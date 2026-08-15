@@ -56,4 +56,14 @@ describe("session error copy", () => {
     expect(parsed.detail).toContain("No prompt was sent");
     expect(`${parsed.message} ${parsed.detail}`).not.toContain("provider_privacy_unverified");
   });
+
+  test("turns provider timeouts into a clear retry path", () => {
+    const parsed = parseSessionError(new Error("TimeoutError: request exceeded response deadline"));
+
+    expect(parsed.kind).toBe("generic");
+    expect(parsed.retryable).toBe(true);
+    expect(parsed.message).toBe("The model took too long to respond.");
+    expect(parsed.detail).toContain("prompt is preserved");
+    expect(`${parsed.message} ${parsed.detail}`).not.toContain("TimeoutError");
+  });
 });

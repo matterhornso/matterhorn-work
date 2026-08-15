@@ -26,6 +26,8 @@ type JsonRpcRequest = {
   params?: unknown;
 };
 
+export const MANAGED_MCP_MODEL_CONTENT_MAX_CHARS = 8_000;
+
 export type ManagedMcpToolCallMetric = {
   tool: string;
   access: "read" | "prepare" | "system";
@@ -306,6 +308,65 @@ function parseToolPayload(text: string): unknown {
   }
 }
 
+function compactJsonForModel(
+  value: unknown,
+  options: { arrayItems: number; objectKeys: number; stringChars: number },
+  depth = 0,
+): unknown {
+  if (typeof value === "string") {
+    return value.length <= options.stringChars
+      ? value
+      : `${value.slice(0, options.stringChars)}… [truncated]`;
+  }
+  if (value == null || typeof value !== "object") return value;
+  if (depth >= 8) return "[nested content truncated]";
+  if (Array.isArray(value)) {
+    const items = value.slice(0, options.arrayItems)
+      .map((item) => compactJsonForModel(item, options, depth + 1));
+    if (value.length > options.arrayItems) {
+      items.push(`[${value.length - options.arrayItems} additional items omitted]`);
+    }
+    return items;
+  }
+  const entries = Object.entries(value as JsonObject);
+  const compact = Object.fromEntries(entries.slice(0, options.objectKeys).map(([key, item]) => [
+    key,
+    compactJsonForModel(item, options, depth + 1),
+  ]));
+  if (entries.length > options.objectKeys) {
+    compact._matterhornOmittedKeys = entries.length - options.objectKeys;
+  }
+  return compact;
+}
+
+/** Keep full structured evidence for receipts while bounding model context. */
+function modelFacingToolText(text: string): string {
+  if (text.length <= MANAGED_MCP_MODEL_CONTENT_MAX_CHARS) return text;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return `${text.slice(0, MANAGED_MCP_MODEL_CONTENT_MAX_CHARS - 120)}\n\n[Matterhorn truncated this tool result. Ask for a narrower query to inspect more.]`;
+  }
+
+  for (const options of [
+    { arrayItems: 8, objectKeys: 50, stringChars: 1_000 },
+    { arrayItems: 4, objectKeys: 25, stringChars: 400 },
+  ]) {
+    const compact = compactJsonForModel(parsed, options);
+    const output = JSON.stringify({
+      _matterhornContext: "Result shortened for model context. Use a narrower query for omitted detail.",
+      result: compact,
+    });
+    if (output.length <= MANAGED_MCP_MODEL_CONTENT_MAX_CHARS) return output;
+  }
+
+  return JSON.stringify({
+    _matterhornContext: "Result exceeded the model-context limit. Ask for a narrower query.",
+    preview: text.slice(0, Math.floor(MANAGED_MCP_MODEL_CONTENT_MAX_CHARS * 0.65)),
+  });
+}
+
 function findEvidenceString(value: unknown, keys: readonly string[], depth = 0): string | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value) || depth > 2) return undefined;
   const record = value as JsonObject;
@@ -379,7 +440,7 @@ function toolCallResult(input: {
   return {
     content: [{
       type: "text",
-      text: input.text || (input.ok ? "{}" : "Matterhorn backend returned an empty error"),
+      text: modelFacingToolText(input.text || (input.ok ? "{}" : "Matterhorn backend returned an empty error")),
     }],
     ...(definition
       ? {

@@ -966,6 +966,14 @@ export function parseSessionError(thrown: unknown): SessionError {
       kind: "provider-unavailable",
     };
   }
+  if (/TimeoutError|timed out|timeout|response deadline|stalled stream|AbortSignal\.timeout/i.test(diagnostic)) {
+    return {
+      message: "The model took too long to respond.",
+      detail: "Matterhorn stopped the stalled request. Your prompt is preserved—retry once, or choose another model if it happens again.",
+      kind: "generic",
+      retryable: true,
+    };
+  }
   if (/OpenCode|opencode_(?:request_failed|empty_response|invalid_response)/i.test(diagnostic)) {
     return {
       message: "Matterhorn's workspace engine could not complete this request.",

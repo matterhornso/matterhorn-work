@@ -21,6 +21,7 @@ import type {
   MatterhornBackendModelSelectionResponse,
   MatterhornProviderPrivacyPolicy,
 } from "@matterhorn-work/types/backend-models";
+import type { MatterhornWorkflowRunListItem } from "@matterhorn-work/types/workflow-runs";
 
 import { createClient, unwrap } from "../../app/lib/opencode";
 import { forkSession, revertSession, shellInSession } from "../../app/lib/opencode-session";
@@ -2519,26 +2520,33 @@ export function SessionRoute() {
     const executionModePrompt = buildMatterhornExecutionModeSystemPrompt(requestedExecutionMode);
     const directResponsePrompt = buildDirectResponseSystemPrompt();
     const deskAgentInstructions = deskAgent ? buildMatterhornDeskRequestOverlay(deskAgent) : "";
+    const formatWorkflowRunPrompt = (linkedRun: MatterhornWorkflowRunListItem | null | undefined) => {
+      if (!linkedRun) return "";
+      const workflowRunId = sanitizeMatterhornSystemContextValue(linkedRun.workflowRunId, { maxChars: 128 });
+      const outputBasePath = sanitizeMatterhornSystemContextValue(linkedRun.outputBasePath, { maxChars: 512 });
+      return [
+        "## Active Matterhorn Workflow Run",
+        `Workflow run: ${workflowRunId}`,
+        `Canonical output directory: ${outputBasePath}`,
+        "Save every artifact for this workflow under exactly that directory. Do not create a parallel descriptive or custom session folder.",
+      ].join("\n");
+    };
     const workflowRunPromptPromise = client && selectedWorkspaceId && agentId
-      ? resolveOptionalMatterhornContext(
-          client.listWorkflowRuns({
-            workspaceId: selectedWorkspaceId,
-            sessionId,
-            limit: 1,
-          }).then(({ items }) => {
-            const linkedRun = items[0];
-            if (!linkedRun) return "";
-            const workflowRunId = sanitizeMatterhornSystemContextValue(linkedRun.workflowRunId, { maxChars: 128 });
-            const outputBasePath = sanitizeMatterhornSystemContextValue(linkedRun.outputBasePath, { maxChars: 512 });
-            return [
-              "## Active Matterhorn Workflow Run",
-              `Workflow run: ${workflowRunId}`,
-              `Canonical output directory: ${outputBasePath}`,
-              "Save every artifact for this workflow under exactly that directory. Do not create a parallel descriptive or custom session folder.",
-            ].join("\n");
-          }),
-          400,
-        )
+      ? (() => {
+          const queryKey = ["session-workflow-run", selectedWorkspaceId, sessionId] as const;
+          const cachedRun = getReactQueryClient().getQueryData<MatterhornWorkflowRunListItem | null>(queryKey);
+          if (cachedRun !== undefined) {
+            return Promise.resolve(formatWorkflowRunPrompt(cachedRun));
+          }
+          return resolveOptionalMatterhornContext(
+            client.listWorkflowRuns({
+              workspaceId: selectedWorkspaceId,
+              sessionId,
+              limit: 1,
+            }).then(({ items }) => formatWorkflowRunPrompt(items[0])),
+            400,
+          );
+        })()
       : Promise.resolve(undefined);
 
     const [envSystemContext, workflowRunPrompt] = await Promise.all([

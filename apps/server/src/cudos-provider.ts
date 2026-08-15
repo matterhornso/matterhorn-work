@@ -19,6 +19,12 @@ export function buildManagedCudosProviderConfig() {
     env: ["CUDOS_API_KEY"],
     options: {
       baseURL: CUDOS_INFERENCE_BASE_URL,
+      // OpenCode 1.18 enforces these at the transport boundary. A degraded
+      // inference request should fail cleanly into the existing Retry flow
+      // instead of leaving a chat visibly active for many minutes.
+      headerTimeout: 30_000,
+      chunkTimeout: 45_000,
+      timeout: 120_000,
     },
     models: Object.fromEntries(
       CUDOS_MODELS.map((model) => [model.id, { name: model.name }]),

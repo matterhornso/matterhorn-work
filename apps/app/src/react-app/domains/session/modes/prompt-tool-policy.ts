@@ -20,11 +20,22 @@ const TOOL_INTENT_PATTERNS: readonly RegExp[] = [
   /\b(?:stake|unstake)\b(?=[^\n]{0,80}\b(?:\d|tao|validator|hotkey|wallet)\b)/i,
 ];
 
+const CLEARLY_ANSWER_ONLY_PATTERNS: readonly RegExp[] = [
+  /^\s*(?:hi|hello|hey|thanks|thank you)[.!?\s]*$/i,
+  /\breply\s+with\s+(?:exactly|only)\b/i,
+  /^\s*(?:explain|define|describe|rewrite|proofread|translate|brainstorm)\b/i,
+  /^\s*(?:what|why|how)\s+(?:is|are|does|do|did|would|could|should)\b/i,
+];
+
 export function promptNeedsMatterhornTools(text: string, hasAttachments = false): boolean {
   if (hasAttachments) return true;
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return false;
-  return TOOL_INTENT_PATTERNS.some((pattern) => pattern.test(normalized));
+  if (TOOL_INTENT_PATTERNS.some((pattern) => pattern.test(normalized))) return true;
+  // Disable tools only when the turn is clearly self-contained. Short follow-
+  // ups such as "do it" or "continue" may refer to an action established by
+  // prior context and must retain the selected agent's capabilities.
+  return !CLEARLY_ANSWER_ONLY_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 /**

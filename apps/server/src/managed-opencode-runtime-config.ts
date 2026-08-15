@@ -44,6 +44,14 @@ export function buildManagedOpencodeRuntimeConfig(input: {
 
   return JSON.stringify({
     permission: MANAGED_OPENCODE_PERMISSION_POLICY,
+    // OpenCode defaults auto-compaction on, but old tool outputs are retained
+    // unless pruning is explicit. Pruning starts only after protected recent
+    // turns and preserves the full output on disk, reducing repeat input
+    // tokens without weakening the audit trail.
+    compaction: {
+      auto: true,
+      prune: true,
+    },
     plugin: [
       "opencode-chrome-devtools",
       openworkExtensionsPreviewPluginPath(),

@@ -19,7 +19,8 @@ describe("Matterhorn response perspectives", () => {
       "optimistic",
     ]);
 
-    for (const perspective of RESPONSE_PERSPECTIVE_OPTIONS.map((option) => option.value)) {
+    expect(buildResponsePerspectiveSystemPrompt("balanced")).toBe("");
+    for (const perspective of ["cautious", "optimistic"] as const) {
       const prompt = buildResponsePerspectiveSystemPrompt(perspective);
       expect(prompt).toContain("This changes framing only.");
       expect(prompt).toContain("Never remove, weaken, delay, or hide safety constraints");

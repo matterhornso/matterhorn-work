@@ -78,6 +78,8 @@ describe("Matterhorn execution modes", () => {
   test("omits the tool catalog for answer-only Work turns", () => {
     expect(promptNeedsMatterhornTools("Reply with exactly: CUDOS_READY")).toBe(false);
     expect(promptNeedsMatterhornTools("Explain proof of stake in plain English.")).toBe(false);
+    expect(promptNeedsMatterhornTools("Do it")).toBe(true);
+    expect(promptNeedsMatterhornTools("Continue")).toBe(true);
     expect(buildMatterhornPromptTools({
       mode: "work",
       agentId: null,
