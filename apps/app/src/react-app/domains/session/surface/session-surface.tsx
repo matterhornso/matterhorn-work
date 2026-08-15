@@ -232,6 +232,20 @@ function ProtocolLogo({ iconHint, size = 18 }: { iconHint: CustomerWorkflowIconH
 
 type MatterhornDeskMode = MatterhornDeskTaskStarterDesk;
 
+function matterhornDeskModeForAgent(agentId: string | null | undefined): MatterhornDeskMode | null {
+  const deskId = getMatterhornDeskAgentById(agentId)?.deskId;
+  switch (deskId) {
+    case "bittensor":
+    case "hyperliquid":
+    case "polymarket":
+    case "sui":
+    case "wellness":
+      return deskId;
+    default:
+      return null;
+  }
+}
+
 function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
   const text = chunks.join("\n").toLowerCase();
   const candidates: Array<[MatterhornDeskMode, RegExp[]]> = [
@@ -1532,20 +1546,38 @@ export function SessionSurface(props: SessionSurfaceProps) {
     props.activeQuestion,
     props.client,
   ]);
+  const linkedWorkflowDeskAgent = useMemo(
+    () => getMatterhornDeskAgentById(linkedWorkflowRun?.agentId),
+    [linkedWorkflowRun?.agentId],
+  );
+  const selectedWorkflowDeskAgent = useMemo(
+    () => getMatterhornDeskAgentById(props.selectedAgent),
+    [props.selectedAgent],
+  );
+  const linkedWorkflowDeskMode = useMemo(
+    () => matterhornDeskModeForAgent(linkedWorkflowRun?.agentId),
+    [linkedWorkflowRun?.agentId],
+  );
+  const selectedWorkflowDeskMode = useMemo(
+    () => matterhornDeskModeForAgent(props.selectedAgent),
+    [props.selectedAgent],
+  );
   const activeDeskMode = useMemo(
-    () => deriveMatterhornDeskMode([
-      draft,
-      ...renderedMessages
-        .filter((message) => message.role === "user")
-        .map(messageToReadableText),
-    ]),
-    [draft, renderedMessages],
+    () => linkedWorkflowDeskMode
+      ?? selectedWorkflowDeskMode
+      ?? deriveMatterhornDeskMode([
+        draft,
+        ...renderedMessages
+          .filter((message) => message.role === "user")
+          .map(messageToReadableText),
+      ]),
+    [draft, linkedWorkflowDeskMode, renderedMessages, selectedWorkflowDeskMode],
   );
   const activeWorkflowDeskAgent = useMemo(() => {
-    if (linkedWorkflowRun?.agentId) return getMatterhornDeskAgentById(linkedWorkflowRun.agentId);
-    if (activeDeskMode) return getMatterhornDeskAgent(activeDeskMode);
-    return getMatterhornDeskAgentById(props.selectedAgent);
-  }, [activeDeskMode, linkedWorkflowRun?.agentId, props.selectedAgent]);
+    if (linkedWorkflowDeskAgent) return linkedWorkflowDeskAgent;
+    if (selectedWorkflowDeskAgent) return selectedWorkflowDeskAgent;
+    return activeDeskMode ? getMatterhornDeskAgent(activeDeskMode) : null;
+  }, [activeDeskMode, linkedWorkflowDeskAgent, selectedWorkflowDeskAgent]);
   const activeDeskReadinessQuery = useQuery({
     queryKey: ["session-desk-readiness", props.workspaceId, activeDeskMode],
     enabled: Boolean(activeDeskMode && props.workspaceId),

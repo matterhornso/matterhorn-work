@@ -142,6 +142,27 @@ describe("session panel route state", () => {
     expect(source).not.toContain('"Project home"');
     expect(source).not.toContain('"Project history"');
   });
+
+  test("desk navigation leaves an existing chat for the focused workspace desk", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+    const openDeskBlock = source.slice(
+      source.indexOf("const openVenueRailPane"),
+      source.indexOf("const removeAccessibleTarget"),
+    );
+
+    expect(openDeskBlock).toContain("if (props.selectedSessionId)");
+    expect(openDeskBlock).toContain("pathname: workspaceSessionRoute(props.selectedWorkspaceId)");
+    expect(openDeskBlock).toContain("resolveSessionPanelNavigation(currentLocation.search, panel)");
+    expect(openDeskBlock).toContain("setCurrentSidePanel(panel)");
+  });
+
+  test("the authenticated shell stays pinned to every viewport edge", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(source).toContain(
+      'className="fixed inset-0 flex min-h-0 w-full flex-col overflow-hidden bg-dls-background text-dls-text mac:bg-transparent"',
+    );
+  });
 });
 
 describe("route recovery feedback", () => {

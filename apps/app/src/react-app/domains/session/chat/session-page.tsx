@@ -121,7 +121,11 @@ import { configureSecurityLogReporter } from "../../wallet/state/security-log";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
-import { workspaceNotesRoute, workspaceRunHistoryRoute } from "../../../shell/workspace-routes";
+import {
+  workspaceNotesRoute,
+  workspaceRunHistoryRoute,
+  workspaceSessionRoute,
+} from "../../../shell/workspace-routes";
 import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
 import { dispatchNotesUpdated, useQuickJot } from "../../notes";
 import { cn } from "@/lib/utils";
@@ -2256,9 +2260,22 @@ export function SessionPage(props: SessionPageProps) {
     }
     setReviewedActionEntryProtocol(null);
     setReviewedActionEntryOperation(null);
-    setCurrentSidePanel(panel);
+    if (props.selectedSessionId) {
+      const currentLocation = liveLocationRef.current;
+      const transition = resolveSessionPanelNavigation(currentLocation.search, panel);
+      navigate(
+        {
+          pathname: workspaceSessionRoute(props.selectedWorkspaceId),
+          search: transition?.search ?? currentLocation.search,
+          hash: currentLocation.hash,
+        },
+        { replace: false },
+      );
+    } else {
+      setCurrentSidePanel(panel);
+    }
     if (options?.primePrompt) primeProtocolRailPrompt(panel, options);
-  }, [primeProtocolRailPrompt, props.selectedSessionId, props.surface, setCurrentSidePanel]);
+  }, [navigate, primeProtocolRailPrompt, props.selectedSessionId, props.selectedWorkspaceId, props.surface, setCurrentSidePanel]);
   const removeAccessibleTarget = useCallback((target: OpenTarget) => {
     setHiddenAccessibleTargetIds((current) => new Set(current).add(target.id));
     setArtifactTarget((current) => current?.id === target.id ? null : current);
@@ -2599,7 +2616,7 @@ export function SessionPage(props: SessionPageProps) {
         };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-dls-background text-dls-text mac:bg-transparent">
+    <div className="fixed inset-0 flex min-h-0 w-full flex-col overflow-hidden bg-dls-background text-dls-text mac:bg-transparent">
       <SidebarProvider
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
