@@ -142,6 +142,50 @@ describe("session panel route state", () => {
     expect(source).not.toContain('"Project home"');
     expect(source).not.toContain('"Project history"');
   });
+
+  test("desk navigation leaves an existing chat for the focused workspace desk", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+    const openDeskBlock = source.slice(
+      source.indexOf("const openVenueRailPane"),
+      source.indexOf("const removeAccessibleTarget"),
+    );
+
+    expect(openDeskBlock).toContain("if (props.selectedSessionId)");
+    expect(openDeskBlock).toContain("pathname: workspaceSessionRoute(props.selectedWorkspaceId)");
+    expect(openDeskBlock).toContain("resolveSessionPanelNavigation(currentLocation.search, panel)");
+    expect(openDeskBlock).toContain("setCurrentSidePanel(panel)");
+  });
+
+  test("workflow desk navigation also leaves an existing chat", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+    const workflowDeskStart = source.indexOf("const setCurrentWorkflowDesk");
+    const workflowDeskBlock = source.slice(
+      workflowDeskStart,
+      source.indexOf("\n\n  useEffect(", workflowDeskStart),
+    );
+
+    expect(workflowDeskBlock).toContain("pathname: desk");
+    expect(workflowDeskBlock).toContain("workspaceSessionRoute(props.selectedWorkspaceId)");
+  });
+
+  test("focused desk Back does not race a second panel navigation", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+    const returnBlock = source.slice(
+      source.indexOf("const returnToProjectHome"),
+      source.indexOf("const goHome"),
+    );
+
+    expect(returnBlock).toContain("window.history.back()");
+    expect(returnBlock).not.toContain("setCurrentSidePanel(null);\n        window.history.back()");
+  });
+
+  test("the authenticated shell stays pinned to every viewport edge", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(source).toContain(
+      'className="fixed inset-0 flex min-h-0 w-full flex-col overflow-hidden bg-dls-background text-dls-text mac:bg-transparent"',
+    );
+  });
 });
 
 describe("route recovery feedback", () => {

@@ -93,6 +93,18 @@ describe("Memory panel UI contract", () => {
     expect(source).toContain("resolveWorkspaceMemorySuggestion");
     expect(source).toContain("exportWorkspaceMemory");
   });
+
+  test("starts a reviewable Memory chat when used from workspace Home", () => {
+    const panelSource = readAppSource("domains/memory/memory-panel.tsx");
+    const sessionSource = readSessionPageSource();
+
+    expect(panelSource).toContain("if (!props.sessionId && props.onUseInChat)");
+    expect(panelSource).toContain("props.onUseInChat(context.records)");
+    expect(sessionSource).toContain('title: "Memory task"');
+    expect(sessionSource).toContain('agent: agentIdForDesk("memory")');
+    expect(sessionSource).toContain("sendImmediately: false");
+    expect(sessionSource).toContain("useMatterhornSessionMemoryContextStore.getState().setContext(sessionId, context)");
+  });
 });
 
 describe("Memory rail inbox contract", () => {

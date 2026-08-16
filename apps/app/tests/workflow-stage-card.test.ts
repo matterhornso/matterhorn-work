@@ -129,6 +129,18 @@ describe("WorkflowStageCard — render contract", () => {
     expect(pageSrc).toContain("props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, options)");
   });
 
+  test("an explicitly selected desk agent controls the empty-session surface", () => {
+    const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
+
+    expect(surfaceSrc).toContain("const linkedWorkflowDeskAgent = useMemo");
+    expect(surfaceSrc).toContain("const selectedWorkflowDeskAgent = useMemo");
+    expect(surfaceSrc).toContain("const linkedWorkflowDeskMode = useMemo");
+    expect(surfaceSrc).toContain("const selectedWorkflowDeskMode = useMemo");
+    expect(surfaceSrc.indexOf("?? selectedWorkflowDeskMode")).toBeLessThan(
+      surfaceSrc.indexOf("?? deriveMatterhornDeskMode(["),
+    );
+  });
+
   test("desk-panel handoffs open a dedicated chat instead of replacing active desk context", () => {
     const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
 
