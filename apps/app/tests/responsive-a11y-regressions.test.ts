@@ -137,7 +137,9 @@ describe("responsive accessibility regressions", () => {
     expect(signin).toContain("client.getPublicAuthConfig()");
     expect(signin).toContain("AUTH_CONFIG_FAIL_CLOSED");
     expect(signin).toContain("never infer that signup or recovery is safe");
-    expect(signin).toContain("New accounts are paused. Existing users can sign in.");
+    expect(signin).toContain('signupsPaused ? "public-auth-signup-availability" : undefined');
+    expect(signin).toContain('id="public-auth-signup-availability"');
+    expect(signin).toContain("publicSignupAvailabilityMessage(publicAuthConfig)");
     expect(den).toContain('"/api/auth/config"');
     expect(den).toContain('"/api/auth/verify-email"');
     expect(den).toContain('"/api/auth/resend-verification"');
