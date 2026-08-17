@@ -127,6 +127,11 @@
   opacity: 0.58;
 }
 
+.public-auth-mode button[aria-disabled="true"] {
+  color: var(--auth-secondary);
+  cursor: help;
+}
+
 .public-auth-mode button:focus-visible,
 .public-auth-form input:focus-visible,
 .public-auth-submit:focus-visible,
@@ -139,6 +144,13 @@
 .public-auth-mode button.is-active {
   background: var(--auth-surface);
   color: var(--auth-text);
+}
+
+.public-auth-availability {
+  margin: 10px 0 0;
+  color: var(--auth-secondary);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .public-auth-form {

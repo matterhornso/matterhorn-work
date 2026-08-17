@@ -2,8 +2,46 @@ import { describe, expect, test } from "bun:test";
 
 import { DenApiError } from "../src/app/lib/den";
 import { publicWebAuthErrorMessage } from "../src/react-app/domains/cloud/public-web-auth-errors";
+import { publicSignupAvailabilityMessage } from "../src/react-app/domains/cloud/public-web-signin-page";
 
 describe("public web authentication errors", () => {
+  test("explains signup deployment states without making sign-in look unavailable", () => {
+    expect(publicSignupAvailabilityMessage(null)).toBeNull();
+    expect(
+      publicSignupAvailabilityMessage({
+        signupsAvailable: true,
+        signupStatus: "open",
+        emailVerificationRequired: true,
+        passwordResetAvailable: true,
+        legalAcceptanceRequired: true,
+        minimumPasswordLength: 12,
+        turnstileSiteKey: "site-key",
+      }),
+    ).toBeNull();
+    expect(
+      publicSignupAvailabilityMessage({
+        signupsAvailable: false,
+        signupStatus: "setup_required",
+        emailVerificationRequired: true,
+        passwordResetAvailable: false,
+        legalAcceptanceRequired: true,
+        minimumPasswordLength: 12,
+        turnstileSiteKey: "site-key",
+      }),
+    ).toContain("secure email delivery");
+    expect(
+      publicSignupAvailabilityMessage({
+        signupsAvailable: false,
+        signupStatus: "paused",
+        emailVerificationRequired: true,
+        passwordResetAvailable: true,
+        legalAcceptanceRequired: true,
+        minimumPasswordLength: 12,
+        turnstileSiteKey: "site-key",
+      }),
+    ).toContain("temporarily paused");
+  });
+
   test("keeps safe signup pauses actionable for existing users", () => {
     expect(
       publicWebAuthErrorMessage(

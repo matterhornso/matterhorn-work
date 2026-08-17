@@ -42,6 +42,15 @@ const AUTH_CONFIG_FAIL_CLOSED: DenPublicAuthConfig = {
   turnstileSiteKey: null,
 };
 
+export function publicSignupAvailabilityMessage(
+  config: DenPublicAuthConfig | null,
+): string | null {
+  if (!config || config.signupsAvailable) return null;
+  return config.signupStatus === "setup_required"
+    ? "Account creation is temporarily unavailable while secure email delivery is being configured. Existing users can still sign in."
+    : "Account creation is temporarily paused. Existing users can still sign in.";
+}
+
 function authLocationValue(name: string): string | null {
   if (typeof window === "undefined") return null;
   const url = new URL(window.location.href);
@@ -150,11 +159,7 @@ export function PublicWebSigninPage({
   useEffect(() => {
     if (mode !== "sign-up" || publicAuthConfig?.signupsAvailable !== false) return;
     setMode("sign-in");
-    setStatusMessage(
-      publicAuthConfig.signupStatus === "setup_required"
-        ? "New account creation is waiting for secure deployment setup. Existing users can still sign in."
-        : "New account creation is temporarily paused. Existing users can still sign in.",
-    );
+    setStatusMessage(publicSignupAvailabilityMessage(publicAuthConfig));
   }, [mode, publicAuthConfig]);
 
   useEffect(() => {
@@ -193,6 +198,11 @@ export function PublicWebSigninPage({
   }, []);
 
   const selectMode = (nextMode: AuthMode) => {
+    if (nextMode === "sign-up" && publicAuthConfig?.signupsAvailable === false) {
+      setAuthError(null);
+      setStatusMessage(publicSignupAvailabilityMessage(publicAuthConfig));
+      return;
+    }
     setMode(nextMode);
     setAuthError(null);
     setStatusMessage(null);
@@ -314,6 +324,8 @@ export function PublicWebSigninPage({
   const primaryMode = mode === "sign-in" || mode === "sign-up";
   const accountUnavailable = accountServiceAvailable === false;
   const signupsPaused = publicAuthConfig?.signupsAvailable === false;
+  const signupAvailabilityMessage =
+    publicSignupAvailabilityMessage(publicAuthConfig);
   const passwordResetUnavailable =
     publicAuthConfig?.passwordResetAvailable === false;
   const accessDisabled = sessionBusy || submitBusy || accountUnavailable;
@@ -357,13 +369,28 @@ export function PublicWebSigninPage({
             <button
               type="button"
               aria-pressed={signingUp}
+              aria-disabled={signupsPaused || undefined}
+              aria-describedby={
+                signupsPaused ? "public-auth-signup-availability" : undefined
+              }
               className={signingUp ? "is-active" : ""}
               onClick={() => selectMode("sign-up")}
-              disabled={sessionBusy || accountUnavailable || signupsPaused}
+              disabled={sessionBusy || accountUnavailable}
+              title={signupAvailabilityMessage ?? undefined}
             >
               Create account
             </button>
           </div>
+
+          {signupAvailabilityMessage ? (
+            <p
+              id="public-auth-signup-availability"
+              className="public-auth-availability"
+              role="status"
+            >
+              {signupAvailabilityMessage}
+            </p>
+          ) : null}
 
           {formTitle ? <h2 className="public-auth-form-title">{formTitle}</h2> : null}
           {mode === "verify-email" ? (
@@ -539,9 +566,7 @@ export function PublicWebSigninPage({
             <span>
               {authError ??
                 statusMessage ??
-                (signupsPaused
-                  ? "New accounts are paused. Existing users can sign in."
-                  : "Your workspace stays private to your account.")}
+                "Your workspace stays private to your account."}
             </span>
             {accountUnavailable && !sessionBusy ? (
               <button type="button" onClick={() => void refreshSession()}>
@@ -574,6 +599,10 @@ export function PublicWebSigninPage({
             <div>
               <dt>Polymarket</dt>
               <dd>Discover markets, compare outcomes, and inspect liquidity.</dd>
+            </div>
+            <div>
+              <dt>Sui</dt>
+              <dd>Inspect accounts and objects, then review transfers in your wallet.</dd>
             </div>
             <div>
               <dt>Longevity</dt>
