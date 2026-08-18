@@ -212,6 +212,39 @@ try {
     ],
   });
 
+  const guardedShadowPath = writeJson("guarded-shadow.json", withIntegrity({
+    version: "matterhorn.guarded-runtime-shadow-evidence.v1",
+    decision: "GO",
+    ready: true,
+    commit,
+    serverOrigin: "https://api.matterhorn.example",
+    evaluatedAt: commitTime,
+    window: {
+      startedAt: "2026-07-18T10:50:00.000Z",
+      endedAt: "2026-07-20T11:00:00.000Z",
+      hours: 48.167,
+      processUptimeDeltaSeconds: 173400,
+    },
+    checks: [
+      "baseline_integrity",
+      "final_integrity",
+      "same_commit",
+      "same_origin",
+      "shadow_ready",
+      "snapshot_time",
+      "window_duration",
+      "uninterrupted_process",
+      "counter_monotonicity",
+      "shadow_decision_shape",
+      "issue_exercised",
+      "consume_exercised",
+      "read_exercised",
+      "prepare_exercised",
+      "anomaly_review",
+    ].map((id) => passingCheck(id)),
+    blockers: [],
+  }));
+
   const acceptanceEvidence = Object.fromEntries([
     "new-user.md",
     "existing-user.md",
@@ -268,6 +301,7 @@ try {
       ownerApproval: approvalPath,
       deployment: deploymentPath,
       operations: operationsPath,
+      guardedShadow: guardedShadowPath,
       acceptance: acceptancePath,
       desktop: desktopPath,
     },
@@ -333,6 +367,23 @@ try {
   assert.equal(passingReport.commit, commit);
   assert.equal(passingReport.launchReadiness.blocked, 0);
   assert.ok(readFileSync(join(outputDir, "launch-readiness.md"), "utf8").includes("**Decision:** GO"));
+
+  const blockedShadowPath = writeJson("guarded-shadow-blocked.json", withIntegrity({
+    version: "matterhorn.guarded-runtime-shadow-evidence.v1",
+    decision: "NO-GO",
+    ready: false,
+    commit,
+    evaluatedAt: commitTime,
+    window: { hours: 24 },
+    checks: [{ id: "window_duration", status: "fail", evidence: 24 }],
+    blockers: [{ id: "window_duration", action: "Shadow observation is at least 48 hours" }],
+  }));
+  const blockedShadow = run({
+    ...baseInput,
+    reports: { ...baseInput.reports, guardedShadow: blockedShadowPath },
+  });
+  assert.equal(blockedShadow.status, 1);
+  assert.ok(JSON.parse(blockedShadow.stdout).blockers.some((entry) => entry.gate === "agent.guarded_shadow_window"));
 
   const noOauthAcceptancePath = writeJson("acceptance-no-oauth.json", {
     version: "matterhorn.product-hunt-acceptance-readiness.v1",

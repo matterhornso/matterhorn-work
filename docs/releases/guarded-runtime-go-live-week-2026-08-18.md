@@ -52,7 +52,7 @@ Captured on 18 August 2026:
 | Turnstile | Site key, server secret and exact production hostname | Configured |
 | Email delivery | Resend and authenticated SMTP | **Missing — signup blocker** |
 | Public signup | `MATTERHORN_SIGNUPS_ENABLED=false` | Correctly disabled |
-| Guarded runtime | Mode and two runtime secrets | Not deployed/configured yet |
+| Guarded runtime | Mode and two runtime secrets | Both secrets and `off` are staged in Railway without a deploy; guarded code is not deployed yet |
 | Live autonomous execution | Submission flags | Unset/disabled |
 
 Do not copy secret values into release evidence. Presence checks may record only
@@ -88,7 +88,7 @@ final evidence packet.
 Exit evidence:
 
 - Reviewable PR with no unrelated QA artifacts.
-- 945 app tests and 922 server tests pass or improve on the exact release tree.
+- 945 app tests and 927 server tests pass or improve on the exact release tree.
 - Typecheck/build, 10-stage safety gate, secret scan, dependency audit,
   container contract and bundle budget pass.
 
@@ -108,6 +108,9 @@ Exit evidence:
 7. Run authenticated smoke with signups still disabled.
 8. Change only `MATTERHORN_GUARDED_RUNTIME_MODE` from `off` to `shadow` and
    restart Railway. Record the shadow start timestamp and deployment id.
+9. Capture the content-free starting counter snapshot with
+   `pnpm capture:guarded-runtime-shadow`; keep the host token only in the
+   operator environment.
 
 Exit evidence:
 
@@ -117,6 +120,8 @@ Exit evidence:
   as the accepted release tree.
 - Shadow decisions are visible in bounded operational evidence without raw
   prompts, arguments, secrets or capabilities.
+- The starting snapshot is integrity-bound to the exact merge commit and
+  reports `shadow`, ready, and the current process uptime.
 
 ### Thursday, 20 August — hosted acceptance and observation
 
@@ -163,6 +168,13 @@ Also run:
 - Browser console/network audit with zero unexplained errors.
 - Encrypted user-data backup and disposable restore rehearsal.
 - Rollback rehearsal to the previous immutable Railway/Vercel deployment.
+
+After the full 48-hour window, capture the final counter snapshot and run
+`pnpm gate:guarded-runtime-shadow`. The gate fails if the commit or origin
+changed, process uptime does not cover the window, counters reset, read or
+prepare calls were not exercised, or any `would_deny`/`bypassed` observation
+lacks an exact snapshot-bound human review. Evidence files must never contain
+the host token, prompts, tool arguments, wallet identities or capabilities.
 
 ### Friday, 21 August — GO/NO-GO and Public Beta
 
@@ -284,6 +296,33 @@ node scripts/product-hunt-deployment-probe.mjs \
   --expected-commit <release-sha> \
   --strict
 ```
+
+Start and end shadow snapshots, using the direct Railway control-plane origin
+and an operator-only host token environment variable:
+
+```bash
+export MATTERHORN_WORK_HOST_TOKEN='<read from the Railway secret manager>'
+pnpm capture:guarded-runtime-shadow -- \
+  --server-url https://control-plane-production-d46b.up.railway.app \
+  --expected-commit <release-sha> \
+  --output qa-reports/guarded-shadow/shadow-start.json
+
+# Repeat after at least 48 hours with shadow-end.json, then evaluate:
+pnpm gate:guarded-runtime-shadow -- \
+  --baseline qa-reports/guarded-shadow/shadow-start.json \
+  --final qa-reports/guarded-shadow/shadow-end.json \
+  --review qa-reports/guarded-shadow/shadow-review.json \
+  --output qa-reports/guarded-shadow/shadow-evidence.json \
+  --json
+unset MATTERHORN_WORK_HOST_TOKEN
+```
+
+The review file is required only when a denial or rollout bypass occurred. It
+must use `matterhorn.guarded-runtime-shadow-review.v1`, bind the SHA-256 of both
+snapshot files, name the reviewer, and explain every exact stage, decision,
+reason and delta as `expected_test` or `accepted_policy` with an evidence
+reference. A fix requires a new commit and a new observation window; it cannot
+be waived in the review file.
 
 The public configuration gate must run from a controlled environment that has
 the deployment variables. Its JSON output must be stored under the final QA

@@ -9,6 +9,7 @@ const SPECS = Object.freeze({
   readiness: { version: "matterhorn.launch-channel-readiness.v1", commit: (value) => value.commit },
   deployment: { version: "matterhorn.product-hunt-deployment-probe.v1", commit: (value) => value.metadata?.expectedCommit },
   operations: { version: "matterhorn.product-hunt-operations-readiness.v2", commit: (value) => value.commit },
+  guardedShadow: { version: "matterhorn.guarded-runtime-shadow-evidence.v1", commit: (value) => value.commit },
   acceptance: { version: "matterhorn.product-hunt-acceptance-readiness.v1", commit: (value) => value.commit },
   desktop: { version: "matterhorn.desktop-public-release-verification.v1", commit: (value) => value.sourceCommit },
 });
@@ -28,6 +29,7 @@ function parseArgs(argv) {
     else if (arg === "--strict") config.strict = true;
     else if (arg === "--json") config.json = true;
     else if (arg === "--help" || arg === "-h") config.help = true;
+    else if (arg === "--guarded-shadow") config.paths.guardedShadow = next();
     else if (/^--(?:readiness|deployment|operations|acceptance|desktop)$/.test(arg)) config.paths[arg.slice(2)] = next();
     else throw new Error(`Unknown argument: ${arg}`);
   }
@@ -43,11 +45,11 @@ function help() {
   return [
     "Matterhorn Product Hunt evidence packet",
     "",
-    "Binds the final launch-readiness, deployed-host, operations, external-acceptance, and desktop reports to one immutable commit.",
+    "Binds launch-readiness, deployed-host, operations, guarded-shadow, external-acceptance, and desktop reports to one immutable commit.",
     "Only evaluated reports are accepted. The packet contains hashes and summaries, never credentials or signing material.",
     "",
     "Usage:",
-    "  pnpm pack:product-hunt-evidence -- --commit <40-char-sha> --readiness readiness.json --deployment deployment.json --operations operations.json --acceptance acceptance.json --desktop desktop.json --output-dir qa-reports/product-hunt/final",
+    "  pnpm pack:product-hunt-evidence -- --commit <40-char-sha> --readiness readiness.json --deployment deployment.json --operations operations.json --guarded-shadow guarded-shadow.json --acceptance acceptance.json --desktop desktop.json --output-dir qa-reports/product-hunt/final",
   ].join("\n");
 }
 

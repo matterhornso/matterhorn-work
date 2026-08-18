@@ -12,6 +12,7 @@ const reports = {
   readiness: { version: "matterhorn.launch-channel-readiness.v1", channel: "product-hunt", ready: true, decision: "GO", commit },
   deployment: { version: "matterhorn.product-hunt-deployment-probe.v1", ready: true, metadata: { expectedCommit: commit } },
   operations: { version: "matterhorn.product-hunt-operations-readiness.v2", ready: true, decision: "GO", commit },
+  guardedShadow: { version: "matterhorn.guarded-runtime-shadow-evidence.v1", ready: true, decision: "GO", commit },
   acceptance: { version: "matterhorn.product-hunt-acceptance-readiness.v1", ready: true, decision: "GO", commit },
   desktop: { version: "matterhorn.desktop-public-release-verification.v1", ready: true, status: "pass", sourceCommit: commit },
 };
@@ -28,7 +29,7 @@ function writeReports(values) {
 
 function run(paths) {
   const args = ["scripts/product-hunt-evidence-packet.mjs", "--commit", commit, "--output-dir", outputDir, "--strict", "--json"];
-  for (const label of Object.keys(reports)) args.push(`--${label}`, paths[label]);
+  for (const label of Object.keys(reports)) args.push(label === "guardedShadow" ? "--guarded-shadow" : `--${label}`, paths[label]);
   return new Promise((resolve) => {
     const child = spawn("node", args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = ""; let stderr = "";
@@ -45,7 +46,7 @@ try {
   assert.equal(report.version, "matterhorn.product-hunt-evidence-packet.v1");
   assert.equal(report.decision, "GO");
   assert.equal(report.commit, commit);
-  assert.equal(report.reports.length, 5);
+  assert.equal(report.reports.length, 6);
   const checksums = readFileSync(join(outputDir, "SHA256SUMS"), "utf8");
   assert.match(checksums, /product-hunt-evidence-manifest\.json/);
   for (const item of report.reports) {

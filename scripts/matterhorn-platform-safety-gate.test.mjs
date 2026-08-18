@@ -100,6 +100,7 @@ for (const required of [
   "generated-media-diagnostics.test.ts",
   "generated-media-production-readiness.test.mjs",
   "product-readiness-smoke.test.mjs",
+  "guarded-runtime-shadow-evidence.test.mjs",
   "public-beta-owner-acceptance.test.mjs",
 ]) {
   assert.ok(source.includes(required), `platform safety gate missing ${required}`);

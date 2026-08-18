@@ -22,6 +22,7 @@ const REPORT_VERSIONS = Object.freeze({
   ownerApproval: "matterhorn.release-owner-approval.v1",
   deployment: "matterhorn.product-hunt-deployment-probe.v1",
   operations: "matterhorn.product-hunt-operations-readiness.v2",
+  guardedShadow: "matterhorn.guarded-runtime-shadow-evidence.v1",
   acceptance: "matterhorn.product-hunt-acceptance-readiness.v1",
   desktop: "matterhorn.desktop-public-release-verification.v1",
 });
@@ -66,8 +67,8 @@ function help() {
   return [
     "Matterhorn Public Beta owner acceptance",
     "",
-    "Binds the certified candidate, deployed web probe, operations drill, real",
-    "wallet/OAuth acceptance, signed desktop verification, and human approvals",
+    "Binds the certified candidate, deployed web probe, operations drill, guarded",
+    "shadow window, real wallet/OAuth acceptance, signed desktop verification, and human approvals",
     "to one immutable commit and one fail-closed Public Beta decision.",
     "",
     "The input contains evidence references and outcomes only. Never put API keys,",
@@ -277,6 +278,7 @@ function evaluate(config) {
   const approval = reports.ownerApproval.value;
   const deployment = reports.deployment.value;
   const operations = reports.operations.value;
+  const guardedShadow = reports.guardedShadow.value;
   const acceptance = reports.acceptance.value;
   const desktop = reports.desktop.value;
   const expectedOauth = Array.isArray(input.expectedOauthConnectors)
@@ -359,6 +361,38 @@ function evaluate(config) {
   add("operations_recovery", "operations.backup_restore", "Workspace and encrypted full user-data recovery pass", operationsMeta && allChecksWithPrefixPass(operations, ["backup_", "user_data_recovery_"]) && reportEvidencePasses(operations, ["backup_status", "user_data_recovery_status"], operationsBases), input.reports.operations);
   add("operations_rollback", "operations.rollback_drill", "Rollback between immutable commits restores health", operationsMeta && allChecksWithPrefixPass(operations, ["rollback_"]) && reportEvidencePasses(operations, ["rollback_status"], operationsBases), input.reports.operations);
 
+  const guardedShadowMeta = guardedShadow.version === REPORT_VERSIONS.guardedShadow
+    && guardedShadow.ready === true
+    && guardedShadow.decision === "GO"
+    && guardedShadow.commit === commit
+    && guardedShadow.window?.hours >= 48
+    && isFresh(guardedShadow.evaluatedAt, config.now)
+    && candidateIntegrityPasses(guardedShadow)
+    && reportChecksPass(guardedShadow, [
+      "baseline_integrity",
+      "final_integrity",
+      "same_commit",
+      "same_origin",
+      "shadow_ready",
+      "snapshot_time",
+      "window_duration",
+      "uninterrupted_process",
+      "counter_monotonicity",
+      "shadow_decision_shape",
+      "issue_exercised",
+      "consume_exercised",
+      "read_exercised",
+      "prepare_exercised",
+      "anomaly_review",
+    ]);
+  add(
+    "guarded_shadow_window",
+    "agent.guarded_shadow_window",
+    "Guarded runtime completed an uninterrupted 48-hour shadow window with every denial and bypass reviewed",
+    guardedShadowMeta,
+    input.reports.guardedShadow,
+  );
+
   const acceptanceIdentity = acceptance.version === REPORT_VERSIONS.acceptance
     && acceptance.commit === commit
     && isFresh(acceptance.evaluatedAt, config.now);
@@ -422,6 +456,7 @@ function evaluate(config) {
     "deployment.monitoring",
     "operations.backup_restore",
     "operations.rollback_drill",
+    "agent.guarded_shadow_window",
     "web.authenticated_same_origin",
     "web.deployed_two_user_acceptance",
     "wallet.metamask_coinbase",
