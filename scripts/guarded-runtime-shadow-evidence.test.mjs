@@ -152,24 +152,43 @@ try {
   assert.equal(unreviewed.code, 1);
   assert.ok(JSON.parse(unreviewed.stdout).blockers.some((entry) => entry.id === "anomaly_review"));
 
-  writeFileSync(join(dir, "wrong-desk-negative.json"), "{\"status\":\"expected-denial\"}\n");
-  writeFileSync(reviewPath, `${JSON.stringify({
-    version: "matterhorn.guarded-runtime-shadow-review.v1",
-    commit,
-    baselineSha256: hashFile(baselinePath),
-    finalSha256: hashFile(anomalousPath),
-    reviewer: "Release owner",
-    reviewedAt: "2026-08-21T00:06:30.000Z",
-    items: [{
+  const template = await run([
+    "review-template", "--baseline", baselinePath, "--final", anomalousPath,
+    "--reviewer", "Release owner", "--output", reviewPath,
+    "--now", "2026-08-21T00:06:30.000Z", "--json",
+  ]);
+  assert.equal(template.code, 0, template.stderr || template.stdout);
+  const generatedReview = JSON.parse(template.stdout);
+  assert.equal(generatedReview.version, "matterhorn.guarded-runtime-shadow-review.v1");
+  assert.equal(generatedReview.commit, commit);
+  assert.equal(generatedReview.baselineSha256, hashFile(baselinePath));
+  assert.equal(generatedReview.finalSha256, hashFile(anomalousPath));
+  assert.equal(generatedReview.items.length, 1);
+  assert.deepEqual(
+    generatedReview.items[0],
+    {
       stage: "issue",
       decision: "would_deny",
       reason: "wrong_desk",
       delta: 2,
-      disposition: "expected_test",
-      note: "Expected wrong-desk negative acceptance exercise.",
-      evidence: "wrong-desk-negative.json",
-    }],
-  }, null, 2)}\n`);
+      disposition: "REVIEW_REQUIRED",
+      note: "",
+      evidence: "",
+    },
+  );
+  const untouchedTemplate = await run([
+    "evaluate", "--baseline", baselinePath, "--final", anomalousPath,
+    "--review", reviewPath, "--output", reportPath,
+    "--now", "2026-08-21T00:07:00.000Z", "--strict", "--json",
+  ]);
+  assert.equal(untouchedTemplate.code, 1);
+  assert.ok(JSON.parse(untouchedTemplate.stdout).blockers.some((entry) => entry.id === "anomaly_review"));
+
+  writeFileSync(join(dir, "wrong-desk-negative.json"), "{\"status\":\"expected-denial\"}\n");
+  generatedReview.items[0].disposition = "expected_test";
+  generatedReview.items[0].note = "Expected wrong-desk negative acceptance exercise.";
+  generatedReview.items[0].evidence = "wrong-desk-negative.json";
+  writeFileSync(reviewPath, `${JSON.stringify(generatedReview, null, 2)}\n`);
   const reviewed = await run([
     "evaluate", "--baseline", baselinePath, "--final", anomalousPath,
     "--review", reviewPath, "--output", reportPath,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import process from "node:process";
 
@@ -18,6 +18,11 @@ const ALLOWED_OUTCOMES = new Set(["success", "error", "timeout"]);
 const REVIEWABLE_DECISIONS = new Set(["would_deny", "bypassed"]);
 const ACCEPTED_DISPOSITIONS = new Set(["expected_test", "accepted_policy"]);
 
+function writeOutputFile(path, source) {
+  mkdirSync(dirname(resolve(path)), { recursive: true });
+  writeFileSync(path, source);
+}
+
 function parseArgs(argv) {
   const command = argv[0];
   const config = {
@@ -28,6 +33,7 @@ function parseArgs(argv) {
     baseline: "",
     final: "",
     review: "",
+    reviewer: "",
     minHours: DEFAULT_MIN_HOURS,
     now: new Date(),
     strict: false,
@@ -48,6 +54,7 @@ function parseArgs(argv) {
     else if (arg === "--baseline") config.baseline = next();
     else if (arg === "--final") config.final = next();
     else if (arg === "--review") config.review = next();
+    else if (arg === "--reviewer") config.reviewer = next();
     else if (arg === "--min-hours") config.minHours = Number(next());
     else if (arg === "--now") config.now = new Date(next());
     else if (arg === "--strict") config.strict = true;
@@ -66,8 +73,13 @@ function parseArgs(argv) {
     if (!config.final) throw new Error("evaluate requires --final.");
     if (!config.output) throw new Error("evaluate requires --output.");
     if (!Number.isFinite(config.minHours) || config.minHours <= 0) throw new Error("--min-hours must be a positive number.");
+  } else if (config.command === "review-template") {
+    if (!config.baseline) throw new Error("review-template requires --baseline.");
+    if (!config.final) throw new Error("review-template requires --final.");
+    if (!config.output) throw new Error("review-template requires --output.");
+    if (config.reviewer.trim().length < 2) throw new Error("review-template requires --reviewer.");
   } else {
-    throw new Error("Command must be capture or evaluate.");
+    throw new Error("Command must be capture, review-template, or evaluate.");
   }
   return config;
 }
@@ -84,6 +96,12 @@ function help() {
     "  node scripts/guarded-runtime-shadow-evidence.mjs capture \\",
     "    --server-url https://control-plane.example \\",
     "    --expected-commit <40-char-sha> --output shadow-start.json",
+    "",
+    "Generate an exact anomaly review template after the final capture:",
+    "  node scripts/guarded-runtime-shadow-evidence.mjs review-template \\",
+    "    --baseline shadow-start.json --final shadow-end.json \\",
+    "    --reviewer \"Release owner\" --output shadow-review.json",
+    "  Fill every REVIEW_REQUIRED item with an accepted disposition, note, and evidence.",
     "",
     "Evaluate after 48 hours:",
     "  node scripts/guarded-runtime-shadow-evidence.mjs evaluate \\",
@@ -244,7 +262,7 @@ async function capture(config) {
   });
   rejectSecrets(snapshot);
   const source = `${JSON.stringify(snapshot, null, 2)}\n`;
-  writeFileSync(config.output, source);
+  writeOutputFile(config.output, source);
   if (config.json) process.stdout.write(source);
   else process.stdout.write(`Guarded shadow snapshot: ${config.output}\n`);
 }
@@ -290,6 +308,51 @@ function metricDeltas(baseline, final) {
 
 function check(id, label, pass, evidence) {
   return { id, label, status: pass ? "pass" : "fail", evidence: evidence ?? null };
+}
+
+function writeReviewTemplate(config) {
+  const baseline = readEvidence(config.baseline, SNAPSHOT_VERSION, "baseline");
+  const final = readEvidence(config.final, SNAPSHOT_VERSION, "final");
+  if (!validIntegrity(baseline.value) || !validIntegrity(final.value)) {
+    throw new Error("Review templates require integrity-valid baseline and final snapshots.");
+  }
+  if (!/^[a-f0-9]{40}$/.test(final.value.commit ?? "") || baseline.value.commit !== final.value.commit) {
+    throw new Error("Review templates require snapshots from the same immutable commit.");
+  }
+  if (baseline.value.serverOrigin !== final.value.serverOrigin) {
+    throw new Error("Review templates require snapshots from the same server origin.");
+  }
+  const observationDeltas = metricDeltas(
+    baseline.value.observations ?? [],
+    final.value.observations ?? [],
+  );
+  const anomalies = observationDeltas.filter(
+    (entry) => entry.delta > 0 && REVIEWABLE_DECISIONS.has(entry.decision),
+  );
+  const template = {
+    version: REVIEW_VERSION,
+    commit: final.value.commit,
+    baselineSha256: baseline.sha256,
+    finalSha256: final.sha256,
+    reviewer: config.reviewer.trim(),
+    reviewedAt: config.now.toISOString(),
+    items: anomalies.map((entry) => ({
+      stage: entry.stage,
+      decision: entry.decision,
+      reason: entry.reason,
+      delta: entry.delta,
+      disposition: "REVIEW_REQUIRED",
+      note: "",
+      evidence: "",
+    })),
+  };
+  rejectSecrets(template, "review-template");
+  const source = `${JSON.stringify(template, null, 2)}\n`;
+  writeOutputFile(config.output, source);
+  if (config.json) process.stdout.write(source);
+  else process.stdout.write(
+    `Guarded shadow review template: ${config.output}\nItems requiring review: ${anomalies.length}\n`,
+  );
 }
 
 function evaluate(config) {
@@ -387,7 +450,7 @@ function evaluate(config) {
   const report = withIntegrity(unsigned);
   rejectSecrets(report);
   const source = `${JSON.stringify(report, null, 2)}\n`;
-  writeFileSync(config.output, source);
+  writeOutputFile(config.output, source);
   if (config.json) process.stdout.write(source);
   else process.stdout.write(`Guarded shadow evidence: ${report.decision}\nReport: ${config.output}\n`);
   if (config.strict && !report.ready) process.exitCode = 1;
@@ -397,6 +460,7 @@ async function main() {
   const config = parseArgs(process.argv.slice(2));
   if (config.help) return process.stdout.write(`${help()}\n`);
   if (config.command === "capture") await capture(config);
+  else if (config.command === "review-template") writeReviewTemplate(config);
   else evaluate(config);
 }
 

@@ -312,12 +312,22 @@ and an operator-only host token environment variable:
 
 ```bash
 export MATTERHORN_WORK_HOST_TOKEN='<read from the Railway secret manager>'
+mkdir -p qa-reports/guarded-shadow
 pnpm capture:guarded-runtime-shadow -- \
   --server-url https://control-plane-production-d46b.up.railway.app \
   --expected-commit <release-sha> \
   --output qa-reports/guarded-shadow/shadow-start.json
 
 # Repeat after at least 48 hours with shadow-end.json, then evaluate:
+pnpm template:guarded-runtime-shadow-review -- \
+  --baseline qa-reports/guarded-shadow/shadow-start.json \
+  --final qa-reports/guarded-shadow/shadow-end.json \
+  --reviewer '<release-owner-name>' \
+  --output qa-reports/guarded-shadow/shadow-review.json
+
+# Review every generated REVIEW_REQUIRED item. Replace its disposition with
+# expected_test or accepted_policy, add a specific note, and attach the cited
+# evidence file. Leave the generated commit and snapshot hashes unchanged.
 pnpm gate:guarded-runtime-shadow -- \
   --baseline qa-reports/guarded-shadow/shadow-start.json \
   --final qa-reports/guarded-shadow/shadow-end.json \
@@ -327,12 +337,15 @@ pnpm gate:guarded-runtime-shadow -- \
 unset MATTERHORN_WORK_HOST_TOKEN
 ```
 
-The review file is required only when a denial or rollout bypass occurred. It
-must use `matterhorn.guarded-runtime-shadow-review.v1`, bind the SHA-256 of both
-snapshot files, name the reviewer, and explain every exact stage, decision,
-reason and delta as `expected_test` or `accepted_policy` with an evidence
-reference. A fix requires a new commit and a new observation window; it cannot
-be waived in the review file.
+The template command binds `matterhorn.guarded-runtime-shadow-review.v1` to the
+SHA-256 of both snapshot files and generates one fail-closed
+`REVIEW_REQUIRED` item for every exact denial or rollout bypass delta. A clean
+window produces an empty item list. For an anomalous window, the named reviewer
+must classify every generated stage, decision, reason and delta as
+`expected_test` or `accepted_policy`, write a specific note, and cite an
+existing evidence file. The gate rejects untouched templates, missing evidence,
+hash changes and incomplete reviews. A product or policy fix requires a new
+commit and a new observation window; it cannot be waived in the review file.
 
 The public configuration gate must run from a controlled environment that has
 the deployment variables. Its JSON output must be stored under the final QA

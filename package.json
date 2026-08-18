@@ -39,6 +39,7 @@
     "smoke:product-hunt-deployment": "node scripts/product-hunt-deployment-probe.mjs --strict",
     "test:product-hunt-deployment-probe": "node scripts/product-hunt-deployment-probe.test.mjs",
     "capture:guarded-runtime-shadow": "node scripts/guarded-runtime-shadow-evidence.mjs capture",
+    "template:guarded-runtime-shadow-review": "node scripts/guarded-runtime-shadow-evidence.mjs review-template",
     "gate:guarded-runtime-shadow": "node scripts/guarded-runtime-shadow-evidence.mjs evaluate --strict",
     "test:guarded-runtime-shadow-evidence": "node scripts/guarded-runtime-shadow-evidence.test.mjs",
     "drill:workspace-backup-restore": "node scripts/workspace-backup-restore-drill.mjs",
