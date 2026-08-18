@@ -40,6 +40,8 @@ const parsed = parseArgs([
   "https://engine.example",
   "--timeout-ms",
   "5000",
+  "--release-surface",
+  "web",
   "--strict",
   "--json",
 ]);
@@ -47,9 +49,11 @@ assert.equal(parsed.outputDir, "/tmp/candidate");
 assert.equal(parsed.appUrl, "https://desks.example/workspace/ws/session");
 assert.equal(parsed.serverUrl, "https://engine.example");
 assert.equal(parsed.timeoutMs, 5000);
+assert.equal(parsed.releaseSurface, "web");
 assert.equal(parsed.strict, true);
 assert.equal(parsed.json, true);
 assert.throws(() => parseArgs(["--timeout-ms", "10"]), /at least 100/);
+assert.throws(() => parseArgs(["--release-surface", "mobile"]), /web or web-and-desktop/);
 assert.throws(() => parseArgs(["--app-url", "file:///tmp/app"]), /http or https/);
 assert.throws(() => parseArgs(["--server-url", "file:///tmp/engine"]), /http or https/);
 assert.throws(
@@ -309,6 +313,8 @@ const cli = spawnSync(
     "scripts/public-beta-candidate-certifier.mjs",
     "--dry-run",
     "--skip-browser",
+    "--release-surface",
+    "web",
     "--output-dir",
     dryRunDir,
     "--json",
@@ -320,8 +326,12 @@ const report = JSON.parse(cli.stdout);
 assert.equal(report.version, REPORT_VERSION);
 assert.equal(report.decision, "DRY-RUN");
 assert.equal(report.publicReady, false);
+assert.equal(report.releaseSurface, "web");
 assert.ok(report.externalGates.length >= 5);
+assert.ok(!report.externalGates.some(({ id }) => id === "desktop_distribution"));
 assert.equal(report.channelReadiness.decision, "NO-GO");
+assert.equal(report.channelReadiness.releaseSurface, "web");
+assert.ok(!report.channelReadiness.blockers.some(({ id }) => id.startsWith("desktop.") || id === "distribution.public_download"));
 assert.ok(report.channelReadiness.counts.blocked > 0);
 assert.equal(
   report.artifacts.candidateManifest,

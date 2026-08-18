@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 
 export const REPORT_VERSION = "matterhorn.public-beta-candidate-certifier.v1";
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
+const RELEASE_SURFACES = new Set(["web", "web-and-desktop"]);
 const MAX_LOG_CHARS = 2_000_000;
 const GIT_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
 const PROTECTED_PATH_RULES = Object.freeze([
@@ -74,6 +75,12 @@ const EXTERNAL_GATES = Object.freeze([
   },
 ]);
 
+function externalGatesFor(releaseSurface) {
+  return EXTERNAL_GATES.filter((gate) => (
+    releaseSurface === "web-and-desktop" || gate.id !== "desktop_distribution"
+  ));
+}
+
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -122,6 +129,7 @@ export function parseArgs(argv) {
     appUrl: "",
     serverUrl: "",
     timeoutMs: DEFAULT_TIMEOUT_MS,
+    releaseSurface: "web-and-desktop",
     resume: true,
     skipBrowser: false,
     dryRun: false,
@@ -160,6 +168,11 @@ export function parseArgs(argv) {
       index += 1;
     } else if (arg.startsWith("--timeout-ms=")) {
       args.timeoutMs = Number(arg.slice("--timeout-ms=".length));
+    } else if (arg === "--release-surface") {
+      args.releaseSurface = argv[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--release-surface=")) {
+      args.releaseSurface = arg.slice("--release-surface=".length);
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -167,6 +180,9 @@ export function parseArgs(argv) {
 
   if (!Number.isFinite(args.timeoutMs) || args.timeoutMs < 100) {
     throw new Error("--timeout-ms must be at least 100.");
+  }
+  if (!RELEASE_SURFACES.has(args.releaseSurface)) {
+    throw new Error("--release-surface must be web or web-and-desktop.");
   }
   for (const [name, value] of [
     ["--app-url", args.appUrl],
@@ -197,6 +213,7 @@ export function helpText() {
     "Usage:",
     "  pnpm certify:public-beta -- --output-dir qa-reports/public-beta/current --app-url http://127.0.0.1:5207/workspace/ws/session --server-url http://127.0.0.1:4145 --json",
     "  pnpm certify:public-beta -- --output-dir qa-reports/public-beta/current --skip-browser --strict --json",
+    "  pnpm certify:public-beta -- --release-surface web --output-dir qa-reports/public-beta/current --strict --json",
     "  pnpm certify:public-beta -- --dry-run --json",
     "",
     "The certifier runs local engineering gates and records redacted evidence.",
@@ -598,6 +615,7 @@ function markdownReport(report) {
     `- Source stable during run: ${report.sourceStable ? "YES" : "NO"}`,
     `- Local engineering gates: ${report.localReady ? "PASS" : "NOT PASS"}`,
     `- Immutable candidate: ${report.immutable ? "YES" : "NO"}`,
+    `- Release surface: ${report.releaseSurface}`,
     `- Public-beta channel gate: ${report.channelReadiness.decision}`,
     `- Public-beta gates: ${report.channelReadiness.counts.passed ?? 0} passed, ${report.channelReadiness.counts.blocked ?? 0} blocked, ${report.channelReadiness.counts.expired ?? 0} expired`,
     `- Public launch ready: NO`,
@@ -745,7 +763,7 @@ export function buildLaunchEvidence(report) {
   };
 }
 
-function launchReadinessArtifacts(repoRoot, outputDir, evidence) {
+function launchReadinessArtifacts(repoRoot, outputDir, evidence, releaseSurface) {
   const evidencePath = join(outputDir, "launch-evidence.local.json");
   const jsonPath = join(outputDir, "launch-readiness.json");
   const markdownPath = join(outputDir, "launch-readiness.md");
@@ -757,6 +775,8 @@ function launchReadinessArtifacts(repoRoot, outputDir, evidence) {
       "scripts/launch-channel-readiness.mjs",
       "--channel",
       "public-beta",
+      "--release-surface",
+      releaseSurface,
       "--evidence",
       evidencePath,
       "--json-output",
@@ -865,19 +885,22 @@ export async function runCertifier(config, options = {}) {
     finalSource,
     ...decision,
     stages: stageResults,
-    externalGates: EXTERNAL_GATES,
+    releaseSurface: config.releaseSurface,
+    externalGates: externalGatesFor(config.releaseSurface),
   };
   const launchEvidence = buildLaunchEvidence(draftReport);
   const launch = launchReadinessArtifacts(
     repoRoot,
     outputDir,
     launchEvidence,
+    config.releaseSurface,
   );
   const report = reportWithIntegrity({
     ...draftReport,
     channelReadiness: {
       decision: launch.report.decision,
       ready: launch.report.ready,
+      releaseSurface: launch.report.releaseSurface,
       counts: launch.report.counts,
       blockers: launch.report.blockers,
     },

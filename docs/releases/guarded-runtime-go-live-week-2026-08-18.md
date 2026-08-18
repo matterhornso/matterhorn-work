@@ -303,6 +303,13 @@ calendar date.
 Run against the exact release tree:
 
 ```bash
+pnpm certify:public-beta -- \
+  --release-surface web \
+  --output-dir qa-reports/public-beta/candidate \
+  --app-url <local-fixture-workspace-url> \
+  --server-url <local-fixture-server-url> \
+  --strict \
+  --json
 bun test apps/app/tests --only-failures
 bun test apps/server/src --only-failures
 pnpm --filter @matterhorn-work/app typecheck
