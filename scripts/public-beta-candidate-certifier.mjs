@@ -201,9 +201,20 @@ export function helpText() {
     "",
     "The certifier runs local engineering gates and records redacted evidence.",
     "Use --server-url only when the app and local engine are served on different origins.",
+    "Loopback app URLs use fixture-workspace browser assertions; non-loopback URLs create a fresh hosted account.",
     "It never signs, deploys, submits transactions, or converts missing owner evidence into GO.",
     "",
   ].join("\n");
+}
+
+export function isLoopbackAppUrl(value) {
+  if (!value) return false;
+  const hostname = new URL(value).hostname.toLowerCase();
+  return hostname === "localhost"
+    || hostname === "::1"
+    || hostname === "[::1]"
+    || hostname === "0.0.0.0"
+    || hostname.startsWith("127.");
 }
 
 function git(repoRoot, args) {
@@ -402,8 +413,10 @@ export function buildStages(config) {
       "scripts/matterhorn-product-browser-smoke.mjs",
       "--url",
       config.appUrl,
-      "--hosted-account",
     ];
+    if (!isLoopbackAppUrl(config.appUrl)) {
+      browserCommand.push("--hosted-account");
+    }
     if (config.serverUrl) {
       browserCommand.push("--server-url", config.serverUrl);
     }

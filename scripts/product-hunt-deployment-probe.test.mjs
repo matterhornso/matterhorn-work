@@ -54,7 +54,11 @@ for (const required of [
 
 const indexHtml = readFileSync("apps/app/index.html", "utf8");
 const webBuild = readFileSync("apps/app/scripts/build-web.mjs", "utf8");
-assert.match(indexHtml, /name="matterhorn-build-commit" content="%VITE_MATTERHORN_BUILD_COMMIT%"/);
+const viteConfig = readFileSync("apps/app/vite.config.ts", "utf8");
+assert.doesNotMatch(indexHtml, /%VITE_MATTERHORN_BUILD_COMMIT%/);
+assert.ok(viteConfig.includes('name: "matterhorn-web-build-attestation"'));
+assert.ok(viteConfig.includes('name: "matterhorn-build-commit"'));
+assert.ok(viteConfig.includes("fullCommitPattern.test(webBuildCommit)"));
 assert.ok(webBuild.includes("VITE_MATTERHORN_BUILD_COMMIT"));
 assert.ok(webBuild.includes("VERCEL_GIT_COMMIT_SHA"));
 assert.ok(webBuild.includes("git\", [\"rev-parse\", \"HEAD\"]"));

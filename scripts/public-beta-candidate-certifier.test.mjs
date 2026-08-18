@@ -16,6 +16,7 @@ import {
   evaluateDecision,
   executeStage,
   getSourceIdentity,
+  isLoopbackAppUrl,
   parseArgs,
   redactLog,
   reusableStage,
@@ -60,6 +61,10 @@ assert.throws(
   /secret-like query parameters/,
 );
 assert.throws(() => parseArgs(["--unknown"]), /Unknown argument/);
+assert.equal(isLoopbackAppUrl("http://127.0.0.1:5282/workspace/ws/session"), true);
+assert.equal(isLoopbackAppUrl("http://localhost:5282/workspace/ws/session"), true);
+assert.equal(isLoopbackAppUrl("http://[::1]:5282/workspace/ws/session"), true);
+assert.equal(isLoopbackAppUrl("https://desks.example/workspace/ws/session"), false);
 
 const stages = buildStages({
   outputDir: "/tmp/candidate",
@@ -161,6 +166,16 @@ assert.equal(
   }).some((item) => item.id === "browser_acceptance"),
   false,
 );
+const localBrowserStage = buildStages({
+  outputDir: "/tmp/candidate",
+  appUrl: "http://127.0.0.1:5282/workspace/ws/session",
+  serverUrl: "http://127.0.0.1:4125",
+  skipBrowser: false,
+  timeoutMs: 1000,
+}).find((item) => item.id === "browser_acceptance");
+assert.ok(localBrowserStage);
+assert.equal(localBrowserStage.command.includes("--hosted-account"), false);
+assert.ok(localBrowserStage.command.includes("--server-url"));
 
 const secret = "sk-" + "A".repeat(32);
 assert.doesNotMatch(redactLog(`token=${secret}`), new RegExp(secret));
