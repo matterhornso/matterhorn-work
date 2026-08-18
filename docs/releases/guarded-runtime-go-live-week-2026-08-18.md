@@ -393,7 +393,7 @@ Any missing evidence is a NO-GO, not a warning.
 
 Before the first candidate deploy, record all of the following in the private
 release evidence packet: current commit, last-known-good commit, Railway project
-id, service id, environment, last-known-good immutable Railway deployment id,
+id, service id, environment id, last-known-good immutable Railway deployment id,
 last-known-good immutable Vercel deployment URL, Vercel scope, rollback owner and
 on-call owner. Do not record CLI credentials or deployment secrets.
 
@@ -417,7 +417,10 @@ Apply rollback only through `pnpm drill:product-hunt-rollback` and
 [`docs/production-launch-configuration.md`](../production-launch-configuration.md).
 The hook is dry-run by default. Application requires both `--apply` and the
 literal confirmation `rollback:<last-known-good-commit>`. The rehearsal first
-proves the current commit and then proves the target commit is healthy twice.
+proves the current commit. Before mutation, the hook verifies that both rollback
+targets exist, are healthy or successful and belong to the exact configured
+Railway project/service/environment and Vercel production project. The
+rehearsal then proves the target commit is healthy twice.
 
 1. Set `MATTERHORN_SIGNUPS_ENABLED=false` to stop account creation without
    affecting existing accounts.

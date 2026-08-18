@@ -109,8 +109,8 @@ function validateVercelDeployment(value, prefix) {
 
 export function validateConfig(config) {
   validateUuid(config.railwayProject, "--railway-project");
-  validateSafeName(config.railwayService, "--railway-service");
-  validateSafeName(config.railwayEnvironment, "--railway-environment");
+  validateUuid(config.railwayService, "--railway-service");
+  validateUuid(config.railwayEnvironment, "--railway-environment");
   validateUuid(config.railwayDeploymentId, "--railway-deployment-id");
   validateSafeName(config.vercelProjectPrefix, "--vercel-project-prefix");
   if (config.vercelScope) validateSafeName(config.vercelScope, "--vercel-scope");
@@ -127,6 +127,27 @@ export function validateConfig(config) {
 
 export function buildRollbackPlan(config) {
   const { vercelDeployment, requiredConfirmation } = validateConfig(config);
+  const preflight = [
+    {
+      id: "validate_railway_target",
+      command: "railway",
+      args: [
+        "api",
+        "query TargetDeployment($id: String!) { deployment(id: $id) { id projectId serviceId environmentId status canRollback } }",
+        "--raw-var", `id=${config.railwayDeploymentId}`,
+        "--compact",
+      ],
+    },
+    {
+      id: "validate_vercel_target",
+      command: "vercel",
+      args: [
+        "inspect", vercelDeployment,
+        "--format=json",
+        ...(config.vercelScope ? ["--scope", config.vercelScope] : []),
+      ],
+    },
+  ];
   const plan = [
     {
       id: "freeze_runtime",
@@ -161,7 +182,7 @@ export function buildRollbackPlan(config) {
       ],
     },
   ];
-  return { plan, requiredConfirmation, vercelDeployment };
+  return { preflight, plan, requiredConfirmation, vercelDeployment };
 }
 
 function publicStep(step) {
@@ -169,7 +190,7 @@ function publicStep(step) {
 }
 
 export function executeRollback(config, runner = spawnSync) {
-  const { plan, requiredConfirmation, vercelDeployment } = buildRollbackPlan(config);
+  const { preflight, plan, requiredConfirmation, vercelDeployment } = buildRollbackPlan(config);
   const report = {
     version: VERSION,
     mode: config.apply ? "apply" : "dry_run",
@@ -179,10 +200,58 @@ export function executeRollback(config, runner = spawnSync) {
     railwayDeploymentId: config.railwayDeploymentId,
     vercelDeployment,
     requiredConfirmation,
+    preflight: preflight.map(publicStep),
     plan: plan.map(publicStep),
+    targetValidation: { railway: false, vercel: false },
+    completedPreflights: [],
     completedSteps: [],
   };
   if (!config.apply) return report;
+
+  const inspect = (step) => {
+    const result = runner(step.command, step.args, {
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8",
+      env: process.env,
+    });
+    if (result.error) throw new Error(`${step.id} failed to start: ${result.error.message}`);
+    if (result.signal) throw new Error(`${step.id} terminated by signal ${result.signal}.`);
+    if (result.status !== 0) throw new Error(`${step.id} exited with status ${result.status ?? "unknown"}.`);
+    try {
+      return JSON.parse(String(result.stdout ?? ""));
+    } catch {
+      throw new Error(`${step.id} returned unreadable JSON.`);
+    }
+  };
+
+  const railway = inspect(preflight[0])?.data?.deployment;
+  if (
+    railway?.id !== config.railwayDeploymentId
+    || railway?.projectId !== config.railwayProject
+    || railway?.serviceId !== config.railwayService
+    || railway?.environmentId !== config.railwayEnvironment
+    || railway?.status !== "SUCCESS"
+    || railway?.canRollback !== true
+  ) {
+    throw new Error("validate_railway_target rejected a missing, mismatched, unsuccessful, or ineligible deployment.");
+  }
+  report.targetValidation.railway = true;
+  report.completedPreflights.push(preflight[0].id);
+
+  const vercel = inspect(preflight[1]);
+  if (
+    typeof vercel?.id !== "string"
+    || !vercel.id.startsWith("dpl_")
+    || vercel?.name !== config.vercelProjectPrefix
+    || vercel?.url !== new URL(vercelDeployment).hostname
+    || vercel?.readyState !== "READY"
+    || vercel?.target !== "production"
+  ) {
+    throw new Error("validate_vercel_target rejected a missing, mismatched, unready, or non-production deployment.");
+  }
+  report.targetValidation.vercel = true;
+  report.completedPreflights.push(preflight[1].id);
 
   for (const step of plan) {
     const result = runner(step.command, step.args, {

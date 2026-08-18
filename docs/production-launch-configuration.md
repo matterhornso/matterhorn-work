@@ -231,8 +231,9 @@ Store the passphrase outside the application host and outside the report
 packet. The archive includes private user content and must never be attached to
 the public launch evidence.
 
-Record the immutable Railway deployment id and Vercel deployment URL for the
-last-known-good commit before cutover. First inspect the first-party rollback
+Record the Railway project, service and environment ids plus the immutable
+Railway deployment id and Vercel deployment URL for the last-known-good commit
+before cutover. First inspect the first-party rollback
 plan. This command is dry-run only and executes no external command:
 
 ```bash
@@ -285,11 +286,14 @@ pnpm drill:product-hunt-rollback -- \
 ```
 
 The hook accepts no credentials. Railway and Vercel authentication must already
-exist in the operator's CLI session. It freezes signups, sets guarded mode to
-`off`, binds the target build commit without triggering a second deploy, rolls
-Railway back to the named immutable deployment, and only then promotes the
-named immutable Vercel deployment. Never substitute an alias URL for the
-immutable Vercel deployment URL.
+exist in the operator's CLI session. Before any mutation, it requires the
+Railway target to be successful, rollback-eligible and bound to the exact
+project, service and environment ids; it also requires the Vercel target to be
+ready, production and bound to the exact project name and immutable URL. It
+then freezes signups, sets guarded mode to `off`, binds the target build commit
+without triggering a second deploy, rolls Railway back to the named immutable
+deployment, and only then promotes the named immutable Vercel deployment. Never
+substitute an alias URL for the immutable Vercel deployment URL.
 
 Fill
 [`product-hunt-operations-evidence.example.json`](product-hunt-operations-evidence.example.json)
