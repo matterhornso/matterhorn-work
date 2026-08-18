@@ -157,6 +157,17 @@ function evidenceReference(reference, bases) {
   return { ok, display: value };
 }
 
+function evidenceDigestMatches(reference, digest, bases) {
+  if (!present(reference) || !/^[a-f0-9]{64}$/i.test(digest ?? "")) return false;
+  const value = String(reference).trim();
+  if (safeHttpsUrl(value)) return false;
+  const path = resolveLocalPath(value, bases);
+  return existsSync(path)
+    && statSync(path).isFile()
+    && statSync(path).size > 0
+    && sha256(readFileSync(path)) === digest.toLowerCase();
+}
+
 function readJsonReference(label, reference, bases) {
   if (!present(reference)) throw new Error(`${label} report path is required.`);
   const path = resolveLocalPath(String(reference).trim(), bases);
@@ -361,6 +372,13 @@ function evaluate(config) {
   add("operations_recovery", "operations.backup_restore", "Workspace and encrypted full user-data recovery pass", operationsMeta && allChecksWithPrefixPass(operations, ["backup_", "user_data_recovery_"]) && reportEvidencePasses(operations, ["backup_status", "user_data_recovery_status"], operationsBases), input.reports.operations);
   add("operations_rollback", "operations.rollback_drill", "Rollback between immutable commits restores health", operationsMeta && allChecksWithPrefixPass(operations, ["rollback_"]) && reportEvidencePasses(operations, ["rollback_status"], operationsBases), input.reports.operations);
 
+  const guardedShadowBases = [dirname(reports.guardedShadow.path), ...bases];
+  const guardedEvidence = guardedShadow.evidence ?? {};
+  const guardedShadowArtifacts = evidenceDigestMatches(guardedEvidence.baselinePath, guardedEvidence.baselineSha256, guardedShadowBases)
+    && evidenceDigestMatches(guardedEvidence.finalPath, guardedEvidence.finalSha256, guardedShadowBases)
+    && (guardedEvidence.reviewPath
+      ? evidenceDigestMatches(guardedEvidence.reviewPath, guardedEvidence.reviewSha256, guardedShadowBases)
+      : guardedEvidence.reviewSha256 === null);
   const guardedShadowMeta = guardedShadow.version === REPORT_VERSIONS.guardedShadow
     && guardedShadow.ready === true
     && guardedShadow.decision === "GO"
@@ -368,6 +386,7 @@ function evaluate(config) {
     && guardedShadow.window?.hours >= 48
     && isFresh(guardedShadow.evaluatedAt, config.now)
     && candidateIntegrityPasses(guardedShadow)
+    && guardedShadowArtifacts
     && reportChecksPass(guardedShadow, [
       "baseline_integrity",
       "final_integrity",

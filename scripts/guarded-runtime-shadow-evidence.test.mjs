@@ -152,6 +152,7 @@ try {
   assert.equal(unreviewed.code, 1);
   assert.ok(JSON.parse(unreviewed.stdout).blockers.some((entry) => entry.id === "anomaly_review"));
 
+  writeFileSync(join(dir, "wrong-desk-negative.json"), "{\"status\":\"expected-denial\"}\n");
   writeFileSync(reviewPath, `${JSON.stringify({
     version: "matterhorn.guarded-runtime-shadow-review.v1",
     commit,
@@ -166,7 +167,7 @@ try {
       delta: 2,
       disposition: "expected_test",
       note: "Expected wrong-desk negative acceptance exercise.",
-      evidence: "qa-reports/guarded-shadow/wrong-desk-negative.json",
+      evidence: "wrong-desk-negative.json",
     }],
   }, null, 2)}\n`);
   const reviewed = await run([
@@ -176,6 +177,17 @@ try {
   ]);
   assert.equal(reviewed.code, 0, reviewed.stderr || reviewed.stdout);
   assert.equal(JSON.parse(reviewed.stdout).decision, "GO");
+
+  const missingEvidenceReview = JSON.parse(readFileSync(reviewPath, "utf8"));
+  missingEvidenceReview.items[0].evidence = "missing-negative-evidence.json";
+  writeFileSync(reviewPath, `${JSON.stringify(missingEvidenceReview, null, 2)}\n`);
+  const missingEvidence = await run([
+    "evaluate", "--baseline", baselinePath, "--final", anomalousPath,
+    "--review", reviewPath, "--output", reportPath,
+    "--now", "2026-08-21T00:07:00.000Z", "--strict", "--json",
+  ]);
+  assert.equal(missingEvidence.code, 1);
+  assert.ok(JSON.parse(missingEvidence.stdout).blockers.some((entry) => entry.id === "anomaly_review"));
 
   writeFileSync(reviewPath, `${JSON.stringify({
     version: "matterhorn.guarded-runtime-shadow-review.v1",

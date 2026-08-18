@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import process from "node:process";
 
 const SNAPSHOT_VERSION = "matterhorn.guarded-runtime-shadow-snapshot.v1";
@@ -256,6 +257,20 @@ function readEvidence(path, expectedVersion, label) {
   return { source, value, sha256: sha256(source) };
 }
 
+function safeReviewEvidence(reference, reviewPath) {
+  if (typeof reference !== "string" || !reference.trim()) return false;
+  const value = reference.trim();
+  try {
+    const url = new URL(value);
+    const sensitiveQuery = [...url.searchParams.keys()].some((key) => /token|authorization|api.?key|secret|signature|credential/i.test(key));
+    return url.protocol === "https:" && !url.username && !url.password && !sensitiveQuery && !url.hash;
+  } catch {
+    if (isAbsolute(value) || value.split(/[\\/]/).includes("..") || /[\u0000-\u001f?#]/.test(value)) return false;
+    const path = resolve(dirname(reviewPath), value);
+    return existsSync(path) && statSync(path).isFile() && statSync(path).size > 0;
+  }
+}
+
 function metricKey(entry) {
   if ("stage" in entry) return `${entry.stage}\u0000${entry.decision}\u0000${entry.reason}`;
   return `${entry.tool}\u0000${entry.access}\u0000${entry.outcome}`;
@@ -300,16 +315,19 @@ function evaluate(config) {
   if (config.review) {
     review = readEvidence(config.review, REVIEW_VERSION, "review");
     const reviewedAt = new Date(review.value.reviewedAt);
-    const reviewItems = new Map((review.value.items ?? []).map((entry) => [`${entry.stage}\u0000${entry.decision}\u0000${entry.reason}\u0000${entry.delta}`, entry]));
+    const reviewList = Array.isArray(review.value.items) ? review.value.items : [];
+    const reviewItems = new Map(reviewList.map((entry) => [`${entry.stage}\u0000${entry.decision}\u0000${entry.reason}\u0000${entry.delta}`, entry]));
     reviewValid = review.value.commit === final.value.commit
       && review.value.baselineSha256 === baseline.sha256
       && review.value.finalSha256 === final.sha256
       && typeof review.value.reviewer === "string" && review.value.reviewer.trim().length >= 2
       && Number.isFinite(reviewedAt.getTime()) && reviewedAt.getTime() >= endAt.getTime() - MAX_CLOCK_SKEW_MS
       && reviewedAt.getTime() <= config.now.getTime() + MAX_CLOCK_SKEW_MS
+      && reviewList.length === anomalies.length
+      && reviewItems.size === anomalies.length
       && anomalies.every((entry) => {
         const item = reviewItems.get(`${entry.stage}\u0000${entry.decision}\u0000${entry.reason}\u0000${entry.delta}`);
-        return item && ACCEPTED_DISPOSITIONS.has(item.disposition) && typeof item.note === "string" && item.note.trim().length >= 8 && typeof item.evidence === "string" && item.evidence.trim().length > 0;
+        return item && ACCEPTED_DISPOSITIONS.has(item.disposition) && typeof item.note === "string" && item.note.trim().length >= 8 && safeReviewEvidence(item.evidence, config.review);
       });
   }
 

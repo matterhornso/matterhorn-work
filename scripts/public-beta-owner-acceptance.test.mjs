@@ -71,6 +71,10 @@ function evidence(name) {
   return path;
 }
 
+function fileSha256(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
 function passingCheck(id, value = "verified") {
   return { id, status: "pass", evidence: value };
 }
@@ -212,6 +216,8 @@ try {
     ],
   });
 
+  const guardedShadowStart = evidence("guarded-shadow-start.json");
+  const guardedShadowEnd = evidence("guarded-shadow-end.json");
   const guardedShadowPath = writeJson("guarded-shadow.json", withIntegrity({
     version: "matterhorn.guarded-runtime-shadow-evidence.v1",
     decision: "GO",
@@ -224,6 +230,14 @@ try {
       endedAt: "2026-07-20T11:00:00.000Z",
       hours: 48.167,
       processUptimeDeltaSeconds: 173400,
+    },
+    evidence: {
+      baselinePath: guardedShadowStart,
+      baselineSha256: fileSha256(guardedShadowStart),
+      finalPath: guardedShadowEnd,
+      finalSha256: fileSha256(guardedShadowEnd),
+      reviewPath: null,
+      reviewSha256: null,
     },
     checks: [
       "baseline_integrity",
