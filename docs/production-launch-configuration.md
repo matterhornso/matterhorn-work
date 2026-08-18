@@ -231,8 +231,28 @@ Store the passphrase outside the application host and outside the report
 packet. The archive includes private user content and must never be attached to
 the public launch evidence.
 
-Run the reviewed no-shell rollback hook against the immutable current and
-last-known-good commits:
+Record the immutable Railway deployment id and Vercel deployment URL for the
+last-known-good commit before cutover. First inspect the first-party rollback
+plan. This command is dry-run only and executes no external command:
+
+```bash
+pnpm rollback:public-beta -- \
+  --railway-project "$RAILWAY_PROJECT_ID" \
+  --railway-service "$RAILWAY_SERVICE_ID" \
+  --railway-environment "$RAILWAY_ENVIRONMENT" \
+  --railway-deployment-id "$LAST_KNOWN_GOOD_RAILWAY_DEPLOYMENT_ID" \
+  --vercel-deployment "$LAST_KNOWN_GOOD_VERCEL_DEPLOYMENT_URL" \
+  --vercel-scope "$VERCEL_SCOPE" \
+  --current-commit "$MATTERHORN_BUILD_COMMIT" \
+  --target-commit "$LAST_KNOWN_GOOD_COMMIT" \
+  --json
+```
+
+Then run the reviewed no-shell rollback hook through the rehearsal. Hook
+arguments use the `--rollback-arg=<value>` form so flags are passed to the hook
+without being interpreted by the rehearsal itself. The rehearsal verifies the
+current exact commit before mutation and requires two consecutive healthy
+snapshots on the rollback target afterward:
 
 ```bash
 pnpm drill:product-hunt-rollback -- \
@@ -241,9 +261,35 @@ pnpm drill:product-hunt-rollback -- \
   --from-commit "$MATTERHORN_BUILD_COMMIT" \
   --to-commit "$LAST_KNOWN_GOOD_COMMIT" \
   --owner "$ROLLBACK_OWNER" \
-  --rollback-hook "$REVIEWED_ROLLBACK_HOOK" \
+  --rollback-hook "$PWD/scripts/public-beta-rollback-hook.mjs" \
+  --rollback-arg=--railway-project \
+  --rollback-arg="$RAILWAY_PROJECT_ID" \
+  --rollback-arg=--railway-service \
+  --rollback-arg="$RAILWAY_SERVICE_ID" \
+  --rollback-arg=--railway-environment \
+  --rollback-arg="$RAILWAY_ENVIRONMENT" \
+  --rollback-arg=--railway-deployment-id \
+  --rollback-arg="$LAST_KNOWN_GOOD_RAILWAY_DEPLOYMENT_ID" \
+  --rollback-arg=--vercel-deployment \
+  --rollback-arg="$LAST_KNOWN_GOOD_VERCEL_DEPLOYMENT_URL" \
+  --rollback-arg=--vercel-scope \
+  --rollback-arg="$VERCEL_SCOPE" \
+  --rollback-arg=--current-commit \
+  --rollback-arg="$MATTERHORN_BUILD_COMMIT" \
+  --rollback-arg=--target-commit \
+  --rollback-arg="$LAST_KNOWN_GOOD_COMMIT" \
+  --rollback-arg=--apply \
+  --rollback-arg=--confirm \
+  --rollback-arg="rollback:$LAST_KNOWN_GOOD_COMMIT" \
   --strict --json-output qa-reports/product-hunt/rollback.json
 ```
+
+The hook accepts no credentials. Railway and Vercel authentication must already
+exist in the operator's CLI session. It freezes signups, sets guarded mode to
+`off`, binds the target build commit without triggering a second deploy, rolls
+Railway back to the named immutable deployment, and only then promotes the
+named immutable Vercel deployment. Never substitute an alias URL for the
+immutable Vercel deployment URL.
 
 Fill
 [`product-hunt-operations-evidence.example.json`](product-hunt-operations-evidence.example.json)

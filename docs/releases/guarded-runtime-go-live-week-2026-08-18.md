@@ -391,6 +391,34 @@ Any missing evidence is a NO-GO, not a warning.
 
 ## Rollback
 
+Before the first candidate deploy, record all of the following in the private
+release evidence packet: current commit, last-known-good commit, Railway project
+id, service id, environment, last-known-good immutable Railway deployment id,
+last-known-good immutable Vercel deployment URL, Vercel scope, rollback owner and
+on-call owner. Do not record CLI credentials or deployment secrets.
+
+Inspect the exact plan without mutation:
+
+```bash
+pnpm rollback:public-beta -- \
+  --railway-project "$RAILWAY_PROJECT_ID" \
+  --railway-service "$RAILWAY_SERVICE_ID" \
+  --railway-environment "$RAILWAY_ENVIRONMENT" \
+  --railway-deployment-id "$LAST_KNOWN_GOOD_RAILWAY_DEPLOYMENT_ID" \
+  --vercel-deployment "$LAST_KNOWN_GOOD_VERCEL_DEPLOYMENT_URL" \
+  --vercel-scope "$VERCEL_SCOPE" \
+  --current-commit "$MATTERHORN_BUILD_COMMIT" \
+  --target-commit "$LAST_KNOWN_GOOD_COMMIT" \
+  --json
+```
+
+Apply rollback only through `pnpm drill:product-hunt-rollback` and
+`scripts/public-beta-rollback-hook.mjs`, following the full command in
+[`docs/production-launch-configuration.md`](../production-launch-configuration.md).
+The hook is dry-run by default. Application requires both `--apply` and the
+literal confirmation `rollback:<last-known-good-commit>`. The rehearsal first
+proves the current commit and then proves the target commit is healthy twice.
+
 1. Set `MATTERHORN_SIGNUPS_ENABLED=false` to stop account creation without
    affecting existing accounts.
 2. Set `MATTERHORN_GUARDED_RUNTIME_MODE=off` to remove guarded-runtime routing

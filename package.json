@@ -48,6 +48,8 @@
     "test:workspace-user-data-recovery": "node scripts/workspace-user-data-recovery.test.mjs",
     "drill:product-hunt-rollback": "node scripts/product-hunt-rollback-rehearsal.mjs",
     "test:product-hunt-rollback-rehearsal": "node scripts/product-hunt-rollback-rehearsal.test.mjs",
+    "rollback:public-beta": "node scripts/public-beta-rollback-hook.mjs",
+    "test:public-beta-rollback-hook": "node scripts/public-beta-rollback-hook.test.mjs",
     "gate:product-hunt-operations": "node scripts/product-hunt-operations-evidence.mjs --strict",
     "test:product-hunt-operations-evidence": "node scripts/product-hunt-operations-evidence.test.mjs",
     "gate:product-hunt-acceptance": "node scripts/product-hunt-acceptance-evidence.mjs --strict",
