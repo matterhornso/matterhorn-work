@@ -294,8 +294,18 @@ node scripts/product-hunt-deployment-probe.mjs \
   --app-url https://matterhorn-desks-canary.vercel.app \
   --server-url https://matterhorn-desks-canary.vercel.app \
   --expected-commit <release-sha> \
+  --health-path /health/ready \
+  --expected-guarded-mode off \
+  --expected-signup-status paused \
   --strict
 ```
+
+After switching the backend to shadow, repeat the probe with
+`--expected-guarded-mode shadow`. On launch day, repeat it only after enabling
+signups with `--expected-signup-status open`; that check fails unless the public
+auth config also proves email verification, password reset, legal acceptance,
+and Turnstile are all available. This prevents a healthy API from masking an
+unusable or incompletely protected signup flow.
 
 Start and end shadow snapshots, using the direct Railway control-plane origin
 and an operator-only host token environment variable:

@@ -44,11 +44,28 @@ for (const required of [
   "cors_untrusted_origin",
   "app_workspace_proxy",
   "app_engine_proxy",
+  "--expected-guarded-mode",
+  "--expected-signup-status",
+  "signup_security",
   "--allow-loopback-http",
 ]) assert.ok(source.includes(required), `deployment probe missing ${required}`);
 
 let serveSpaFallbackForProxyRoutes = false;
+let signupStatus = "paused";
+let signupSecurityReady = true;
 const app = await listen((request, response) => {
+  if (request.url === "/api/auth/config") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({
+      signupsAvailable: signupStatus === "open",
+      signupStatus,
+      emailVerificationRequired: signupSecurityReady,
+      passwordResetAvailable: signupSecurityReady,
+      legalAcceptanceRequired: signupSecurityReady,
+      turnstileSiteKey: signupSecurityReady ? "0x-test-site-key" : null,
+    }));
+    return;
+  }
   const isProxyRoute = request.url === "/workspaces" || request.url === "/opencode/global/health";
   const acceptsHtml = request.headers.accept?.includes("text/html") === true;
   const status = isProxyRoute && !serveSpaFallbackForProxyRoutes ? 401 : acceptsHtml ? 200 : 406;
@@ -68,6 +85,7 @@ const app = await listen((request, response) => {
 });
 
 let allowUntrusted = false;
+let guardedMode = "shadow";
 const api = await listen((request, response) => {
   const origin = request.headers.origin;
   const headers = {
@@ -83,7 +101,10 @@ const api = await listen((request, response) => {
     headers.vary = "Origin";
   }
   response.writeHead(request.method === "OPTIONS" ? 204 : 200, headers);
-  response.end(request.method === "OPTIONS" ? undefined : JSON.stringify({ ok: true }));
+  response.end(request.method === "OPTIONS" ? undefined : JSON.stringify({
+    ok: true,
+    checks: { guardedRuntimeMode: guardedMode, guardedRuntimeReady: true },
+  }));
 });
 
 try {
@@ -91,6 +112,8 @@ try {
     "--app-url", app.url,
     "--server-url", api.url,
     "--expected-commit", expectedCommit,
+    "--expected-guarded-mode", "shadow",
+    "--expected-signup-status", "paused",
     "--allow-loopback-http",
     "--json",
   ]);
@@ -100,6 +123,8 @@ try {
   assert.equal(report.ok, true);
   assert.equal(report.ready, false);
   assert.equal(report.metadata.localContractRun, true);
+  assert.equal(report.metadata.expectedGuardedMode, "shadow");
+  assert.equal(report.metadata.expectedSignupStatus, "paused");
   assert.deepEqual(report.failures, []);
   assert.doesNotMatch(JSON.stringify(report), /authorization|bearer|token/i);
 
@@ -112,6 +137,46 @@ try {
     "--json",
   ]);
   assert.equal(strictLocal.code, 1, "local HTTP must never produce strict production evidence");
+
+  signupStatus = "open";
+  const openSignup = await run([
+    "--app-url", app.url,
+    "--server-url", api.url,
+    "--expected-commit", expectedCommit,
+    "--expected-guarded-mode", "shadow",
+    "--expected-signup-status", "open",
+    "--allow-loopback-http",
+    "--json",
+  ]);
+  assert.equal(openSignup.code, 0, openSignup.stderr || openSignup.stdout);
+  assert.ok(JSON.parse(openSignup.stdout).checks.some((entry) => entry.id === "signup_security" && entry.status === "pass"));
+
+  signupSecurityReady = false;
+  const unsafeSignup = await run([
+    "--app-url", app.url,
+    "--server-url", api.url,
+    "--expected-commit", expectedCommit,
+    "--expected-signup-status", "open",
+    "--allow-loopback-http",
+    "--json",
+  ]);
+  assert.equal(unsafeSignup.code, 1, unsafeSignup.stderr || unsafeSignup.stdout);
+  assert.ok(JSON.parse(unsafeSignup.stdout).failures.some((entry) => entry.id === "signup_security"));
+  signupSecurityReady = true;
+  signupStatus = "paused";
+
+  guardedMode = "off";
+  const wrongGuardedMode = await run([
+    "--app-url", app.url,
+    "--server-url", api.url,
+    "--expected-commit", expectedCommit,
+    "--expected-guarded-mode", "shadow",
+    "--allow-loopback-http",
+    "--json",
+  ]);
+  assert.equal(wrongGuardedMode.code, 1, wrongGuardedMode.stderr || wrongGuardedMode.stdout);
+  assert.ok(JSON.parse(wrongGuardedMode.stdout).failures.some((entry) => entry.id === "guarded_runtime_mode"));
+  guardedMode = "shadow";
 
   const escapedHealth = await run([
     "--app-url", app.url,
