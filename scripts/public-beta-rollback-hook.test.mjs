@@ -40,6 +40,10 @@ assert.equal(plan[0].args.includes("MATTERHORN_SIGNUPS_ENABLED=false"), true);
 assert.equal(plan[0].args.includes("MATTERHORN_GUARDED_RUNTIME_MODE=off"), true);
 assert.equal(plan[0].args.includes(`MATTERHORN_BUILD_COMMIT=${targetCommit}`), true);
 assert.equal(plan[1].args.includes(`id=${config.railwayDeploymentId}`), true);
+assert.match(preflight[0].args[1], /^query TargetDeployment/);
+assert.match(plan[1].args[1], /^mutation RollbackDeployment/);
+assert.notEqual(preflight[0].args[1], "query");
+assert.notEqual(plan[1].args[1], "mutation");
 assert.equal(plan[2].args.includes(config.vercelDeployment), true);
 
 const dryRun = executeRollback(config, () => {
@@ -109,6 +113,22 @@ assert.deepEqual(applied.completedPreflights, ["validate_railway_target", "valid
 assert.deepEqual(applied.completedSteps, ["freeze_runtime", "rollback_railway", "promote_vercel"]);
 assert.equal(calls.every((call) => call.options.shell === false), true);
 assert.equal(calls.length, 5);
+
+const validationCalls = [];
+const validated = executeRollback(
+  parseArgs([...baseArgs, "--validate-targets"]),
+  (command, args, options) => {
+    validationCalls.push({ command, args, options });
+    return successfulRunner(command, args, options);
+  },
+);
+assert.equal(validated.mode, "validate_targets");
+assert.equal(validated.applied, false);
+assert.deepEqual(validated.targetValidation, { railway: true, vercel: true });
+assert.deepEqual(validated.completedPreflights, ["validate_railway_target", "validate_vercel_target"]);
+assert.deepEqual(validated.completedSteps, []);
+assert.equal(validationCalls.length, 2);
+assert.equal(validationCalls.every((call) => call.options.shell === false), true);
 
 let mismatchedAttempts = 0;
 assert.throws(

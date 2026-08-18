@@ -414,6 +414,26 @@ pnpm rollback:public-beta -- \
   --json
 ```
 
+Then validate both immutable targets without applying any rollback step by
+re-running the same command with `--validate-targets`. This executes only the
+Railway deployment lookup and Vercel inspection. It must report both
+`targetValidation` values as `true`, an empty `completedSteps` array and
+`applied: false`:
+
+```bash
+pnpm rollback:public-beta -- \
+  --railway-project "$RAILWAY_PROJECT_ID" \
+  --railway-service "$RAILWAY_SERVICE_ID" \
+  --railway-environment "$RAILWAY_ENVIRONMENT" \
+  --railway-deployment-id "$LAST_KNOWN_GOOD_RAILWAY_DEPLOYMENT_ID" \
+  --vercel-deployment "$LAST_KNOWN_GOOD_VERCEL_DEPLOYMENT_URL" \
+  --vercel-scope "$VERCEL_SCOPE" \
+  --current-commit "$MATTERHORN_BUILD_COMMIT" \
+  --target-commit "$LAST_KNOWN_GOOD_COMMIT" \
+  --validate-targets \
+  --json
+```
+
 Apply rollback only through `pnpm drill:product-hunt-rollback` and
 `scripts/public-beta-rollback-hook.mjs`, following the full command in
 [`docs/production-launch-configuration.md`](../production-launch-configuration.md).

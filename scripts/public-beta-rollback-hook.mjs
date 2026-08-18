@@ -21,6 +21,7 @@ export function parseArgs(argv) {
     targetCommit: "",
     confirm: "",
     apply: false,
+    validateTargets: false,
     json: false,
     help: false,
   };
@@ -52,6 +53,7 @@ export function parseArgs(argv) {
       case "--target-commit": config.targetCommit = next().toLowerCase(); break;
       case "--confirm": config.confirm = next().toLowerCase(); break;
       case "--apply": config.apply = true; break;
+      case "--validate-targets": config.validateTargets = true; break;
       case "--json": config.json = true; break;
       case "--help":
       case "-h": config.help = true; break;
@@ -67,6 +69,7 @@ function help() {
     "",
     "Builds an exact-target rollback plan. It is dry-run only unless --apply and",
     "--confirm rollback:<target-commit> are both present.",
+    "Use --validate-targets to execute only the read-only Railway and Vercel target checks.",
     "",
     "The applied sequence freezes signups and guarded mode without triggering a deploy,",
     "rolls Railway back to an immutable deployment, then promotes an immutable Vercel deployment.",
@@ -193,7 +196,7 @@ export function executeRollback(config, runner = spawnSync) {
   const { preflight, plan, requiredConfirmation, vercelDeployment } = buildRollbackPlan(config);
   const report = {
     version: VERSION,
-    mode: config.apply ? "apply" : "dry_run",
+    mode: config.apply ? "apply" : config.validateTargets ? "validate_targets" : "dry_run",
     applied: false,
     currentCommit: config.currentCommit,
     targetCommit: config.targetCommit,
@@ -206,7 +209,7 @@ export function executeRollback(config, runner = spawnSync) {
     completedPreflights: [],
     completedSteps: [],
   };
-  if (!config.apply) return report;
+  if (!config.apply && !config.validateTargets) return report;
 
   const inspect = (step) => {
     const result = runner(step.command, step.args, {
@@ -252,6 +255,8 @@ export function executeRollback(config, runner = spawnSync) {
   }
   report.targetValidation.vercel = true;
   report.completedPreflights.push(preflight[1].id);
+
+  if (!config.apply) return report;
 
   for (const step of plan) {
     const result = runner(step.command, step.args, {

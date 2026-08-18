@@ -250,6 +250,12 @@ pnpm rollback:public-beta -- \
   --json
 ```
 
+Execute only the read-only Railway and Vercel target preflights before cutover
+by adding `--validate-targets` to that command. The result must have
+`targetValidation.railway: true`, `targetValidation.vercel: true`,
+`applied: false`, and no completed mutation steps. This mode never freezes
+signups, changes guarded mode, rolls Railway back, or promotes Vercel.
+
 Then run the reviewed no-shell rollback hook through the rehearsal. Hook
 arguments use the `--rollback-arg=<value>` form so flags are passed to the hook
 without being interpreted by the rehearsal itself. The rehearsal verifies the
