@@ -37,7 +37,7 @@ type TrustPage = {
   sections: TrustSection[];
 };
 
-const LAST_UPDATED = "August 11, 2026";
+const LAST_UPDATED = "August 19, 2026";
 
 const pageLabels: Record<PublicTrustPath, string> = {
   "/privacy": "Privacy",
@@ -76,18 +76,25 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
         body: (
           <>
             <p>
-              When you use an AI model, MCP, connector, or external tool, the
-              information required for that request is sent to the provider you
-              selected. This can include prompts, selected files, public wallet
-              addresses, and tool parameters.
+              Matterhorn checks each model request before it contacts a
+              provider. The check identifies the provider and model, the
+              provider&apos;s training and retention policy, the categories of data
+              included, and whether that data will leave Matterhorn.
             </p>
             <p>
-              Matterhorn reports the selected model provider&apos;s training and
-              retention status in Models. Public signup deployments block
-              prompts unless the provider&apos;s no-training terms, retention
-              period, and privacy policy have been verified. Do not send
-              secrets, seed phrases, private keys, or information you are not
-              authorized to share.
+              Public research can use a disclosed external provider. Selected
+              files, memories, and account-linked wallet context are private.
+              Matterhorn sends private context automatically only to a local or
+              verified provider. An unverified provider requires approval for
+              one exact request; that approval expires after five minutes and
+              becomes invalid if the prompt, attachment, memory, provider, or
+              model changes.
+            </p>
+            <p>
+              Matterhorn blocks detected seed phrases, private keys, API
+              credentials, raw signatures, and wallet exports before provider
+              contact. The block identifies the category and remediation but
+              never echoes the detected value.
             </p>
           </>
         ),
@@ -96,22 +103,34 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
         title: "Wallets and public networks",
         body: (
           <p>
-            Wallet connections expose the public account and network context
-            needed for reads and previews. Matterhorn Desks does not ask for or
-            store seed phrases or private keys. Signing and transaction approval
-            stay in the connected wallet or external signer.
+            A public address becomes private context when it is linked to your
+            Matterhorn account. The same applies to balances, positions, and
+            trade intent. An agent can research, read, prepare, and simulate an
+            action, but it cannot sign, relay, or submit it. Signing, approval,
+            and submission stay in the connected wallet or external signer.
           </p>
         ),
       },
       {
         title: "Cloud and telemetry",
         body: (
-          <p>
-            Signed-in web sessions use Matterhorn&apos;s hosted workspace services.
-            Product telemetry is limited to operational events and does not
-            include prompt text, response text, code, file contents, or file
-            paths. Local-only use does not send these hosted product events.
-          </p>
+          <>
+            <p>
+              Signed-in web sessions use Matterhorn&apos;s hosted workspace services.
+              Product telemetry is limited to operational events and does not
+              include prompt text, response text, code, file contents, or file
+              paths. Local-only use does not send these hosted product events.
+            </p>
+            <p>
+              Completed and interrupted runs produce a security receipt with the
+              provider policy, data categories, redaction count, tool outcomes,
+              token usage, duration, memory activity, and reviewed-action
+              references. A receipt does not contain raw prompts, unrestricted
+              tool output, secrets, signatures, private keys, or wallet exports.
+              Minimal content-free security metadata is hash-chained and expires
+              after 365 days.
+            </p>
+          </>
         ),
       },
       {
@@ -126,8 +145,10 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
             <p>
               Download a complete workspace archive from Settings → Privacy.
               Download your profile, legal acceptance, and memberships from
-              Settings → Account. For hosted access, deletion, or privacy
-              questions, contact{" "}
+              Settings → Account. Deleting a workspace removes user-controlled
+              content immediately. Only minimal content-free security metadata
+              remains until its normal 365-day expiry. For hosted access,
+              deletion, or privacy questions, contact{" "}
               <a className="text-foreground underline underline-offset-4" href={`mailto:${MATTERHORN_SUPPORT_EMAIL}`}>
                 {MATTERHORN_SUPPORT_EMAIL}
               </a>
@@ -181,13 +202,22 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
       {
         title: "Wallet actions",
         body: (
-          <p>
-            You control connected wallets and external signers. Review the
-            network, account, asset, destination, amount, fees, slippage, and
-            permissions before approving any action. Blockchain transactions
-            can be irreversible, and Matterhorn Desks cannot recover funds or
-            reverse a transaction.
-          </p>
+          <>
+            <p>
+              You control connected wallets and external signers. Matterhorn
+              prepares an exact action with its protocol, network, signer,
+              asset, destination, amount, slippage, expiry, and simulation. Any
+              change to a reviewed field invalidates the review and requires a
+              new action.
+            </p>
+            <p>
+              Agents, MCP clients, command-line clients, watches, and schedulers
+              cannot sign, relay, or submit. Review and submission happen only
+              in the connected wallet. Blockchain transactions can be
+              irreversible, and Matterhorn Desks cannot recover funds or reverse
+              a transaction.
+            </p>
+          </>
         ),
       },
       {
@@ -234,12 +264,20 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
       {
         title: "Security model",
         body: (
-          <p>
-            Matterhorn Desks is local-first and uses scoped workspace access.
-            Browser deployments fail closed when an authenticated same-origin
-            backend is unavailable. Sensitive server metrics require owner or
-            host authorization.
-          </p>
+          <>
+            <p>
+              Matterhorn treats the selected model as an untrusted planner. The
+              authenticated server—not model text, tool output, or the browser
+              UI—controls data disclosure, workspace access, available tools,
+              and reviewed transaction terms.
+            </p>
+            <p>
+              Crypto tool calls are bound to the workspace, session, desk, tool,
+              and exact arguments. Guarded calls use short-lived, single-use
+              authorization. Browser deployments fail closed when their
+              authenticated same-origin backend is unavailable.
+            </p>
+          </>
         ),
       },
       {
@@ -250,7 +288,8 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
             payment credentials into chat. Provider credentials should use the
             operating system&apos;s protected storage or server-side secrets. They
             must not be committed to a project or embedded in a public web
-            build.
+            build. Matterhorn&apos;s deterministic privacy check blocks detected
+            credential-shaped content before model or tool-provider contact.
           </p>
         ),
       },
@@ -259,9 +298,23 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
         body: (
           <p>
             Matterhorn Desks keeps signing in your wallet or external signer.
-            Transaction previews require explicit review, and configured
-            safety limits are checked before a request reaches the signer. A
-            preview is not proof that a transaction is safe or final.
+            Transaction previews bind exact terms, policy, expiry, signer,
+            network, and a fresh simulation to one reviewed intent. Changing a
+            reviewed field or allowing the simulation to become stale requires
+            regeneration. A preview is not proof that a transaction is safe or
+            final.
+          </p>
+        ),
+      },
+      {
+        title: "Untrusted external data",
+        body: (
+          <p>
+            Webpages, token metadata, contract text, governance proposals,
+            protocol responses, and MCP results are treated as data, not
+            instructions. Matterhorn projects approved fields into model context
+            and prevents external content from changing the agent, provider,
+            consent, permissions, or tool authorization.
           </p>
         ),
       },
