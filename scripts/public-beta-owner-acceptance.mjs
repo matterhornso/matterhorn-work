@@ -162,10 +162,12 @@ function evidenceDigestMatches(reference, digest, bases) {
   const value = String(reference).trim();
   if (safeHttpsUrl(value)) return false;
   const path = resolveLocalPath(value, bases);
-  return existsSync(path)
-    && statSync(path).isFile()
-    && statSync(path).size > 0
-    && sha256(readFileSync(path)) === digest.toLowerCase();
+  try {
+    const source = readFileSync(path);
+    return source.length > 0 && sha256(source) === digest.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 function readJsonReference(label, reference, bases) {
