@@ -101,8 +101,9 @@ Exit evidence:
 3. Merge the guarded-runtime PR only after required checks and review.
 4. Deploy the exact merge SHA to Railway with guarded mode `off` and update
    `MATTERHORN_BUILD_COMMIT` to that SHA.
-5. Deploy the same exact merge SHA to Vercel and promote the immutable
-   deployment to the canonical alias.
+5. Deploy the same exact merge SHA to Vercel with
+   `--build-env VITE_MATTERHORN_BUILD_COMMIT=<merge-sha>` and `--skip-domain`.
+   Inspect the immutable deployment, then promote it to the canonical alias.
 6. Run the strict deployment probe. The frontend/API commit, same-origin proxy,
    security headers and CORS must match.
 7. Run authenticated smoke with signups still disabled.
@@ -317,6 +318,7 @@ node scripts/product-hunt-deployment-probe.mjs \
   --app-url https://matterhorn-desks-canary.vercel.app \
   --server-url https://matterhorn-desks-canary.vercel.app \
   --expected-commit <release-sha> \
+  --expected-web-commit <release-sha> \
   --health-path /health/ready \
   --expected-guarded-mode off \
   --expected-signup-status paused \

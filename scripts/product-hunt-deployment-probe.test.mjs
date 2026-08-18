@@ -44,15 +44,27 @@ for (const required of [
   "cors_untrusted_origin",
   "app_workspace_proxy",
   "app_engine_proxy",
+  "--expected-web-commit",
+  "web_build_commit",
   "--expected-guarded-mode",
   "--expected-signup-status",
   "signup_security",
   "--allow-loopback-http",
 ]) assert.ok(source.includes(required), `deployment probe missing ${required}`);
 
+const indexHtml = readFileSync("apps/app/index.html", "utf8");
+const webBuild = readFileSync("apps/app/scripts/build-web.mjs", "utf8");
+assert.match(indexHtml, /name="matterhorn-build-commit" content="%VITE_MATTERHORN_BUILD_COMMIT%"/);
+assert.ok(webBuild.includes("VITE_MATTERHORN_BUILD_COMMIT"));
+assert.ok(webBuild.includes("VERCEL_GIT_COMMIT_SHA"));
+assert.ok(webBuild.includes("git\", [\"rev-parse\", \"HEAD\"]"));
+assert.match(webBuild, /find\(\(\[, value\]\) => value\.length > 0\)/);
+assert.match(webBuild, /if \(!commitPattern\.test\(buildCommit\)\)/);
+
 let serveSpaFallbackForProxyRoutes = false;
 let signupStatus = "paused";
 let signupSecurityReady = true;
+let webCommit = expectedCommit;
 const app = await listen((request, response) => {
   if (request.url === "/api/auth/config") {
     response.writeHead(200, { "content-type": "application/json" });
@@ -81,7 +93,7 @@ const app = await listen((request, response) => {
     ? JSON.stringify({ error: "Authentication required." })
     : status === 406
       ? "<!doctype html><title>HTML navigation required</title>"
-      : "<!doctype html><title>Matterhorn Desks</title>");
+      : `<!doctype html><meta name="matterhorn-build-commit" content="${webCommit}"><title>Matterhorn Desks</title>`);
 });
 
 let allowUntrusted = false;
@@ -112,6 +124,7 @@ try {
     "--app-url", app.url,
     "--server-url", api.url,
     "--expected-commit", expectedCommit,
+    "--expected-web-commit", expectedCommit,
     "--expected-guarded-mode", "shadow",
     "--expected-signup-status", "paused",
     "--allow-loopback-http",
@@ -125,8 +138,22 @@ try {
   assert.equal(report.metadata.localContractRun, true);
   assert.equal(report.metadata.expectedGuardedMode, "shadow");
   assert.equal(report.metadata.expectedSignupStatus, "paused");
+  assert.equal(report.metadata.expectedWebCommit, expectedCommit);
   assert.deepEqual(report.failures, []);
   assert.doesNotMatch(JSON.stringify(report), /authorization|bearer|token/i);
+
+  webCommit = "b".repeat(40);
+  const wrongWebCommit = await run([
+    "--app-url", app.url,
+    "--server-url", api.url,
+    "--expected-commit", expectedCommit,
+    "--expected-web-commit", expectedCommit,
+    "--allow-loopback-http",
+    "--json",
+  ]);
+  assert.equal(wrongWebCommit.code, 1, wrongWebCommit.stderr || wrongWebCommit.stdout);
+  assert.ok(JSON.parse(wrongWebCommit.stdout).failures.some((entry) => entry.id === "web_build_commit"));
+  webCommit = expectedCommit;
 
   const strictLocal = await run([
     "--app-url", app.url,

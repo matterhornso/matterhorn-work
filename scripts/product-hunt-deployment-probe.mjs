@@ -12,6 +12,7 @@ function parseArgs(argv) {
     allowedOrigin: process.env.MATTERHORN_APP_ORIGIN ?? "",
     untrustedOrigin: DEFAULT_UNTRUSTED_ORIGIN,
     expectedCommit: process.env.MATTERHORN_BUILD_COMMIT ?? "",
+    expectedWebCommit: process.env.VITE_MATTERHORN_BUILD_COMMIT ?? "",
     expectedGuardedMode: "",
     expectedSignupStatus: "",
     healthPath: "/health",
@@ -36,6 +37,7 @@ function parseArgs(argv) {
       case "--allowed-origin": config.allowedOrigin = next(); break;
       case "--untrusted-origin": config.untrustedOrigin = next(); break;
       case "--expected-commit": config.expectedCommit = next().toLowerCase(); break;
+      case "--expected-web-commit": config.expectedWebCommit = next().toLowerCase(); break;
       case "--expected-guarded-mode": config.expectedGuardedMode = next().toLowerCase(); break;
       case "--expected-signup-status": config.expectedSignupStatus = next().toLowerCase(); break;
       case "--health-path": config.healthPath = next(); break;
@@ -58,13 +60,13 @@ function help() {
     "Performs safe live checks against the deployed app and API. It never reads or prints auth tokens.",
     "",
     "Usage:",
-    "  pnpm smoke:product-hunt-deployment -- --app-url https://app.example/workspace/ws/session --server-url https://api.example --expected-commit <40-char-sha> --expected-guarded-mode shadow --expected-signup-status open",
+    "  pnpm smoke:product-hunt-deployment -- --app-url https://app.example/workspace/ws/session --server-url https://api.example --expected-commit <40-char-sha> --expected-web-commit <40-char-sha> --expected-guarded-mode shadow --expected-signup-status open",
     "  node scripts/product-hunt-deployment-probe.mjs --app-url $MATTERHORN_APP_URL --server-url $MATTERHORN_WORK_SERVER_URL --strict --json-output deployment.json",
     "",
     "Required in strict mode:",
     "  HTTPS app and API, authenticated same-origin /workspaces and /opencode routing, successful responses,",
     "  defensive security headers, exact-origin CORS, and rejection of an untrusted origin.",
-    "  Optional expected guarded-runtime mode and public signup status checks fail closed on drift.",
+    "  Optional expected web commit, guarded-runtime mode and public signup status checks fail closed on drift.",
     "  --allow-loopback-http is only for local contract tests and can never produce production-ready evidence.",
   ].join("\n");
 }
@@ -185,6 +187,9 @@ async function runProbe(config) {
   if (!/^[a-f0-9]{40}$/i.test(config.expectedCommit)) {
     throw new Error("--expected-commit must be a full 40-character commit SHA.");
   }
+  if (config.expectedWebCommit && !/^[a-f0-9]{40}$/i.test(config.expectedWebCommit)) {
+    throw new Error("--expected-web-commit must be a full 40-character commit SHA.");
+  }
   if (config.expectedGuardedMode && !["off", "shadow", "enforce"].includes(config.expectedGuardedMode)) {
     throw new Error("--expected-guarded-mode must be off, shadow, or enforce.");
   }
@@ -212,9 +217,26 @@ async function runProbe(config) {
     checks.push(check("app_response", "App response", appResponse.ok, `App returned HTTP ${appResponse.status}.`));
     checks.push(check("app_response_origin", "App response origin", new URL(appResponse.url).origin === appUrl.origin, "The app response stays on the configured origin."));
     checks.push(...headerCheck("app", appResponse, { requireHsts: appUrl.protocol === "https:" }));
+    if (config.expectedWebCommit) {
+      const html = await appResponse.text();
+      const deployedWebCommit = html.match(
+        /<meta\s+name=["']matterhorn-build-commit["']\s+content=["']([a-f0-9]{40})["']\s*\/?>/i,
+      )?.[1]?.toLowerCase() ?? "";
+      checks.push(check(
+        "web_build_commit",
+        "Deployed web commit",
+        deployedWebCommit === config.expectedWebCommit,
+        deployedWebCommit
+          ? `Web build reports ${deployedWebCommit}.`
+          : "Web HTML did not report a valid Matterhorn build commit.",
+      ));
+    }
   } catch (error) {
     checks.push(check("app_response", "App response", false, `App request failed: ${error instanceof Error ? error.message : String(error)}`));
     checks.push(check("app_response_origin", "App response origin", false, "The app response origin could not be verified."));
+    if (config.expectedWebCommit) {
+      checks.push(check("web_build_commit", "Deployed web commit", false, "The web build commit could not be verified."));
+    }
   }
 
   await probeUnauthenticatedProxyRoute(
@@ -379,6 +401,7 @@ async function runProbe(config) {
       serverUrl: publicUrl(serverUrl),
       healthPath: config.healthPath,
       expectedCommit: config.expectedCommit,
+      expectedWebCommit: config.expectedWebCommit || null,
       expectedGuardedMode: config.expectedGuardedMode || null,
       expectedSignupStatus: config.expectedSignupStatus || null,
       allowedOrigin,
