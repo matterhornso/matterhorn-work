@@ -222,6 +222,7 @@ export interface MatterhornWorkspaceDataMapResponse {
     | "audit"
     | "taskEvents"
     | "workflowRuns"
+    | "securityReceipts"
     | "walletEvidence"
     | "evidence"
     | "feedback",

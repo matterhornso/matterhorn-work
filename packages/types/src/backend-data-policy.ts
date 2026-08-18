@@ -5,7 +5,7 @@ export const MATTERHORN_BACKEND_DATA_POLICY_VERSION = "matterhorn.backend.data-p
 export type MatterhornWorkspaceModelTrainingUse = "none_by_default";
 export type MatterhornWorkspaceFeedbackUse = "eval_routing_product_quality_only" | "disabled";
 export type MatterhornWorkspaceAppendOnlyRetentionMode = "accountability_default";
-export type MatterhornWorkspaceAppendOnlyStoreId = "audit" | "taskEvents" | "workflowRuns";
+export type MatterhornWorkspaceAppendOnlyStoreId = "securityReceipts";
 
 export interface MatterhornWorkspaceAppendOnlyRetentionPolicy {
   mode: MatterhornWorkspaceAppendOnlyRetentionMode;
@@ -13,9 +13,9 @@ export interface MatterhornWorkspaceAppendOnlyRetentionPolicy {
   summary: string;
   stores: MatterhornWorkspaceAppendOnlyStoreId[];
   exportRoute: string;
-  windowDays: null;
+  windowDays: 365;
   windowLabel: string;
-  purgeSupported: false;
+  purgeSupported: true;
   configurable: false;
 }
 

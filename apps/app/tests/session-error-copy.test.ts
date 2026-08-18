@@ -66,4 +66,41 @@ describe("session error copy", () => {
     expect(parsed.detail).toContain("prompt is preserved");
     expect(`${parsed.message} ${parsed.detail}`).not.toContain("TimeoutError");
   });
+
+  test("extracts an exact-request privacy challenge from a nested provider error", () => {
+    const preflight = {
+      version: "matterhorn.agent-privacy-preflight.v1",
+      requestHash: "request_hash",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      requestedMode: "public_research",
+      effectiveMode: "private_workspace",
+      decision: "consent_required",
+      provider: {
+        id: "cudos",
+        name: "ASI:Cloud",
+        modelId: "asi1-mini",
+        privacyStatus: "unverified",
+        trainingUse: "unknown",
+        retentionDays: null,
+        policyUrl: null,
+        dataLeavesMatterhorn: true,
+      },
+      detectedData: {
+        labels: ["workspace_private"],
+        categories: ["selected_memory"],
+        redactionCount: 0,
+      },
+      challenge: { id: "challenge_1", expiresAt: "2026-08-18T10:05:00.000Z", singleUse: true },
+      reason: "Private context requires one-request consent.",
+    };
+    const parsed = parseSessionError(new Error(JSON.stringify({
+      data: { responseBody: JSON.stringify({ code: "agent_privacy_consent_required", details: preflight }) },
+    })));
+
+    expect(parsed.kind).toBe("privacy-consent");
+    expect(parsed.privacyPreflight?.requestHash).toBe("request_hash");
+    expect(parsed.message).toBe("Allow ASI:Cloud for this request?");
+    expect(parsed.detail).toContain("selected_memory");
+  });
 });

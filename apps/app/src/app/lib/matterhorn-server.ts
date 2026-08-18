@@ -98,6 +98,18 @@ import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/typ
 import type { MatterhornBackendSupportReportResponse } from "@matterhorn-work/types/backend-support-report";
 import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-mode";
 import type {
+  MatterhornAgentPrivacyConsentResponse,
+  MatterhornAgentPrivacyPreflightRequest,
+  MatterhornAgentPrivacyPreflightResponse,
+  MatterhornAgentRunReceipt,
+  MatterhornAgentRunReceiptListResponse,
+} from "@matterhorn-work/types/guarded-agent-runtime";
+import type {
+  ReviewedActionHandoffV2,
+  ReviewedActionValidationRequest,
+  ReviewedActionValidationResponse,
+} from "@matterhorn-work/types/reviewed-actions";
+import type {
   MatterhornWorkflowRun,
   MatterhornWorkflowRunListItem,
   MatterhornWorkflowRunStageInput,
@@ -1798,6 +1810,46 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         { token, hostToken, timeoutMs: timeouts.sessionRead },
       );
     },
+    preflightAgentMessage: (
+      workspaceId: string,
+      sessionId: string,
+      input: Omit<MatterhornAgentPrivacyPreflightRequest, "workspaceId" | "sessionId">,
+    ) => requestJson<MatterhornAgentPrivacyPreflightResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages/preflight`,
+      { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.sessionRead },
+    ),
+    confirmAgentPrivacyConsent: (
+      workspaceId: string,
+      challengeId: string,
+      input: { sessionId: string; requestHash: string },
+    ) => requestJson<MatterhornAgentPrivacyConsentResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/privacy-consents/${encodeURIComponent(challengeId)}/confirm`,
+      { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.sessionRead },
+    ),
+    listAgentRunReceipts: (workspaceId: string, options?: { sessionId?: string; limit?: number }) => {
+      const query = new URLSearchParams();
+      if (options?.sessionId) query.set("sessionId", options.sessionId);
+      if (typeof options?.limit === "number") query.set("limit", String(options.limit));
+      const suffix = query.size ? `?${query.toString()}` : "";
+      return requestJson<MatterhornAgentRunReceiptListResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/agent-run-receipts${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.sessionRead },
+      );
+    },
+    getAgentRunReceipt: (workspaceId: string, runId: string) => requestJson<{ item: MatterhornAgentRunReceipt }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-run-receipts/${encodeURIComponent(runId)}`,
+      { token, hostToken, timeoutMs: timeouts.sessionRead },
+    ),
+    validateReviewedAction: (workspaceId: string, request: ReviewedActionValidationRequest) =>
+      requestJson<ReviewedActionValidationResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/reviewed-actions/validate`,
+        { token, hostToken, method: "POST", body: request, timeoutMs: timeouts.status },
+      ),
     recordSessionExecutionMode: (
       workspaceId: string,
       sessionId: string,
@@ -2423,7 +2475,7 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     workspaceSuiTransactionReceipt: (
       workspaceId: string,
       payload: MatterhornSuiTransactionReceiptInput,
-      options?: { sessionId?: string | null },
+      options?: { sessionId?: string | null; reviewedAction?: ReviewedActionHandoffV2 | null },
     ) =>
       requestJson<MatterhornSuiTransactionReceiptResponse>(
         baseUrl,
@@ -2432,14 +2484,21 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           token,
           hostToken,
           method: "POST",
-          body: { payload, sessionId: options?.sessionId ?? null },
+          body: {
+            payload,
+            sessionId: options?.sessionId ?? null,
+            ...(options?.reviewedAction ? {
+              reviewedAction: options.reviewedAction,
+              receiptIntentHash: options.reviewedAction.intentHash,
+            } : {}),
+          },
           timeoutMs: timeouts.status,
         },
       ),
     workspaceSuiVerifyTransactionReceipt: (
       workspaceId: string,
       payload: MatterhornSuiTransactionReceiptInput,
-      options?: { sessionId?: string | null },
+      options?: { sessionId?: string | null; reviewedAction?: ReviewedActionHandoffV2 | null },
     ) =>
       requestJson<MatterhornSuiTransactionReceiptResponse>(
         baseUrl,
@@ -2448,7 +2507,14 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           token,
           hostToken,
           method: "POST",
-          body: { payload, sessionId: options?.sessionId ?? null },
+          body: {
+            payload,
+            sessionId: options?.sessionId ?? null,
+            ...(options?.reviewedAction ? {
+              reviewedAction: options.reviewedAction,
+              receiptIntentHash: options.reviewedAction.intentHash,
+            } : {}),
+          },
           timeoutMs: timeouts.status,
         },
       ),

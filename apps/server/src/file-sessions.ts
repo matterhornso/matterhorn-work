@@ -126,6 +126,18 @@ export class FileSessionStore {
     return { items, cursor: state.seq };
   }
 
+  clearWorkspace(workspaceId: string): { sessions: number; events: number } {
+    let sessions = 0;
+    for (const [id, session] of this.sessions) {
+      if (session.workspaceId !== workspaceId) continue;
+      this.sessions.delete(id);
+      sessions += 1;
+    }
+    const events = this.workspaceEvents.get(workspaceId)?.events.length ?? 0;
+    this.workspaceEvents.delete(workspaceId);
+    return { sessions, events };
+  }
+
   private pruneExpired(): void {
     const now = Date.now();
     for (const [id, session] of this.sessions) {

@@ -6,6 +6,12 @@ variable-name contract. It contains placeholders only; real credentials belong
 in the deployment secret manager and must never be committed or attached to QA
 evidence.
 
+Guarded crypto runtime interfaces, invariants, retention, and staged enforcement
+are documented in the [guarded runtime operator guide](security/matterhorn-guarded-agent-runtime.md).
+The dated release sequence, GO/NO-GO gates and rollback order for the week of
+18 August 2026 are in the
+[guarded-runtime go-live runbook](releases/guarded-runtime-go-live-week-2026-08-18.md).
+
 ## Who Owns Setup
 
 Matterhorn uses action-specific labels instead of treating every incomplete
@@ -70,6 +76,7 @@ user failure.
 
 1. Copy the root `.env.example` into the deployment secret/config system. Replace placeholders there, not in the repository.
 2. Configure the backend workspace, client token, host token, exact CORS origin, request limits, and attached Matterhorn Desks engine. Set `MATTERHORN_BUILD_COMMIT` to the exact 40-character release SHA.
+   For the guarded crypto runtime, deploy first with `MATTERHORN_GUARDED_RUNTIME_MODE=off` and two independent server-only secrets: `MATTERHORN_AGENT_RUNTIME_SECRET` and `MATTERHORN_CAPABILITY_SIGNING_SECRET`. Move invite-only accounts to `shadow` for 48 hours before `enforce`. Shadow and enforce readiness fail if either secret or a rollout selector is invalid, preventing a false-green observation window. Start enforcement with `MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS=prepare` and `MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS=sui`; append `bittensor`, `hyperliquid`, then `polymarket` only after the prior desk has 24 hours without unexplained denials. Switch access to `all` to cover reads, then clear the desk selector only after generic crypto chat passes. Privacy preflight remains authoritative for every prompt throughout this staged tool rollout.
 3. For a private or local web bridge, configure `VITE_MATTERHORN_WORK_URL` only in its protected deployment configuration. It is never a public browser credential path.
 4. Deploy `packaging/docker/Dockerfile.public-beta` on a long-lived container host with an encrypted persistent volume mounted at `/data`. Set the exact app origin, three high-entropy server secrets, the exact build SHA, and provider credentials in that host's secret manager. The container fails startup when its token, host token, trusted-proxy secret, build SHA, or exact HTTPS CORS origin is missing.
 5. For Public Beta web, configure the same-origin proxy with `MATTERHORN_CONTROL_PLANE_URL` and `MATTERHORN_PROXY_SECRET` as server-only Vercel secrets. Route `/api`, `/workspaces`, `/workspace`, `/opencode`, and the other approved API roots through `api/matterhorn-proxy.mjs`. Set the same value as `MATTERHORN_WORK_TRUSTED_PROXY_SECRET` on the backend. Then set `MATTERHORN_PUBLIC_PROXY_MODE=same-origin`, `VITE_MATTERHORN_DEPLOYMENT=web`, `VITE_MATTERHORN_PUBLIC_BETA=1`, `VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED=1`, `VITE_MATTERHORN_REQUIRE_SIGNIN=1`, `VITE_MATTERHORN_CLOUD_URL=https://<app-origin>`, and `VITE_MATTERHORN_CLOUD_API_URL=https://<app-origin>/api/den`. The reviewed-actions flag exposes only audited agent-draft to exact-review to connected-wallet approval paths; it does not enable autonomous agent or watch submission. Leave every browser-side Matterhorn Desks URL and token variable unset. The deployment probe must confirm `/workspaces` and `/opencode` return a JSON `401` or `403` without authentication; an HTML SPA fallback is a launch blocker.

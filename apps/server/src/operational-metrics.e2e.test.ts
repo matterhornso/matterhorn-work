@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { startServer } from "./server.js";
+import { OperationalMetrics } from "./operational-metrics.js";
 import type { ServerConfig } from "./types.js";
 
 const OWNER_TOKEN = "matterhorn_metrics_owner";
@@ -100,6 +101,33 @@ describe("operational probes and metrics", () => {
     });
   });
 
+  test("shadow and enforced guarded runtime fail readiness when either server-only secret is missing", async () => {
+    const previous = {
+      mode: process.env.MATTERHORN_GUARDED_RUNTIME_MODE,
+      runtime: process.env.MATTERHORN_AGENT_RUNTIME_SECRET,
+      capability: process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET,
+    };
+    delete process.env.MATTERHORN_AGENT_RUNTIME_SECRET;
+    delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    try {
+      for (const mode of ["shadow", "enforce"] as const) {
+        process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode;
+        const base = await boot();
+        const response = await fetch(`${base}/health/ready`);
+        const body = await response.json();
+        expect(response.status).toBe(503);
+        expect(body).toMatchObject({ checks: { guardedRuntimeReady: false, guardedRuntimeMode: mode } });
+      }
+    } finally {
+      if (previous.mode === undefined) delete process.env.MATTERHORN_GUARDED_RUNTIME_MODE;
+      else process.env.MATTERHORN_GUARDED_RUNTIME_MODE = previous.mode;
+      if (previous.runtime === undefined) delete process.env.MATTERHORN_AGENT_RUNTIME_SECRET;
+      else process.env.MATTERHORN_AGENT_RUNTIME_SECRET = previous.runtime;
+      if (previous.capability === undefined) delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+      else process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = previous.capability;
+    }
+  });
+
   test("metrics require owner authentication and expose bounded labels only", async () => {
     const base = await boot();
     await fetch(`${base}/not-a-real-route`);
@@ -144,5 +172,28 @@ describe("operational probes and metrics", () => {
     expect(body).not.toContain(HOST_TOKEN);
     expect(body).not.toContain("not-a-real-route");
     expect(body).not.toContain(tmpdir());
+  });
+
+  test("guarded-runtime shadow metrics expose bounded decisions without request content", () => {
+    const metrics = new OperationalMetrics();
+    const body = metrics.renderPrometheus({
+      ready: true,
+      uptimeMs: 1_000,
+      guardedRuntimeObservations: [{
+        mode: "shadow",
+        stage: "consume",
+        decision: "would_deny",
+        reason: "capability_argument_mutation",
+        count: 2,
+      }],
+    });
+    expect(body).toContain("matterhorn_guarded_capability_decisions_total");
+    expect(body).toContain('mode="shadow"');
+    expect(body).toContain('stage="consume"');
+    expect(body).toContain('decision="would_deny"');
+    expect(body).toContain('reason="capability_argument_mutation"');
+    expect(body).not.toContain("private key");
+    expect(body).not.toContain("walletAddress");
+    expect(body).not.toContain("toolArguments");
   });
 });

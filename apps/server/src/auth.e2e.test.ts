@@ -1043,6 +1043,39 @@ describe("public account authentication", () => {
     expect(crossWorkspace.response.status).toBe(404);
     expect(crossWorkspace.payload.code).toBe("workspace_not_found");
 
+    const ownSecurityReceipts = await jsonRequest(
+      app.base,
+      `/workspace/${workspaceA.id}/agent-run-receipts`,
+      { cookie: cookieA },
+    );
+    expect(ownSecurityReceipts.response.status).toBe(200);
+    expect(ownSecurityReceipts.payload).toMatchObject({
+      items: [],
+      retention: { windowDays: 365, purgeSupported: true },
+    });
+    for (const request of [
+      jsonRequest(app.base, `/workspace/${workspaceB.id}/agent-run-receipts`, { cookie: cookieA }),
+      jsonRequest(app.base, `/workspace/${workspaceB.id}/sessions/ses_private/messages/preflight`, {
+        cookie: cookieA,
+        body: {
+          parts: [{ type: "text", text: "public research" }],
+          model: { providerId: "cudos", modelId: "asi1-mini" },
+        },
+      }),
+      jsonRequest(app.base, `/workspace/${workspaceB.id}/privacy-consents/privacy_challenge_guessed/confirm`, {
+        cookie: cookieA,
+        body: { sessionId: "ses_private", requestHash: "guessed" },
+      }),
+      jsonRequest(app.base, `/workspace/${workspaceB.id}/reviewed-actions/validate`, {
+        cookie: cookieA,
+        body: { handoff: {}, currentDraft: {} },
+      }),
+    ]) {
+      const isolated = await request;
+      expect(isolated.response.status).toBe(404);
+      expect(isolated.payload.code).toBe("workspace_not_found");
+    }
+
     const now = "2026-07-29T00:00:00.000Z";
     const capturedMemory = await jsonRequest(app.base, "/api/memory/capture", {
       cookie: cookieA,

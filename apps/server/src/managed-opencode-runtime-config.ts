@@ -1,5 +1,6 @@
 import { openworkExtensionsPreviewPluginPath } from "./openwork-extensions-plugin-path.js";
 import { buildManagedCudosProviderConfig, CUDOS_PROVIDER_ID } from "./cudos-provider.js";
+import { matterhornGuardPluginPath } from "./matterhorn-guard-plugin-path.js";
 
 const BUILTIN_MCP_NAME = "matterhorn-work";
 
@@ -55,6 +56,7 @@ export function buildManagedOpencodeRuntimeConfig(input: {
     plugin: [
       "opencode-chrome-devtools",
       openworkExtensionsPreviewPluginPath(),
+      matterhornGuardPluginPath(),
     ],
     ...(input.enableCudosProvider
       ? {

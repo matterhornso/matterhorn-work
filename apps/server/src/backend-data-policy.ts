@@ -26,12 +26,12 @@ export function buildAppendOnlyRetentionPolicy(workspaceId: string): MatterhornW
   return {
     mode: "accountability_default",
     label: "Accountability default",
-    summary: "Audit, task event, and workflow run rows are append-only workspace records retained for accountability and exported through the project ledger.",
-    stores: ["audit", "taskEvents", "workflowRuns"],
-    exportRoute: `/workspace/${encodeURIComponent(workspaceId)}/data-ledger/export`,
-    windowDays: null,
-    windowLabel: "No automatic purge window is configured",
-    purgeSupported: false,
+    summary: "Minimal guarded-agent security receipts are retained for accountability for up to 365 days, automatically expired, and never contain raw prompts, secrets, signatures, or unrestricted tool output.",
+    stores: ["securityReceipts"],
+    exportRoute: `/workspace/${encodeURIComponent(workspaceId)}/agent-run-receipts`,
+    windowDays: 365,
+    windowLabel: "Automatically expires after 365 days",
+    purgeSupported: true,
     configurable: false,
   };
 }

@@ -277,6 +277,18 @@ function startFakeOpencode() {
     response.end(JSON.stringify(payload));
   };
 
+  const fakeAgentPermission = [
+    { permission: "*", pattern: "*", action: "allow" },
+  ];
+  const fakeAgents = [
+    "matterhorn",
+    "matterhorn-bittensor",
+    "matterhorn-hyperliquid",
+    "matterhorn-polymarket",
+    "matterhorn-sui",
+    "matterhorn-longevity",
+  ].map((name) => ({ name, mode: "primary", permission: fakeAgentPermission, options: {} }));
+
   const requestDirectory = (request) => {
     const raw = request.headers["x-opencode-directory"];
     if (typeof raw !== "string" || !raw.trim()) return workspaceRoot;
@@ -444,6 +456,11 @@ function startFakeOpencode() {
       return;
     }
 
+    if (url.pathname === "/agent" && request.method === "GET") {
+      json(response, 200, fakeAgents);
+      return;
+    }
+
     if (url.pathname === "/mcp" && request.method === "GET") {
       json(response, 200, mcpStatuses);
       return;
@@ -533,6 +550,8 @@ function startFakeOpencode() {
         const updatedSession = {
           ...session,
           title,
+          ...(Array.isArray(body?.permission) ? { permission: body.permission } : {}),
+          ...(typeof body?.agent === "string" && body.agent.trim() ? { agent: body.agent.trim() } : {}),
           slug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || session.slug,
           time: { ...session.time, updated: now },
         };

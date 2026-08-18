@@ -1,4 +1,4 @@
-import { appendFile, open, readdir, writeFile } from "node:fs/promises";
+import { appendFile, open, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   MatterhornWorkflowRun,
@@ -103,6 +103,16 @@ export class WorkflowRunEngine {
     } catch {
       // Fall back to memory-only if persistence fails.
     }
+  }
+
+  async purgeWorkspace(workspaceId: string): Promise<number> {
+    const runIds = [...(this.runsByWorkspace.get(workspaceId) ?? [])];
+    for (const runId of runIds) this.runs.delete(runId);
+    this.runsByWorkspace.delete(workspaceId);
+    this.loadPromises.delete(workspaceId);
+    const directory = this.runDir(workspaceId);
+    if (directory) await rm(directory, { recursive: true, force: true });
+    return runIds.length;
   }
 
   async stageRun(input: MatterhornWorkflowRunStageInput & {

@@ -68,6 +68,11 @@
       "development": "./src/execution-mode.ts",
       "default": "./src/execution-mode.ts"
     },
+    "./reviewed-actions": {
+      "types": "./src/reviewed-actions.ts",
+      "development": "./src/reviewed-actions.ts",
+      "default": "./src/reviewed-actions.ts"
+    },
     "./memory": {
       "types": "./src/memory.ts",
       "development": "./src/memory.ts",
@@ -157,6 +162,11 @@
       "types": "./src/prediction-markets.ts",
       "development": "./src/prediction-markets.ts",
       "default": "./src/prediction-markets.ts"
+    },
+    "./guarded-agent-runtime": {
+      "types": "./src/guarded-agent-runtime.ts",
+      "development": "./src/guarded-agent-runtime.ts",
+      "default": "./src/guarded-agent-runtime.ts"
     }
   },
   "files": [
