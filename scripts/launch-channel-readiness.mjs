@@ -4,7 +4,13 @@ import process from "node:process";
 
 const EVIDENCE_VERSION = "matterhorn.launch-channel-evidence.v1";
 const CHANNELS = new Set(["beta", "public-beta", "product-hunt"]);
+const RELEASE_SURFACES = new Set(["web", "web-and-desktop"]);
 const MAX_EVIDENCE_AGE_HOURS = Object.freeze({ beta: 24, "public-beta": 12, "product-hunt": 12 });
+const DESKTOP_DISTRIBUTION_GATE_IDS = new Set([
+  "desktop.signed_notarized",
+  "desktop.clean_install",
+  "distribution.public_download",
+]);
 
 const COMMON_GATES = Object.freeze([
   ["scope.freeze", "Launch scope and deferred features are frozen", "Release owner"],
@@ -80,6 +86,7 @@ function parseArgs(argv) {
     jsonOutput: "",
     markdownOutput: "",
     now: new Date(),
+    releaseSurface: "web-and-desktop",
     listGates: false,
     help: false,
   };
@@ -98,6 +105,7 @@ function parseArgs(argv) {
     else if (arg === "--json-output") config.jsonOutput = next();
     else if (arg === "--markdown-output") config.markdownOutput = next();
     else if (arg === "--now") config.now = new Date(next());
+    else if (arg === "--release-surface") config.releaseSurface = next();
     else if (arg === "--json") config.json = true;
     else if (arg === "--strict") config.strict = true;
     else if (arg === "--list-gates") config.listGates = true;
@@ -106,6 +114,12 @@ function parseArgs(argv) {
   }
   if (!CHANNELS.has(config.channel)) {
     throw new Error("--channel must be beta, public-beta, or product-hunt.");
+  }
+  if (!RELEASE_SURFACES.has(config.releaseSurface)) {
+    throw new Error("--release-surface must be web or web-and-desktop.");
+  }
+  if (config.channel !== "public-beta" && config.releaseSurface !== "web-and-desktop") {
+    throw new Error("--release-surface web is supported only for the public-beta channel.");
   }
   if (Number.isNaN(config.now.getTime())) throw new Error("--now must be an ISO date-time.");
   if (!config.help && !config.listGates && !config.evidencePath) {
@@ -121,6 +135,7 @@ function help() {
     "Usage:",
     "  node scripts/launch-channel-readiness.mjs --channel beta --evidence <json> --strict --json",
     "  node scripts/launch-channel-readiness.mjs --channel public-beta --evidence <json> --strict --json",
+    "  node scripts/launch-channel-readiness.mjs --channel public-beta --release-surface web --evidence <json> --strict --json",
     "  node scripts/launch-channel-readiness.mjs --channel product-hunt --evidence <json> --strict --json",
     "  node scripts/launch-channel-readiness.mjs --channel product-hunt --list-gates --json",
     "",
@@ -129,13 +144,15 @@ function help() {
   ].join("\n");
 }
 
-function requiredGates(channel) {
+function requiredGates(channel, releaseSurface = "web-and-desktop") {
   const rows = channel === "beta"
     ? [...COMMON_GATES, ...BETA_GATES]
     : channel === "public-beta"
       ? [...COMMON_GATES, ...PUBLIC_BETA_GATES]
       : [...COMMON_GATES, ...PRODUCT_HUNT_GATES];
-  return rows.map(([id, label, owner]) => ({ id, label, owner }));
+  return rows
+    .filter(([id]) => releaseSurface !== "web" || !DESKTOP_DISTRIBUTION_GATE_IDS.has(id))
+    .map(([id, label, owner]) => ({ id, label, owner }));
 }
 
 function rejectSecretShapedKeys(value, path = "evidence") {
@@ -170,7 +187,7 @@ function evaluate(config, input) {
   const ageHours = (config.now.getTime() - capturedAt.getTime()) / 3_600_000;
   const maxAgeHours = MAX_EVIDENCE_AGE_HOURS[config.channel];
   const commit = typeof input.commit === "string" ? input.commit.trim() : "";
-  const checks = requiredGates(config.channel).map((gate) => {
+  const checks = requiredGates(config.channel, config.releaseSurface).map((gate) => {
     const value = evidenceFor(input, config.channel, gate.id);
     const status = typeof value?.status === "string" ? value.status.trim().toLowerCase() : "missing";
     const evidence = typeof value?.evidence === "string" ? value.evidence.trim() : "";
@@ -214,6 +231,7 @@ function evaluate(config, input) {
   return {
     version: "matterhorn.launch-channel-readiness.v1",
     channel: config.channel,
+    releaseSurface: config.releaseSurface,
     decision: blockers.length === 0 ? "GO" : "NO-GO",
     ready: blockers.length === 0,
     commit: commit || null,
@@ -239,6 +257,7 @@ function markdown(report) {
     "",
     `**Decision:** ${report.decision}`,
     `**Candidate:** ${report.commit ?? "Missing"}`,
+    `**Release surface:** ${report.releaseSurface}`,
     `**Evidence captured:** ${report.capturedAt ?? "Invalid"}`,
     "",
     "| Gate | Status | Owner | Evidence |",
@@ -255,7 +274,11 @@ function main() {
     return;
   }
   if (config.listGates) {
-    const payload = { channel: config.channel, gates: requiredGates(config.channel) };
+    const payload = {
+      channel: config.channel,
+      releaseSurface: config.releaseSurface,
+      gates: requiredGates(config.channel, config.releaseSurface),
+    };
     process.stdout.write(config.json ? `${JSON.stringify(payload, null, 2)}\n` : `${payload.gates.map((gate) => gate.id).join("\n")}\n`);
     return;
   }

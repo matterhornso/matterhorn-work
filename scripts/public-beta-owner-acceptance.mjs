@@ -15,6 +15,7 @@ import process from "node:process";
 const INPUT_VERSION = "matterhorn.public-beta-owner-acceptance-input.v1";
 const REPORT_VERSION = "matterhorn.public-beta-owner-acceptance.v1";
 const MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const RELEASE_SURFACES = new Set(["web", "web-and-desktop"]);
 const scriptRoot = dirname(fileURLToPath(import.meta.url));
 
 const REPORT_VERSIONS = Object.freeze({
@@ -68,7 +69,7 @@ function help() {
     "Matterhorn Public Beta owner acceptance",
     "",
     "Binds the certified candidate, deployed web probe, operations drill, guarded",
-    "shadow window, real wallet/OAuth acceptance, signed desktop verification, and human approvals",
+    "shadow window, real wallet/OAuth acceptance, optional desktop distribution, and human approvals",
     "to one immutable commit and one fail-closed Public Beta decision.",
     "",
     "The input contains evidence references and outcomes only. Never put API keys,",
@@ -254,6 +255,7 @@ function markdown(report) {
     `**Decision:** ${report.decision}`,
     `**Candidate:** \`${report.commit}\``,
     `**Tag:** \`${report.tag}\``,
+    `**Release surface:** ${report.releaseSurface}`,
     `**Generated:** ${report.generatedAt}`,
     "",
     "| Gate | Status | Check | Evidence |",
@@ -275,6 +277,10 @@ function evaluate(config) {
   if (input.version !== INPUT_VERSION) {
     throw new Error(`Input version must be ${INPUT_VERSION}.`);
   }
+  const releaseSurface = input.releaseSurface ?? "web-and-desktop";
+  if (!RELEASE_SURFACES.has(releaseSurface)) {
+    throw new Error("input.releaseSurface must be web or web-and-desktop.");
+  }
 
   const commit = String(input.commit ?? "").trim().toLowerCase();
   const tag = String(input.tag ?? "").trim();
@@ -283,7 +289,9 @@ function evaluate(config) {
 
   const bases = [inputDir, repoRoot];
   const reports = {};
-  for (const name of Object.keys(REPORT_VERSIONS)) {
+  const requiredReports = Object.keys(REPORT_VERSIONS)
+    .filter((name) => releaseSurface === "web-and-desktop" || name !== "desktop");
+  for (const name of requiredReports) {
     reports[name] = readJsonReference(name, input.reports?.[name], bases);
   }
 
@@ -293,7 +301,7 @@ function evaluate(config) {
   const operations = reports.operations.value;
   const guardedShadow = reports.guardedShadow.value;
   const acceptance = reports.acceptance.value;
-  const desktop = reports.desktop.value;
+  const desktop = reports.desktop?.value ?? null;
   const expectedOauth = Array.isArray(input.expectedOauthConnectors)
     ? input.expectedOauthConnectors.map((entry) => String(entry).trim().toLowerCase()).filter(Boolean)
     : [];
@@ -442,7 +450,7 @@ function evaluate(config) {
   const oauthIds = expectedOauth.map((id) => `oauth_${id}`);
   add("oauth_acceptance", "connectors.visible_oauth", "Every and only allowlisted OAuth connector passes acceptance", acceptanceIdentity && reportChecksPass(acceptance, [...oauthIds, "oauth_visible_set"]) && expectedOauth.length === (acceptance.acceptedOauthConnectors?.length ?? 0) && expectedOauth.every((id) => acceptance.acceptedOauthConnectors.includes(id)) && reportEvidencePasses(acceptance, oauthIds, acceptanceBases), expectedOauth.join(", ") || "No public OAuth connectors");
 
-  const desktopMeta = desktop.version === REPORT_VERSIONS.desktop
+  const desktopMeta = desktop?.version === REPORT_VERSIONS.desktop
     && desktop.ready === true
     && desktop.sourceCommit === commit
     && desktop.localContract === false
@@ -450,16 +458,18 @@ function evaluate(config) {
     && Array.isArray(desktop.artifacts)
     && desktop.artifacts.length >= 2
     && desktop.artifacts.every((entry) => /^[a-f0-9]{64}$/i.test(entry.sha256 ?? ""));
-  add("desktop_signed", "desktop.signed_notarized", "Signed, notarized, stapled, Gatekeeper-approved desktop artifacts pass", desktopMeta, input.reports.desktop);
+  if (releaseSurface === "web-and-desktop") {
+    add("desktop_signed", "desktop.signed_notarized", "Signed, notarized, stapled, Gatekeeper-approved desktop artifacts pass", desktopMeta, input.reports.desktop);
 
-  const cleanInstall = input.manual?.cleanInstall ?? {};
-  const cleanInstallRef = evidenceReference(cleanInstall.reportPath, bases);
-  add("desktop_clean_install", "desktop.clean_install", "Clean install, update, and reinstall pass on the signed candidate", cleanInstall.status === "pass" && cleanInstall.cleanInstall === true && cleanInstall.update === true && cleanInstall.reinstall === true && present(cleanInstall.tester) && isFresh(cleanInstall.testedAt, config.now) && cleanInstallRef.ok, cleanInstallRef.display);
+    const cleanInstall = input.manual?.cleanInstall ?? {};
+    const cleanInstallRef = evidenceReference(cleanInstall.reportPath, bases);
+    add("desktop_clean_install", "desktop.clean_install", "Clean install, update, and reinstall pass on the signed candidate", cleanInstall.status === "pass" && cleanInstall.cleanInstall === true && cleanInstall.update === true && cleanInstall.reinstall === true && present(cleanInstall.tester) && isFresh(cleanInstall.testedAt, config.now) && cleanInstallRef.ok, cleanInstallRef.display);
 
-  const publicDownload = input.manual?.publicDownload ?? {};
-  const publicDownloadRef = evidenceReference(publicDownload.reportPath, bases);
-  const desktopArtifact = desktop.artifacts?.find((entry) => entry.file === publicDownload.artifactFile);
-  add("public_download", "distribution.public_download", "Public download resolves to the exact signed candidate artifact and checksum", publicDownload.status === "pass" && safeHttpsUrl(publicDownload.url) && publicDownload.resolvesToCandidate === true && /^[a-f0-9]{64}$/i.test(publicDownload.sha256 ?? "") && desktopArtifact?.sha256 === publicDownload.sha256 && publicDownloadRef.ok, publicDownload.url);
+    const publicDownload = input.manual?.publicDownload ?? {};
+    const publicDownloadRef = evidenceReference(publicDownload.reportPath, bases);
+    const desktopArtifact = desktop.artifacts?.find((entry) => entry.file === publicDownload.artifactFile);
+    add("public_download", "distribution.public_download", "Public download resolves to the exact signed candidate artifact and checksum", publicDownload.status === "pass" && safeHttpsUrl(publicDownload.url) && publicDownload.resolvesToCandidate === true && /^[a-f0-9]{64}$/i.test(publicDownload.sha256 ?? "") && desktopArtifact?.sha256 === publicDownload.sha256 && publicDownloadRef.ok, publicDownload.url);
+  }
 
   const legal = input.manual?.legal ?? {};
   const legalRef = evidenceReference(legal.reportPath, bases);
@@ -484,7 +494,7 @@ function evaluate(config) {
   launchEvidence.channels["public-beta"] ??= { gates: {} };
   launchEvidence.channels["public-beta"].gates ??= {};
   const publicGates = launchEvidence.channels["public-beta"].gates;
-  for (const gate of [
+  const publicBetaGates = [
     "release.stable_tag",
     "security.credential_rotation",
     "deployment.https",
@@ -510,12 +520,17 @@ function evaluate(config) {
     "product.public_copy_and_legal",
     "support.public_beta_channel",
     "support.launch_room",
-  ]) {
+  ].filter((gate) => releaseSurface === "web-and-desktop" || ![
+    "desktop.signed_notarized",
+    "desktop.clean_install",
+    "distribution.public_download",
+  ].includes(gate));
+  for (const gate of publicBetaGates) {
     const evidence = checks.find((entry) => entry.gate === gate)?.evidence ?? inputPath;
     publicGates[gate] = gateEvidence(checks, gate, evidence, `Validated by ${REPORT_VERSION}.`);
   }
 
-  return { repoRoot, input, inputPath, commit, tag, reports, checks, launchEvidence };
+  return { repoRoot, input, inputPath, commit, tag, releaseSurface, reports, checks, launchEvidence };
 }
 
 function writeOutputs(config, evaluated) {
@@ -529,6 +544,7 @@ function writeOutputs(config, evaluated) {
   const readinessResult = spawnSync(process.execPath, [
     join(scriptRoot, "launch-channel-readiness.mjs"),
     "--channel", "public-beta",
+    "--release-surface", evaluated.releaseSurface,
     "--evidence", evidencePath,
     "--now", config.now.toISOString(),
     "--json-output", readinessPath,
@@ -556,6 +572,7 @@ function writeOutputs(config, evaluated) {
     ready: readiness.ready && blockers.length === 0,
     commit: evaluated.commit,
     tag: evaluated.tag,
+    releaseSurface: evaluated.releaseSurface,
     generatedAt: config.now.toISOString(),
     input: evaluated.inputPath,
     launchReadiness: {

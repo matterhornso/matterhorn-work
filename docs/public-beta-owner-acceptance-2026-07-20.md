@@ -23,6 +23,12 @@ Start from
 Keep the completed input and all generated QA evidence outside the release
 commit.
 
+Set `releaseSurface` explicitly. Use `web` for a web-only Public Beta or
+`web-and-desktop` when the same release also publishes downloadable desktop
+artifacts. The strict default is `web-and-desktop`. A web release still requires
+the desktop build, typecheck, and trust-boundary contracts; it omits only the
+signed/notarized distribution, clean-install, and public-download gates.
+
 ## What Engineering Has Automated
 
 The release flow now verifies all of the following in one place:
@@ -38,10 +44,11 @@ The release flow now verifies all of the following in one place:
 - MetaMask, Coinbase Wallet, Phantom/Sui, and Hyperliquid testnet acceptance
   pass;
 - the tested OAuth connector set exactly matches the public allowlist;
-- desktop Developer ID signing, notarization, stapling, Gatekeeper, archive
-  integrity, and checksums pass;
-- clean install, update, reinstall, public download, legal, support, launch
-  staffing, and exposed-key rotation are explicitly approved;
+- for a `web-and-desktop` release, desktop Developer ID signing, notarization,
+  stapling, Gatekeeper, archive integrity, checksums, clean install, update,
+  reinstall, and public download pass;
+- legal, support, launch staffing, and exposed-key rotation are explicitly
+  approved for every release surface;
 - every report is fresh and bound to one candidate;
 - evidence objects reject credential- and signing-material fields.
 
@@ -208,6 +215,7 @@ Set:
 
 - `commit` to `git rev-parse HEAD`;
 - `tag` to the annotated candidate tag;
+- `releaseSurface` to the exact declared launch surface;
 - `capturedAt` to the current ISO timestamp;
 - `expectedOauthConnectors` to the exact public allowlist;
 - each report path to an evaluated report, not raw credentials;
@@ -230,7 +238,7 @@ After a final `GO`:
 
 1. push the exact release commit and annotated tag;
 2. verify the production deployment still reports that commit;
-3. verify the public download checksum again;
+3. for `web-and-desktop`, verify the public download checksum again;
 4. keep the launch room staffed;
 5. retain the generated owner-acceptance and readiness reports as the launch
    record.

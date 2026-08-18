@@ -400,6 +400,30 @@ try {
   assert.equal(passingReport.launchReadiness.blocked, 0);
   assert.ok(readFileSync(join(outputDir, "launch-readiness.md"), "utf8").includes("**Decision:** GO"));
 
+  const { desktop: _desktopReport, ...webReports } = baseInput.reports;
+  const {
+    cleanInstall: _cleanInstall,
+    publicDownload: _publicDownload,
+    ...webManual
+  } = baseInput.manual;
+  const webOnly = run({
+    ...baseInput,
+    releaseSurface: "web",
+    reports: webReports,
+    manual: webManual,
+  });
+  assert.equal(webOnly.status, 0, webOnly.stderr || webOnly.stdout);
+  const webOnlyReport = JSON.parse(webOnly.stdout);
+  assert.equal(webOnlyReport.ready, true);
+  assert.equal(webOnlyReport.releaseSurface, "web");
+  assert.equal(webOnlyReport.checks.some(({ gate }) => gate.startsWith("desktop.")), false);
+  assert.equal(webOnlyReport.checks.some(({ gate }) => gate === "distribution.public_download"), false);
+  assert.ok(webOnlyReport.launchReadiness.required < passingReport.launchReadiness.required);
+
+  const invalidSurface = run({ ...baseInput, releaseSurface: "mobile" });
+  assert.equal(invalidSurface.status, 1);
+  assert.match(invalidSurface.stderr, /input\.releaseSurface must be web or web-and-desktop/);
+
   const blockedShadowPath = writeJson("guarded-shadow-blocked.json", withIntegrity({
     version: "matterhorn.guarded-runtime-shadow-evidence.v1",
     decision: "NO-GO",

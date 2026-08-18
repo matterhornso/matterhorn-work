@@ -5,6 +5,12 @@ on Friday, 21 August 2026, with the guarded agent runtime deployed in `shadow`.
 Full desk-by-desk enforcement continues after launch; it must not be compressed
 to meet the launch date.
 
+Release surface: `web`. Desktop typecheck/build and trust-boundary contracts
+remain source-quality gates, but signed/notarized desktop distribution, clean
+installation and public-download publication are outside this web launch. The
+final owner input must set `releaseSurface: "web"`; the acceptance gate defaults
+to the stricter `web-and-desktop` surface if this field is omitted.
+
 ## Launch definition
 
 Friday's launch is a production Public Beta with:
@@ -375,6 +381,26 @@ commit and a new observation window; it cannot be waived in the review file.
 The public configuration gate must run from a controlled environment that has
 the deployment variables. Its JSON output must be stored under the final QA
 evidence directory; never attach the environment itself.
+
+Final owner acceptance must use the declared web surface. Copy the checked-in
+input template into the ignored QA directory, set `releaseSurface` to `web`,
+remove the desktop report plus the `cleanInstall` and `publicDownload` manual
+sections, and bind every remaining report to the exact merge commit:
+
+```bash
+cp docs/public-beta-owner-acceptance.example.json \
+  qa-reports/public-beta/owner-input.json
+
+pnpm public-beta:owner-acceptance -- \
+  --input qa-reports/public-beta/owner-input.json \
+  --output-dir qa-reports/public-beta/final-owner-acceptance \
+  --strict \
+  --json
+```
+
+The command fails closed if `releaseSurface` is invalid or omitted and a
+desktop report is missing. `web-and-desktop` remains the strict default so an
+operator cannot silently narrow an existing combined release.
 
 ## GO criteria
 
