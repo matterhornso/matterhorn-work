@@ -10,7 +10,7 @@ const SPECS = Object.freeze({
   deployment: { version: "matterhorn.product-hunt-deployment-probe.v1", commit: (value) => value.metadata?.expectedCommit },
   operations: { version: "matterhorn.product-hunt-operations-readiness.v2", commit: (value) => value.commit },
   guardedShadow: { version: "matterhorn.guarded-runtime-shadow-evidence.v1", commit: (value) => value.commit },
-  acceptance: { version: "matterhorn.product-hunt-acceptance-readiness.v1", commit: (value) => value.commit },
+  acceptance: { version: "matterhorn.product-hunt-acceptance-readiness.v2", commit: (value) => value.commit },
   desktop: { version: "matterhorn.desktop-public-release-verification.v1", commit: (value) => value.sourceCommit },
 });
 

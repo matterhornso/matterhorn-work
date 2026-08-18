@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import process from "node:process";
 
-const INPUT_VERSION = "matterhorn.product-hunt-acceptance-evidence.v1";
-const OUTPUT_VERSION = "matterhorn.product-hunt-acceptance-readiness.v1";
+const INPUT_VERSION = "matterhorn.product-hunt-acceptance-evidence.v2";
+const OUTPUT_VERSION = "matterhorn.product-hunt-acceptance-readiness.v2";
 const MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 function parseArgs(argv) {
@@ -33,7 +34,7 @@ function help() {
   return [
     "Matterhorn Product Hunt external acceptance gate",
     "",
-    "Validates deployed two-user, real-wallet, Hyperliquid testnet, and visible OAuth connector acceptance.",
+    "Validates deployed signup, two-account isolation, guarded crypto-agent, real-wallet, and visible OAuth acceptance.",
     "Evidence must describe outcomes only. Private keys, seed phrases, wallet exports, signatures, signed payloads, and auth credentials are rejected.",
     "",
     "Usage:",
@@ -56,6 +57,20 @@ function present(value) {
   return typeof value === "string" ? value.trim().length > 0 : value !== undefined && value !== null;
 }
 
+function evidenceFileReady(path, evidencePath) {
+  if (typeof path !== "string" || !path.trim() || isAbsolute(path)) return false;
+  const base = resolve(dirname(evidencePath));
+  const target = resolve(base, path);
+  const offset = relative(base, target);
+  if (!offset || offset.startsWith("..") || isAbsolute(offset) || !existsSync(target)) return false;
+  try {
+    const stat = statSync(target);
+    return stat.isFile() && stat.size > 0 && stat.size <= 5 * 1024 * 1024;
+  } catch {
+    return false;
+  }
+}
+
 function check(id, gate, label, pass, evidence) {
   return { id, gate, label, status: pass ? "pass" : "fail", evidence: present(evidence) ? evidence : null };
 }
@@ -63,6 +78,43 @@ function check(id, gate, label, pass, evidence) {
 function allTrue(value, keys) {
   return keys.every((key) => value?.[key] === true);
 }
+
+const GUARDED_DESK_SCENARIOS = Object.freeze({
+  bittensor: {
+    label: "Bittensor",
+    network: "testnet",
+    protocol: ["balance", "validatorComparison", "transferPreview", "stakePreview"],
+  },
+  hyperliquid: {
+    label: "Hyperliquid",
+    network: "testnet",
+    protocol: ["markets", "positions", "orderbook", "orderPreview", "modifyCancelPreview", "closePreview"],
+  },
+  polymarket: {
+    label: "Polymarket",
+    network: "preview",
+    protocol: ["discovery", "complianceBlock", "eligiblePreview", "walletTicket"],
+  },
+  sui: {
+    label: "Sui",
+    network: "sui-testnet",
+    protocol: ["balance", "nativeTransferPreview", "coinTransferPreview", "objectTransferPreview"],
+  },
+});
+
+const GUARDED_DESK_COMMON = [
+  "publicResearch",
+  "privateContextFlow",
+  "modelCompletion",
+  "runReceipt",
+  "prepare",
+  "reject",
+  "expiryBlocked",
+  "tamperBlocked",
+  "walletReview",
+  "receiptReconciled",
+  "reload",
+];
 
 function evaluate(input, config) {
   if (input.version !== INPUT_VERSION) throw new Error(`Evidence version must be ${INPUT_VERSION}.`);
@@ -76,13 +128,84 @@ function evaluate(input, config) {
     check("deployed_https", "ux.deployed_two_user_acceptance", "Acceptance ran on the deployed HTTPS app", deployed, input.appUrl),
   ];
 
+  const signup = input.authentication?.signup;
+  checks.push(check(
+    "signup_journey",
+    "auth.public_signup",
+    "Create account, Turnstile, legal acceptance, email verification, sign in/out, and password reset pass",
+    signup?.status === "pass" && allTrue(signup, [
+      "createAccount", "turnstile", "legalAcceptance", "verificationEmail", "verifyEmail", "signIn", "signOut", "passwordReset",
+    ]) && present(signup.tester) && evidenceFileReady(signup.reportPath, config.evidence),
+    signup?.reportPath,
+  ));
+
+  const isolation = input.authentication?.twoAccountIsolation;
+  checks.push(check(
+    "two_account_isolation",
+    "security.two_account_isolation",
+    "Two accounts cannot cross-read workspaces, preflights, grants, receipts, memories, or reviewed actions",
+    isolation?.status === "pass" && allTrue(isolation, [
+      "workspaces", "preflights", "grants", "receipts", "memories", "actions",
+    ]) && present(isolation.tester) && evidenceFileReady(isolation.reportPath, config.evidence),
+    isolation?.reportPath,
+  ));
+
+  const privacy = input.agentRuntime?.privacy;
+  checks.push(check(
+    "privacy_firewall",
+    "agent.privacy_firewall",
+    "Sensitive input is blocked before usage/provider contact and private consent is exact, disclosed, and mutation-safe",
+    privacy?.status === "pass" && allTrue(privacy, [
+      "sensitiveBlocked", "usageReservationZeroOnBlock", "providerContactZeroOnBlock", "privateConsentRequired",
+      "consentExactBinding", "consentMutationBlocked", "providerDisclosed",
+    ]) && evidenceFileReady(privacy.reportPath, config.evidence),
+    privacy?.reportPath,
+  ));
+
+  const capability = input.agentRuntime?.capability;
+  checks.push(check(
+    "capability_adversarial",
+    "agent.capability_enforcement",
+    "Wrong-desk/tool/access, replay, mutation, cross-tenant/session, and submit-capability attacks fail closed",
+    capability?.status === "pass" && allTrue(capability, [
+      "wrongDeskBlocked", "wrongToolBlocked", "readCannotPrepare", "replayBlocked", "argumentMutationBlocked",
+      "crossWorkspaceBlocked", "crossSessionBlocked", "noSubmitCapability",
+    ]) && evidenceFileReady(capability.reportPath, config.evidence),
+    capability?.reportPath,
+  ));
+
+  const genericCrypto = input.agentRuntime?.genericCrypto;
+  checks.push(check(
+    "generic_crypto_journey",
+    "agent.generic_crypto",
+    "Generic crypto chat completes public and private-context flows with model, privacy, usage, tool, and reload receipts",
+    genericCrypto?.status === "pass" && allTrue(genericCrypto, [
+      "publicResearch", "privateContextFlow", "modelCompletion", "runReceipt", "privacyReceipt", "usageReceipt", "toolReceipt", "reload",
+    ]) && evidenceFileReady(genericCrypto.reportPath, config.evidence),
+    genericCrypto?.reportPath,
+  ));
+
+  for (const [id, scenario] of Object.entries(GUARDED_DESK_SCENARIOS)) {
+    const item = input.agentRuntime?.desks?.[id];
+    checks.push(check(
+      `${id}_guarded_journey`,
+      `agent.${id}_guarded_journey`,
+      `${scenario.label} completes public/private model work, guarded prepare negatives, exact wallet review, receipt reconciliation, and protocol scenarios`,
+      item?.status === "pass"
+        && item?.network === scenario.network
+        && allTrue(item, [...GUARDED_DESK_COMMON, ...scenario.protocol])
+        && evidenceFileReady(item.reportPath, config.evidence),
+      item?.reportPath,
+    ));
+  }
+
   for (const [id, label] of [["metamask", "MetaMask"], ["coinbase", "Coinbase Wallet"]]) {
     const item = input.wallets?.[id];
     checks.push(check(
       `${id}_journey`,
       "wallet.metamask_coinbase",
       `${label} connect, reject, approve, receipt, reload, and disconnect pass`,
-      item?.status === "pass" && allTrue(item, ["connect", "reject", "approve", "receipt", "reload", "disconnect"]) && present(item.browser) && present(item.walletVersion),
+      item?.status === "pass" && allTrue(item, ["connect", "reject", "approve", "receipt", "reload", "disconnect"]) && present(item.browser) && present(item.walletVersion) && evidenceFileReady(item.reportPath, config.evidence),
       item?.reportPath,
     ));
   }
@@ -92,7 +215,7 @@ function evaluate(input, config) {
     "phantom_sui_journey",
     "wallet.phantom_sui",
     "Phantom Sui connect, reject, approve handoff, receipt, reload, and disconnect pass",
-    phantom?.status === "pass" && phantom?.network === "sui-testnet" && allTrue(phantom, ["connect", "reject", "approveHandoff", "receipt", "reload", "disconnect"]) && present(phantom.walletVersion),
+    phantom?.status === "pass" && phantom?.network === "sui-testnet" && allTrue(phantom, ["connect", "reject", "approveHandoff", "receipt", "reload", "disconnect"]) && present(phantom.walletVersion) && evidenceFileReady(phantom.reportPath, config.evidence),
     phantom?.reportPath,
   ));
 
@@ -103,7 +226,7 @@ function evaluate(input, config) {
     "Hyperliquid testnet execution and every fail-closed boundary pass",
     hyperliquid?.status === "pass" && hyperliquid?.network === "testnet" && allTrue(hyperliquid, [
       "connect", "reject", "approve", "receipt", "replayBlocked", "expiryBlocked", "limitBlocked", "killSwitchBlocked",
-    ]) && present(hyperliquid.wallet) && present(hyperliquid.reportPath),
+    ]) && present(hyperliquid.wallet) && evidenceFileReady(hyperliquid.reportPath, config.evidence),
     hyperliquid?.reportPath,
   ));
 
@@ -113,7 +236,7 @@ function evaluate(input, config) {
       `${id}_journey`,
       "ux.deployed_two_user_acceptance",
       `${label} can open a project, complete chat, use a desk, save a note, and inspect output`,
-      item?.status === "pass" && allTrue(item, ["openProject", "chat", "desk", "note", "output"]) && present(item.tester) && present(item.reportPath),
+      item?.status === "pass" && allTrue(item, ["openProject", "chat", "desk", "note", "output"]) && present(item.tester) && evidenceFileReady(item.reportPath, config.evidence),
       item?.reportPath,
     ));
   }
@@ -126,7 +249,7 @@ function evaluate(input, config) {
       `oauth_${id}`,
       "connectors.visible_oauth",
       `${id} connect, reload, tool call, disconnect, and revoked-account behavior pass`,
-      item?.status === "pass" && allTrue(item, ["connect", "reload", "toolCall", "disconnect", "revokedAccountBlocked"]) && present(item.reportPath),
+      item?.status === "pass" && allTrue(item, ["connect", "reload", "toolCall", "disconnect", "revokedAccountBlocked"]) && evidenceFileReady(item.reportPath, config.evidence),
       item?.reportPath,
     ));
   }

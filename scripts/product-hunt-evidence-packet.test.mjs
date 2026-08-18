@@ -13,7 +13,7 @@ const reports = {
   deployment: { version: "matterhorn.product-hunt-deployment-probe.v1", ready: true, metadata: { expectedCommit: commit } },
   operations: { version: "matterhorn.product-hunt-operations-readiness.v2", ready: true, decision: "GO", commit },
   guardedShadow: { version: "matterhorn.guarded-runtime-shadow-evidence.v1", ready: true, decision: "GO", commit },
-  acceptance: { version: "matterhorn.product-hunt-acceptance-readiness.v1", ready: true, decision: "GO", commit },
+  acceptance: { version: "matterhorn.product-hunt-acceptance-readiness.v2", ready: true, decision: "GO", commit },
   desktop: { version: "matterhorn.desktop-public-release-verification.v1", ready: true, status: "pass", sourceCommit: commit },
 };
 

@@ -159,6 +159,29 @@ Protocol matrix for each account where applicable:
 No test may broadcast mainnet funds. Wallet tests use testnet, rejected signatures
 or non-broadcast previews.
 
+Record these outcomes in the v2 hosted-acceptance contract. Start from the
+checked-in template, fill only observed results, and attach an existing report
+file for every passing journey:
+
+```bash
+mkdir -p qa-reports/guarded-hosted
+cp docs/product-hunt-acceptance-evidence.example.json \
+  qa-reports/guarded-hosted/acceptance-input.json
+
+pnpm gate:product-hunt-acceptance -- \
+  --evidence qa-reports/guarded-hosted/acceptance-input.json \
+  --json-output qa-reports/guarded-hosted/acceptance-readiness.json \
+  --json --strict
+```
+
+`matterhorn.product-hunt-acceptance-evidence.v2` fails closed unless it proves
+the complete signup journey, two-account isolation across guarded artifacts,
+privacy and adversarial capability cases, generic crypto completion, and every
+desk's public/private, model, receipt, prepare, reject, expiry, tamper, wallet
+review, reload, and protocol-specific scenarios. Evidence contains outcomes and
+references only—never accounts, prompts, wallet addresses, signatures,
+credentials, capabilities, or unrestricted tool output.
+
 Also run:
 
 - 320, 375, 768 and 1440 pixel viewport checks.

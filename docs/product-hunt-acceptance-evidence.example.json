@@ -1,9 +1,24 @@
 {
-  "version": "matterhorn.product-hunt-acceptance-evidence.v1",
+  "version": "matterhorn.product-hunt-acceptance-evidence.v2",
   "capturedAt": "2026-07-20T00:00:00.000Z",
   "commit": "0000000000000000000000000000000000000000",
   "environment": "deployed",
   "appUrl": "https://app.matterhorn.example/workspace/ws/session",
+  "authentication": {
+    "signup": { "status": "pending", "tester": "", "createAccount": false, "turnstile": false, "legalAcceptance": false, "verificationEmail": false, "verifyEmail": false, "signIn": false, "signOut": false, "passwordReset": false, "reportPath": "" },
+    "twoAccountIsolation": { "status": "pending", "tester": "", "workspaces": false, "preflights": false, "grants": false, "receipts": false, "memories": false, "actions": false, "reportPath": "" }
+  },
+  "agentRuntime": {
+    "privacy": { "status": "pending", "sensitiveBlocked": false, "usageReservationZeroOnBlock": false, "providerContactZeroOnBlock": false, "privateConsentRequired": false, "consentExactBinding": false, "consentMutationBlocked": false, "providerDisclosed": false, "reportPath": "" },
+    "capability": { "status": "pending", "wrongDeskBlocked": false, "wrongToolBlocked": false, "readCannotPrepare": false, "replayBlocked": false, "argumentMutationBlocked": false, "crossWorkspaceBlocked": false, "crossSessionBlocked": false, "noSubmitCapability": false, "reportPath": "" },
+    "genericCrypto": { "status": "pending", "publicResearch": false, "privateContextFlow": false, "modelCompletion": false, "runReceipt": false, "privacyReceipt": false, "usageReceipt": false, "toolReceipt": false, "reload": false, "reportPath": "" },
+    "desks": {
+      "bittensor": { "status": "pending", "network": "testnet", "publicResearch": false, "privateContextFlow": false, "modelCompletion": false, "runReceipt": false, "prepare": false, "reject": false, "expiryBlocked": false, "tamperBlocked": false, "walletReview": false, "receiptReconciled": false, "reload": false, "balance": false, "validatorComparison": false, "transferPreview": false, "stakePreview": false, "reportPath": "" },
+      "hyperliquid": { "status": "pending", "network": "testnet", "publicResearch": false, "privateContextFlow": false, "modelCompletion": false, "runReceipt": false, "prepare": false, "reject": false, "expiryBlocked": false, "tamperBlocked": false, "walletReview": false, "receiptReconciled": false, "reload": false, "markets": false, "positions": false, "orderbook": false, "orderPreview": false, "modifyCancelPreview": false, "closePreview": false, "reportPath": "" },
+      "polymarket": { "status": "pending", "network": "preview", "publicResearch": false, "privateContextFlow": false, "modelCompletion": false, "runReceipt": false, "prepare": false, "reject": false, "expiryBlocked": false, "tamperBlocked": false, "walletReview": false, "receiptReconciled": false, "reload": false, "discovery": false, "complianceBlock": false, "eligiblePreview": false, "walletTicket": false, "reportPath": "" },
+      "sui": { "status": "pending", "network": "sui-testnet", "publicResearch": false, "privateContextFlow": false, "modelCompletion": false, "runReceipt": false, "prepare": false, "reject": false, "expiryBlocked": false, "tamperBlocked": false, "walletReview": false, "receiptReconciled": false, "reload": false, "balance": false, "nativeTransferPreview": false, "coinTransferPreview": false, "objectTransferPreview": false, "reportPath": "" }
+    }
+  },
   "wallets": {
     "metamask": { "status": "pending", "connect": false, "reject": false, "approve": false, "receipt": false, "reload": false, "disconnect": false, "browser": "", "walletVersion": "", "reportPath": "" },
     "coinbase": { "status": "pending", "connect": false, "reject": false, "approve": false, "receipt": false, "reload": false, "disconnect": false, "browser": "", "walletVersion": "", "reportPath": "" },

@@ -266,10 +266,19 @@ try {
     "coinbase.md",
     "phantom.md",
     "hyperliquid.md",
+    "signup.md",
+    "isolation.md",
+    "privacy.md",
+    "capability.md",
+    "generic-crypto.md",
+    "bittensor-guarded.md",
+    "hyperliquid-guarded.md",
+    "polymarket-guarded.md",
+    "sui-guarded.md",
     "notion.md",
   ].map((name) => [name, evidence(name)]));
   const acceptancePath = writeJson("acceptance.json", {
-    version: "matterhorn.product-hunt-acceptance-readiness.v1",
+    version: "matterhorn.product-hunt-acceptance-readiness.v2",
     ready: true,
     decision: "GO",
     commit,
@@ -284,6 +293,15 @@ try {
       passingCheck("coinbase_journey", acceptanceEvidence["coinbase.md"]),
       passingCheck("phantom_sui_journey", acceptanceEvidence["phantom.md"]),
       passingCheck("hyperliquid_testnet_journey", acceptanceEvidence["hyperliquid.md"]),
+      passingCheck("signup_journey", acceptanceEvidence["signup.md"]),
+      passingCheck("two_account_isolation", acceptanceEvidence["isolation.md"]),
+      passingCheck("privacy_firewall", acceptanceEvidence["privacy.md"]),
+      passingCheck("capability_adversarial", acceptanceEvidence["capability.md"]),
+      passingCheck("generic_crypto_journey", acceptanceEvidence["generic-crypto.md"]),
+      passingCheck("bittensor_guarded_journey", acceptanceEvidence["bittensor-guarded.md"]),
+      passingCheck("hyperliquid_guarded_journey", acceptanceEvidence["hyperliquid-guarded.md"]),
+      passingCheck("polymarket_guarded_journey", acceptanceEvidence["polymarket-guarded.md"]),
+      passingCheck("sui_guarded_journey", acceptanceEvidence["sui-guarded.md"]),
       passingCheck("oauth_notion", acceptanceEvidence["notion.md"]),
       passingCheck("oauth_visible_set", "notion"),
     ],
@@ -399,8 +417,22 @@ try {
   assert.equal(blockedShadow.status, 1);
   assert.ok(JSON.parse(blockedShadow.stdout).blockers.some((entry) => entry.gate === "agent.guarded_shadow_window"));
 
+  const blockedPrivacyAcceptance = JSON.parse(readFileSync(acceptancePath, "utf8"));
+  blockedPrivacyAcceptance.ready = false;
+  blockedPrivacyAcceptance.decision = "NO-GO";
+  blockedPrivacyAcceptance.checks = blockedPrivacyAcceptance.checks.map((entry) => (
+    entry.id === "privacy_firewall" ? { ...entry, status: "fail" } : entry
+  ));
+  const blockedPrivacyAcceptancePath = writeJson("acceptance-privacy-blocked.json", blockedPrivacyAcceptance);
+  const blockedPrivacy = run({
+    ...baseInput,
+    reports: { ...baseInput.reports, acceptance: blockedPrivacyAcceptancePath },
+  });
+  assert.equal(blockedPrivacy.status, 1);
+  assert.ok(JSON.parse(blockedPrivacy.stdout).blockers.some((entry) => entry.gate === "agent.privacy_firewall"));
+
   const noOauthAcceptancePath = writeJson("acceptance-no-oauth.json", {
-    version: "matterhorn.product-hunt-acceptance-readiness.v1",
+    version: "matterhorn.product-hunt-acceptance-readiness.v2",
     ready: false,
     decision: "NO-GO",
     commit,

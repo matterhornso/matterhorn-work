@@ -9,6 +9,7 @@
     "ownerApproval": "qa-reports/public-beta/candidate/release-owner-approval.json",
     "deployment": "qa-reports/public-beta/owner/deployment.json",
     "operations": "qa-reports/public-beta/owner/operations-readiness.json",
+    "guardedShadow": "qa-reports/public-beta/owner/guarded-shadow-evidence.json",
     "acceptance": "qa-reports/public-beta/owner/external-acceptance-readiness.json",
     "desktop": "qa-reports/public-beta/owner/desktop-public-release.json"
   },

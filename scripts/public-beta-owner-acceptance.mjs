@@ -23,7 +23,7 @@ const REPORT_VERSIONS = Object.freeze({
   deployment: "matterhorn.product-hunt-deployment-probe.v1",
   operations: "matterhorn.product-hunt-operations-readiness.v2",
   guardedShadow: "matterhorn.guarded-runtime-shadow-evidence.v1",
-  acceptance: "matterhorn.product-hunt-acceptance-readiness.v1",
+  acceptance: "matterhorn.product-hunt-acceptance-readiness.v2",
   desktop: "matterhorn.desktop-public-release-verification.v1",
 });
 
@@ -419,6 +419,22 @@ function evaluate(config) {
     && isFresh(acceptance.evaluatedAt, config.now);
   const acceptanceMeta = acceptanceIdentity && acceptance.ready === true;
   const acceptanceBases = [dirname(reports.acceptance.path), ...bases];
+  add("signup_acceptance", "auth.public_signup", "Hosted signup, Turnstile, legal acceptance, email verification, sign in/out, and password reset pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["signup_journey"]) && reportEvidencePasses(acceptance, ["signup_journey"], acceptanceBases), input.reports.acceptance);
+  add("two_account_isolation", "security.two_account_isolation", "Two hosted accounts are isolated across workspaces, preflights, grants, receipts, memories, and actions", acceptanceMeta && reportChecksPass(acceptance, ["two_account_isolation"]) && reportEvidencePasses(acceptance, ["two_account_isolation"], acceptanceBases), input.reports.acceptance);
+  add("guarded_privacy_acceptance", "agent.privacy_firewall", "Hosted privacy firewall and adversarial capability enforcement pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["privacy_firewall", "capability_adversarial"]) && reportEvidencePasses(acceptance, ["privacy_firewall", "capability_adversarial"], acceptanceBases), input.reports.acceptance);
+  add("guarded_crypto_acceptance", "agent.crypto_hosted_acceptance", "Generic crypto and every initial crypto desk pass model, privacy, wallet-review, receipt, reload, and protocol scenarios", acceptanceMeta && reportChecksPass(acceptance, [
+    "generic_crypto_journey",
+    "bittensor_guarded_journey",
+    "hyperliquid_guarded_journey",
+    "polymarket_guarded_journey",
+    "sui_guarded_journey",
+  ]) && reportEvidencePasses(acceptance, [
+    "generic_crypto_journey",
+    "bittensor_guarded_journey",
+    "hyperliquid_guarded_journey",
+    "polymarket_guarded_journey",
+    "sui_guarded_journey",
+  ], acceptanceBases), input.reports.acceptance);
   add("two_user_acceptance", "web.deployed_two_user_acceptance", "New-user and returning-user deployed journeys pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["evidence_fresh", "deployed_https", "newUser_journey", "existingUser_journey"]) && reportEvidencePasses(acceptance, ["newUser_journey", "existingUser_journey"], acceptanceBases), input.reports.acceptance);
   add("evm_wallet_acceptance", "wallet.metamask_coinbase", "MetaMask and Coinbase Wallet journeys pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["metamask_journey", "coinbase_journey"]) && reportEvidencePasses(acceptance, ["metamask_journey", "coinbase_journey"], acceptanceBases), input.reports.acceptance);
   add("sui_wallet_acceptance", "wallet.phantom_sui", "Phantom Sui reject and approve-handoff journeys pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["phantom_sui_journey"]) && reportEvidencePasses(acceptance, ["phantom_sui_journey"], acceptanceBases), input.reports.acceptance);
@@ -478,6 +494,10 @@ function evaluate(config) {
     "operations.backup_restore",
     "operations.rollback_drill",
     "agent.guarded_shadow_window",
+    "agent.privacy_firewall",
+    "agent.crypto_hosted_acceptance",
+    "auth.public_signup",
+    "security.two_account_isolation",
     "web.authenticated_same_origin",
     "web.deployed_two_user_acceptance",
     "wallet.metamask_coinbase",
