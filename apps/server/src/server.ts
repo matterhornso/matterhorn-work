@@ -2432,9 +2432,15 @@ function matterhornEmailConfig(): EmailSendConfig {
 
 function matterhornEmailDeliveryConfigured(config: EmailSendConfig): boolean {
   if (config.devMode) return true;
+  const resendConfigured = (config.resendApiKey?.trim().length ?? 0) >= 16;
+  const smtpConfigured = Boolean(
+    config.smtp?.host?.trim() &&
+      config.smtp.user?.trim() &&
+      config.smtp.pass?.trim(),
+  );
   return Boolean(
     config.from &&
-      (config.resendApiKey || config.smtp?.host),
+      (resendConfigured || smtpConfigured),
   );
 }
 
