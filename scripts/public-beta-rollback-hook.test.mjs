@@ -83,7 +83,7 @@ const successfulRunner = (command, args, options) => {
         projectId: config.railwayProject,
         serviceId: config.railwayService,
         environmentId: config.railwayEnvironment,
-        status: "SUCCESS",
+        status: "REMOVED",
         canRollback: true,
       } } }),
     };
@@ -129,6 +129,39 @@ assert.deepEqual(validated.completedPreflights, ["validate_railway_target", "val
 assert.deepEqual(validated.completedSteps, []);
 assert.equal(validationCalls.length, 2);
 assert.equal(validationCalls.every((call) => call.options.shell === false), true);
+
+const activeSuccessfulTarget = executeRollback(
+  parseArgs([...baseArgs, "--validate-targets"]),
+  (command, args, options) => {
+    const result = successfulRunner(command, args, options);
+    if (command === "railway") {
+      const payload = JSON.parse(result.stdout);
+      payload.data.deployment.status = "SUCCESS";
+      result.stdout = JSON.stringify(payload);
+    }
+    return result;
+  },
+);
+assert.deepEqual(activeSuccessfulTarget.targetValidation, { railway: true, vercel: true });
+
+let unsupportedStatusAttempts = 0;
+assert.throws(
+  () => executeRollback(
+    parseArgs([...baseArgs, "--validate-targets"]),
+    (command, args, options) => {
+      unsupportedStatusAttempts += 1;
+      const result = successfulRunner(command, args, options);
+      if (unsupportedStatusAttempts === 1) {
+        const payload = JSON.parse(result.stdout);
+        payload.data.deployment.status = "FAILED";
+        result.stdout = JSON.stringify(payload);
+      }
+      return result;
+    },
+  ),
+  /validate_railway_target rejected/i,
+);
+assert.equal(unsupportedStatusAttempts, 1, "an unsupported target status must fail before Vercel inspection");
 
 let mismatchedAttempts = 0;
 assert.throws(
