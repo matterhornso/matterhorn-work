@@ -769,17 +769,38 @@ async function run() {
     await gotoWithTransientRetry(page, workspaceUrl("session", "?panel=extensions"), { waitUntil: "load" });
     await visibleMarker(page, ["MCP connections"]);
     const configuredServer = page.getByText("Matterhorn Desks MCP", { exact: true });
+    const connectedServerSummary = page.locator('[aria-label^="Connected MCP servers:"]');
     const emptySummary = page.getByText("No external MCPs connected.", { exact: true });
-    await Promise.race([
-      configuredServer.waitFor({ state: "visible", timeout: 20_000 }),
-      emptySummary.waitFor({ state: "visible", timeout: 20_000 }),
-    ]);
-    if (await configuredServer.isVisible().catch(() => false)) {
+    await page.waitForFunction(
+      () => Boolean(
+        document.querySelector('[aria-label^="Connected MCP servers:"]')
+        || Array.from(document.querySelectorAll("*")).some((element) => {
+          const text = element.textContent?.trim();
+          return text === "Matterhorn Desks MCP" || text === "No external MCPs connected.";
+        }),
+      ),
+      undefined,
+      { timeout: 20_000 },
+    );
+    const connectedSummaryLabel = await connectedServerSummary.getAttribute("aria-label");
+    if (connectedSummaryLabel?.startsWith("Connected MCP servers:")) {
+      const connectedNames = connectedSummaryLabel
+        .replace(/^Connected MCP servers:\s*/, "")
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean);
+      if (connectedNames.length === 0) {
+        throw new Error("Connected MCP summary did not name any servers.");
+      }
+      const readyCount = await page.getByText("Ready", { exact: true }).count();
+      if (readyCount < connectedNames.length) {
+        throw new Error("Not every connected MCP server is visibly ready.");
+      }
+    } else if (await configuredServer.isVisible().catch(() => false)) {
       await page.getByText("Ready", { exact: true })
         .waitFor({ state: "visible", timeout: 20_000 });
     } else {
-      await page.getByText("No external MCPs connected.", { exact: true })
-        .waitFor({ state: "visible", timeout: 20_000 });
+      await emptySummary.waitFor({ state: "visible", timeout: 20_000 });
     }
     if (await page.getByText("Available MCPs & connectors", { exact: true }).count() !== 0) {
       throw new Error("Embedded MCP rail exposed the full connector catalog.");
