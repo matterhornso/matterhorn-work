@@ -55,9 +55,9 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-function loadTypedExport(name) {
+function loadTypedExport(name, source = "matterhorn-workflows.ts") {
   const inline = `
-import { ${name} } from "${__dirname}/../packages/types/src/matterhorn-workflows.ts";
+import { ${name} } from "${__dirname}/../packages/types/src/${source}";
 console.log(JSON.stringify(${name}, null, 2));
 `;
   const runner = spawnSync("bun", ["-e", inline], {
@@ -77,6 +77,7 @@ const protocolWorkspaces = loadTypedExport("MATTERHORN_PROTOCOL_WORKSPACE_MANIFE
 const customerTemplates = loadTypedExport("MATTERHORN_CUSTOMER_WORKFLOW_TEMPLATE_REGISTRY");
 const templateToWorkspace = loadTypedExport("MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE");
 const demoScenarios = loadTypedExport("MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS");
+const deskAgents = loadTypedExport("MATTERHORN_DESK_AGENT_MANIFESTS", "desk-agents.ts");
 
 const findings = [];
 
@@ -168,16 +169,45 @@ const hyperliquidProtocol = protocolWorkspaces.hyperliquid;
 const polymarketProtocol = protocolWorkspaces.polymarket;
 record(
   "Market safety",
-  "Hyperliquid protocol workspace is preview_only",
-  hyperliquidProtocol?.customerStatus === "preview_only",
+  "Hyperliquid protocol workspace is live",
+  hyperliquidProtocol?.customerStatus === "live",
   hyperliquidProtocol?.customerStatus,
 );
 record(
   "Market safety",
-  "Polymarket protocol workspace is preview_only",
-  polymarketProtocol?.customerStatus === "preview_only",
+  "Polymarket protocol workspace is beta_ready",
+  polymarketProtocol?.customerStatus === "beta_ready",
   polymarketProtocol?.customerStatus,
 );
+
+for (const [id, label, surface, featureGate] of [
+  ["hyperliquid", "Hyperliquid", "manual_trade_ticket", "hyperliquid_execution"],
+  ["polymarket", "Polymarket", "connected_wallet", "polymarket_compliance"],
+]) {
+  const policy = deskAgents[id]?.capabilityPolicy;
+  record(
+    "Market safety",
+    `${label} agent is prepare_only`,
+    policy?.actionLevel === "prepare_only",
+    policy?.actionLevel,
+  );
+  record(
+    "Market safety",
+    `${label} agent, automation, and agent signing stay disabled`,
+    policy?.agentMaySign === false
+      && policy?.agentMaySubmit === false
+      && policy?.automationsMaySubmit === false,
+    `sign=${String(policy?.agentMaySign)}, submit=${String(policy?.agentMaySubmit)}, automation=${String(policy?.automationsMaySubmit)}`,
+  );
+  record(
+    "Market safety",
+    `${label} completion requires the reviewed user surface`,
+    policy?.userCompletion?.surface === surface
+      && policy?.userCompletion?.availableAfterReview === true
+      && policy?.userCompletion?.featureGate === featureGate,
+    `surface=${String(policy?.userCompletion?.surface)}, reviewed=${String(policy?.userCompletion?.availableAfterReview)}, gate=${String(policy?.userCompletion?.featureGate)}`,
+  );
+}
 
 // 3. Wellness safety
 const wellnessScenario = demoScenarios.wellness_client_program_packet;

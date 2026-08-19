@@ -30,8 +30,8 @@ This fixture report does not query GitHub. Verify the current PR state before cl
 | Workflow manifest market_read_preview exists | ✅ | category=markets, status=preview_only |
 | Workflow manifest decentralized_services_planner exists | ✅ | category=decentralized_services, status=planned_not_live |
 | Protocol workspace manifest bittensor exists | ✅ | category=bittensor, customerStatus=beta_ready |
-| Protocol workspace manifest hyperliquid exists | ✅ | category=markets, customerStatus=preview_only |
-| Protocol workspace manifest polymarket exists | ✅ | category=markets, customerStatus=preview_only |
+| Protocol workspace manifest hyperliquid exists | ✅ | category=markets, customerStatus=live |
+| Protocol workspace manifest polymarket exists | ✅ | category=markets, customerStatus=beta_ready |
 | Protocol workspace manifest wellness exists | ✅ | category=wellness, customerStatus=workflow_ready |
 | Protocol workspace manifest decentralized_services exists | ✅ | category=decentralized_services, customerStatus=planned_not_live |
 | Customer template bittensor_operator maps to protocol workspace bittensor | ✅ | mapping valid |
@@ -51,8 +51,14 @@ This fixture report does not query GitHub. Verify the current PR state before cl
 | Polymarket scenario is preview_only | ✅ | preview_only |
 | Polymarket scenario canSubmit is false | ✅ | false |
 | Polymarket scenario canExecute is false | ✅ | false |
-| Hyperliquid protocol workspace is preview_only | ✅ | preview_only |
-| Polymarket protocol workspace is preview_only | ✅ | preview_only |
+| Hyperliquid protocol workspace is live | ✅ | live |
+| Polymarket protocol workspace is beta_ready | ✅ | beta_ready |
+| Hyperliquid agent is prepare_only | ✅ | prepare_only |
+| Hyperliquid agent, automation, and agent signing stay disabled | ✅ | sign=false, submit=false, automation=false |
+| Hyperliquid completion requires the reviewed user surface | ✅ | surface=manual_trade_ticket, reviewed=true, gate=hyperliquid_execution |
+| Polymarket agent is prepare_only | ✅ | prepare_only |
+| Polymarket agent, automation, and agent signing stay disabled | ✅ | sign=false, submit=false, automation=false |
+| Polymarket completion requires the reviewed user surface | ✅ | surface=connected_wallet, reviewed=true, gate=polymarket_compliance |
 
 ### Wellness safety
 
