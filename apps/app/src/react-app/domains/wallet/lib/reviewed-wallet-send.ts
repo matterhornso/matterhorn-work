@@ -27,15 +27,28 @@ export type ReviewedWalletSendSimulationResult = {
   error?: string;
 };
 
+export type ReviewedWalletSimulationProof = {
+  status: "passed";
+  chainId: number;
+  to: string;
+  from: string;
+  value: string;
+  data: string;
+  dataSelector: string;
+  checkedAt: number;
+};
+
 export type ReviewedWalletSendInput = {
   approval: ReviewedWalletSendApproval;
   connectedChainId: number | null | undefined;
+  connectedAddress?: string | null;
   forceTestnet?: boolean;
   policy: Omit<WalletApprovalPolicyInput, "valueUSD">;
   chainName?: (chainId: number) => string;
   simulateTransaction?: (
     request: PreparedWalletSendRequest["request"],
   ) => Promise<ReviewedWalletSendSimulationResult>;
+  simulationProof?: ReviewedWalletSimulationProof;
   sendTransaction: (request: PreparedWalletSendRequest["request"]) => Promise<`0x${string}`>;
   now?: () => number;
   blockedReasonPrefix?: string;
@@ -45,6 +58,33 @@ export type ReviewedWalletSendInput = {
   onSwapSubmitted?: () => void;
   onSecurityLog?: (entry: SecurityLogEntry) => void;
 };
+
+const REVIEWED_SIMULATION_MAX_AGE_MS = 60_000;
+
+function verifiedSimulationProof(input: ReviewedWalletSendInput, timestamp: number): ReviewedWalletSendSimulationResult | null {
+  const proof = input.simulationProof;
+  if (!proof) return null;
+  const expectedSelector = dataSelector(input.approval.data) ?? "0x";
+  const connectedAddress = input.connectedAddress?.trim().toLowerCase() ?? "";
+  const matches =
+    proof.status === "passed"
+    && proof.chainId === input.approval.chainId
+    && proof.to.trim().toLowerCase() === input.approval.to.trim().toLowerCase()
+    && proof.from.trim().toLowerCase() === connectedAddress
+    && proof.value === input.approval.value
+    && proof.data.trim().toLowerCase() === (input.approval.data ?? "0x").trim().toLowerCase()
+    && proof.dataSelector.trim().toLowerCase() === expectedSelector.toLowerCase()
+    && Number.isFinite(proof.checkedAt)
+    && proof.checkedAt <= timestamp + 5_000
+    && timestamp - proof.checkedAt <= REVIEWED_SIMULATION_MAX_AGE_MS;
+  if (!matches) {
+    return {
+      status: "failed",
+      error: "Reviewed simulation is stale or does not match this transaction. Reopen wallet review and try again.",
+    };
+  }
+  return { status: "passed" };
+}
 
 function actionForBlockReason(reason: string): SecurityLogEntry["action"] {
   if (reason.startsWith("Switch your wallet to ")) return "chain_mismatch";
@@ -132,9 +172,10 @@ export async function sendReviewedWalletTransaction(input: ReviewedWalletSendInp
 
   let simulation: ReviewedWalletSendSimulationResult;
   try {
-    simulation = input.simulateTransaction
-      ? await input.simulateTransaction(prepared.request)
-      : { status: "unavailable", error: "Simulation service is unavailable." };
+    simulation = verifiedSimulationProof(input, timestamp)
+      ?? (input.simulateTransaction
+        ? await input.simulateTransaction(prepared.request)
+        : { status: "unavailable", error: "Simulation service is unavailable." });
   } catch {
     simulation = { status: "unavailable", error: "Simulation service is unavailable." };
   }

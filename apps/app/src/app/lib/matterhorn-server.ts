@@ -300,9 +300,12 @@ export type MatterhornWalletTransactionSimulationResponse = {
     to: string;
     from: string;
     value: string;
+    data: string;
     dataSelector: string;
     sessionId: string | null;
     checkedAt: number;
+    gasUnits?: string | null;
+    gasError?: string | null;
     error: string | null;
   };
 };

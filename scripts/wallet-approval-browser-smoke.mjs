@@ -12,6 +12,7 @@ const REVIEWED_VALUE_WEI = "10000000000000000";
 const REVIEWED_VALUE_DISPLAY = "0.01 ETH";
 const REVIEWED_VALUE_RAW_BUG = `${REVIEWED_VALUE_WEI} ETH`;
 const REVIEWED_VALUE_HEX = "0x2386f26fc10000";
+const BASE_SEPOLIA_ID = 84532;
 const BASE_SEPOLIA_HEX = "0x14a34";
 const BASE_MAINNET_ID = 8453;
 const SIMULATION_ROUTE_GLOB = "**/workspace/**/wallet/simulate-transaction";
@@ -112,17 +113,20 @@ async function stage(report, id, label, action) {
   }
 }
 
-async function clickFirstVisible(locator, label) {
-  const count = await locator.count();
-  if (count < 1) throw new Error(`Could not find ${label}.`);
-  for (let index = 0; index < count; index += 1) {
-    const candidate = locator.nth(index);
-    if (await candidate.isVisible()) {
-      await candidate.click();
-      return;
+async function clickFirstVisible(locator, label, timeout = 20_000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeout) {
+    const count = await locator.count();
+    for (let index = 0; index < count; index += 1) {
+      const candidate = locator.nth(index);
+      if (await candidate.isVisible()) {
+        await candidate.click();
+        return;
+      }
     }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
   }
-  throw new Error(`${label} exists but is not visible.`);
+  throw new Error(`Could not find a visible ${label}.`);
 }
 
 async function waitForMountedApp(page) {
@@ -312,6 +316,55 @@ async function installMockWallet(context) {
   }, { account: MOCK_ACCOUNT, chainIdHex: BASE_SEPOLIA_HEX });
 }
 
+function mockBaseRpcResult(method) {
+  if (method === "eth_chainId") return BASE_SEPOLIA_HEX;
+  if (method === "net_version") return String(BASE_SEPOLIA_ID);
+  if (method === "eth_getBalance") return "0x2386f26fc10000";
+  if (method === "eth_blockNumber") return "0x1";
+  if (method === "eth_getTransactionCount") return "0x0";
+  if (method === "eth_estimateGas") return "0x5208";
+  if (method === "eth_gasPrice" || method === "eth_maxPriorityFeePerGas") return "0x3b9aca00";
+  if (method === "eth_feeHistory") {
+    return {
+      oldestBlock: "0x1",
+      baseFeePerGas: ["0x3b9aca00", "0x3b9aca00"],
+      gasUsedRatio: [0.5],
+      reward: [["0x3b9aca00"]],
+    };
+  }
+  if (method === "eth_getBlockByNumber") {
+    return {
+      number: "0x1",
+      hash: `0x${"1".repeat(64)}`,
+      parentHash: `0x${"0".repeat(64)}`,
+      timestamp: "0x1",
+      gasLimit: "0x1c9c380",
+      gasUsed: "0x0",
+      baseFeePerGas: "0x3b9aca00",
+      transactions: [],
+    };
+  }
+  if (method === "eth_call") return "0x";
+  return null;
+}
+
+async function installMockBaseRpc(page) {
+  await page.route("https://sepolia.base.org/**", async (route) => {
+    const payload = route.request().postDataJSON();
+    const entries = Array.isArray(payload) ? payload : [payload];
+    const responses = entries.map((entry) => ({
+      jsonrpc: "2.0",
+      id: entry.id ?? null,
+      result: mockBaseRpcResult(entry.method),
+    }));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(Array.isArray(payload) ? responses : responses[0]),
+    });
+  });
+}
+
 async function connectInjectedWallet(page) {
   await waitForMountedApp(page);
   const connectedAccount = await page.evaluate(() => {
@@ -420,6 +473,7 @@ async function runSmoke(config) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await installMockWallet(context);
     page = await context.newPage();
+    await installMockBaseRpc(page);
     let simulationMode = "passed";
 
     await page.route(SAFETY_EVENT_ROUTE_GLOB, async (route) => {
@@ -452,24 +506,39 @@ async function runSmoke(config) {
 
     await page.route(SIMULATION_ROUTE_GLOB, async (route) => {
       const status = simulationMode === "failed" ? "failed" : "passed";
+      const input = route.request().postDataJSON();
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
           success: true,
           simulation: status === "failed"
-            ? {
+              ? {
                 status,
-                gasUsed: null,
-                blockNumber: null,
-                logs: [],
+                chainId: input.chainId,
+                to: input.to,
+                from: input.from,
+                value: input.value,
+                data: input.data,
+                dataSelector: input.data?.length >= 10 ? input.data.slice(0, 10) : input.data,
+                sessionId: input.sessionId ?? null,
+                checkedAt: Date.now(),
+                gasUnits: null,
+                gasError: "Smoke simulation failed before wallet approval.",
                 error: "Smoke simulation failed before wallet approval.",
               }
             : {
                 status,
-                gasUsed: "21000",
-                blockNumber: 1,
-                logs: [],
+                chainId: input.chainId,
+                to: input.to,
+                from: input.from,
+                value: input.value,
+                data: input.data,
+                dataSelector: input.data?.length >= 10 ? input.data.slice(0, 10) : input.data,
+                sessionId: input.sessionId ?? null,
+                checkedAt: Date.now(),
+                gasUnits: "21000",
+                gasError: null,
                 error: null,
               },
         }),

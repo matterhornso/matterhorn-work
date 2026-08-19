@@ -13,10 +13,11 @@ import {
 } from "./state/wallet-store";
 import { CHAIN_NAMES, FORCE_TESTNET } from "../../infra/chains";
 import { isWhitelistedAddress } from "./infra/whitelist";
-import { estimateGasClient, sanitizeGasEstimateError, type GasEstimateResult } from "./lib/gas-estimate";
+import { sanitizeGasEstimateError, type GasEstimateResult } from "./lib/gas-estimate";
 import { lookupEnsName, truncateAddress } from "./lib/ens";
 import { TransactionBatch, type BatchStepGuardView } from "./components/TransactionBatch";
 import { appendSecurityLog } from "./state/security-log";
+import type { ReviewedWalletSimulationProof } from "./lib/reviewed-wallet-send";
 import type {
   MatterhornWalletTransactionSimulationInput,
   MatterhornWalletTransactionSimulationResponse,
@@ -33,7 +34,7 @@ export type TxApprovalRequest = {
 
 export type TransactionApprovalProps = {
   store: WalletStore;
-  onApprove: (tx: TxApprovalRequest) => void | Promise<unknown>;
+  onApprove: (tx: TxApprovalRequest, simulationProof: ReviewedWalletSimulationProof) => void | Promise<unknown>;
   onReject: () => void;
   onSimulateTransaction?: (input: MatterhornWalletTransactionSimulationInput) => Promise<MatterhornWalletTransactionSimulationResponse>;
   /** Called to execute a single batch step (for multi-hop / batch approvals). */
@@ -268,7 +269,9 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
     };
   }, [pending]);
 
-  // Gas estimation + ENS reverse lookup + calldata decode
+  // ENS reverse lookup + calldata decode. Gas estimation is server-routed with
+  // the exact transaction simulation so wallet-private context never leaks
+  // from the browser to a separate public RPC.
   useEffect(() => {
     if (!pending || pending.type !== "tx" || !state.address) {
       setGasEstimate(null);
@@ -290,17 +293,6 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
       if (!cancelled) setEnsName(name);
     }).catch(() => {});
 
-    // Gas estimation
-    estimateGasClient({
-      chainId: pending.chainId,
-      to: pending.to as `0x${string}`,
-      data: (pending.data ?? "0x") as `0x${string}`,
-      value: pending.value,
-      from: state.address,
-    }).then((result) => {
-      if (!cancelled) setGasEstimate(result);
-    }).catch(() => {});
-
     return () => { cancelled = true; };
   }, [pending, state.address]);
 
@@ -319,6 +311,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
     }
 
     let cancelled = false;
+    setGasEstimate(null);
     setSimulation({ status: "checking" });
     onSimulateTransaction({
       chainId: pending.chainId,
@@ -329,6 +322,18 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
     }).then((response) => {
       if (cancelled) return;
       const result = response.simulation;
+      if (result.gasUnits) {
+        setGasEstimate({
+          success: true,
+          gas: result.gasUnits,
+          gasFormatted: Number(result.gasUnits).toLocaleString(),
+          gasPriceGwei: null,
+          estimatedCostEth: null,
+          estimatedCostUSD: null,
+        });
+      } else if (result.gasError) {
+        setGasEstimate({ success: false, error: result.gasError });
+      }
       if (result.status === "passed") {
         setSimulation({ status: "passed" });
         return;
@@ -822,10 +827,38 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
             )}
             onClick={async () => {
               if (approvalBusy || simulationChecking || isBlocked || (isMainnet && countdown > 0)) return;
+              if (simulation.status !== "passed") return;
               setApprovalBusy(true);
               setApprovalError(null);
               try {
-                await onApprove(pending);
+                if (!onSimulateTransaction || !state.address) {
+                  throw new Error("Simulation service is unavailable.");
+                }
+                const refreshed = await onSimulateTransaction({
+                  chainId: pending.chainId,
+                  to: pending.to,
+                  data: pending.data ?? "0x",
+                  value: pending.value,
+                  from: state.address,
+                });
+                if (refreshed.simulation.status !== "passed") {
+                  throw new Error(
+                    refreshed.simulation.error
+                    ?? (refreshed.simulation.status === "failed"
+                      ? "Simulation failed before approval."
+                      : "Simulation service is unavailable."),
+                  );
+                }
+                await onApprove(pending, {
+                  status: "passed",
+                  chainId: refreshed.simulation.chainId,
+                  to: refreshed.simulation.to,
+                  from: refreshed.simulation.from,
+                  value: refreshed.simulation.value,
+                  data: refreshed.simulation.data,
+                  dataSelector: refreshed.simulation.dataSelector,
+                  checkedAt: refreshed.simulation.checkedAt,
+                });
                 dispatchTxApprovalResponse(true);
                 store.clearApproval();
               } catch (error) {

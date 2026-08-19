@@ -36,14 +36,16 @@ describe("Wallet approval security contract", () => {
     );
 
     expect(source).toContain("const [approvalBusy, setApprovalBusy]");
-    expect(source).toContain("await onApprove(pending)");
+    expect(source).toContain("const refreshed = await onSimulateTransaction");
+    expect(source).toContain("data: refreshed.simulation.data");
+    expect(source).toContain("await onApprove(pending, {");
     expect(source).toContain("setApprovalError(message)");
     expect(source).toContain("sanitizeApprovalError");
     expect(source).not.toContain(
       "dispatchTxApprovalResponse(true);\n              onApprove(pending);\n              store.clearApproval();",
     );
     expect(sessionRuntimeSource).toContain(
-      "onApprove={() => sessionWallet.approveTx()}",
+      "onApprove={(_tx, simulationProof) => sessionWallet.approveTx(simulationProof)}",
     );
   });
 
@@ -119,13 +121,16 @@ describe("Wallet approval security contract", () => {
     expect(stateSource).toContain("cannot verify this transaction's USD value");
   });
 
-  test("gas estimation errors are sanitized before display", () => {
-    const source = readAppSource("domains/wallet/lib/gas-estimate.ts");
+  test("gas estimation is server-routed and errors are sanitized before display", () => {
+    const gasSource = readAppSource("domains/wallet/lib/gas-estimate.ts");
+    const modalSource = readAppSource("domains/wallet/TransactionApproval.tsx");
 
-    expect(source).toContain("sanitizeGasEstimateError");
-    expect(source).toContain('http("https://mainnet.base.org")');
-    expect(source).toContain('http("https://sepolia.base.org")');
-    expect(source).not.toContain("error: err instanceof Error ? err.message");
+    expect(gasSource).toContain("sanitizeGasEstimateError");
+    expect(gasSource).not.toContain("mainnet.base.org");
+    expect(gasSource).not.toContain("sepolia.base.org");
+    expect(modalSource).toContain("result.gasUnits");
+    expect(modalSource).not.toContain("estimateGasClient");
+    expect(gasSource).not.toContain("error: err instanceof Error ? err.message");
   });
 
   test("approval modal uses workspace transaction simulation before approval", () => {

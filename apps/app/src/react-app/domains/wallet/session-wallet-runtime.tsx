@@ -44,7 +44,7 @@ export function SessionTransactionApproval(props: {
   return (
     <TransactionApproval
       store={props.store}
-      onApprove={() => sessionWallet.approveTx()}
+      onApprove={(_tx, simulationProof) => sessionWallet.approveTx(simulationProof)}
       onReject={sessionWallet.rejectTx}
       onSimulateTransaction={props.onSimulateTransaction}
       onExecuteBatchStep={sessionWallet.executeBatchStep}
