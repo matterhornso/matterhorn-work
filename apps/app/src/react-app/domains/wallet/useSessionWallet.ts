@@ -15,7 +15,10 @@ import { CHAIN_NAMES, FORCE_TESTNET } from "../../infra/chains";
 import { USDC_BY_CHAIN } from "../../infra/contracts";
 import { isWhitelistedAddress } from "./infra/whitelist";
 import { appendSecurityLog } from "./state/security-log";
-import { sendReviewedWalletTransaction } from "./lib/reviewed-wallet-send";
+import {
+  sendReviewedWalletTransaction,
+  type ReviewedWalletSimulationProof,
+} from "./lib/reviewed-wallet-send";
 
 /**
  * Hook that provides the session-scoped wallet context
@@ -70,7 +73,7 @@ export function useSessionWallet(store: WalletStore) {
    * Approve a pending TX — sends it to the chain.
    * Returns the transaction hash on success.
    */
-  const approveTx = useCallback(async (): Promise<`0x${string}` | undefined> => {
+  const approveTx = useCallback(async (simulationProof?: ReviewedWalletSimulationProof): Promise<`0x${string}` | undefined> => {
     const approval = state.pendingApproval;
     if (!approval) throw new Error("No pending transaction to approve");
     if (approval.type !== "tx") throw new Error("No on-chain transaction to approve");
@@ -81,10 +84,12 @@ export function useSessionWallet(store: WalletStore) {
     const result = await sendReviewedWalletTransaction({
       approval,
       connectedChainId,
+      connectedAddress: wagmiAddress,
       forceTestnet: FORCE_TESTNET || !state.mainnetEnabled,
       chainName: (id) => CHAIN_NAMES[id] ?? `chain ${id}`,
       policy: approvalPolicyFromSafetyPolicy(safetyPolicy),
       simulateTransaction: simulatePreparedTransaction,
+      simulationProof,
       sendTransaction: sendTransactionAsync,
       onTransaction: (tx) => store.addTransaction(tx),
       onDailySpend: (amountUSD) => store.incrementDailySpendUSD(amountUSD),

@@ -8961,9 +8961,12 @@ function createRoutes(
         to: input.to,
         from: input.from,
         value: input.value,
+        data: input.data,
         dataSelector: input.data.length >= 10 ? input.data.slice(0, 10) : input.data,
         sessionId: input.sessionId,
         checkedAt: Date.now(),
+        gasUnits: result.success ? result.gasUnits : null,
+        gasError: result.success ? null : compactWalletSimulationString(result.error, "Gas estimation failed before approval.", 220),
         error: result.success ? null : compactWalletSimulationString(result.error, "Simulation failed before approval.", 220),
       },
     });

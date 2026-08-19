@@ -1,6 +1,7 @@
 /**
  * Transaction Simulation.
- * Uses viem eth_call to verify a raw tx won't revert before showing Approve.
+ * Uses viem eth_estimateGas to verify a raw tx won't revert and return the
+ * bounded gas estimate before showing Approve.
  */
 
 import { getClient } from "../infra/chain-client.js";
@@ -60,13 +61,13 @@ export async function simulateTransaction({
   if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
 
   try {
-    await client.call({
+    const gasUnits = await client.estimateGas({
       to,
       data,
       value: BigInt(value),
       account: from,
     });
-    return { success: true };
+    return { success: true, gasUnits: gasUnits.toString() };
   } catch (err) {
     return {
       success: false,

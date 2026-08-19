@@ -11,6 +11,7 @@ import { USDC_BY_CHAIN } from "../src/react-app/infra/contracts";
 import type { SecurityLogEntry } from "../src/react-app/domains/wallet/state/security-log";
 
 const TARGET = "0x2222222222222222222222222222222222222222";
+const ACCOUNT = "0x1111111111111111111111111111111111111111";
 const HASH = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SPENDER = "0x3333333333333333333333333333333333333333";
 
@@ -353,6 +354,104 @@ describe("reviewed wallet send behavior", () => {
     expect(requests).toHaveLength(0);
     expect(logs).toHaveLength(2);
     expect(logs.every((entry) => entry.action === "simulation_failed")).toBe(true);
+  });
+
+  test("uses a fresh exact server simulation proof without repeating a separate browser RPC", async () => {
+    const now = 1_783_607_000_000;
+    const requests: PreparedWalletSendRequest["request"][] = [];
+    let fallbackSimulationCalls = 0;
+    const result = await sendReviewedWalletTransaction({
+      approval: {
+        chainId: 84532,
+        to: TARGET,
+        value: "10000000000000000",
+        data: "0x",
+        proposedBy: "behavior_test",
+        riskLevel: "low",
+      },
+      connectedChainId: 84532,
+      connectedAddress: ACCOUNT,
+      forceTestnet: true,
+      policy: policy(),
+      simulationProof: {
+        status: "passed",
+        chainId: 84532,
+        to: TARGET,
+        from: ACCOUNT,
+        value: "10000000000000000",
+        data: "0x",
+        dataSelector: "0x",
+        checkedAt: now - 1_000,
+      },
+      simulateTransaction: async () => {
+        fallbackSimulationCalls += 1;
+        return { status: "unavailable", error: "Browser RPC unavailable." };
+      },
+      sendTransaction: async (request) => {
+        requests.push(request);
+        return HASH;
+      },
+      now: () => now,
+      approvedReason: "User approved via TransactionApproval modal",
+    });
+
+    expect(result.hash).toBe(HASH);
+    expect(requests).toHaveLength(1);
+    expect(fallbackSimulationCalls).toBe(0);
+  });
+
+  test("rejects stale or transaction-mismatched server simulation proofs", async () => {
+    const now = 1_783_607_000_000;
+    const requests: PreparedWalletSendRequest["request"][] = [];
+    const baseInput = {
+      approval: {
+        chainId: 84532,
+        to: TARGET,
+        value: "10000000000000000",
+        data: "0x",
+        proposedBy: "behavior_test",
+        riskLevel: "low" as const,
+      },
+      connectedChainId: 84532,
+      connectedAddress: ACCOUNT,
+      forceTestnet: true,
+      policy: policy(),
+      sendTransaction: async (request: PreparedWalletSendRequest["request"]) => {
+        requests.push(request);
+        return HASH as `0x${string}`;
+      },
+      now: () => now,
+      approvedReason: "User approved via TransactionApproval modal",
+    };
+
+    await expect(sendReviewedWalletTransaction({
+      ...baseInput,
+      simulationProof: {
+        status: "passed",
+        chainId: 84532,
+        to: TARGET,
+        from: ACCOUNT,
+        value: "10000000000000000",
+        data: "0x",
+        dataSelector: "0x",
+        checkedAt: now - 60_001,
+      },
+    })).rejects.toThrow("Reviewed simulation is stale");
+    await expect(sendReviewedWalletTransaction({
+      ...baseInput,
+      simulationProof: {
+        status: "passed",
+        chainId: 84532,
+        to: "0x3333333333333333333333333333333333333333",
+        from: ACCOUNT,
+        value: "10000000000000000",
+        data: "0x",
+        dataSelector: "0x",
+        checkedAt: now - 1_000,
+      },
+    })).rejects.toThrow("does not match this transaction");
+
+    expect(requests).toHaveLength(0);
   });
 
   test("records explicit audit actions for mainnet and unavailable-wallet blocks", async () => {
