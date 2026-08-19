@@ -7,6 +7,7 @@ const VERSION = "matterhorn.public-beta-rollback-hook.v1";
 const SHA_PATTERN = /^[a-f0-9]{40}$/i;
 const UUID_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const SAFE_NAME_PATTERN = /^[a-z0-9][a-z0-9_-]{0,127}$/i;
+const ROLLBACK_ELIGIBLE_DEPLOYMENT_STATUSES = new Set(["SUCCESS", "REMOVED"]);
 
 export function parseArgs(argv) {
   const config = {
@@ -234,10 +235,10 @@ export function executeRollback(config, runner = spawnSync) {
     || railway?.projectId !== config.railwayProject
     || railway?.serviceId !== config.railwayService
     || railway?.environmentId !== config.railwayEnvironment
-    || railway?.status !== "SUCCESS"
+    || !ROLLBACK_ELIGIBLE_DEPLOYMENT_STATUSES.has(railway?.status)
     || railway?.canRollback !== true
   ) {
-    throw new Error("validate_railway_target rejected a missing, mismatched, unsuccessful, or ineligible deployment.");
+    throw new Error("validate_railway_target rejected a missing, mismatched, rollback-ineligible, or unsupported-status deployment.");
   }
   report.targetValidation.railway = true;
   report.completedPreflights.push(preflight[0].id);
