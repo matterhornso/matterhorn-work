@@ -22,7 +22,10 @@ assert.ok(
     script.includes("requestDirectory(request)") &&
     script.includes('url.pathname === "/session"') &&
     script.includes('url.pathname === "/session/status"') &&
+    script.includes('url.pathname === "/agent"') &&
+    script.includes("fakeAgentPermission") &&
     script.includes('request.method === "PATCH"') &&
+    script.includes('Array.isArray(body?.permission)') &&
     script.includes('action === "revert"') &&
     script.includes('session.revert = { messageID }') &&
     script.includes("currentMessages.slice(0, revertIndex + 1)") &&

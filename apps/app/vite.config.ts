@@ -66,6 +66,9 @@ const buildAppVersion =
   readPackageVersion(desktopPackagePath) ||
   readPackageVersion(appPackagePath) ||
   "0.0.0";
+const webBuildCommit =
+  process.env.VITE_MATTERHORN_BUILD_COMMIT?.trim().toLowerCase() || "";
+const fullCommitPattern = /^[a-f0-9]{40}$/;
 
 // Load the Tauri → Electron migration-release fragment if present. Written
 // by scripts/migration/01-cut-migration-release.mjs for the specific
@@ -115,6 +118,20 @@ export default defineConfig({
     "import.meta.env.VITE_OPENWORK_APP_VERSION": JSON.stringify(buildAppVersion),
   },
   plugins: [
+    {
+      name: "matterhorn-web-build-attestation",
+      transformIndexHtml() {
+        if (!fullCommitPattern.test(webBuildCommit)) return [];
+        return [{
+          tag: "meta",
+          attrs: {
+            name: "matterhorn-build-commit",
+            content: webBuildCommit,
+          },
+          injectTo: "head",
+        }];
+      },
+    },
     {
       name: "openwork-dev-server-id",
       configureServer(server) {

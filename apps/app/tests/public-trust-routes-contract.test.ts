@@ -51,10 +51,41 @@ describe("public trust routes", () => {
       "Matterhorn does not use workspace content to train models.",
     );
     expect(trustRouteSource).toContain(
-      "Public signup deployments block\n              prompts",
+      "Public research can use a disclosed external provider.",
     );
     expect(trustRouteSource).toContain(
-      "does not\n            include prompt text, response text, code, file contents",
+      "An unverified provider requires approval for\n              one exact request",
+    );
+    expect(trustRouteSource).toContain(
+      "approval expires after five minutes",
+    );
+    expect(trustRouteSource).toContain(
+      "never echoes the detected value",
+    );
+    expect(trustRouteSource).toMatch(
+      /does not\s+include prompt text, response text, code, file contents/,
+    );
+  });
+
+  test("publishes guarded runtime, wallet, receipt, and retention boundaries", () => {
+    expect(trustRouteSource).toContain(
+      "Matterhorn treats the selected model as an untrusted planner.",
+    );
+    expect(trustRouteSource).toContain(
+      "short-lived, single-use\n              authorization",
+    );
+    expect(trustRouteSource).toContain(
+      "Agents, MCP clients, command-line clients, watches, and schedulers",
+    );
+    expect(trustRouteSource).toContain(
+      "Review and submission happen only\n              in the connected wallet.",
+    );
+    expect(trustRouteSource).toContain(
+      "A receipt does not contain raw prompts",
+    );
+    expect(trustRouteSource).toContain("expires\n              after 365 days");
+    expect(trustRouteSource).toContain(
+      "Deleting a workspace removes user-controlled\n              content immediately.",
     );
   });
 

@@ -70,7 +70,10 @@ describe("Matterhorn execution modes", () => {
       "*": false,
       "matterhorn-work_matterhorn_sui_get_balance": true,
     });
-    expect(buildMatterhornExecutionModeTools("plan", "matterhorn-bittensor")).toEqual({ "*": false });
+    expect(buildMatterhornExecutionModeTools("plan", "matterhorn-bittensor")).toEqual({
+      "*": false,
+      "matterhorn-work_matterhorn_bittensor_chat": true,
+    });
     expect(buildMatterhornExecutionModeTools("discuss", "custom-agent")).toEqual({ "*": false });
     expect(buildMatterhornExecutionModeTools("work", "matterhorn-sui")).toBeUndefined();
   });

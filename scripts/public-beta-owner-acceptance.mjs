@@ -15,6 +15,7 @@ import process from "node:process";
 const INPUT_VERSION = "matterhorn.public-beta-owner-acceptance-input.v1";
 const REPORT_VERSION = "matterhorn.public-beta-owner-acceptance.v1";
 const MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const RELEASE_SURFACES = new Set(["web", "web-and-desktop"]);
 const scriptRoot = dirname(fileURLToPath(import.meta.url));
 
 const REPORT_VERSIONS = Object.freeze({
@@ -22,7 +23,8 @@ const REPORT_VERSIONS = Object.freeze({
   ownerApproval: "matterhorn.release-owner-approval.v1",
   deployment: "matterhorn.product-hunt-deployment-probe.v1",
   operations: "matterhorn.product-hunt-operations-readiness.v2",
-  acceptance: "matterhorn.product-hunt-acceptance-readiness.v1",
+  guardedShadow: "matterhorn.guarded-runtime-shadow-evidence.v1",
+  acceptance: "matterhorn.product-hunt-acceptance-readiness.v2",
   desktop: "matterhorn.desktop-public-release-verification.v1",
 });
 
@@ -66,8 +68,8 @@ function help() {
   return [
     "Matterhorn Public Beta owner acceptance",
     "",
-    "Binds the certified candidate, deployed web probe, operations drill, real",
-    "wallet/OAuth acceptance, signed desktop verification, and human approvals",
+    "Binds the certified candidate, deployed web probe, operations drill, guarded",
+    "shadow window, real wallet/OAuth acceptance, optional desktop distribution, and human approvals",
     "to one immutable commit and one fail-closed Public Beta decision.",
     "",
     "The input contains evidence references and outcomes only. Never put API keys,",
@@ -156,6 +158,19 @@ function evidenceReference(reference, bases) {
   return { ok, display: value };
 }
 
+function evidenceDigestMatches(reference, digest, bases) {
+  if (!present(reference) || !/^[a-f0-9]{64}$/i.test(digest ?? "")) return false;
+  const value = String(reference).trim();
+  if (safeHttpsUrl(value)) return false;
+  const path = resolveLocalPath(value, bases);
+  try {
+    const source = readFileSync(path);
+    return source.length > 0 && sha256(source) === digest.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 function readJsonReference(label, reference, bases) {
   if (!present(reference)) throw new Error(`${label} report path is required.`);
   const path = resolveLocalPath(String(reference).trim(), bases);
@@ -240,6 +255,7 @@ function markdown(report) {
     `**Decision:** ${report.decision}`,
     `**Candidate:** \`${report.commit}\``,
     `**Tag:** \`${report.tag}\``,
+    `**Release surface:** ${report.releaseSurface}`,
     `**Generated:** ${report.generatedAt}`,
     "",
     "| Gate | Status | Check | Evidence |",
@@ -261,6 +277,10 @@ function evaluate(config) {
   if (input.version !== INPUT_VERSION) {
     throw new Error(`Input version must be ${INPUT_VERSION}.`);
   }
+  const releaseSurface = input.releaseSurface ?? "web-and-desktop";
+  if (!RELEASE_SURFACES.has(releaseSurface)) {
+    throw new Error("input.releaseSurface must be web or web-and-desktop.");
+  }
 
   const commit = String(input.commit ?? "").trim().toLowerCase();
   const tag = String(input.tag ?? "").trim();
@@ -269,7 +289,9 @@ function evaluate(config) {
 
   const bases = [inputDir, repoRoot];
   const reports = {};
-  for (const name of Object.keys(REPORT_VERSIONS)) {
+  const requiredReports = Object.keys(REPORT_VERSIONS)
+    .filter((name) => releaseSurface === "web-and-desktop" || name !== "desktop");
+  for (const name of requiredReports) {
     reports[name] = readJsonReference(name, input.reports?.[name], bases);
   }
 
@@ -277,8 +299,9 @@ function evaluate(config) {
   const approval = reports.ownerApproval.value;
   const deployment = reports.deployment.value;
   const operations = reports.operations.value;
+  const guardedShadow = reports.guardedShadow.value;
   const acceptance = reports.acceptance.value;
-  const desktop = reports.desktop.value;
+  const desktop = reports.desktop?.value ?? null;
   const expectedOauth = Array.isArray(input.expectedOauthConnectors)
     ? input.expectedOauthConnectors.map((entry) => String(entry).trim().toLowerCase()).filter(Boolean)
     : [];
@@ -359,11 +382,67 @@ function evaluate(config) {
   add("operations_recovery", "operations.backup_restore", "Workspace and encrypted full user-data recovery pass", operationsMeta && allChecksWithPrefixPass(operations, ["backup_", "user_data_recovery_"]) && reportEvidencePasses(operations, ["backup_status", "user_data_recovery_status"], operationsBases), input.reports.operations);
   add("operations_rollback", "operations.rollback_drill", "Rollback between immutable commits restores health", operationsMeta && allChecksWithPrefixPass(operations, ["rollback_"]) && reportEvidencePasses(operations, ["rollback_status"], operationsBases), input.reports.operations);
 
+  const guardedShadowBases = [dirname(reports.guardedShadow.path), ...bases];
+  const guardedEvidence = guardedShadow.evidence ?? {};
+  const guardedShadowArtifacts = evidenceDigestMatches(guardedEvidence.baselinePath, guardedEvidence.baselineSha256, guardedShadowBases)
+    && evidenceDigestMatches(guardedEvidence.finalPath, guardedEvidence.finalSha256, guardedShadowBases)
+    && (guardedEvidence.reviewPath
+      ? evidenceDigestMatches(guardedEvidence.reviewPath, guardedEvidence.reviewSha256, guardedShadowBases)
+      : guardedEvidence.reviewSha256 === null);
+  const guardedShadowMeta = guardedShadow.version === REPORT_VERSIONS.guardedShadow
+    && guardedShadow.ready === true
+    && guardedShadow.decision === "GO"
+    && guardedShadow.commit === commit
+    && guardedShadow.window?.hours >= 48
+    && isFresh(guardedShadow.evaluatedAt, config.now)
+    && candidateIntegrityPasses(guardedShadow)
+    && guardedShadowArtifacts
+    && reportChecksPass(guardedShadow, [
+      "baseline_integrity",
+      "final_integrity",
+      "same_commit",
+      "same_origin",
+      "shadow_ready",
+      "snapshot_time",
+      "window_duration",
+      "uninterrupted_process",
+      "counter_monotonicity",
+      "shadow_decision_shape",
+      "issue_exercised",
+      "consume_exercised",
+      "read_exercised",
+      "prepare_exercised",
+      "anomaly_review",
+    ]);
+  add(
+    "guarded_shadow_window",
+    "agent.guarded_shadow_window",
+    "Guarded runtime completed an uninterrupted 48-hour shadow window with every denial and bypass reviewed",
+    guardedShadowMeta,
+    input.reports.guardedShadow,
+  );
+
   const acceptanceIdentity = acceptance.version === REPORT_VERSIONS.acceptance
     && acceptance.commit === commit
     && isFresh(acceptance.evaluatedAt, config.now);
   const acceptanceMeta = acceptanceIdentity && acceptance.ready === true;
   const acceptanceBases = [dirname(reports.acceptance.path), ...bases];
+  add("signup_acceptance", "auth.public_signup", "Hosted signup, Turnstile, legal acceptance, email verification, sign in/out, and password reset pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["signup_journey"]) && reportEvidencePasses(acceptance, ["signup_journey"], acceptanceBases), input.reports.acceptance);
+  add("two_account_isolation", "security.two_account_isolation", "Two hosted accounts are isolated across workspaces, preflights, grants, receipts, memories, and actions", acceptanceMeta && reportChecksPass(acceptance, ["two_account_isolation"]) && reportEvidencePasses(acceptance, ["two_account_isolation"], acceptanceBases), input.reports.acceptance);
+  add("guarded_privacy_acceptance", "agent.privacy_firewall", "Hosted privacy firewall and adversarial capability enforcement pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["privacy_firewall", "capability_adversarial"]) && reportEvidencePasses(acceptance, ["privacy_firewall", "capability_adversarial"], acceptanceBases), input.reports.acceptance);
+  add("guarded_crypto_acceptance", "agent.crypto_hosted_acceptance", "Generic crypto and every initial crypto desk pass model, privacy, wallet-review, receipt, reload, and protocol scenarios", acceptanceMeta && reportChecksPass(acceptance, [
+    "generic_crypto_journey",
+    "bittensor_guarded_journey",
+    "hyperliquid_guarded_journey",
+    "polymarket_guarded_journey",
+    "sui_guarded_journey",
+  ]) && reportEvidencePasses(acceptance, [
+    "generic_crypto_journey",
+    "bittensor_guarded_journey",
+    "hyperliquid_guarded_journey",
+    "polymarket_guarded_journey",
+    "sui_guarded_journey",
+  ], acceptanceBases), input.reports.acceptance);
   add("two_user_acceptance", "web.deployed_two_user_acceptance", "New-user and returning-user deployed journeys pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["evidence_fresh", "deployed_https", "newUser_journey", "existingUser_journey"]) && reportEvidencePasses(acceptance, ["newUser_journey", "existingUser_journey"], acceptanceBases), input.reports.acceptance);
   add("evm_wallet_acceptance", "wallet.metamask_coinbase", "MetaMask and Coinbase Wallet journeys pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["metamask_journey", "coinbase_journey"]) && reportEvidencePasses(acceptance, ["metamask_journey", "coinbase_journey"], acceptanceBases), input.reports.acceptance);
   add("sui_wallet_acceptance", "wallet.phantom_sui", "Phantom Sui reject and approve-handoff journeys pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["phantom_sui_journey"]) && reportEvidencePasses(acceptance, ["phantom_sui_journey"], acceptanceBases), input.reports.acceptance);
@@ -371,7 +450,7 @@ function evaluate(config) {
   const oauthIds = expectedOauth.map((id) => `oauth_${id}`);
   add("oauth_acceptance", "connectors.visible_oauth", "Every and only allowlisted OAuth connector passes acceptance", acceptanceIdentity && reportChecksPass(acceptance, [...oauthIds, "oauth_visible_set"]) && expectedOauth.length === (acceptance.acceptedOauthConnectors?.length ?? 0) && expectedOauth.every((id) => acceptance.acceptedOauthConnectors.includes(id)) && reportEvidencePasses(acceptance, oauthIds, acceptanceBases), expectedOauth.join(", ") || "No public OAuth connectors");
 
-  const desktopMeta = desktop.version === REPORT_VERSIONS.desktop
+  const desktopMeta = desktop?.version === REPORT_VERSIONS.desktop
     && desktop.ready === true
     && desktop.sourceCommit === commit
     && desktop.localContract === false
@@ -379,16 +458,18 @@ function evaluate(config) {
     && Array.isArray(desktop.artifacts)
     && desktop.artifacts.length >= 2
     && desktop.artifacts.every((entry) => /^[a-f0-9]{64}$/i.test(entry.sha256 ?? ""));
-  add("desktop_signed", "desktop.signed_notarized", "Signed, notarized, stapled, Gatekeeper-approved desktop artifacts pass", desktopMeta, input.reports.desktop);
+  if (releaseSurface === "web-and-desktop") {
+    add("desktop_signed", "desktop.signed_notarized", "Signed, notarized, stapled, Gatekeeper-approved desktop artifacts pass", desktopMeta, input.reports.desktop);
 
-  const cleanInstall = input.manual?.cleanInstall ?? {};
-  const cleanInstallRef = evidenceReference(cleanInstall.reportPath, bases);
-  add("desktop_clean_install", "desktop.clean_install", "Clean install, update, and reinstall pass on the signed candidate", cleanInstall.status === "pass" && cleanInstall.cleanInstall === true && cleanInstall.update === true && cleanInstall.reinstall === true && present(cleanInstall.tester) && isFresh(cleanInstall.testedAt, config.now) && cleanInstallRef.ok, cleanInstallRef.display);
+    const cleanInstall = input.manual?.cleanInstall ?? {};
+    const cleanInstallRef = evidenceReference(cleanInstall.reportPath, bases);
+    add("desktop_clean_install", "desktop.clean_install", "Clean install, update, and reinstall pass on the signed candidate", cleanInstall.status === "pass" && cleanInstall.cleanInstall === true && cleanInstall.update === true && cleanInstall.reinstall === true && present(cleanInstall.tester) && isFresh(cleanInstall.testedAt, config.now) && cleanInstallRef.ok, cleanInstallRef.display);
 
-  const publicDownload = input.manual?.publicDownload ?? {};
-  const publicDownloadRef = evidenceReference(publicDownload.reportPath, bases);
-  const desktopArtifact = desktop.artifacts?.find((entry) => entry.file === publicDownload.artifactFile);
-  add("public_download", "distribution.public_download", "Public download resolves to the exact signed candidate artifact and checksum", publicDownload.status === "pass" && safeHttpsUrl(publicDownload.url) && publicDownload.resolvesToCandidate === true && /^[a-f0-9]{64}$/i.test(publicDownload.sha256 ?? "") && desktopArtifact?.sha256 === publicDownload.sha256 && publicDownloadRef.ok, publicDownload.url);
+    const publicDownload = input.manual?.publicDownload ?? {};
+    const publicDownloadRef = evidenceReference(publicDownload.reportPath, bases);
+    const desktopArtifact = desktop.artifacts?.find((entry) => entry.file === publicDownload.artifactFile);
+    add("public_download", "distribution.public_download", "Public download resolves to the exact signed candidate artifact and checksum", publicDownload.status === "pass" && safeHttpsUrl(publicDownload.url) && publicDownload.resolvesToCandidate === true && /^[a-f0-9]{64}$/i.test(publicDownload.sha256 ?? "") && desktopArtifact?.sha256 === publicDownload.sha256 && publicDownloadRef.ok, publicDownload.url);
+  }
 
   const legal = input.manual?.legal ?? {};
   const legalRef = evidenceReference(legal.reportPath, bases);
@@ -413,7 +494,7 @@ function evaluate(config) {
   launchEvidence.channels["public-beta"] ??= { gates: {} };
   launchEvidence.channels["public-beta"].gates ??= {};
   const publicGates = launchEvidence.channels["public-beta"].gates;
-  for (const gate of [
+  const publicBetaGates = [
     "release.stable_tag",
     "security.credential_rotation",
     "deployment.https",
@@ -422,6 +503,11 @@ function evaluate(config) {
     "deployment.monitoring",
     "operations.backup_restore",
     "operations.rollback_drill",
+    "agent.guarded_shadow_window",
+    "agent.privacy_firewall",
+    "agent.crypto_hosted_acceptance",
+    "auth.public_signup",
+    "security.two_account_isolation",
     "web.authenticated_same_origin",
     "web.deployed_two_user_acceptance",
     "wallet.metamask_coinbase",
@@ -434,12 +520,17 @@ function evaluate(config) {
     "product.public_copy_and_legal",
     "support.public_beta_channel",
     "support.launch_room",
-  ]) {
+  ].filter((gate) => releaseSurface === "web-and-desktop" || ![
+    "desktop.signed_notarized",
+    "desktop.clean_install",
+    "distribution.public_download",
+  ].includes(gate));
+  for (const gate of publicBetaGates) {
     const evidence = checks.find((entry) => entry.gate === gate)?.evidence ?? inputPath;
     publicGates[gate] = gateEvidence(checks, gate, evidence, `Validated by ${REPORT_VERSION}.`);
   }
 
-  return { repoRoot, input, inputPath, commit, tag, reports, checks, launchEvidence };
+  return { repoRoot, input, inputPath, commit, tag, releaseSurface, reports, checks, launchEvidence };
 }
 
 function writeOutputs(config, evaluated) {
@@ -453,6 +544,7 @@ function writeOutputs(config, evaluated) {
   const readinessResult = spawnSync(process.execPath, [
     join(scriptRoot, "launch-channel-readiness.mjs"),
     "--channel", "public-beta",
+    "--release-surface", evaluated.releaseSurface,
     "--evidence", evidencePath,
     "--now", config.now.toISOString(),
     "--json-output", readinessPath,
@@ -480,6 +572,7 @@ function writeOutputs(config, evaluated) {
     ready: readiness.ready && blockers.length === 0,
     commit: evaluated.commit,
     tag: evaluated.tag,
+    releaseSurface: evaluated.releaseSurface,
     generatedAt: config.now.toISOString(),
     input: evaluated.inputPath,
     launchReadiness: {

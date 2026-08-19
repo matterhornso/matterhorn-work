@@ -12,6 +12,7 @@ import { Transaction } from "@mysten/sui/transactions";
 import { useQuery } from "@tanstack/react-query";
 import type {
   ReviewedActionDraftHandoff,
+  ReviewedActionHandoffV2,
   ReviewedActionOperation,
 } from "@matterhorn-work/types";
 import {
@@ -43,6 +44,7 @@ import { getSuiWorkflowAvailability } from "./sui-workflow-state";
 import { usePhantomSui } from "./phantom-sui-provider";
 import {
   subscribeReviewedActionHandoff,
+  takePendingReviewedActionGuard,
   takePendingReviewedActionHandoff,
 } from "./reviewed-action-handoff";
 
@@ -181,6 +183,8 @@ export function SuiWorkflowPanel(props: {
   const [busyAction, setBusyAction] = useState<"connect" | "disconnect" | "preview" | "sign" | "receipt" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copyLabel, setCopyLabel] = useState<string | null>(null);
+  const [draftHandoff, setDraftHandoff] = useState<Extract<ReviewedActionDraftHandoff, { protocol: "sui" }> | null>(null);
+  const [guardedHandoff, setGuardedHandoff] = useState<Extract<ReviewedActionHandoffV2, { protocol: "sui" }> | null>(null);
 
   useEffect(() => {
     const operation = props.initialOperation;
@@ -191,6 +195,8 @@ export function SuiWorkflowPanel(props: {
       && operation !== "batch_transfer_sui"
     ) return;
     setTransactionKind(operation);
+    setDraftHandoff(null);
+    setGuardedHandoff(null);
     setPreviewResponse(null);
     setReceiptResponse(null);
     setConfirmation("");
@@ -221,17 +227,21 @@ export function SuiWorkflowPanel(props: {
       setError(null);
     };
 
-    const applyHandoff = (handoff: ReviewedActionDraftHandoff) => {
-      if (handoff.protocol === "sui") applyDraft(handoff.draft);
+    const applyHandoff = (handoff: ReviewedActionDraftHandoff, guard: ReviewedActionHandoffV2 | null) => {
+      if (handoff.protocol !== "sui") return;
+      setDraftHandoff(handoff);
+      setGuardedHandoff(guard?.protocol === "sui" ? guard : null);
+      applyDraft(handoff.draft);
     };
 
     const pending = takePendingReviewedActionHandoff();
-    if (pending?.protocol === "sui") applyDraft(pending.draft);
+    const pendingGuard = takePendingReviewedActionGuard();
+    if (pending?.protocol === "sui") applyHandoff(pending, pendingGuard);
 
     return subscribeReviewedActionHandoff((handoff) => {
       if (handoff.protocol !== "sui") return;
       takePendingReviewedActionHandoff();
-      applyHandoff(handoff);
+      applyHandoff(handoff, takePendingReviewedActionGuard());
     });
   }, []);
 
@@ -327,6 +337,86 @@ export function SuiWorkflowPanel(props: {
           : transactionKind === "transfer_coin"
             ? { recipient: recipient.trim(), amountSui: amountSui.trim(), coinType: coinType.trim() }
             : { recipient: recipient.trim(), amountSui: amountSui.trim() };
+      if (draftHandoff) {
+        if (!guardedHandoff) {
+          throw new Error("This legacy agent draft is preview-only. Regenerate it from the Sui desk to create a simulated, hash-bound wallet action.");
+        }
+        const source = guardedHandoff.source;
+        const currentDraft: ReviewedActionDraftHandoff = transactionKind === "batch_transfer_sui"
+          ? {
+              version: "matterhorn.reviewed-action-handoff.v1",
+              protocol: "sui",
+              source,
+              draft: {
+                operation: "batch_transfer_sui",
+                network,
+                sender: effectiveSender || null,
+                recipient: null,
+                amount: null,
+                coinType: null,
+                objectId: null,
+                transfers: ("transfers" in transactionInput ? transactionInput.transfers ?? [] : []).map((transfer) => ({
+                  recipient: transfer.recipient,
+                  amount: transfer.amountSui,
+                })),
+              },
+            }
+          : transactionKind === "transfer_object"
+            ? {
+                version: "matterhorn.reviewed-action-handoff.v1",
+                protocol: "sui",
+                source,
+                draft: {
+                  operation: "transfer_object",
+                  network,
+                  sender: effectiveSender || null,
+                  recipient: recipient.trim(),
+                  amount: null,
+                  coinType: null,
+                  objectId: objectId.trim(),
+                  transfers: [],
+                },
+              }
+            : transactionKind === "transfer_coin"
+              ? {
+                  version: "matterhorn.reviewed-action-handoff.v1",
+                  protocol: "sui",
+                  source,
+                  draft: {
+                    operation: "transfer_coin",
+                    network,
+                    sender: effectiveSender || null,
+                    recipient: recipient.trim(),
+                    amount: amountSui.trim(),
+                    coinType: coinType.trim(),
+                    objectId: null,
+                    transfers: [],
+                  },
+                }
+              : {
+                  version: "matterhorn.reviewed-action-handoff.v1",
+                  protocol: "sui",
+                  source,
+                  draft: {
+                    operation: "transfer_sui",
+                    network,
+                    sender: effectiveSender || null,
+                    recipient: recipient.trim(),
+                    amount: amountSui.trim(),
+                    coinType: null,
+                    objectId: null,
+                    transfers: [],
+                  },
+                };
+        const validation = await client.validateReviewedAction(workspaceId, {
+          handoff: guardedHandoff,
+          currentDraft,
+        });
+        if (!validation.valid) {
+          const reason = validation.issues.join(", ").replaceAll("_", " ");
+          throw new Error(`This Sui wallet review is no longer valid (${reason}). Regenerate and re-simulate it before signing.`);
+        }
+      }
       const response = await client.workspaceSuiTransactionPreview(
         workspaceId,
         {
@@ -352,8 +442,10 @@ export function SuiWorkflowPanel(props: {
     batchTransfers,
     client,
     coinType,
+    draftHandoff,
     effectiveSender,
     emitEvidenceSaved,
+    guardedHandoff,
     memo,
     network,
     objectId,
@@ -386,7 +478,7 @@ export function SuiWorkflowPanel(props: {
           amountMist: previewResponse?.preview.amountMist,
           explorerUrl: explorerUrl.trim() || undefined,
         },
-        { sessionId: props.sessionId ?? null },
+        { sessionId: props.sessionId ?? null, reviewedAction: guardedHandoff },
       );
       setReceiptResponse(response);
       emitEvidenceSaved(response.evidence?.outputPath);
@@ -401,6 +493,7 @@ export function SuiWorkflowPanel(props: {
     effectiveSender,
     emitEvidenceSaved,
     explorerUrl,
+    guardedHandoff,
     network,
     previewResponse,
     props.sessionId,
@@ -487,7 +580,7 @@ export function SuiWorkflowPanel(props: {
           recipient: preview.recipient,
           amountMist: preview.amountMist,
         },
-        { sessionId: props.sessionId ?? null },
+        { sessionId: props.sessionId ?? null, reviewedAction: guardedHandoff },
       );
       setDigest(nextDigest);
       setReceiptResponse(response);
@@ -501,7 +594,7 @@ export function SuiWorkflowPanel(props: {
     } finally {
       setBusyAction(null);
     }
-  }, [account, client, confirmation, emitEvidenceSaved, network, previewResponse, props.sessionId, workspaceId]);
+  }, [account, client, confirmation, emitEvidenceSaved, guardedHandoff, network, previewResponse, props.sessionId, workspaceId]);
 
   const preview = previewResponse?.preview ?? null;
   const receipt = receiptResponse?.receipt ?? null;

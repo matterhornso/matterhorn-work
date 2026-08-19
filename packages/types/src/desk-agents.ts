@@ -220,9 +220,12 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       },
       work: [
         "matterhorn-work_matterhorn_bittensor_chat",
+        "matterhorn-work_matterhorn_bittensor_prepare_action",
         "matterhorn-work_matterhorn_crypto_chat",
       ],
-      readOnly: [],
+      readOnly: [
+        "matterhorn-work_matterhorn_bittensor_chat",
+      ],
     },
     capabilityPolicy: {
       actionLevel: "prepare_only",

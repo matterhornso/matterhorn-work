@@ -2666,7 +2666,28 @@ export function SessionRoute() {
           if (executionMode !== "work") {
             throw new Error(`${executionMode === "plan" ? "Plan" : "Discuss"} mode does not run commands. Switch to Work mode first.`);
           }
-          const result = await opencodeClient.session.command({
+          const commandPrivacyParts = [{
+            type: "text",
+            text: `/${draft.command.name}${draft.command.arguments ? ` ${draft.command.arguments}` : ""}`,
+          }];
+          if (!draft.privacy?.consentToken) {
+            const privacyPreflight = await client.preflightAgentMessage(selectedWorkspaceId, selectedSessionId, {
+              parts: commandPrivacyParts,
+              model: selectedPromptModel
+                ? { providerId: selectedPromptModel.providerID, modelId: selectedPromptModel.modelID }
+                : { providerId: "", modelId: "" },
+              agentId: selectedAgent ?? undefined,
+              ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
+            });
+            if (privacyPreflight.decision !== "allow") {
+              throw new Error(JSON.stringify({
+                code: privacyPreflight.decision === "blocked" ? "agent_privacy_blocked" : "agent_privacy_consent_required",
+                message: privacyPreflight.reason,
+                details: privacyPreflight,
+              }));
+            }
+          }
+          const commandRequest = {
             sessionID: selectedSessionId,
             command: draft.command.name,
             arguments: draft.command.arguments,
@@ -2675,7 +2696,10 @@ export function SessionRoute() {
               : undefined,
             agent: selectedAgent ?? undefined,
             ...(modelVariantValue ? { variant: modelVariantValue } : {}),
-          });
+            ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
+            ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
+          };
+          const result = await opencodeClient.session.command(commandRequest);
           if (result.error) {
             throw new Error(serializeSDKError(result.error));
           }
@@ -2694,6 +2718,26 @@ export function SessionRoute() {
           hasAttachments: draft.attachments.length > 0,
         });
 
+        if (!draft.privacy?.consentToken) {
+          const privacyPreflight = await client.preflightAgentMessage(selectedWorkspaceId, selectedSessionId, {
+            parts: parts as unknown as import("@matterhorn-work/types/guarded-agent-runtime").MatterhornAgentPrivacyPart[],
+            model: selectedPromptModel
+              ? { providerId: selectedPromptModel.providerID, modelId: selectedPromptModel.modelID }
+              : { providerId: "", modelId: "" },
+            agentId: selectedAgent ?? undefined,
+            ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
+            ...(draft.privacy?.attachmentIds?.length ? { attachmentIds: draft.privacy.attachmentIds } : {}),
+            ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
+          });
+          if (privacyPreflight.decision !== "allow") {
+            throw new Error(JSON.stringify({
+              code: privacyPreflight.decision === "blocked" ? "agent_privacy_blocked" : "agent_privacy_consent_required",
+              message: privacyPreflight.reason,
+              details: privacyPreflight,
+            }));
+          }
+        }
+
         const dispatchStartedAt = performance.now();
         promptTimingRef.current.set(selectedSessionId, {
           startedAt: dispatchStartedAt,
@@ -2710,7 +2754,7 @@ export function SessionRoute() {
         });
         let result;
         try {
-          result = await opencodeClient.session.promptAsync({
+          const promptRequest = {
             sessionID: selectedSessionId,
             parts,
             model: selectedPromptModel ?? undefined,
@@ -2718,7 +2762,12 @@ export function SessionRoute() {
             ...(executionModeTools ? { tools: executionModeTools } : {}),
             ...(modelVariantValue ? { variant: modelVariantValue } : {}),
             ...(systemContext ? { system: systemContext } : {}),
-          });
+            ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
+            ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
+            ...(draft.privacy?.attachmentIds?.length ? { attachmentIds: draft.privacy.attachmentIds } : {}),
+            ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
+          };
+          result = await opencodeClient.session.promptAsync(promptRequest);
         } catch (error) {
           promptTimingRef.current.delete(selectedSessionId);
           throw error;

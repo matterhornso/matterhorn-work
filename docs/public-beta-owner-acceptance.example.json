@@ -3,12 +3,14 @@
   "capturedAt": "2026-07-20T00:00:00.000Z",
   "commit": "0000000000000000000000000000000000000000",
   "tag": "v0.13.13-public-beta-rc.N",
+  "releaseSurface": "web-and-desktop",
   "expectedOauthConnectors": [],
   "reports": {
     "candidate": "qa-reports/public-beta/candidate/candidate-certification.json",
     "ownerApproval": "qa-reports/public-beta/candidate/release-owner-approval.json",
     "deployment": "qa-reports/public-beta/owner/deployment.json",
     "operations": "qa-reports/public-beta/owner/operations-readiness.json",
+    "guardedShadow": "qa-reports/public-beta/owner/guarded-shadow-evidence.json",
     "acceptance": "qa-reports/public-beta/owner/external-acceptance-readiness.json",
     "desktop": "qa-reports/public-beta/owner/desktop-public-release.json"
   },

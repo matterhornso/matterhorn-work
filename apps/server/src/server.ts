@@ -309,6 +309,7 @@ import type {
   MatterhornWorkspaceDataControlsResponse,
 } from "@matterhorn-work/types/backend-data-controls";
 import type { MatterhornWorkspaceDataPolicyUpdateRequest } from "@matterhorn-work/types/backend-data-policy";
+import type { MatterhornAgentPrivacyMode } from "@matterhorn-work/types/guarded-agent-runtime";
 import type {
   MatterhornBackendModelCatalogErrorCode,
   MatterhornBackendModelCatalogSnapshot,
@@ -495,6 +496,25 @@ import {
 } from "./extensions/google-workspace.js";
 import { callExperimentalExtensionAction, listExperimentalExtensionActions } from "./extensions/index.js";
 import { handleManagedOpencodeMcp } from "./managed-opencode-mcp.js";
+import {
+  GuardedRuntimeError,
+  MatterhornGuardedAgentRuntime,
+  type GuardedPromptAcceptance,
+} from "./guarded-agent-runtime.js";
+import { agentSecurityReceiptDirectory } from "./agent-run-receipts.js";
+import {
+  legacySecurityMigrationCheckpointPath,
+  migrateLegacySecurityRecords,
+} from "./legacy-security-migration.js";
+import { normalizePrivacyParts } from "./agent-privacy.js";
+import {
+  isReviewedActionDraftHandoff,
+  isReviewedActionHandoffV2,
+} from "@matterhorn-work/types/reviewed-actions";
+import {
+  assertReviewedActionReceiptBinding,
+  validateReviewedActionHandoffV2,
+} from "./reviewed-action-airlock.js";
 import pkg from "../package.json" with { type: "json" };
 import constants from "../../../constants.json" with { type: "json" };
 
@@ -549,6 +569,21 @@ function readStringField(value: unknown, key: string): string {
   if (!isRecord(value)) return "";
   const field = value[key];
   return typeof field === "string" ? field.trim() : "";
+}
+
+function assertOptionalReviewedActionReceiptBinding(body: Record<string, unknown>): void {
+  const nestedPayload = isRecord(body.payload) ? body.payload : null;
+  const handoff = body.reviewedAction ?? nestedPayload?.reviewedAction;
+  const receiptIntentHash = readStringField(body, "receiptIntentHash") || (nestedPayload ? readStringField(nestedPayload, "receiptIntentHash") : "");
+  if (handoff == null && !receiptIntentHash) return;
+  if (!isReviewedActionHandoffV2(handoff) || !receiptIntentHash) {
+    throw new ApiError(400, "reviewed_action_receipt_binding_required", "A complete v2 reviewed action and its exact receipt intent hash are required together.");
+  }
+  try {
+    assertReviewedActionReceiptBinding({ handoff, receiptIntentHash });
+  } catch {
+    throw new ApiError(409, "reviewed_action_receipt_intent_mismatch", "The public receipt does not match the reviewed wallet intent.");
+  }
 }
 
 async function resolveOpenAiRealtimeApiKey(env: EnvService): Promise<string> {
@@ -1035,6 +1070,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   };
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
+  const guardedRuntime = new MatterhornGuardedAgentRuntime();
   const ownsRequestRateLimitStore = !config.requestRateLimitStore;
   const requestRateLimitStore = config.requestRateLimitStore ?? createDefaultRequestRateLimitStore();
   const routes = createRoutes(
@@ -1047,6 +1083,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     operationalMetrics,
     requestRateLimitStore,
     modelUsageStore,
+    guardedRuntime,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
 
@@ -1111,6 +1148,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
             proxyPath: mount.restPath,
             access,
             modelUsageStore,
+            guardedRuntime,
           });
           return finalize(response);
         } catch (error) {
@@ -1198,6 +1236,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
             workspace,
             access,
             modelUsageStore,
+            guardedRuntime,
           });
           return finalize(response);
         } catch (error) {
@@ -1319,18 +1358,21 @@ function providerForOperationalRoute(route: string, proxyService?: "opencode"): 
   return undefined;
 }
 
-function operationalReadiness(config: ServerConfig) {
+function operationalReadiness(config: ServerConfig, guardedRuntime?: MatterhornGuardedAgentRuntime) {
   const workspaceConfigured = config.workspaces.length > 0;
   const workspaceStorageAvailable = config.workspaces.every((workspace) =>
     workspace.workspaceType === "remote" || existsSync(workspace.path),
   );
   const authConfigured = Boolean(config.token.trim() && config.hostToken.trim());
+  const guardedRuntimeReady = guardedRuntime?.ready() ?? true;
   return {
-    ready: workspaceConfigured && workspaceStorageAvailable && authConfigured,
+    ready: workspaceConfigured && workspaceStorageAvailable && authConfigured && guardedRuntimeReady,
     checks: {
       workspaceConfigured,
       workspaceStorageAvailable,
       authConfigured,
+      guardedRuntimeReady,
+      guardedRuntimeMode: guardedRuntime?.capabilities.mode ?? "off",
     },
   };
 }
@@ -1787,6 +1829,7 @@ async function proxyOpencodeRequest(input: {
   proxyPath?: string;
   access?: ClientAccess;
   modelUsageStore?: MatterhornModelUsageStore;
+  guardedRuntime: MatterhornGuardedAgentRuntime;
 }) {
   const workspace = input.workspace;
   const baseUrl = workspace ? resolveWorkspaceOpencodeConnection(input.config, workspace).baseUrl?.trim() ?? "" : "";
@@ -1846,6 +1889,7 @@ async function proxyOpencodeRequest(input: {
   } | null = null;
   let usageReservationId: string | null = null;
   let usageSubject: ModelUsageSubject | null = null;
+  let guardedRunId: string | null = null;
   if (isSessionPromptProxyRequest(method, proxyPath)) {
     let payload: Record<string, unknown>;
     try {
@@ -1868,6 +1912,10 @@ async function proxyOpencodeRequest(input: {
     }
 
     const agent = typeof payload.agent === "string" && payload.agent.trim() ? payload.agent.trim() : undefined;
+    const privacyMode = parseAgentPrivacyMode(payload.privacyMode);
+    const privacyConsentToken = typeof payload.privacyConsentToken === "string" ? payload.privacyConsentToken.trim() : undefined;
+    const attachmentIds = promptPrivateContextIds(payload, "attachmentIds");
+    const memoryIds = promptPrivateContextIds(payload, "memoryIds", "selectedMemoryIds");
     const reasoningEffort = parsePromptReasoningEffort(payload);
     const modeTools = buildMatterhornExecutionModeTools(bodyExecutionMode, agent);
     const routedTools = modeTools ?? (bodyExecutionMode === "work"
@@ -1893,6 +1941,11 @@ async function proxyOpencodeRequest(input: {
       : enforcedSystemPrompt;
     delete payload.executionMode;
     delete payload.reasoningEffort;
+    delete payload.privacyMode;
+    delete payload.privacyConsentToken;
+    delete payload.attachmentIds;
+    delete payload.memoryIds;
+    delete payload.selectedMemoryIds;
     if (reasoningEffort) payload.reasoning_effort = reasoningEffort;
     else delete payload.reasoning_effort;
     body = JSON.stringify(payload);
@@ -1921,34 +1974,84 @@ async function proxyOpencodeRequest(input: {
         workspace,
         parseSessionPromptModel(payload),
       );
-      assertPromptProviderPrivacy(modelResolution.model.providerID);
-      if (input.access && input.modelUsageStore) {
-        const usage = await reserveModelUsage({
-          config: input.config,
-          workspace,
-          store: input.modelUsageStore,
-          access: input.access,
+      if (input.guardedRuntime.capabilities.mode === "off") {
+        assertPromptProviderPrivacy(modelResolution.model.providerID);
+      }
+      try {
+        const acceptance = await input.guardedRuntime.acceptPrompt({
+          workspaceId: workspace.id,
           sessionId,
+          parts: normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
           providerId: modelResolution.model.providerID,
           modelId: modelResolution.model.modelID,
+          agentId: agent,
+          attachmentIds,
+          memoryIds,
+          privacyMode,
+          privacyConsentToken,
+          executionMode: bodyExecutionMode,
+          requestToolProfiles,
         });
-        usageReservationId = usage.reservation.reservationId;
-        usageSubject = usage.subject;
+        guardedRunId = acceptance.runId;
+      } catch (error) {
+        throw guardedRuntimeApiError(error);
+      }
+      if (input.access && input.modelUsageStore) {
+        try {
+          const usage = await reserveModelUsage({
+            config: input.config,
+            workspace,
+            store: input.modelUsageStore,
+            access: input.access,
+            sessionId,
+            providerId: modelResolution.model.providerID,
+            modelId: modelResolution.model.modelID,
+          });
+          usageReservationId = usage.reservation.reservationId;
+          usageSubject = usage.subject;
+        } catch (error) {
+          if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+          throw error;
+        }
       }
     }
   }
   if (method === "POST" && /^\/session\/[^/]+\/command$/.test(normalizeOpencodeProxyPath(proxyPath))) {
-    if (
-      workspace &&
-      providerPrivacyEnforcementMode() === "verified_only"
-    ) {
+    if (workspace) {
       const payload = parseJsonObjectBody(rawBody, "Command");
       const modelResolution = await resolveSessionPromptModel(
         input.config,
         workspace,
         parseSessionCommandModel(payload),
       );
-      assertPromptProviderPrivacy(modelResolution.model.providerID);
+      if (input.guardedRuntime.capabilities.mode === "off" && providerPrivacyEnforcementMode() === "verified_only") {
+        assertPromptProviderPrivacy(modelResolution.model.providerID);
+      }
+      const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
+      const command = typeof payload.command === "string" ? payload.command.trim() : "";
+      const commandArguments = typeof payload.arguments === "string" ? payload.arguments.trim() : "";
+      const privacyMode = parseAgentPrivacyMode(payload.privacyMode);
+      const privacyConsentToken = typeof payload.privacyConsentToken === "string" ? payload.privacyConsentToken.trim() : undefined;
+      delete payload.privacyMode;
+      delete payload.privacyConsentToken;
+      body = JSON.stringify(payload);
+      headers.delete("content-length");
+      try {
+        const acceptance = await input.guardedRuntime.acceptPrompt({
+          workspaceId: workspace.id,
+          sessionId,
+          parts: [{ type: "text", text: `/${command}${commandArguments ? ` ${commandArguments}` : ""}` }],
+          providerId: modelResolution.model.providerID,
+          modelId: modelResolution.model.modelID,
+          agentId: typeof payload.agent === "string" ? payload.agent.trim() : undefined,
+          privacyMode,
+          privacyConsentToken,
+          executionMode: "work",
+        });
+        guardedRunId = acceptance.runId;
+      } catch (error) {
+        throw guardedRuntimeApiError(error);
+      }
     }
     void fetch(targetUrl, {
       method,
@@ -1956,6 +2059,7 @@ async function proxyOpencodeRequest(input: {
       body,
     }).catch(() => {
       // Command failures are surfaced through the OpenCode event stream.
+      if (guardedRunId) void input.guardedRuntime.failRun(guardedRunId);
     });
     return jsonResponse({ ok: true, accepted: true });
   }
@@ -1963,7 +2067,7 @@ async function proxyOpencodeRequest(input: {
     method === "POST" &&
     /^\/session\/[^/]+\/summarize$/.test(normalizeOpencodeProxyPath(proxyPath)) &&
     workspace &&
-    providerPrivacyEnforcementMode() === "verified_only"
+    (providerPrivacyEnforcementMode() === "verified_only" || input.guardedRuntime.capabilities.mode !== "off")
   ) {
     const modelResolution = await resolveSessionPromptModel(
       input.config,
@@ -1980,6 +2084,7 @@ async function proxyOpencodeRequest(input: {
       });
     } catch (error) {
       input.modelUsageStore?.cancel(usageReservationId);
+      if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
       throw error;
     }
   }
@@ -1996,6 +2101,7 @@ async function proxyOpencodeRequest(input: {
     });
     if (!response.ok) {
       input.modelUsageStore?.cancel(usageReservationId);
+      if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
       if (promptAudit) {
         const errorPayload = await response.clone().json().catch(() => null);
         const errorRecord = recordLike(errorPayload);
@@ -2066,6 +2172,7 @@ async function proxyOpencodeRequest(input: {
     }
   } catch (error) {
     input.modelUsageStore?.cancel(usageReservationId);
+    if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
     throw error;
   } finally {
     input.request.signal.removeEventListener("abort", abortUpstreamConnect);
@@ -2096,7 +2203,9 @@ async function proxyOpencodeRequest(input: {
     }
   }
 
-  return sanitizeProxyResponse(response, input.request.signal, upstreamController);
+  const sanitized = sanitizeProxyResponse(response, input.request.signal, upstreamController);
+  if (guardedRunId) sanitized.headers.set("X-Matterhorn-Agent-Run-Id", guardedRunId);
+  return sanitized;
 }
 
 /**
@@ -2323,9 +2432,15 @@ function matterhornEmailConfig(): EmailSendConfig {
 
 function matterhornEmailDeliveryConfigured(config: EmailSendConfig): boolean {
   if (config.devMode) return true;
+  const resendConfigured = (config.resendApiKey?.trim().length ?? 0) >= 16;
+  const smtpConfigured = Boolean(
+    config.smtp?.host?.trim() &&
+      config.smtp.user?.trim() &&
+      config.smtp.pass?.trim(),
+  );
   return Boolean(
     config.from &&
-      (config.resendApiKey || config.smtp?.host),
+      (resendConfigured || smtpConfigured),
   );
 }
 
@@ -4242,6 +4357,8 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const billingSubscriptionPath = matterhornBillingAccountPath(workspace.path);
   const dataPolicyPath = workspaceDataPolicyPath(workspace);
   const missionPath = workspaceMissionPath(workspace);
+  const securityReceiptsPath = agentSecurityReceiptDirectory(workspace.id);
+  const securityMigrationCheckpoint = legacySecurityMigrationCheckpointPath(workspace.id);
   const dataPolicy = readWorkspaceDataPolicySync(workspace);
   const appendOnlyRetention = buildAppendOnlyRetentionPolicy(workspace.id);
   const notesIndexPath = notes.indexPath;
@@ -4263,6 +4380,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
     outputsPath,
     imageOutputsPath,
     feedbackPath,
+    securityReceiptsPath,
   ];
 
   return {
@@ -4483,6 +4601,28 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         exportable: true,
         deletable: false,
       }),
+      securityReceipts: dataStore({
+        id: "securityReceipts",
+        ...capability(
+          existsSync(securityReceiptsPath) ? "working" : "preview",
+          "Guarded-agent security receipts",
+          "Date-segmented, hash-chained receipts retain only minimal privacy, capability, tool, usage, and reviewed-action metadata for up to 365 days.",
+          {
+            route: `/workspace/${workspace.id}/agent-run-receipts`,
+            migrationRoute: `/workspace/${workspace.id}/security-receipts/migrate-legacy`,
+            migrationCheckpoint: securityMigrationCheckpoint,
+            windowDays: 365,
+          },
+        ),
+        scope: "machine_global",
+        path: securityReceiptsPath,
+        format: "jsonl",
+        containsUserContent: false,
+        containsSecrets: "never",
+        retention: "append_only",
+        exportable: true,
+        deletable: false,
+      }),
       walletEvidence: dataStore({
         id: "walletEvidence",
         ...capability(
@@ -4534,7 +4674,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
       feedbackUse: dataPolicy.feedbackUse,
       redaction: capability("working", "Redaction", "Memory, workflow, and market paths reject or redact known secret-shaped wallet/API/signature inputs."),
       export: capability("preview", "Export", "Memory can export bundles and workspace files are user-controlled; the project data ledger can be read as a unified JSON contract."),
-      deletion: capability("preview", "Deletion", "Notes and memory records are user-deletable; append-only audit/task logs are retained for accountability."),
+      deletion: capability("preview", "Deletion", "User-controlled content has scoped deletion controls. Minimal guarded-agent security receipts exclude raw content and expire automatically after 365 days."),
       retention: {
         status: "working",
         description: appendOnlyRetention.summary,
@@ -5170,6 +5310,40 @@ function buildDataControlStore(
       summary: "Wallet audit events are retained for accountability. Output files can be removed from the outputs folder.",
       actions: [],
     });
+  } else if (storeId === "securityReceipts") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Security receipt API",
+      summary: "Exports minimal guarded-agent receipts without raw prompts, secrets, signatures, or unrestricted tool output.",
+      actions: [
+        dataControlAction({
+          id: "security-receipts.list",
+          label: "Export security receipts",
+          description: "Returns authenticated workspace receipts and the enforced 365-day retention policy.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/agent-run-receipts`,
+        }),
+        dataControlAction({
+          id: "security-receipts.migrate-legacy",
+          label: "Migrate legacy security events",
+          description: "Strictly projects legacy audit/task/workflow rows into content-free hash-chained records, verifies counts and hashes, checkpoints the migration, then removes superseded source logs.",
+          kind: "api_route",
+          status: "working",
+          method: "POST",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/security-receipts/migrate-legacy`,
+          destructive: true,
+          requirements: ["owner_or_host", "writable_server"],
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Automatic expiry",
+      summary: "Date-segmented security records expire automatically after 365 days; no raw user content is retained in this store.",
+      actions: [],
+    });
   } else if (storeId === "audit" || storeId === "taskEvents" || storeId === "workflowRuns" || storeId === "evidence") {
     exportCapability = dataControlCapability({
       status: "working",
@@ -5253,10 +5427,10 @@ function buildWorkspaceDataControls(
         ...appendOnlyRetention,
       },
       export: capability("working", "Export controls", "Mission, notes, memory, outputs, feedback, and event ledgers report their available export paths."),
-      deletion: capability("preview", "Deletion controls", "Mission, notes, memory, outputs, and feedback support scoped deletes; append-only logs remain retained for accountability."),
+      deletion: capability("working", "Deletion controls", `Scoped deletes remain available. Owners can purge all Matterhorn-managed user content at /workspace/${encodeURIComponent(workspace.id)}/user-content/purge while content-free security receipts expire after 365 days.`),
       limitations: [
-        "Append-only audit, task event, and workflow run rows do not currently have a purge endpoint.",
-        "Chat/session history remains controlled by the workspace engine store.",
+        "Legacy audit, task event, and workflow run files remain outside the 365-day security-receipt window until an owner completes the verified migration endpoint.",
+        "Complete workspace content purge requires the workspace engine to be reachable so every chat can be deleted before local content is removed.",
         "Feedback is stored for eval, routing, and product quality only; it is not used for model training by default.",
       ],
     },
@@ -6954,6 +7128,7 @@ function createRoutes(
   operationalMetrics: OperationalMetrics,
   requestRateLimitStore: RequestRateLimitStore,
   modelUsageStore: MatterhornModelUsageStore,
+  guardedRuntime: MatterhornGuardedAgentRuntime,
 ): Route[] {
   const routes: Route[] = [];
   const billingRouteContext = createBillingRouteContext(config);
@@ -6965,6 +7140,14 @@ function createRoutes(
     persistenceRoot: config.workspaces[0]?.path ?? process.cwd(),
     onEvent: recordWorkflowTaskEvent,
   });
+  const resolveGuardedRuntimeWorkspace = (directoryValue: unknown): WorkspaceInfo => {
+    const directory = typeof directoryValue === "string" ? resolve(directoryValue) : "";
+    const workspace = directory
+      ? config.workspaces.find((item) => resolve(item.directory ?? item.path) === directory)
+      : config.workspaces[0];
+    if (!workspace) throw new ApiError(404, "workspace_not_found", "Guarded runtime workspace not found");
+    return workspace;
+  };
   const loadWorkflowRunsForRequest = async (ctx: RequestContext, workspaceId?: string) => {
     const requestedWorkspaceId = ctx.matterhornWorkspace?.id ?? workspaceId;
     if (requestedWorkspaceId) {
@@ -7548,7 +7731,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/health/ready", "none", async () => {
-    const readiness = operationalReadiness(config);
+    const readiness = operationalReadiness(config, guardedRuntime);
     const response = jsonResponse({
       ok: readiness.ready,
       status: readiness.ready ? "ready" : "not_ready",
@@ -7561,10 +7744,11 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/metrics", "host", async () => {
-    const readiness = operationalReadiness(config);
+    const readiness = operationalReadiness(config, guardedRuntime);
     return new Response(operationalMetrics.renderPrometheus({
       ready: readiness.ready,
       uptimeMs: Date.now() - config.startedAt,
+      guardedRuntimeObservations: guardedRuntime.observationSnapshot(),
     }), {
       status: 200,
       headers: {
@@ -7584,10 +7768,68 @@ function createRoutes(
       payload,
       serverUrl: ctx.url.origin,
       clientToken: config.token,
-      onToolCall: (metric) => operationalMetrics.recordAgentTool(metric),
+      authorizeToolCall: ({ toolName, args }) => guardedRuntime.authorizeMcpTool({ toolName, args }),
+      onToolCall: (metric, authorization) => {
+        operationalMetrics.recordAgentTool(metric);
+        void guardedRuntime.recordMcpTool({ runId: authorization?.runId ?? null, metric });
+      },
     });
     if (result.body === null) return new Response(null, { status: result.status });
     return jsonResponse(result.body, result.status);
+  });
+
+  addRoute(routes, "POST", "/internal/agent-capabilities/authorize", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 128_000, "Agent capability authorization");
+    const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const callId = typeof body.callId === "string" ? body.callId.trim() : "";
+    const toolName = typeof body.toolName === "string" ? body.toolName.trim() : "";
+    if (!sessionId || !callId || !toolName || !isRecord(body.args)) {
+      throw new ApiError(400, "invalid_payload", "sessionId, callId, toolName, and object args are required");
+    }
+    try {
+      const staged = guardedRuntime.stageRuntimeTool({
+        runtimeSecret: ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "",
+        workspaceId: workspace.id,
+        sessionId,
+        callId,
+        toolName,
+        args: body.args,
+      });
+      const response = jsonResponse(staged);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/internal/agent-runs/complete", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 64_000, "Agent run completion");
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const status = body.status === "success" || body.status === "partial" || body.status === "cancelled" || body.status === "error"
+      ? body.status
+      : null;
+    if (!sessionId || !status) throw new ApiError(400, "invalid_payload", "sessionId and a valid completion status are required");
+    const usage = isRecord(body.usage) ? {
+      inputTokens: nonNegativeFiniteNumber(body.usage.inputTokens),
+      outputTokens: nonNegativeFiniteNumber(body.usage.outputTokens),
+      reasoningTokens: nonNegativeFiniteNumber(body.usage.reasoningTokens),
+      cacheReadTokens: nonNegativeFiniteNumber(body.usage.cacheReadTokens),
+      cacheWriteTokens: nonNegativeFiniteNumber(body.usage.cacheWriteTokens),
+      estimatedCostUsd: nonNegativeFiniteNumber(body.usage.estimatedCostUsd),
+    } : undefined;
+    try {
+      await guardedRuntime.completeSessionRun({
+        runtimeSecret: ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "",
+        sessionId,
+        status,
+        usage,
+      });
+      return jsonResponse({ ok: true });
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
   });
 
   // Dev log sink: append browser console + error events to a file that an
@@ -9118,6 +9360,108 @@ function createRoutes(
     return jsonResponse({ item });
   });
 
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages/preflight", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
+    const body = await readJsonBody(ctx.request, 1_000_000, "Agent privacy preflight");
+    const parts = parseSessionPromptParts(body);
+    const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
+    const response = guardedRuntime.preflight({
+      workspaceId: workspace.id,
+      sessionId,
+      parts: normalizePrivacyParts(parts),
+      providerId: modelResolution.model.providerID,
+      modelId: modelResolution.model.modelID,
+      agentId: typeof body.agentId === "string"
+        ? body.agentId.trim()
+        : typeof body.agent === "string" ? body.agent.trim() : undefined,
+      attachmentIds: promptPrivateContextIds(body, "attachmentIds"),
+      memoryIds: promptPrivateContextIds(body, "memoryIds", "selectedMemoryIds"),
+      privacyMode: parseAgentPrivacyMode(body.privacyMode),
+    });
+    const result = jsonResponse(response);
+    result.headers.set("Cache-Control", "no-store");
+    return result;
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/privacy-consents/:challengeId/confirm", "client", async (ctx) => {
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request, 32_000, "Privacy consent confirmation");
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const requestHash = typeof body.requestHash === "string" ? body.requestHash.trim() : "";
+    const challengeId = (ctx.params.challengeId ?? "").trim();
+    if (!sessionId || !requestHash || !challengeId) {
+      throw new ApiError(400, "invalid_payload", "sessionId and requestHash are required");
+    }
+    try {
+      const response = guardedRuntime.confirmConsent({ challengeId, requestHash, workspaceId: workspace.id, sessionId });
+      const result = jsonResponse(response);
+      result.headers.set("Cache-Control", "no-store");
+      return result;
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/agent-run-receipts", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = ctx.url.searchParams.get("sessionId")?.trim() || undefined;
+    const limit = parseOptionalPositiveInteger(ctx.url.searchParams.get("limit"), "limit");
+    const items = await guardedRuntime.receipts.list(workspace.id, { sessionId, limit });
+    return jsonResponse({ items, retention: { windowDays: 365, purgeSupported: true } });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/security-receipts/migrate-legacy", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "owner");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request, 16_384, "Legacy security migration confirmation");
+    if (body.confirm !== "migrate-and-remove-legacy-content") {
+      throw new ApiError(
+        400,
+        "migration_confirmation_required",
+        "Set confirm to migrate-and-remove-legacy-content after exporting any legacy history you want to keep.",
+      );
+    }
+    const checkpoint = await migrateLegacySecurityRecords({ workspace });
+    const response = jsonResponse({ success: true, checkpoint });
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/reviewed-actions/validate", "client", async (ctx) => {
+    requireClientScope(ctx, "collaborator");
+    await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request, 131_072, "Reviewed action validation");
+    if (!isReviewedActionHandoffV2(body.handoff) || !isReviewedActionDraftHandoff(body.currentDraft)) {
+      throw new ApiError(400, "reviewed_action_invalid", "A valid v2 reviewed action and its current wallet draft are required.");
+    }
+    const issues = validateReviewedActionHandoffV2({
+      handoff: body.handoff,
+      currentDraft: body.currentDraft,
+    });
+    const response = jsonResponse({
+      success: true,
+      valid: issues.length === 0,
+      issues,
+      validatedAt: new Date().toISOString(),
+      requiresRegeneration: issues.length > 0,
+    });
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/agent-run-receipts/:runId", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const receipt = await guardedRuntime.receipts.get(workspace.id, (ctx.params.runId ?? "").trim());
+    if (!receipt) {
+      throw new ApiError(404, "agent_run_receipt_not_found", "Agent run receipt not found");
+    }
+    return jsonResponse({ item: receipt });
+  });
+
   addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages", "client", async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
@@ -9139,7 +9483,6 @@ function createRoutes(
       throw new ApiError(400, "execution_mode_mismatch", "Prompt execution mode does not match the request header");
     }
     const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
-    assertPromptProviderPrivacy(modelResolution.model.providerID);
     const requestVariant = typeof body.variant === "string" && body.variant.trim()
       ? body.variant.trim()
       : undefined;
@@ -9160,13 +9503,6 @@ function createRoutes(
       promptAsync: (parameters: Record<string, unknown>) => Promise<OpencodeClientResult<unknown, unknown>>;
     };
 
-    await requireApproval(ctx, {
-      workspaceId: workspace.id,
-      action: "session.prompt",
-      summary: `Submit prompt to session ${sessionId}`,
-      paths: [workspace.path],
-    });
-
     const agent = typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
     const modeTools = buildMatterhornExecutionModeTools(executionMode, agent);
     const routedTools = modeTools ?? (executionMode === "work"
@@ -9184,15 +9520,51 @@ function createRoutes(
     const modeSystemPrompt = buildMatterhornExecutionModeSystemPrompt(executionMode);
     const requestedSystemPrompt = typeof body.system === "string" && body.system.trim() ? body.system.trim() : "";
 
-    const usage = await reserveModelUsage({
-      config,
-      workspace,
-      store: modelUsageStore,
-      access: clientAccessFromRequestContext(ctx, workspace),
-      sessionId,
-      providerId: modelResolution.model.providerID,
-      modelId: modelResolution.model.modelID,
-    });
+    if (guardedRuntime.capabilities.mode === "off") {
+      assertPromptProviderPrivacy(modelResolution.model.providerID);
+    }
+    let guardedAcceptance: GuardedPromptAcceptance;
+    try {
+      guardedAcceptance = await guardedRuntime.acceptPrompt({
+        workspaceId: workspace.id,
+        sessionId,
+        parts: normalizePrivacyParts(parts),
+        providerId: modelResolution.model.providerID,
+        modelId: modelResolution.model.modelID,
+        agentId: agent,
+        attachmentIds: promptPrivateContextIds(body, "attachmentIds"),
+        memoryIds: promptPrivateContextIds(body, "memoryIds", "selectedMemoryIds"),
+        privacyMode: parseAgentPrivacyMode(body.privacyMode),
+        privacyConsentToken: typeof body.privacyConsentToken === "string" ? body.privacyConsentToken.trim() : undefined,
+        executionMode,
+        requestToolProfiles,
+      });
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+
+    let usage;
+    try {
+      await requireApproval(ctx, {
+        workspaceId: workspace.id,
+        action: "session.prompt",
+        summary: `Submit prompt to session ${sessionId}`,
+        paths: [workspace.path],
+      });
+
+      usage = await reserveModelUsage({
+        config,
+        workspace,
+        store: modelUsageStore,
+        access: clientAccessFromRequestContext(ctx, workspace),
+        sessionId,
+        providerId: modelResolution.model.providerID,
+        modelId: modelResolution.model.modelID,
+      });
+    } catch (error) {
+      await guardedRuntime.failRun(guardedAcceptance.runId);
+      throw error;
+    }
 
     const promptBody = {
       sessionID: sessionId,
@@ -9230,6 +9602,7 @@ function createRoutes(
       }
     } catch (error) {
       modelUsageStore.cancel(usage.reservation.reservationId);
+      await guardedRuntime.failRun(guardedAcceptance.runId);
       throw error;
     }
 
@@ -9254,7 +9627,7 @@ function createRoutes(
       });
     }
 
-    return jsonResponse({ ok: true, accepted: true, sessionId }, 202);
+    return jsonResponse({ ok: true, accepted: true, sessionId, runId: guardedAcceptance.runId }, 202);
   });
 
   addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/execution-mode", "client", async (ctx) => {
@@ -10771,6 +11144,119 @@ function createRoutes(
       }
       throw error;
     }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/user-content/purge", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "owner");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request, 16_384, "Workspace content purge confirmation");
+    if (body.confirm !== `purge:${workspace.id}`) {
+      throw new ApiError(
+        400,
+        "workspace_content_purge_confirmation_required",
+        `Set confirm to purge:${workspace.id} after exporting any workspace content you want to keep.`,
+      );
+    }
+
+    // Delete engine-owned chats first. If the engine is unavailable, fail
+    // without claiming that all workspace content has been removed.
+    const sessions = await listWorkspaceSessions(config, workspace, { limit: 2_001 });
+    if (sessions.length > 2_000) {
+      throw new ApiError(
+        409,
+        "workspace_content_purge_session_limit",
+        "This workspace has more than 2,000 chats. Delete older chats and retry the complete purge.",
+      );
+    }
+    const opencode = createWorkspaceOpencodeClient(config, workspace);
+    const sessionFailures: string[] = [];
+    for (const session of sessions) {
+      try {
+        unwrapOpencodeResult(
+          await opencode.session.delete({ sessionID: session.id }),
+          `/session/${encodeURIComponent(session.id)}`,
+        );
+      } catch {
+        sessionFailures.push(session.id);
+      }
+    }
+    if (sessionFailures.length) {
+      throw new ApiError(
+        502,
+        "workspace_content_purge_session_failed",
+        "Matterhorn could not delete every chat from the workspace engine. Retry before removing the workspace.",
+        { failedSessionIds: sessionFailures.slice(0, 20), failedCount: sessionFailures.length },
+      );
+    }
+
+    // Convert content-bearing legacy event files into minimal, content-free
+    // security records before removing the user-controlled stores.
+    await migrateLegacySecurityRecords({ workspace });
+
+    const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+    const memory = await workspaceVault.purgeWorkspace(workspace.id);
+    const feedback = await deleteAllProjectFeedbackEntries(workspace.id);
+    const workflowRunsDeleted = await workflowRuns.purgeWorkspace(workspace.id);
+    const fileSessionState = fileSessions.clearWorkspace(workspace.id);
+    const guardedState = guardedRuntime.purgeWorkspace(workspace.id);
+
+    const managedContentPaths = [
+      join(workspace.path, "notes"),
+      join(workspace.path, "outputs"),
+      join(workspace.path, ".matterhorn-work", "notes"),
+      workspaceLocalMemoryRoot(workspace),
+      join(workspace.path, ".matterhorn-work", "task-logs", workspace.id),
+      workspaceMissionPath(workspace),
+    ];
+    let removedManagedPaths = 0;
+    for (const path of managedContentPaths) {
+      if (await exists(path)) removedManagedPaths += 1;
+      await rm(path, { recursive: true, force: true });
+    }
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.user_content.purge",
+      target: "workspace-managed-content",
+      summary: "Purged user-controlled workspace content",
+      timestamp: Date.now(),
+      metadata: {
+        chats: sessions.length,
+        memoryRecords: memory.deletedRecords,
+        memorySuggestions: memory.deletedSuggestions,
+        feedback,
+        workflowRuns: workflowRunsDeleted,
+      },
+    });
+    const securityCheckpoint = await migrateLegacySecurityRecords({ workspace });
+    const response = jsonResponse({
+      success: true,
+      workspaceId: workspace.id,
+      deleted: {
+        chats: sessions.length,
+        memoryRecords: memory.deletedRecords,
+        memorySuggestions: memory.deletedSuggestions,
+        feedback,
+        workflowRuns: workflowRunsDeleted,
+        managedPaths: removedManagedPaths,
+        transientFileSessions: fileSessionState.sessions,
+        transientFileEvents: fileSessionState.events,
+        transientPrivacyChallenges: guardedState.privacy.challenges,
+        transientPrivacyConsents: guardedState.privacy.consents,
+        transientAgentRuns: guardedState.capabilities.runs,
+      },
+      retained: {
+        store: "securityReceipts",
+        containsRawUserContent: false,
+        windowDays: 365,
+        migrationId: securityCheckpoint.migrationId,
+      },
+    });
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   });
 
   addRoute(routes, "POST", "/workspace/:id/import/preview", "client", async (ctx) => {
@@ -12686,6 +13172,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const ownerKey = hyperliquidExecutionOwnerKey(ctx);
     const body = await readJsonBody(ctx.request);
+    assertOptionalReviewedActionReceiptBinding(body);
     try {
       const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
       const workspace = workspaceId ? await resolveWorkspace(config, workspaceId) : null;
@@ -13032,6 +13519,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
+    assertOptionalReviewedActionReceiptBinding(body);
     const forbidden = findForbiddenPolymarketCredentialInput(body);
     if (forbidden) {
       throw new ApiError(400, "market_secret_rejected", `Polymarket receipt evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
@@ -13092,6 +13580,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
+    assertOptionalReviewedActionReceiptBinding(body);
     const forbidden = findForbiddenPolymarketCredentialInput(body);
     if (forbidden) {
       throw new ApiError(400, "market_secret_rejected", `Polymarket cancellation evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
@@ -13289,6 +13778,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
+    assertOptionalReviewedActionReceiptBinding(body);
     const payload = body && typeof body === "object" && !Array.isArray(body) && "payload" in body
       ? (body as Record<string, unknown>).payload
       : body;
@@ -13346,6 +13836,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
+    assertOptionalReviewedActionReceiptBinding(body);
     const payload = body && typeof body === "object" && !Array.isArray(body) && "payload" in body
       ? (body as Record<string, unknown>).payload
       : body;
@@ -14373,6 +14864,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
+    assertOptionalReviewedActionReceiptBinding(body);
     const payload = body && typeof body === "object" && !Array.isArray(body) && "payload" in body
       ? (body as Record<string, unknown>).payload
       : body;
@@ -14741,6 +15233,17 @@ function isBooleanRecord(value: unknown): value is Record<string, boolean> {
   return isRecord(value) && Object.values(value).every((item) => typeof item === "boolean");
 }
 
+function nonNegativeFiniteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function guardedRuntimeApiError(error: unknown): ApiError {
+  if (error instanceof GuardedRuntimeError) {
+    return new ApiError(error.status, error.code, error.message, error.details);
+  }
+  return new ApiError(500, "guarded_runtime_failed", "Matterhorn's guarded agent runtime could not complete this request.");
+}
+
 function parseSessionPromptParts(body: Record<string, unknown>): unknown[] {
   if (Array.isArray(body.parts) && body.parts.length > 0) {
     return body.parts;
@@ -14749,6 +15252,21 @@ function parseSessionPromptParts(body: Record<string, unknown>): unknown[] {
     return [{ type: "text", text: body.message }];
   }
   throw new ApiError(400, "invalid_payload", "message or non-empty parts is required");
+}
+
+function parseAgentPrivacyMode(value: unknown): MatterhornAgentPrivacyMode | undefined {
+  if (value === "public_research" || value === "private_workspace" || value === "transaction") return value;
+  if (value == null || value === "") return undefined;
+  throw new ApiError(400, "invalid_payload", "privacyMode must be public_research, private_workspace, or transaction");
+}
+
+function promptPrivateContextIds(body: Record<string, unknown>, ...keys: string[]): string[] {
+  const values = keys.flatMap((key) => Array.isArray(body[key]) ? body[key] : []);
+  const ids = values
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return [...new Set(ids)].sort().slice(0, 256);
 }
 
 type SessionPromptModel = { providerID: string; modelID: string };
@@ -14787,16 +15305,24 @@ function parseJsonObjectBody(
 
 function parseSessionPromptModel(body: Record<string, unknown>): SessionPromptModel | undefined {
   if (isRecord(body.model)) {
-    const providerID = typeof body.model.providerID === "string" ? body.model.providerID.trim() : "";
-    const modelID = typeof body.model.modelID === "string" ? body.model.modelID.trim() : "";
+    const providerID = typeof body.model.providerID === "string"
+      ? body.model.providerID.trim()
+      : typeof body.model.providerId === "string" ? body.model.providerId.trim() : "";
+    const modelID = typeof body.model.modelID === "string"
+      ? body.model.modelID.trim()
+      : typeof body.model.modelId === "string" ? body.model.modelId.trim() : "";
     if (!providerID && !modelID) return undefined;
     if (!providerID || !modelID) {
       throw new ApiError(400, "invalid_payload", "model requires providerID and modelID");
     }
     return { providerID, modelID };
   }
-  const providerID = typeof body.providerID === "string" ? body.providerID.trim() : "";
-  const modelID = typeof body.modelID === "string" ? body.modelID.trim() : "";
+  const providerID = typeof body.providerID === "string"
+    ? body.providerID.trim()
+    : typeof body.providerId === "string" ? body.providerId.trim() : "";
+  const modelID = typeof body.modelID === "string"
+    ? body.modelID.trim()
+    : typeof body.modelId === "string" ? body.modelId.trim() : "";
   if (!providerID && !modelID) return undefined;
   if (!providerID || !modelID) {
     throw new ApiError(400, "invalid_payload", "providerID and modelID must be provided together");

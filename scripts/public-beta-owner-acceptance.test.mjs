@@ -71,6 +71,10 @@ function evidence(name) {
   return path;
 }
 
+function fileSha256(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
 function passingCheck(id, value = "verified") {
   return { id, status: "pass", evidence: value };
 }
@@ -212,6 +216,49 @@ try {
     ],
   });
 
+  const guardedShadowStart = evidence("guarded-shadow-start.json");
+  const guardedShadowEnd = evidence("guarded-shadow-end.json");
+  const guardedShadowPath = writeJson("guarded-shadow.json", withIntegrity({
+    version: "matterhorn.guarded-runtime-shadow-evidence.v1",
+    decision: "GO",
+    ready: true,
+    commit,
+    serverOrigin: "https://api.matterhorn.example",
+    evaluatedAt: commitTime,
+    window: {
+      startedAt: "2026-07-18T10:50:00.000Z",
+      endedAt: "2026-07-20T11:00:00.000Z",
+      hours: 48.167,
+      processUptimeDeltaSeconds: 173400,
+    },
+    evidence: {
+      baselinePath: guardedShadowStart,
+      baselineSha256: fileSha256(guardedShadowStart),
+      finalPath: guardedShadowEnd,
+      finalSha256: fileSha256(guardedShadowEnd),
+      reviewPath: null,
+      reviewSha256: null,
+    },
+    checks: [
+      "baseline_integrity",
+      "final_integrity",
+      "same_commit",
+      "same_origin",
+      "shadow_ready",
+      "snapshot_time",
+      "window_duration",
+      "uninterrupted_process",
+      "counter_monotonicity",
+      "shadow_decision_shape",
+      "issue_exercised",
+      "consume_exercised",
+      "read_exercised",
+      "prepare_exercised",
+      "anomaly_review",
+    ].map((id) => passingCheck(id)),
+    blockers: [],
+  }));
+
   const acceptanceEvidence = Object.fromEntries([
     "new-user.md",
     "existing-user.md",
@@ -219,10 +266,19 @@ try {
     "coinbase.md",
     "phantom.md",
     "hyperliquid.md",
+    "signup.md",
+    "isolation.md",
+    "privacy.md",
+    "capability.md",
+    "generic-crypto.md",
+    "bittensor-guarded.md",
+    "hyperliquid-guarded.md",
+    "polymarket-guarded.md",
+    "sui-guarded.md",
     "notion.md",
   ].map((name) => [name, evidence(name)]));
   const acceptancePath = writeJson("acceptance.json", {
-    version: "matterhorn.product-hunt-acceptance-readiness.v1",
+    version: "matterhorn.product-hunt-acceptance-readiness.v2",
     ready: true,
     decision: "GO",
     commit,
@@ -237,6 +293,15 @@ try {
       passingCheck("coinbase_journey", acceptanceEvidence["coinbase.md"]),
       passingCheck("phantom_sui_journey", acceptanceEvidence["phantom.md"]),
       passingCheck("hyperliquid_testnet_journey", acceptanceEvidence["hyperliquid.md"]),
+      passingCheck("signup_journey", acceptanceEvidence["signup.md"]),
+      passingCheck("two_account_isolation", acceptanceEvidence["isolation.md"]),
+      passingCheck("privacy_firewall", acceptanceEvidence["privacy.md"]),
+      passingCheck("capability_adversarial", acceptanceEvidence["capability.md"]),
+      passingCheck("generic_crypto_journey", acceptanceEvidence["generic-crypto.md"]),
+      passingCheck("bittensor_guarded_journey", acceptanceEvidence["bittensor-guarded.md"]),
+      passingCheck("hyperliquid_guarded_journey", acceptanceEvidence["hyperliquid-guarded.md"]),
+      passingCheck("polymarket_guarded_journey", acceptanceEvidence["polymarket-guarded.md"]),
+      passingCheck("sui_guarded_journey", acceptanceEvidence["sui-guarded.md"]),
       passingCheck("oauth_notion", acceptanceEvidence["notion.md"]),
       passingCheck("oauth_visible_set", "notion"),
     ],
@@ -268,6 +333,7 @@ try {
       ownerApproval: approvalPath,
       deployment: deploymentPath,
       operations: operationsPath,
+      guardedShadow: guardedShadowPath,
       acceptance: acceptancePath,
       desktop: desktopPath,
     },
@@ -334,8 +400,63 @@ try {
   assert.equal(passingReport.launchReadiness.blocked, 0);
   assert.ok(readFileSync(join(outputDir, "launch-readiness.md"), "utf8").includes("**Decision:** GO"));
 
+  const { desktop: _desktopReport, ...webReports } = baseInput.reports;
+  const {
+    cleanInstall: _cleanInstall,
+    publicDownload: _publicDownload,
+    ...webManual
+  } = baseInput.manual;
+  const webOnly = run({
+    ...baseInput,
+    releaseSurface: "web",
+    reports: webReports,
+    manual: webManual,
+  });
+  assert.equal(webOnly.status, 0, webOnly.stderr || webOnly.stdout);
+  const webOnlyReport = JSON.parse(webOnly.stdout);
+  assert.equal(webOnlyReport.ready, true);
+  assert.equal(webOnlyReport.releaseSurface, "web");
+  assert.equal(webOnlyReport.checks.some(({ gate }) => gate.startsWith("desktop.")), false);
+  assert.equal(webOnlyReport.checks.some(({ gate }) => gate === "distribution.public_download"), false);
+  assert.ok(webOnlyReport.launchReadiness.required < passingReport.launchReadiness.required);
+
+  const invalidSurface = run({ ...baseInput, releaseSurface: "mobile" });
+  assert.equal(invalidSurface.status, 1);
+  assert.match(invalidSurface.stderr, /input\.releaseSurface must be web or web-and-desktop/);
+
+  const blockedShadowPath = writeJson("guarded-shadow-blocked.json", withIntegrity({
+    version: "matterhorn.guarded-runtime-shadow-evidence.v1",
+    decision: "NO-GO",
+    ready: false,
+    commit,
+    evaluatedAt: commitTime,
+    window: { hours: 24 },
+    checks: [{ id: "window_duration", status: "fail", evidence: 24 }],
+    blockers: [{ id: "window_duration", action: "Shadow observation is at least 48 hours" }],
+  }));
+  const blockedShadow = run({
+    ...baseInput,
+    reports: { ...baseInput.reports, guardedShadow: blockedShadowPath },
+  });
+  assert.equal(blockedShadow.status, 1);
+  assert.ok(JSON.parse(blockedShadow.stdout).blockers.some((entry) => entry.gate === "agent.guarded_shadow_window"));
+
+  const blockedPrivacyAcceptance = JSON.parse(readFileSync(acceptancePath, "utf8"));
+  blockedPrivacyAcceptance.ready = false;
+  blockedPrivacyAcceptance.decision = "NO-GO";
+  blockedPrivacyAcceptance.checks = blockedPrivacyAcceptance.checks.map((entry) => (
+    entry.id === "privacy_firewall" ? { ...entry, status: "fail" } : entry
+  ));
+  const blockedPrivacyAcceptancePath = writeJson("acceptance-privacy-blocked.json", blockedPrivacyAcceptance);
+  const blockedPrivacy = run({
+    ...baseInput,
+    reports: { ...baseInput.reports, acceptance: blockedPrivacyAcceptancePath },
+  });
+  assert.equal(blockedPrivacy.status, 1);
+  assert.ok(JSON.parse(blockedPrivacy.stdout).blockers.some((entry) => entry.gate === "agent.privacy_firewall"));
+
   const noOauthAcceptancePath = writeJson("acceptance-no-oauth.json", {
-    version: "matterhorn.product-hunt-acceptance-readiness.v1",
+    version: "matterhorn.product-hunt-acceptance-readiness.v2",
     ready: false,
     decision: "NO-GO",
     commit,

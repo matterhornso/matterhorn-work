@@ -96,10 +96,15 @@ for (const required of [
   "outputs-browser-smoke.test.mjs",
   "production-cors-readiness.test.mjs",
   "production-launch-environment.test.mjs",
+  "public-beta-web-readiness.test.mjs",
+  "product-hunt-deployment-probe.test.mjs",
   "production-cors-readiness.mjs",
   "generated-media-diagnostics.test.ts",
   "generated-media-production-readiness.test.mjs",
   "product-readiness-smoke.test.mjs",
+  "public-beta-rollback-hook.test.mjs",
+  "product-hunt-rollback-rehearsal.test.mjs",
+  "guarded-runtime-shadow-evidence.test.mjs",
   "public-beta-owner-acceptance.test.mjs",
 ]) {
   assert.ok(source.includes(required), `platform safety gate missing ${required}`);

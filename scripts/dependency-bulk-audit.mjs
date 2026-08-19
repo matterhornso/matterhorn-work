@@ -60,8 +60,9 @@ function help() {
   return [
     "Matterhorn dependency bulk audit",
     "",
-    "Checks the installed workspace graph against npm's supported bulk advisory API.",
-    "By default, build and development dependencies are included because they participate in release creation.",
+    "Checks the workspace dependency inventory against npm's supported bulk advisory API.",
+    "By default, the complete lockfile is audited so build and development dependencies are included",
+    "without expanding the recursive workspace graph. Use --prod only for the installed production graph.",
     "",
     "Usage:",
     "  node scripts/dependency-bulk-audit.mjs --all --audit-level=low",
@@ -117,21 +118,14 @@ function addInventoryVersion(inventory, packageName, rawVersion) {
   inventory.set(packageName, versions);
 }
 
-export function packageListInventory(packageList) {
+export function packagePathInventory(packagePaths) {
   const inventory = new Map();
-  const visit = (dependencies) => {
-    for (const [packageName, dependency] of Object.entries(dependencies ?? {})) {
-      if (!dependency || typeof dependency !== "object") continue;
-      addInventoryVersion(inventory, packageName, dependency.version);
-      visit(dependency.dependencies);
-      visit(dependency.devDependencies);
-      visit(dependency.optionalDependencies);
-    }
-  };
-  for (const workspace of Array.isArray(packageList) ? packageList : []) {
-    visit(workspace.dependencies);
-    visit(workspace.devDependencies);
-    visit(workspace.optionalDependencies);
+  for (const packagePath of packagePaths.split(/\r?\n/)) {
+    const match = packagePath.match(/[\\/]node_modules[\\/]\.pnpm[\\/]([^\\/]+)[\\/]node_modules[\\/](.+)$/);
+    if (!match) continue;
+    const version = match[1].match(/@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)(?:_|$)/)?.[1];
+    const packageName = match[2].replaceAll("\\", "/");
+    addInventoryVersion(inventory, packageName, version);
   }
   return Object.fromEntries(
     [...inventory.entries()]
@@ -143,12 +137,12 @@ export function packageListInventory(packageList) {
 function installedInventory(productionOnly) {
   const args = ["list", "-r"];
   if (productionOnly) args.push("--prod");
-  args.push("--json", "--depth", "Infinity");
-  const packageList = JSON.parse(execFileSync("pnpm", args, {
+  args.push("--parseable", "--depth", "Infinity");
+  const packagePaths = execFileSync("pnpm", args, {
     encoding: "utf8",
-    maxBuffer: 128 * 1024 * 1024,
-  }));
-  return packageListInventory(packageList);
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  return packagePathInventory(packagePaths);
 }
 
 function advisorySeverity(advisory) {
@@ -161,9 +155,10 @@ function advisoryId(advisory) {
 }
 
 async function audit(config) {
-  const inventory = config.lockfile
-    ? lockfileInventory(readFileSync(config.lockfile, "utf8"))
-    : installedInventory(config.productionOnly);
+  const lockfile = config.lockfile ?? (config.productionOnly ? null : "pnpm-lock.yaml");
+  const inventory = lockfile
+    ? lockfileInventory(readFileSync(lockfile, "utf8"))
+    : installedInventory(true);
   const response = await fetch(config.registryUrl, {
     method: "POST",
     headers: {
@@ -205,9 +200,9 @@ async function audit(config) {
     version: "matterhorn.dependency-bulk-audit.v1",
     ready: blocking.length === 0,
     source: "npm-bulk-advisory-api",
-    scope: config.lockfile
+    scope: lockfile
       ? "complete-lockfile"
-      : config.productionOnly ? "installed-production-graph" : "installed-release-graph",
+      : "installed-production-graph",
     auditLevel: config.auditLevel,
     packageCount: Object.keys(inventory).length,
     versionCount: Object.values(inventory).reduce((total, versions) => total + versions.length, 0),

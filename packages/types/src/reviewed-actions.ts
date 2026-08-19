@@ -224,6 +224,103 @@ export type ReviewedActionDraftHandoff =
           }
     }
 
+export const MATTERHORN_REVIEWED_ACTION_HANDOFF_V2 = "matterhorn.reviewed-action-handoff.v2" as const
+
+type ReviewedActionHandoffV2For<T extends ReviewedActionDraftHandoff> = {
+  version: typeof MATTERHORN_REVIEWED_ACTION_HANDOFF_V2
+  protocol: T["protocol"]
+  source: T["source"]
+  runId: string
+  intentHash: string
+  policyHash: string
+  signer: string | null
+  network: string
+  operation: string
+  amount: string | null
+  asset: string | null
+  recipient: string | null
+  slippage: string | null
+  expiresAt: string
+  simulation: {
+    reference: string
+    block: string | null
+    simulatedAt: string
+  }
+  preparedAt: string
+  capabilityClass: "wallet_review_only"
+  draft: T["draft"]
+}
+
+export type ReviewedActionHandoffV2 = ReviewedActionDraftHandoff extends infer T
+  ? T extends ReviewedActionDraftHandoff
+    ? ReviewedActionHandoffV2For<T>
+    : never
+  : never
+
+export type ReviewedActionWalletHandoff = ReviewedActionDraftHandoff | ReviewedActionHandoffV2
+
+export type ReviewedActionAirlockIssue =
+  | "invalid"
+  | "intent_hash_mismatch"
+  | "expired"
+  | "simulation_stale"
+  | "material_change"
+
+export interface ReviewedActionValidationRequest {
+  handoff: ReviewedActionHandoffV2
+  currentDraft: ReviewedActionDraftHandoff
+}
+
+export interface ReviewedActionValidationResponse {
+  success: true
+  valid: boolean
+  issues: ReviewedActionAirlockIssue[]
+  validatedAt: string
+  requiresRegeneration: boolean
+}
+
+export function isReviewedActionHandoffV2(value: unknown): value is ReviewedActionHandoffV2 {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const handoff = value as Record<string, unknown>
+  if (
+    handoff.version !== MATTERHORN_REVIEWED_ACTION_HANDOFF_V2
+    || (handoff.source !== "agent-card" && handoff.source !== "composer-command")
+    || !isNonEmptyPublicText(handoff.runId, 128)
+    || !isNonEmptyPublicText(handoff.intentHash, 128)
+    || !isNonEmptyPublicText(handoff.policyHash, 128)
+    || !isNonEmptyPublicText(handoff.network, 64)
+    || !isNonEmptyPublicText(handoff.operation, 64)
+    || !isNonEmptyPublicText(handoff.expiresAt, 64)
+    || !isNonEmptyPublicText(handoff.preparedAt, 64)
+    || !(handoff.signer === null || isNonEmptyPublicText(handoff.signer, 256))
+    || !(handoff.amount === null || isNonEmptyPublicText(handoff.amount, 128))
+    || !(handoff.asset === null || isNonEmptyPublicText(handoff.asset, 512))
+    || !(handoff.recipient === null || isNonEmptyPublicText(handoff.recipient, 512))
+    || !(handoff.slippage === null || isNonEmptyPublicText(handoff.slippage, 128))
+    || handoff.capabilityClass !== "wallet_review_only"
+    || !handoff.simulation
+    || typeof handoff.simulation !== "object"
+    || Array.isArray(handoff.simulation)
+  ) return false
+  const simulation = handoff.simulation as Record<string, unknown>
+  const protocolValid = handoff.protocol === "hyperliquid" || handoff.protocol === "polymarket" || handoff.protocol === "bittensor" || handoff.protocol === "sui"
+  const draftValid = protocolValid && isReviewedActionDraftHandoff({
+    version: "matterhorn.reviewed-action-handoff.v1",
+    protocol: handoff.protocol,
+    source: handoff.source,
+    draft: handoff.draft,
+  })
+  return /^[a-f0-9]{64}$/i.test(String(handoff.intentHash))
+    && /^[a-f0-9]{64}$/i.test(String(handoff.policyHash))
+    && Number.isFinite(Date.parse(String(handoff.expiresAt)))
+    && Number.isFinite(Date.parse(String(handoff.preparedAt)))
+    && isNonEmptyPublicText(simulation.reference, 256)
+    && isNonEmptyPublicText(simulation.simulatedAt, 64)
+    && Number.isFinite(Date.parse(String(simulation.simulatedAt)))
+    && (simulation.block === null || isNonEmptyPublicText(simulation.block, 128))
+    && draftValid
+}
+
 function isFiniteNumberInRange(value: unknown, minimum: number, maximum: number): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= minimum && value <= maximum
 }

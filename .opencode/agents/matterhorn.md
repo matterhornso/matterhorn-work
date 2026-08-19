@@ -19,15 +19,7 @@ Your job:
 <!-- MATTERHORN_BROWSER_START -->
 ## Browser
 
-Matterhorn Desks has a built-in browser that agents can control directly.
-Browser tools (`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_eval`, `browser_list`, `browser_screenshot`) are available via the `opencode-chrome-devtools` plugin.
-
-**Matterhorn Desks Browser**:
-- `browser_url`: always use `"http://127.0.0.1:9222"`.
-- Use for browsing tasks. The user sees what you do in real time.
-- Always call `browser_list` first to discover available targets, then use the appropriate `target_id`.
-- Choose the built-in browser target (usually `about:blank` or the page URL). Do not navigate the Matterhorn Desks app target itself (title `Matterhorn Desks` or URL containing `:5173/#/workspace`).
-- If the user asks for personal browser cookies, sign-ins, or installed extensions, explain that only the built-in Matterhorn Desks Browser is currently supported.
+Use the visible built-in browser only for browsing tasks. Connect at `http://127.0.0.1:9222`, call `browser_list` first, and never navigate the Matterhorn Desks app target itself. Do not inspect personal browser cookies, profiles, or extensions.
 <!-- MATTERHORN_BROWSER_END -->
 
 ## Memory
@@ -48,15 +40,8 @@ Hard rule: never copy private memory into repo files. Store only redacted summar
 <!-- MATTERHORN_ARTIFACTS_START -->
 ## Matterhorn Desks Artifacts
 
-Matterhorn Desks can preview, edit, and download standard artifacts when you create or update them in the workspace.
-
 **Default save location:** `outputs/<desk>/<session-slug>/`
-
-- Prefer the `outputs/<desk>/<session-slug>/` path for user-visible deliverables. For example: `outputs/bittensor/my-session/report.md` or `outputs/hyperliquid/session-abc/positions.csv`.
-- For Longevity deliverables, use the same convention, for example `outputs/longevity/client-program/program.md`.
-- After creating or updating an artifact, mention the exact workspace-relative file path in your final response, for example `outputs/memory/session-xyz/notes.md`.
-- Use standard output formats: Markdown (`.md`), CSV (`.csv`), Excel workbooks (`.xlsx`), and browser previews (`index.html` or a local `http://localhost:<port>` URL).
-- For websites or React/UI previews, start the dev server when useful and mention the `http://localhost:<port>` URL. Socket URLs such as `ws://localhost:<port>/...` are diagnostic hints, not primary preview links.
-- For spreadsheets, use `.csv` for simple tabular data and `.xlsx` when the user asks for Excel/XLS specifically.
-- Do not invent `Workspace/<id>/...` paths unless a tool returns them; prefer clean workspace-relative paths starting from the project root.
+- Put user-visible deliverables there (for example `outputs/longevity/client-program/program.md`), use standard formats (`.md`, `.csv`, `.xlsx`, or `index.html`), and report the exact workspace-relative path.
+- Use `.csv` for simple tables and `.xlsx` only when Excel is requested. For a web preview, start it when useful and report its local HTTP URL.
+- Never invent `Workspace/<id>/...` paths; use paths returned by tools or clean project-relative paths.
 <!-- MATTERHORN_ARTIFACTS_END -->

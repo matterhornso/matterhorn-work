@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 const dockerfile = readFileSync("packaging/docker/Dockerfile.public-beta", "utf8");
 const entrypoint = readFileSync("packaging/docker/public-beta-entrypoint.sh", "utf8");
 const ciWorkflow = readFileSync(".github/workflows/ci-tests.yml", "utf8");
+const railway = JSON.parse(readFileSync("railway.json", "utf8"));
 
 for (const required of [
   "OPENWORK_MANAGE_OPENCODE=1",
@@ -29,6 +30,11 @@ for (const required of [
   "require_secret MATTERHORN_WORK_TOKEN",
   "require_secret MATTERHORN_WORK_HOST_TOKEN",
   "require_secret MATTERHORN_WORK_TRUSTED_PROXY_SECRET",
+  "require_secret MATTERHORN_AGENT_RUNTIME_SECRET",
+  "require_secret MATTERHORN_CAPABILITY_SIGNING_SECRET",
+  "MATTERHORN_GUARDED_RUNTIME_MODE must be off, shadow, or enforce",
+  "MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS must be prepare or all",
+  "MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS contains an unknown or malformed desk",
   "MATTERHORN_BUILD_COMMIT must be a full 40-character SHA",
   "MATTERHORN_WORK_CORS_ORIGINS must be the exact HTTPS app origin",
   '"${MATTERHORN_WORK_DATA_DIR}"',
@@ -51,5 +57,19 @@ for (const required of [
 ]) {
   assert.ok(ciWorkflow.includes(required), `CI must include ${required}`);
 }
+
+assert.equal(railway.$schema, "https://railway.com/railway.schema.json");
+assert.deepEqual(railway.build, {
+  builder: "DOCKERFILE",
+  dockerfilePath: "packaging/docker/Dockerfile.public-beta",
+});
+assert.equal(
+  railway.deploy?.healthcheckPath,
+  "/health/ready",
+  "Railway must promote only a fully ready guarded-runtime deployment",
+);
+assert.equal(railway.deploy?.healthcheckTimeout, 300);
+assert.equal(railway.deploy?.restartPolicyType, "ON_FAILURE");
+assert.equal(railway.deploy?.restartPolicyMaxRetries, 10);
 
 console.log("public-beta-container-contract tests: PASS");

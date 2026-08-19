@@ -16,6 +16,7 @@ import {
   evaluateDecision,
   executeStage,
   getSourceIdentity,
+  isLoopbackAppUrl,
   parseArgs,
   redactLog,
   reusableStage,
@@ -39,6 +40,8 @@ const parsed = parseArgs([
   "https://engine.example",
   "--timeout-ms",
   "5000",
+  "--release-surface",
+  "web",
   "--strict",
   "--json",
 ]);
@@ -46,9 +49,11 @@ assert.equal(parsed.outputDir, "/tmp/candidate");
 assert.equal(parsed.appUrl, "https://desks.example/workspace/ws/session");
 assert.equal(parsed.serverUrl, "https://engine.example");
 assert.equal(parsed.timeoutMs, 5000);
+assert.equal(parsed.releaseSurface, "web");
 assert.equal(parsed.strict, true);
 assert.equal(parsed.json, true);
 assert.throws(() => parseArgs(["--timeout-ms", "10"]), /at least 100/);
+assert.throws(() => parseArgs(["--release-surface", "mobile"]), /web or web-and-desktop/);
 assert.throws(() => parseArgs(["--app-url", "file:///tmp/app"]), /http or https/);
 assert.throws(() => parseArgs(["--server-url", "file:///tmp/engine"]), /http or https/);
 assert.throws(
@@ -60,6 +65,10 @@ assert.throws(
   /secret-like query parameters/,
 );
 assert.throws(() => parseArgs(["--unknown"]), /Unknown argument/);
+assert.equal(isLoopbackAppUrl("http://127.0.0.1:5282/workspace/ws/session"), true);
+assert.equal(isLoopbackAppUrl("http://localhost:5282/workspace/ws/session"), true);
+assert.equal(isLoopbackAppUrl("http://[::1]:5282/workspace/ws/session"), true);
+assert.equal(isLoopbackAppUrl("https://desks.example/workspace/ws/session"), false);
 
 const stages = buildStages({
   outputDir: "/tmp/candidate",
@@ -161,6 +170,16 @@ assert.equal(
   }).some((item) => item.id === "browser_acceptance"),
   false,
 );
+const localBrowserStage = buildStages({
+  outputDir: "/tmp/candidate",
+  appUrl: "http://127.0.0.1:5282/workspace/ws/session",
+  serverUrl: "http://127.0.0.1:4125",
+  skipBrowser: false,
+  timeoutMs: 1000,
+}).find((item) => item.id === "browser_acceptance");
+assert.ok(localBrowserStage);
+assert.equal(localBrowserStage.command.includes("--hosted-account"), false);
+assert.ok(localBrowserStage.command.includes("--server-url"));
 
 const secret = "sk-" + "A".repeat(32);
 assert.doesNotMatch(redactLog(`token=${secret}`), new RegExp(secret));
@@ -294,6 +313,8 @@ const cli = spawnSync(
     "scripts/public-beta-candidate-certifier.mjs",
     "--dry-run",
     "--skip-browser",
+    "--release-surface",
+    "web",
     "--output-dir",
     dryRunDir,
     "--json",
@@ -305,8 +326,12 @@ const report = JSON.parse(cli.stdout);
 assert.equal(report.version, REPORT_VERSION);
 assert.equal(report.decision, "DRY-RUN");
 assert.equal(report.publicReady, false);
+assert.equal(report.releaseSurface, "web");
 assert.ok(report.externalGates.length >= 5);
+assert.ok(!report.externalGates.some(({ id }) => id === "desktop_distribution"));
 assert.equal(report.channelReadiness.decision, "NO-GO");
+assert.equal(report.channelReadiness.releaseSurface, "web");
+assert.ok(!report.channelReadiness.blockers.some(({ id }) => id.startsWith("desktop.") || id === "distribution.public_download"));
 assert.ok(report.channelReadiness.counts.blocked > 0);
 assert.equal(
   report.artifacts.candidateManifest,

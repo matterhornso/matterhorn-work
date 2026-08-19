@@ -12,10 +12,11 @@ assert.equal(pkg.scripts["test:launch-channel-readiness"], "node scripts/launch-
 const now = "2026-07-16T12:00:00.000Z";
 const dir = mkdtempSync(join(tmpdir(), "matterhorn-launch-channel-"));
 
-function listGates(channel) {
+function listGates(channel, releaseSurface = "web-and-desktop") {
   const result = spawnSync(process.execPath, [
     "scripts/launch-channel-readiness.mjs",
     "--channel", channel,
+    "--release-surface", releaseSurface,
     "--list-gates",
     "--json",
   ], { encoding: "utf8" });
@@ -81,6 +82,26 @@ assert.ok(publicBetaReport.counts.required > betaReport.counts.required);
 assert.ok(publicBetaReport.checks.some((check) => check.id === "web.authenticated_same_origin"));
 assert.ok(publicBetaReport.checks.some((check) => check.id === "distribution.public_download"));
 assert.ok(publicBetaReport.checks.some((check) => check.id === "security.credential_rotation"));
+
+const publicWebGates = listGates("public-beta", "web");
+assert.ok(publicWebGates.some((gate) => gate.id === "web.authenticated_same_origin"));
+assert.ok(!publicWebGates.some((gate) => gate.id === "desktop.signed_notarized"));
+assert.ok(!publicWebGates.some((gate) => gate.id === "desktop.clean_install"));
+assert.ok(!publicWebGates.some((gate) => gate.id === "distribution.public_download"));
+const publicWeb = run("public-beta", evidence, ["--release-surface", "web"]);
+assert.equal(publicWeb.status, 0, publicWeb.stderr);
+const publicWebReport = JSON.parse(publicWeb.stdout);
+assert.equal(publicWebReport.releaseSurface, "web");
+assert.equal(publicWebReport.counts.required, publicBetaReport.counts.required - 3);
+
+const invalidProductHuntSurface = spawnSync(process.execPath, [
+  "scripts/launch-channel-readiness.mjs",
+  "--channel", "product-hunt",
+  "--release-surface", "web",
+  "--list-gates",
+], { encoding: "utf8" });
+assert.notEqual(invalidProductHuntSurface.status, 0);
+assert.match(invalidProductHuntSurface.stderr, /supported only for the public-beta channel/);
 
 const productHunt = run("product-hunt", evidence);
 assert.equal(productHunt.status, 0, productHunt.stderr);

@@ -1,0 +1,188 @@
+export const MATTERHORN_AGENT_PRIVACY_PREFLIGHT_VERSION = "matterhorn.agent-privacy-preflight.v1" as const;
+export const MATTERHORN_AGENT_CAPABILITY_VERSION = "matterhorn.agent-capability.v1" as const;
+export const MATTERHORN_AGENT_RUN_RECEIPT_VERSION = "matterhorn.agent-run-receipt.v1" as const;
+
+export type MatterhornGuardedRuntimeMode = "off" | "shadow" | "enforce";
+
+export type MatterhornAgentPrivacyMode =
+  | "public_research"
+  | "private_workspace"
+  | "transaction";
+
+export type MatterhornAgentDataLabel =
+  | "public"
+  | "workspace_private"
+  | "wallet_private"
+  | "secret"
+  | "untrusted_external";
+
+export type MatterhornAgentPrivacyDecision =
+  | "allow"
+  | "consent_required"
+  | "blocked";
+
+export type MatterhornAgentPrivacyPart = {
+  type: string;
+  text?: string;
+  name?: string;
+  mime?: string;
+  source?: "composer" | "attachment" | "memory" | "wallet" | "tool";
+};
+
+export type MatterhornAgentPrivacyPreflightRequest = {
+  version?: typeof MATTERHORN_AGENT_PRIVACY_PREFLIGHT_VERSION;
+  parts: MatterhornAgentPrivacyPart[];
+  model: { providerId: string; modelId: string };
+  agentId?: string | null;
+  attachmentIds?: string[];
+  memoryIds?: string[];
+  privacyMode?: MatterhornAgentPrivacyMode;
+};
+
+export type MatterhornAgentPrivacyPreflightResponse = {
+  version: typeof MATTERHORN_AGENT_PRIVACY_PREFLIGHT_VERSION;
+  requestHash: string;
+  workspaceId: string;
+  sessionId: string;
+  requestedMode: MatterhornAgentPrivacyMode;
+  effectiveMode: MatterhornAgentPrivacyMode;
+  decision: MatterhornAgentPrivacyDecision;
+  provider: {
+    id: string;
+    name: string;
+    modelId: string;
+    privacyStatus: "verified_no_training" | "local_processing" | "opt_in_training" | "unverified";
+    trainingUse: "none" | "opt_in_only" | "unknown";
+    retentionDays: number | null;
+    policyUrl: string | null;
+    dataLeavesMatterhorn: boolean;
+  };
+  detectedData: {
+    labels: MatterhornAgentDataLabel[];
+    categories: string[];
+    redactionCount: number;
+  };
+  challenge?: {
+    id: string;
+    expiresAt: string;
+    singleUse: true;
+  };
+  reason: string;
+};
+
+export type MatterhornAgentPrivacyConsentConfirmation = {
+  challengeId: string;
+  requestHash: string;
+};
+
+export type MatterhornAgentPrivacyConsentResponse = {
+  version: typeof MATTERHORN_AGENT_PRIVACY_PREFLIGHT_VERSION;
+  consentToken: string;
+  expiresAt: string;
+  singleUse: true;
+  requestHash: string;
+};
+
+export type MatterhornAgentCapabilityAccess = "read" | "prepare";
+
+export type MatterhornAgentCapabilityClaims = {
+  version: typeof MATTERHORN_AGENT_CAPABILITY_VERSION;
+  jti: string;
+  runId: string;
+  workspaceId: string;
+  sessionId: string;
+  callId: string;
+  agentId: string;
+  deskId: string;
+  toolName: string;
+  access: MatterhornAgentCapabilityAccess;
+  argsHash: string;
+  issuedAt: string;
+  expiresAt: string;
+  policyVersion: string;
+  registryVersion: string;
+};
+
+export type MatterhornAgentCapabilityToken = {
+  version: typeof MATTERHORN_AGENT_CAPABILITY_VERSION;
+  token: string;
+  claims: MatterhornAgentCapabilityClaims;
+};
+
+export type MatterhornAgentCapabilityDecision = {
+  toolName: string;
+  access: MatterhornAgentCapabilityAccess;
+  decision: "issued" | "allowed" | "denied";
+  reason: string;
+  callId: string;
+  decidedAt: string;
+  latencyMs: number;
+};
+
+export type MatterhornAgentToolReceipt = {
+  name: string;
+  access: MatterhornAgentCapabilityAccess;
+  outcome: "success" | "error" | "timeout" | "denied";
+  latencyMs: number;
+  source: string | null;
+  freshness: string | null;
+  trust: "trusted_runtime" | "untrusted_external";
+};
+
+export type MatterhornAgentRunReceipt = {
+  version: typeof MATTERHORN_AGENT_RUN_RECEIPT_VERSION;
+  id: string;
+  runId: string;
+  workspaceId: string;
+  sessionId: string;
+  status: "pending" | "success" | "partial" | "cancelled" | "error";
+  startedAt: string;
+  completedAt: string | null;
+  responseDurationMs: number | null;
+  provider: {
+    id: string;
+    name: string;
+    modelId: string;
+    privacyStatus: "verified_no_training" | "local_processing" | "opt_in_training" | "unverified";
+    trainingUse: "none" | "opt_in_only" | "unknown";
+    retentionDays: number | null;
+    policyUrl: string | null;
+  };
+  privacy: {
+    mode: MatterhornAgentPrivacyMode;
+    dataCategories: string[];
+    redactionCount: number;
+    consent: "not_required" | "single_request";
+    dataLeavesMatterhorn: boolean;
+  };
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    reasoningTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    estimatedCostUsd: number;
+    toolCallBudget: { reads: number; preparesPerFamily: number; submits: 0 };
+  };
+  tools: MatterhornAgentToolReceipt[];
+  memory: {
+    readIds: string[];
+    writtenIds: string[];
+  };
+  capabilities: MatterhornAgentCapabilityDecision[];
+  reviewedActions: Array<{
+    intentHash: string;
+    policyHash: string;
+    simulationReference: string;
+    publicReceipt: string | null;
+  }>;
+  integrity: {
+    previousHash: string | null;
+    recordHash: string;
+  };
+};
+
+export type MatterhornAgentRunReceiptListResponse = {
+  items: MatterhornAgentRunReceipt[];
+  retention: { windowDays: 365; purgeSupported: true };
+};

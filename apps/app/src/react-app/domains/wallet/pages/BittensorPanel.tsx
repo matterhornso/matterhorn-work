@@ -56,7 +56,9 @@ import type {
   MarketExecutionChainGuide,
   MarketExecutionReadinessReport,
   ReviewedActionDraftHandoff,
+  ReviewedActionHandoffV2,
   ReviewedActionOperation,
+  ReviewedActionValidationResponse,
 } from "@matterhorn-work/types";
 import {
   MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY,
@@ -71,6 +73,7 @@ import {
 import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import {
   subscribeReviewedActionHandoff,
+  takePendingReviewedActionGuard,
   takePendingReviewedActionHandoff,
 } from "../reviewed-action-handoff";
 import {
@@ -735,6 +738,32 @@ async function fetchMatterhornApiJson<T>(path: string, init?: RequestInit): Prom
   }
 }
 
+async function validateAgentWalletDraft(input: {
+  workspaceId?: string | null;
+  guardedHandoff?: ReviewedActionHandoffV2 | null;
+  currentDraft: ReviewedActionDraftHandoff;
+  originatedFromHandoff: boolean;
+}): Promise<void> {
+  if (!input.originatedFromHandoff) return;
+  if (!input.guardedHandoff) {
+    throw new Error("This legacy agent draft is preview-only. Regenerate it from the desk so Matterhorn can simulate and hash-bind the exact wallet action.");
+  }
+  const workspaceId = input.workspaceId?.trim();
+  if (!workspaceId) throw new Error("Open this action from an authenticated workspace before wallet review.");
+  const { response, json } = await fetchMatterhornApiJson<ReviewedActionValidationResponse>(
+    `/workspace/${encodeURIComponent(workspaceId)}/reviewed-actions/validate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ handoff: input.guardedHandoff, currentDraft: input.currentDraft }),
+    },
+  );
+  if (!response.ok || !json.success || !json.valid) {
+    const reason = json.issues?.length ? json.issues.join(", ").replaceAll("_", " ") : "validation failed";
+    throw new Error(`This wallet review is no longer valid (${reason}). Regenerate and re-simulate it before signing.`);
+  }
+}
+
 function mondayBetaScenarioMode(scenario: CustomerBetaDemoScenario): "bittensor" | "crypto" {
   return scenario.mapsToCustomerTemplateId === "bittensor_operator" ? "bittensor" : "crypto";
 }
@@ -1011,12 +1040,14 @@ function buildBittensorChatPrompt(prompt: string, context: Record<string, unknow
 
 function HyperliquidTradeExecution({
   initialDraft,
+  guardedHandoff,
   initialOperation,
   executionAvailable,
   workspaceId,
   sessionId,
 }: {
   initialDraft?: HyperliquidDraftHandoff | null;
+  guardedHandoff?: Extract<ReviewedActionHandoffV2, { protocol: "hyperliquid" }> | null;
   initialOperation?: HyperliquidExecutionIntent["operation"] | null;
   executionAvailable?: boolean | null;
   workspaceId?: string | null;
@@ -1118,6 +1149,17 @@ function HyperliquidTradeExecution({
     setTradeError(null);
     setReceipt(null);
     try {
+      await validateAgentWalletDraft({
+        workspaceId,
+        guardedHandoff,
+        originatedFromHandoff: Boolean(initialDraft),
+        currentDraft: {
+          version: "matterhorn.reviewed-action-handoff.v1",
+          protocol: "hyperliquid",
+          source: guardedHandoff?.source ?? "agent-card",
+          draft: reviewDraft as HyperliquidDraftHandoff,
+        },
+      });
       const actionBody = reviewDraft.operation === "cancel_order"
         ? {
             operation: reviewDraft.operation,
@@ -1157,7 +1199,7 @@ function HyperliquidTradeExecution({
     } finally {
       setBusy(null);
     }
-  }, [address, reviewDraft]);
+  }, [address, guardedHandoff, initialDraft, reviewDraft, workspaceId]);
 
   const signAndSubmit = useCallback(async () => {
     if (!intent || !address) return;
@@ -1185,6 +1227,10 @@ function HyperliquidTradeExecution({
           liveConfirmation: intent.network === "mainnet" ? liveConfirmation : null,
           workspaceId: workspaceId || null,
           sessionId: sessionId || null,
+          ...(guardedHandoff ? {
+            reviewedAction: guardedHandoff,
+            receiptIntentHash: guardedHandoff.intentHash,
+          } : {}),
         }),
       });
       if (!json.receipt) throw new Error(json.error?.message ?? "Hyperliquid did not return a submission receipt.");
@@ -1203,7 +1249,7 @@ function HyperliquidTradeExecution({
     } finally {
       setBusy(null);
     }
-  }, [address, intent, liveConfirmation, sessionId, signTypedDataAsync, workspaceId]);
+  }, [address, guardedHandoff, intent, liveConfirmation, sessionId, signTypedDataAsync, workspaceId]);
 
   const shortWalletAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null;
   const firstConnector = connectors.find((connector) => connector.id !== "injected") ?? connectors[0];
@@ -1464,11 +1510,13 @@ function HyperliquidTradeExecution({
 
 function PolymarketTradeExecution({
   initialDraft,
+  guardedHandoff,
   initialOperation,
   workspaceId,
   sessionId,
 }: {
   initialDraft?: PolymarketDraftHandoff | null;
+  guardedHandoff?: Extract<ReviewedActionHandoffV2, { protocol: "polymarket" }> | null;
   initialOperation?: "buy" | "sell" | "cancel" | null;
   workspaceId?: string | null;
   sessionId?: string | null;
@@ -1581,6 +1629,65 @@ function PolymarketTradeExecution({
   }, []);
 
   const prepareOrder = useCallback(async () => {
+    try {
+      const source = guardedHandoff?.source ?? "agent-card";
+      const currentDraft: ReviewedActionDraftHandoff = tradeAction === "CANCEL"
+        ? {
+            version: "matterhorn.reviewed-action-handoff.v1",
+            protocol: "polymarket",
+            source,
+            draft: {
+              operation: "cancel",
+              marketId: null,
+              outcome: null,
+              amountUsdc: null,
+              amountShares: null,
+              slippageTolerance: null,
+              orderIds: cancelAll ? [] : normalizePolymarketOrderIds(cancelOrderIds),
+              cancelAll,
+            },
+          }
+        : tradeAction === "SELL"
+          ? {
+              version: "matterhorn.reviewed-action-handoff.v1",
+              protocol: "polymarket",
+              source,
+              draft: {
+                operation: "sell",
+                marketId: marketId.trim(),
+                outcome: outcome.trim(),
+                amountUsdc: null,
+                amountShares: Number(amountShares),
+                slippageTolerance: Number(slippageTolerance),
+                orderIds: [],
+                cancelAll: false,
+              },
+            }
+          : {
+              version: "matterhorn.reviewed-action-handoff.v1",
+              protocol: "polymarket",
+              source,
+              draft: {
+                operation: "buy",
+                marketId: marketId.trim(),
+                outcome: outcome.trim(),
+                amountUsdc: Number(amountUsdc),
+                amountShares: null,
+                slippageTolerance: Number(slippageTolerance),
+                orderIds: [],
+                cancelAll: false,
+              },
+            };
+      await validateAgentWalletDraft({
+        workspaceId,
+        guardedHandoff,
+        currentDraft,
+        originatedFromHandoff: Boolean(initialDraft),
+      });
+    } catch (error) {
+      setTradeError(error instanceof Error ? error.message : "This agent wallet draft must be regenerated before review.");
+      return;
+    }
     if (tradeAction === "CANCEL") {
       try {
         const orderIds = cancelAll ? [] : normalizePolymarketOrderIds(cancelOrderIds);
@@ -1689,7 +1796,7 @@ function PolymarketTradeExecution({
     } finally {
       setBusy(null);
     }
-  }, [amountShares, amountUsdc, cancelAll, cancelOrderIds, marketId, outcome, slippageTolerance, tradeAction]);
+  }, [amountShares, amountUsdc, cancelAll, cancelOrderIds, guardedHandoff, initialDraft, marketId, outcome, slippageTolerance, tradeAction, workspaceId]);
 
   const signAndSubmit = useCallback(async () => {
     if ((!prepared && !cancelReview) || !walletClient || !address) return;
@@ -1729,6 +1836,10 @@ function PolymarketTradeExecution({
                 sessionId: sessionId || null,
                 cancellation: cancelReview,
                 receipt: publicReceipt,
+                ...(guardedHandoff ? {
+                  reviewedAction: guardedHandoff,
+                  receiptIntentHash: guardedHandoff.intentHash,
+                } : {}),
               }),
             });
             if (!response.ok || !json.success) {
@@ -1760,6 +1871,10 @@ function PolymarketTradeExecution({
             body: JSON.stringify({
               sessionId: sessionId || null,
               handoff,
+              ...(guardedHandoff ? {
+                reviewedAction: guardedHandoff,
+                receiptIntentHash: guardedHandoff.intentHash,
+              } : {}),
               receipt: {
                 previewSha256: prepared.previewSha256,
                 handoffSha256: typeof handoff.handoffSha256 === "string" ? handoff.handoffSha256 : null,
@@ -1787,7 +1902,7 @@ function PolymarketTradeExecution({
     } finally {
       setBusy(null);
     }
-  }, [address, cancelReview, confirmation, handoff, prepared, sessionId, walletClient, workspaceId]);
+  }, [address, cancelReview, confirmation, guardedHandoff, handoff, prepared, sessionId, walletClient, workspaceId]);
 
   const firstConnector = connectors.find((connector) => connector.id !== "injected") ?? connectors[0];
   const onPolygon = walletClient?.chain?.id === POLYMARKET_CHAIN_ID;
@@ -2091,11 +2206,13 @@ function PolymarketTradeExecution({
 
 function BittensorConnectedWalletExecution({
   initialDraft,
+  guardedHandoff,
   initialOperation,
   workspaceId,
   sessionId,
 }: {
   initialDraft?: BittensorDraftHandoff | null;
+  guardedHandoff?: Extract<ReviewedActionHandoffV2, { protocol: "bittensor" }> | null;
   initialOperation?: BittensorWalletAction | null;
   workspaceId?: string | null;
   sessionId?: string | null;
@@ -2166,6 +2283,40 @@ function BittensorConnectedWalletExecution({
       if (walletAction !== "transfer" && (!Number.isInteger(parsedNetuid) || parsedNetuid < 0)) {
         throw new Error("Enter a valid non-negative subnet netuid.");
       }
+      const source = guardedHandoff?.source ?? "agent-card";
+      const currentDraft: ReviewedActionDraftHandoff = walletAction === "transfer"
+        ? {
+            version: "matterhorn.reviewed-action-handoff.v1",
+            protocol: "bittensor",
+            source,
+            draft: {
+              operation: "transfer",
+              sender: sender || null,
+              destination: destination.trim(),
+              hotkey: null,
+              netuid: null,
+              amountTao,
+            },
+          }
+        : {
+            version: "matterhorn.reviewed-action-handoff.v1",
+            protocol: "bittensor",
+            source,
+            draft: {
+              operation: walletAction,
+              sender: sender || null,
+              destination: null,
+              hotkey: hotkey.trim(),
+              netuid: parsedNetuid,
+              amountTao,
+            },
+          };
+      await validateAgentWalletDraft({
+        workspaceId,
+        guardedHandoff,
+        currentDraft,
+        originatedFromHandoff: Boolean(initialDraft),
+      });
       const { response, json } = await fetchMatterhornApiJson<BittensorWalletActionPreviewResponse>("/api/bittensor/extrinsics/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2228,7 +2379,7 @@ function BittensorConnectedWalletExecution({
     } finally {
       setBusy(null);
     }
-  }, [amountTao, destination, hotkey, netuid, sender, walletAction]);
+  }, [amountTao, destination, guardedHandoff, hotkey, initialDraft, netuid, sender, walletAction, workspaceId]);
 
   const signAndSubmit = useCallback(async () => {
     if (!prepared || !backendPreview) return;
@@ -2256,6 +2407,10 @@ function BittensorConnectedWalletExecution({
             message: `Connected Bittensor wallet finalized the reviewed ${publicReceipt.action}.`,
             explorerUrl: null,
           },
+          ...(guardedHandoff ? {
+            reviewedAction: guardedHandoff,
+            receiptIntentHash: guardedHandoff.intentHash,
+          } : {}),
         };
         const { response, json } = await fetchMatterhornApiJson<{ success?: boolean; evidence?: { outputPath?: string }; error?: { message?: string } }>(receiptPath, {
           method: "POST",
@@ -2278,7 +2433,7 @@ function BittensorConnectedWalletExecution({
     } finally {
       setBusy(null);
     }
-  }, [backendPreview, confirmation, prepared, sessionId, workspaceId]);
+  }, [backendPreview, confirmation, guardedHandoff, prepared, sessionId, workspaceId]);
 
   const shortSender = sender ? shortAddress(sender) : "Not connected";
   const actionCopy = {
@@ -2500,6 +2655,7 @@ export default function BittensorPanel({
   const [venue, setVenue] = useState<CryptoVenue>(initialVenue);
   const [tab, setTab] = useState<Tab>("overview");
   const [draftHandoff, setDraftHandoff] = useState<ReviewedActionDraftHandoff | null>(null);
+  const [guardedHandoff, setGuardedHandoff] = useState<ReviewedActionHandoffV2 | null>(null);
   const [subnets, setSubnets] = useState<BittensorSubnetSummary[]>([]);
   const [selectedNetuid, setSelectedNetuid] = useState<number | null>(null);
   const [detail, setDetail] = useState<BittensorSubnetDetail | null>(null);
@@ -2548,17 +2704,19 @@ export default function BittensorPanel({
   }, [initialVenue, openReviewedAction]);
 
   useEffect(() => {
-    const applyHandoff = (handoff: ReviewedActionDraftHandoff) => {
+    const applyHandoff = (handoff: ReviewedActionDraftHandoff, guard: ReviewedActionHandoffV2 | null) => {
       if (handoff.protocol === "sui") return;
       setDraftHandoff(handoff);
+      setGuardedHandoff(guard?.protocol === handoff.protocol ? guard : null);
       setVenue(handoff.protocol);
       setTab(handoff.protocol === "bittensor" ? "actions" : "overview");
     };
     const pending = takePendingReviewedActionHandoff();
-    if (pending) applyHandoff(pending);
+    const pendingGuard = takePendingReviewedActionGuard();
+    if (pending) applyHandoff(pending, pendingGuard);
     return subscribeReviewedActionHandoff((handoff) => {
       takePendingReviewedActionHandoff();
-      applyHandoff(handoff);
+      applyHandoff(handoff, takePendingReviewedActionGuard());
     });
   }, []);
 
@@ -3399,6 +3557,7 @@ export default function BittensorPanel({
                 <Section title="Trade Hyperliquid" icon={<ArrowUpDown className="size-4" />}>
                   <HyperliquidTradeExecution
                     initialDraft={draftHandoff?.protocol === "hyperliquid" ? draftHandoff.draft : null}
+                    guardedHandoff={guardedHandoff?.protocol === "hyperliquid" ? guardedHandoff : null}
                     initialOperation={initialOperation === "place_order" || initialOperation === "cancel_order" || initialOperation === "modify_order" || initialOperation === "close_position" ? initialOperation : null}
                     executionAvailable={marketExecutionReadiness?.reviewedWalletTickets.hyperliquid.available ?? null}
                     workspaceId={workspaceId}
@@ -3413,6 +3572,7 @@ export default function BittensorPanel({
                 <Section title="Trade Polymarket" icon={<ArrowUpDown className="size-4" />}>
                   <PolymarketTradeExecution
                     initialDraft={draftHandoff?.protocol === "polymarket" ? draftHandoff.draft : null}
+                    guardedHandoff={guardedHandoff?.protocol === "polymarket" ? guardedHandoff : null}
                     initialOperation={initialOperation === "buy" || initialOperation === "sell" || initialOperation === "cancel" ? initialOperation : null}
                     workspaceId={workspaceId}
                     sessionId={sessionId}
@@ -4290,6 +4450,7 @@ export default function BittensorPanel({
             <Section title="Transfer and stake" icon={<Wallet className="size-4" />}>
               <BittensorConnectedWalletExecution
                 initialDraft={draftHandoff?.protocol === "bittensor" ? draftHandoff.draft : null}
+                guardedHandoff={guardedHandoff?.protocol === "bittensor" ? guardedHandoff : null}
                 initialOperation={initialOperation === "transfer" || initialOperation === "stake" || initialOperation === "unstake" ? initialOperation : null}
                 workspaceId={workspaceId}
                 sessionId={sessionId}

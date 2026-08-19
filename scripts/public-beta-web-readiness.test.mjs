@@ -40,6 +40,7 @@ for (const vercelConfig of vercelConfigs) {
 const managedKeys = [
   "VITE_MATTERHORN_DEPLOYMENT",
   "VITE_MATTERHORN_PUBLIC_BETA",
+  "VITE_MATTERHORN_BUILD_COMMIT",
   "VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED",
   "VITE_MATTERHORN_REQUIRE_SIGNIN",
   "VITE_MATTERHORN_CLOUD_ENABLED",
@@ -99,6 +100,7 @@ function publicWebEnvironment(overrides = {}) {
     ...env,
     VITE_MATTERHORN_DEPLOYMENT: "web",
     VITE_MATTERHORN_PUBLIC_BETA: "1",
+    VITE_MATTERHORN_BUILD_COMMIT: "a".repeat(40),
     VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED: "1",
     VITE_MATTERHORN_REQUIRE_SIGNIN: "true",
     VITE_MATTERHORN_CLOUD_ENABLED: "true",
@@ -173,6 +175,10 @@ assert.ok(JSON.parse(missingProxyDeclaration.stdout).blockers.some((blocker) => 
 const noSignin = run({ VITE_MATTERHORN_REQUIRE_SIGNIN: "0" });
 assert.notEqual(noSignin.status, 0);
 assert.ok(JSON.parse(noSignin.stdout).blockers.some((blocker) => blocker.id === "web.require_signin"));
+
+const missingWebCommit = run({ VITE_MATTERHORN_BUILD_COMMIT: "" });
+assert.notEqual(missingWebCommit.status, 0);
+assert.ok(JSON.parse(missingWebCommit.stdout).blockers.some((blocker) => blocker.id === "web.build_commit"));
 
 const noReviewedActions = run({ VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED: "0" });
 assert.notEqual(noReviewedActions.status, 0);

@@ -6,6 +6,12 @@ variable-name contract. It contains placeholders only; real credentials belong
 in the deployment secret manager and must never be committed or attached to QA
 evidence.
 
+Guarded crypto runtime interfaces, invariants, retention, and staged enforcement
+are documented in the [guarded runtime operator guide](security/matterhorn-guarded-agent-runtime.md).
+The dated release sequence, GO/NO-GO gates and rollback order for the week of
+18 August 2026 are in the
+[guarded-runtime go-live runbook](releases/guarded-runtime-go-live-week-2026-08-18.md).
+
 ## Who Owns Setup
 
 Matterhorn uses action-specific labels instead of treating every incomplete
@@ -70,9 +76,10 @@ user failure.
 
 1. Copy the root `.env.example` into the deployment secret/config system. Replace placeholders there, not in the repository.
 2. Configure the backend workspace, client token, host token, exact CORS origin, request limits, and attached Matterhorn Desks engine. Set `MATTERHORN_BUILD_COMMIT` to the exact 40-character release SHA.
+   For the guarded crypto runtime, deploy first with `MATTERHORN_GUARDED_RUNTIME_MODE=off` and two independent server-only secrets: `MATTERHORN_AGENT_RUNTIME_SECRET` and `MATTERHORN_CAPABILITY_SIGNING_SECRET`. Move invite-only accounts to `shadow` for 48 hours before `enforce`. Shadow and enforce readiness fail if either secret or a rollout selector is invalid, preventing a false-green observation window. Start enforcement with `MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS=prepare` and `MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS=sui`; append `bittensor`, `hyperliquid`, then `polymarket` only after the prior desk has 24 hours without unexplained denials. Switch access to `all` to cover reads, then clear the desk selector only after generic crypto chat passes. Privacy preflight remains authoritative for every prompt throughout this staged tool rollout.
 3. For a private or local web bridge, configure `VITE_MATTERHORN_WORK_URL` only in its protected deployment configuration. It is never a public browser credential path.
 4. Deploy `packaging/docker/Dockerfile.public-beta` on a long-lived container host with an encrypted persistent volume mounted at `/data`. Set the exact app origin, three high-entropy server secrets, the exact build SHA, and provider credentials in that host's secret manager. The container fails startup when its token, host token, trusted-proxy secret, build SHA, or exact HTTPS CORS origin is missing.
-5. For Public Beta web, configure the same-origin proxy with `MATTERHORN_CONTROL_PLANE_URL` and `MATTERHORN_PROXY_SECRET` as server-only Vercel secrets. Route `/api`, `/workspaces`, `/workspace`, `/opencode`, and the other approved API roots through `api/matterhorn-proxy.mjs`. Set the same value as `MATTERHORN_WORK_TRUSTED_PROXY_SECRET` on the backend. Then set `MATTERHORN_PUBLIC_PROXY_MODE=same-origin`, `VITE_MATTERHORN_DEPLOYMENT=web`, `VITE_MATTERHORN_PUBLIC_BETA=1`, `VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED=1`, `VITE_MATTERHORN_REQUIRE_SIGNIN=1`, `VITE_MATTERHORN_CLOUD_URL=https://<app-origin>`, and `VITE_MATTERHORN_CLOUD_API_URL=https://<app-origin>/api/den`. The reviewed-actions flag exposes only audited agent-draft to exact-review to connected-wallet approval paths; it does not enable autonomous agent or watch submission. Leave every browser-side Matterhorn Desks URL and token variable unset. The deployment probe must confirm `/workspaces` and `/opencode` return a JSON `401` or `403` without authentication; an HTML SPA fallback is a launch blocker.
+5. For Public Beta web, configure the same-origin proxy with `MATTERHORN_CONTROL_PLANE_URL` and `MATTERHORN_PROXY_SECRET` as server-only Vercel secrets. Route `/api`, `/workspaces`, `/workspace`, `/opencode`, and the other approved API roots through `api/matterhorn-proxy.mjs`. Set the same value as `MATTERHORN_WORK_TRUSTED_PROXY_SECRET` on the backend. Then set `MATTERHORN_PUBLIC_PROXY_MODE=same-origin`, `VITE_MATTERHORN_DEPLOYMENT=web`, `VITE_MATTERHORN_PUBLIC_BETA=1`, `VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED=1`, `VITE_MATTERHORN_REQUIRE_SIGNIN=1`, `VITE_MATTERHORN_CLOUD_URL=https://<app-origin>`, and `VITE_MATTERHORN_CLOUD_API_URL=https://<app-origin>/api/den`. Supply the exact full merge SHA as the non-secret build variable `VITE_MATTERHORN_BUILD_COMMIT`; do not reuse a branch-head SHA after merge. The reviewed-actions flag exposes only audited agent-draft to exact-review to connected-wallet approval paths; it does not enable autonomous agent or watch submission. Leave every browser-side Matterhorn Desks URL and token variable unset. The deployment probe must confirm the static web build and backend both report the exact merge SHA and that `/workspaces` and `/opencode` return a JSON `401` or `403` without authentication; an HTML SPA fallback is a launch blocker.
 6. Configure the server-managed ASI:Cloud credential, signup capacity,
    `MATTERHORN_EMAIL_VERIFICATION_REQUIRED=true`, `MATTERHORN_EMAIL_FROM`, and
    either `MATTERHORN_RESEND_API_KEY` or the authenticated SMTP variables.
@@ -175,6 +182,7 @@ pnpm smoke:product-hunt-deployment -- \
   --app-url "$MATTERHORN_APP_URL" \
   --server-url "$MATTERHORN_WORK_SERVER_URL" \
   --expected-commit "$MATTERHORN_BUILD_COMMIT" \
+  --expected-web-commit "$MATTERHORN_BUILD_COMMIT" \
   --json-output qa-reports/product-hunt/deployment-probe.json
 ```
 
@@ -224,8 +232,35 @@ Store the passphrase outside the application host and outside the report
 packet. The archive includes private user content and must never be attached to
 the public launch evidence.
 
-Run the reviewed no-shell rollback hook against the immutable current and
-last-known-good commits:
+Record the Railway project, service and environment ids plus the immutable
+Railway deployment id and Vercel deployment URL for the last-known-good commit
+before cutover. First inspect the first-party rollback
+plan. This command is dry-run only and executes no external command:
+
+```bash
+pnpm rollback:public-beta -- \
+  --railway-project "$RAILWAY_PROJECT_ID" \
+  --railway-service "$RAILWAY_SERVICE_ID" \
+  --railway-environment "$RAILWAY_ENVIRONMENT" \
+  --railway-deployment-id "$LAST_KNOWN_GOOD_RAILWAY_DEPLOYMENT_ID" \
+  --vercel-deployment "$LAST_KNOWN_GOOD_VERCEL_DEPLOYMENT_URL" \
+  --vercel-scope "$VERCEL_SCOPE" \
+  --current-commit "$MATTERHORN_BUILD_COMMIT" \
+  --target-commit "$LAST_KNOWN_GOOD_COMMIT" \
+  --json
+```
+
+Execute only the read-only Railway and Vercel target preflights before cutover
+by adding `--validate-targets` to that command. The result must have
+`targetValidation.railway: true`, `targetValidation.vercel: true`,
+`applied: false`, and no completed mutation steps. This mode never freezes
+signups, changes guarded mode, rolls Railway back, or promotes Vercel.
+
+Then run the reviewed no-shell rollback hook through the rehearsal. Hook
+arguments use the `--rollback-arg=<value>` form so flags are passed to the hook
+without being interpreted by the rehearsal itself. The rehearsal verifies the
+current exact commit before mutation and requires two consecutive healthy
+snapshots on the rollback target afterward:
 
 ```bash
 pnpm drill:product-hunt-rollback -- \
@@ -234,9 +269,38 @@ pnpm drill:product-hunt-rollback -- \
   --from-commit "$MATTERHORN_BUILD_COMMIT" \
   --to-commit "$LAST_KNOWN_GOOD_COMMIT" \
   --owner "$ROLLBACK_OWNER" \
-  --rollback-hook "$REVIEWED_ROLLBACK_HOOK" \
+  --rollback-hook "$PWD/scripts/public-beta-rollback-hook.mjs" \
+  --rollback-arg=--railway-project \
+  --rollback-arg="$RAILWAY_PROJECT_ID" \
+  --rollback-arg=--railway-service \
+  --rollback-arg="$RAILWAY_SERVICE_ID" \
+  --rollback-arg=--railway-environment \
+  --rollback-arg="$RAILWAY_ENVIRONMENT" \
+  --rollback-arg=--railway-deployment-id \
+  --rollback-arg="$LAST_KNOWN_GOOD_RAILWAY_DEPLOYMENT_ID" \
+  --rollback-arg=--vercel-deployment \
+  --rollback-arg="$LAST_KNOWN_GOOD_VERCEL_DEPLOYMENT_URL" \
+  --rollback-arg=--vercel-scope \
+  --rollback-arg="$VERCEL_SCOPE" \
+  --rollback-arg=--current-commit \
+  --rollback-arg="$MATTERHORN_BUILD_COMMIT" \
+  --rollback-arg=--target-commit \
+  --rollback-arg="$LAST_KNOWN_GOOD_COMMIT" \
+  --rollback-arg=--apply \
+  --rollback-arg=--confirm \
+  --rollback-arg="rollback:$LAST_KNOWN_GOOD_COMMIT" \
   --strict --json-output qa-reports/product-hunt/rollback.json
 ```
+
+The hook accepts no credentials. Railway and Vercel authentication must already
+exist in the operator's CLI session. Before any mutation, it requires the
+Railway target to be successful, rollback-eligible and bound to the exact
+project, service and environment ids; it also requires the Vercel target to be
+ready, production and bound to the exact project name and immutable URL. It
+then freezes signups, sets guarded mode to `off`, binds the target build commit
+without triggering a second deploy, rolls Railway back to the named immutable
+deployment, and only then promotes the named immutable Vercel deployment. Never
+substitute an alias URL for the immutable Vercel deployment URL.
 
 Fill
 [`product-hunt-operations-evidence.example.json`](product-hunt-operations-evidence.example.json)

@@ -1,0 +1,71 @@
+{
+  "version": "matterhorn.guarded-runtime-baseline.v1",
+  "capturedAt": "2026-08-18T00:00:00.000Z",
+  "method": {
+    "tokenEstimate": "UTF-8 model-facing character count divided by four; hosted receipts replace estimates with provider usage",
+    "qualityGuard": "Each scenario must retain required citations, exact action terms, risk warnings, and receipt fields",
+    "providerDisclosure": "Provider, model, training status, retention status, and whether data leaves Matterhorn are required in every receipt",
+    "fullCryptoSchemaChars": 12900
+  },
+  "scenarios": [
+    {
+      "desk": "bittensor",
+      "task": "Compare validators on one subnet, then prepare a testnet stake review",
+      "systemChars": 5609,
+      "requestOverlayChars": 177,
+      "activeSchemaChars": 4316,
+      "repeatedInputReductionPct": 66.5,
+      "expectedToolCalls": { "readsMax": 12, "prepareMaxPerFamily": 1, "submit": 0 },
+      "requiredOutput": ["source", "freshness", "validator risks", "exact TAO amount", "hotkey", "netuid", "simulation", "wallet review"]
+    },
+    {
+      "desk": "hyperliquid",
+      "task": "Read BTC funding and orderbook, then prepare a testnet limit order",
+      "systemChars": 5319,
+      "requestOverlayChars": 179,
+      "activeSchemaChars": 6282,
+      "repeatedInputReductionPct": 51.3,
+      "expectedToolCalls": { "readsMax": 12, "prepareMaxPerFamily": 1, "submit": 0 },
+      "requiredOutput": ["source", "freshness", "market risk", "asset", "side", "size", "limit price", "slippage", "simulation", "wallet review"]
+    },
+    {
+      "desk": "polymarket",
+      "task": "Discover an eligible market, check compliance, and prepare a buy ticket",
+      "systemChars": 6031,
+      "requestOverlayChars": 178,
+      "activeSchemaChars": 5935,
+      "repeatedInputReductionPct": 54,
+      "expectedToolCalls": { "readsMax": 12, "prepareMaxPerFamily": 1, "submit": 0 },
+      "requiredOutput": ["venue", "source", "freshness", "compliance", "market", "outcome", "USDC amount", "slippage", "simulation", "wallet review"]
+    },
+    {
+      "desk": "sui",
+      "task": "Read a testnet balance and prepare a native SUI transfer",
+      "systemChars": 3000,
+      "requestOverlayChars": 171,
+      "activeSchemaChars": 1374,
+      "repeatedInputReductionPct": 89.3,
+      "expectedToolCalls": { "readsMax": 12, "prepareMaxPerFamily": 1, "submit": 0 },
+      "requiredOutput": ["source", "freshness", "network", "signer", "recipient", "amount", "checkpoint", "simulation", "wallet review"]
+    },
+    {
+      "desk": "generic_crypto",
+      "task": "Route one public protocol question to a single venue without loading every crypto tool",
+      "systemChars": 2094,
+      "requestOverlayChars": 178,
+      "activeSchemaCharsMax": 6282,
+      "repeatedInputReductionPctMin": 51.3,
+      "expectedToolCalls": { "readsMax": 12, "prepareMaxPerFamily": 1, "submit": 0 },
+      "requiredOutput": ["selected venue", "source", "freshness", "risk warning", "receipt"]
+    }
+  ],
+  "hostedMeasurementFields": [
+    "providerInputTokens",
+    "providerOutputTokens",
+    "toolCalls",
+    "responseDurationMs",
+    "estimatedCostUsd",
+    "providerDisclosure",
+    "qualityGuardResult"
+  ]
+}

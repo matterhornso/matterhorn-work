@@ -58,6 +58,15 @@ try {
   assert.equal(escapedHealth.code, 1);
   assert.match(escapedHealth.stderr, /health-path must be an absolute path/i);
 
+  const equalsArg = await run([
+    "--app-url", base, "--server-url", base, "--from-commit", fromCommit, "--to-commit", toCommit,
+    "--owner", "Release owner", "--rollback-hook", hookPath,
+    `--rollback-arg=${toCommit}`, `--rollback-arg=${statePath}`,
+    "--timeout-ms", "4000", "--interval-ms", "50", "--allow-loopback-http",
+  ]);
+  assert.equal(equalsArg.code, 0, equalsArg.stderr || equalsArg.stdout);
+  writeFileSync(statePath, fromCommit);
+
   const result = await run([
     "--app-url", base, "--server-url", base, "--from-commit", fromCommit, "--to-commit", toCommit,
     "--owner", "Release owner", "--rollback-hook", hookPath,

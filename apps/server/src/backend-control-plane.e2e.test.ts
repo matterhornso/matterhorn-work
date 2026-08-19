@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { buildMatterhornBillingSubscription } from "./billing.js";
 import { startServer } from "./server.js";
+import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
 import type { ServerConfig } from "./types.js";
 
 type Served = {
@@ -120,6 +121,37 @@ async function startProviderCatalogServer(payload: unknown): Promise<string> {
   });
   stops.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
   return `http://127.0.0.1:${port}`;
+}
+
+async function startSessionPurgeServer() {
+  const deleted: string[] = [];
+  const server = createHttpServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    response.setHeader("Content-Type", "application/json");
+    if (url.pathname === "/global/health") {
+      response.end(JSON.stringify({ healthy: true, version: "test" }));
+      return;
+    }
+    if (url.pathname === "/session" && request.method === "GET") {
+      response.end(JSON.stringify([
+        { id: "ses_purge_1", title: "Private chat", slug: "private-chat", time: { created: 1, updated: 2 } },
+      ]));
+      return;
+    }
+    if (url.pathname === "/session/ses_purge_1" && request.method === "DELETE") {
+      deleted.push("ses_purge_1");
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end(JSON.stringify({ code: "not_found" }));
+  });
+  const port = await new Promise<number>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve((server.address() as AddressInfo).port));
+  });
+  stops.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  return { url: `http://127.0.0.1:${port}`, deleted };
 }
 
 async function startWalrusDiagnosticServer() {
@@ -1684,10 +1716,65 @@ describe("backend control plane routes", () => {
     });
     expect(existsSync(join(dir, preview.payload.evidence.outputPath))).toBe(true);
 
+    const reviewedAction = buildReviewedActionHandoffV2({
+      handoff: {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "sui",
+        source: "agent-card",
+        draft: {
+          operation: "transfer_sui",
+          network: "testnet",
+          sender: "0x2",
+          recipient: "0x3",
+          amount: "1",
+          coinType: null,
+          objectId: null,
+          transfers: [],
+        },
+      },
+      runId: "run_sui_wallet_evidence",
+      simulation: { reference: preview.payload.preview.previewSha256 },
+    });
+    const validation = await jsonFetch(base, "/workspace/ws_backend/reviewed-actions/validate", {
+      method: "POST",
+      body: JSON.stringify({
+        handoff: reviewedAction,
+        currentDraft: {
+          version: "matterhorn.reviewed-action-handoff.v1",
+          protocol: "sui",
+          source: "agent-card",
+          draft: reviewedAction.draft,
+        },
+      }),
+    });
+    expect(validation.response.status).toBe(200);
+    expect(validation.payload).toMatchObject({ success: true, valid: true, issues: [] });
+
+    const mismatchedReceipt = await jsonFetch(base, "/workspace/ws_backend/sui/transactions/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        reviewedAction,
+        receiptIntentHash: "f".repeat(64),
+        payload: {
+          network: "testnet",
+          previewSha256: preview.payload.preview.previewSha256,
+          transactionDigest: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+          status: "success",
+          sender: "0x2",
+          recipient: "0x3",
+          amountSui: "1",
+        },
+      }),
+    });
+    expect(mismatchedReceipt.response.status).toBe(409);
+    expect(mismatchedReceipt.payload.code).toBe("reviewed_action_receipt_intent_mismatch");
+
     const receipt = await jsonFetch(base, "/workspace/ws_backend/sui/transactions/receipt", {
       method: "POST",
       body: JSON.stringify({
         sessionId: "sui wallet evidence",
+        reviewedAction,
+        receiptIntentHash: reviewedAction.intentHash,
         payload: {
           network: "testnet",
           previewSha256: preview.payload.preview.previewSha256,
@@ -2199,12 +2286,13 @@ describe("backend control plane routes", () => {
       href: "/workspace/ws_backend/history?kind=task",
     }));
     expect(result.payload.policy.retention.mode).toBe("accountability_default");
-    expect(result.payload.policy.retention.stores).toEqual(["audit", "taskEvents", "workflowRuns"]);
-    expect(result.payload.policy.retention.exportRoute).toBe("/workspace/ws_backend/data-ledger/export");
-    expect(result.payload.policy.retention.purgeSupported).toBe(false);
+    expect(result.payload.policy.retention.stores).toEqual(["securityReceipts"]);
+    expect(result.payload.policy.retention.exportRoute).toBe("/workspace/ws_backend/agent-run-receipts");
+    expect(result.payload.policy.retention.windowDays).toBe(365);
+    expect(result.payload.policy.retention.purgeSupported).toBe(true);
     expect(result.payload.policy.trainingUse).toBe("none_by_default");
     expect(result.payload.policy.feedbackUse).toBe("eval_routing_product_quality_only");
-    expect(result.payload.policy.limitations.join(" ")).toContain("Append-only audit, task event, and workflow run rows do not currently have a purge endpoint");
+    expect(result.payload.policy.limitations.join(" ")).toContain("Legacy audit, task event, and workflow run files remain outside the 365-day security-receipt window");
     expect(JSON.stringify(result.payload)).not.toContain("local build");
 
     const serialized = JSON.stringify(result.payload);
@@ -2225,10 +2313,12 @@ describe("backend control plane routes", () => {
     });
     expect(initial.payload.policy.appendOnlyRetention).toMatchObject({
       mode: "accountability_default",
-      exportRoute: "/workspace/ws_backend/data-ledger/export",
-      summary: expect.stringContaining("append-only workspace records"),
-      windowLabel: "No automatic purge window is configured",
-      purgeSupported: false,
+      stores: ["securityReceipts"],
+      exportRoute: "/workspace/ws_backend/agent-run-receipts",
+      summary: expect.stringContaining("Minimal guarded-agent security receipts"),
+      windowDays: 365,
+      windowLabel: "Automatically expires after 365 days",
+      purgeSupported: true,
       configurable: false,
     });
     expect(JSON.stringify(initial.payload)).not.toContain("local build");
@@ -2241,7 +2331,7 @@ describe("backend control plane routes", () => {
     expect(initial.payload.controls.retention).toMatchObject({
       status: "working",
       mode: "accountability_default",
-      purgeSupported: false,
+      purgeSupported: true,
     });
     expect(initial.payload.storage.path).toBe(join(dir, ".matterhorn-work", "privacy", "data-policy.json"));
 
@@ -2284,7 +2374,7 @@ describe("backend control plane routes", () => {
     expect(dataMap.payload.stores.dataPolicy.details.feedbackUse).toBe("disabled");
     const controls = await jsonFetch(base, "/workspace/ws_backend/backend/data-controls");
     expect(controls.payload.policy.feedbackUse).toBe("disabled");
-    expect(controls.payload.policy.retention.exportRoute).toBe("/workspace/ws_backend/data-ledger/export");
+    expect(controls.payload.policy.retention.exportRoute).toBe("/workspace/ws_backend/agent-run-receipts");
     expect(controls.payload.stores.feedback.privacy.trainingUse).toBe("disabled");
     const controlPlane = await jsonFetch(base, "/workspace/ws_backend/backend/control-plane");
     expect(controlPlane.payload.privacy.feedbackUse).toBe("disabled");
@@ -2395,6 +2485,53 @@ describe("backend control plane routes", () => {
     const audit = await jsonFetch(base, "/workspace/ws_backend/audit?limit=5");
     expect(audit.response.status).toBe(200);
     expect(audit.payload.items.map((item: { action: string }) => item.action)).toContain("memory.capture");
+  });
+
+  test("owner-confirmed workspace purge removes user content but retains minimal security records", async () => {
+    const opencode = await startSessionPurgeServer();
+    const { base, dir } = await boot({ opencodeBaseUrl: opencode.url });
+    const owner = await hostFetch(base, "/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "owner", label: "Workspace purge owner" }),
+    });
+    expect(owner.response.status).toBe(201);
+    const outputFile = join(dir, "outputs", "bittensor", "private-report.md");
+    mkdirSync(join(dir, "outputs", "bittensor"), { recursive: true });
+    writeFileSync(outputFile, "private output content", "utf8");
+
+    const note = await jsonFetch(base, "/workspace/ws_backend/notes", {
+      method: "POST",
+      body: JSON.stringify({ title: "Private note", body: "private note content" }),
+    });
+    expect(note.response.status).toBe(201);
+    const memory = await jsonFetch(base, "/workspace/ws_backend/memory/capture", {
+      method: "POST",
+      body: JSON.stringify({ record: record({ id: "mem_workspace_purge" }) }),
+    });
+    expect(memory.response.status).toBe(201);
+
+    const unconfirmed = await jsonFetch(base, "/workspace/ws_backend/user-content/purge", {
+      method: "POST",
+      body: JSON.stringify({ confirm: "purge:wrong-workspace" }),
+    }, owner.payload.token);
+    expect(unconfirmed.response.status).toBe(400);
+    expect(existsSync(outputFile)).toBe(true);
+
+    const purged = await jsonFetch(base, "/workspace/ws_backend/user-content/purge", {
+      method: "POST",
+      body: JSON.stringify({ confirm: "purge:ws_backend" }),
+    }, owner.payload.token);
+    expect(purged.response.status).toBe(200);
+    expect(purged.payload).toMatchObject({
+      success: true,
+      deleted: { chats: 1, memoryRecords: 1 },
+      retained: { store: "securityReceipts", containsRawUserContent: false, windowDays: 365 },
+    });
+    expect(opencode.deleted).toEqual(["ses_purge_1"]);
+    expect(existsSync(join(dir, "outputs"))).toBe(false);
+    expect(existsSync(join(dir, "notes"))).toBe(false);
+    expect(existsSync(join(dir, ".matterhorn-work", "memory"))).toBe(false);
+    expect(existsSync(join(dir, "openwork-data", "security-receipts", "ws_backend", "legacy"))).toBe(true);
   });
 
   test("memory writes are blocked when the server is read-only", async () => {

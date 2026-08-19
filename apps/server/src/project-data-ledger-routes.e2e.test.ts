@@ -461,11 +461,16 @@ describe("project data ledger routes", () => {
       }),
     );
     expect(dataControls.payload.stores.taskEvents.retention.mode).toBe("append_only");
+    expect(dataControls.payload.stores.securityReceipts).toMatchObject({
+      retention: { mode: "append_only" },
+      privacy: { containsUserContent: false, containsSecrets: "never" },
+    });
     expect(dataControls.payload.policy.retention).toMatchObject({
       mode: "accountability_default",
-      stores: ["audit", "taskEvents", "workflowRuns"],
-      exportRoute: "/workspace/ws_ledger/data-ledger/export",
-      purgeSupported: false,
+      stores: ["securityReceipts"],
+      exportRoute: "/workspace/ws_ledger/agent-run-receipts",
+      windowDays: 365,
+      purgeSupported: true,
     });
   });
 
@@ -497,8 +502,9 @@ describe("project data ledger routes", () => {
     expect(result.payload.manifest.feedbackUse).toBe("eval_routing_product_quality_only");
     expect(result.payload.ledger.policy.retentionPolicy).toMatchObject({
       mode: "accountability_default",
-      exportRoute: "/workspace/ws_ledger/data-ledger/export",
-      purgeSupported: false,
+      exportRoute: "/workspace/ws_ledger/agent-run-receipts",
+      windowDays: 365,
+      purgeSupported: true,
     });
     expect(result.payload.backend.controlPlane.version).toBe("matterhorn.backend.control-plane.v1");
     expect(result.payload.backend.controlPlane.summary.totalFeatures).toBeGreaterThan(0);

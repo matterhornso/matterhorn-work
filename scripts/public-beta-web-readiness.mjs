@@ -120,6 +120,7 @@ function evaluate() {
   const configuredCredentials = configuredVariableNames(browserCredentialVariables);
   const configuredDirectBackend = configuredVariableNames(directBackendVariables);
   const appUrl = readEnv("MATTERHORN_APP_URL");
+  const webBuildCommit = readEnv("VITE_MATTERHORN_BUILD_COMMIT").toLowerCase();
   const cloudUrl = readEnv("VITE_MATTERHORN_CLOUD_URL");
   const cloudApiUrl = readEnv("VITE_MATTERHORN_CLOUD_API_URL");
   const publicProxyMode = readEnv("MATTERHORN_PUBLIC_PROXY_MODE").toLowerCase();
@@ -177,6 +178,13 @@ function evaluate() {
       "Release owner",
       enabled("VITE_MATTERHORN_PUBLIC_BETA"),
       "VITE_MATTERHORN_PUBLIC_BETA must be true.",
+    ),
+    check(
+      "web.build_commit",
+      "The public web bundle is bound to a full release commit",
+      "Release owner",
+      /^[a-f0-9]{40}$/.test(webBuildCommit),
+      "VITE_MATTERHORN_BUILD_COMMIT must be the exact full merge SHA supplied at build time.",
     ),
     check(
       "web.reviewed_desk_actions",

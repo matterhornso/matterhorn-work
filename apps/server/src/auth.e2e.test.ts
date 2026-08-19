@@ -35,6 +35,8 @@ const priorEmailDevMode = process.env.MATTERHORN_EMAIL_DEV_MODE;
 const priorAppUrl = process.env.MATTERHORN_APP_URL;
 const priorResendApiKey = process.env.MATTERHORN_RESEND_API_KEY;
 const priorSmtpHost = process.env.MATTERHORN_SMTP_HOST;
+const priorSmtpUser = process.env.MATTERHORN_SMTP_USER;
+const priorSmtpPassword = process.env.MATTERHORN_SMTP_PASSWORD;
 const priorLegalAcceptanceRequired = process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED;
 const priorTermsVersion = process.env.MATTERHORN_TERMS_VERSION;
 const priorPrivacyVersion = process.env.MATTERHORN_PRIVACY_VERSION;
@@ -200,6 +202,10 @@ afterEach(async () => {
   else process.env.MATTERHORN_RESEND_API_KEY = priorResendApiKey;
   if (priorSmtpHost === undefined) delete process.env.MATTERHORN_SMTP_HOST;
   else process.env.MATTERHORN_SMTP_HOST = priorSmtpHost;
+  if (priorSmtpUser === undefined) delete process.env.MATTERHORN_SMTP_USER;
+  else process.env.MATTERHORN_SMTP_USER = priorSmtpUser;
+  if (priorSmtpPassword === undefined) delete process.env.MATTERHORN_SMTP_PASSWORD;
+  else process.env.MATTERHORN_SMTP_PASSWORD = priorSmtpPassword;
   if (priorLegalAcceptanceRequired === undefined) delete process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED;
   else process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = priorLegalAcceptanceRequired;
   if (priorTermsVersion === undefined) delete process.env.MATTERHORN_TERMS_VERSION;
@@ -406,6 +412,34 @@ describe("public account authentication", () => {
       body: { email: "not-created@example.com", password: PASSWORD },
     });
     expect(created.response.status).toBe(200);
+  });
+
+  test("does not advertise signup or password reset for incomplete production email configuration", async () => {
+    const app = await boot();
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "true";
+    process.env.MATTERHORN_EMAIL_FROM = "Matterhorn Desks <updates@matterhorn.so>";
+    delete process.env.MATTERHORN_EMAIL_DEV_MODE;
+    delete process.env.MATTERHORN_SMTP_HOST;
+    delete process.env.MATTERHORN_SMTP_USER;
+    delete process.env.MATTERHORN_SMTP_PASSWORD;
+
+    process.env.MATTERHORN_RESEND_API_KEY = "too-short";
+    const shortResend = await jsonRequest(app.base, "/api/auth/config");
+    expect(shortResend.payload.signupStatus).toBe("setup_required");
+    expect(shortResend.payload.signupsAvailable).toBe(false);
+    expect(shortResend.payload.passwordResetAvailable).toBe(false);
+
+    delete process.env.MATTERHORN_RESEND_API_KEY;
+    process.env.MATTERHORN_SMTP_HOST = "smtp.example.com";
+    const hostOnly = await jsonRequest(app.base, "/api/auth/config");
+    expect(hostOnly.payload.signupStatus).toBe("setup_required");
+    expect(hostOnly.payload.passwordResetAvailable).toBe(false);
+
+    process.env.MATTERHORN_SMTP_USER = "mailer";
+    process.env.MATTERHORN_SMTP_PASSWORD = "authenticated-smtp-password";
+    const authenticatedSmtp = await jsonRequest(app.base, "/api/auth/config");
+    expect(authenticatedSmtp.payload.signupsAvailable).toBe(true);
+    expect(authenticatedSmtp.payload.passwordResetAvailable).toBe(true);
   });
 
   test("requires an explicit production signup flag and all signup safety controls", async () => {
@@ -1042,6 +1076,39 @@ describe("public account authentication", () => {
     );
     expect(crossWorkspace.response.status).toBe(404);
     expect(crossWorkspace.payload.code).toBe("workspace_not_found");
+
+    const ownSecurityReceipts = await jsonRequest(
+      app.base,
+      `/workspace/${workspaceA.id}/agent-run-receipts`,
+      { cookie: cookieA },
+    );
+    expect(ownSecurityReceipts.response.status).toBe(200);
+    expect(ownSecurityReceipts.payload).toMatchObject({
+      items: [],
+      retention: { windowDays: 365, purgeSupported: true },
+    });
+    for (const request of [
+      jsonRequest(app.base, `/workspace/${workspaceB.id}/agent-run-receipts`, { cookie: cookieA }),
+      jsonRequest(app.base, `/workspace/${workspaceB.id}/sessions/ses_private/messages/preflight`, {
+        cookie: cookieA,
+        body: {
+          parts: [{ type: "text", text: "public research" }],
+          model: { providerId: "cudos", modelId: "asi1-mini" },
+        },
+      }),
+      jsonRequest(app.base, `/workspace/${workspaceB.id}/privacy-consents/privacy_challenge_guessed/confirm`, {
+        cookie: cookieA,
+        body: { sessionId: "ses_private", requestHash: "guessed" },
+      }),
+      jsonRequest(app.base, `/workspace/${workspaceB.id}/reviewed-actions/validate`, {
+        cookie: cookieA,
+        body: { handoff: {}, currentDraft: {} },
+      }),
+    ]) {
+      const isolated = await request;
+      expect(isolated.response.status).toBe(404);
+      expect(isolated.payload.code).toBe("workspace_not_found");
+    }
 
     const now = "2026-07-29T00:00:00.000Z";
     const capturedMemory = await jsonRequest(app.base, "/api/memory/capture", {

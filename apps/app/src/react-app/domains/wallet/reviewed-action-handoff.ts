@@ -1,11 +1,15 @@
 import {
   isReviewedActionDraftHandoff,
+  isReviewedActionHandoffV2,
   type ReviewedActionDraftHandoff,
+  type ReviewedActionHandoffV2,
+  type ReviewedActionWalletHandoff,
 } from "@matterhorn-work/types";
 
 const REVIEWED_ACTION_HANDOFF_EVENT = "matterhorn:reviewed-action-handoff";
 
 let pendingHandoff: ReviewedActionDraftHandoff | null = null;
+let pendingGuardedHandoff: ReviewedActionHandoffV2 | null = null;
 
 type SharedActionCard = {
   kind?: string;
@@ -60,8 +64,11 @@ function publicSuiTransfers(value: unknown): Array<{ recipient: string; amount: 
   }).slice(0, 16);
 }
 
-export function reviewedActionHandoffFromCard(card: SharedActionCard): ReviewedActionDraftHandoff | null {
+export function reviewedActionHandoffFromCard(card: SharedActionCard): ReviewedActionWalletHandoff | null {
   if (card.kind !== "action_preview" || !isRecord(card.data)) return null;
+  const guardedCandidate = card.data.reviewedAction
+    ?? (isRecord(card.data.data) ? card.data.data.reviewedAction : undefined);
+  if (isReviewedActionHandoffV2(guardedCandidate)) return guardedCandidate;
   const nestedData = isRecord(card.data.data) ? card.data.data : null;
   const preview = isRecord(card.data.preview)
     ? card.data.preview
@@ -360,10 +367,19 @@ export function reviewedActionHandoffFromCard(card: SharedActionCard): ReviewedA
   return candidate && isReviewedActionDraftHandoff(candidate) ? candidate : null;
 }
 
-export function stageReviewedActionHandoff(handoff: ReviewedActionDraftHandoff): boolean {
-  if (!isReviewedActionDraftHandoff(handoff)) return false;
+export function stageReviewedActionHandoff(handoff: ReviewedActionWalletHandoff): boolean {
+  if (!isReviewedActionDraftHandoff(handoff) && !isReviewedActionHandoffV2(handoff)) return false;
+  if (isReviewedActionHandoffV2(handoff)) {
+    const nowMs = Date.now();
+    if (Date.parse(handoff.expiresAt) <= nowMs || nowMs - Date.parse(handoff.simulation.simulatedAt) > 60_000) return false;
+    pendingGuardedHandoff = structuredClone(handoff);
+  } else {
+    pendingGuardedHandoff = null;
+  }
   const nextHandoff = {
-    ...handoff,
+    version: "matterhorn.reviewed-action-handoff.v1" as const,
+    protocol: handoff.protocol,
+    source: handoff.source,
     draft: { ...handoff.draft },
   } as ReviewedActionDraftHandoff;
   pendingHandoff = nextHandoff;
@@ -376,6 +392,13 @@ export function stageReviewedActionHandoff(handoff: ReviewedActionDraftHandoff):
 export function takePendingReviewedActionHandoff(): ReviewedActionDraftHandoff | null {
   const handoff = pendingHandoff;
   pendingHandoff = null;
+  return handoff;
+}
+
+/** Guard metadata stays separate from editable wallet form state. */
+export function takePendingReviewedActionGuard(): ReviewedActionHandoffV2 | null {
+  const handoff = pendingGuardedHandoff;
+  pendingGuardedHandoff = null;
   return handoff;
 }
 

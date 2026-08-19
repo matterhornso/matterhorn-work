@@ -6,6 +6,10 @@ import { useQuery } from "@tanstack/react-query";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
 import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-mode";
 import type { MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
+import type {
+  MatterhornAgentPrivacyPreflightResponse,
+  MatterhornAgentRunReceipt,
+} from "@matterhorn-work/types/guarded-agent-runtime";
 import {
   AlertCircle,
   ArrowDown,
@@ -594,12 +598,13 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
 type SessionError = {
   message: string;
   detail?: string;
-  kind?: "model-not-found" | "provider-unavailable" | "privacy-blocked" | "cancelled" | "generic";
+  kind?: "model-not-found" | "provider-unavailable" | "privacy-blocked" | "privacy-consent" | "cancelled" | "generic";
   retryable?: boolean;
   /** For model-not-found: the model that failed. */
   failedModel?: { providerID: string; modelID: string };
   /** For model-not-found: suggested replacements from the backend. */
   suggestions?: Array<{ providerID: string; modelID: string }>;
+  privacyPreflight?: MatterhornAgentPrivacyPreflightResponse;
 };
 
 export type SessionSurfaceProps = {
@@ -876,6 +881,112 @@ function AssistantStatusSpacer() {
   );
 }
 
+function receiptDuration(receipt: MatterhornAgentRunReceipt): string {
+  const durationMs = receipt.responseDurationMs ?? 0;
+  if (durationMs < 1_000) return `${durationMs}ms`;
+  return `${(durationMs / 1_000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
+}
+
+function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgentRunReceipt }) {
+  const totalTokens = receipt.usage.inputTokens + receipt.usage.outputTokens + receipt.usage.reasoningTokens;
+  const capabilityDenials = receipt.capabilities.filter((decision) => decision.decision === "denied").length;
+  const trainingLabel = receipt.provider.trainingUse === "none"
+    ? "No training"
+    : receipt.provider.trainingUse === "opt_in_only"
+      ? "Training only if provider account opts in"
+      : "Training policy unverified";
+  const retentionLabel = receipt.provider.retentionDays === null
+    ? receipt.provider.privacyStatus === "local_processing" ? "Local processing" : "Retention period not verified"
+    : `${receipt.provider.retentionDays}-day provider retention`;
+  const status = receipt.status === "success"
+    ? "Completed"
+    : receipt.status === "partial"
+      ? "Partially completed"
+      : receipt.status === "cancelled"
+        ? "Cancelled"
+        : "Failed";
+  return (
+    <details className="mt-3 rounded-lg border border-dls-border bg-dls-surface/45 text-xs text-dls-secondary">
+      <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dls-text/25">
+        <span className="font-medium text-dls-text">Run receipt</span>
+        <span className="flex flex-wrap justify-end gap-x-3 gap-y-1 tabular-nums">
+          <span>{status}</span>
+          <span>{receiptDuration(receipt)}</span>
+          <span>{totalTokens.toLocaleString()} tokens</span>
+          <span>{receipt.tools.length} tool{receipt.tools.length === 1 ? "" : "s"}</span>
+        </span>
+      </summary>
+      <div className="grid gap-3 border-t border-dls-border px-3 py-3 sm:grid-cols-2">
+        <div>
+          <div className="font-medium text-dls-text">Privacy</div>
+          <div className="mt-1 leading-5">
+            {receipt.provider.name || receipt.provider.id}/{receipt.provider.modelId} · {receipt.privacy.mode.replaceAll("_", " ")}
+            <br />
+            {receipt.privacy.dataLeavesMatterhorn ? "Data left Matterhorn" : "Processed inside Matterhorn"}
+            {receipt.privacy.consent === "single_request" ? " · one-request consent" : ""}
+            <br />
+            {trainingLabel} · {retentionLabel}
+            {receipt.memory.readIds.length > 0 ? ` · ${receipt.memory.readIds.length} selected memories` : ""}
+            {receipt.provider.policyUrl ? (
+              <>
+                <br />
+                <a
+                  href={receipt.provider.policyUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline decoration-dls-border underline-offset-2 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/25"
+                >
+                  Provider privacy policy
+                </a>
+              </>
+            ) : null}
+          </div>
+        </div>
+        <div>
+          <div className="font-medium text-dls-text">Usage</div>
+          <div className="mt-1 leading-5 tabular-nums">
+            {receipt.usage.inputTokens.toLocaleString()} input · {receipt.usage.outputTokens.toLocaleString()} output
+            <br />
+            {receipt.usage.reasoningTokens.toLocaleString()} reasoning · {receipt.usage.cacheReadTokens.toLocaleString()} cache reads
+            <br />
+            Estimated cost: ${receipt.usage.estimatedCostUsd.toFixed(4)}
+            <br />
+            Budget: {receipt.usage.toolCallBudget.reads} reads · {receipt.usage.toolCallBudget.preparesPerFamily} prepare · 0 submits
+          </div>
+        </div>
+        <div>
+          <div className="font-medium text-dls-text">Tools</div>
+          <div className="mt-1 leading-5">
+            {receipt.tools.length > 0
+              ? receipt.tools.map((tool) => `${tool.name} · ${tool.outcome}`).join("; ")
+              : "No crypto tools used."}
+            {receipt.capabilities.length > 0 ? (
+              <>
+                <br />
+                {receipt.capabilities.length} capability decision{receipt.capabilities.length === 1 ? "" : "s"}
+                {capabilityDenials > 0 ? ` · ${capabilityDenials} denied` : " · none denied"}
+              </>
+            ) : null}
+          </div>
+        </div>
+        <div>
+          <div className="font-medium text-dls-text">Wallet review</div>
+          <div className="mt-1 leading-5">
+            {receipt.reviewedActions.length > 0
+              ? receipt.reviewedActions.map((action) => (
+                  <span key={action.intentHash} className="block break-all">
+                    Intent {action.intentHash.slice(0, 12)}… · simulation {action.simulationReference.slice(0, 18)}…
+                    {action.publicReceipt ? ` · receipt ${action.publicReceipt}` : " · not submitted"}
+                  </span>
+                ))
+              : "No transaction prepared or submitted."}
+          </div>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 function TodoPanel(props: { todos: TodoItem[] }) {
   const [expanded, setExpanded] = useState(false);
   const todos = props.todos.filter((todo) => todo.content.trim());
@@ -933,6 +1044,45 @@ function TodoPanel(props: { todos: TodoItem[] }) {
   );
 }
 
+function isPrivacyPreflight(value: unknown): value is MatterhornAgentPrivacyPreflightResponse {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.version === "matterhorn.agent-privacy-preflight.v1"
+    && typeof record.requestHash === "string"
+    && typeof record.workspaceId === "string"
+    && typeof record.sessionId === "string"
+    && (record.decision === "allow" || record.decision === "consent_required" || record.decision === "blocked")
+    && Boolean(record.provider && typeof record.provider === "object")
+    && Boolean(record.detectedData && typeof record.detectedData === "object");
+}
+
+export function findPrivacyPreflightInError(value: unknown, depth = 0): MatterhornAgentPrivacyPreflightResponse | null {
+  if (depth > 8 || value == null) return null;
+  if (isPrivacyPreflight(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+    try {
+      return findPrivacyPreflightInError(JSON.parse(trimmed), depth + 1);
+    } catch {
+      return null;
+    }
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const match = findPrivacyPreflightInError(item, depth + 1);
+      if (match) return match;
+    }
+    return null;
+  }
+  if (typeof value !== "object") return null;
+  for (const item of Object.values(value as Record<string, unknown>)) {
+    const match = findPrivacyPreflightInError(item, depth + 1);
+    if (match) return match;
+  }
+  return null;
+}
+
 export function parseSessionError(thrown: unknown): SessionError {
   const raw = thrown instanceof Error ? thrown.message : String(thrown);
   let parsed: unknown;
@@ -962,6 +1112,28 @@ export function parseSessionError(thrown: unknown): SessionError {
     }
   } catch {
     // Not JSON — fall through to plain message
+  }
+  const privacyPreflight = findPrivacyPreflightInError(parsed ?? raw);
+  if (privacyPreflight?.decision === "consent_required" && privacyPreflight.challenge) {
+    const categories = privacyPreflight.detectedData.categories.length
+      ? privacyPreflight.detectedData.categories.join(", ")
+      : "private workspace context";
+    return {
+      message: `Allow ${privacyPreflight.provider.name} for this request?`,
+      detail: `This request includes ${categories}. It leaves Matterhorn for ${privacyPreflight.provider.name} and this one-time approval expires in five minutes.`,
+      kind: "privacy-consent",
+      retryable: false,
+      privacyPreflight,
+    };
+  }
+  if (privacyPreflight?.decision === "blocked") {
+    return {
+      message: "Matterhorn blocked secret material before sending.",
+      detail: privacyPreflight.reason,
+      kind: "privacy-blocked",
+      retryable: false,
+      privacyPreflight,
+    };
   }
   const diagnostic = `${raw}\n${parsed ? JSON.stringify(parsed) : ""}`;
   if (/provider_privacy_unverified/i.test(diagnostic)) {
@@ -1052,11 +1224,13 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
   };
 }
 
-function SessionErrorCard({ error, onDismiss, onRetry, retrying, onChangeModel, onOpenModelPicker, onOpenAiProviders, onOpenPrivacyDetails }: {
+function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfirmPrivacy, confirmingPrivacy, onChangeModel, onOpenModelPicker, onOpenAiProviders, onOpenPrivacyDetails }: {
   error: SessionError;
   onDismiss: () => void;
   onRetry?: () => void | Promise<void>;
   retrying?: boolean;
+  onConfirmPrivacy?: () => void | Promise<void>;
+  confirmingPrivacy?: boolean;
   onChangeModel?: (model: { providerID: string; modelID: string }) => void;
   onOpenModelPicker?: () => void;
   onOpenAiProviders?: () => void;
@@ -1121,6 +1295,27 @@ function SessionErrorCard({ error, onDismiss, onRetry, retrying, onChangeModel, 
                 >
                   Review privacy
                 </button>
+              </div>
+            ) : null}
+            {error.kind === "privacy-consent" && onConfirmPrivacy ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex min-h-10 items-center rounded-md bg-dls-accent px-3 text-xs font-semibold text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.32)] disabled:cursor-wait disabled:opacity-60"
+                  onClick={() => void onConfirmPrivacy()}
+                  disabled={confirmingPrivacy}
+                >
+                  {confirmingPrivacy ? "Authorizing…" : "Allow this request"}
+                </button>
+                {onOpenPrivacyDetails ? (
+                  <button
+                    type="button"
+                    className="min-h-10 rounded-md px-3 text-xs font-medium text-dls-secondary transition-colors hover:bg-dls-hover hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/25"
+                    onClick={onOpenPrivacyDetails}
+                  >
+                    Privacy details
+                  </button>
+                ) : null}
               </div>
             ) : null}
             {error.kind === "model-not-found" ? (
@@ -1277,6 +1472,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [error, setError] = useState<SessionError | null>(null);
   const [sending, setSending] = useState(false);
+  const [confirmingPrivacy, setConfirmingPrivacy] = useState(false);
   const [showDelayedLoading, setShowDelayedLoading] = useState(false);
   const [awaitingAssistantBaseline, setAwaitingAssistantBaseline] = useState<number | null>(null);
   const [noVisibleAssistantOutputBaseline, setNoVisibleAssistantOutputBaseline] = useState<number | null>(null);
@@ -1323,6 +1519,21 @@ export function SessionSurface(props: SessionSurfaceProps) {
     staleTime: 500,
     retry: (failureCount, error) => !(error instanceof MatterhornServerError && error.status === 404) && failureCount < 2,
   });
+  const runReceiptsQuery = useQuery({
+    queryKey: ["agent-run-receipts", props.workspaceId, props.sessionId],
+    queryFn: async () => props.client.listAgentRunReceipts(
+      props.workspaceId,
+      { sessionId: props.sessionId, limit: 8 },
+    ),
+    staleTime: 2_000,
+    refetchInterval: (query) => (
+      sending || query.state.data?.items.some((receipt) => receipt.status === "pending")
+        ? 2_000
+        : false
+    ),
+    retry: 1,
+  });
+  const latestCompletedRunReceipt = runReceiptsQuery.data?.items.find((receipt) => receipt.status !== "pending") ?? null;
   const sessionMissing = snapshotQuery.error instanceof MatterhornServerError && snapshotQuery.error.status === 404;
   useEffect(() => {
     if (sessionMissing) props.onSessionMissing?.();
@@ -1354,6 +1565,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     hydratedSavedDraftKeyRef.current = null;
     setError(null);
     setSending(false);
+    setConfirmingPrivacy(false);
     setShowDelayedLoading(false);
     setAwaitingAssistantBaseline(null);
     setNoVisibleAssistantOutputBaseline(null);
@@ -1483,6 +1695,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
     ],
     [localReviewedActionMessages, snapshot, transcriptState],
   );
+  useEffect(() => {
+    if (renderedMessages.length === 0) return;
+    void runReceiptsQuery.refetch();
+  }, [renderedMessages.length, runReceiptsQuery.refetch]);
   const linkedWorkflowRunQuery = useQuery({
     queryKey: ["session-workflow-run", props.workspaceId, props.sessionId],
     enabled: Boolean(props.workspaceId && props.sessionId),
@@ -1759,7 +1975,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const buildDraft = useCallback((
     text: string,
     nextAttachments: ComposerAttachment[],
-    options?: { resolvedText?: string },
+    options?: { resolvedText?: string; privacyConsentToken?: string },
   ): ComposerDraft => {
     const parts: ComposerPart[] = text.split(/(\[pasted text [^\]]+\]|@[^\s@]+)/).flatMap((segment) => {
       if (!segment) return [] as ComposerDraft["parts"];
@@ -1788,6 +2004,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
       resolved = resolved.replaceAll(`@${encodeComposerMentionValue(value)}`, `@${value}`);
     }
     const resolvedSlashMatch = resolved.trim().match(/^\/([^\s]+)\s*(.*)$/);
+    const attachmentIds = nextAttachments.map((attachment) => attachment.id).filter(Boolean).sort();
+    const memoryIds = (memoryContext?.records ?? []).map((record) => record.id).filter(Boolean).sort();
     return {
       mode: "prompt",
       parts,
@@ -1795,8 +2013,19 @@ export function SessionSurface(props: SessionSurfaceProps) {
       text,
       resolvedText: resolved,
       command: resolvedSlashMatch ? { name: resolvedSlashMatch[1] ?? "", arguments: resolvedSlashMatch[2] ?? "" } : undefined,
+      ...(
+        options?.privacyConsentToken || attachmentIds.length > 0 || memoryIds.length > 0
+          ? {
+              privacy: {
+                ...(options?.privacyConsentToken ? { consentToken: options.privacyConsentToken } : {}),
+                ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
+                ...(memoryIds.length > 0 ? { memoryIds } : {}),
+              },
+            }
+          : {}
+      ),
     };
-  }, [mentions, pasteParts]);
+  }, [memoryContext?.records, mentions, pasteParts]);
 
   const handleComposerDraftChange = useCallback((value: string) => {
     setComposerDraft(props.sessionId, value);
@@ -1874,7 +2103,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
   };
 
-  const handleSend = useCallback(async () => {
+  const handleSend = useCallback(async (privacyConsentToken?: string) => {
     const text = draft.trim();
     if (!text && attachments.length === 0) return;
     const reviewedActionHandoff = attachments.length === 0
@@ -1947,7 +2176,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     try {
       let resolvedText = addBittensorContextToResolvedText(text, bittensorContext);
       resolvedText = addMatterhornMemoryContextToResolvedText(resolvedText, memoryContext);
-      const nextDraft = buildDraft(text, attachments, { resolvedText });
+      const nextDraft = buildDraft(text, attachments, { resolvedText, privacyConsentToken });
       if (resolvedText !== text) {
         recordInspectorEvent("session.context.resolved_text_attached", {
           workspaceId: props.workspaceId,
@@ -2000,6 +2229,26 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setSending(false);
     }
   }, [activeWorkflowDeskAgent, attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.modelVariant, props.onDraftChange, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
+
+  const handleConfirmPrivacy = useCallback(async () => {
+    const preflight = error?.privacyPreflight;
+    const challenge = preflight?.challenge;
+    if (!preflight || !challenge || confirmingPrivacy || sending) return;
+    setConfirmingPrivacy(true);
+    try {
+      const consent = await props.client.confirmAgentPrivacyConsent(
+        props.workspaceId,
+        challenge.id,
+        { sessionId: props.sessionId, requestHash: preflight.requestHash },
+      );
+      setError(null);
+      await handleSend(consent.consentToken);
+    } catch (nextError) {
+      setError(parseSessionError(nextError));
+    } finally {
+      setConfirmingPrivacy(false);
+    }
+  }, [confirmingPrivacy, error?.privacyPreflight, handleSend, props.client, props.sessionId, props.workspaceId, sending]);
 
   const handleAbort = useCallback(async () => {
     if (!chatStreaming) return;
@@ -2952,6 +3201,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     onOpenModelPicker={props.onModelClick}
                     onOpenAiProviders={props.onOpenAiProviders}
                     onOpenPrivacyDetails={props.onOpenPrivacyDetails}
+                    onConfirmPrivacy={handleConfirmPrivacy}
+                    confirmingPrivacy={confirmingPrivacy}
                   />
                 ) : sessionMissing ? (
                   <div className="mx-auto flex max-w-sm items-center justify-center gap-2 rounded-lg bg-dls-canvas/45 px-6 py-5 text-sm text-dls-secondary">
@@ -2984,6 +3235,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onOpenModelPicker={props.onModelClick}
                   onOpenAiProviders={props.onOpenAiProviders}
                   onOpenPrivacyDetails={props.onOpenPrivacyDetails}
+                  onConfirmPrivacy={handleConfirmPrivacy}
+                  confirmingPrivacy={confirmingPrivacy}
                 />
               ) : activeDeskMode ? (
                 <div className="space-y-2">
@@ -3076,6 +3329,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     onRateAssistantResponse={handleRateAssistantResponse}
                     footer={assistantStatusFooter}
                   />
+                  {latestCompletedRunReceipt ? (
+                    <AgentRunReceiptDisclosure receipt={latestCompletedRunReceipt} />
+                  ) : null}
                   {error ? (
                     <SessionErrorCard
                       error={error}
@@ -3086,6 +3342,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
                       onOpenModelPicker={props.onModelClick}
                       onOpenAiProviders={props.onOpenAiProviders}
                       onOpenPrivacyDetails={props.onOpenPrivacyDetails}
+                      onConfirmPrivacy={handleConfirmPrivacy}
+                      confirmingPrivacy={confirmingPrivacy}
                     />
                   ) : null}
                 </Suspense>

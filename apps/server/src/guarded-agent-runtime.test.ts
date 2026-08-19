@@ -1,0 +1,278 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
+
+const original = {
+  mode: process.env.MATTERHORN_GUARDED_RUNTIME_MODE,
+  runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET,
+  signingSecret: process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET,
+  dataDir: process.env.OPENWORK_DATA_DIR,
+  enforceAccess: process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS,
+  enforceDesks: process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS,
+};
+let dataDir = "";
+
+beforeAll(async () => {
+  dataDir = await mkdtemp(join(tmpdir(), "matterhorn-guard-runtime-"));
+  process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+  process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "runtime-secret-that-never-enters-tool-args";
+  process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "capability-signing-secret-with-at-least-32-characters";
+  process.env.OPENWORK_DATA_DIR = dataDir;
+});
+
+afterAll(async () => {
+  for (const [key, value] of Object.entries({
+    MATTERHORN_GUARDED_RUNTIME_MODE: original.mode,
+    MATTERHORN_AGENT_RUNTIME_SECRET: original.runtimeSecret,
+    MATTERHORN_CAPABILITY_SIGNING_SECRET: original.signingSecret,
+    OPENWORK_DATA_DIR: original.dataDir,
+    MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS: original.enforceAccess,
+    MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS: original.enforceDesks,
+  })) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  await rm(dataDir, { recursive: true, force: true });
+});
+
+describe("guarded agent runtime transport", () => {
+  test("keeps the signed capability server-side and atomically redeems a non-secret call id", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_guard",
+      sessionId: "ses_guard",
+      parts: [{ type: "text", text: "Compare Bittensor validators" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-bittensor",
+      executionMode: "work",
+    });
+    expect(accepted.runId).toStartWith("agent_run_");
+    const args = { message: "Compare Bittensor validators", netuid: 1 };
+    const staged = runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: "ws_guard",
+      sessionId: "ses_guard",
+      callId: "call_guard_1",
+      agentId: "matterhorn-bittensor",
+      toolName: "matterhorn-work_matterhorn_bittensor_chat",
+      args,
+    });
+    expect(staged).toEqual(expect.objectContaining({ accepted: true, callId: "call_guard_1" }));
+    expect(JSON.stringify(staged)).not.toContain("capability-signing-secret");
+    expect(JSON.stringify(staged)).not.toContain("runtime-secret");
+
+    const authorized = runtime.authorizeMcpTool({
+      toolName: "matterhorn_bittensor_chat",
+      args: { ...args, _matterhornCallId: "call_guard_1" },
+    });
+    expect(authorized).toEqual(expect.objectContaining({ runId: accepted.runId, workspaceId: "ws_guard", args }));
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_bittensor_chat",
+      args: { ...args, _matterhornCallId: "call_guard_1" },
+    })).toThrow("unknown, expired, or replayed");
+  });
+
+  test("revokes the active grant and staged calls when a run completes", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_complete",
+      sessionId: "ses_complete",
+      parts: [{ type: "text", text: "Read my public Sui balance" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+    });
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: "ws_complete",
+      sessionId: "ses_complete",
+      callId: "call_complete_pending",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    });
+    await runtime.completeSessionRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_complete",
+      status: "success",
+    });
+    expect(runtime.capabilities.activeRun("ses_complete")).toBeNull();
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}`, _matterhornCallId: "call_complete_pending" },
+    })).toThrow("unknown, expired, or replayed");
+    expect((await runtime.receipts.get("ws_complete", accepted.runId))?.status).toBe("success");
+  });
+
+  test("keeps production-default off mode behavior-free", async () => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "off";
+    const runtime = new MatterhornGuardedAgentRuntime();
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_off",
+      sessionId: "ses_off",
+      parts: [{ type: "text", text: "Public crypto research" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      executionMode: "work",
+    });
+    expect(accepted.runId).toStartWith("agent_run_off_");
+    expect(await runtime.receipts.list("ws_off")).toEqual([]);
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+  });
+
+  test("shadow mode observes missing capabilities without blocking the existing tool flow", () => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "shadow";
+    const runtime = new MatterhornGuardedAgentRuntime();
+    expect(runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}`, _matterhornCallId: "unknown-shadow-call" },
+    })).toEqual({
+      args: { address: `0x${"1".repeat(64)}` },
+      runId: null,
+      workspaceId: null,
+    });
+    expect(runtime.observationSnapshot()).toContainEqual(expect.objectContaining({
+      mode: "shadow",
+      stage: "consume",
+      decision: "would_deny",
+      reason: "unknown_or_replayed_call_id",
+      count: 1,
+    }));
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+  });
+
+  test("shadow keeps privacy authoritative while capability decisions stay non-blocking", async () => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "shadow";
+    const runtime = new MatterhornGuardedAgentRuntime();
+    await expect(runtime.acceptPrompt({
+      workspaceId: "ws_shadow_privacy",
+      sessionId: "ses_shadow_secret",
+      parts: [{ type: "text", text: "private key: never-send-this-value" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      executionMode: "work",
+    })).rejects.toMatchObject({ code: "agent_privacy_blocked" });
+
+    const privateInput = {
+      workspaceId: "ws_shadow_privacy",
+      sessionId: "ses_shadow_private",
+      parts: [{ type: "text" as const, text: "Use the selected memory to compare validators" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      memoryIds: ["memory_private"],
+      executionMode: "work" as const,
+    };
+    const preflight = runtime.preflight(privateInput);
+    expect(preflight.decision).toBe("consent_required");
+    await expect(runtime.acceptPrompt(privateInput)).rejects.toMatchObject({ code: "agent_privacy_consent_required" });
+    const consent = runtime.confirmConsent({
+      challengeId: preflight.challenge?.id ?? "",
+      requestHash: preflight.requestHash,
+      workspaceId: privateInput.workspaceId,
+      sessionId: privateInput.sessionId,
+    });
+    const accepted = await runtime.acceptPrompt({ ...privateInput, privacyConsentToken: consent.consentToken });
+    expect(accepted.consentUsed).toBe(true);
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+  });
+
+  test("shadow records a denied issue and passes the existing call without a bearer capability", () => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "shadow";
+    const runtime = new MatterhornGuardedAgentRuntime();
+    const staged = runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: "ws_shadow_issue",
+      sessionId: "ses_without_grant",
+      callId: "call_shadow_denied",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    });
+    expect(staged).toEqual(expect.objectContaining({ accepted: true, callId: "call_shadow_denied" }));
+    expect(runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}`, _matterhornCallId: "call_shadow_denied" },
+    }).runId).toBeNull();
+    expect(runtime.observationSnapshot()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: "issue", decision: "would_deny", reason: "capability_run_or_tool_not_found" }),
+      expect.objectContaining({ stage: "consume", decision: "bypassed", reason: "capability_run_or_tool_not_found" }),
+    ]));
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+  });
+
+  test("can enforce prepare tools before reads during a fail-closed rollout", async () => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS = "prepare";
+    process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS = "sui";
+    const runtime = new MatterhornGuardedAgentRuntime();
+    await runtime.acceptPrompt({
+      workspaceId: "ws_rollout",
+      sessionId: "ses_rollout",
+      parts: [{ type: "text", text: "Read my public Sui balance" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+    });
+
+    const stagedRead = runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: "ws_rollout",
+      sessionId: "ses_rollout",
+      callId: "call_rollout_read",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    });
+    expect(stagedRead.accepted).toBe(true);
+    expect(runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}`, _matterhornCallId: "call_rollout_read" },
+    }).runId).toBeNull();
+
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: "ws_rollout",
+      sessionId: "ses_rollout",
+      callId: "call_rollout_mutated",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    });
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { address: `0x${"2".repeat(64)}`, _matterhornCallId: "call_rollout_mutated" },
+    })).toThrow("no longer matches its exact tool and arguments");
+
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_preview_transfer",
+      args: { network: "testnet", sender: `0x${"1".repeat(64)}`, recipient: `0x${"2".repeat(64)}`, amountSui: "1" },
+    })).toThrow("did not include");
+    delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS;
+    delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS;
+  });
+
+  test("invalid rollout selectors fail readiness instead of bypassing tools", () => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS = "sui,typo-desk";
+    const runtime = new MatterhornGuardedAgentRuntime();
+    expect(runtime.ready()).toBe(false);
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    })).toThrow("did not include");
+    delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS;
+  });
+
+  test("requires both server-only secrets before shadow can claim readiness", () => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "shadow";
+    const savedSigningSecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    expect(new MatterhornGuardedAgentRuntime().ready()).toBe(false);
+    process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = savedSigningSecret;
+    expect(new MatterhornGuardedAgentRuntime().ready()).toBe(true);
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+  });
+});

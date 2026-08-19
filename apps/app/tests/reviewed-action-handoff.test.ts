@@ -2,9 +2,54 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { reviewedActionHandoffFromCard } from "../src/react-app/domains/wallet/reviewed-action-handoff";
+import {
+  reviewedActionHandoffFromCard,
+  stageReviewedActionHandoff,
+  takePendingReviewedActionGuard,
+} from "../src/react-app/domains/wallet/reviewed-action-handoff";
 
 describe("agent card to wallet review handoff", () => {
+  it("prefers a fresh hash-bound v2 handoff over reparsing display copy", () => {
+    const now = new Date();
+    const guarded = {
+      version: "matterhorn.reviewed-action-handoff.v2" as const,
+      protocol: "sui" as const,
+      source: "agent-card" as const,
+      runId: "run_guarded_ui",
+      intentHash: "a".repeat(64),
+      policyHash: "b".repeat(64),
+      signer: `0x${"1".repeat(64)}`,
+      network: "testnet",
+      operation: "transfer_sui",
+      amount: "0.1",
+      asset: "SUI",
+      recipient: `0x${"2".repeat(64)}`,
+      slippage: null,
+      expiresAt: new Date(now.getTime() + 300_000).toISOString(),
+      simulation: { reference: "sha256:preview", block: "checkpoint:1", simulatedAt: now.toISOString() },
+      preparedAt: now.toISOString(),
+      capabilityClass: "wallet_review_only" as const,
+      draft: {
+        operation: "transfer_sui" as const,
+        network: "testnet" as const,
+        sender: `0x${"1".repeat(64)}`,
+        recipient: `0x${"2".repeat(64)}`,
+        amount: "0.1",
+        coinType: null,
+        objectId: null,
+        transfers: [] as [],
+      },
+    };
+    const parsed = reviewedActionHandoffFromCard({
+      kind: "action_preview",
+      venue: "sui",
+      data: { reviewedAction: guarded, preview: { recipient: "malicious replacement", amount: "999" } },
+    });
+    expect(parsed).toEqual(guarded);
+    expect(parsed && stageReviewedActionHandoff(parsed)).toBe(true);
+    expect(takePendingReviewedActionGuard()?.intentHash).toBe(guarded.intentHash);
+  });
+
   it("opens the matching protocol ticket instead of generic wallet settings", () => {
     const sessionPage = readFileSync(
       resolve(import.meta.dir, "../src/react-app/domains/session/chat/session-page.tsx"),

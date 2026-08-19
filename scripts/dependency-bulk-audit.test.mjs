@@ -40,7 +40,7 @@ const server = createServer(async (request, response) => {
   for await (const chunk of request) body += chunk;
   receivedBody = JSON.parse(body);
   response.setHeader("Content-Type", "application/json");
-  response.end(JSON.stringify({
+  response.end(JSON.stringify(receivedBody["fixture-package"] ? {
     "fixture-package": [{
       id: 42,
       url: "https://github.com/advisories/GHSA-test-test-test",
@@ -48,7 +48,7 @@ const server = createServer(async (request, response) => {
       severity: "high",
       vulnerable_versions: "<=1.0.0",
     }],
-  }));
+  } : {}));
 });
 
 await new Promise((resolve, reject) => {
@@ -75,6 +75,20 @@ try {
   const allowed = await run(["--lockfile", lockfile, "--registry-url", registryUrl, "--audit-level", "critical", "--json"]);
   assert.equal(allowed.code, 0, allowed.stderr || allowed.stdout);
   assert.equal(JSON.parse(allowed.stdout).ready, true);
+
+  const completeLockfile = await run(["--all", "--registry-url", registryUrl, "--audit-level", "low", "--json"]);
+  assert.equal(completeLockfile.code, 0, completeLockfile.stderr || completeLockfile.stdout);
+  const completeReport = JSON.parse(completeLockfile.stdout);
+  assert.equal(completeReport.ready, true);
+  assert.equal(completeReport.scope, "complete-lockfile");
+  assert.ok(completeReport.versionCount > 1_000, "the default release audit should cover the complete workspace lockfile");
+
+  const productionGraph = await run(["--prod", "--registry-url", registryUrl, "--audit-level", "low", "--json"]);
+  assert.equal(productionGraph.code, 0, productionGraph.stderr || productionGraph.stdout);
+  const productionReport = JSON.parse(productionGraph.stdout);
+  assert.equal(productionReport.ready, true);
+  assert.equal(productionReport.scope, "installed-production-graph");
+  assert.ok(productionReport.versionCount > 500, "the production audit should cover transitive installed dependencies");
 } finally {
   await new Promise((resolve) => server.close(resolve));
   rmSync(dir, { recursive: true, force: true });

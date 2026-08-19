@@ -10,11 +10,69 @@ const path = join(dir, "acceptance.json");
 const now = "2026-07-20T12:00:00.000Z";
 const passSteps = { connect: true, reject: true, approve: true, receipt: true, reload: true, disconnect: true };
 const input = {
-  version: "matterhorn.product-hunt-acceptance-evidence.v1",
+  version: "matterhorn.product-hunt-acceptance-evidence.v2",
   capturedAt: "2026-07-20T11:00:00.000Z",
   commit: "a".repeat(40),
   environment: "deployed",
   appUrl: "https://app.matterhorn.example/workspace/ws/session",
+  authentication: {
+    signup: {
+      status: "pass", tester: "Tester Signup", createAccount: true, turnstile: true,
+      legalAcceptance: true, verificationEmail: true, verifyEmail: true, signIn: true,
+      signOut: true, passwordReset: true, reportPath: "signup.md",
+    },
+    twoAccountIsolation: {
+      status: "pass", tester: "Isolation tester", workspaces: true, preflights: true,
+      grants: true, receipts: true, memories: true, actions: true, reportPath: "isolation.md",
+    },
+  },
+  agentRuntime: {
+    privacy: {
+      status: "pass", sensitiveBlocked: true, usageReservationZeroOnBlock: true,
+      providerContactZeroOnBlock: true, privateConsentRequired: true, consentExactBinding: true,
+      consentMutationBlocked: true, providerDisclosed: true, reportPath: "privacy.md",
+    },
+    capability: {
+      status: "pass", wrongDeskBlocked: true, wrongToolBlocked: true, readCannotPrepare: true,
+      replayBlocked: true, argumentMutationBlocked: true, crossWorkspaceBlocked: true,
+      crossSessionBlocked: true, noSubmitCapability: true, reportPath: "capability.md",
+    },
+    genericCrypto: {
+      status: "pass", publicResearch: true, privateContextFlow: true, modelCompletion: true,
+      runReceipt: true, privacyReceipt: true, usageReceipt: true, toolReceipt: true,
+      reload: true, reportPath: "generic-crypto.md",
+    },
+    desks: {
+      bittensor: {
+        status: "pass", network: "testnet", publicResearch: true, privateContextFlow: true,
+        modelCompletion: true, runReceipt: true, prepare: true, reject: true, expiryBlocked: true,
+        tamperBlocked: true, walletReview: true, receiptReconciled: true, reload: true,
+        balance: true, validatorComparison: true, transferPreview: true, stakePreview: true,
+        reportPath: "bittensor.md",
+      },
+      hyperliquid: {
+        status: "pass", network: "testnet", publicResearch: true, privateContextFlow: true,
+        modelCompletion: true, runReceipt: true, prepare: true, reject: true, expiryBlocked: true,
+        tamperBlocked: true, walletReview: true, receiptReconciled: true, reload: true,
+        markets: true, positions: true, orderbook: true, orderPreview: true,
+        modifyCancelPreview: true, closePreview: true, reportPath: "hyperliquid-guarded.md",
+      },
+      polymarket: {
+        status: "pass", network: "preview", publicResearch: true, privateContextFlow: true,
+        modelCompletion: true, runReceipt: true, prepare: true, reject: true, expiryBlocked: true,
+        tamperBlocked: true, walletReview: true, receiptReconciled: true, reload: true,
+        discovery: true, complianceBlock: true, eligiblePreview: true, walletTicket: true,
+        reportPath: "polymarket.md",
+      },
+      sui: {
+        status: "pass", network: "sui-testnet", publicResearch: true, privateContextFlow: true,
+        modelCompletion: true, runReceipt: true, prepare: true, reject: true, expiryBlocked: true,
+        tamperBlocked: true, walletReview: true, receiptReconciled: true, reload: true,
+        balance: true, nativeTransferPreview: true, coinTransferPreview: true,
+        objectTransferPreview: true, reportPath: "sui.md",
+      },
+    },
+  },
   wallets: {
     metamask: { status: "pass", ...passSteps, browser: "Chrome 140", walletVersion: "1.2.3", reportPath: "metamask.md" },
     coinbase: { status: "pass", ...passSteps, browser: "Chrome 140", walletVersion: "4.5.6", reportPath: "coinbase.md" },
@@ -27,6 +85,13 @@ const input = {
   },
   oauth: { visible: [{ id: "notion", status: "pass", connect: true, reload: true, toolCall: true, disconnect: true, revokedAccountBlocked: true, reportPath: "notion.md" }] },
 };
+
+for (const name of [
+  "signup.md", "isolation.md", "privacy.md", "capability.md", "generic-crypto.md",
+  "bittensor.md", "hyperliquid-guarded.md", "polymarket.md", "sui.md",
+  "metamask.md", "coinbase.md", "phantom.md", "hyperliquid.md",
+  "new-user.md", "existing-user.md", "notion.md",
+]) writeFileSync(join(dir, name), `Acceptance evidence: ${name}\n`);
 
 function run(value, expectedOauth = "notion") {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
@@ -44,12 +109,56 @@ try {
   assert.equal(pass.code, 0, pass.stderr || pass.stdout);
   const report = JSON.parse(pass.stdout);
   assert.equal(report.decision, "GO");
+  assert.equal(report.version, "matterhorn.product-hunt-acceptance-readiness.v2");
   assert.deepEqual(report.acceptedOauthConnectors, ["notion"]);
   assert.equal(report.buildEnvironment, "VITE_MATTERHORN_PUBLIC_OAUTH_CONNECTORS=notion");
 
   const blocked = await run({ ...input, wallets: { ...input.wallets, hyperliquid: { ...input.wallets.hyperliquid, replayBlocked: false } } });
   assert.equal(blocked.code, 1);
   assert.ok(JSON.parse(blocked.stdout).blockers.some((item) => item.id === "hyperliquid_testnet_journey"));
+
+  const signupBlocked = await run({
+    ...input,
+    authentication: {
+      ...input.authentication,
+      signup: { ...input.authentication.signup, passwordReset: false },
+    },
+  });
+  assert.equal(signupBlocked.code, 1);
+  assert.ok(JSON.parse(signupBlocked.stdout).blockers.some((item) => item.id === "signup_journey"));
+
+  const privacyBlocked = await run({
+    ...input,
+    agentRuntime: {
+      ...input.agentRuntime,
+      privacy: { ...input.agentRuntime.privacy, providerContactZeroOnBlock: false },
+    },
+  });
+  assert.equal(privacyBlocked.code, 1);
+  assert.ok(JSON.parse(privacyBlocked.stdout).blockers.some((item) => item.id === "privacy_firewall"));
+
+  const tamperBlocked = await run({
+    ...input,
+    agentRuntime: {
+      ...input.agentRuntime,
+      desks: {
+        ...input.agentRuntime.desks,
+        sui: { ...input.agentRuntime.desks.sui, tamperBlocked: false },
+      },
+    },
+  });
+  assert.equal(tamperBlocked.code, 1);
+  assert.ok(JSON.parse(tamperBlocked.stdout).blockers.some((item) => item.id === "sui_guarded_journey"));
+
+  const missingEvidence = await run({
+    ...input,
+    agentRuntime: {
+      ...input.agentRuntime,
+      genericCrypto: { ...input.agentRuntime.genericCrypto, reportPath: "missing-generic.md" },
+    },
+  });
+  assert.equal(missingEvidence.code, 1);
+  assert.ok(JSON.parse(missingEvidence.stdout).blockers.some((item) => item.id === "generic_crypto_journey"));
 
   const missingOauth = await run(input, "notion,linear");
   assert.equal(missingOauth.code, 1);

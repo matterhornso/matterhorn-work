@@ -7,6 +7,12 @@ import {
   MATTERHORN_CRYPTO_EVIDENCE_VERSION,
   type MatterhornCryptoEvidenceEnvelope,
 } from "@matterhorn-work/types/crypto-evidence";
+import type {
+  ReviewedActionDraftHandoff,
+  ReviewedActionHandoffV2,
+} from "@matterhorn-work/types/reviewed-actions";
+import { sha256 } from "./guarded-runtime-crypto.js";
+import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -26,13 +32,24 @@ type JsonRpcRequest = {
   params?: unknown;
 };
 
-export const MANAGED_MCP_MODEL_CONTENT_MAX_CHARS = 8_000;
+export const MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS = 2_000;
+export const MANAGED_MCP_MODEL_PREPARE_CONTENT_MAX_CHARS = 4_000;
+export const MANAGED_MCP_MODEL_CONTENT_MAX_CHARS = MANAGED_MCP_MODEL_PREPARE_CONTENT_MAX_CHARS;
 
 export type ManagedMcpToolCallMetric = {
   tool: string;
   access: "read" | "prepare" | "system";
   outcome: "success" | "error" | "timeout";
   durationMs: number;
+  reviewedAction?: ReviewedActionHandoffV2;
+  source?: string;
+  freshness?: string;
+};
+
+export type ManagedMcpToolAuthorization = {
+  args: JsonObject;
+  runId: string | null;
+  workspaceId: string | null;
 };
 
 const objectSchema = (properties: JsonObject, required: string[] = []): JsonObject => ({
@@ -74,7 +91,7 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Run a Bittensor-native public read or unsigned preview through the Matterhorn desk workflow. Never signs or broadcasts.",
+    description: "Run a Bittensor-native public read through the Matterhorn desk workflow. Transaction intents use the separate prepare tool. Never signs or broadcasts.",
     inputSchema: objectSchema({
       message: { type: "string", description: "Plain-language Bittensor request." },
       ss58Address: { type: "string", description: "Optional public SS58 address." },
@@ -83,6 +100,31 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
       strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
     }, ["message"]),
     request: (args) => ({ path: "/api/bittensor/chat/execute", method: "POST", body: args }),
+  },
+  {
+    name: "matterhorn_bittensor_prepare_action",
+    title: "Bittensor action preview",
+    description: "Prepare exact Bittensor transfer, stake, or unstake terms for separate wallet review. Never signs, relays, or submits.",
+    inputSchema: objectSchema({
+      action: { type: "string", enum: ["transfer", "stake", "unstake"] },
+      sender: { type: "string" },
+      destination: { type: "string" },
+      hotkey: { type: "string" },
+      netuid: { type: "number", minimum: 0 },
+      amountTao: numberOrStringSchema,
+    }, ["action", "amountTao"]),
+    request: (args) => ({
+      path: "/api/bittensor/extrinsics/prepare",
+      method: "POST",
+      body: {
+        action: args.action,
+        coldkey: args.sender,
+        destination: args.destination,
+        hotkey: args.hotkey,
+        netuid: args.netuid,
+        amountTao: args.amountTao,
+      },
+    }),
   },
   {
     name: "matterhorn_crypto_chat",
@@ -340,14 +382,24 @@ function compactJsonForModel(
 }
 
 /** Keep full structured evidence for receipts while bounding model context. */
-function modelFacingToolText(text: string): string {
-  if (text.length <= MANAGED_MCP_MODEL_CONTENT_MAX_CHARS) return text;
+function modelFacingToolText(text: string, access: "read" | "prepare" | "system"): string {
+  const maxChars = access === "prepare"
+    ? MANAGED_MCP_MODEL_PREPARE_CONTENT_MAX_CHARS
+    : MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS;
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return `${text.slice(0, MANAGED_MCP_MODEL_CONTENT_MAX_CHARS - 120)}\n\n[Matterhorn truncated this tool result. Ask for a narrower query to inspect more.]`;
+    const safeText = UNTRUSTED_INSTRUCTION_PATTERN.test(text)
+      ? "[Matterhorn quarantined instruction-like external content]"
+      : text;
+    if (safeText.length <= maxChars) return safeText;
+    return `${safeText.slice(0, maxChars - 120)}\n\n[Matterhorn truncated this tool result. Ask for a narrower query to inspect more.]`;
   }
+
+  parsed = quarantineUntrustedContent(parsed);
+  const sanitized = JSON.stringify(parsed);
+  if (sanitized.length <= maxChars) return sanitized;
 
   for (const options of [
     { arrayItems: 8, objectKeys: 50, stringChars: 1_000 },
@@ -358,12 +410,12 @@ function modelFacingToolText(text: string): string {
       _matterhornContext: "Result shortened for model context. Use a narrower query for omitted detail.",
       result: compact,
     });
-    if (output.length <= MANAGED_MCP_MODEL_CONTENT_MAX_CHARS) return output;
+    if (output.length <= maxChars) return output;
   }
 
   return JSON.stringify({
     _matterhornContext: "Result exceeded the model-context limit. Ask for a narrower query.",
-    preview: text.slice(0, Math.floor(MANAGED_MCP_MODEL_CONTENT_MAX_CHARS * 0.65)),
+    preview: sanitized.slice(0, Math.floor(maxChars * 0.65)),
   });
 }
 
@@ -391,17 +443,192 @@ function evidenceWarnings(value: unknown): readonly string[] {
     .map((warning) => String(warning).trim().slice(0, 1_000));
 }
 
+function finitePositive(value: unknown): number | null {
+  const number = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN;
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function reviewedActionDraftFromTool(toolName: string, args: JsonObject): ReviewedActionDraftHandoff | null {
+  if (toolName === "matterhorn_bittensor_prepare_action") {
+    const action = stringArg(args, "action");
+    const amount = finitePositive(args.amountTao);
+    if (!amount || (action !== "transfer" && action !== "stake" && action !== "unstake")) return null;
+    const sender = stringArg(args, "sender") || null;
+    if (action === "transfer") {
+      const destination = stringArg(args, "destination");
+      return destination ? {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "bittensor",
+        source: "agent-card",
+        draft: { operation: "transfer", sender, destination, hotkey: null, netuid: null, amountTao: String(amount) },
+      } : null;
+    }
+    const hotkey = stringArg(args, "hotkey");
+    const netuid = Number(args.netuid);
+    return hotkey && Number.isInteger(netuid) && netuid >= 0 ? {
+      version: "matterhorn.reviewed-action-handoff.v1",
+      protocol: "bittensor",
+      source: "agent-card",
+      draft: { operation: action, sender, destination: null, hotkey, netuid, amountTao: String(amount) },
+    } : null;
+  }
+  if (toolName === "matterhorn_hyperliquid_preview_order") {
+    const asset = stringArg(args, "asset").toUpperCase();
+    const size = finitePositive(args.size);
+    const rawSide = stringArg(args, "side").toLowerCase();
+    const side = rawSide === "buy" || rawSide === "long" ? "buy" : rawSide === "sell" || rawSide === "short" ? "sell" : null;
+    if (!asset || !size || !side) return null;
+    const orderType = args.orderType === "limit" ? "limit" : "market";
+    const price = finitePositive(args.price);
+    if (orderType === "limit" && !price) return null;
+    const slippagePercent = finitePositive(args.slippageTolerance) ?? 1;
+    return {
+      version: "matterhorn.reviewed-action-handoff.v1",
+      protocol: "hyperliquid",
+      source: "agent-card",
+      draft: {
+        operation: "place_order",
+        network: args.network === "mainnet" ? "mainnet" : "testnet",
+        asset,
+        orderId: null,
+        side,
+        size,
+        orderType,
+        limitPrice: orderType === "limit" ? price : null,
+        slippageBps: Math.min(5_000, Math.max(1, Math.round(slippagePercent * 100))),
+        reduceOnly: args.reduceOnly === true,
+      },
+    };
+  }
+  if (toolName === "matterhorn_polymarket_preview_order" || toolName === "matterhorn_polymarket_prepare_handoff") {
+    const marketId = stringArg(args, "marketId");
+    const outcome = stringArg(args, "outcome");
+    const amountUsdc = finitePositive(args.amountUsdc);
+    if (!marketId || !outcome || !amountUsdc) return null;
+    return {
+      version: "matterhorn.reviewed-action-handoff.v1",
+      protocol: "polymarket",
+      source: "agent-card",
+      draft: {
+        operation: "buy",
+        marketId,
+        outcome,
+        amountUsdc,
+        amountShares: null,
+        slippageTolerance: Math.min(50, finitePositive(args.slippageTolerance) ?? 2),
+        orderIds: [],
+        cancelAll: false,
+      },
+    };
+  }
+  if (toolName === "matterhorn_sui_preview_transfer") {
+    const sender = stringArg(args, "sender") || null;
+    const recipient = stringArg(args, "recipient");
+    const amount = finitePositive(args.amountSui ?? args.amount);
+    if (!recipient || !amount) return null;
+    return {
+      version: "matterhorn.reviewed-action-handoff.v1",
+      protocol: "sui",
+      source: "agent-card",
+      draft: {
+        operation: "transfer_sui",
+        network: args.network === "mainnet" ? "mainnet" : "testnet",
+        sender,
+        recipient,
+        amount: String(amount),
+        coinType: null,
+        objectId: null,
+        transfers: [],
+      },
+    };
+  }
+  return null;
+}
+
+function buildGuardedReviewedAction(input: {
+  toolName: string;
+  args: JsonObject;
+  result: unknown;
+  authorization?: ManagedMcpToolAuthorization;
+  completedAtMs: number;
+}): ReviewedActionHandoffV2 | undefined {
+  if (!input.authorization?.runId) return undefined;
+  if (input.result && typeof input.result === "object" && !Array.isArray(input.result) && (input.result as JsonObject).blocked === true) return undefined;
+  const draft = reviewedActionDraftFromTool(input.toolName, input.args);
+  if (!draft) return undefined;
+  const block = findEvidenceString(input.result, ["block", "blockNumber", "checkpoint", "observedBlock"]);
+  return buildReviewedActionHandoffV2({
+    handoff: draft,
+    runId: input.authorization.runId,
+    signer: draft.protocol === "sui" ? draft.draft.sender : draft.protocol === "bittensor" ? draft.draft.sender : stringArg(input.args, "address") || null,
+    simulation: {
+      reference: `sha256:${sha256(input.result)}`,
+      block: block ?? null,
+      simulatedAt: new Date(input.completedAtMs),
+    },
+    preparedAt: new Date(input.completedAtMs),
+  });
+}
+
+function attachReviewedActionToToolResult(result: unknown, reviewedAction: ReviewedActionHandoffV2): unknown {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return { result, reviewedAction };
+  }
+  const record = result as JsonObject;
+  const cards = Array.isArray(record.cards)
+    ? record.cards.map((card) => {
+        if (!card || typeof card !== "object" || Array.isArray(card)) return card;
+        const cardRecord = card as JsonObject;
+        if (cardRecord.kind !== "action_preview") return card;
+        const data = cardRecord.data && typeof cardRecord.data === "object" && !Array.isArray(cardRecord.data)
+          ? cardRecord.data as JsonObject
+          : {};
+        return { ...cardRecord, data: { ...data, reviewedAction } };
+      })
+    : undefined;
+  return { ...record, reviewedAction, ...(cards ? { cards } : {}) };
+}
+
+const UNTRUSTED_INSTRUCTION_PATTERN = /\b(?:ignore|override|disregard|bypass)\b[\s\S]{0,80}\b(?:instruction|policy|permission|system|tool)|\b(?:call|invoke|run)\b[\s\S]{0,40}\btool\b|\b(?:change|switch|select)\b[\s\S]{0,40}\b(?:agent|provider|model)\b|\b(?:grant|approve|forge|generate)\b[\s\S]{0,40}\b(?:consent|permission|capability|token)\b/i;
+const BITTENSOR_ACTION_INTENT_PATTERN = /\b(?:send|transfer|stake|unstake|delegate)\b/i;
+
+function assertReadToolArguments(tool: ManagedMcpTool, args: JsonObject): void {
+  if (tool.name !== "matterhorn_bittensor_chat") return;
+  const message = typeof args.message === "string" ? args.message : "";
+  if (BITTENSOR_ACTION_INTENT_PATTERN.test(message)) {
+    throw new Error("matterhorn_read_tool_cannot_prepare_action");
+  }
+}
+
+function quarantineUntrustedContent(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") {
+    return UNTRUSTED_INSTRUCTION_PATTERN.test(value)
+      ? "[Matterhorn quarantined instruction-like external content]"
+      : value;
+  }
+  if (value == null || typeof value !== "object" || depth >= 10) return value;
+  if (Array.isArray(value)) return value.map((item) => quarantineUntrustedContent(item, depth + 1));
+  return Object.fromEntries(Object.entries(value as JsonObject).map(([key, item]) => [
+    key,
+    /^(?:instruction|systemPrompt|prompt|toolCall|permission|agent|agentId|provider|providerId|model|modelId|privacyConsentToken|consent|capability|grant|access|_matterhornCallId|_matterhornCapability)$/i.test(key)
+      ? "[Matterhorn quarantined an untrusted control field]"
+      : quarantineUntrustedContent(item, depth + 1),
+  ]));
+}
+
 function buildCryptoEvidenceEnvelope(input: {
   definition: NonNullable<ReturnType<typeof getMatterhornCryptoTool>>;
   status: "success" | "error";
   result: unknown;
   startedAtMs: number;
   completedAtMs: number;
+  reviewedAction?: ReviewedActionHandoffV2;
 }): MatterhornCryptoEvidenceEnvelope {
   const completedAt = new Date(input.completedAtMs).toISOString();
   const upstreamSource = findEvidenceString(input.result, ["source", "provider", "venue"]);
   const upstreamObservedAt = findEvidenceString(input.result, ["observedAt", "asOf", "updatedAt", "fetchedAt"]);
   const freshness = findEvidenceString(input.result, ["freshness", "freshnessStatus", "dataStatus"]);
+  const sanitizedResult = quarantineUntrustedContent(input.result);
   return {
     version: MATTERHORN_CRYPTO_EVIDENCE_VERSION,
     status: input.status,
@@ -423,9 +650,19 @@ function buildCryptoEvidenceEnvelope(input: {
       ...(freshness ? { freshness } : {}),
       freshnessRequired: input.definition.requiresFreshness,
     },
+    provenance: {
+      trust: "untrusted_external",
+      sanitization: canonicalJsonChanged(input.result, sanitizedResult) ? "quarantined" : "typed_projection",
+      evidenceReference: `sha256:${sha256(input.result)}`,
+    },
     warnings: evidenceWarnings(input.result),
-    result: input.result,
+    ...(input.reviewedAction ? { reviewedAction: input.reviewedAction } : {}),
+    result: sanitizedResult,
   };
+}
+
+function canonicalJsonChanged(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) !== JSON.stringify(right);
 }
 
 function toolCallResult(input: {
@@ -434,13 +671,17 @@ function toolCallResult(input: {
   ok: boolean;
   startedAtMs: number;
   completedAtMs: number;
+  reviewedAction?: ReviewedActionHandoffV2;
 }) {
   const result = parseToolPayload(input.text);
   const definition = getMatterhornCryptoTool(input.tool.name);
   return {
     content: [{
       type: "text",
-      text: modelFacingToolText(input.text || (input.ok ? "{}" : "Matterhorn backend returned an empty error")),
+      text: modelFacingToolText(
+        input.text || (input.ok ? "{}" : "Matterhorn backend returned an empty error"),
+        definition?.access ?? "system",
+      ),
     }],
     ...(definition
       ? {
@@ -450,6 +691,7 @@ function toolCallResult(input: {
             result,
             startedAtMs: input.startedAtMs,
             completedAtMs: input.completedAtMs,
+            reviewedAction: input.reviewedAction,
           }),
         }
       : {}),
@@ -463,17 +705,23 @@ async function callBackendTool(input: {
   serverUrl: string;
   clientToken: string;
   fetchImpl: typeof fetch;
-  onToolCall?: (metric: ManagedMcpToolCallMetric) => void;
+  authorization?: ManagedMcpToolAuthorization;
+  onToolCall?: (metric: ManagedMcpToolCallMetric, authorization?: ManagedMcpToolAuthorization) => void;
 }) {
   const startedAtMs = Date.now();
   const definition = getMatterhornCryptoTool(input.tool.name);
   let outcome: ManagedMcpToolCallMetric["outcome"] = "error";
+  let reviewedAction: ReviewedActionHandoffV2 | undefined;
+  let source: string | undefined;
+  let freshness: string | undefined;
+  assertReadToolArguments(input.tool, input.args);
   const request = input.tool.request(input.args);
   try {
     const response = await input.fetchImpl(`${input.serverUrl.replace(/\/+$/, "")}${request.path}`, {
       method: request.method ?? "GET",
       headers: {
         Authorization: `Bearer ${input.clientToken}`,
+        ...(input.authorization?.workspaceId ? { "X-Matterhorn-Workspace-Id": input.authorization.workspaceId } : {}),
         ...(request.body ? { "Content-Type": "application/json" } : {}),
       },
       ...(request.body ? { body: JSON.stringify(request.body) } : {}),
@@ -481,12 +729,29 @@ async function callBackendTool(input: {
     });
     const text = await response.text();
     outcome = response.ok ? "success" : "error";
+    const completedAtMs = Date.now();
+    const parsedResult = parseToolPayload(text);
+    source = findEvidenceString(parsedResult, ["source", "provider", "venue"]);
+    freshness = findEvidenceString(parsedResult, ["freshness", "freshnessStatus", "dataStatus", "observedAt", "asOf"]);
+    if (response.ok) {
+      reviewedAction = buildGuardedReviewedAction({
+        toolName: input.tool.name,
+        args: input.args,
+        result: parsedResult,
+        authorization: input.authorization,
+        completedAtMs,
+      });
+    }
+    const resultText = reviewedAction
+      ? JSON.stringify(attachReviewedActionToToolResult(parsedResult, reviewedAction))
+      : text;
     return toolCallResult({
       tool: input.tool,
-      text: text || (!response.ok ? `Matterhorn backend returned HTTP ${response.status}` : "{}"),
+      text: resultText || (!response.ok ? `Matterhorn backend returned HTTP ${response.status}` : "{}"),
       ok: response.ok,
       startedAtMs,
-      completedAtMs: Date.now(),
+      completedAtMs,
+      reviewedAction,
     });
   } catch (error) {
     if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
@@ -500,7 +765,10 @@ async function callBackendTool(input: {
         access: definition?.access ?? "system",
         outcome,
         durationMs: Math.max(0, Date.now() - startedAtMs),
-      });
+        ...(reviewedAction ? { reviewedAction } : {}),
+        ...(source ? { source } : {}),
+        ...(freshness ? { freshness } : {}),
+      }, input.authorization);
     } catch {
       // Metrics must never change the MCP result.
     }
@@ -511,7 +779,8 @@ async function mcpResult(message: JsonRpcRequest, options: {
   serverUrl: string;
   clientToken: string;
   fetchImpl: typeof fetch;
-  onToolCall?: (metric: ManagedMcpToolCallMetric) => void;
+  authorizeToolCall?: (input: { toolName: string; args: JsonObject }) => ManagedMcpToolAuthorization;
+  onToolCall?: (metric: ManagedMcpToolCallMetric, authorization?: ManagedMcpToolAuthorization) => void;
 }) {
   if (message.method === "initialize") {
     return {
@@ -533,7 +802,17 @@ async function mcpResult(message: JsonRpcRequest, options: {
     const name = typeof params.name === "string" ? params.name : "";
     const tool = MANAGED_MCP_TOOLS.find((item) => item.name === name);
     if (!tool) return { content: [{ type: "text", text: `Unknown Matterhorn tool: ${name || "(missing)"}` }], isError: true };
-    return callBackendTool({ tool, args: argumentsObject(params), ...options });
+    const rawArgs = argumentsObject(params);
+    const authorization = options.authorizeToolCall?.({ toolName: tool.name, args: rawArgs });
+    return callBackendTool({
+      tool,
+      args: authorization?.args ?? rawArgs,
+      authorization,
+      serverUrl: options.serverUrl,
+      clientToken: options.clientToken,
+      fetchImpl: options.fetchImpl,
+      onToolCall: options.onToolCall,
+    });
   }
   return {};
 }
@@ -543,7 +822,8 @@ export async function handleManagedOpencodeMcp(input: {
   serverUrl: string;
   clientToken: string;
   fetchImpl?: typeof fetch;
-  onToolCall?: (metric: ManagedMcpToolCallMetric) => void;
+  authorizeToolCall?: (input: { toolName: string; args: JsonObject }) => ManagedMcpToolAuthorization;
+  onToolCall?: (metric: ManagedMcpToolCallMetric, authorization?: ManagedMcpToolAuthorization) => void;
 }): Promise<{ status: number; body: unknown | null }> {
   const messages = Array.isArray(input.payload) ? input.payload : [input.payload];
   const responses = [];
@@ -563,6 +843,7 @@ export async function handleManagedOpencodeMcp(input: {
           serverUrl: input.serverUrl,
           clientToken: input.clientToken,
           fetchImpl: input.fetchImpl ?? fetch,
+          authorizeToolCall: input.authorizeToolCall,
           onToolCall: input.onToolCall,
         }),
       });

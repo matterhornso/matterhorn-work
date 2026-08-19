@@ -99,6 +99,8 @@ jobs:
         run: pnpm test:security-workflow-contract
       - name: Scan release scope for secrets
         run: pnpm release:secret-scan
+      - name: Validate dependency audit inventory
+        run: pnpm test:dependency-bulk-audit
       - name: Audit locked dependencies
         run: pnpm audit:dependencies
       - name: Exercise auth, tenancy, and shared rate-limit controls

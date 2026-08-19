@@ -40,7 +40,7 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Run a Bittensor-native public read or unsigned preview through the Matterhorn desk workflow. Never signs or broadcasts.",
+    description: "Run a Bittensor-native public read through the Matterhorn desk workflow. Transaction intents use the separate prepare tool. Never signs or broadcasts.",
     inputSchema: objectSchema({
       message: { type: "string", description: "Plain-language Bittensor request." },
       ss58Address: { type: "string", description: "Optional public SS58 address." },
@@ -55,8 +55,26 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
       "bittensor_discover_subnets",
       "bittensor_compare_validators",
     ],
-    access: "prepare",
+    access: "read",
     timeoutMs: 25_000,
+    requiresFreshness: true,
+  },
+  {
+    name: "matterhorn_bittensor_prepare_action",
+    title: "Bittensor action preview",
+    description: "Prepare exact Bittensor transfer, stake, or unstake terms for separate wallet review. Never signs, relays, or submits.",
+    inputSchema: objectSchema({
+      action: { type: "string", enum: ["transfer", "stake", "unstake"] },
+      sender: { type: "string", description: "Optional public coldkey address." },
+      destination: { type: "string", description: "Required transfer recipient." },
+      hotkey: { type: "string", description: "Required validator hotkey for stake or unstake." },
+      netuid: { type: "number", minimum: 0 },
+      amountTao: numberOrStringSchema,
+    }, ["action", "amountTao"]),
+    deskIds: ["bittensor"],
+    actionIds: ["bittensor_prepare_stake", "bittensor_prepare_unstake", "bittensor_prepare_transfer"],
+    access: "prepare",
+    timeoutMs: 15_000,
     requiresFreshness: true,
   },
   {

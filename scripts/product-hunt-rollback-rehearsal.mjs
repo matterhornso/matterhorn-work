@@ -29,6 +29,12 @@ function parseArgs(argv) {
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg.startsWith("--rollback-arg=")) {
+      const value = arg.slice("--rollback-arg=".length);
+      if (!value) throw new Error("--rollback-arg requires a value.");
+      config.rollbackArgs.push(value);
+      continue;
+    }
     const next = () => {
       const value = argv[index + 1];
       if (!value || value.startsWith("--")) throw new Error(`${arg} requires a value.`);
@@ -67,7 +73,7 @@ function help() {
     "Hook output and arguments are never copied into the report. Do not put credentials in hook arguments.",
     "",
     "Usage:",
-    "  pnpm drill:product-hunt-rollback -- --app-url https://app.example --server-url https://api.example --from-commit <40-char-sha> --to-commit <40-char-sha> --owner <name> --rollback-hook /absolute/path/rollback --strict --json-output rollback.json",
+    "  pnpm drill:product-hunt-rollback -- --app-url https://app.example --server-url https://api.example --from-commit <40-char-sha> --to-commit <40-char-sha> --owner <name> --rollback-hook /absolute/path/rollback --rollback-arg=--apply --strict --json-output rollback.json",
     "",
     "Production requirements:",
     "  The API must expose MATTERHORN_BUILD_COMMIT as X-Matterhorn-Build-Commit. HTTPS is mandatory.",

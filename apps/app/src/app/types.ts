@@ -129,6 +129,13 @@ export type ComposerDraft = {
   resolvedText?: string;
   /** When set, draft is a slash command invocation */
   command?: { name: string; arguments: string } | undefined;
+  /** Exact-request privacy consent and classification metadata. Never persisted. */
+  privacy?: {
+    mode?: "public_research" | "private_workspace" | "transaction";
+    consentToken?: string;
+    attachmentIds?: string[];
+    memoryIds?: string[];
+  };
 };
 
 export type ArtifactItem = {

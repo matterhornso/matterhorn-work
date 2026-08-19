@@ -12,6 +12,15 @@ type RequestMetric = {
 type RenderMetricsInput = {
   ready: boolean;
   uptimeMs: number;
+  guardedRuntimeObservations?: GuardedRuntimeObservationMetric[];
+};
+
+export type GuardedRuntimeObservationMetric = {
+  mode: "shadow" | "enforce";
+  stage: "issue" | "consume";
+  decision: "would_allow" | "would_deny" | "allowed" | "denied" | "bypassed";
+  reason: string;
+  count: number;
 };
 
 export type AgentToolMetric = {
@@ -171,6 +180,21 @@ export class OperationalMetrics {
     for (const [tool, duration] of Array.from(this.agentToolDurations.entries()).sort(([left], [right]) => left.localeCompare(right))) {
       lines.push(metricLine("matterhorn_agent_tool_duration_seconds_sum", { tool }, duration.sumSeconds));
       lines.push(metricLine("matterhorn_agent_tool_duration_seconds_count", { tool }, duration.count));
+    }
+
+    lines.push(
+      "# HELP matterhorn_guarded_capability_decisions_total Bounded guarded-runtime capability decisions; shadow decisions never contain prompts, arguments, identities, or bearer capabilities.",
+      "# TYPE matterhorn_guarded_capability_decisions_total counter",
+    );
+    for (const observation of [...(input.guardedRuntimeObservations ?? [])].sort((left, right) =>
+      `${left.mode}:${left.stage}:${left.decision}:${left.reason}`.localeCompare(`${right.mode}:${right.stage}:${right.decision}:${right.reason}`),
+    )) {
+      lines.push(metricLine("matterhorn_guarded_capability_decisions_total", {
+        mode: observation.mode,
+        stage: observation.stage,
+        decision: observation.decision,
+        reason: observation.reason.replaceAll(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 96) || "unknown",
+      }, Math.max(0, observation.count)));
     }
 
     return `${lines.join("\n")}\n`;

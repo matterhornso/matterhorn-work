@@ -12,6 +12,9 @@ function parseArgs(argv) {
     allowedOrigin: process.env.MATTERHORN_APP_ORIGIN ?? "",
     untrustedOrigin: DEFAULT_UNTRUSTED_ORIGIN,
     expectedCommit: process.env.MATTERHORN_BUILD_COMMIT ?? "",
+    expectedWebCommit: process.env.VITE_MATTERHORN_BUILD_COMMIT ?? "",
+    expectedGuardedMode: "",
+    expectedSignupStatus: "",
     healthPath: "/health",
     json: false,
     jsonOutput: "",
@@ -34,6 +37,9 @@ function parseArgs(argv) {
       case "--allowed-origin": config.allowedOrigin = next(); break;
       case "--untrusted-origin": config.untrustedOrigin = next(); break;
       case "--expected-commit": config.expectedCommit = next().toLowerCase(); break;
+      case "--expected-web-commit": config.expectedWebCommit = next().toLowerCase(); break;
+      case "--expected-guarded-mode": config.expectedGuardedMode = next().toLowerCase(); break;
+      case "--expected-signup-status": config.expectedSignupStatus = next().toLowerCase(); break;
       case "--health-path": config.healthPath = next(); break;
       case "--json": config.json = true; break;
       case "--json-output": config.jsonOutput = next(); break;
@@ -54,12 +60,13 @@ function help() {
     "Performs safe live checks against the deployed app and API. It never reads or prints auth tokens.",
     "",
     "Usage:",
-    "  pnpm smoke:product-hunt-deployment -- --app-url https://app.example/workspace/ws/session --server-url https://api.example --expected-commit <40-char-sha>",
+    "  pnpm smoke:product-hunt-deployment -- --app-url https://app.example/workspace/ws/session --server-url https://api.example --expected-commit <40-char-sha> --expected-web-commit <40-char-sha> --expected-guarded-mode shadow --expected-signup-status open",
     "  node scripts/product-hunt-deployment-probe.mjs --app-url $MATTERHORN_APP_URL --server-url $MATTERHORN_WORK_SERVER_URL --strict --json-output deployment.json",
     "",
     "Required in strict mode:",
     "  HTTPS app and API, authenticated same-origin /workspaces and /opencode routing, successful responses,",
     "  defensive security headers, exact-origin CORS, and rejection of an untrusted origin.",
+    "  Optional expected web commit, guarded-runtime mode and public signup status checks fail closed on drift.",
     "  --allow-loopback-http is only for local contract tests and can never produce production-ready evidence.",
   ].join("\n");
 }
@@ -180,6 +187,15 @@ async function runProbe(config) {
   if (!/^[a-f0-9]{40}$/i.test(config.expectedCommit)) {
     throw new Error("--expected-commit must be a full 40-character commit SHA.");
   }
+  if (config.expectedWebCommit && !/^[a-f0-9]{40}$/i.test(config.expectedWebCommit)) {
+    throw new Error("--expected-web-commit must be a full 40-character commit SHA.");
+  }
+  if (config.expectedGuardedMode && !["off", "shadow", "enforce"].includes(config.expectedGuardedMode)) {
+    throw new Error("--expected-guarded-mode must be off, shadow, or enforce.");
+  }
+  if (config.expectedSignupStatus && !["open", "paused", "setup_required"].includes(config.expectedSignupStatus)) {
+    throw new Error("--expected-signup-status must be open, paused, or setup_required.");
+  }
   if (allowedOrigin === untrustedOrigin) throw new Error("The trusted and untrusted origins must differ.");
 
   const localHttp = appUrl.protocol !== "https:" || serverUrl.protocol !== "https:";
@@ -201,9 +217,26 @@ async function runProbe(config) {
     checks.push(check("app_response", "App response", appResponse.ok, `App returned HTTP ${appResponse.status}.`));
     checks.push(check("app_response_origin", "App response origin", new URL(appResponse.url).origin === appUrl.origin, "The app response stays on the configured origin."));
     checks.push(...headerCheck("app", appResponse, { requireHsts: appUrl.protocol === "https:" }));
+    if (config.expectedWebCommit) {
+      const html = await appResponse.text();
+      const deployedWebCommit = html.match(
+        /<meta\s+name=["']matterhorn-build-commit["']\s+content=["']([a-f0-9]{40})["']\s*\/?>/i,
+      )?.[1]?.toLowerCase() ?? "";
+      checks.push(check(
+        "web_build_commit",
+        "Deployed web commit",
+        deployedWebCommit === config.expectedWebCommit,
+        deployedWebCommit
+          ? `Web build reports ${deployedWebCommit}.`
+          : "Web HTML did not report a valid Matterhorn build commit.",
+      ));
+    }
   } catch (error) {
     checks.push(check("app_response", "App response", false, `App request failed: ${error instanceof Error ? error.message : String(error)}`));
     checks.push(check("app_response_origin", "App response origin", false, "The app response origin could not be verified."));
+    if (config.expectedWebCommit) {
+      checks.push(check("web_build_commit", "Deployed web commit", false, "The web build commit could not be verified."));
+    }
   }
 
   await probeUnauthenticatedProxyRoute(
@@ -234,10 +267,87 @@ async function runProbe(config) {
       deployedCommit ? `API reports ${deployedCommit}.` : "API did not report X-Matterhorn-Build-Commit.",
     ));
     checks.push(...headerCheck("api", healthResponse, { requireHsts: serverUrl.protocol === "https:" }));
+    if (config.expectedGuardedMode) {
+      let payload = null;
+      try {
+        payload = await healthResponse.json();
+      } catch {
+        // The check below reports a bounded failure without copying the response body.
+      }
+      const mode = payload?.checks?.guardedRuntimeMode;
+      const guardedReady = payload?.checks?.guardedRuntimeReady;
+      checks.push(check(
+        "guarded_runtime_mode",
+        "Guarded runtime mode",
+        mode === config.expectedGuardedMode && guardedReady === true,
+        typeof mode === "string"
+          ? `API reports guarded runtime mode ${mode} with readiness ${String(guardedReady)}.`
+          : "API health did not expose the guarded runtime mode and readiness state.",
+      ));
+    }
   } catch (error) {
     checks.push(check("api_health", "API health", false, `API health request failed: ${error instanceof Error ? error.message : String(error)}`));
     checks.push(check("api_response_origin", "API response origin", false, "The API response origin could not be verified."));
     checks.push(check("api_build_commit", "Deployed API commit", false, "API build commit could not be verified."));
+    if (config.expectedGuardedMode) {
+      checks.push(check("guarded_runtime_mode", "Guarded runtime mode", false, "Guarded runtime mode could not be verified."));
+    }
+  }
+
+  if (config.expectedSignupStatus) {
+    const authConfigUrl = appOriginUrlFor(appUrl, "/api/auth/config");
+    try {
+      const response = await fetchWithTimeout(authConfigUrl, {
+        headers: { accept: "application/json" },
+      });
+      const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+      let payload = null;
+      if (contentType.includes("application/json")) {
+        try {
+          payload = await response.json();
+        } catch {
+          // The checks below fail without preserving the response body.
+        }
+      }
+      checks.push(check(
+        "signup_config_origin",
+        "Signup configuration origin",
+        new URL(response.url).origin === appUrl.origin,
+        "The public signup configuration stays on the application origin.",
+        { statusCode: response.status },
+      ));
+      const expectedAvailable = config.expectedSignupStatus === "open";
+      checks.push(check(
+        "signup_status",
+        "Public signup status",
+        response.ok
+          && contentType.includes("application/json")
+          && payload?.signupStatus === config.expectedSignupStatus
+          && payload?.signupsAvailable === expectedAvailable,
+        typeof payload?.signupStatus === "string"
+          ? `Public auth reports signup status ${payload.signupStatus}.`
+          : `Public auth config returned HTTP ${response.status} with ${contentType || "no content type"}.`,
+        { statusCode: response.status },
+      ));
+      if (expectedAvailable) {
+        checks.push(check(
+          "signup_security",
+          "Public signup security dependencies",
+          payload?.emailVerificationRequired === true
+            && payload?.passwordResetAvailable === true
+            && payload?.legalAcceptanceRequired === true
+            && typeof payload?.turnstileSiteKey === "string"
+            && payload.turnstileSiteKey.length > 0,
+          "Email verification, password reset, legal acceptance, and Turnstile must all be available before signup opens.",
+        ));
+      }
+    } catch (error) {
+      checks.push(check("signup_config_origin", "Signup configuration origin", false, "The public signup configuration origin could not be verified."));
+      checks.push(check("signup_status", "Public signup status", false, `Public signup configuration failed: ${error instanceof Error ? error.message : String(error)}`));
+      if (config.expectedSignupStatus === "open") {
+        checks.push(check("signup_security", "Public signup security dependencies", false, "Public signup security dependencies could not be verified."));
+      }
+    }
   }
 
   try {
@@ -291,6 +401,9 @@ async function runProbe(config) {
       serverUrl: publicUrl(serverUrl),
       healthPath: config.healthPath,
       expectedCommit: config.expectedCommit,
+      expectedWebCommit: config.expectedWebCommit || null,
+      expectedGuardedMode: config.expectedGuardedMode || null,
+      expectedSignupStatus: config.expectedSignupStatus || null,
       allowedOrigin,
       untrustedOrigin,
       localContractRun: localException,
