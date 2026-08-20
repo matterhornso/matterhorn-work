@@ -738,13 +738,13 @@ async function fetchMatterhornApiJson<T>(path: string, init?: RequestInit): Prom
   }
 }
 
-async function validateAgentWalletDraft(input: {
+async function validateAgentWalletDraft<T extends ReviewedActionHandoffV2>(input: {
   workspaceId?: string | null;
-  guardedHandoff?: ReviewedActionHandoffV2 | null;
+  guardedHandoff?: T | null;
   currentDraft: ReviewedActionDraftHandoff;
   originatedFromHandoff: boolean;
-}): Promise<void> {
-  if (!input.originatedFromHandoff) return;
+}): Promise<T | null> {
+  if (!input.originatedFromHandoff) return input.guardedHandoff ?? null;
   if (!input.guardedHandoff) {
     throw new Error("This legacy agent draft is preview-only. Regenerate it from the desk so Matterhorn can simulate and hash-bind the exact wallet action.");
   }
@@ -762,6 +762,10 @@ async function validateAgentWalletDraft(input: {
     const reason = json.issues?.length ? json.issues.join(", ").replaceAll("_", " ") : "validation failed";
     throw new Error(`This wallet review is no longer valid (${reason}). Regenerate and re-simulate it before signing.`);
   }
+  if (!json.refreshedHandoff || json.refreshedHandoff.protocol !== input.currentDraft.protocol) {
+    throw new Error("Matterhorn did not return a fresh, protocol-matched wallet review. Regenerate this action before signing.");
+  }
+  return json.refreshedHandoff as T;
 }
 
 function mondayBetaScenarioMode(scenario: CustomerBetaDemoScenario): "bittensor" | "crypto" {
@@ -1040,7 +1044,7 @@ function buildBittensorChatPrompt(prompt: string, context: Record<string, unknow
 
 function HyperliquidTradeExecution({
   initialDraft,
-  guardedHandoff,
+  guardedHandoff: initialGuardedHandoff,
   initialOperation,
   executionAvailable,
   workspaceId,
@@ -1074,6 +1078,8 @@ function HyperliquidTradeExecution({
   const [evidenceWarning, setEvidenceWarning] = useState<string | null>(null);
   const [busy, setBusy] = useState<"prepare" | "submit" | null>(null);
   const [tradeError, setTradeError] = useState<string | null>(null);
+  const [guardedHandoff, setGuardedHandoff] = useState(initialGuardedHandoff ?? null);
+  useEffect(() => setGuardedHandoff(initialGuardedHandoff ?? null), [initialGuardedHandoff]);
   // Execution must fail closed until the deployment reports this exact route is enabled.
   const executionUnavailable = executionAvailable !== true;
   const executionStatusMessage = executionAvailable === false
@@ -1149,7 +1155,7 @@ function HyperliquidTradeExecution({
     setTradeError(null);
     setReceipt(null);
     try {
-      await validateAgentWalletDraft({
+      const refreshedHandoff = await validateAgentWalletDraft({
         workspaceId,
         guardedHandoff,
         originatedFromHandoff: Boolean(initialDraft),
@@ -1160,6 +1166,7 @@ function HyperliquidTradeExecution({
           draft: reviewDraft as HyperliquidDraftHandoff,
         },
       });
+      setGuardedHandoff(refreshedHandoff);
       const actionBody = reviewDraft.operation === "cancel_order"
         ? {
             operation: reviewDraft.operation,
@@ -1510,7 +1517,7 @@ function HyperliquidTradeExecution({
 
 function PolymarketTradeExecution({
   initialDraft,
-  guardedHandoff,
+  guardedHandoff: initialGuardedHandoff,
   initialOperation,
   workspaceId,
   sessionId,
@@ -1542,6 +1549,8 @@ function PolymarketTradeExecution({
   const [evidenceWarning, setEvidenceWarning] = useState<string | null>(null);
   const [busy, setBusy] = useState<"prepare" | "submit" | null>(null);
   const [tradeError, setTradeError] = useState<string | null>(null);
+  const [guardedHandoff, setGuardedHandoff] = useState(initialGuardedHandoff ?? null);
+  useEffect(() => setGuardedHandoff(initialGuardedHandoff ?? null), [initialGuardedHandoff]);
   const [marketQuery, setMarketQuery] = useState("");
   const [markets, setMarkets] = useState<PolymarketMarketSearchResult[]>([]);
   const [marketSearchBusy, setMarketSearchBusy] = useState(false);
@@ -1678,12 +1687,13 @@ function PolymarketTradeExecution({
                 cancelAll: false,
               },
             };
-      await validateAgentWalletDraft({
+      const refreshedHandoff = await validateAgentWalletDraft({
         workspaceId,
         guardedHandoff,
         currentDraft,
         originatedFromHandoff: Boolean(initialDraft),
       });
+      setGuardedHandoff(refreshedHandoff);
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "This agent wallet draft must be regenerated before review.");
       return;
@@ -2206,7 +2216,7 @@ function PolymarketTradeExecution({
 
 function BittensorConnectedWalletExecution({
   initialDraft,
-  guardedHandoff,
+  guardedHandoff: initialGuardedHandoff,
   initialOperation,
   workspaceId,
   sessionId,
@@ -2232,6 +2242,8 @@ function BittensorConnectedWalletExecution({
   const [transferError, setTransferError] = useState<string | null>(null);
   const [evidenceWarning, setEvidenceWarning] = useState<string | null>(null);
   const [evidencePath, setEvidencePath] = useState<string | null>(null);
+  const [guardedHandoff, setGuardedHandoff] = useState(initialGuardedHandoff ?? null);
+  useEffect(() => setGuardedHandoff(initialGuardedHandoff ?? null), [initialGuardedHandoff]);
 
   const resetReview = useCallback(() => {
     setBackendPreview(null);
@@ -2311,12 +2323,13 @@ function BittensorConnectedWalletExecution({
               amountTao,
             },
           };
-      await validateAgentWalletDraft({
+      const refreshedHandoff = await validateAgentWalletDraft({
         workspaceId,
         guardedHandoff,
         currentDraft,
         originatedFromHandoff: Boolean(initialDraft),
       });
+      setGuardedHandoff(refreshedHandoff);
       const { response, json } = await fetchMatterhornApiJson<BittensorWalletActionPreviewResponse>("/api/bittensor/extrinsics/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -1234,19 +1234,6 @@ const tools = [
     },
   },
   {
-    name: "matterhorn_bittensor_submit_signed_extrinsic",
-    description: "Submit an externally signed Bittensor extrinsic through a configured sidecar, if available.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        preview: { type: "object" },
-        signature: { type: "string" },
-        signerAddress: { type: "string" },
-      },
-      required: ["preview", "signature"],
-    },
-  },
-  {
     name: "matterhorn_bittensor_preview_subnet_invocation",
     description: "Preview a Bittensor subnet adapter call before invocation. First inspect the subnet capability manifest for adapter support, auth, cost, schemas, benefits, and safety notes; this preview returns request hash, warnings, and confirmation text.",
     inputSchema: {
@@ -3715,7 +3702,12 @@ async function handleTool(name, args = {}) {
     case "matterhorn_bittensor_check_signing_handoff":
       return matterhornBittensorCheckSigningHandoff(args);
     case "matterhorn_bittensor_submit_signed_extrinsic":
-      return callServer("/api/bittensor/extrinsics/submit", { method: "POST", body: args });
+      return {
+        success: false,
+        code: "wallet_airlock_required",
+        tool: "matterhorn_bittensor_submit_signed_extrinsic",
+        message: "This deprecated submission tool cannot sign, relay, broadcast, or submit. Regenerate a reviewed action and approve it in the connected Matterhorn wallet UI.",
+      };
     case "matterhorn_bittensor_preview_subnet_invocation":
       return callServer(`/api/bittensor/subnets/${encodeURIComponent(String(args.netuid))}/preview`, { method: "POST", body: args });
     case "matterhorn_bittensor_invoke_subnet":

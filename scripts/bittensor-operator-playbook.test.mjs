@@ -18,7 +18,7 @@ for (const phrase of [
   "matterhorn_bittensor_get_subnet_capability",
   "matterhorn_bittensor_prepare_extrinsic",
   "matterhorn_bittensor_create_signing_handoff",
-  "matterhorn_bittensor_submit_signed_extrinsic",
+  "wallet_airlock_required",
   "I'm new to Bittensor",
   "Show my TAO",
   "Where am I staked",
@@ -72,8 +72,6 @@ for (const command of [
   "bittensor extrinsic handoff",
   "bittensor extrinsic submit",
   "--preview-json",
-  "--signature",
-  "--signer-address",
   "bittensor capabilities",
   "bittensor capability",
 ]) {

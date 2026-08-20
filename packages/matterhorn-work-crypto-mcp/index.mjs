@@ -1347,12 +1347,17 @@ async function bittensor_create_signing_handoff(args) {
 }
 
 async function bittensor_submit_signed_extrinsic(args) {
-  const res = await callServer("/api/bittensor/extrinsics/submit", "POST", {
-    preview: args.preview,
-    signature: args.signature,
-    signerAddress: args.signerAddress,
-  });
-  return { success: true, result: res.result, cards: res.cards || [] };
+  void args;
+  return walletAirlockRequired("bittensor_submit_signed_extrinsic");
+}
+
+function walletAirlockRequired(toolName) {
+  return {
+    success: false,
+    code: "wallet_airlock_required",
+    tool: toolName,
+    message: "This deprecated submission tool cannot sign, relay, broadcast, or submit. Regenerate a reviewed action and approve it in the connected Matterhorn wallet UI.",
+  };
 }
 
 async function bittensor_preview_subnet_invocation(args) {
@@ -1494,7 +1499,6 @@ const tools = [
   { name: "bittensor_export_subnet_adapter_dry_run", description: "Return a redacted markdown export for the mock adapter dry-run harness. Evidence only; it does not authorize or invoke real subnet services.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, task: { type: "string" }, ss58Address: { type: "string" }, limit: { type: "number" } } } },
   { name: "bittensor_prepare_extrinsic", description: "Prepare an unsigned Bittensor extrinsic preview for external signing. No secret material is handled.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "move_stake", "transfer", "set_child_hotkey", "register", "serve"] }, netuid: { type: "number" }, amountTao: { type: "string" }, coldkey: { type: "string" }, hotkey: { type: "string" }, destination: { type: "string" }, originNetuid: { type: "number" }, destinationNetuid: { type: "number" }, rateTolerance: { type: "number" } }, required: ["action"] } },
   { name: "bittensor_create_signing_handoff", description: "Create a checksumed desktop handoff bundle from an unsigned Bittensor preview for external signing.", inputSchema: { type: "object", properties: { preview: { type: "object" } }, required: ["preview"] } },
-  { name: "bittensor_submit_signed_extrinsic", description: "Submit an externally signed Bittensor extrinsic through a configured Subtensor sidecar, if available.", inputSchema: { type: "object", properties: { preview: { type: "object" }, signature: { type: "string" }, signerAddress: { type: "string" } }, required: ["preview", "signature"] } },
   { name: "bittensor_preview_subnet_invocation", description: "Preview a Bittensor subnet service or universal adapter call before invocation. First inspect bittensor_get_subnet_capabilities for adapter support, auth, cost, schemas, user benefits, and safety notes; this preview returns request hash, warnings, and confirmation prompt.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, intent: { type: "string", enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] }, task: { type: "string" }, ss58Address: { type: "string" } }, required: ["netuid"] } },
   { name: "bittensor_invoke_subnet", description: "Invoke a supported Bittensor subnet adapter only after capability inspection, preview, explicit confirmation, and request SHA-256 verification; otherwise return a safe unsupported-adapter explanation.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, intent: { type: "string", enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] }, task: { type: "string" }, ss58Address: { type: "string" }, previewRequestSha256: { type: "string" } }, required: ["netuid"] } },
   { name: "bittensor_compare_validators", description: "Compare visible validator candidates for a subnet by public metagraph samples. Informational only; not financial advice.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, hotkeys: { type: "array", items: { type: "string" } }, limit: { type: "number" }, strategy: { type: "string", enum: ["balanced", "yield", "safety"] } }, required: ["netuid"] } },
@@ -1539,7 +1543,6 @@ const tools = [
 
   // -- cow protocol --
   { name: "crypto_cowQuote", description: "Get a CoW Protocol MEV-protected swap quote.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, sellToken: { type: "string" }, buyToken: { type: "string" }, sellAmount: { type: "string" }, receiver: { type: "string" } }, required: ["chainId", "sellToken", "buyToken", "sellAmount", "receiver"] } },
-  { name: "crypto_cowSubmit", description: "Submit a signed CoW Protocol order.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, order: { type: "object" }, signature: { type: "string" } }, required: ["chainId", "order", "signature"] } },
 
   // -- aave (v0.6) --
   { name: "crypto_aaveDeposit", description: "Build Aave V3 supply calldata. Returns {to, data, value} for client signing.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, token: { type: "string" }, amount: { type: "string" }, onBehalfOf: { type: "string" } }, required: ["chainId", "token", "amount", "onBehalfOf"] } },
@@ -1758,16 +1761,7 @@ function handleMessage(msg) {
           }).catch(catchErr);
         }
         case "crypto_cowSubmit": {
-          const baseUrl = { 1: "https://api.cow.fi/mainnet", 8453: "https://api.cow.fi/base", 42161: "https://api.cow.fi/arbitrum" }[args.chainId];
-          if (!baseUrl) return respond(textResult({ success: false, error: "Unsupported chainId" }));
-          return fetch(`${baseUrl}/api/v1/orders`, {
-            method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ ...(args.order || {}), signature: args.signature }),
-          }).then(async (res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const orderId = await res.json();
-            return respond(textResult({ success: true, orderId, explorerUrl: `${baseUrl}/orders/${orderId}` }));
-          }).catch(catchErr);
+          return respond(textResult(walletAirlockRequired("crypto_cowSubmit")));
         }
 
         // aave (v0.6 — proxied to server)

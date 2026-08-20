@@ -3214,7 +3214,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                 ) : publicBetaWeb ? (
                   <>
                     Each request is checked before it leaves Matterhorn.{" "}
-                    {props.providerPrivacyPolicy.providerName} processes allowed
+                    {props.providerPrivacyPolicy?.providerName ?? "The selected provider"} processes allowed
                     prompts. Public research can proceed; private context requires
                     one-request consent.
                   </>

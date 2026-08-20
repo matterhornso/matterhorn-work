@@ -34,6 +34,7 @@ describe("agent capability broker", () => {
     const broker = brokerWithRun();
     const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
     const capability = broker.issue({
+      runId: "run_1",
       workspaceId: "ws_1",
       sessionId: "ses_1",
       callId: "call_1",
@@ -50,6 +51,7 @@ describe("agent capability broker", () => {
     const broker = brokerWithRun();
     const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
     const capability = broker.issue({
+      runId: "run_1",
       workspaceId: "ws_1",
       sessionId: "ses_1",
       callId: "call_2",
@@ -62,13 +64,15 @@ describe("agent capability broker", () => {
       args: { ...args, network: "mainnet" },
     })).toThrow("capability_argument_mutation");
     expect(() => broker.issue({
+      runId: "run_1",
       workspaceId: "ws_1",
       sessionId: "ses_other",
       callId: "call_3",
       toolName: "matterhorn_sui_get_balance",
       args,
-    })).toThrow("capability_run_or_tool_not_found");
+    })).toThrow("capability_scope_mismatch");
     expect(() => broker.issue({
+      runId: "run_1",
       workspaceId: "ws_1",
       sessionId: "ses_1",
       callId: "call_4",
@@ -80,6 +84,7 @@ describe("agent capability broker", () => {
   test("never exposes a submit access class", () => {
     const broker = brokerWithRun();
     const capability = broker.issue({
+      runId: "run_1",
       workspaceId: "ws_1",
       sessionId: "ses_1",
       callId: "call_5",
@@ -105,6 +110,7 @@ describe("agent capability broker", () => {
       }],
     });
     expect(() => broker.issue({
+      runId: "run_narrow",
       workspaceId: "ws_1",
       sessionId: "ses_narrow",
       callId: "call_cross_desk",
@@ -118,6 +124,7 @@ describe("agent capability broker", () => {
     const broker = brokerWithRun();
     const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
     const capability = broker.issue({
+      runId: "run_1",
       workspaceId: "ws_1",
       sessionId: "ses_1",
       callId: "call_purge",
@@ -139,6 +146,7 @@ describe("agent capability broker", () => {
     const broker = brokerWithRun();
     const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
     const capability = broker.issue({
+      runId: "run_1",
       workspaceId: "ws_1",
       sessionId: "ses_1",
       callId: "call_close",
@@ -153,5 +161,55 @@ describe("agent capability broker", () => {
       args,
     })).toThrow("capability_scope_mismatch");
     expect(broker.closeRun("run_1")).toEqual({ callIds: [] });
+  });
+
+  test("accounts prepare budgets from the resolved protocol instead of a static registry prefix", () => {
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    broker.createRunGrant({
+      runId: "run_protocol_family",
+      workspaceId: "ws_1",
+      sessionId: "ses_protocol_family",
+      agentId: "matterhorn",
+      executionMode: "work",
+      requestToolProfiles: [{
+        "*": false,
+        "matterhorn-work_matterhorn_crypto_chat": true,
+        "matterhorn-work_matterhorn_hyperliquid_preview_order": true,
+        "matterhorn-work_matterhorn_polymarket_preview_order": true,
+      }],
+    });
+    const autoArgs = { message: "Prepare the reviewed action I described" };
+    const automatic = broker.issue({
+      runId: "run_protocol_family",
+      workspaceId: "ws_1",
+      sessionId: "ses_protocol_family",
+      callId: "call_auto_hyperliquid",
+      toolName: "matterhorn_crypto_chat",
+      args: autoArgs,
+    });
+    broker.consume({ token: automatic.token, toolName: "matterhorn_crypto_chat", args: autoArgs });
+    broker.recordToolOutcome(
+      "run_protocol_family",
+      "call_auto_hyperliquid",
+      "matterhorn_crypto_chat",
+      "success",
+      "hyperliquid",
+    );
+    expect(() => broker.issue({
+      runId: "run_protocol_family",
+      workspaceId: "ws_1",
+      sessionId: "ses_protocol_family",
+      callId: "call_duplicate_hyperliquid",
+      toolName: "matterhorn_hyperliquid_preview_order",
+      args: { asset: "BTC", side: "buy", size: "0.01" },
+    })).toThrow("capability_prepare_family_already_completed");
+    expect(broker.issue({
+      runId: "run_protocol_family",
+      workspaceId: "ws_1",
+      sessionId: "ses_protocol_family",
+      callId: "call_distinct_polymarket",
+      toolName: "matterhorn_polymarket_preview_order",
+      args: { marketId: "market_1", outcome: "YES", amountUsdc: "5" },
+    }).claims.access).toBe("prepare");
   });
 });

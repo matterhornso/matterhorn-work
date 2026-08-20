@@ -325,6 +325,26 @@ function runCli(baseUrl, args) {
   });
 }
 
+function runDeprecatedCli(baseUrl, args) {
+  const cliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "apps", "orchestrator", "src", "cli.ts");
+  const child = spawn("bun", [
+    cliPath,
+    ...args,
+    "--openwork-url",
+    baseUrl,
+    "--token",
+    CLIENT_TOKEN,
+    "--json",
+  ], { stdio: ["ignore", "pipe", "pipe"] });
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => resolve({ code, payload: JSON.parse(stdout) }));
+  });
+}
+
 const port = await listen(server);
 const baseUrl = `http://127.0.0.1:${port}`;
 
@@ -418,7 +438,7 @@ try {
   assert.equal(extrinsicHandoff.success, true);
   assert.equal(extrinsicHandoff.handoff.payloadSha256.length, 64);
 
-  const extrinsicSubmit = await runCli(baseUrl, [
+  const extrinsicSubmit = await runDeprecatedCli(baseUrl, [
     "bittensor",
     "extrinsic",
     "submit",
@@ -429,8 +449,9 @@ try {
     "--signer-address",
     "5SignerPublic",
   ]);
-  assert.equal(extrinsicSubmit.success, true);
-  assert.equal(extrinsicSubmit.result.status, "sidecar_unavailable");
+  assert.equal(extrinsicSubmit.code, 2);
+  assert.equal(extrinsicSubmit.payload.success, false);
+  assert.equal(extrinsicSubmit.payload.code, "wallet_airlock_required");
 
   const subnetPreview = await runCli(baseUrl, [
     "bittensor",
@@ -528,7 +549,6 @@ try {
       "POST /api/bittensor/wallet/timeline/clear",
       "POST /api/bittensor/extrinsics/prepare",
       "POST /api/bittensor/extrinsics/handoff",
-      "POST /api/bittensor/extrinsics/submit",
       "POST /api/bittensor/subnets/14/preview",
       "POST /api/bittensor/subnets/14/invoke",
       "GET /api/bittensor/monitoring/watchlist",

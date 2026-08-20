@@ -507,8 +507,6 @@ matterhorn-work bittensor extrinsic handoff \
 
 matterhorn-work bittensor extrinsic submit \
   --preview-json '<preview-json-from-prepare>' \
-  --signature "<externally-signed-payload>" \
-  --signer-address "<public-signer-address>" \
   --json
 ```
 
@@ -539,15 +537,13 @@ Then:
 }
 ```
 
-Only after an external signer returns a signed payload:
+The legacy submit tool name remains only as a compatibility check:
 
 ```json
 {
   "tool": "matterhorn_bittensor_submit_signed_extrinsic",
   "arguments": {
-    "preview": "<preview-object-from-prepare>",
-    "signature": "<externally-signed-payload>",
-    "signerAddress": "<public-signer-address>"
+    "preview": "<preview-object-from-prepare>"
   }
 }
 ```
@@ -556,7 +552,7 @@ Expected behavior:
 
 - prepare returns an unsigned preview that requires external signing;
 - handoff returns a payload SHA-256 and instructions for signing outside Matterhorn;
-- submit accepts only an externally signed payload plus public signer metadata;
+- submit returns `wallet_airlock_required` without making a network request; signing and submission stay in the connected wallet UI;
 - Matterhorn still does not import keys, custody funds, or ask for raw signing material.
 
 ## 10. Follow-Up Context
@@ -1435,7 +1431,7 @@ Use the Matterhorn Desks MCP server for Bittensor.
      "rateTolerance": 0.01
    }
 9. For lower-level action workflows, call `matterhorn_bittensor_prepare_extrinsic`, then `matterhorn_bittensor_create_signing_handoff`.
-10. Submit only after external signing with `matterhorn_bittensor_submit_signed_extrinsic`, and only with public signer metadata plus the externally signed payload.
+10. Never submit through the agent, MCP, or CLI. The deprecated `matterhorn_bittensor_submit_signed_extrinsic` name returns `wallet_airlock_required`; complete the exact reviewed action in the connected wallet UI.
 11. Before real adapter setup, call `bittensor_plan_subnet_adapter_onboarding` for the target adapter kind and netuid; it combines candidate, template, doctor, conformance, gates, warnings, and next actions without invoking a subnet service.
 12. After onboarding is clean, call `bittensor_check_subnet_adapter_launch_gate`; `mock_ready` means only mock rehearsal can proceed, while `manual_review_required` means a real adapter still needs provider/canary/rollback review.
 13. Before any real HTTPS canary, call `bittensor_get_subnet_adapter_canary_review` and collect evidence for every blocker item: provider identity, metadata conformance, fixture review, preview hash, bounded result handling, redaction, rollback, and monitoring.
@@ -1534,4 +1530,3 @@ Expected behavior:
 - any credential-shaped or signed-payload-shaped field in the monitoring response fails closed.
 
 Use the generated prompts in chat. Do not treat the report as permission to execute a financial action.
-

@@ -20,6 +20,9 @@ beforeAll(() => {
     if (url.endsWith("/internal/agent-capabilities/authorize")) {
       return Response.json({ accepted: true, callId: body.callId, expiresAt: new Date(Date.now() + 60_000).toISOString() });
     }
+    if (url.endsWith("/internal/agent-runs/bind-message")) {
+      return Response.json({ runId: "run_plugin_1" });
+    }
     return Response.json({ ok: true });
   }) as typeof fetch;
 });
@@ -37,11 +40,27 @@ afterAll(() => {
 describe("matterhorn-guard OpenCode plugin", () => {
   test("adds only the reserved call id after model argument generation", async () => {
     const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: {
+            role: "assistant",
+            id: "msg_assistant_plugin_1",
+            parentID: "msg_user_plugin_1",
+            sessionID: "ses_plugin",
+            tokens: { input: 10, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: {},
+          },
+        },
+      },
+    });
     const output: { args: Record<string, unknown> } = { args: { asset: "BTC", limit: 5 } };
     await plugin["tool.execute.before"]({
       tool: "matterhorn-work_matterhorn_hyperliquid_list_markets",
       sessionID: "ses_plugin",
       callID: "call_plugin_1",
+      messageID: "msg_assistant_plugin_1",
     }, output);
     expect(output.args).toEqual({ asset: "BTC", limit: 5, _matterhornCallId: "call_plugin_1" });
     expect(JSON.stringify(output.args)).not.toContain("runtime-only-secret");
@@ -49,6 +68,7 @@ describe("matterhorn-guard OpenCode plugin", () => {
     const request = requests.at(-1);
     expect(request?.init?.headers).toEqual(expect.objectContaining({ "X-Matterhorn-Agent-Runtime-Secret": "runtime-only-secret" }));
     expect(String(request?.init?.body)).not.toContain("runtime-only-secret");
+    expect(JSON.parse(String(request?.init?.body))).toMatchObject({ runId: "run_plugin_1" });
   });
 
   test("adds crypto-specific safe compaction requirements", async () => {

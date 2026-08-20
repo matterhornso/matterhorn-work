@@ -1194,7 +1194,6 @@ try {
     "matterhorn_bittensor_import_receipt",
     "matterhorn_bittensor_check_receipt",
     "matterhorn_bittensor_check_signing_handoff",
-    "matterhorn_bittensor_submit_signed_extrinsic",
     "matterhorn_bittensor_preview_subnet_invocation",
     "matterhorn_bittensor_invoke_subnet",
     "matterhorn_bittensor_create_watch",
@@ -2263,7 +2262,12 @@ try {
     name: "matterhorn_bittensor_submit_signed_extrinsic",
     arguments: { preview: extrinsicPreview.preview, signature: "0x1234567890abcdef" },
   }));
-  assert.equal(signedSubmit.result.status, "sidecar_unavailable");
+  assert.deepEqual(signedSubmit, {
+    success: false,
+    code: "wallet_airlock_required",
+    tool: "matterhorn_bittensor_submit_signed_extrinsic",
+    message: "This deprecated submission tool cannot sign, relay, broadcast, or submit. Regenerate a reviewed action and approve it in the connected Matterhorn wallet UI.",
+  });
 
   const subnetPreview = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_preview_subnet_invocation",

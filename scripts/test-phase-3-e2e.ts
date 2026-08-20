@@ -56,15 +56,15 @@ async function main() {
       assert(json.success === false, "Expected failure for unsupported chain");
     });
 
-    await test("CoW order API rejects missing params", async () => {
+    await test("CoW order API stays behind the wallet airlock", async () => {
       const res = await fetch("http://localhost:3001/api/cow/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chainId: 8453 }),
       });
-      assert(res.ok, `HTTP ${res.status}`);
+      assert.equal(res.status, 403, `HTTP ${res.status}`);
       const json = await res.json();
-      assert(json.error?.code === "invalid_params", "Expected invalid_params");
+      assert.equal(json.code, "reviewed_wallet_flow_required", "Expected reviewed-wallet denial");
     });
   } else {
     console.log("  (Server not running — skipping API tests)\n");
@@ -119,10 +119,10 @@ async function main() {
     assert(Array.isArray(tools), "No tools returned");
     const names = tools.map((t) => t.name);
     assert(names.includes("crypto_cowQuote"), "Missing crypto_cowQuote");
-    assert(names.includes("crypto_cowSubmit"), "Missing crypto_cowSubmit");
+    assert(!names.includes("crypto_cowSubmit"), "crypto_cowSubmit must stay outside the model-visible registry");
     assert(names.includes("crypto_aaveDeposit"), "Missing crypto_aaveDeposit");
     assert(names.includes("crypto_aaveBorrow"), "Missing crypto_aaveBorrow");
-    assert(names.includes("crypto_bridgeEstimate"), "Missing crypto_bridgeEstimate");
+    assert(names.includes("crypto_bridgeQuote"), "Missing crypto_bridgeQuote");
   });
 
   // ─── Build Check ───────────────────────────────────────────────────

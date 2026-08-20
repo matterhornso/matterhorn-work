@@ -22,7 +22,7 @@ Use the Bittensor MCP when an agent needs Bittensor-specific public wallet, subn
 - `matterhorn_bittensor_import_receipt`
 - `matterhorn_bittensor_check_receipt`
 - `matterhorn_bittensor_check_signing_handoff`
-- `matterhorn_bittensor_submit_signed_extrinsic`
+- `matterhorn_bittensor_submit_signed_extrinsic` is a hidden deprecated compatibility stub that always returns `wallet_airlock_required`; wallet review is the only completion surface.
 - `matterhorn_bittensor_preview_subnet_invocation`
 - `matterhorn_bittensor_invoke_subnet`
 - `matterhorn_bittensor_create_watch`

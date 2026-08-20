@@ -1,4 +1,5 @@
 import { SuiGrpcClient } from "@mysten/sui/grpc";
+import { Transaction } from "@mysten/sui/transactions";
 import {
   isValidStructTag,
   isValidSuiAddress,
@@ -509,6 +510,69 @@ export function buildSuiTransferPreview(
   options: { now?: () => Date; ttlMs?: number } = {},
 ): SuiTransactionPreview {
   return buildSuiTransactionPreview(input, options);
+}
+
+export interface SuiTransactionSimulationRefresh {
+  reference: string;
+  block: string | null;
+  simulatedAt: string;
+  gasSummary: unknown;
+}
+
+/**
+ * Builds the exact wallet-reviewed transfer with the official Sui SDK and
+ * asks the selected fullnode to simulate it. This never signs or submits.
+ */
+export async function simulateSuiTransactionPreview(
+  input: SuiTransactionPreviewInput,
+): Promise<SuiTransactionSimulationRefresh> {
+  const preview = buildSuiTransactionPreview(input);
+  const transaction = new Transaction();
+  transaction.setSender(preview.sender);
+  if (preview.kind === "transfer_object") {
+    transaction.transferObjects([transaction.object(preview.objectId!)], preview.recipient!);
+  } else if (preview.kind === "batch_transfer_sui") {
+    for (const transfer of preview.transfers ?? []) {
+      transaction.transferObjects([
+        transaction.coin({ balance: BigInt(transfer.amountMist) }),
+      ], transfer.recipient);
+    }
+  } else {
+    transaction.transferObjects([
+      transaction.coin({
+        balance: BigInt(preview.amountMist!),
+        ...(preview.coinType ? { type: preview.coinType } : {}),
+      }),
+    ], preview.recipient!);
+  }
+  const client = new SuiGrpcClient({
+    network: preview.network,
+    baseUrl: SUI_GRPC_URLS[preview.network],
+  });
+  const result = await client.simulateTransaction({
+    transaction,
+    include: { effects: true, balanceChanges: true, objectTypes: true, transaction: true },
+  });
+  if (result.$kind === "FailedTransaction") {
+    throw new SuiInputError(
+      "invalid_sui_preview",
+      `Sui dry-run failed: ${result.FailedTransaction.status.error?.message ?? "transaction rejected"}`,
+    );
+  }
+  const simulatedAt = new Date().toISOString();
+  const evidence = {
+    network: preview.network,
+    previewSha256: preview.previewSha256,
+    effects: result.Transaction.effects ?? null,
+    balanceChanges: result.Transaction.balanceChanges ?? [],
+    objectTypes: result.Transaction.objectTypes ?? {},
+  };
+  return {
+    reference: sha256(evidence),
+    block: null,
+    simulatedAt,
+    gasSummary: result.Transaction.effects ?? null,
+  };
 }
 
 function normalizeSuiReceiptStatus(value: string | null | undefined): SuiTransactionReceipt["status"] {

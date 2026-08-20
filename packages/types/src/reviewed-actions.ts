@@ -265,6 +265,9 @@ export type ReviewedActionAirlockIssue =
   | "expired"
   | "simulation_stale"
   | "material_change"
+  | "protocol_mismatch"
+  | "simulation_refresh_failed"
+  | "simulation_state_changed"
 
 export interface ReviewedActionValidationRequest {
   handoff: ReviewedActionHandoffV2
@@ -277,6 +280,14 @@ export interface ReviewedActionValidationResponse {
   issues: ReviewedActionAirlockIssue[]
   validatedAt: string
   requiresRegeneration: boolean
+  refreshedHandoff: ReviewedActionHandoffV2 | null
+  refreshedSimulation: ReviewedActionHandoffV2["simulation"] | null
+  freshness: {
+    status: "fresh" | "unavailable"
+    observedAt: string
+    maximumAgeMs: number
+  }
+  invalidationReasons: string[]
 }
 
 export function isReviewedActionHandoffV2(value: unknown): value is ReviewedActionHandoffV2 {

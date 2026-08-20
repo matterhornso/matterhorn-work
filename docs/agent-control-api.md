@@ -111,7 +111,7 @@ Common status codes:
 | `matterhorn_bittensor_prepare_extrinsic` | `POST /api/bittensor/extrinsics/prepare` |
 | `matterhorn_bittensor_create_signing_handoff` | `POST /api/bittensor/extrinsics/handoff` |
 | `matterhorn_bittensor_import_receipt` | `POST /api/bittensor/extrinsics/receipt` |
-| `matterhorn_bittensor_submit_signed_extrinsic` | `POST /api/bittensor/extrinsics/submit` |
+| `matterhorn_bittensor_submit_signed_extrinsic` | Deprecated hidden compatibility stub; returns `wallet_airlock_required` without network traffic |
 
 ## Additional Crypto Read Routes
 
@@ -690,36 +690,7 @@ Response:
 
 Auth: `client`
 
-Submits an externally signed Bittensor payload when a sidecar submission path is configured. The route accepts a signed payload and signer address, but it still never accepts seed phrases, mnemonics, private keys, wallet exports, or imported key material.
-
-Request:
-
-```json
-{
-  "preview": {
-    "action": "stake",
-    "netuid": 14,
-    "requiresExternalSignature": true,
-    "unsignedPayload": {}
-  },
-  "signature": "0x...",
-  "signerAddress": "5..."
-}
-```
-
-Response:
-
-```json
-{
-  "success": true,
-  "result": {
-    "status": "submitted",
-    "txHash": "0x..."
-  },
-  "receipt": {},
-  "cards": []
-}
-```
+Deprecated fail-closed route. It always returns HTTP 403 with `reviewed_action_required` and performs no network request. Agents, MCPs, CLIs, server automations, and sidecars cannot sign, relay, or submit. The connected wallet UI is the only completion surface; Matterhorn accepts public receipt evidence afterward.
 
 ### `GET /api/bittensor/readiness`
 

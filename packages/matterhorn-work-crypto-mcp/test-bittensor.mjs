@@ -1514,7 +1514,6 @@ try {
     "bittensor_export_subnet_adapter_dry_run",
     "bittensor_prepare_extrinsic",
     "bittensor_create_signing_handoff",
-    "bittensor_submit_signed_extrinsic",
     "bittensor_preview_subnet_invocation",
     "bittensor_invoke_subnet",
     "bittensor_compare_validators",
@@ -1912,7 +1911,12 @@ try {
   assert.equal(JSON.parse(handoff.result.content[0].text).cards[0].kind, "signing_handoff");
 
   const submit = await ask({ jsonrpc: "2.0", id: 16, method: "tools/call", params: { name: "bittensor_submit_signed_extrinsic", arguments: { preview: { action: "stake" }, signature: "0x1234567890abcdef" } } });
-  assert.equal(JSON.parse(submit.result.content[0].text).result.status, "sidecar_unavailable");
+  assert.deepEqual(JSON.parse(submit.result.content[0].text), {
+    success: false,
+    code: "wallet_airlock_required",
+    tool: "bittensor_submit_signed_extrinsic",
+    message: "This deprecated submission tool cannot sign, relay, broadcast, or submit. Regenerate a reviewed action and approve it in the connected Matterhorn wallet UI.",
+  });
 
   const subnetPreview = await ask({ jsonrpc: "2.0", id: 27, method: "tools/call", params: { name: "bittensor_preview_subnet_invocation", arguments: { netuid: 14, intent: "service_call", task: "mock task" } } });
   const subnetPreviewPayload = JSON.parse(subnetPreview.result.content[0].text);
