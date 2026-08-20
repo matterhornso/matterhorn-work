@@ -25,18 +25,58 @@ export type MatterhornAgentPrivacyPart = {
   type: string;
   text?: string;
   name?: string;
+  filename?: string;
   mime?: string;
-  source?: "composer" | "attachment" | "memory" | "wallet" | "tool";
+  /** Inline data URL or authorized workspace-local file URL. Remote URLs are rejected. */
+  url?: string;
+  source?: "composer" | "system" | "attachment" | "memory" | "wallet" | "tool";
+  label?: MatterhornAgentDataLabel;
+  /** Server-computed digest of attachment bytes or versioned private context. */
+  contentHash?: string;
+  sizeBytes?: number;
+  version?: string;
+};
+
+/** Account-facing message input. Privacy labels and content digests are server-owned. */
+export type MatterhornAgentMessagePart = {
+  type: string;
+  text?: string;
+  name?: string;
+  filename?: string;
+  mime?: string;
+  url?: string;
 };
 
 export type MatterhornAgentPrivacyPreflightRequest = {
   version?: typeof MATTERHORN_AGENT_PRIVACY_PREFLIGHT_VERSION;
-  parts: MatterhornAgentPrivacyPart[];
+  parts: MatterhornAgentMessagePart[];
   model: { providerId: string; modelId: string };
   agentId?: string | null;
   attachmentIds?: string[];
   memoryIds?: string[];
   privacyMode?: MatterhornAgentPrivacyMode;
+  executionMode?: "discuss" | "plan" | "work";
+  requestToolProfiles?: Array<Record<string, boolean>>;
+};
+
+export type MatterhornAgentMessageRequest = MatterhornAgentPrivacyPreflightRequest & {
+  privacyConsentToken?: string;
+  variant?: string;
+  reasoningEffort?: string;
+  messageID?: string;
+  noReply?: boolean;
+};
+
+export type MatterhornAgentMessageResponse = {
+  ok: true;
+  accepted: true;
+  sessionId: string;
+  runId: string;
+  privacy: {
+    requestHash: string;
+    decision: MatterhornAgentPrivacyDecision;
+    consentUsed: boolean;
+  };
 };
 
 export type MatterhornAgentPrivacyPreflightResponse = {

@@ -2723,7 +2723,9 @@ export function SessionRoute() {
         const prepareStartedAt = performance.now();
         const [parts, systemContext] = await Promise.all([
           draftToParts(draft, selectedWorkspaceRoot),
-          buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode),
+          publicBetaWeb
+            ? Promise.resolve(undefined)
+            : buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode),
         ]);
         const executionModeTools = buildMatterhornPromptTools({
           mode: executionMode,
@@ -2734,11 +2736,13 @@ export function SessionRoute() {
 
         if (!draft.privacy?.consentToken) {
           const privacyPreflight = await client.preflightAgentMessage(selectedWorkspaceId, selectedSessionId, {
-            parts: parts as unknown as import("@matterhorn-work/types/guarded-agent-runtime").MatterhornAgentPrivacyPart[],
+            parts,
             model: selectedPromptModel
               ? { providerId: selectedPromptModel.providerID, modelId: selectedPromptModel.modelID }
               : { providerId: "", modelId: "" },
             agentId: selectedAgent ?? undefined,
+            executionMode,
+            ...(executionModeTools ? { requestToolProfiles: [executionModeTools] } : {}),
             ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
             ...(draft.privacy?.attachmentIds?.length ? { attachmentIds: draft.privacy.attachmentIds } : {}),
             ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
@@ -2766,29 +2770,43 @@ export function SessionRoute() {
           executionMode,
           agentId: selectedAgent ?? "matterhorn",
         });
-        let result;
         try {
-          const promptRequest = {
-            sessionID: selectedSessionId,
-            parts,
-            model: selectedPromptModel ?? undefined,
-            agent: selectedAgent ?? undefined,
-            ...(executionModeTools ? { tools: executionModeTools } : {}),
-            ...(modelVariantValue ? { variant: modelVariantValue } : {}),
-            ...(systemContext ? { system: systemContext } : {}),
-            ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
-            ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
-            ...(draft.privacy?.attachmentIds?.length ? { attachmentIds: draft.privacy.attachmentIds } : {}),
-            ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
-          };
-          result = await opencodeClient.session.promptAsync(promptRequest);
+          if (publicBetaWeb) {
+            await client.sendAgentMessage(selectedWorkspaceId, selectedSessionId, {
+              parts,
+              model: selectedPromptModel
+                ? { providerId: selectedPromptModel.providerID, modelId: selectedPromptModel.modelID }
+                : { providerId: "", modelId: "" },
+              agentId: selectedAgent ?? undefined,
+              executionMode,
+              ...(executionModeTools ? { requestToolProfiles: [executionModeTools] } : {}),
+              ...(modelVariantValue ? { variant: modelVariantValue } : {}),
+              ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
+              ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
+              ...(draft.privacy?.attachmentIds?.length ? { attachmentIds: draft.privacy.attachmentIds } : {}),
+              ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
+            });
+          } else {
+            const result = await opencodeClient.session.promptAsync({
+              sessionID: selectedSessionId,
+              parts,
+              model: selectedPromptModel ?? undefined,
+              agent: selectedAgent ?? undefined,
+              ...(executionModeTools ? { tools: executionModeTools } : {}),
+              ...(modelVariantValue ? { variant: modelVariantValue } : {}),
+              ...(systemContext ? { system: systemContext } : {}),
+              ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
+              ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
+              ...(draft.privacy?.attachmentIds?.length ? { attachmentIds: draft.privacy.attachmentIds } : {}),
+              ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
+            });
+            if (result.error) {
+              throw new Error(serializeSDKError(result.error));
+            }
+          }
         } catch (error) {
           promptTimingRef.current.delete(selectedSessionId);
           throw error;
-        }
-        if (result.error) {
-          promptTimingRef.current.delete(selectedSessionId);
-          throw new Error(serializeSDKError(result.error));
         }
         recordInspectorEvent("session.prompt.dispatch_accepted", {
           dispatchDurationMs: Math.round(performance.now() - dispatchStartedAt),
@@ -3722,7 +3740,7 @@ export function SessionRoute() {
               });
               return false;
             }
-            if (options?.sendImmediately && selectedProviderPrivacyPolicy?.allowed === false) {
+            if (!publicBetaWeb && options?.sendImmediately && selectedProviderPrivacyPolicy?.allowed === false) {
               recordInspectorEvent("desk.task_launch.failed", {
                 ...taskLaunchEvent,
                 reason: "provider_privacy_unverified",
@@ -3830,7 +3848,15 @@ export function SessionRoute() {
               }
 
               try {
-                const systemContext = await buildSessionSystemContext(prompt, session.id, agent, "work");
+                const systemContext = publicBetaWeb
+                  ? undefined
+                  : await buildSessionSystemContext(prompt, session.id, agent, "work");
+                const executionModeTools = buildMatterhornPromptTools({
+                  mode: "work",
+                  agentId: agent,
+                  text: prompt,
+                  hasAttachments: false,
+                });
                 const operation = beginModelOperation({
                   workspaceId,
                   sessionId: session.id,
@@ -3843,16 +3869,29 @@ export function SessionRoute() {
                   ...taskLaunchEvent,
                   sessionId: session.id,
                 });
-                const result = await workspaceClient.session.promptAsync({
-                  sessionID: session.id,
-                  parts: [{ type: "text", text: prompt }],
-                  model: selectedPromptModel ?? undefined,
-                  agent: agent || undefined,
-                  ...(modelVariantValue ? { variant: modelVariantValue } : {}),
-                  ...(systemContext ? { system: systemContext } : {}),
-                });
-                if (result.error) {
-                  throw new Error(serializeSDKError(result.error));
+                if (publicBetaWeb) {
+                  await endpoint.client.sendAgentMessage(endpoint.workspaceId, session.id, {
+                    parts: [{ type: "text", text: prompt }],
+                    model: selectedPromptModel
+                      ? { providerId: selectedPromptModel.providerID, modelId: selectedPromptModel.modelID }
+                      : { providerId: "", modelId: "" },
+                    agentId: agent || undefined,
+                    executionMode: "work",
+                    ...(executionModeTools ? { requestToolProfiles: [executionModeTools] } : {}),
+                    ...(modelVariantValue ? { variant: modelVariantValue } : {}),
+                  });
+                } else {
+                  const result = await workspaceClient.session.promptAsync({
+                    sessionID: session.id,
+                    parts: [{ type: "text", text: prompt }],
+                    model: selectedPromptModel ?? undefined,
+                    agent: agent || undefined,
+                    ...(modelVariantValue ? { variant: modelVariantValue } : {}),
+                    ...(systemContext ? { system: systemContext } : {}),
+                  });
+                  if (result.error) {
+                    throw new Error(serializeSDKError(result.error));
+                  }
                 }
                 recordModelOperationAccepted(operation);
                 saveSessionDraft(workspaceId, session.id, { text: "", mode: "prompt" });

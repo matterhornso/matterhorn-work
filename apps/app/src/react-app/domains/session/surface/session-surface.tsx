@@ -29,6 +29,7 @@ import {
 import { createClient, unwrap } from "../../../../app/lib/opencode";
 import { abortSessionSafe, revertSession, unrevertSession } from "../../../../app/lib/opencode-session";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
+import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import {
   beginModelOperation,
   pendingModelOperation,
@@ -1443,6 +1444,7 @@ function revokeAttachmentPreview(attachment: { previewUrl?: string | undefined }
 }
 
 export function SessionSurface(props: SessionSurfaceProps) {
+  const publicBetaWeb = isPublicBetaWebDeployment();
   const local = useLocal();
   const { openQuickJot } = useQuickJot();
   const { config: shellConfig } = useShellConfig();
@@ -3209,6 +3211,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     <OwDotTicker size="sm" />
                     Returning to project Home…
                   </div>
+                ) : publicBetaWeb ? (
+                  <>
+                    Each request is checked before it leaves Matterhorn.{" "}
+                    {props.providerPrivacyPolicy.providerName} processes allowed
+                    prompts. Public research can proceed; private context requires
+                    one-request consent.
+                  </>
                 ) : (
                   <div className="mx-auto max-w-xl rounded-lg bg-red-3/20 px-6 py-5 text-sm text-red-11 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.22)]">
                     {snapshotQuery.error instanceof Error ? snapshotQuery.error.message : "Failed to load session."}
@@ -3432,7 +3441,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         disabled={model.transitionState !== "idle"}
         sendDisabled={
           model.transitionState !== "idle" ||
-          props.providerPrivacyPolicy?.allowed === false ||
+          (!publicBetaWeb && props.providerPrivacyPolicy?.allowed === false) ||
           (Boolean(props.modelUnavailable) && !localReviewedActionReady)
         }
         modelUnavailable={Boolean(props.modelUnavailable)}

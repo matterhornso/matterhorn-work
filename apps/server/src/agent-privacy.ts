@@ -29,7 +29,7 @@ const SECRET_ATTACHMENT_NAME = /(?:^|[/\\])(?:\.env(?:\.[^/\\]+)?|id_(?:rsa|ed25
 const WALLET_ADDRESS_PATTERN = /\b(?:0x[a-fA-F0-9]{40,64}|[1-9A-HJ-NP-Za-km-z]{47,64})\b/;
 const TRANSACTION_PATTERN = /\b(?:send|transfer|stake|unstake|buy|sell|swap|bridge|place|modify|cancel|close)\b[\s\S]{0,80}\b(?:tao|sui|usdc|position|order|market|wallet|address|recipient|amount)\b/i;
 
-type PrivacyInput = {
+export type PrivacyInput = {
   workspaceId: string;
   sessionId: string;
   parts: MatterhornAgentPrivacyPart[];
@@ -97,6 +97,25 @@ function classify(input: PrivacyInput): {
   let redactionCount = 0;
   let effectiveMode = requestedMode(input.privacyMode);
   const text = input.parts.map((part) => `${part.name ?? ""}\n${part.text ?? ""}`).join("\n");
+  const intentText = input.parts
+    .filter((part) => part.source !== "system" && part.source !== "tool")
+    .map((part) => `${part.name ?? ""}\n${part.text ?? ""}`)
+    .join("\n");
+
+  for (const part of input.parts) {
+    if (!part.label || part.label === "public") continue;
+    labels.add(part.label);
+    if (part.label === "workspace_private") {
+      effectiveMode = maxMode(effectiveMode, "private_workspace");
+    } else if (part.label === "wallet_private") {
+      effectiveMode = "transaction";
+    } else if (part.label === "secret") {
+      categories.add("secret_context");
+      redactionCount += 1;
+    } else if (part.label === "untrusted_external") {
+      categories.add("external_tool_data");
+    }
+  }
 
   for (const entry of SECRET_PATTERNS) {
     if (!entry.pattern.test(text)) continue;
@@ -127,13 +146,13 @@ function classify(input: PrivacyInput): {
     effectiveMode = maxMode(effectiveMode, "private_workspace");
   }
 
-  if (input.parts.some((part) => part.source === "wallet") || (WALLET_ADDRESS_PATTERN.test(text) && TRANSACTION_PATTERN.test(text))) {
+  if (input.parts.some((part) => part.source === "wallet") || (WALLET_ADDRESS_PATTERN.test(intentText) && TRANSACTION_PATTERN.test(intentText))) {
     labels.add("wallet_private");
     categories.add("linked_wallet_context");
     effectiveMode = maxMode(effectiveMode, "transaction");
   }
 
-  if (TRANSACTION_PATTERN.test(text) || requestedMode(input.privacyMode) === "transaction") {
+  if (TRANSACTION_PATTERN.test(intentText) || requestedMode(input.privacyMode) === "transaction") {
     labels.add("wallet_private");
     categories.add("transaction_intent");
     effectiveMode = "transaction";
@@ -165,10 +184,14 @@ export function agentPrivacyRequestHash(input: PrivacyInput): string {
     privacyMode: requestedMode(input.privacyMode),
     parts: input.parts.map((part) => ({
       type: part.type,
-      text: part.text ?? null,
+      text: part.contentHash ? null : part.text ?? null,
       name: part.name ?? null,
       mime: part.mime ?? null,
       source: part.source ?? "composer",
+      label: part.label ?? "public",
+      contentHash: part.contentHash ?? null,
+      sizeBytes: part.sizeBytes ?? null,
+      version: part.version ?? null,
     })),
   });
 }
@@ -344,15 +367,24 @@ export function normalizePrivacyParts(parts: unknown[]): MatterhornAgentPrivacyP
   return parts.map((part) => {
     if (!part || typeof part !== "object" || Array.isArray(part)) return { type: "unknown" };
     const record = part as Record<string, unknown>;
-    const source = record.source === "attachment" || record.source === "memory" || record.source === "wallet" || record.source === "tool"
+    const source = record.source === "system" || record.source === "attachment" || record.source === "memory" || record.source === "wallet" || record.source === "tool"
       ? record.source
       : "composer";
+    const label = record.label === "workspace_private" || record.label === "wallet_private" || record.label === "secret" || record.label === "untrusted_external"
+      ? record.label
+      : "public";
     return {
       type: typeof record.type === "string" ? record.type.slice(0, 80) : "unknown",
       ...(typeof record.text === "string" ? { text: record.text } : {}),
       ...(typeof record.name === "string" ? { name: record.name.slice(0, 256) } : {}),
       ...(typeof record.mime === "string" ? { mime: record.mime.slice(0, 160) } : {}),
       source,
+      label,
+      ...(typeof record.contentHash === "string" ? { contentHash: record.contentHash.slice(0, 128) } : {}),
+      ...(typeof record.sizeBytes === "number" && Number.isFinite(record.sizeBytes)
+        ? { sizeBytes: Math.max(0, Math.floor(record.sizeBytes)) }
+        : {}),
+      ...(typeof record.version === "string" ? { version: record.version.slice(0, 256) } : {}),
     };
   });
 }

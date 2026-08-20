@@ -99,6 +99,8 @@ import type { MatterhornBackendSupportReportResponse } from "@matterhorn-work/ty
 import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-mode";
 import type {
   MatterhornAgentPrivacyConsentResponse,
+  MatterhornAgentMessageRequest,
+  MatterhornAgentMessageResponse,
   MatterhornAgentPrivacyPreflightRequest,
   MatterhornAgentPrivacyPreflightResponse,
   MatterhornAgentRunReceipt,
@@ -1825,6 +1827,21 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         hostToken,
         method: "POST",
         body: model ? { model } : {},
+        timeoutMs: timeouts.sessionRead,
+      },
+    ),
+    sendAgentMessage: (
+      workspaceId: string,
+      sessionId: string,
+      input: MatterhornAgentMessageRequest,
+    ) => requestJson<MatterhornAgentMessageResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages`,
+      {
+        token,
+        hostToken,
+        method: "POST",
+        body: input,
         timeoutMs: timeouts.sessionRead,
       },
     ),

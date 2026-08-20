@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MatterhornPrivacyFirewall } from "./agent-privacy.js";
+import { agentPrivacyRequestHash, MatterhornPrivacyFirewall } from "./agent-privacy.js";
 
 function baseInput() {
   return {
@@ -91,6 +91,60 @@ describe("agent privacy firewall", () => {
       workspaceId: request.workspaceId,
       sessionId: request.sessionId,
     })).toBe(false);
+  });
+
+  test("binds consent to server context, attachment bytes, Memory versions, model, agent, and tools", () => {
+    const request = {
+      ...baseInput(),
+      agentId: "matterhorn-bittensor",
+      attachmentIds: ["attachment_1"],
+      memoryIds: ["memory_1"],
+      parts: [
+        { type: "text", text: "Compare validators", source: "composer" as const },
+        {
+          type: "system",
+          source: "system" as const,
+          label: "public" as const,
+          text: "Server-owned desk policy",
+        },
+        {
+          type: "attachment",
+          source: "attachment" as const,
+          label: "workspace_private" as const,
+          name: "notes.txt",
+          contentHash: "a".repeat(64),
+          sizeBytes: 12,
+        },
+        {
+          type: "memory",
+          source: "memory" as const,
+          label: "workspace_private" as const,
+          contentHash: "b".repeat(64),
+          version: "2026-08-20T00:00:00.000Z",
+        },
+        {
+          type: "tool_profile",
+          source: "system" as const,
+          label: "public" as const,
+          contentHash: "c".repeat(64),
+        },
+      ],
+    };
+    const hash = agentPrivacyRequestHash(request);
+    const mutations = [
+      { ...request, modelId: "asi1-large" },
+      { ...request, providerId: "ollama" },
+      { ...request, agentId: "matterhorn-sui" },
+      { ...request, attachmentIds: ["attachment_2"] },
+      { ...request, memoryIds: ["memory_2"] },
+      { ...request, parts: request.parts.map((part, index) => index === 1 ? { ...part, text: "Changed server policy" } : part) },
+      { ...request, parts: request.parts.map((part, index) => index === 2 ? { ...part, contentHash: "d".repeat(64) } : part) },
+      { ...request, parts: request.parts.map((part, index) => index === 3 ? { ...part, version: "2026-08-20T00:01:00.000Z" } : part) },
+      { ...request, parts: request.parts.map((part, index) => index === 4 ? { ...part, contentHash: "e".repeat(64) } : part) },
+    ];
+    for (const mutation of mutations) {
+      expect(agentPrivacyRequestHash(mutation)).not.toBe(hash);
+    }
   });
 
   test("allows private context through a local provider without consent", () => {
