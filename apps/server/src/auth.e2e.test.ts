@@ -1232,11 +1232,35 @@ describe("public account authentication", () => {
         cookie: cookieA,
         body: { handoff: {}, currentDraft: {} },
       }),
+      jsonRequest(app.base, `/workspace/${workspaceB.id}/bittensor/wallet/timeline/status`, {
+        cookie: cookieA,
+      }),
+      jsonRequest(app.base, `/workspace/${workspaceB.id}/bittensor/wallet/timeline/export`, {
+        cookie: cookieA,
+      }),
     ]) {
       const isolated = await request;
       expect(isolated.response.status).toBe(404);
       expect(isolated.payload.code).toBe("workspace_not_found");
     }
+
+    const ownWalletTimeline = await jsonRequest(
+      app.base,
+      `/workspace/${workspaceA.id}/bittensor/wallet/timeline/export`,
+      { cookie: cookieA },
+    );
+    expect(ownWalletTimeline.response.status).toBe(200);
+    expect(ownWalletTimeline.payload.timeline).toMatchObject({
+      snapshots: [],
+      status: { path: null },
+    });
+    const legacyGlobalTimeline = await jsonRequest(
+      app.base,
+      "/api/bittensor/wallet/timeline/export",
+      { cookie: cookieA },
+    );
+    expect(legacyGlobalTimeline.response.status).toBe(403);
+    expect(legacyGlobalTimeline.payload.code).toBe("hosted_operation_not_allowed");
 
     const now = "2026-07-29T00:00:00.000Z";
     const capturedMemory = await jsonRequest(app.base, "/api/memory/capture", {

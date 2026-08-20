@@ -45,6 +45,7 @@ export type MatterhornWorkspaceArchiveInput = {
     messages: unknown[];
     todos: unknown[];
   }>;
+  receipts?: unknown[];
   activity: unknown;
 };
 
@@ -60,6 +61,7 @@ export type MatterhornWorkspaceArchiveResult = {
     memorySuggestions: number;
     chats: number;
     messages: number;
+    receipts: number;
     files: number;
   };
 };
@@ -293,6 +295,7 @@ export async function buildMatterhornWorkspaceArchive(
     memorySuggestions: input.memory.suggestions.length,
     chats: input.chats.length,
     messages: messageCount(input.chats),
+    receipts: input.receipts?.length ?? 0,
     files: files.length,
   };
   const data = {
@@ -301,6 +304,7 @@ export async function buildMatterhornWorkspaceArchive(
     notes: input.notes,
     memory: input.memory,
     chats: input.chats,
+    receipts: input.receipts ?? [],
     activity: input.activity,
     files,
   };
@@ -320,6 +324,7 @@ export async function buildMatterhornWorkspaceArchive(
         "sanitized workspace configuration",
         "the current project mission and coordination context",
         "chat sessions with full message bodies and todos",
+        "minimal guarded-agent security receipts without raw prompts or capability values",
         "active note records",
         "confirmed memory records and the complete memory review inbox",
         "rendered note files, outputs, and generated output files",

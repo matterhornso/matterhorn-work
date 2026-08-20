@@ -12,6 +12,7 @@ const OWNER_TOKEN = "matterhorn_metrics_owner";
 const HOST_TOKEN = "matterhorn_metrics_host";
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
+const originalGuardedRuntimeDb = process.env.MATTERHORN_GUARDED_RUNTIME_DB;
 
 async function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -28,6 +29,7 @@ async function boot(withWorkspace = true): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-operational-metrics-"));
   dirs.push(root);
   const port = await getFreePort();
+  process.env.MATTERHORN_GUARDED_RUNTIME_DB = join(root, "guarded-runtime", "state.db");
   const config: ServerConfig = {
     host: "127.0.0.1",
     port,
@@ -59,6 +61,8 @@ async function boot(withWorkspace = true): Promise<string> {
 afterEach(async () => {
   while (stops.length) await stops.pop()?.();
   while (dirs.length) rmSync(dirs.pop()!, { recursive: true, force: true });
+  if (originalGuardedRuntimeDb === undefined) delete process.env.MATTERHORN_GUARDED_RUNTIME_DB;
+  else process.env.MATTERHORN_GUARDED_RUNTIME_DB = originalGuardedRuntimeDb;
 });
 
 describe("operational probes and metrics", () => {
@@ -125,6 +129,60 @@ describe("operational probes and metrics", () => {
       else process.env.MATTERHORN_AGENT_RUNTIME_SECRET = previous.runtime;
       if (previous.capability === undefined) delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
       else process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = previous.capability;
+    }
+  });
+
+  test("shadow and enforced guarded runtime require an explicit single-instance topology", async () => {
+    const previous = {
+      mode: process.env.MATTERHORN_GUARDED_RUNTIME_MODE,
+      runtime: process.env.MATTERHORN_AGENT_RUNTIME_SECRET,
+      capability: process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET,
+      instances: process.env.MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT,
+    };
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+    process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "runtime-secret-at-least-32-characters";
+    process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "capability-secret-at-least-32-characters";
+    process.env.MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT = "2";
+    try {
+      const base = await boot();
+      const response = await fetch(`${base}/health/ready`);
+      const body = await response.json();
+      expect(response.status).toBe(503);
+      expect(body).toMatchObject({ checks: { guardedRuntimeTopologyReady: false } });
+    } finally {
+      for (const [key, value] of Object.entries({
+        MATTERHORN_GUARDED_RUNTIME_MODE: previous.mode,
+        MATTERHORN_AGENT_RUNTIME_SECRET: previous.runtime,
+        MATTERHORN_CAPABILITY_SIGNING_SECRET: previous.capability,
+        MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT: previous.instances,
+      })) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  test("required host backups fail readiness until a recent verified upload marker exists", async () => {
+    const previous = {
+      required: process.env.MATTERHORN_HOST_BACKUP_REQUIRED,
+      dataRoot: process.env.MATTERHORN_WORK_DATA_DIR,
+    };
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-backup-readiness-"));
+    dirs.push(root);
+    process.env.MATTERHORN_HOST_BACKUP_REQUIRED = "1";
+    process.env.MATTERHORN_WORK_DATA_DIR = root;
+    try {
+      const base = await boot();
+      const response = await fetch(`${base}/health/ready`);
+      const body = await response.json();
+      expect(response.status).toBe(503);
+      expect(body).toMatchObject({ checks: { hostBackupRequired: true, hostBackupFresh: false } });
+      expect(JSON.stringify(body)).not.toContain(root);
+    } finally {
+      if (previous.required === undefined) delete process.env.MATTERHORN_HOST_BACKUP_REQUIRED;
+      else process.env.MATTERHORN_HOST_BACKUP_REQUIRED = previous.required;
+      if (previous.dataRoot === undefined) delete process.env.MATTERHORN_WORK_DATA_DIR;
+      else process.env.MATTERHORN_WORK_DATA_DIR = previous.dataRoot;
     }
   });
 

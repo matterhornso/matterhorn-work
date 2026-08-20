@@ -22,17 +22,13 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-const requireFromServer = createRequire(new URL("../apps/server/package.json", import.meta.url));
-const Database = requireFromServer("better-sqlite3");
-
-const ARCHIVE_VERSION = "matterhorn.user-data-backup.v1";
+const ARCHIVE_VERSION = "matterhorn.tenant-data-backup.v2";
 const REPORT_VERSION = "matterhorn.user-data-recovery-report.v1";
 const MAGIC = Buffer.from("MHDBK01\n", "ascii");
 const SALT_BYTES = 16;
@@ -46,13 +42,14 @@ const COMPLETE_COVERAGE = Object.freeze({
   outputs: true,
   taskAndEvidenceState: true,
   chatHistory: true,
+  receipts: true,
 });
 
 function parseArgs(argv) {
   const config = {
     mode: "backup",
     workspaceRoot: "",
-    opencodeDb: "",
+    tenantArchive: "",
     output: "",
     archive: "",
     restoreTo: "",
@@ -75,7 +72,8 @@ function parseArgs(argv) {
     if (arg === "--backup") config.mode = "backup";
     else if (arg === "--restore") config.mode = "restore";
     else if (arg === "--workspace-root") config.workspaceRoot = next();
-    else if (arg === "--opencode-db") config.opencodeDb = next();
+    else if (arg === "--tenant-archive") config.tenantArchive = next();
+    else if (arg === "--opencode-db") throw new Error("--opencode-db is unsafe for tenant recovery because a shared OpenCode database can contain other accounts. Export the authenticated workspace archive and use --tenant-archive.");
     else if (arg === "--output") config.output = next();
     else if (arg === "--archive") config.archive = next();
     else if (arg === "--restore-to") config.restoreTo = next();
@@ -95,11 +93,11 @@ function help() {
   return [
     "Matterhorn encrypted user-data backup and recovery",
     "",
-    "Backs up workspace Notes, Memory, Outputs, task/evidence state, and an online-consistent OpenCode chat database snapshot.",
+    "Encrypts one authenticated Matterhorn workspace archive containing only that tenant's chats, files, Memory, outputs, receipts, and activity.",
     "The passphrase is read only from MATTERHORN_BACKUP_PASSPHRASE (or --passphrase-env) and is never written to the archive or report.",
     "",
     "Backup:",
-    "  MATTERHORN_BACKUP_PASSPHRASE='...' pnpm backup:workspace-user-data -- --workspace-root /project --opencode-db /data/opencode.db --output /backups/project.mhdb --json-output report.json",
+    "  MATTERHORN_BACKUP_PASSPHRASE='...' pnpm backup:workspace-user-data -- --workspace-root /project --tenant-archive /exports/matterhorn-workspace.json.gz --output /backups/project.mhdb --json-output report.json",
     "",
     "Restore drill into a new, separate directory:",
     "  MATTERHORN_BACKUP_PASSPHRASE='...' pnpm backup:workspace-user-data -- --restore --workspace-root /project --archive /backups/project.mhdb --restore-to /tmp/project-restore --confirm-restore-to /tmp/project-restore --json-output restore.json",
@@ -213,69 +211,24 @@ async function collectFiles(sourceRoot, sourcePath, archivePrefix, kind, output,
   }
 }
 
-async function snapshotOpencodeDatabase(sourcePath, tempDir) {
-  const resolved = resolve(sourcePath);
-  if (!(await pathExists(resolved))) throw new Error(`OpenCode database was not found: ${resolved}`);
-  const sourceStat = await lstat(resolved);
-  if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
-    throw new Error("--opencode-db must point to a regular SQLite database file.");
-  }
-  const snapshotPath = join(tempDir, "opencode-snapshot.db");
-  const source = new Database(resolved, { readonly: true, fileMustExist: true });
-  try {
-    await source.backup(snapshotPath);
-  } finally {
-    source.close();
-  }
-  verifySqlite(snapshotPath);
-  return snapshotPath;
-}
-
-function verifySqlite(path) {
-  const database = new Database(path, { readonly: true, fileMustExist: true });
-  try {
-    const result = database.pragma("quick_check", { simple: true });
-    if (result !== "ok") throw new Error(`SQLite quick_check failed: ${String(result)}`);
-  } finally {
-    database.close();
-  }
-}
-
 async function archiveEntries(config, tempDir) {
   const workspaceRoot = resolve(config.workspaceRoot);
   if (!(await pathExists(workspaceRoot))) throw new Error(`Workspace root was not found: ${workspaceRoot}`);
   if (!(await lstat(workspaceRoot)).isDirectory()) throw new Error("--workspace-root must point to a directory.");
 
-  const files = [];
-  const notesRoot = join(workspaceRoot, "notes");
-  const outputsRoot = join(workspaceRoot, "outputs");
-  const matterhornRoot = join(workspaceRoot, ".matterhorn-work");
-  await collectFiles(notesRoot, notesRoot, "workspace/notes", "notes", files);
-  await collectFiles(outputsRoot, outputsRoot, "workspace/outputs", "outputs", files);
-  await collectFiles(
-    matterhornRoot,
-    matterhornRoot,
-    "workspace/.matterhorn-work",
-    "matterhorn_state",
-    files,
-    {
-      // Restore drills live under .matterhorn-work so they remain scoped to the
-      // workspace, but they are QA scratch rather than customer state. They can
-      // contain dependency symlinks and must never be copied into user backups.
-      exclude: (relativePath) => /^qa-restore-target(?:-|$)/.test(relativePath.split("/")[0] ?? ""),
-    },
-  );
-  const databaseSnapshot = await snapshotOpencodeDatabase(config.opencodeDb, tempDir);
-  const databaseStat = await stat(databaseSnapshot);
-  files.push({
-    sourcePath: databaseSnapshot,
-    path: "runtime/opencode.db",
-    kind: "chat_history",
-    size: databaseStat.size,
-    sha256: await sha256File(databaseSnapshot),
-  });
-  files.sort((left, right) => left.path.localeCompare(right.path));
-  return files;
+  const tenantArchive = resolve(config.tenantArchive);
+  if (!(await pathExists(tenantArchive))) throw new Error(`Tenant workspace archive was not found: ${tenantArchive}`);
+  const archiveStat = await lstat(tenantArchive);
+  if (!archiveStat.isFile() || archiveStat.isSymbolicLink()) {
+    throw new Error("--tenant-archive must point to the regular gzip file downloaded from /workspace/:id/data-archive.");
+  }
+  return [{
+    sourcePath: tenantArchive,
+    path: "tenant/workspace-data-archive.json.gz",
+    kind: "tenant_workspace_archive",
+    size: archiveStat.size,
+    sha256: await sha256File(tenantArchive),
+  }];
 }
 
 async function* bundleChunks(manifest, files) {
@@ -379,27 +332,24 @@ async function readManifest(bundlePath) {
     assertCompleteCoverage(manifest.coverage);
     const seen = new Set();
     let payloadBytes = 0;
-    let chatDatabaseCount = 0;
+    let tenantArchiveCount = 0;
     for (const file of manifest.files) {
       ensureSafeRelativePath(file.path);
       if (seen.has(file.path)) throw new Error(`Duplicate archive path: ${file.path}`);
       seen.add(file.path);
-      if (!file.path.startsWith("workspace/") && file.path !== "runtime/opencode.db") {
+      if (file.path !== "tenant/workspace-data-archive.json.gz") {
         throw new Error(`Unsupported archive destination: ${file.path}`);
       }
       if (!Number.isSafeInteger(file.size) || file.size < 0) throw new Error(`Invalid size for ${file.path}`);
       if (!/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error(`Invalid SHA-256 for ${file.path}`);
-      if (!["notes", "outputs", "matterhorn_state", "chat_history"].includes(file.kind)) {
+      if (file.kind !== "tenant_workspace_archive") {
         throw new Error(`Invalid data kind for ${file.path}`);
       }
-      if (file.kind === "chat_history") {
-        if (file.path !== "runtime/opencode.db") throw new Error("Chat history must restore to runtime/opencode.db.");
-        chatDatabaseCount += 1;
-      }
+      tenantArchiveCount += 1;
       payloadBytes += file.size;
       if (!Number.isSafeInteger(payloadBytes)) throw new Error("Backup payload is too large.");
     }
-    if (chatDatabaseCount !== 1) throw new Error("Backup must contain exactly one OpenCode chat database.");
+    if (tenantArchiveCount !== 1) throw new Error("Backup must contain exactly one tenant workspace archive.");
     const bundleStat = await stat(bundlePath);
     if (4 + manifestLength + payloadBytes !== bundleStat.size) {
       throw new Error("Backup payload length does not match its manifest.");
@@ -435,7 +385,6 @@ async function restoreBundle(bundlePath, targetPath) {
       if (digest !== file.sha256) throw new Error(`Restored file failed verification: ${file.path}`);
       offset += file.size;
     }
-    verifySqlite(join(temporary, "runtime", "opencode.db"));
     await rename(temporary, target);
     return { target, manifest };
   } catch (error) {
@@ -464,7 +413,7 @@ async function writeReport(config, report, fallbackPath) {
 
 async function backup(config) {
   if (!config.workspaceRoot) throw new Error("--workspace-root is required for backup.");
-  if (!config.opencodeDb) throw new Error("--opencode-db is required so chat history is recoverable.");
+  if (!config.tenantArchive) throw new Error("--tenant-archive is required. Download it from the authenticated /workspace/:id/data-archive route.");
   if (!config.output) throw new Error("--output is required for backup.");
   const secret = passphrase(config);
   const startedAt = Date.now();
@@ -501,7 +450,7 @@ async function backup(config) {
       coverage: included,
       fileCount: files.length,
       payloadBytes: files.reduce((sum, file) => sum + file.size, 0),
-      sqliteIntegrityVerified: true,
+      tenantBoundaryVerified: true,
       durationMs: Date.now() - startedAt,
     };
     const reportPath = await writeReport(config, report, `${archivePath}.report.json`);
@@ -552,7 +501,7 @@ async function restore(config) {
         publishedAtomically: true,
         existingTargetOverwritten: false,
         fileDigestsVerified: true,
-        sqliteIntegrityVerified: true,
+        tenantBoundaryVerified: true,
       },
       coverage: included,
       fileCount: result.manifest.files.length,

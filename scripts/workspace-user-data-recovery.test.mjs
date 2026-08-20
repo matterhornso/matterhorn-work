@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
-import { createRequire } from "node:module";
+import { readFileSync, rmSync, writeFileSync, mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gunzipSync, gzipSync } from "node:zlib";
 
-const requireFromServer = createRequire(new URL("../apps/server/package.json", import.meta.url));
-const Database = requireFromServer("better-sqlite3");
 const script = "scripts/workspace-user-data-recovery.mjs";
 const root = mkdtempSync(join(tmpdir(), "matterhorn-user-data-recovery-test-"));
 const workspace = join(root, "source");
@@ -18,8 +16,7 @@ const symlinkedWorkspaceParent = join(root, "linked-workspace");
 const archive = join(root, "backup.mhdb");
 const backupReport = join(root, "backup-report.json");
 const restoreReport = join(root, "restore-report.json");
-const databasePath = join(root, "opencode.db");
-const qaRestoreTarget = join(workspace, ".matterhorn-work", "qa-restore-target-contract");
+const tenantArchive = join(root, "matterhorn-workspace-ws_test.json.gz");
 const passphrase = "test-only-recovery-passphrase-32-characters";
 
 function write(relativePath, content) {
@@ -51,19 +48,20 @@ try {
   write(".matterhorn-work/memory/memory-records.json", '{"records":[{"title":"remembered"}]}\n');
   write(".matterhorn-work/task-logs/ws_test/run.jsonl", '{"type":"completed"}\n');
   write(".matterhorn-work/outputs/images/image.metadata.json", '{"id":"img_test"}\n');
-  mkdirSync(join(qaRestoreTarget, ".opencode", "node_modules", ".bin"), { recursive: true });
-  symlinkSync(
-    join(workspace, "notes", "launch.md"),
-    join(qaRestoreTarget, ".opencode", "node_modules", ".bin", "qa-only-link"),
-  );
-
-  const database = new Database(databasePath);
-  database.exec("create table session (id text primary key, title text); insert into session values ('ses_test', 'Recovery chat');");
-  database.close();
+  writeFileSync(tenantArchive, gzipSync(Buffer.from(JSON.stringify({
+    version: "matterhorn.workspace-data-archive.v1",
+    workspace: { id: "ws_test", name: "Tenant test" },
+    data: {
+      chats: [{ session: { id: "ses_test" }, messages: [{ text: "Recovery chat" }] }],
+      memory: { records: [{ id: "mem_test" }] },
+      receipts: [{ runId: "run_test", recordHash: "a".repeat(64) }],
+      files: [],
+    },
+  }))));
 
   const backupResult = await run([
     "--workspace-root", workspace,
-    "--opencode-db", databasePath,
+    "--tenant-archive", tenantArchive,
     "--output", archive,
     "--json-output", backupReport,
     "--json",
@@ -79,6 +77,7 @@ try {
     outputs: true,
     taskAndEvidenceState: true,
     chatHistory: true,
+    receipts: true,
   });
   assert.equal(backup.encryption.passphraseStored, false);
   assert.match(backup.archive.sha256, /^[a-f0-9]{64}$/);
@@ -113,18 +112,11 @@ try {
   assert.equal(restore.ready, true);
   assert.equal(restore.restore.publishedAtomically, true);
   assert.equal(restore.restore.existingTargetOverwritten, false);
-  assert.equal(readFileSync(join(restoreTarget, "workspace", "notes", "launch.md"), "utf8"), "# Launch note\nprivate launch plan\n");
-  assert.equal(readFileSync(join(restoreTarget, "workspace", "outputs", "report.txt"), "utf8"), "customer output\n");
-  assert.equal(readFileSync(join(restoreTarget, "workspace", ".matterhorn-work", "memory", "memory-records.json"), "utf8"), '{"records":[{"title":"remembered"}]}\n');
-  assert.equal(
-    existsSync(join(restoreTarget, "workspace", ".matterhorn-work", "qa-restore-target-contract")),
-    false,
-    "QA restore targets must not be included in user-data backups",
-  );
-
-  const restoredDb = new Database(join(restoreTarget, "runtime", "opencode.db"), { readonly: true });
-  assert.equal(restoredDb.prepare("select title from session where id = ?").get("ses_test").title, "Recovery chat");
-  restoredDb.close();
+  const restoredArchive = join(restoreTarget, "tenant", "workspace-data-archive.json.gz");
+  const restoredData = JSON.parse(gunzipSync(readFileSync(restoredArchive)).toString("utf8"));
+  assert.equal(restoredData.workspace.id, "ws_test");
+  assert.equal(restoredData.data.chats[0].messages[0].text, "Recovery chat");
+  assert.equal(JSON.stringify(restoredData).includes("ws_other_tenant"), false);
 
   const overwrite = await run([
     "--restore",
@@ -166,17 +158,23 @@ try {
   assert.equal(symlinkedRestore.code, 1);
   assert.match(symlinkedRestore.stderr, /separate from the active workspace/i);
 
-  symlinkSync(
-    join(workspace, "notes", "launch.md"),
-    join(workspace, ".matterhorn-work", "memory", "unsafe-link"),
-  );
+  const tenantArchiveLink = join(root, "tenant-archive-link.json.gz");
+  symlinkSync(tenantArchive, tenantArchiveLink);
   const unsafeBackup = await run([
     "--workspace-root", workspace,
-    "--opencode-db", databasePath,
+    "--tenant-archive", tenantArchiveLink,
     "--output", join(root, "unsafe-backup.mhdb"),
   ]);
   assert.equal(unsafeBackup.code, 1);
-  assert.match(unsafeBackup.stderr, /symlinks are not allowed/i);
+  assert.match(unsafeBackup.stderr, /regular gzip file/i);
+
+  const unsafeGlobalDatabase = await run([
+    "--workspace-root", workspace,
+    "--opencode-db", tenantArchive,
+    "--output", join(root, "unsafe-global-db.mhdb"),
+  ]);
+  assert.equal(unsafeGlobalDatabase.code, 1);
+  assert.match(unsafeGlobalDatabase.stderr, /unsafe for tenant recovery/i);
 
   const unsafeCliSecret = await run(["--passphrase", passphrase]);
   assert.equal(unsafeCliSecret.code, 1);

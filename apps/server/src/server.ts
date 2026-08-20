@@ -1,4 +1,5 @@
 import { getPortfolio } from "./tools/portfolio-tracker.js";
+import { hostBackupFresh } from "./host-backup-readiness.js";
 import { getCowQuote } from "./tools/cow-swap.js";
 import {
   buildAaveSupplyTx,
@@ -115,6 +116,7 @@ import {
   type BittensorSubnetInvocation,
   type BittensorWatch,
 } from "./tools/bittensor.js";
+import { MatterhornBittensorWalletTimelineStore } from "./bittensor-wallet-timeline-store.js";
 import {
   buildHyperliquidAccountCard,
   buildHyperliquidFundingCard,
@@ -386,6 +388,7 @@ import {
   MatterhornAuthError,
   MatterhornAuthStore,
   resolveMatterhornDataRoot,
+  type MatterhornAuthAccountDeletionJob,
   type MatterhornAuthSession,
 } from "./auth-store.js";
 import {
@@ -510,7 +513,11 @@ import {
   MatterhornGuardedAgentRuntime,
   type GuardedPromptAcceptance,
 } from "./guarded-agent-runtime.js";
-import { agentSecurityReceiptDirectory } from "./agent-run-receipts.js";
+import {
+  agentSecurityReceiptDirectory,
+  purgeAllExpiredAgentRunReceipts,
+} from "./agent-run-receipts.js";
+import { guardedRuntimeSingleInstanceReady } from "./guarded-runtime-state-store.js";
 import {
   legacySecurityMigrationCheckpointPath,
   migrateLegacySecurityRecords,
@@ -1181,6 +1188,34 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
+  let receiptExpiryTask = purgeAllExpiredAgentRunReceipts(guardedRuntime.receipts).catch((error) => {
+    logger.log("error", "Guarded receipt expiry failed", unhandledErrorAttributes(error));
+    return { workspaces: 0, files: 0 };
+  });
+  const receiptExpiryTimer = setInterval(() => {
+    receiptExpiryTask = purgeAllExpiredAgentRunReceipts(guardedRuntime.receipts).catch((error) => {
+      logger.log("error", "Guarded receipt expiry failed", unhandledErrorAttributes(error));
+      return { workspaces: 0, files: 0 };
+    });
+  }, 24 * 60 * 60 * 1_000);
+  receiptExpiryTimer.unref?.();
+  let accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
+    config,
+    authStore,
+    onWorkspacesChanged: restartReloadWatchers,
+  }).catch((error) => {
+    logger.log("error", "Account deletion retry failed", unhandledErrorAttributes(error));
+  });
+  const accountDeletionRetryTimer = setInterval(() => {
+    accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
+      config,
+      authStore,
+      onWorkspacesChanged: restartReloadWatchers,
+    }).catch((error) => {
+      logger.log("error", "Account deletion retry failed", unhandledErrorAttributes(error));
+    });
+  }, 60_000);
+  accountDeletionRetryTimer.unref?.();
   const ownsRequestRateLimitStore = !config.requestRateLimitStore;
   const requestRateLimitStore = config.requestRateLimitStore ?? createDefaultRequestRateLimitStore();
   const routes = createRoutes(
@@ -1421,10 +1456,15 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   return {
     ...server,
     stop: async (closeActiveConnections?: boolean) => {
+      clearInterval(receiptExpiryTimer);
+      clearInterval(accountDeletionRetryTimer);
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
-      authStore.close();
       modelUsageStore.close();
+      await receiptExpiryTask;
+      await accountDeletionRetryTask;
+      authStore.close();
+      guardedRuntime.close();
       if (ownsRequestRateLimitStore) await requestRateLimitStore.close?.();
       await (server.stop as unknown as (closeActiveConnections?: boolean) => void | Promise<void>)(closeActiveConnections);
     },
@@ -1475,26 +1515,35 @@ function operationalReadiness(config: ServerConfig, guardedRuntime?: MatterhornG
   );
   const authConfigured = Boolean(config.token.trim() && config.hostToken.trim());
   const guardedRuntimeReady = guardedRuntime?.ready() ?? true;
+  const guardedMode = guardedRuntime?.capabilities.mode ?? "off";
+  const guardedRuntimeTopologyReady = guardedMode === "off" || guardedRuntimeSingleInstanceReady();
   const hostedBrowserOpencodePolicyReady = HOSTED_BROWSER_OPENCODE_POLICY === "restricted";
   const hostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA === "1";
   const accountMessageGatewayReady = !hostedPublicBeta
     || process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED === "1";
+  const hostBackupRequired = process.env.MATTERHORN_HOST_BACKUP_REQUIRED === "1";
+  const hostBackupFreshCheck = !hostBackupRequired || hostBackupFresh();
   return {
     ready: workspaceConfigured
       && workspaceStorageAvailable
       && authConfigured
       && guardedRuntimeReady
+      && guardedRuntimeTopologyReady
       && hostedBrowserOpencodePolicyReady
-      && accountMessageGatewayReady,
+      && accountMessageGatewayReady
+      && hostBackupFreshCheck,
     checks: {
       workspaceConfigured,
       workspaceStorageAvailable,
       authConfigured,
       guardedRuntimeReady,
-      guardedRuntimeMode: guardedRuntime?.capabilities.mode ?? "off",
+      guardedRuntimeMode: guardedMode,
+      guardedRuntimeTopologyReady,
       hostedBrowserOpencodePolicy: HOSTED_BROWSER_OPENCODE_POLICY,
       hostedBrowserOpencodePolicyReady,
       accountMessageGatewayReady,
+      hostBackupRequired,
+      hostBackupFresh: hostBackupFreshCheck,
     },
   };
 }
@@ -2648,7 +2697,7 @@ function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
     const status =
       error.code === "invalid_credentials" || error.code === "unauthorized"
         ? 401
-        : error.code === "email_unverified"
+        : error.code === "email_unverified" || error.code === "account_deletion_pending"
           ? 403
         : error.code === "email_taken" ||
             error.code === "account_owns_shared_organization" ||
@@ -2731,6 +2780,51 @@ async function purgeMatterhornOrganizationWorkspaces(
     complete: failedOrganizationIds.length === 0,
     failedOrganizationIds,
   };
+}
+
+async function processMatterhornAccountDeletionJob(input: {
+  config: ServerConfig;
+  authStore: MatterhornAuthStore;
+  job: MatterhornAuthAccountDeletionJob;
+  onWorkspacesChanged?: () => void;
+}): Promise<{ complete: boolean; job: MatterhornAuthAccountDeletionJob }> {
+  let job = input.job;
+  try {
+    if (!job.steps.memory) {
+      const memoryVault = createMatterhornMemoryVault(resolveMatterhornMemoryRoot());
+      for (const organizationId of job.deletedOrganizationIds) {
+        await memoryVault.purgeWorkspace(matterhornOrganizationWorkspaceId(organizationId));
+      }
+      job = input.authStore.markAccountDeletionStep(job.jobId, "memory");
+    }
+    if (!job.steps.workspaces) {
+      const workspaceDeletion = await purgeMatterhornOrganizationWorkspaces(
+        input.config,
+        job.deletedOrganizationIds,
+      );
+      if (!workspaceDeletion.complete) throw new Error("workspace_purge_failed");
+      input.onWorkspacesChanged?.();
+      job = input.authStore.markAccountDeletionStep(job.jobId, "workspaces");
+    }
+    job = input.authStore.finalizeAccountDeletion(job.jobId);
+    return { complete: true, job };
+  } catch (error) {
+    const safeCode = error instanceof Error && error.message === "workspace_purge_failed"
+      ? "workspace_purge_failed"
+      : "account_content_purge_failed";
+    job = input.authStore.failAccountDeletionJob(job.jobId, safeCode);
+    return { complete: false, job };
+  }
+}
+
+async function retryMatterhornAccountDeletionJobs(input: {
+  config: ServerConfig;
+  authStore: MatterhornAuthStore;
+  onWorkspacesChanged?: () => void;
+}): Promise<void> {
+  for (const job of input.authStore.listPendingAccountDeletionJobs()) {
+    await processMatterhornAccountDeletionJob({ ...input, job });
+  }
 }
 
 async function ensureMatterhornOrganizationWorkspace(
@@ -7744,44 +7838,23 @@ function createRoutes(
     }
     const password = stringBodyField(body, "password");
     const deletion = withMatterhornAuthErrorMapping(() =>
-      authStore.prepareAccountDeletion(token, password),
+      authStore.beginAccountDeletion(token, password),
     );
-    const memoryDeletionFailures: string[] = [];
-    for (const organizationId of deletion.deletedOrganizationIds) {
-      try {
-        await memoryVault.purgeWorkspace(
-          matterhornOrganizationWorkspaceId(organizationId),
-        );
-      } catch {
-        memoryDeletionFailures.push(organizationId);
-      }
-    }
-    const workspaceDeletion = await purgeMatterhornOrganizationWorkspaces(
+    const processed = await processMatterhornAccountDeletionJob({
       config,
-      deletion.deletedOrganizationIds,
-    );
-    onWorkspacesChanged();
-    const deletionFailureCount =
-      workspaceDeletion.failedOrganizationIds.length +
-      memoryDeletionFailures.length;
-    if (deletionFailureCount > 0) {
-      throw new ApiError(
-        503,
-        "account_data_deletion_failed",
-        "Account data could not be fully deleted. Your account remains active; try again or contact support.",
-      );
-    }
-
-    withMatterhornAuthErrorMapping(() =>
-      authStore.deleteAccount(token, password),
-    );
+      authStore,
+      job: deletion,
+      onWorkspacesChanged,
+    });
 
     const response = jsonResponse({
-      ok: true,
+      ok: processed.complete,
+      status: processed.complete ? "deleted" : "deletion_pending",
+      deletionJobId: deletion.jobId,
       deletedOrganizationCount: deletion.deletedOrganizationIds.length,
-      workspaceDataDeletionComplete: true,
-      workspaceDataDeletionFailures: 0,
-    });
+      workspaceDataDeletionComplete: processed.complete,
+      workspaceDataDeletionFailures: processed.complete ? 0 : 1,
+    }, processed.complete ? 200 : 202);
     response.headers.append(
       "Set-Cookie",
       matterhornSessionCookie(request, "", { clear: true }),
@@ -11438,7 +11511,7 @@ function createRoutes(
     const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
     const notesStore = new MatterhornNotesStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     try {
-      const [configuration, mission, notes, memoryRecords, memorySuggestions, chats, activity] = await Promise.all([
+      const [configuration, mission, notes, memoryRecords, memorySuggestions, chats, receipts, activity] = await Promise.all([
         exportWorkspace(workspace, { sensitiveMode: "exclude" }),
         readWorkspaceMission(workspace),
         notesStore.exportAllNotes(),
@@ -11450,6 +11523,7 @@ function createRoutes(
           entries.filter((entry) => memorySuggestionBelongsToWorkspace(entry.suggestion, workspace)),
         ),
         exportAllWorkspaceChats(config, workspace),
+        guardedRuntime.receipts.list(workspace.id, { limit: 200 }),
         buildProjectDataLedger({ workspace, limit: 300 }),
       ]);
       const archive = await buildMatterhornWorkspaceArchive({
@@ -11459,6 +11533,7 @@ function createRoutes(
         notes,
         memory: { records: memoryRecords, suggestions: memorySuggestions },
         chats,
+        receipts,
         activity,
       });
       const headers = new Headers();
@@ -11538,6 +11613,7 @@ function createRoutes(
       join(workspace.path, ".matterhorn-work", "notes"),
       workspaceLocalMemoryRoot(workspace),
       join(workspace.path, ".matterhorn-work", "task-logs", workspace.id),
+      join(workspace.path, ".matterhorn-work", "bittensor"),
       workspaceMissionPath(workspace),
     ];
     let removedManagedPaths = 0;
@@ -14251,11 +14327,66 @@ function createRoutes(
     return jsonResponse({ success: true, subnet, cards: buildBittensorSubnetCards([subnet]) });
   });
 
-  addRoute(routes, "GET", "/api/bittensor/wallet/timeline/status", "client", async () => {
+  addRoute(routes, "GET", "/workspace/:id/bittensor/wallet/timeline/status", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const store = new MatterhornBittensorWalletTimelineStore(workspace.id, workspace.path);
+    return jsonResponse({ success: true, status: await store.status() });
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/bittensor/wallet/timeline/export", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const ss58Address = ctx.url.searchParams.get("ss58Address") ?? ctx.url.searchParams.get("ss58_address");
+    if (ss58Address && !isValidSs58Address(ss58Address)) throw new ApiError(400, "invalid_ss58", "invalid SS58 address");
+    const store = new MatterhornBittensorWalletTimelineStore(workspace.id, workspace.path);
+    return jsonResponse({ success: true, timeline: await store.export(ss58Address) });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/bittensor/wallet/timeline/capture", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const ss58Address = typeof body.ss58Address === "string" ? body.ss58Address.trim() : "";
+    if (!isValidSs58Address(ss58Address)) {
+      throw new ApiError(400, "invalid_ss58", "valid public SS58 address is required");
+    }
+    const wallet = await bittensorProvider.getWallet(ss58Address);
+    const store = new MatterhornBittensorWalletTimelineStore(workspace.id, workspace.path);
+    const snapshot = await store.capture(wallet);
+    return jsonResponse({ success: true, wallet, snapshot, status: await store.status() }, 201);
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/bittensor/wallet/timeline/clear", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const ss58Address = typeof body.ss58Address === "string" ? body.ss58Address.trim() : "";
+    if (!isValidSs58Address(ss58Address)) throw new ApiError(400, "invalid_ss58", "valid SS58 address is required");
+    const store = new MatterhornBittensorWalletTimelineStore(workspace.id, workspace.path);
+    const cleared = await store.clear(ss58Address);
+    return jsonResponse({
+      success: true,
+      report: {
+        kind: "wallet_baseline_clear",
+        ss58Address,
+        cleared: cleared.cleared > 0,
+        previousUpdatedAt: cleared.previousUpdatedAt,
+        persistentSnapshotsCleared: cleared.cleared,
+        updatedAt: new Date().toISOString(),
+        summary: cleared.cleared > 0 ? "Cleared this workspace's public wallet history." : "No public wallet history was stored in this workspace.",
+        warnings: ["No other workspace was inspected or modified."],
+      },
+    });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/wallet/timeline/status", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     return jsonResponse({ success: true, status: publicBittensorWalletTimelineStatus() });
   });
 
   addRoute(routes, "GET", "/api/bittensor/wallet/timeline/export", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     const ss58Address = ctx.url.searchParams.get("ss58Address") ?? ctx.url.searchParams.get("ss58_address");
     if (ss58Address && !isValidSs58Address(ss58Address)) throw new ApiError(400, "invalid_ss58", "invalid SS58 address");
     const timeline = exportBittensorWalletTimeline({ ss58Address });
@@ -14266,6 +14397,7 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/bittensor/wallet/timeline/capture", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
@@ -14294,6 +14426,7 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/bittensor/wallet/timeline/clear", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { MatterhornAgentCapabilityBroker } from "./agent-capability.js";
+import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 const originalSigningSecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
 const originalRuntimeSecret = process.env.MATTERHORN_AGENT_RUNTIME_SECRET;
@@ -211,5 +215,37 @@ describe("agent capability broker", () => {
       toolName: "matterhorn_polymarket_preview_order",
       args: { marketId: "market_1", outcome: "YES", amountUsdc: "5" },
     }).claims.access).toBe("prepare");
+  });
+
+  test("persists grants and rejects replay atomically across broker instances", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-state-"));
+    const path = join(root, "state.db");
+    const firstState = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornAgentCapabilityBroker("enforce", firstState);
+    first.createRunGrant({
+      runId: "run_durable",
+      workspaceId: "ws_durable",
+      sessionId: "ses_durable",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+    });
+    const args = { address: `0x${"2".repeat(64)}`, network: "testnet" };
+    const capability = first.issue({
+      runId: "run_durable",
+      workspaceId: "ws_durable",
+      sessionId: "ses_durable",
+      callId: "call_durable",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    });
+
+    const secondState = new MatterhornGuardedRuntimeStateStore(path);
+    const second = new MatterhornAgentCapabilityBroker("enforce", secondState);
+    expect(second.activeRun("ses_durable")).toBe("run_durable");
+    expect(second.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args }).runId).toBe("run_durable");
+    expect(() => first.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args })).toThrow("capability_replayed");
+    firstState.close();
+    secondState.close();
   });
 });

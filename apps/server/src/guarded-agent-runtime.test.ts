@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
+import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 const original = {
   mode: process.env.MATTERHORN_GUARDED_RUNTIME_MODE,
@@ -74,6 +75,39 @@ describe("guarded agent runtime transport", () => {
       toolName: "matterhorn_bittensor_chat",
       args: { ...args, _matterhornCallId: "call_guard_1" },
     })).toThrow("unknown, expired, or replayed");
+  });
+
+  test("restores an exact staged tool call after a runtime restart", async () => {
+    const path = join(dataDir, "restart-state.db");
+    const first = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    const accepted = await first.acceptPrompt({
+      workspaceId: "ws_restart",
+      sessionId: "ses_restart",
+      parts: [{ type: "text", text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+    });
+    const args = { address: `0x${"3".repeat(64)}` };
+    first.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_restart",
+      sessionId: "ses_restart",
+      callId: "call_after_restart",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args,
+    });
+    first.close();
+
+    const second = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    expect(second.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { ...args, _matterhornCallId: "call_after_restart" },
+    })).toEqual(expect.objectContaining({ runId: accepted.runId, workspaceId: "ws_restart" }));
+    second.close();
   });
 
   test("revokes the active grant and staged calls when a run completes", async () => {

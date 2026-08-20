@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MatterhornAgentRunReceiptStore } from "./agent-run-receipts.js";
+import {
+  AgentRunReceiptIntegrityError,
+  MatterhornAgentRunReceiptStore,
+  purgeAllExpiredAgentRunReceipts,
+} from "./agent-run-receipts.js";
 
 let root = "";
 const originalDataDir = process.env.OPENWORK_DATA_DIR;
@@ -114,8 +118,7 @@ describe("guarded agent run receipts", () => {
     tampered.usage.inputTokens = 999_999;
     await writeFile(path, `${JSON.stringify(records[0])}\n${JSON.stringify(tampered)}\n`, "utf8");
     const reloaded = new MatterhornAgentRunReceiptStore();
-    const listed = await reloaded.list(workspaceId);
-    expect(listed.map((item) => item.runId)).toEqual(["run_first"]);
+    await expect(reloaded.list(workspaceId)).rejects.toBeInstanceOf(AgentRunReceiptIntegrityError);
   });
 
   test("serializes racing tool and completion records into one valid chain", async () => {
@@ -206,5 +209,41 @@ describe("guarded agent run receipts", () => {
     });
     expect(await store.purgeExpired(workspaceId, new Date("2026-08-18T00:00:00.000Z"))).toBe(1);
     expect(await store.list(workspaceId)).toEqual([]);
+  });
+
+  test("scheduled expiry scans dormant workspace receipt directories", async () => {
+    const workspaceId = "ws_receipt_scheduled_expiry";
+    const store = new MatterhornAgentRunReceiptStore();
+    await store.start({
+      runId: "run_scheduled_expired",
+      workspaceId,
+      sessionId: "ses_scheduled_expired",
+      consentUsed: false,
+      now: new Date("2025-01-01T00:00:00.000Z"),
+      preflight: {
+        version: "matterhorn.agent-privacy-preflight.v1",
+        requestHash: "scheduled-expiry-hash",
+        workspaceId,
+        sessionId: "ses_scheduled_expired",
+        requestedMode: "public_research",
+        effectiveMode: "public_research",
+        decision: "allow",
+        provider: {
+          id: "cudos",
+          name: "ASI:Cloud",
+          modelId: "asi1-mini",
+          privacyStatus: "unverified",
+          trainingUse: "unknown",
+          retentionDays: null,
+          policyUrl: null,
+          dataLeavesMatterhorn: true,
+        },
+        detectedData: { labels: ["public"], categories: [], redactionCount: 0 },
+        reason: "public research",
+      },
+    });
+    const result = await purgeAllExpiredAgentRunReceipts(store, new Date("2026-08-18T00:00:00.000Z"));
+    expect(result.workspaces).toBeGreaterThan(0);
+    expect(result.files).toBeGreaterThan(0);
   });
 });

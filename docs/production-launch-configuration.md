@@ -204,18 +204,19 @@ pnpm drill:workspace-backup-restore -- \
   --apply --json-output qa-reports/product-hunt/backup-restore.json
 ```
 
-The Product Hunt operations gate also requires fresh external monitoring and a
-complete encrypted user-data recovery drill. The portable drill above proves
-configuration recovery only; it does not contain Notes, Memory, Outputs, task
-evidence, or chat history. Back up those stores and restore them into a new
-directory before launch:
+The Product Hunt operations gate also requires fresh external monitoring and
+both tenant and host recovery drills. Download `/workspace/:id/data-archive`
+with that workspace owner's authenticated session first. That export is
+tenant-filtered and includes its chats, Notes, Memory, outputs, activity, and
+minimal security receipts. Never place the shared OpenCode database in a
+tenant archive.
 
 ```bash
 export MATTERHORN_BACKUP_PASSPHRASE="<from the approved secret manager>"
 
 pnpm backup:workspace-user-data -- \
   --workspace-root "$MATTERHORN_WORKSPACE_ROOT" \
-  --opencode-db "$OPENCODE_DB" \
+  --tenant-archive "$MATTERHORN_TENANT_ARCHIVE" \
   --output "$MATTERHORN_ENCRYPTED_BACKUP_PATH" \
   --json-output qa-reports/product-hunt/user-data-backup.json
 
@@ -230,7 +231,43 @@ pnpm backup:workspace-user-data -- \
 
 Store the passphrase outside the application host and outside the report
 packet. The archive includes private user content and must never be attached to
-the public launch evidence.
+the public launch evidence. The tenant tool rejects `--opencode-db` so an
+archive can never accidentally contain another account's chat database.
+
+Host recovery is a separate operator-only snapshot. It contains authentication
+and legal acceptance state, model usage, durable rate limits, guarded-runtime
+state, and the shared OpenCode service database. Use a backup-only IAM
+principal and a versioned private bucket; the upload is rejected unless an
+SSE-KMS key is configured:
+
+```bash
+export MATTERHORN_BACKUP_S3_BUCKET="<private-versioned-bucket>"
+export MATTERHORN_BACKUP_KMS_KEY_ID="<customer-managed-kms-key-arn>"
+export MATTERHORN_BACKUP_AWS_ACCESS_KEY_ID="<backup-only-access-key>"
+export MATTERHORN_BACKUP_AWS_SECRET_ACCESS_KEY="<backup-only-secret-key>"
+export AWS_REGION="<backup-region>"
+
+pnpm backup:matterhorn-host -- \
+  --data-root "$MATTERHORN_WORK_DATA_DIR" \
+  --opencode-db "$OPENCODE_DB" \
+  --output "$MATTERHORN_HOST_BACKUP_SCRATCH" \
+  --upload --json
+```
+
+Run this daily from the backup-only job. A successful upload writes only a
+non-secret freshness marker under `backups/last-success.json`. Restore into a
+clean, separate root with `--restore`, verify every SQLite `quick_check`, then
+start an isolated backend against the restored paths before declaring the
+backup usable. Set `MATTERHORN_HOST_BACKUP_REQUIRED=1` for launch readiness;
+the backend then fails `/health/ready` when the last verified upload is older
+than 36 hours. The backup job uses its dedicated credential names and never
+falls back to the SES AWS credentials.
+
+Before enabling tenant-scoped Bittensor timelines on a host with legacy global
+timeline data, archive that file with `archive:bittensor-legacy-timeline` and a
+32-byte key from the backup secret manager. Use `--apply --confirm-source` only
+after the encrypted archive verifies. Legacy records are never autoassigned to
+an account; hosted tenant stores begin empty.
 
 Record the Railway project, service and environment ids plus the immutable
 Railway deployment id and Vercel deployment URL for the last-known-good commit

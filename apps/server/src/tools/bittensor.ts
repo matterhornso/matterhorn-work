@@ -1870,6 +1870,10 @@ function bittensorWalletTimelinePersistenceEnabled(): boolean {
 }
 
 function bittensorWalletTimelinePath(): string | null {
+  // Hosted account traffic uses the workspace-bound store in the server
+  // routes. A process-global timeline would mix tenant history even though
+  // the underlying wallet addresses are public.
+  if (readEnv("MATTERHORN_HOSTED_PUBLIC_BETA") === "1") return null;
   if (readEnv("BITTENSOR_WALLET_TIMELINE_DISABLE_PERSISTENCE") === "1") return null;
   if (!bittensorWalletTimelinePersistenceEnabled()) return null;
   return readEnv("BITTENSOR_WALLET_TIMELINE_PATH") || join(homedir(), ".matterhorn-work", "bittensor-wallet-timeline.json");

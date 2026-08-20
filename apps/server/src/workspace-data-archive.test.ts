@@ -90,6 +90,7 @@ describe("workspace data archive", () => {
       memorySuggestions: 1,
       chats: 1,
       messages: 1,
+      receipts: 0,
       files: 2,
     });
 

@@ -8,6 +8,7 @@ import type {
 } from "@matterhorn-work/types/guarded-agent-runtime";
 import { resolveProviderPrivacyPolicy } from "./provider-privacy.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
+import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 const CONSENT_TTL_MS = 5 * 60 * 1_000;
 const MAX_TRACKED_CHALLENGES = 2_000;
@@ -200,6 +201,8 @@ export class MatterhornPrivacyFirewall {
   private readonly challenges = new Map<string, ChallengeRecord>();
   private readonly consents = new Map<string, ConsentRecord>();
 
+  constructor(private readonly stateStore?: MatterhornGuardedRuntimeStateStore) {}
+
   preflight(input: PrivacyInput, options: { issueChallenge?: boolean; now?: Date } = {}): MatterhornPrivacyEvaluation {
     const now = options.now ?? new Date();
     this.cleanup(now.getTime());
@@ -225,7 +228,7 @@ export class MatterhornPrivacyFirewall {
     if (decision === "consent_required" && options.issueChallenge !== false) {
       const id = `privacy_challenge_${randomUUID()}`;
       const expiresAtMs = now.getTime() + CONSENT_TTL_MS;
-      this.challenges.set(id, {
+      const record: ChallengeRecord = {
         id,
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
@@ -233,6 +236,16 @@ export class MatterhornPrivacyFirewall {
         categories: classified.categories,
         expiresAtMs,
         confirmed: false,
+      };
+      this.challenges.set(id, record);
+      this.stateStore?.put({
+        kind: "privacy_challenge",
+        key: id,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        value: record,
+        expiresAtMs,
+        nowMs: now.getTime(),
       });
       challenge = { id, expiresAt: new Date(expiresAtMs).toISOString(), singleUse: true };
     }
@@ -277,7 +290,23 @@ export class MatterhornPrivacyFirewall {
   }): MatterhornAgentPrivacyConsentResponse {
     const nowMs = (input.now ?? new Date()).getTime();
     this.cleanup(nowMs);
-    const challenge = this.challenges.get(input.challengeId);
+    const candidate = this.stateStore
+      ? this.stateStore.get<ChallengeRecord>("privacy_challenge", input.challengeId, nowMs)
+      : this.challenges.get(input.challengeId);
+    if (
+      !candidate
+      || candidate.confirmed
+      || candidate.expiresAtMs <= nowMs
+      || candidate.workspaceId !== input.workspaceId
+      || candidate.sessionId !== input.sessionId
+      || !equalDigest(candidate.requestHash, input.requestHash)
+    ) {
+      throw new Error("privacy_consent_challenge_invalid");
+    }
+    const challenge = this.stateStore
+      ? this.stateStore.take<ChallengeRecord>("privacy_challenge", input.challengeId, nowMs)
+      : candidate;
+    this.challenges.delete(input.challengeId);
     if (
       !challenge
       || challenge.confirmed
@@ -285,13 +314,11 @@ export class MatterhornPrivacyFirewall {
       || challenge.workspaceId !== input.workspaceId
       || challenge.sessionId !== input.sessionId
       || !equalDigest(challenge.requestHash, input.requestHash)
-    ) {
-      throw new Error("privacy_consent_challenge_invalid");
-    }
+    ) throw new Error("privacy_consent_challenge_invalid");
     challenge.confirmed = true;
     const token = randomBytes(32).toString("base64url");
     const tokenHash = sha256(token);
-    this.consents.set(tokenHash, {
+    const consent: ConsentRecord = {
       tokenHash,
       workspaceId: challenge.workspaceId,
       sessionId: challenge.sessionId,
@@ -299,6 +326,16 @@ export class MatterhornPrivacyFirewall {
       categories: challenge.categories,
       expiresAtMs: challenge.expiresAtMs,
       consumed: false,
+    };
+    this.consents.set(tokenHash, consent);
+    this.stateStore?.put({
+      kind: "privacy_consent",
+      key: tokenHash,
+      workspaceId: challenge.workspaceId,
+      sessionId: challenge.sessionId,
+      value: consent,
+      expiresAtMs: challenge.expiresAtMs,
+      nowMs,
     });
     return {
       version: "matterhorn.agent-privacy-preflight.v1",
@@ -319,7 +356,21 @@ export class MatterhornPrivacyFirewall {
     const nowMs = (input.now ?? new Date()).getTime();
     this.cleanup(nowMs);
     const tokenHash = sha256(input.token);
-    const record = this.consents.get(tokenHash);
+    const candidate = this.stateStore
+      ? this.stateStore.get<ConsentRecord>("privacy_consent", tokenHash, nowMs)
+      : this.consents.get(tokenHash);
+    if (
+      !candidate
+      || candidate.consumed
+      || candidate.expiresAtMs <= nowMs
+      || candidate.workspaceId !== input.workspaceId
+      || candidate.sessionId !== input.sessionId
+      || !equalDigest(candidate.requestHash, input.requestHash)
+    ) return false;
+    const record = this.stateStore
+      ? this.stateStore.take<ConsentRecord>("privacy_consent", tokenHash, nowMs)
+      : candidate;
+    this.consents.delete(tokenHash);
     if (
       !record
       || record.consumed
@@ -345,10 +396,22 @@ export class MatterhornPrivacyFirewall {
       this.consents.delete(tokenHash);
       consents += 1;
     }
+    if (this.stateStore) {
+      const persistedChallenges = this.stateStore.list<ChallengeRecord>("privacy_challenge", { workspaceId }).length;
+      const persistedConsents = this.stateStore.list<ConsentRecord>("privacy_consent", { workspaceId }).length;
+      this.stateStore.purgeWorkspace(
+        workspaceId,
+        ["privacy_challenge", "privacy_consent"],
+        { includeConsumedCapabilities: false },
+      );
+      challenges = Math.max(challenges, persistedChallenges);
+      consents = Math.max(consents, persistedConsents);
+    }
     return { challenges, consents };
   }
 
   private cleanup(nowMs: number): void {
+    this.stateStore?.deleteExpired(nowMs);
     for (const [id, challenge] of this.challenges) {
       if (challenge.expiresAtMs <= nowMs || challenge.confirmed) this.challenges.delete(id);
     }

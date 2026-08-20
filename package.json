@@ -46,6 +46,10 @@
     "test:workspace-backup-restore-drill": "node scripts/workspace-backup-restore-drill.test.mjs",
     "backup:workspace-user-data": "node scripts/workspace-user-data-recovery.mjs",
     "test:workspace-user-data-recovery": "node scripts/workspace-user-data-recovery.test.mjs",
+    "backup:matterhorn-host": "node scripts/matterhorn-host-recovery.mjs",
+    "test:matterhorn-host-recovery": "node scripts/matterhorn-host-recovery.test.mjs",
+    "archive:bittensor-legacy-timeline": "node scripts/bittensor-wallet-timeline-legacy-archive.mjs",
+    "test:bittensor-legacy-timeline-archive": "node scripts/bittensor-wallet-timeline-legacy-archive.test.mjs",
     "drill:product-hunt-rollback": "node scripts/product-hunt-rollback-rehearsal.mjs",
     "test:product-hunt-rollback-rehearsal": "node scripts/product-hunt-rollback-rehearsal.test.mjs",
     "rollback:public-beta": "node scripts/public-beta-rollback-hook.mjs",
@@ -271,6 +275,7 @@
     "test:matterhorn-memory-vault": "pnpm --filter @matterhorn-work/memory-vault build && node scripts/matterhorn-memory-vault.test.mjs"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.894.0",
     "lighthouse": "^13.4.0",
     "playwright": "^1.60.0",
     "turbo": "^2.10.5"
