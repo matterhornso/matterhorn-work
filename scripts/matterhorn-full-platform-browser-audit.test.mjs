@@ -92,6 +92,8 @@ for (const signal of [
   "mcp-rail-availability-and-disclosure",
   'getByText("Matterhorn Desks MCP", { exact: true })',
   'Connected MCP servers:',
+  "connectedServerSummary.count()",
+  "connectedServerSummary.first().getAttribute",
   "Connected MCP summary did not name any servers.",
   "Not every connected MCP server is visibly ready.",
   "Embedded MCP rail exposed the full connector catalog.",

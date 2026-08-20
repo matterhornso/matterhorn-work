@@ -8,17 +8,16 @@ import {
 } from "react";
 
 import {
-  createDenClient,
+  createPublicAuthClient,
   DenApiError,
   type DenPublicAuthConfig,
-} from "../../../app/lib/den";
+} from "../../../app/lib/public-auth-client";
 import {
   checkPublicCloudSession,
   type PublicCloudConfig,
 } from "../../../app/lib/public-cloud-config";
 import { publicWebAuthErrorMessage } from "./public-web-auth-errors";
 import { PublicTurnstile } from "./public-turnstile";
-import "./public-web-signin.css";
 
 type PublicWebSigninPageProps = {
   config: PublicCloudConfig;
@@ -97,11 +96,8 @@ export function PublicWebSigninPage({
 
   const client = useMemo(
     () =>
-      createDenClient({
-        baseUrl: config.baseUrl,
-        apiBaseUrl: config.apiBaseUrl,
-      }),
-    [config.apiBaseUrl, config.baseUrl],
+      createPublicAuthClient(config),
+    [config],
   );
 
   const refreshSession = useCallback(async (signal?: AbortSignal) => {

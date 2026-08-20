@@ -113,6 +113,7 @@ for (const required of [
   "public-beta-rollback-hook.test.mjs",
   "product-hunt-rollback-rehearsal.test.mjs",
   "guarded-runtime-shadow-evidence.test.mjs",
+  "guarded-runtime-token-acceptance.test.mjs",
   "public-beta-owner-acceptance.test.mjs",
 ]) {
   assert.ok(source.includes(required), `platform safety gate missing ${required}`);

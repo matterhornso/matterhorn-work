@@ -9,6 +9,7 @@ import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { buildMatterhornBillingSubscription } from "./billing.js";
 import { startServer } from "./server.js";
 import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
+import { MatterhornAgentRunReceiptStore } from "./agent-run-receipts.js";
 import type { ServerConfig } from "./types.js";
 
 type Served = {
@@ -1735,6 +1736,40 @@ describe("backend control plane routes", () => {
       runId: "run_sui_wallet_evidence",
       simulation: { reference: preview.payload.preview.previewSha256 },
     });
+    const runReceipts = new MatterhornAgentRunReceiptStore();
+    await runReceipts.start({
+      runId: reviewedAction.runId,
+      workspaceId: "ws_backend",
+      sessionId: "sui_wallet_evidence",
+      consentUsed: false,
+      preflight: {
+        version: "matterhorn.agent-privacy-preflight.v1",
+        requestHash: "sui-wallet-evidence-request",
+        workspaceId: "ws_backend",
+        sessionId: "sui_wallet_evidence",
+        requestedMode: "transaction",
+        effectiveMode: "transaction",
+        decision: "allow",
+        provider: {
+          id: "local",
+          name: "Local runtime",
+          modelId: "test",
+          privacyStatus: "local_processing",
+          trainingUse: "none",
+          retentionDays: 0,
+          policyUrl: null,
+          dataLeavesMatterhorn: false,
+        },
+        detectedData: { labels: ["wallet_private"], categories: ["transaction_intent"], redactionCount: 0 },
+        reason: "Local transaction preparation test.",
+      },
+    });
+    await runReceipts.addReviewedAction({
+      runId: reviewedAction.runId,
+      intentHash: reviewedAction.intentHash,
+      policyHash: reviewedAction.policyHash,
+      simulationReference: reviewedAction.simulation.reference,
+    });
     const validation = await jsonFetch(base, "/workspace/ws_backend/reviewed-actions/validate", {
       method: "POST",
       body: JSON.stringify({
@@ -1809,6 +1844,15 @@ describe("backend control plane routes", () => {
     expect(receipt.payload.success).toBe(true);
     expect(receipt.payload.receipt.containsSignatureMaterial).toBe(false);
     expect(existsSync(join(dir, receipt.payload.evidence.outputPath))).toBe(true);
+    const reconciledRunReceipt = await jsonFetch(
+      base,
+      `/workspace/ws_backend/agent-run-receipts/${encodeURIComponent(reviewedAction.runId)}`,
+    );
+    expect(reconciledRunReceipt.response.status).toBe(200);
+    expect(reconciledRunReceipt.payload.item.reviewedActions).toContainEqual(expect.objectContaining({
+      intentHash: reviewedAction.intentHash,
+      publicReceipt: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+    }));
 
     const ledger = await jsonFetch(base, "/workspace/ws_backend/data-ledger?desk=sui&kind=output&limit=20");
     expect(ledger.response.status).toBe(200);

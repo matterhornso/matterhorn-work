@@ -36,6 +36,7 @@ assert.equal(packageJson.scripts["smoke:product-hunt-deployment"], "node scripts
 assert.equal(packageJson.scripts["test:product-hunt-deployment-probe"], "node scripts/product-hunt-deployment-probe.test.mjs");
 
 const source = readFileSync(scriptPath, "utf8");
+assert.match(source, /healthPath:\s*"\/health\/ready"/);
 for (const required of [
   "matterhorn.product-hunt-deployment-probe.v1",
   "strict-transport-security",

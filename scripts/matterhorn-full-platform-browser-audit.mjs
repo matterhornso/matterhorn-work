@@ -782,7 +782,10 @@ async function run() {
       undefined,
       { timeout: 20_000 },
     );
-    const connectedSummaryLabel = await connectedServerSummary.getAttribute("aria-label");
+    const connectedSummaryCount = await connectedServerSummary.count();
+    const connectedSummaryLabel = connectedSummaryCount > 0
+      ? await connectedServerSummary.first().getAttribute("aria-label")
+      : null;
     if (connectedSummaryLabel?.startsWith("Connected MCP servers:")) {
       const connectedNames = connectedSummaryLabel
         .replace(/^Connected MCP servers:\s*/, "")

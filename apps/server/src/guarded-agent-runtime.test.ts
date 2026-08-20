@@ -144,7 +144,7 @@ describe("guarded agent runtime transport", () => {
     expect((await runtime.receipts.get("ws_complete", accepted.runId))?.status).toBe("success");
   });
 
-  test("keeps production-default off mode behavior-free", async () => {
+  test("keeps capabilities off while still producing an exact provider-usage receipt", async () => {
     process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "off";
     const runtime = new MatterhornGuardedAgentRuntime();
     const accepted = await runtime.acceptPrompt({
@@ -156,7 +156,24 @@ describe("guarded agent runtime transport", () => {
       executionMode: "work",
     });
     expect(accepted.runId).toStartWith("agent_run_off_");
-    expect(await runtime.receipts.list("ws_off")).toEqual([]);
+    expect(runtime.capabilities.activeRun("ses_off")).toBeNull();
+    runtime.bindUserMessage({ runId: accepted.runId, sessionId: "ses_off", messageId: "msg_off_user" });
+    expect(runtime.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_off",
+      userMessageId: "msg_off_user",
+      assistantMessageId: "msg_off_assistant",
+    })).toEqual({ runId: accepted.runId });
+    await runtime.completeRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      status: "success",
+      usage: { inputTokens: 120, outputTokens: 25, estimatedCostUsd: 0.001 },
+    });
+    expect(await runtime.receipts.get("ws_off", accepted.runId)).toMatchObject({
+      status: "success",
+      usage: { inputTokens: 120, outputTokens: 25, estimatedCostUsd: 0.001 },
+    });
     process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
   });
 
@@ -361,5 +378,45 @@ describe("guarded agent runtime transport", () => {
       status: "error",
     });
     expect(runtime.capabilities.activeRun("ses_exact_run")).toBe(second.runId);
+  });
+
+  test("rejects dispatch when provider privacy terms change after authorization", async () => {
+    const keys = [
+      "MATTERHORN_CUDOS_TRAINING_USE",
+      "MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS",
+      "MATTERHORN_CUDOS_PRIVACY_POLICY_URL",
+      "MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT",
+    ] as const;
+    const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    try {
+      process.env.MATTERHORN_CUDOS_TRAINING_USE = "none";
+      process.env.MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS = "30";
+      process.env.MATTERHORN_CUDOS_PRIVACY_POLICY_URL = "https://provider.example/privacy";
+      process.env.MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT = new Date().toISOString();
+      const runtime = new MatterhornGuardedAgentRuntime();
+      const input = {
+        workspaceId: "ws_policy_drift",
+        sessionId: "ses_policy_drift",
+        parts: [{ type: "text" as const, text: "Use this private workspace context" }],
+        memoryIds: ["memory_policy_drift"],
+        providerId: "cudos",
+        modelId: "asi1-mini",
+        executionMode: "work" as const,
+      };
+      const authorization = runtime.authorizePrompt(input);
+      expect(authorization.preflight.provider.privacyStatus).toBe("verified_no_training");
+
+      delete process.env.MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS;
+      await expect(runtime.startAuthorizedPrompt(input, authorization)).rejects.toMatchObject({
+        code: "agent_privacy_policy_changed",
+      });
+      expect(await runtime.receipts.list(input.workspaceId)).toHaveLength(0);
+    } finally {
+      for (const key of keys) {
+        const value = previous[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 });

@@ -25,6 +25,8 @@ tool access, reviewed transaction terms, retention, and security receipts.
 | Method and path | Purpose |
 |---|---|
 | `POST /workspace/:id/sessions/:sessionId/messages/preflight` | Classify the exact prompt, attachments, memories, provider, model, agent, and requested mode. |
+| `POST /workspace/:id/sessions/:sessionId/messages` | Authoritative provider gateway: classify, consent, reserve usage, create a run, and dispatch one server-built request. |
+| `POST /workspace/:id/sessions/:sessionId/compact` | Compact through the same privacy and usage boundary without exposing raw OpenCode summarize access. |
 | `POST /workspace/:id/privacy-consents/:challengeId/confirm` | Issue a five-minute, single-use token for the exact request hash. |
 | `GET /workspace/:id/agent-run-receipts` | Read content-free, hash-chained run receipts and the 365-day retention contract. |
 | `POST /workspace/:id/reviewed-actions/validate` | Revalidate a v2 handoff against current terms and simulation before wallet review or receipt import. |
@@ -40,11 +42,31 @@ usage, memory ids, capability decisions, action hashes, and public chain receipt
 references. They never contain raw prompts, unrestricted tool output, secrets,
 signatures, private keys, wallet exports, or bearer capabilities.
 
-Receipts are written to date-segmented, hash-chained workspace storage and expire
-after 365 days. Workspace purge deletes engine sessions, notes, outputs, memories,
+Receipts are created in every guarded mode, including `off`, then written to
+date-segmented, hash-chained workspace storage and expired by the daily retention
+job after 365 days. Workspace purge deletes engine sessions, notes, outputs, memories,
 workflow content, and transient grants/consents immediately. It retains only the
 minimal content-free security chain until normal expiry. Purge fails before local
 deletion when engine content cannot first be deleted, preventing a false success.
+
+## Context and token acceptance
+
+Only the active desk's bounded tool vocabulary is projected into model context.
+Discuss and Plan project only that desk's read tools. Tool reads are bounded near
+2,000 characters and previews near 4,000 characters, with omitted data recovered
+through a narrower query. Structured pending-action and evidence references replace
+transcript replay; user-selected Memory is resolved and version-bound by the server.
+
+The Phase 0 JSON remains an engineering estimate, not hosted evidence. Before launch,
+capture provider-reported input tokens and quality results for the same fixed scenarios,
+then run:
+
+```sh
+pnpm gate:guarded-runtime-tokens -- --baseline <baseline.json> --candidate <candidate.json> --json
+```
+
+The gate requires at least 40% fewer repeated input tokens for every scenario, complete
+citations/action terms/risk warnings/receipts, and text-only policy overhead below 100ms p95.
 
 ## Rollout
 
@@ -52,10 +74,10 @@ deletion when engine content cannot first be deleted, preventing a false success
 2. Configure independent 32-byte-or-longer
    `MATTERHORN_AGENT_RUNTIME_SECRET` and
    `MATTERHORN_CAPABILITY_SIGNING_SECRET` values.
-3. Keep the control plane at one running instance while guarded mode is `shadow`
-   or `enforce`; grants and single-use capability consumption are process-local
-   in this release. A shared transactional nonce store is required before
-   horizontal scaling.
+3. Keep the Railway control plane at one running instance while guarded mode is
+   `shadow` or `enforce`. Grants, consent challenges, run scopes, replay records,
+   and receipt indexes are durable in the host SQLite database, whose atomic
+   single-use constraints are scoped to that one persistent `/data` volume.
 4. Run `shadow` for invite-only accounts for 48 hours. Missing secrets or invalid
    rollout selectors fail readiness.
 5. Set `MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS=prepare` and

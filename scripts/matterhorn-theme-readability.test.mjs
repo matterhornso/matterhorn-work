@@ -59,7 +59,7 @@ assert.ok(theme.includes('"matterhorn-work.react.settings.theme-mode"'), "theme 
 assert.ok(theme.includes('"openwork.react.settings.theme-mode"'), "theme preference should keep legacy OpenWork fallback");
 assert.ok(theme.includes('"openwork.themePref"'), "theme preference should keep older OpenWork fallback");
 assert.ok(
-  indexHtml.includes('<script src="/theme-bootstrap.js"></script>'),
+  indexHtml.includes('<script defer src="/theme-bootstrap.js"></script>'),
   "theme bootstrap should load from a same-origin external script under a strict CSP",
 );
 assert.ok(!indexHtml.includes("<script>"), "app index should not require inline script execution");

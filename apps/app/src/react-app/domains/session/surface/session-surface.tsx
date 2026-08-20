@@ -888,6 +888,15 @@ function receiptDuration(receipt: MatterhornAgentRunReceipt): string {
   return `${(durationMs / 1_000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
 }
 
+function receiptToolLabel(tool: MatterhornAgentRunReceipt["tools"][number]): string {
+  return [
+    `${tool.name} · ${tool.outcome}`,
+    `${tool.latencyMs}ms`,
+    tool.source ? `source ${tool.source}` : null,
+    tool.freshness ? `freshness ${tool.freshness}` : null,
+  ].filter(Boolean).join(" · ");
+}
+
 function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgentRunReceipt }) {
   const totalTokens = receipt.usage.inputTokens + receipt.usage.outputTokens + receipt.usage.reasoningTokens;
   const capabilityDenials = receipt.capabilities.filter((decision) => decision.decision === "denied").length;
@@ -927,7 +936,19 @@ function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgentRunRec
             {receipt.privacy.consent === "single_request" ? " · one-request consent" : ""}
             <br />
             {trainingLabel} · {retentionLabel}
-            {receipt.memory.readIds.length > 0 ? ` · ${receipt.memory.readIds.length} selected memories` : ""}
+            {receipt.privacy.dataCategories.length > 0 ? (
+              <>
+                <br />
+                Sent: {receipt.privacy.dataCategories.join(", ")}
+                {receipt.privacy.redactionCount > 0 ? ` · ${receipt.privacy.redactionCount} redacted` : ""}
+              </>
+            ) : null}
+            {receipt.memory.readIds.length > 0 || receipt.memory.writtenIds.length > 0 ? (
+              <>
+                <br />
+                Memory: {receipt.memory.readIds.length} read · {receipt.memory.writtenIds.length} written
+              </>
+            ) : null}
             {receipt.provider.policyUrl ? (
               <>
                 <br />
@@ -949,6 +970,7 @@ function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgentRunRec
             {receipt.usage.inputTokens.toLocaleString()} input · {receipt.usage.outputTokens.toLocaleString()} output
             <br />
             {receipt.usage.reasoningTokens.toLocaleString()} reasoning · {receipt.usage.cacheReadTokens.toLocaleString()} cache reads
+            {receipt.usage.cacheWriteTokens > 0 ? ` · ${receipt.usage.cacheWriteTokens.toLocaleString()} cache writes` : ""}
             <br />
             Estimated cost: ${receipt.usage.estimatedCostUsd.toFixed(4)}
             <br />
@@ -959,7 +981,7 @@ function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgentRunRec
           <div className="font-medium text-dls-text">Tools</div>
           <div className="mt-1 leading-5">
             {receipt.tools.length > 0
-              ? receipt.tools.map((tool) => `${tool.name} · ${tool.outcome}`).join("; ")
+              ? receipt.tools.map(receiptToolLabel).join("; ")
               : "No crypto tools used."}
             {receipt.capabilities.length > 0 ? (
               <>
@@ -2879,7 +2901,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
     });
 
     try {
-      const response = await props.client.captureWorkspaceMemory(props.workspaceId, record);
+      const response = await props.client.captureWorkspaceMemory(
+        props.workspaceId,
+        record,
+        latestCompletedRunReceipt
+          ? { runId: latestCompletedRunReceipt.runId, sessionId: props.sessionId }
+          : undefined,
+      );
       window.dispatchEvent(new CustomEvent("matterhorn:memory-records-changed", {
         detail: { workspaceId: props.workspaceId, record: response.record },
       }));
@@ -2908,7 +2936,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       });
       throw error;
     }
-  }, [props.client, props.sessionId, props.workspaceId]);
+  }, [latestCompletedRunReceipt, props.client, props.sessionId, props.workspaceId]);
 
   useEffect(() => {
     const handleVoiceTranscript = (event: Event) => {

@@ -3023,7 +3023,11 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       );
     },
 
-    captureWorkspaceMemory: (workspaceId: string, record: MatterhornMemoryRecord) =>
+    captureWorkspaceMemory: (
+      workspaceId: string,
+      record: MatterhornMemoryRecord,
+      source?: { runId: string; sessionId: string },
+    ) =>
       requestJson<MatterhornMemoryCaptureResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/memory/capture`,
@@ -3031,7 +3035,10 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           token,
           hostToken,
           method: "POST",
-          body: { record },
+          body: {
+            record,
+            ...(source ? { sourceRunId: source.runId, sourceSessionId: source.sessionId } : {}),
+          },
           timeoutMs: timeouts.config,
         },
       ),

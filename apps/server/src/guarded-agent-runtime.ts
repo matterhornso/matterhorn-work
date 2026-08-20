@@ -53,6 +53,11 @@ export type GuardedPromptAcceptance = {
   consentUsed: boolean;
 };
 
+export type GuardedPromptAuthorization = {
+  preflight: MatterhornAgentPrivacyPreflightResponse;
+  consentRequired: boolean;
+};
+
 const GUARDED_OBSERVATION_REASONS = new Set([
   "capability_agent_mismatch",
   "capability_argument_mutation",
@@ -130,8 +135,11 @@ export class MatterhornGuardedAgentRuntime {
   }
 
   async acceptPrompt(input: GuardedPromptInput): Promise<GuardedPromptAcceptance> {
-    const evaluation = this.privacy.preflight(input);
-    let consentUsed = false;
+    return this.startAuthorizedPrompt(input, this.authorizePrompt(input));
+  }
+
+  authorizePrompt(input: GuardedPromptInput): GuardedPromptAuthorization {
+    let evaluation = this.privacy.preflight(input, { issueChallenge: false });
     if (evaluation.response.decision === "blocked") {
       throw new GuardedRuntimeError(
         422,
@@ -142,13 +150,14 @@ export class MatterhornGuardedAgentRuntime {
     }
     if (evaluation.response.decision === "consent_required") {
       const token = input.privacyConsentToken?.trim() ?? "";
-      consentUsed = Boolean(token) && this.privacy.consumeConsent({
+      const consentValid = Boolean(token) && this.privacy.validateConsent({
         token,
         requestHash: evaluation.response.requestHash,
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
       });
-      if (!consentUsed) {
+      if (!consentValid) {
+        evaluation = this.privacy.preflight(input);
         throw new GuardedRuntimeError(
           409,
           "agent_privacy_consent_required",
@@ -157,49 +166,110 @@ export class MatterhornGuardedAgentRuntime {
         );
       }
     }
+    return {
+      preflight: evaluation.response,
+      consentRequired: evaluation.response.decision === "consent_required",
+    };
+  }
 
-    // Privacy is an account-facing dispatch boundary, not a guarded-tool
-    // rollout flag. `off` disables capability grants and receipts only; it
-    // must never disable secret blocking or exact-request consent.
-    if (this.capabilities.mode === "off") {
-      return {
-        runId: `agent_run_off_${randomUUID()}`,
-        preflight: evaluation.response,
-        consentUsed,
-      };
+  async startAuthorizedPrompt(
+    input: GuardedPromptInput,
+    authorization: GuardedPromptAuthorization,
+  ): Promise<GuardedPromptAcceptance> {
+    const current = this.privacy.preflight(input, { issueChallenge: false }).response;
+    if (!equalDigest(current.requestHash, authorization.preflight.requestHash)) {
+      throw new GuardedRuntimeError(
+        409,
+        "agent_privacy_request_changed",
+        "The prompt changed after privacy authorization. Run privacy preflight again.",
+        current,
+      );
     }
-
-    const previousRunId = this.capabilities.activeRun(input.sessionId);
-    if (previousRunId) await this.finishRun(previousRunId, "cancelled");
-    const runId = `agent_run_${randomUUID()}`;
-    this.capabilities.createRunGrant({
-      runId,
+    const authorizedProvider = authorization.preflight.provider;
+    const currentProvider = current.provider;
+    if (
+      current.decision !== authorization.preflight.decision
+      || currentProvider.privacyStatus !== authorizedProvider.privacyStatus
+      || currentProvider.trainingUse !== authorizedProvider.trainingUse
+      || currentProvider.retentionDays !== authorizedProvider.retentionDays
+      || currentProvider.policyUrl !== authorizedProvider.policyUrl
+      || currentProvider.dataLeavesMatterhorn !== authorizedProvider.dataLeavesMatterhorn
+    ) {
+      throw new GuardedRuntimeError(
+        409,
+        "agent_privacy_policy_changed",
+        "The provider privacy policy changed after authorization. Run privacy preflight again.",
+        current,
+      );
+    }
+    const consentUsed = authorization.consentRequired && this.privacy.consumeConsent({
+      token: input.privacyConsentToken?.trim() ?? "",
+      requestHash: current.requestHash,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
-      agentId: input.agentId,
-      executionMode: input.executionMode,
-      requestToolProfiles: input.requestToolProfiles,
+    });
+    if (authorization.consentRequired && !consentUsed) {
+      throw new GuardedRuntimeError(
+        409,
+        "agent_privacy_consent_required",
+        current.reason,
+        current,
+      );
+    }
+
+    // Privacy and receipts are account-facing dispatch boundaries, not
+    // guarded-tool rollout flags. `off` disables per-tool capabilities only;
+    // every accepted provider request still receives an exact run id and a
+    // minimal security/usage receipt.
+    const previousRunId = this.activeRun(input.sessionId);
+    if (previousRunId) await this.finishRun(previousRunId, "cancelled");
+    const runId = `${this.capabilities.mode === "off" ? "agent_run_off" : "agent_run"}_${randomUUID()}`;
+    if (this.capabilities.mode !== "off") {
+      this.capabilities.createRunGrant({
+        runId,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        agentId: input.agentId,
+        executionMode: input.executionMode,
+        requestToolProfiles: input.requestToolProfiles,
+      });
+    }
+    const expiresAtMs = Date.now() + 6 * 60 * 60 * 1_000;
+    this.stateStore.put({
+      kind: "active_agent_run",
+      key: input.sessionId,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      value: { runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
+      expiresAtMs,
+    });
+    this.stateStore.put({
+      kind: "agent_run_scope",
+      key: runId,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      value: { runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
+      expiresAtMs,
     });
     await this.receipts.start({
       runId,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
-      preflight: evaluation.response,
+      preflight: current,
       consentUsed,
       memoryReadIds: input.memoryIds,
     });
-    return { runId, preflight: evaluation.response, consentUsed };
+    return { runId, preflight: current, consentUsed };
   }
 
   bindUserMessage(input: { runId: string; sessionId: string; messageId: string }): void {
-    if (this.capabilities.mode === "off") return;
-    const activeRunId = this.capabilities.activeRun(input.sessionId);
+    const activeRunId = this.activeRun(input.sessionId);
     if (activeRunId !== input.runId) {
       throw new GuardedRuntimeError(409, "agent_run_not_active", "The message no longer belongs to the active guarded run.");
     }
     const bound = { runId: input.runId, sessionId: input.sessionId };
     this.userMessageRunIds.set(input.messageId, bound);
-    const scope = this.capabilities.scopeForRun(input.runId);
+    const scope = this.runScope(input.runId);
     if (scope) this.stateStore.put({
       kind: "user_message_binding",
       key: input.messageId,
@@ -224,7 +294,7 @@ export class MatterhornGuardedAgentRuntime {
       throw new GuardedRuntimeError(409, "agent_run_message_not_bound", "The assistant message is not bound to an accepted Matterhorn run.");
     }
     this.assistantMessageRunIds.set(input.assistantMessageId, bound);
-    const scope = this.capabilities.scopeForRun(bound.runId);
+    const scope = this.runScope(bound.runId);
     if (scope) this.stateStore.put({
       kind: "assistant_message_binding",
       key: input.assistantMessageId,
@@ -452,7 +522,7 @@ export class MatterhornGuardedAgentRuntime {
     }
     this.stateStore.purgeWorkspace(
       workspaceId,
-      ["staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding"],
+      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding"],
       { includeConsumedCapabilities: false },
     );
     return {
@@ -483,6 +553,11 @@ export class MatterhornGuardedAgentRuntime {
 
   private revokeRun(runId: string): void {
     this.capabilities.closeRun(runId);
+    const scope = this.runScope(runId);
+    if (scope) {
+      const active = this.stateStore.get<{ runId: string }>("active_agent_run", scope.sessionId);
+      if (active?.runId === runId) this.stateStore.delete("active_agent_run", scope.sessionId);
+    }
     for (const [callId, staged] of this.stagedCapabilities) {
       if (staged.runId === runId) this.stagedCapabilities.delete(callId);
     }
@@ -496,6 +571,7 @@ export class MatterhornGuardedAgentRuntime {
       if (bound.runId === runId) this.assistantMessageRunIds.delete(messageId);
     }
     this.deletePersistedRunState(runId);
+    this.stateStore.delete("agent_run_scope", runId);
   }
 
   close(): void {
@@ -548,12 +624,24 @@ export class MatterhornGuardedAgentRuntime {
     status: Exclude<MatterhornAgentRunReceipt["status"], "pending">,
     usage?: Partial<Omit<MatterhornAgentRunReceipt["usage"], "toolCallBudget">>,
   ): Promise<void> {
+    const scope = this.runScope(runId);
+    if (scope) await this.receipts.get(scope.workspaceId, runId);
     const capabilityDecisions = this.capabilities.decisionsForRun(runId);
     try {
       await this.receipts.complete({ runId, status, usage, capabilityDecisions });
     } finally {
       this.revokeRun(runId);
     }
+  }
+
+  private activeRun(sessionId: string): string | null {
+    return this.stateStore.get<{ runId: string }>("active_agent_run", sessionId)?.runId
+      ?? this.capabilities.activeRun(sessionId);
+  }
+
+  private runScope(runId: string): { workspaceId: string; sessionId: string } | null {
+    return this.stateStore.get<{ workspaceId: string; sessionId: string }>("agent_run_scope", runId)
+      ?? this.capabilities.scopeForRun(runId);
   }
 
   private observe(

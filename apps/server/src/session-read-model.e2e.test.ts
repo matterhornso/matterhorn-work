@@ -326,6 +326,10 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
         return Response.json({ ok: true });
       }
 
+      if (url.pathname === "/session/ses_1/abort" && request.method === "POST") {
+        return Response.json(true);
+      }
+
       if (url.pathname === "/session/ses_1/summarize" && request.method === "POST") {
         return Response.json({ ok: true });
       }
@@ -1119,6 +1123,12 @@ describe("workspace session read APIs", () => {
     expect(typeof upstreamBody?.system).toBe("string");
     expect(String(upstreamBody?.system)).toContain("Prefer validators with stable emissions and low take.");
     expect(String(upstreamBody?.system)).toContain("maxTakePercent");
+    expect(String(upstreamBody?.system)).toContain("## Matterhorn Crypto Context");
+    expect(String(upstreamBody?.system)).toContain("matterhorn_bittensor_chat");
+    expect(String(upstreamBody?.system)).not.toContain("matterhorn_sui_preview_transfer");
+    expect(mock.requests.some((request) => request.pathname === "/session/ses_1/abort")).toBe(true);
+    expect(mock.requests.findIndex((request) => request.pathname === "/session/ses_1/abort"))
+      .toBeLessThan(mock.requests.findIndex((request) => request.pathname === "/session/ses_1/prompt_async"));
 
     const receiptResponse = await fetch(
       `${base}/workspace/ws_1/agent-run-receipts/${encodeURIComponent(accepted.runId)}`,
@@ -1127,6 +1137,24 @@ describe("workspace session read APIs", () => {
     expect(receiptResponse.status).toBe(200);
     await expect(receiptResponse.json()).resolves.toMatchObject({
       item: { memory: { readIds: ["mem_agent_gateway_private"] } },
+    });
+
+    const memoryWrite = await fetch(`${base}/workspace/ws_1/memory/capture`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        record: { ...privateMemoryRecord(), id: "mem_written_from_run", title: "Saved run result" },
+        sourceRunId: accepted.runId,
+        sourceSessionId: "ses_1",
+      }),
+    });
+    expect(memoryWrite.status).toBe(201);
+    const reconciledReceipt = await fetch(
+      `${base}/workspace/ws_1/agent-run-receipts/${encodeURIComponent(accepted.runId)}`,
+      { headers: auth(openwork.token) },
+    );
+    await expect(reconciledReceipt.json()).resolves.toMatchObject({
+      item: { memory: { writtenIds: ["mem_written_from_run"] } },
     });
 
     const secondPreflightResponse = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages/preflight`, {

@@ -1,4 +1,4 @@
-import { DenApiError } from "../../../app/lib/den";
+import { DenApiError } from "../../../app/lib/den-api-error";
 
 const SAFE_ACTION_ERROR_CODES = new Set([
   "email_delivery_failed",

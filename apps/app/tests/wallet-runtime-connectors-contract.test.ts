@@ -81,7 +81,7 @@ describe("wallet runtime connector contract", () => {
       'import("./react-app/shell/authenticated-app")',
     );
     expect(appEntrySource).toContain(
-      'import("./react-app/shell/public-signin-bootstrap")',
+      'import PublicSigninBootstrap from "./react-app/shell/public-signin-bootstrap"',
     );
     expect(appEntrySource).toContain(
       'import("./react-app/shell/public-trust-bootstrap")',

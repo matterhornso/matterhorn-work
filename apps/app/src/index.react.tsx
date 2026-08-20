@@ -2,41 +2,41 @@
 import * as React from "react";
 import ReactDOM from "react-dom/client";
 
-import {
-  getMatterhornDeployment,
-  isPublicBetaWebDeployment,
-} from "./app/lib/matterhorn-deployment";
-import {
-  denSessionUpdatedEvent,
-  type DenSessionUpdatedDetail,
-} from "./app/lib/den-session-events";
 import { readPublicCloudConfig } from "./app/lib/public-cloud-config";
 import { bootstrapTheme } from "./app/theme";
-import { initLocale } from "./i18n";
 import {
   isPublicTrustPath,
   shouldGatePublicWebEntry,
 } from "./react-app/domains/public/public-trust-content";
-import "./app/bootstrap.css";
-
+import PublicSigninBootstrap from "./react-app/shell/public-signin-bootstrap";
 bootstrapTheme();
-initLocale();
-const publicBetaWeb = isPublicBetaWebDeployment();
+const deployment = (
+  import.meta.env.VITE_MATTERHORN_DEPLOYMENT
+  ?? import.meta.env.VITE_OPENWORK_DEPLOYMENT
+  ?? "desktop"
+).trim().toLowerCase() === "web" ? "web" : "desktop";
+const publicBetaWeb = deployment === "web" && /^(1|true|yes|on)$/i.test(
+  import.meta.env.VITE_MATTERHORN_PUBLIC_BETA?.trim() ?? "",
+);
+const denSessionUpdatedEvent = "matterhorn-den-session-updated";
+type DenSessionUpdatedDetail = { status?: "signed_out" | "success" | string };
 const publicCloudConfig = readPublicCloudConfig();
 const publicTrustEntry = isPublicTrustPath(window.location.pathname);
 const bootstrapConfig = publicTrustEntry
   ? null
-  : await import("./app/lib/den").then((denModule) => (
-      publicBetaWeb
-        ? denModule.setDenBootstrapConfig(publicCloudConfig)
-        : denModule.initializeDenBootstrapConfig()
-    ));
+  : publicBetaWeb
+    ? publicCloudConfig
+    : await import("./app/lib/den").then((denModule) => denModule.initializeDenBootstrapConfig());
 
 const AuthenticatedApp = React.lazy(
-  () => import("./react-app/shell/authenticated-app"),
-);
-const PublicSigninBootstrap = React.lazy(
-  () => import("./react-app/shell/public-signin-bootstrap"),
+  async () => {
+    const [appModule, denModule] = await Promise.all([
+      import("./react-app/shell/authenticated-app"),
+      import("./app/lib/den"),
+    ]);
+    if (publicBetaWeb) await denModule.setDenBootstrapConfig(publicCloudConfig);
+    return appModule;
+  },
 );
 const PublicTrustBootstrap = React.lazy(
   () => import("./react-app/shell/public-trust-bootstrap"),
@@ -52,7 +52,7 @@ if (!root) {
   throw new Error("Root element not found");
 }
 
-root.dataset.matterhornDeployment = getMatterhornDeployment();
+root.dataset.matterhornDeployment = deployment;
 
 function AppLoadingFallback() {
   return (
@@ -105,12 +105,10 @@ function MatterhornWorkspaceEntry() {
 
   if (!publicSessionVerified) {
     return (
-      <React.Suspense fallback={<AppLoadingFallback />}>
-        <PublicSigninBootstrap
-          config={publicCloudConfig}
-          onSignedIn={markPublicSessionVerified}
-        />
-      </React.Suspense>
+      <PublicSigninBootstrap
+        config={publicCloudConfig}
+        onSignedIn={markPublicSessionVerified}
+      />
     );
   }
 

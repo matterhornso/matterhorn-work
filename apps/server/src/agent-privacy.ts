@@ -383,6 +383,29 @@ export class MatterhornPrivacyFirewall {
     return true;
   }
 
+  validateConsent(input: {
+    token: string;
+    requestHash: string;
+    workspaceId: string;
+    sessionId: string;
+    now?: Date;
+  }): boolean {
+    const nowMs = (input.now ?? new Date()).getTime();
+    this.cleanup(nowMs);
+    const tokenHash = sha256(input.token);
+    const candidate = this.stateStore
+      ? this.stateStore.get<ConsentRecord>("privacy_consent", tokenHash, nowMs)
+      : this.consents.get(tokenHash);
+    return Boolean(
+      candidate
+      && !candidate.consumed
+      && candidate.expiresAtMs > nowMs
+      && candidate.workspaceId === input.workspaceId
+      && candidate.sessionId === input.sessionId
+      && equalDigest(candidate.requestHash, input.requestHash),
+    );
+  }
+
   purgeWorkspace(workspaceId: string): { challenges: number; consents: number } {
     let challenges = 0;
     let consents = 0;
