@@ -361,18 +361,29 @@ export function getSettingsTabStatus(
 
 export function getWorkspaceSettingsTabs(developerMode = false): SettingsTab[] {
   const tabs: SettingsTab[] = ["preferences", "permissions", "privacy", "wallet", "generated-media", "extensions"];
-  if (developerMode) tabs.push("marketplace", "advanced");
+  if (developerMode && !isPublicBetaWebDeployment()) tabs.push("marketplace", "advanced");
   return filterLaunchSettingsTabs(tabs);
 }
 
 export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
-  const tabs: SettingsTab[] = ["overview", "ai", "shell", "appearance", "updates", "billing"];
-  if (developerMode) tabs.push("environment", "recovery", "debug");
+  const tabs: SettingsTab[] = [
+    "overview",
+    "ai",
+    ...(isPublicBetaWebDeployment() ? [] : ["shell" as const]),
+    "appearance",
+    "updates",
+    "billing",
+  ];
+  if (developerMode && !isPublicBetaWebDeployment()) tabs.push("environment", "recovery", "debug");
   return filterLaunchSettingsTabs(tabs);
 }
 
 export function getCloudSettingsTabs(developerMode = false): SettingsTab[] {
-  return filterLaunchSettingsTabs(developerMode ? ["cloud-account", "cloud-workers"] : ["cloud-account"]);
+  return filterLaunchSettingsTabs(
+    developerMode && !isPublicBetaWebDeployment()
+      ? ["cloud-account", "cloud-workers"]
+      : ["cloud-account"],
+  );
 }
 
 function SettingsTabReadinessBadge(props: { status: SettingsReadinessStatus | null }) {

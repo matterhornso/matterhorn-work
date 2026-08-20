@@ -30,6 +30,7 @@ import { safeStringify } from "../../app/utils";
 import { filterProviderList } from "../../app/utils/providers";
 import { getReactQueryClient } from "../infra/query-client";
 import { ensureProviderListQuery } from "../domains/connections/provider-list-query";
+import { isPublicBetaWebDeployment } from "../../app/lib/matterhorn-deployment";
 
 import { useGlobalSDK } from "./global-sdk-provider";
 
@@ -249,6 +250,7 @@ export function GlobalSyncProvider({ children }: GlobalSyncProviderProps) {
   const refreshDirectory = useCallback(
     async (directory: string) => {
       if (!directory) return;
+      if (isPublicBetaWebDeployment()) return;
       await Promise.allSettled([
         refreshMcp(directory),
         refreshLsp(directory),
@@ -282,6 +284,12 @@ export function GlobalSyncProvider({ children }: GlobalSyncProviderProps) {
       setField("serverVersion", health.version);
     } catch (error) {
       setError(error);
+      return;
+    }
+
+    if (isPublicBetaWebDeployment()) {
+      await refreshProviders();
+      setField("ready", true);
       return;
     }
 

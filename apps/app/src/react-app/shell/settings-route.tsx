@@ -691,6 +691,16 @@ function settingsPathForRoute(route: ReturnType<typeof parseSettingsPath>) {
   return route.tab;
 }
 
+const UNSUPPORTED_HOSTED_SETTINGS_TABS: ReadonlySet<SettingsTab> = new Set([
+  "shell",
+  "marketplace",
+  "advanced",
+  "environment",
+  "recovery",
+  "debug",
+  "cloud-workers",
+]);
+
 function applyLaunchSettingsRoutePolicy(
   route: ReturnType<typeof parseSettingsPath>,
   options: { allowLocalProfile?: boolean } = {},
@@ -725,12 +735,16 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const [embeddedPath, setEmbeddedPath] = useState(
     props.initialPath ?? "general",
   );
-  const route = applyLaunchSettingsRoutePolicy(
+  const launchRoute = applyLaunchSettingsRoutePolicy(
     props.embedded
       ? parseSettingsPath(`/settings/${embeddedPath}`)
       : parseSettingsPath(location.pathname),
     { allowLocalProfile: props.embedded },
   );
+  const route: ReturnType<typeof parseSettingsPath> = publicBetaWeb
+    && UNSUPPORTED_HOSTED_SETTINGS_TABS.has(launchRoute.tab)
+      ? { tab: "overview" as const, redirectPath: "overview" }
+      : launchRoute;
   const navigationWorkspaceId = readNavigationWorkspaceId(location.state);
   const navigationSessionId = readNavigationSessionId(location.state);
   const navigationPendingDeskTask = readPendingDeskTaskNavigation(location.state);
