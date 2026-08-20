@@ -55,12 +55,12 @@ The beta auth layer does not require Clerk packages, but it documents the standa
 | Variable | Required? | Purpose |
 |---|---|---|
 | `MATTERHORN_EMAIL_VERIFICATION_REQUIRED` | Required for public signup | Keeps new accounts signed out until the six-digit email challenge is completed. |
-| `MATTERHORN_EMAIL_FROM` | Required for public signup | Verified transactional sender identity. |
+| `EMAIL_FROM`, `EMAIL_FROM_NAME` | Required for public signup | Verified AWS SES sender address and display name. |
 | `MATTERHORN_TURNSTILE_SITEKEY` | Required for public signup | Public Cloudflare Turnstile widget site key returned by `/api/auth/config`. |
 | `TURNSTILE_SECRET` | Required for public signup | Server-only Turnstile Siteverify credential. Never expose this in a browser variable. |
 | `TURNSTILE_HOSTNAMES` | Required for public signup | Comma-separated exact frontend hostname allowlist. Production must contain only production hosts, never localhost. |
-| `MATTERHORN_RESEND_API_KEY` | Required when using Resend | Server-only delivery credential. |
-| `MATTERHORN_SMTP_HOST`, `MATTERHORN_SMTP_PORT`, `MATTERHORN_SMTP_USER`, `MATTERHORN_SMTP_PASSWORD`, `MATTERHORN_SMTP_SECURE` | Alternative to Resend | Authenticated SMTP delivery configuration. |
+| `AWS_SES_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Required for public signup | Server-only AWS SES delivery configuration. No application module outside `@matterhorn-work/email` imports the SES SDK. |
+| `AWS_SES_CONFIGURATION_SET`, `MATTERHORN_SES_EVENT_SECRET` | Required for public signup | Emits delivery/bounce/complaint events and authenticates the EventBridge API Destination callback. |
 | `MATTERHORN_EMAIL_DEV_MODE` | Local development only | Emits template payloads locally. Production ignores this flag. |
 | `MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED` | Required for public signup | Rejects account creation unless the user explicitly accepts the Terms and acknowledges the Privacy notice. |
 | `MATTERHORN_TERMS_VERSION`, `MATTERHORN_PRIVACY_VERSION` | Required for public signup | Versions stored with the server-side acceptance record. |
@@ -69,6 +69,10 @@ Verification codes expire after 10 minutes. Password reset links expire after
 one hour, can be used once, and revoke every active session when the password
 changes. Reset requests always return the same response whether or not an
 account exists, so the endpoint does not disclose registered addresses.
+Account creation, the verification challenge, and its durable outbox row commit
+in one SQLite transaction. SES failure leaves the message retryable and returns
+the same `202 verification_required` state. Bounces and complaints suppress
+future delivery without disclosing whether an address has an account.
 
 ## Data portability and deletion
 
@@ -109,8 +113,13 @@ MATTERHORN_APP_URL=https://app.matterhorn.example
 MATTERHORN_CONTROL_PLANE_URL=https://api-origin.matterhorn.example
 MATTERHORN_PROXY_SECRET=<server-only-high-entropy-secret>
 MATTERHORN_EMAIL_VERIFICATION_REQUIRED=1
-MATTERHORN_EMAIL_FROM="Matterhorn Desks <accounts@matterhorn.example>"
-MATTERHORN_RESEND_API_KEY=<server-only-resend-secret>
+EMAIL_FROM=accounts@matterhorn.example
+EMAIL_FROM_NAME="Matterhorn Desks"
+AWS_SES_REGION=us-east-1
+AWS_ACCESS_KEY_ID=<ses-only-access-key>
+AWS_SECRET_ACCESS_KEY=<ses-only-secret-key>
+AWS_SES_CONFIGURATION_SET=matterhorn-transactional
+MATTERHORN_SES_EVENT_SECRET=<independent-32-byte-event-secret>
 MATTERHORN_TURNSTILE_SITEKEY=<public-turnstile-site-key>
 TURNSTILE_SECRET=<server-only-turnstile-secret>
 TURNSTILE_HOSTNAMES=app.matterhorn.example

@@ -332,7 +332,10 @@ import type {
   MatterhornBackendReadinessResponse,
 } from "@matterhorn-work/types/backend-readiness";
 import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
-import { sendEmail, type EmailSendConfig } from "@matterhorn-work/email";
+import {
+  emailDeliveryConfigured,
+  type EmailSendConfig,
+} from "@matterhorn-work/email";
 import type {
   MatterhornTeamAccessTokenDescriptor,
   MatterhornTeamShareableTokenScope,
@@ -353,7 +356,7 @@ import {
 } from "@matterhorn-work/types/execution-mode";
 import { existsSync, realpathSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -380,6 +383,7 @@ import { deleteSkill, listSkills, upsertSkill } from "./skills.js";
 import { installHubSkill, listHubSkills } from "./skill-hub.js";
 import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./commands.js";
 import { ApiError, formatError } from "./errors.js";
+import { drainMatterhornEmailOutbox } from "./email-outbox.js";
 import {
   resolveMatterhornTurnstileConfig,
   verifyMatterhornTurnstile,
@@ -1188,6 +1192,12 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
+  const drainEmailOutbox = createEmailOutboxDrainer(authStore, logger);
+  let emailOutboxTask = drainEmailOutbox();
+  const emailOutboxTimer = setInterval(() => {
+    emailOutboxTask = drainEmailOutbox();
+  }, 30_000);
+  emailOutboxTimer.unref?.();
   let receiptExpiryTask = purgeAllExpiredAgentRunReceipts(guardedRuntime.receipts).catch((error) => {
     logger.log("error", "Guarded receipt expiry failed", unhandledErrorAttributes(error));
     return { workspaces: 0, files: 0 };
@@ -1229,6 +1239,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     requestRateLimitStore,
     modelUsageStore,
     guardedRuntime,
+    drainEmailOutbox,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
 
@@ -1458,11 +1469,14 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     stop: async (closeActiveConnections?: boolean) => {
       clearInterval(receiptExpiryTimer);
       clearInterval(accountDeletionRetryTimer);
+      clearInterval(emailOutboxTimer);
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
       modelUsageStore.close();
       await receiptExpiryTask;
       await accountDeletionRetryTask;
+      await emailOutboxTask;
+      await drainEmailOutbox();
       authStore.close();
       guardedRuntime.close();
       if (ownsRequestRateLimitStore) await requestRateLimitStore.close?.();
@@ -2580,39 +2594,24 @@ function enabledEnvironmentFlag(name: string): boolean {
 }
 
 function matterhornEmailConfig(): EmailSendConfig {
-  const configuredPort = Number(process.env.MATTERHORN_SMTP_PORT?.trim() || 587);
-  const smtpPort = Number.isSafeInteger(configuredPort) && configuredPort > 0
-    ? configuredPort
-    : 587;
-  const devMode =
+  const consoleMode =
     process.env.NODE_ENV !== "production" &&
     enabledEnvironmentFlag("MATTERHORN_EMAIL_DEV_MODE");
   return {
-    from: process.env.MATTERHORN_EMAIL_FROM?.trim(),
-    resendApiKey: process.env.MATTERHORN_RESEND_API_KEY?.trim(),
-    smtp: {
-      host: process.env.MATTERHORN_SMTP_HOST?.trim(),
-      port: smtpPort,
-      user: process.env.MATTERHORN_SMTP_USER?.trim(),
-      pass: process.env.MATTERHORN_SMTP_PASSWORD,
-      secure: enabledEnvironmentFlag("MATTERHORN_SMTP_SECURE"),
+    from: process.env.EMAIL_FROM?.trim(),
+    fromName: process.env.EMAIL_FROM_NAME?.trim(),
+    awsSes: {
+      region: process.env.AWS_SES_REGION?.trim(),
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      configurationSetName: process.env.AWS_SES_CONFIGURATION_SET?.trim(),
     },
-    devMode,
+    consoleMode,
   };
 }
 
 function matterhornEmailDeliveryConfigured(config: EmailSendConfig): boolean {
-  if (config.devMode) return true;
-  const resendConfigured = (config.resendApiKey?.trim().length ?? 0) >= 16;
-  const smtpConfigured = Boolean(
-    config.smtp?.host?.trim() &&
-      config.smtp.user?.trim() &&
-      config.smtp.pass?.trim(),
-  );
-  return Boolean(
-    config.from &&
-      (resendConfigured || smtpConfigured),
-  );
+  return emailDeliveryConfigured(config);
 }
 
 function requireMatterhornEmailDelivery(config: EmailSendConfig): void {
@@ -2625,7 +2624,7 @@ function requireMatterhornEmailDelivery(config: EmailSendConfig): void {
   }
 }
 
-function matterhornPublicAuthConfig() {
+function matterhornPublicAuthConfig(authStore?: MatterhornAuthStore) {
   const production = process.env.NODE_ENV === "production";
   const turnstile = resolveMatterhornTurnstileConfig();
   const signupFlag = process.env.MATTERHORN_SIGNUPS_ENABLED?.trim().toLowerCase() ?? "";
@@ -2642,6 +2641,10 @@ function matterhornPublicAuthConfig() {
   const emailDeliveryAvailable = matterhornEmailDeliveryConfigured(
     matterhornEmailConfig(),
   );
+  const emailEventsReady = Boolean(
+    process.env.AWS_SES_CONFIGURATION_SET?.trim() &&
+      (process.env.MATTERHORN_SES_EVENT_SECRET?.trim().length ?? 0) >= 32,
+  );
   const termsVersion = process.env.MATTERHORN_TERMS_VERSION?.trim() ?? "";
   const privacyVersion = process.env.MATTERHORN_PRIVACY_VERSION?.trim() ?? "";
   const legalVersionsReady =
@@ -2654,9 +2657,21 @@ function matterhornPublicAuthConfig() {
       legalAcceptanceRequired &&
       process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT?.trim().toLowerCase() === "hard" &&
       turnstile.ready);
+  const configuredCapacity = Number(process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS?.trim() ?? "");
+  const signupCapacityReady = Number.isSafeInteger(configuredCapacity) && configuredCapacity > 0;
+  const signupCapacityAvailable = signupCapacityReady && (!authStore || authStore.accountCount() < configuredCapacity);
+  const inferenceReady = (process.env.CUDOS_API_KEY?.trim().length ?? 0) >= 16;
+  const backupReady = process.env.MATTERHORN_HOST_BACKUP_REQUIRED === "1" && hostBackupFresh();
+  const launchReady = productionSafetyReady &&
+    emailDeliveryAvailable &&
+    emailEventsReady &&
+    legalVersionsReady &&
+    inferenceReady &&
+    backupReady &&
+    signupCapacityAvailable;
   const signupsAvailable =
     signupsAllowedByFlag &&
-    productionSafetyReady &&
+    (!production || launchReady) &&
     (!emailVerificationRequired || emailDeliveryAvailable) &&
     (!legalAcceptanceRequired || legalVersionsReady);
 
@@ -2672,21 +2687,28 @@ function matterhornPublicAuthConfig() {
     legalAcceptanceRequired,
     minimumPasswordLength: 12,
     turnstileSiteKey: turnstile.ready ? turnstile.siteKey : null,
+    infrastructureReady: productionSafetyReady,
+    emailTransportReady: emailDeliveryAvailable && (!production || emailEventsReady),
+    launchReady: !production || launchReady,
   } as const;
 }
 
-async function sendMatterhornAccountEmail(
-  input: Parameters<typeof sendEmail>[0],
-): Promise<void> {
-  try {
-    await sendEmail(input);
-  } catch {
-    throw new ApiError(
-      503,
-      "email_delivery_failed",
-      "Account email could not be delivered. Try again shortly.",
-    );
-  }
+function createEmailOutboxDrainer(authStore: MatterhornAuthStore, logger: ServerLogger) {
+  let active: Promise<void> | null = null;
+  return (): Promise<void> => {
+    if (active) return active;
+    active = drainMatterhornEmailOutbox({
+      authStore,
+      config: matterhornEmailConfig(),
+      onDeferred: (item) => logger.log("warn", "Transactional email delivery deferred", {
+        "email.template": item.template,
+        "email.attempt": item.attempts,
+      }),
+    }).then(() => undefined).finally(() => {
+      active = null;
+    });
+    return active;
+  };
 }
 
 function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
@@ -7360,6 +7382,7 @@ function createRoutes(
   requestRateLimitStore: RequestRateLimitStore,
   modelUsageStore: MatterhornModelUsageStore,
   guardedRuntime: MatterhornGuardedAgentRuntime,
+  drainEmailOutbox: () => Promise<void>,
 ): Route[] {
   const routes: Route[] = [];
   const billingRouteContext = createBillingRouteContext(config);
@@ -7433,7 +7456,46 @@ function createRoutes(
   };
 
   addRoute(routes, "GET", "/api/auth/config", "none", async () => {
-    const response = jsonResponse(matterhornPublicAuthConfig());
+    const response = jsonResponse(matterhornPublicAuthConfig(authStore));
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "POST", "/api/auth/email-events/ses", "none", async (ctx) => {
+    const expected = process.env.MATTERHORN_SES_EVENT_SECRET?.trim() ?? "";
+    const provided = ctx.request.headers.get("x-matterhorn-ses-event-secret")?.trim() ?? "";
+    const expectedHash = createHash("sha256").update(expected).digest("hex");
+    const providedHash = createHash("sha256").update(provided).digest("hex");
+    if (
+      expected.length < 32 ||
+      !timingSafeEqual(Buffer.from(providedHash, "hex"), Buffer.from(expectedHash, "hex"))
+    ) {
+      throw new ApiError(401, "unauthorized", "Email event authentication failed.");
+    }
+    const body = await readJsonBody(ctx.request, 128 * 1024, "SES delivery event");
+    const detail = isRecord(body.detail) ? body.detail : body;
+    const eventType = String(detail.eventType ?? detail.notificationType ?? "").trim().toLowerCase();
+    const mail = isRecord(detail.mail) ? detail.mail : {};
+    const messageId = typeof mail.messageId === "string" ? mail.messageId.trim() : "";
+    const eventId = typeof body.id === "string"
+      ? body.id.trim()
+      : createHash("sha256").update(JSON.stringify(body)).digest("hex");
+    if (eventType === "delivery" && messageId) {
+      authStore.markSesDelivery(messageId);
+    } else if (eventType === "bounce" || eventType === "complaint") {
+      const event = isRecord(detail[eventType]) ? detail[eventType] as Record<string, unknown> : {};
+      const recipientsValue = eventType === "bounce" ? event.bouncedRecipients : event.complainedRecipients;
+      const recipients = Array.isArray(recipientsValue) ? recipientsValue : [];
+      for (const recipient of recipients) {
+        if (!isRecord(recipient) || typeof recipient.emailAddress !== "string") continue;
+        try {
+          authStore.suppressEmail(recipient.emailAddress, eventType, eventId);
+        } catch {
+          // Invalid addresses in provider events are ignored without exposing their value.
+        }
+      }
+    }
+    const response = jsonResponse({ ok: true });
     response.headers.set("Cache-Control", "no-store");
     return response;
   });
@@ -7527,12 +7589,10 @@ function createRoutes(
         "Accept the Terms and acknowledge the Privacy notice to create an account.",
       );
     }
-    const session = withMatterhornAuthErrorMapping(() =>
-      authStore.createAccount({
+    const accountInput = {
         email,
         password: stringBodyField(body, "password"),
         name: optionalStringBodyField(body, "name"),
-        emailVerified: !verificationRequired,
         legalAcceptance:
           body.legalAccepted === true && termsVersion && privacyVersion
             ? { termsVersion, privacyVersion }
@@ -7546,37 +7606,27 @@ function createRoutes(
           }
           return value;
         })(),
-      }),
-    );
+    };
     if (verificationRequired) {
-      authStore.signOut(session.token);
-      const challenge = withMatterhornAuthErrorMapping(() =>
-        authStore.createEmailVerificationChallenge(email),
+      const verification = withMatterhornAuthErrorMapping(() =>
+        authStore.createAccountOrQueueVerification(accountInput),
       );
-      if (!challenge) {
-        throw new ApiError(
-          409,
-          "email_verification_unavailable",
-          "Email verification could not be started. Sign in or request a new code.",
-        );
-      }
-      await sendMatterhornAccountEmail({
-        to: challenge.email,
-        template: "verification",
-        props: { verificationCode: challenge.verificationCode },
-        config: emailConfig,
-      });
+      void drainEmailOutbox();
       const response = jsonResponse(
         {
+          code: "verification_required",
           verificationRequired: true,
-          email: challenge.email,
-          expiresAt: challenge.expiresAt,
+          email: verification.email,
+          expiresAt: verification.expiresAt,
         },
         202,
       );
       response.headers.set("Cache-Control", "no-store");
       return response;
     }
+    const session = withMatterhornAuthErrorMapping(() =>
+      authStore.createAccount({ ...accountInput, emailVerified: true }),
+    );
     return matterhornAuthResponse(request, {
       user: session.user,
       organization: matterhornActiveOrganization(authStore, session),
@@ -7626,15 +7676,10 @@ function createRoutes(
     const emailConfig = matterhornEmailConfig();
     requireMatterhornEmailDelivery(emailConfig);
     const challenge = withMatterhornAuthErrorMapping(() =>
-      authStore.createEmailVerificationChallenge(email),
+      authStore.queueEmailVerification(email),
     );
     if (challenge) {
-      await sendMatterhornAccountEmail({
-        to: challenge.email,
-        template: "verification",
-        props: { verificationCode: challenge.verificationCode },
-        config: emailConfig,
-      });
+      void drainEmailOutbox();
     }
     const response = jsonResponse({
       ok: true,
@@ -7661,34 +7706,17 @@ function createRoutes(
     }
     const emailConfig = matterhornEmailConfig();
     requireMatterhornEmailDelivery(emailConfig);
-    const challenge = withMatterhornAuthErrorMapping(() =>
-      authStore.createPasswordResetChallenge(email),
-    );
-    if (challenge) {
-      try {
-        const appUrl = new URL(process.env.MATTERHORN_APP_URL?.trim() ?? "");
-        if (
-          appUrl.protocol !== "https:" &&
-          !(process.env.NODE_ENV !== "production" && appUrl.protocol === "http:")
-        ) {
-          throw new Error("Matterhorn app URL must use HTTPS.");
-        }
-        appUrl.pathname = "/";
-        appUrl.search = "";
-        appUrl.hash = new URLSearchParams({
-          mode: "reset-password",
-          token: challenge.resetToken,
-        }).toString();
-        await sendMatterhornAccountEmail({
-          to: challenge.email,
-          template: "passwordReset",
-          props: { resetLink: appUrl.toString() },
-          config: emailConfig,
-        });
-      } catch {
-        console.error("[auth] Password reset email delivery failed.");
-      }
+    const appUrl = new URL(process.env.MATTERHORN_APP_URL?.trim() ?? "");
+    if (
+      appUrl.protocol !== "https:" &&
+      !(process.env.NODE_ENV !== "production" && appUrl.protocol === "http:")
+    ) {
+      throw new ApiError(503, "password_reset_unavailable", "Password reset is temporarily unavailable.");
     }
+    const challenge = withMatterhornAuthErrorMapping(() =>
+      authStore.queuePasswordReset(email, appUrl.toString()),
+    );
+    if (challenge) void drainEmailOutbox();
     const response = jsonResponse({
       ok: true,
       message: "If an account exists for that email, a password reset link has been sent.",
@@ -7949,6 +7977,38 @@ function createRoutes(
       checks: readiness.checks,
       uptimeMs: Date.now() - config.startedAt,
     }, readiness.ready ? 200 : 503);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "GET", "/health/email", "none", async () => {
+    const auth = matterhornPublicAuthConfig(authStore);
+    const outbox = authStore.emailOutboxStatus();
+    const ok = auth.emailTransportReady;
+    const response = jsonResponse({
+      ok,
+      status: ok ? "ready" : "not_ready",
+      transport: "ses",
+      pending: outbox.pending,
+      terminal: outbox.terminal,
+    }, ok ? 200 : 503);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "GET", "/health/launch", "none", async () => {
+    const infrastructure = operationalReadiness(config, guardedRuntime);
+    const auth = matterhornPublicAuthConfig(authStore);
+    const ok = infrastructure.ready && auth.launchReady;
+    const response = jsonResponse({
+      ok,
+      status: ok ? "ready" : "not_ready",
+      checks: {
+        infrastructure: infrastructure.ready,
+        emailTransport: auth.emailTransportReady,
+        launchConfiguration: auth.launchReady,
+      },
+    }, ok ? 200 : 503);
     response.headers.set("Cache-Control", "no-store");
     return response;
   });

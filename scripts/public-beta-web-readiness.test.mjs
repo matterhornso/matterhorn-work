@@ -70,11 +70,18 @@ const managedKeys = [
   "MATTERHORN_TURNSTILE_SITEKEY",
   "TURNSTILE_SECRET",
   "TURNSTILE_HOSTNAMES",
-  "MATTERHORN_EMAIL_FROM",
-  "MATTERHORN_RESEND_API_KEY",
-  "MATTERHORN_SMTP_HOST",
-  "MATTERHORN_SMTP_USER",
-  "MATTERHORN_SMTP_PASSWORD",
+  "EMAIL_FROM",
+  "EMAIL_FROM_NAME",
+  "AWS_SES_REGION",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SES_CONFIGURATION_SET",
+  "MATTERHORN_SES_EVENT_SECRET",
+  "MATTERHORN_HOST_BACKUP_REQUIRED",
+  "MATTERHORN_BACKUP_S3_BUCKET",
+  "MATTERHORN_BACKUP_KMS_KEY_ID",
+  "MATTERHORN_BACKUP_AWS_ACCESS_KEY_ID",
+  "MATTERHORN_BACKUP_AWS_SECRET_ACCESS_KEY",
   "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED",
   "MATTERHORN_TERMS_VERSION",
   "MATTERHORN_PRIVACY_VERSION",
@@ -128,8 +135,18 @@ function publicWebEnvironment(overrides = {}) {
     MATTERHORN_TURNSTILE_SITEKEY: "0x4AAAAAAAtest-site-key",
     TURNSTILE_SECRET: "test-turnstile-secret-value",
     TURNSTILE_HOSTNAMES: "app.matterhorn.example",
-    MATTERHORN_EMAIL_FROM: "Matterhorn Desks <accounts@matterhorn.example>",
-    MATTERHORN_RESEND_API_KEY: "re_test_managed_server_secret",
+    EMAIL_FROM: "accounts@matterhorn.example",
+    EMAIL_FROM_NAME: "Matterhorn Desks",
+    AWS_SES_REGION: "us-east-1",
+    AWS_ACCESS_KEY_ID: "AKIASESONLYEXAMPLE",
+    AWS_SECRET_ACCESS_KEY: "ses-only-secret-value",
+    AWS_SES_CONFIGURATION_SET: "matterhorn-transactional",
+    MATTERHORN_SES_EVENT_SECRET: "ses-event-secret-at-least-32-characters",
+    MATTERHORN_HOST_BACKUP_REQUIRED: "true",
+    MATTERHORN_BACKUP_S3_BUCKET: "matterhorn-private-backups",
+    MATTERHORN_BACKUP_KMS_KEY_ID: "arn:aws:kms:us-east-1:123456789012:key/example",
+    MATTERHORN_BACKUP_AWS_ACCESS_KEY_ID: "AKIABACKUPONLYEXAMPLE",
+    MATTERHORN_BACKUP_AWS_SECRET_ACCESS_KEY: "backup-only-secret-value",
     MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED: "true",
     MATTERHORN_TERMS_VERSION: "2026-08-13",
     MATTERHORN_PRIVACY_VERSION: "2026-08-13",
@@ -249,10 +266,10 @@ const unsafeTurnstileHosts = run({
 assert.notEqual(unsafeTurnstileHosts.status, 0);
 assert.ok(JSON.parse(unsafeTurnstileHosts.stdout).blockers.some((blocker) => blocker.id === "signup.bot_protection"));
 
-const missingEmailDelivery = run({ MATTERHORN_RESEND_API_KEY: "" });
+const missingEmailDelivery = run({ AWS_SECRET_ACCESS_KEY: "" });
 assert.notEqual(missingEmailDelivery.status, 0);
 assert.ok(JSON.parse(missingEmailDelivery.stdout).blockers.some((blocker) => blocker.id === "signup.email_delivery"));
-assert.doesNotMatch(missingEmailDelivery.stdout, /re_test_managed_server_secret/);
+assert.doesNotMatch(missingEmailDelivery.stdout, /ses-only-secret-value/);
 
 const missingLegalAcceptance = run({ MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED: "false" });
 assert.notEqual(missingLegalAcceptance.status, 0);

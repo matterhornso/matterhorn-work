@@ -156,12 +156,22 @@ function evaluate() {
     cudosTrainingUse === "opt-in-only" &&
     new Set(["0", "false", "no", "off"]).has(cudosTrainingOptedIn) &&
     cudosProviderPolicyRetention;
-  const emailFrom = readEnv("MATTERHORN_EMAIL_FROM");
-  const resendConfigured = readEnv("MATTERHORN_RESEND_API_KEY").length >= 16;
-  const smtpConfigured = Boolean(
-    readEnv("MATTERHORN_SMTP_HOST") &&
-      readEnv("MATTERHORN_SMTP_USER") &&
-      readEnv("MATTERHORN_SMTP_PASSWORD"),
+  const emailFrom = readEnv("EMAIL_FROM");
+  const sesConfigured = Boolean(
+    readEnv("AWS_SES_REGION") &&
+      readEnv("AWS_ACCESS_KEY_ID") &&
+      readEnv("AWS_SECRET_ACCESS_KEY") &&
+      readEnv("AWS_SES_CONFIGURATION_SET") &&
+      readEnv("MATTERHORN_SES_EVENT_SECRET").length >= 32,
+  );
+  const backupConfigured = Boolean(
+    enabled("MATTERHORN_HOST_BACKUP_REQUIRED") &&
+      readEnv("MATTERHORN_BACKUP_S3_BUCKET") &&
+      readEnv("MATTERHORN_BACKUP_KMS_KEY_ID") &&
+      readEnv("MATTERHORN_BACKUP_AWS_ACCESS_KEY_ID") &&
+      readEnv("MATTERHORN_BACKUP_AWS_SECRET_ACCESS_KEY") &&
+      readEnv("MATTERHORN_BACKUP_AWS_ACCESS_KEY_ID") !== readEnv("AWS_ACCESS_KEY_ID") &&
+      readEnv("MATTERHORN_BACKUP_AWS_SECRET_ACCESS_KEY") !== readEnv("AWS_SECRET_ACCESS_KEY"),
   );
 
   const checks = [
@@ -341,14 +351,21 @@ function evaluate() {
       "Transactional account email has an explicit sender identity",
       "Platform",
       Boolean(emailFrom && emailFrom.includes("@")),
-      "MATTERHORN_EMAIL_FROM must be a valid sender identity for verification and password recovery.",
+      "EMAIL_FROM must be a valid verified SES sender for verification and password recovery.",
     ),
     check(
       "signup.email_delivery",
       "Transactional email delivery is configured server-side",
       "Platform",
-      resendConfigured || smtpConfigured,
-      "Configure MATTERHORN_RESEND_API_KEY or authenticated MATTERHORN_SMTP_HOST, MATTERHORN_SMTP_USER, and MATTERHORN_SMTP_PASSWORD.",
+      sesConfigured,
+      "Configure the AWS SES region, credentials, configuration set, and a 32+ character MATTERHORN_SES_EVENT_SECRET.",
+    ),
+    check(
+      "signup.host_recovery",
+      "Host recovery uses a private versioned S3 bucket and backup-only credentials",
+      "Platform and security",
+      backupConfigured,
+      "Require host backup and configure the S3 bucket, KMS key, and dedicated backup IAM credentials.",
     ),
     check(
       "signup.legal_acceptance",
