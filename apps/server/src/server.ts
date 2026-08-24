@@ -7489,7 +7489,7 @@ function createRoutes(
       for (const recipient of recipients) {
         if (!isRecord(recipient) || typeof recipient.emailAddress !== "string") continue;
         try {
-          authStore.suppressEmail(recipient.emailAddress, eventType, eventId);
+          authStore.suppressEmail(recipient.emailAddress, eventType, eventId, messageId || undefined);
         } catch {
           // Invalid addresses in provider events are ignored without exposing their value.
         }

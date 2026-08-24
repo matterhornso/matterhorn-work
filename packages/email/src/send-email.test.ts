@@ -17,17 +17,20 @@ mock.module("@aws-sdk/client-sesv2", () => ({
   },
 }))
 
-const { EmailSendError, sendEmail } = await import("./send-email.js")
+const { EmailSendError, sendEmail, setConsoleEmailPreviewSink } = await import("./send-email.js")
 const originalConsoleInfo = console.info
 
 afterEach(() => {
   sent.length = 0
   console.info = originalConsoleInfo
+  setConsoleEmailPreviewSink(null)
 })
 
 test("uses console transport locally without AWS credentials", async () => {
   const lines: string[] = []
+  const previews: Array<Record<string, unknown>> = []
   console.info = (...values: unknown[]) => lines.push(values.map(String).join(" "))
+  setConsoleEmailPreviewSink((preview) => previews.push(preview))
   await sendEmail({
     to: "dev@example.com",
     template: "verification",
@@ -36,6 +39,9 @@ test("uses console transport locally without AWS credentials", async () => {
   })
   expect(sent).toHaveLength(0)
   expect(lines[0]).toContain("[email] console delivery")
+  expect(lines[0]).not.toContain("123456")
+  expect(lines[0]).not.toContain("props")
+  expect(previews[0]).toMatchObject({ template: "verification", props: { verificationCode: "123456" } })
 })
 
 test("sends existing templates only through AWS SES v2", async () => {
@@ -75,5 +81,31 @@ test("fails closed without complete SES configuration and rejects header injecti
       config: input,
     })).rejects.toBeInstanceOf(EmailSendError)
   }
+  expect(sent).toHaveLength(0)
+})
+
+test("rejects malformed and adversarially long email addresses without regex backtracking", async () => {
+  for (const to of [
+    "missing-domain@example",
+    "double..dot@example.com",
+    "user@-invalid.example",
+    `${"!.".repeat(20_000)}@example.com`,
+  ]) {
+    await expect(sendEmail({
+      to,
+      template: "verification",
+      props: { verificationCode: "654321" },
+      config: { consoleMode: true },
+    })).rejects.toBeInstanceOf(EmailSendError)
+  }
+  await expect(sendEmail({
+    to: "user@example.com",
+    template: "verification",
+    props: { verificationCode: "654321" },
+    config: {
+      from: `${"!.".repeat(20_000)}@example.com`,
+      awsSes: { region: "us-east-1", accessKeyId: "key", secretAccessKey: "secret" },
+    },
+  })).rejects.toBeInstanceOf(EmailSendError)
   expect(sent).toHaveLength(0)
 })

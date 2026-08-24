@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setConsoleEmailPreviewSink, type ConsoleEmailPreview } from "@matterhorn-work/email";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
@@ -163,21 +164,15 @@ async function captureDevEmail<T>(callback: () => Promise<T>): Promise<{
   result: T;
   payload: { template: string; props: Record<string, unknown> };
 }> {
-  const original = console.info;
-  const lines: string[] = [];
-  console.info = (...values: unknown[]) => {
-    const line = values.map(String).join(" ");
-    if (line.startsWith("[email] console delivery")) lines.push(line);
-    else original(...values);
-  };
+  const previews: ConsoleEmailPreview[] = [];
+  setConsoleEmailPreviewSink((preview) => previews.push(preview));
   try {
     const result = await callback();
-    const line = lines.at(-1);
-    if (!line) throw new Error("Expected a development email payload.");
-    const start = line.indexOf("{");
-    return { result, payload: JSON.parse(line.slice(start)) };
+    const preview = previews.at(-1);
+    if (!preview) throw new Error("Expected a development email preview.");
+    return { result, payload: { template: preview.template, props: preview.props } };
   } finally {
-    console.info = original;
+    setConsoleEmailPreviewSink(null);
   }
 }
 

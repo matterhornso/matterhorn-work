@@ -67,6 +67,9 @@ describe("durable transactional email outbox", () => {
     const [retried] = store.claimDueEmailOutbox();
     expect(retried?.attempts).toBe(2);
     store.markEmailAccepted(retried!.id, "ses-message-1");
+    const acceptedDb = new Database(path, { readonly: true });
+    expect(acceptedDb.query("SELECT props_json FROM email_outbox WHERE id = ?").get(retried!.id)).toEqual({ props_json: "{}" });
+    acceptedDb.close();
     expect(store.emailOutboxStatus().pending).toBe(1);
     store.markSesDelivery("ses-message-1");
     expect(store.emailOutboxStatus().pending).toBe(0);
@@ -83,9 +86,31 @@ describe("durable transactional email outbox", () => {
     expect(mail?.template).toBe("passwordReset");
     expect(mail?.props.resetLink).toContain("mode=reset-password");
     store.markEmailAccepted(mail!.id, "ses-message-2");
-    store.suppressEmail("bounce@example.com", "bounce", "event-1");
+    store.suppressEmail("bounce@example.com", "bounce", "event-1", "ses-message-2");
     expect(store.queuePasswordReset("bounce@example.com", "https://desks.example.com/")).toBeNull();
-    expect(store.emailOutboxStatus().suppressed).toBe(0);
+    expect(store.emailOutboxStatus()).toEqual({ pending: 0, terminal: 0, suppressed: 1 });
+    store.close();
+  });
+
+  test("purges email secrets when delivery becomes terminal or suppressed", () => {
+    const { store, path } = fixture();
+    store.createAccountOrQueueVerification({ email: "terminal@example.com", password: PASSWORD });
+    const [terminalMail] = store.claimDueEmailOutbox();
+    store.markEmailFailed(terminalMail!.id, "ses_rejected", 8);
+
+    store.createAccountOrQueueVerification({ email: "suppressed@example.com", password: PASSWORD });
+    store.suppressEmail("suppressed@example.com", "bounce", "event-secret-purge");
+
+    const db = new Database(path, { readonly: true });
+    expect(db.query("SELECT state, props_json FROM email_outbox WHERE id = ?").get(terminalMail!.id)).toEqual({
+      state: "terminal",
+      props_json: "{}",
+    });
+    expect(db.query("SELECT state, props_json FROM email_outbox WHERE recipient = ?").get("suppressed@example.com")).toEqual({
+      state: "suppressed",
+      props_json: "{}",
+    });
+    db.close();
     store.close();
   });
 });

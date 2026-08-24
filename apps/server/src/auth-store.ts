@@ -795,7 +795,8 @@ export class MatterhornAuthStore {
     const now = Date.now();
     statement(this.db, `
       UPDATE email_outbox SET state = ?, provider_message_id = ?,
-        delivered_at = ?, updated_at = ?, last_error_code = NULL
+        delivered_at = ?, updated_at = ?, last_error_code = NULL,
+        props_json = '{}'
       WHERE id = ? AND state = 'sending'
     `).run(
       providerMessageId ? "accepted" : "delivered",
@@ -811,12 +812,18 @@ export class MatterhornAuthStore {
     const backoff = Math.min(6 * 60 * 60_000, 60_000 * 2 ** Math.max(0, attempts - 1));
     const now = Date.now();
     statement(this.db, `
-      UPDATE email_outbox SET state = ?, next_attempt_at = ?, last_error_code = ?, updated_at = ?
+      UPDATE email_outbox SET state = ?, next_attempt_at = ?, last_error_code = ?, updated_at = ?,
+        props_json = CASE WHEN ? THEN '{}' ELSE props_json END
       WHERE id = ? AND state = 'sending'
-    `).run(terminal ? "terminal" : "retry", now + backoff, errorCode.slice(0, 64), now, id);
+    `).run(terminal ? "terminal" : "retry", now + backoff, errorCode.slice(0, 64), now, terminal ? 1 : 0, id);
   }
 
-  suppressEmail(emailInput: string, reason: "bounce" | "complaint", eventId: string): void {
+  suppressEmail(
+    emailInput: string,
+    reason: "bounce" | "complaint",
+    eventId: string,
+    providerMessageId?: string,
+  ): void {
     const email = normalizeEmail(emailInput);
     const emailHash = hashEmail(email);
     const now = Date.now();
@@ -828,9 +835,16 @@ export class MatterhornAuthStore {
           reason = excluded.reason, event_id = excluded.event_id, created_at = excluded.created_at
       `).run(emailHash, reason, eventId.slice(0, 256), now);
       statement(this.db, `
-        UPDATE email_outbox SET state = 'suppressed', last_error_code = ?, updated_at = ?
+        UPDATE email_outbox SET state = 'suppressed', last_error_code = ?, updated_at = ?, props_json = '{}'
         WHERE recipient = ? AND state IN ('pending', 'retry', 'sending')
       `).run(reason, now, email);
+      if (providerMessageId) {
+        statement(this.db, `
+          UPDATE email_outbox SET state = 'suppressed', last_error_code = ?, updated_at = ?, props_json = '{}'
+          WHERE recipient = ? AND provider_message_id = ?
+            AND state IN ('accepted', 'delivered')
+        `).run(reason, now, email, providerMessageId.slice(0, 256));
+      }
     });
   }
 
@@ -1576,7 +1590,7 @@ export class MatterhornAuthStore {
       input.userId,
       recipient,
       input.template,
-      JSON.stringify(input.props),
+      JSON.stringify(suppressed ? {} : input.props),
       suppressed ? "suppressed" : "pending",
       input.now,
       input.now,
