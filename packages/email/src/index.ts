@@ -4,7 +4,12 @@ export {
   type EmailProvider,
   type EmailSendConfig,
   type SendEmailInput,
-  type SmtpEmailConfig,
+  type SendEmailResult,
+  type ConsoleEmailPreview,
+  type AwsSesEmailConfig,
+  emailDeliveryConfigured,
+  getEmailProvider,
+  setConsoleEmailPreviewSink,
 } from "./send-email.js"
 export {
   emailSubjects,

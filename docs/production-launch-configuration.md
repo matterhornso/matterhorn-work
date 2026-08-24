@@ -39,7 +39,7 @@ user failure.
   release-owner decision, not an automatic scale event.
 - Require email ownership with `MATTERHORN_EMAIL_VERIFICATION_REQUIRED=true`
   and a verified transactional sender. Production signup fails closed before
-  creating an account when neither Resend nor authenticated SMTP is configured.
+  creating an account when AWS SES delivery and event handling are incomplete.
 - Require Cloudflare Turnstile with `MATTERHORN_TURNSTILE_SITEKEY`, the
   server-only `TURNSTILE_SECRET`, and an exact production
   `TURNSTILE_HOSTNAMES` allowlist. Signup verifies the single-use token,
@@ -81,8 +81,11 @@ user failure.
 4. Deploy `packaging/docker/Dockerfile.public-beta` on a long-lived container host with an encrypted persistent volume mounted at `/data`. Set the exact app origin, three high-entropy server secrets, the exact build SHA, and provider credentials in that host's secret manager. The container fails startup when its token, host token, trusted-proxy secret, build SHA, or exact HTTPS CORS origin is missing.
 5. For Public Beta web, configure the same-origin proxy with `MATTERHORN_CONTROL_PLANE_URL` and `MATTERHORN_PROXY_SECRET` as server-only Vercel secrets. Route `/api`, `/workspaces`, `/workspace`, `/opencode`, and the other approved API roots through `api/matterhorn-proxy.mjs`. Set the same value as `MATTERHORN_WORK_TRUSTED_PROXY_SECRET` on the backend. Then set `MATTERHORN_PUBLIC_PROXY_MODE=same-origin`, `VITE_MATTERHORN_DEPLOYMENT=web`, `VITE_MATTERHORN_PUBLIC_BETA=1`, `VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED=1`, `VITE_MATTERHORN_REQUIRE_SIGNIN=1`, `VITE_MATTERHORN_CLOUD_URL=https://<app-origin>`, and `VITE_MATTERHORN_CLOUD_API_URL=https://<app-origin>/api/den`. Supply the exact full merge SHA as the non-secret build variable `VITE_MATTERHORN_BUILD_COMMIT`; do not reuse a branch-head SHA after merge. The reviewed-actions flag exposes only audited agent-draft to exact-review to connected-wallet approval paths; it does not enable autonomous agent or watch submission. Leave every browser-side Matterhorn Desks URL and token variable unset. The deployment probe must confirm the static web build and backend both report the exact merge SHA and that `/workspaces` and `/opencode` return a JSON `401` or `403` without authentication; an HTML SPA fallback is a launch blocker.
 6. Configure the server-managed ASI:Cloud credential, signup capacity,
-   `MATTERHORN_EMAIL_VERIFICATION_REQUIRED=true`, `MATTERHORN_EMAIL_FROM`, and
-   either `MATTERHORN_RESEND_API_KEY` or the authenticated SMTP variables.
+   `MATTERHORN_EMAIL_VERIFICATION_REQUIRED=true`, `EMAIL_FROM`,
+   `EMAIL_FROM_NAME`, and the AWS SES region and SES-only IAM credentials.
+   Attach `AWS_SES_CONFIGURATION_SET` to an EventBridge API Destination that
+   calls `/api/auth/email-events/ses` with the independent
+   `MATTERHORN_SES_EVENT_SECRET`; verify delivery, bounce, and complaint events.
    Configure the Turnstile site key and secret, and set
    `TURNSTILE_HOSTNAMES` to the exact public app hostname without localhost.
    Set the approved Terms and Privacy versions and enable legal acceptance.

@@ -245,7 +245,7 @@ export function PublicWebSigninPage({
           setEmail(result.email ?? email.trim());
           setPassword("");
           setMode("verify-email");
-          setStatusMessage("We sent a six-digit verification code to your email.");
+          setStatusMessage("Your account is ready for verification. Check your email, or request a new code if delivery is delayed.");
           return;
         }
         await finishSignIn();
@@ -312,7 +312,7 @@ export function PublicWebSigninPage({
     try {
       await client.resendVerification(email);
       setVerificationCode("");
-      setStatusMessage("If verification is still needed, a new code is on its way.");
+      setStatusMessage("A verification email is queued. You can safely try again later if it does not arrive.");
     } catch (error) {
       setAuthError(publicWebAuthErrorMessage(error));
     } finally {
@@ -548,7 +548,7 @@ export function PublicWebSigninPage({
             ) : null}
             {mode === "verify-email" ? (
               <button type="button" onClick={() => void resendVerification()} disabled={submitBusy}>
-                Send a new code
+                Resend verification code
               </button>
             ) : null}
             {!primaryMode ? (

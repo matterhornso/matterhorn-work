@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setConsoleEmailPreviewSink, type ConsoleEmailPreview } from "@matterhorn-work/email";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
@@ -30,13 +31,15 @@ const priorMemoryRoot = process.env.MATTERHORN_WORK_MEMORY_ROOT;
 const priorSignupsEnabled = process.env.MATTERHORN_SIGNUPS_ENABLED;
 const priorSignupCapacity = process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS;
 const priorEmailVerificationRequired = process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED;
-const priorEmailFrom = process.env.MATTERHORN_EMAIL_FROM;
+const priorEmailFrom = process.env.EMAIL_FROM;
+const priorEmailFromName = process.env.EMAIL_FROM_NAME;
 const priorEmailDevMode = process.env.MATTERHORN_EMAIL_DEV_MODE;
 const priorAppUrl = process.env.MATTERHORN_APP_URL;
-const priorResendApiKey = process.env.MATTERHORN_RESEND_API_KEY;
-const priorSmtpHost = process.env.MATTERHORN_SMTP_HOST;
-const priorSmtpUser = process.env.MATTERHORN_SMTP_USER;
-const priorSmtpPassword = process.env.MATTERHORN_SMTP_PASSWORD;
+const priorAwsSesRegion = process.env.AWS_SES_REGION;
+const priorAwsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+const priorAwsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+const priorAwsSesConfigurationSet = process.env.AWS_SES_CONFIGURATION_SET;
+const priorSesEventSecret = process.env.MATTERHORN_SES_EVENT_SECRET;
 const priorLegalAcceptanceRequired = process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED;
 const priorTermsVersion = process.env.MATTERHORN_TERMS_VERSION;
 const priorPrivacyVersion = process.env.MATTERHORN_PRIVACY_VERSION;
@@ -121,6 +124,7 @@ async function jsonRequest(
     method?: "GET" | "POST" | "PATCH" | "DELETE";
     forwardedProto?: "http" | "https";
     origin?: string;
+    headers?: Record<string, string>;
   } = {},
 ): Promise<JsonResult> {
   const headers = new Headers();
@@ -131,6 +135,7 @@ async function jsonRequest(
     headers.set("X-Forwarded-Proto", options.forwardedProto);
   }
   if (options.origin) headers.set("Origin", options.origin);
+  for (const [name, value] of Object.entries(options.headers ?? {})) headers.set(name, value);
   const response = await fetch(`${base}${path}`, {
     method: options.method ?? (options.body ? "POST" : "GET"),
     headers,
@@ -159,21 +164,15 @@ async function captureDevEmail<T>(callback: () => Promise<T>): Promise<{
   result: T;
   payload: { template: string; props: Record<string, unknown> };
 }> {
-  const original = console.info;
-  const lines: string[] = [];
-  console.info = (...values: unknown[]) => {
-    const line = values.map(String).join(" ");
-    if (line.startsWith("[email] dev email payload")) lines.push(line);
-    else original(...values);
-  };
+  const previews: ConsoleEmailPreview[] = [];
+  setConsoleEmailPreviewSink((preview) => previews.push(preview));
   try {
     const result = await callback();
-    const line = lines.at(-1);
-    if (!line) throw new Error("Expected a development email payload.");
-    const start = line.indexOf("{");
-    return { result, payload: JSON.parse(line.slice(start)) };
+    const preview = previews.at(-1);
+    if (!preview) throw new Error("Expected a development email preview.");
+    return { result, payload: { template: preview.template, props: preview.props } };
   } finally {
-    console.info = original;
+    setConsoleEmailPreviewSink(null);
   }
 }
 
@@ -195,20 +194,24 @@ afterEach(async () => {
   else process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS = priorSignupCapacity;
   if (priorEmailVerificationRequired === undefined) delete process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED;
   else process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = priorEmailVerificationRequired;
-  if (priorEmailFrom === undefined) delete process.env.MATTERHORN_EMAIL_FROM;
-  else process.env.MATTERHORN_EMAIL_FROM = priorEmailFrom;
+  if (priorEmailFrom === undefined) delete process.env.EMAIL_FROM;
+  else process.env.EMAIL_FROM = priorEmailFrom;
+  if (priorEmailFromName === undefined) delete process.env.EMAIL_FROM_NAME;
+  else process.env.EMAIL_FROM_NAME = priorEmailFromName;
   if (priorEmailDevMode === undefined) delete process.env.MATTERHORN_EMAIL_DEV_MODE;
   else process.env.MATTERHORN_EMAIL_DEV_MODE = priorEmailDevMode;
   if (priorAppUrl === undefined) delete process.env.MATTERHORN_APP_URL;
   else process.env.MATTERHORN_APP_URL = priorAppUrl;
-  if (priorResendApiKey === undefined) delete process.env.MATTERHORN_RESEND_API_KEY;
-  else process.env.MATTERHORN_RESEND_API_KEY = priorResendApiKey;
-  if (priorSmtpHost === undefined) delete process.env.MATTERHORN_SMTP_HOST;
-  else process.env.MATTERHORN_SMTP_HOST = priorSmtpHost;
-  if (priorSmtpUser === undefined) delete process.env.MATTERHORN_SMTP_USER;
-  else process.env.MATTERHORN_SMTP_USER = priorSmtpUser;
-  if (priorSmtpPassword === undefined) delete process.env.MATTERHORN_SMTP_PASSWORD;
-  else process.env.MATTERHORN_SMTP_PASSWORD = priorSmtpPassword;
+  if (priorAwsSesRegion === undefined) delete process.env.AWS_SES_REGION;
+  else process.env.AWS_SES_REGION = priorAwsSesRegion;
+  if (priorAwsAccessKeyId === undefined) delete process.env.AWS_ACCESS_KEY_ID;
+  else process.env.AWS_ACCESS_KEY_ID = priorAwsAccessKeyId;
+  if (priorAwsSecretAccessKey === undefined) delete process.env.AWS_SECRET_ACCESS_KEY;
+  else process.env.AWS_SECRET_ACCESS_KEY = priorAwsSecretAccessKey;
+  if (priorAwsSesConfigurationSet === undefined) delete process.env.AWS_SES_CONFIGURATION_SET;
+  else process.env.AWS_SES_CONFIGURATION_SET = priorAwsSesConfigurationSet;
+  if (priorSesEventSecret === undefined) delete process.env.MATTERHORN_SES_EVENT_SECRET;
+  else process.env.MATTERHORN_SES_EVENT_SECRET = priorSesEventSecret;
   if (priorLegalAcceptanceRequired === undefined) delete process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED;
   else process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = priorLegalAcceptanceRequired;
   if (priorTermsVersion === undefined) delete process.env.MATTERHORN_TERMS_VERSION;
@@ -309,7 +312,8 @@ describe("public account authentication", () => {
   test("verifies email and completes enumeration-safe password recovery", async () => {
     const app = await boot();
     process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "true";
-    process.env.MATTERHORN_EMAIL_FROM = "Matterhorn Desks <accounts@example.com>";
+    process.env.EMAIL_FROM = "accounts@example.com";
+    process.env.EMAIL_FROM_NAME = "Matterhorn Desks";
     process.env.MATTERHORN_EMAIL_DEV_MODE = "true";
     process.env.MATTERHORN_APP_URL = app.base;
     process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "true";
@@ -408,8 +412,9 @@ describe("public account authentication", () => {
     const app = await boot();
     process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "true";
     delete process.env.MATTERHORN_EMAIL_DEV_MODE;
-    delete process.env.MATTERHORN_RESEND_API_KEY;
-    delete process.env.MATTERHORN_SMTP_HOST;
+    delete process.env.AWS_SES_REGION;
+    delete process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_SECRET_ACCESS_KEY;
     const unavailable = await jsonRequest(app.base, "/api/auth/sign-up/email", {
       body: { email: "not-created@example.com", password: PASSWORD },
     });
@@ -426,29 +431,47 @@ describe("public account authentication", () => {
   test("does not advertise signup or password reset for incomplete production email configuration", async () => {
     const app = await boot();
     process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "true";
-    process.env.MATTERHORN_EMAIL_FROM = "Matterhorn Desks <updates@matterhorn.so>";
+    process.env.EMAIL_FROM = "updates@matterhorn.so";
+    process.env.EMAIL_FROM_NAME = "Matterhorn Desks";
     delete process.env.MATTERHORN_EMAIL_DEV_MODE;
-    delete process.env.MATTERHORN_SMTP_HOST;
-    delete process.env.MATTERHORN_SMTP_USER;
-    delete process.env.MATTERHORN_SMTP_PASSWORD;
+    process.env.AWS_SES_REGION = "us-east-1";
+    const regionOnly = await jsonRequest(app.base, "/api/auth/config");
+    expect(regionOnly.payload.signupStatus).toBe("setup_required");
+    expect(regionOnly.payload.signupsAvailable).toBe(false);
+    expect(regionOnly.payload.passwordResetAvailable).toBe(false);
 
-    process.env.MATTERHORN_RESEND_API_KEY = "too-short";
-    const shortResend = await jsonRequest(app.base, "/api/auth/config");
-    expect(shortResend.payload.signupStatus).toBe("setup_required");
-    expect(shortResend.payload.signupsAvailable).toBe(false);
-    expect(shortResend.payload.passwordResetAvailable).toBe(false);
+    process.env.AWS_ACCESS_KEY_ID = "AKIAEXAMPLE";
+    process.env.AWS_SECRET_ACCESS_KEY = "authenticated-ses-password";
+    const authenticatedSes = await jsonRequest(app.base, "/api/auth/config");
+    expect(authenticatedSes.payload.signupsAvailable).toBe(true);
+    expect(authenticatedSes.payload.passwordResetAvailable).toBe(true);
+  });
 
-    delete process.env.MATTERHORN_RESEND_API_KEY;
-    process.env.MATTERHORN_SMTP_HOST = "smtp.example.com";
-    const hostOnly = await jsonRequest(app.base, "/api/auth/config");
-    expect(hostOnly.payload.signupStatus).toBe("setup_required");
-    expect(hostOnly.payload.passwordResetAvailable).toBe(false);
-
-    process.env.MATTERHORN_SMTP_USER = "mailer";
-    process.env.MATTERHORN_SMTP_PASSWORD = "authenticated-smtp-password";
-    const authenticatedSmtp = await jsonRequest(app.base, "/api/auth/config");
-    expect(authenticatedSmtp.payload.signupsAvailable).toBe(true);
-    expect(authenticatedSmtp.payload.passwordResetAvailable).toBe(true);
+  test("authenticates SES events and suppresses bounced addresses without storing them in the suppression ledger", async () => {
+    const app = await boot();
+    process.env.MATTERHORN_SES_EVENT_SECRET = "ses-event-secret-at-least-32-characters";
+    const event = {
+      id: "evt-bounce-1",
+      detail: {
+        eventType: "BOUNCE",
+        mail: { messageId: "ses-message-1" },
+        bounce: { bouncedRecipients: [{ emailAddress: "bounce@example.com" }] },
+      },
+    };
+    const rejected = await jsonRequest(app.base, "/api/auth/email-events/ses", { body: event });
+    expect(rejected.response.status).toBe(401);
+    const accepted = await jsonRequest(app.base, "/api/auth/email-events/ses", {
+      body: event,
+      headers: { "x-matterhorn-ses-event-secret": process.env.MATTERHORN_SES_EVENT_SECRET },
+    });
+    expect(accepted.response.status).toBe(200);
+    const db = new Database(app.authDb, { readonly: true });
+    const suppression = db.query("SELECT email_hash, reason, event_id FROM email_suppressions").get() as Record<string, unknown>;
+    expect(suppression.reason).toBe("bounce");
+    expect(suppression.event_id).toBe("evt-bounce-1");
+    expect(String(suppression.email_hash)).toHaveLength(64);
+    expect(JSON.stringify(suppression)).not.toContain("bounce@example.com");
+    db.close();
   });
 
   test("requires an explicit production signup flag and all signup safety controls", async () => {
@@ -465,6 +488,9 @@ describe("public account authentication", () => {
       legalAcceptanceRequired: false,
       minimumPasswordLength: 12,
       turnstileSiteKey: null,
+      infrastructureReady: false,
+      emailTransportReady: false,
+      launchReady: false,
     });
     expect(pausedConfig.response.headers.get("cache-control")).toBe("no-store");
     const implicit = await jsonRequest(app.base, "/api/auth/sign-up/email", {

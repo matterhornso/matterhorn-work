@@ -80,6 +80,7 @@
     "test:public-beta-container-contract": "node scripts/public-beta-container-contract.test.mjs",
     "test:opencode-runtime-compatibility": "node scripts/opencode-runtime-compatibility.test.mjs",
     "test:matterhorn-platform-safety": "node scripts/matterhorn-platform-safety-gate.mjs",
+    "test:email-transport": "bun test packages/email/src/send-email.test.ts",
     "test:matterhorn-platform-safety-gate": "node scripts/matterhorn-platform-safety-gate.test.mjs",
     "dev:electron": "OPENWORK_DEV_MODE=1 pnpm --filter @matterhorn-work/desktop dev:electron",
     "dev:sandbox": "bash .devcontainer/dev-sandbox.sh",

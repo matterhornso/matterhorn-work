@@ -73,6 +73,23 @@ export type MatterhornPasswordResetChallenge = {
   expiresAt: number;
 };
 
+export type MatterhornEmailOutboxTemplate = "verification" | "passwordReset";
+
+export type MatterhornEmailOutboxItem = {
+  id: string;
+  recipient: string;
+  template: MatterhornEmailOutboxTemplate;
+  props: Record<string, string>;
+  attempts: number;
+};
+
+export type MatterhornVerificationRequired = {
+  verificationRequired: true;
+  email: string;
+  expiresAt: number;
+  accountCreated: boolean;
+};
+
 export type MatterhornAuthOrganization = {
   id: string;
   name: string;
@@ -319,6 +336,13 @@ function hashVerificationCode(code: string, salt: Buffer): Buffer {
   return scryptSync(`matterhorn-email-verification\0${code}`, salt, 64);
 }
 
+function hashEmail(email: string): string {
+  return createHash("sha256")
+    .update("matterhorn-email-suppression\0")
+    .update(normalizeEmail(email))
+    .digest("hex");
+}
+
 function userFromRow(row: UserRow): MatterhornAuthUser {
   return {
     id: row.id,
@@ -462,6 +486,35 @@ export class MatterhornAuthStore {
       );
       CREATE INDEX IF NOT EXISTS account_deletion_jobs_status_idx
         ON account_deletion_jobs(status, updated_at);
+
+      CREATE TABLE IF NOT EXISTS email_outbox (
+        id TEXT PRIMARY KEY,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        user_id TEXT,
+        recipient TEXT NOT NULL,
+        template TEXT NOT NULL CHECK (template IN ('verification', 'passwordReset')),
+        props_json TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('pending', 'sending', 'retry', 'accepted', 'delivered', 'suppressed', 'terminal')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at INTEGER NOT NULL,
+        last_error_code TEXT,
+        provider_message_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        delivered_at INTEGER,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS email_outbox_due_idx
+        ON email_outbox(state, next_attempt_at);
+      CREATE INDEX IF NOT EXISTS email_outbox_provider_message_idx
+        ON email_outbox(provider_message_id);
+
+      CREATE TABLE IF NOT EXISTS email_suppressions (
+        email_hash TEXT PRIMARY KEY,
+        reason TEXT NOT NULL CHECK (reason IN ('bounce', 'complaint')),
+        event_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
     `);
   }
 
@@ -554,6 +607,266 @@ export class MatterhornAuthStore {
     });
 
     return this.createSessionForUser(userId, organizationId);
+  }
+
+  createAccountOrQueueVerification(input: {
+    email: string;
+    password: string;
+    name?: string | null;
+    maxAccounts?: number | null;
+    legalAcceptance?: MatterhornAuthLegalAcceptance | null;
+  }): MatterhornVerificationRequired {
+    const email = normalizeEmail(input.email);
+    validatePassword(input.password);
+    const name = normalizeName(input.name);
+    const now = Date.now();
+    const existing = statement(this.db, `
+      SELECT id, email, email_verified_at FROM users WHERE email = ? LIMIT 1
+    `).get(email) as { id: string; email: string; email_verified_at: number | null } | undefined;
+
+    if (existing?.email_verified_at !== null && existing) {
+      return {
+        verificationRequired: true,
+        email,
+        expiresAt: now + EMAIL_VERIFICATION_TTL_MS,
+        accountCreated: false,
+      };
+    }
+
+    if (existing) {
+      const recent = statement(this.db, `
+        SELECT created_at FROM email_outbox
+        WHERE user_id = ? AND template = 'verification'
+          AND created_at > ?
+        ORDER BY created_at DESC LIMIT 1
+      `).get(existing.id, now - 60_000) as { created_at: number } | undefined;
+      if (recent) {
+        const challenge = statement(this.db, `
+          SELECT expires_at FROM email_verification_challenges
+          WHERE user_id = ? LIMIT 1
+        `).get(existing.id) as { expires_at: number } | undefined;
+        return {
+          verificationRequired: true,
+          email,
+          expiresAt: challenge?.expires_at ?? now + EMAIL_VERIFICATION_TTL_MS,
+          accountCreated: false,
+        };
+      }
+      const challenge = this.withTransaction(() =>
+        this.queueVerificationForUser(existing.id, email, now),
+      );
+      return {
+        verificationRequired: true,
+        email: challenge.email,
+        expiresAt: challenge.expiresAt,
+        accountCreated: false,
+      };
+    }
+
+    const userId = `usr_${randomUUID().replaceAll("-", "")}`;
+    const organizationId = `org_${randomUUID().replaceAll("-", "")}`;
+    const organizationSlug = `personal-${userId.slice(-12)}`;
+    const salt = randomBytes(16);
+    const passwordHash = encodePasswordHash(input.password, salt);
+    let challenge!: MatterhornEmailVerificationChallenge;
+    this.withTransaction(() => {
+      if (input.maxAccounts !== null && input.maxAccounts !== undefined) {
+        const row = statement(this.db, "SELECT COUNT(*) AS count FROM users").get() as { count?: number } | undefined;
+        if ((row?.count ?? 0) >= input.maxAccounts) {
+          throw new MatterhornAuthError(
+            "signup_capacity_reached",
+            "The public beta is full for now. Try again after more places open.",
+          );
+        }
+      }
+      statement(this.db, `
+        INSERT INTO users
+          (id, email, name, password_hash, password_salt, email_verified_at, created_at)
+        VALUES (?, ?, ?, ?, ?, NULL, ?)
+      `).run(userId, email, name, passwordHash, salt.toString("hex"), now);
+      statement(this.db, `
+        INSERT INTO organizations (id, name, slug, created_at) VALUES (?, ?, ?, ?)
+      `).run(organizationId, personalWorkspaceName(email, name), organizationSlug, now);
+      statement(this.db, `
+        INSERT INTO organization_members (organization_id, user_id, role, created_at)
+        VALUES (?, ?, 'owner', ?)
+      `).run(organizationId, userId, now);
+      if (input.legalAcceptance) {
+        statement(this.db, `
+          INSERT INTO account_legal_acceptances
+            (user_id, terms_version, privacy_version, accepted_at)
+          VALUES (?, ?, ?, ?)
+        `).run(
+          userId,
+          input.legalAcceptance.termsVersion,
+          input.legalAcceptance.privacyVersion,
+          now,
+        );
+      }
+      challenge = this.queueVerificationForUser(userId, email, now);
+    });
+    return {
+      verificationRequired: true,
+      email: challenge.email,
+      expiresAt: challenge.expiresAt,
+      accountCreated: true,
+    };
+  }
+
+  queueEmailVerification(emailInput: string): MatterhornEmailVerificationChallenge | null {
+    const email = normalizeEmail(emailInput);
+    const user = statement(this.db, `
+      SELECT id, email, email_verified_at FROM users WHERE email = ? LIMIT 1
+    `).get(email) as { id: string; email: string; email_verified_at: number | null } | undefined;
+    if (!user || user.email_verified_at !== null) return null;
+    return this.withTransaction(() => this.queueVerificationForUser(user.id, user.email, Date.now()));
+  }
+
+  queuePasswordReset(emailInput: string, appUrlInput: string): MatterhornPasswordResetChallenge | null {
+    const email = normalizeEmail(emailInput);
+    const user = statement(this.db, `
+      SELECT id, email, email_verified_at FROM users WHERE email = ? LIMIT 1
+    `).get(email) as { id: string; email: string; email_verified_at: number | null } | undefined;
+    if (!user || user.email_verified_at === null || this.isEmailSuppressed(email)) return null;
+    const resetToken = randomBytes(32).toString("base64url");
+    const tokenHash = hashPasswordResetToken(resetToken);
+    const now = Date.now();
+    const expiresAt = now + PASSWORD_RESET_TTL_MS;
+    const appUrl = new URL(appUrlInput);
+    appUrl.pathname = "/";
+    appUrl.search = "";
+    appUrl.hash = new URLSearchParams({ mode: "reset-password", token: resetToken }).toString();
+    this.withTransaction(() => {
+      statement(this.db, "DELETE FROM password_reset_challenges WHERE user_id = ?").run(user.id);
+      statement(this.db, `
+        INSERT INTO password_reset_challenges (token_hash, user_id, expires_at, created_at)
+        VALUES (?, ?, ?, ?)
+      `).run(tokenHash, user.id, expiresAt, now);
+      this.enqueueEmail({
+        userId: user.id,
+        recipient: user.email,
+        template: "passwordReset",
+        props: { resetLink: appUrl.toString() },
+        idempotencyKey: `password-reset:${user.id}:${tokenHash}`,
+        now,
+      });
+    });
+    return { email: user.email, resetToken, expiresAt };
+  }
+
+  claimDueEmailOutbox(limit = 10, now = Date.now()): MatterhornEmailOutboxItem[] {
+    const boundedLimit = Math.max(1, Math.min(50, Math.trunc(limit)));
+    return this.withTransaction(() => {
+      statement(this.db, `
+        UPDATE email_outbox SET state = 'retry', next_attempt_at = ?, updated_at = ?
+        WHERE state = 'sending' AND updated_at < ?
+      `).run(now, now, now - 5 * 60_000);
+      const rows = statement(this.db, `
+        SELECT id, recipient, template, props_json, attempts
+        FROM email_outbox
+        WHERE state IN ('pending', 'retry') AND next_attempt_at <= ?
+        ORDER BY created_at ASC LIMIT ?
+      `).all(now, boundedLimit) as Array<Record<string, unknown>>;
+      const claimed: MatterhornEmailOutboxItem[] = [];
+      for (const row of rows) {
+        const result = statement(this.db, `
+          UPDATE email_outbox SET state = 'sending', attempts = attempts + 1, updated_at = ?
+          WHERE id = ? AND state IN ('pending', 'retry')
+        `).run(now, String(row.id));
+        if ((result.changes ?? 0) !== 1) continue;
+        const props = JSON.parse(String(row.props_json)) as unknown;
+        if (!props || typeof props !== "object" || Array.isArray(props)) {
+          statement(this.db, `UPDATE email_outbox SET state = 'terminal', last_error_code = 'invalid_payload', updated_at = ? WHERE id = ?`).run(now, String(row.id));
+          continue;
+        }
+        claimed.push({
+          id: String(row.id),
+          recipient: String(row.recipient),
+          template: String(row.template) as MatterhornEmailOutboxTemplate,
+          props: Object.fromEntries(Object.entries(props).filter((entry): entry is [string, string] => typeof entry[1] === "string")),
+          attempts: Number(row.attempts) + 1,
+        });
+      }
+      return claimed;
+    });
+  }
+
+  markEmailAccepted(id: string, providerMessageId?: string): void {
+    const now = Date.now();
+    statement(this.db, `
+      UPDATE email_outbox SET state = ?, provider_message_id = ?,
+        delivered_at = ?, updated_at = ?, last_error_code = NULL,
+        props_json = '{}'
+      WHERE id = ? AND state = 'sending'
+    `).run(
+      providerMessageId ? "accepted" : "delivered",
+      providerMessageId ?? null,
+      providerMessageId ? null : now,
+      now,
+      id,
+    );
+  }
+
+  markEmailFailed(id: string, errorCode: string, attempts: number): void {
+    const terminal = attempts >= 8;
+    const backoff = Math.min(6 * 60 * 60_000, 60_000 * 2 ** Math.max(0, attempts - 1));
+    const now = Date.now();
+    statement(this.db, `
+      UPDATE email_outbox SET state = ?, next_attempt_at = ?, last_error_code = ?, updated_at = ?,
+        props_json = CASE WHEN ? THEN '{}' ELSE props_json END
+      WHERE id = ? AND state = 'sending'
+    `).run(terminal ? "terminal" : "retry", now + backoff, errorCode.slice(0, 64), now, terminal ? 1 : 0, id);
+  }
+
+  suppressEmail(
+    emailInput: string,
+    reason: "bounce" | "complaint",
+    eventId: string,
+    providerMessageId?: string,
+  ): void {
+    const email = normalizeEmail(emailInput);
+    const emailHash = hashEmail(email);
+    const now = Date.now();
+    this.withTransaction(() => {
+      statement(this.db, `
+        INSERT INTO email_suppressions (email_hash, reason, event_id, created_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(email_hash) DO UPDATE SET
+          reason = excluded.reason, event_id = excluded.event_id, created_at = excluded.created_at
+      `).run(emailHash, reason, eventId.slice(0, 256), now);
+      statement(this.db, `
+        UPDATE email_outbox SET state = 'suppressed', last_error_code = ?, updated_at = ?, props_json = '{}'
+        WHERE recipient = ? AND state IN ('pending', 'retry', 'sending')
+      `).run(reason, now, email);
+      if (providerMessageId) {
+        statement(this.db, `
+          UPDATE email_outbox SET state = 'suppressed', last_error_code = ?, updated_at = ?, props_json = '{}'
+          WHERE recipient = ? AND provider_message_id = ?
+            AND state IN ('accepted', 'delivered')
+        `).run(reason, now, email, providerMessageId.slice(0, 256));
+      }
+    });
+  }
+
+  markSesDelivery(providerMessageId: string): void {
+    const now = Date.now();
+    statement(this.db, `
+      UPDATE email_outbox SET state = 'delivered', delivered_at = COALESCE(delivered_at, ?), updated_at = ?
+      WHERE provider_message_id = ? AND state NOT IN ('suppressed', 'terminal')
+    `).run(now, now, providerMessageId.slice(0, 256));
+  }
+
+  emailOutboxStatus(): { pending: number; terminal: number; suppressed: number } {
+    const count = (state: string) => Number((statement(this.db, `SELECT COUNT(*) AS count FROM email_outbox WHERE state = ?`).get(state) as { count?: number } | undefined)?.count ?? 0);
+    return {
+      pending: count("pending") + count("retry") + count("sending") + count("accepted"),
+      terminal: count("terminal"),
+      suppressed: count("suppressed"),
+    };
+  }
+
+  accountCount(): number {
+    return Number((statement(this.db, "SELECT COUNT(*) AS count FROM users").get() as { count?: number } | undefined)?.count ?? 0);
   }
 
   signIn(emailInput: string, password: string): MatterhornAuthSession {
@@ -1228,6 +1541,67 @@ export class MatterhornAuthStore {
       ).run(organization.id, hashSessionToken(token));
     });
     return organization;
+  }
+
+  private queueVerificationForUser(userId: string, email: string, now: number): MatterhornEmailVerificationChallenge {
+    const verificationCode = String(randomInt(100_000, 1_000_000));
+    const salt = randomBytes(16);
+    const expiresAt = now + EMAIL_VERIFICATION_TTL_MS;
+    const codeHash = hashVerificationCode(verificationCode, salt);
+    statement(this.db, `
+      INSERT INTO email_verification_challenges
+        (user_id, code_hash, code_salt, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        code_hash = excluded.code_hash,
+        code_salt = excluded.code_salt,
+        expires_at = excluded.expires_at,
+        created_at = excluded.created_at
+    `).run(userId, codeHash.toString("hex"), salt.toString("hex"), expiresAt, now);
+    this.enqueueEmail({
+      userId,
+      recipient: email,
+      template: "verification",
+      props: { verificationCode },
+      idempotencyKey: `verification:${userId}:${codeHash.toString("hex")}`,
+      now,
+    });
+    return { email, verificationCode, expiresAt };
+  }
+
+  private enqueueEmail(input: {
+    userId: string | null;
+    recipient: string;
+    template: MatterhornEmailOutboxTemplate;
+    props: Record<string, string>;
+    idempotencyKey: string;
+    now: number;
+  }): void {
+    const recipient = normalizeEmail(input.recipient);
+    const suppressed = this.isEmailSuppressed(recipient);
+    statement(this.db, `
+      INSERT OR IGNORE INTO email_outbox
+        (id, idempotency_key, user_id, recipient, template, props_json, state,
+          attempts, next_attempt_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+    `).run(
+      `mail_${randomUUID().replaceAll("-", "")}`,
+      input.idempotencyKey,
+      input.userId,
+      recipient,
+      input.template,
+      JSON.stringify(suppressed ? {} : input.props),
+      suppressed ? "suppressed" : "pending",
+      input.now,
+      input.now,
+      input.now,
+    );
+  }
+
+  private isEmailSuppressed(email: string): boolean {
+    return Boolean(statement(this.db, `
+      SELECT 1 FROM email_suppressions WHERE email_hash = ? LIMIT 1
+    `).get(hashEmail(email)));
   }
 
   private requireSession(token: string): MatterhornAuthSession {

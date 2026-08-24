@@ -1,43 +1,32 @@
+import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2"
 import { render } from "@react-email/render"
-import nodemailer from "nodemailer"
-import { Resend } from "resend"
 import { emailReplyTo, emailSubjects, type EmailTemplate, type EmailTemplateProps, renderEmailTemplate } from "./templates/index.js"
 
-export type EmailProvider = "dev" | "resend" | "nodemailer"
+export type EmailProvider = "console" | "ses"
 
-export type SmtpEmailConfig = {
-  host?: string
-  port?: number
-  user?: string
-  pass?: string
-  secure?: boolean
+export type AwsSesEmailConfig = {
+  region?: string
+  accessKeyId?: string
+  secretAccessKey?: string
+  configurationSetName?: string
 }
 
 export type EmailSendConfig = {
   from?: string
-  resendApiKey?: string
-  smtp?: SmtpEmailConfig
-  devMode?: boolean
+  fromName?: string
+  awsSes?: AwsSesEmailConfig
+  consoleMode?: boolean
 }
 
 export class EmailSendError extends Error {
-  readonly reason: "email_not_configured" | "resend_rejected" | "resend_network" | "nodemailer_rejected"
+  readonly reason: "email_not_configured" | "ses_rejected"
   readonly template: EmailTemplate
-  readonly recipient: string
-  readonly detail?: string
 
-  constructor(input: {
-    template: EmailTemplate
-    reason: EmailSendError["reason"]
-    recipient: string
-    detail?: string
-  }) {
-    super(`[${input.template}] email for ${input.recipient} failed: ${input.reason}${input.detail ? ` (${input.detail})` : ""}`)
+  constructor(input: { template: EmailTemplate; reason: EmailSendError["reason"] }) {
+    super(`Email delivery failed: ${input.reason}`)
     this.name = "EmailSendError"
     this.reason = input.reason
     this.template = input.template
-    this.recipient = input.recipient
-    this.detail = input.detail
   }
 }
 
@@ -49,19 +38,120 @@ export type SendEmailInput<Template extends EmailTemplate = EmailTemplate> = {
   subject?: string
 }
 
-export async function sendEmail<Template extends EmailTemplate>(input: SendEmailInput<Template>) {
-  const to = input.to.trim()
-  if (!to) {
-    return
+export type SendEmailResult = {
+  provider: EmailProvider
+  messageId?: string
+}
+
+export type ConsoleEmailPreview = {
+  to: string
+  template: EmailTemplate
+  subject: string
+  replyTo?: string
+  props: Record<string, unknown>
+}
+
+let consoleEmailPreviewSink: ((preview: ConsoleEmailPreview) => void) | null = null
+
+export function setConsoleEmailPreviewSink(
+  sink: ((preview: ConsoleEmailPreview) => void) | null,
+): void {
+  consoleEmailPreviewSink = sink
+}
+
+function safeHeader(value: string | undefined): string | undefined {
+  const normalized = value?.trim()
+  if (!normalized || /[\r\n]/.test(normalized)) return undefined
+  return normalized
+}
+
+const EMAIL_LOCAL_SPECIALS = new Set("!#$%&'*+-/=?^_`{|}~.".split(""))
+
+function asciiLetterOrDigit(character: string): boolean {
+  const code = character.charCodeAt(0)
+  return (code >= 48 && code <= 57)
+    || (code >= 65 && code <= 90)
+    || (code >= 97 && code <= 122)
+}
+
+function validEmailAddress(value: string): boolean {
+  if (value.length > 320) return false
+  const separator = value.indexOf("@")
+  if (separator <= 0 || separator !== value.lastIndexOf("@")) return false
+  const local = value.slice(0, separator)
+  const domain = value.slice(separator + 1)
+  if (
+    local.length > 64
+    || domain.length === 0
+    || domain.length > 255
+    || local.startsWith(".")
+    || local.endsWith(".")
+    || local.includes("..")
+  ) return false
+  for (const character of local) {
+    if (!asciiLetterOrDigit(character) && !EMAIL_LOCAL_SPECIALS.has(character)) return false
+  }
+  const labels = domain.split(".")
+  if (labels.length < 2) return false
+  for (const label of labels) {
+    if (label.length === 0 || label.length > 63 || label.startsWith("-") || label.endsWith("-")) return false
+    for (const character of label) {
+      if (!asciiLetterOrDigit(character) && character !== "-") return false
+    }
+  }
+  return true
+}
+
+function sender(config: EmailSendConfig): string | undefined {
+  const address = safeHeader(config.from)
+  if (!address || !validEmailAddress(address)) return undefined
+  const name = safeHeader(config.fromName)?.replaceAll(/[<>\"]/g, "")
+  return name ? `${name} <${address}>` : address
+}
+
+export function getEmailProvider(config: EmailSendConfig): EmailProvider {
+  return config.consoleMode ? "console" : "ses"
+}
+
+export function emailDeliveryConfigured(config: EmailSendConfig): boolean {
+  if (config.consoleMode) return true
+  return Boolean(
+    sender(config) &&
+      config.awsSes?.region?.trim() &&
+      config.awsSes.accessKeyId?.trim() &&
+      config.awsSes.secretAccessKey?.trim(),
+  )
+}
+
+export async function sendEmail<Template extends EmailTemplate>(input: SendEmailInput<Template>): Promise<SendEmailResult> {
+  const to = safeHeader(input.to)
+  if (!to || !validEmailAddress(to)) {
+    throw new EmailSendError({ template: input.template, reason: "email_not_configured" })
   }
 
-  const subject = input.subject ?? emailSubjects[input.template](input.props)
-  const replyTo = emailReplyTo[input.template](input.props)?.trim() || undefined
+  const subject = safeHeader(input.subject ?? emailSubjects[input.template](input.props))
+  const replyTo = safeHeader(emailReplyTo[input.template](input.props))
   const provider = getEmailProvider(input.config)
+  if (!subject || !emailDeliveryConfigured(input.config)) {
+    throw new EmailSendError({ template: input.template, reason: "email_not_configured" })
+  }
 
-  if (provider === "dev") {
-    console.info(`[email] dev email payload for ${to}: ${JSON.stringify({ template: input.template, subject, replyTo, props: input.props })}`)
-    return
+  if (provider === "console") {
+    console.info(`[email] console delivery: ${JSON.stringify({ to, template: input.template })}`)
+    consoleEmailPreviewSink?.({
+      to,
+      template: input.template,
+      subject,
+      ...(replyTo ? { replyTo } : {}),
+      props: input.props,
+    })
+    return { provider }
+  }
+
+  const source = sender(input.config)
+  const awsSes = input.config.awsSes
+  if (!source || !awsSes?.region || !awsSes.accessKeyId || !awsSes.secretAccessKey) {
+    throw new EmailSendError({ template: input.template, reason: "email_not_configured" })
   }
 
   const component = renderEmailTemplate(input.template, input.props)
@@ -69,109 +159,31 @@ export async function sendEmail<Template extends EmailTemplate>(input: SendEmail
     render(component),
     render(component, { plainText: true }),
   ])
-
-  if (provider === "resend") {
-    await sendViaResend({ to, subject, replyTo, html, text, template: input.template, config: input.config })
-    return
-  }
-
-  await sendViaNodemailer({ to, subject, replyTo, html, text, template: input.template, config: input.config })
-}
-
-function getEmailProvider(config: EmailSendConfig): EmailProvider {
-  if (config.resendApiKey) {
-    return "resend"
-  }
-  if (config.smtp?.host) {
-    return "nodemailer"
-  }
-  if (config.devMode) {
-    return "dev"
-  }
-  return "nodemailer"
-}
-
-async function sendViaResend(input: {
-  to: string
-  subject: string
-  replyTo?: string
-  html: string
-  text: string
-  template: EmailTemplate
-  config: EmailSendConfig
-}) {
-  const from = input.config.from
-  const apiKey = input.config.resendApiKey
-  if (!apiKey || !from) {
-    throw new EmailSendError({ template: input.template, reason: "email_not_configured", recipient: input.to })
-  }
-
   try {
-    const resend = new Resend(apiKey)
-    const result = await resend.emails.send({
-      from,
-      to: input.to,
-      subject: input.subject,
-      replyTo: input.replyTo,
-      html: input.html,
-      text: input.text,
+    const client = new SESv2Client({
+      region: awsSes.region,
+      credentials: {
+        accessKeyId: awsSes.accessKeyId,
+        secretAccessKey: awsSes.secretAccessKey,
+      },
     })
-
-    if (result.error) {
-      throw new EmailSendError({
-        template: input.template,
-        reason: "resend_rejected",
-        recipient: input.to,
-        detail: result.error.message,
-      })
-    }
-  } catch (error) {
-    if (error instanceof EmailSendError) {
-      throw error
-    }
-    const message = error instanceof Error ? error.message : "Unknown error"
-    throw new EmailSendError({ template: input.template, reason: "resend_network", recipient: input.to, detail: message })
-  }
-}
-
-async function sendViaNodemailer(input: {
-  to: string
-  subject: string
-  replyTo?: string
-  html: string
-  text: string
-  template: EmailTemplate
-  config: EmailSendConfig
-}) {
-  const from = input.config.from
-  const smtp = input.config.smtp
-  if (!from || !smtp?.host) {
-    throw new EmailSendError({ template: input.template, reason: "email_not_configured", recipient: input.to })
-  }
-
-  try {
-    const transporter = nodemailer.createTransport({
-      host: smtp.host,
-      port: smtp.port ?? 587,
-      secure: smtp.secure ?? false,
-      auth: smtp.user
-        ? {
-            user: smtp.user,
-            pass: smtp.pass,
-          }
-        : undefined,
-    })
-
-    await transporter.sendMail({
-      from,
-      to: input.to,
-      subject: input.subject,
-      replyTo: input.replyTo,
-      html: input.html,
-      text: input.text,
-    })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error"
-    throw new EmailSendError({ template: input.template, reason: "nodemailer_rejected", recipient: input.to, detail: message })
+    const result = await client.send(new SendEmailCommand({
+      FromEmailAddress: source,
+      Destination: { ToAddresses: [to] },
+      ReplyToAddresses: replyTo ? [replyTo] : undefined,
+      ConfigurationSetName: safeHeader(awsSes.configurationSetName),
+      Content: {
+        Simple: {
+          Subject: { Data: subject, Charset: "UTF-8" },
+          Body: {
+            Html: { Data: html, Charset: "UTF-8" },
+            Text: { Data: text, Charset: "UTF-8" },
+          },
+        },
+      },
+    }))
+    return { provider, messageId: result.MessageId }
+  } catch {
+    throw new EmailSendError({ template: input.template, reason: "ses_rejected" })
   }
 }
