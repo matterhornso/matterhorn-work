@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { agentPrivacyRequestHash, MatterhornPrivacyFirewall } from "./agent-privacy.js";
+import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 function baseInput() {
   return {
@@ -223,5 +227,71 @@ describe("agent privacy firewall", () => {
       workspaceId: request.workspaceId,
       sessionId: request.sessionId,
     })).toThrow("privacy_consent_challenge_invalid");
+  });
+
+  test("persists challenges across restarts and consumes consent atomically", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-privacy-state-"));
+    const path = join(root, "state.db");
+    const request = { ...baseInput(), memoryIds: ["memory_private"] };
+    const firstStore = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornPrivacyFirewall(firstStore);
+    const preflight = first.preflight(request);
+    firstStore.close();
+
+    const secondStore = new MatterhornGuardedRuntimeStateStore(path);
+    const second = new MatterhornPrivacyFirewall(secondStore);
+    const consent = second.confirm({
+      challengeId: preflight.response.challenge?.id ?? "",
+      requestHash: preflight.response.requestHash,
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+    });
+    const competingStore = new MatterhornGuardedRuntimeStateStore(path);
+    const competing = new MatterhornPrivacyFirewall(competingStore);
+    expect(second.consumeConsent({
+      token: consent.consentToken,
+      requestHash: consent.requestHash,
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+    })).toBe(true);
+    expect(competing.consumeConsent({
+      token: consent.consentToken,
+      requestHash: consent.requestHash,
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+    })).toBe(false);
+    secondStore.close();
+    competingStore.close();
+  });
+
+  test("does not consume exact-request consent when a mutated request is rejected", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-agent-privacy-mutation-"));
+    const store = new MatterhornGuardedRuntimeStateStore(join(root, "guarded.db"));
+    try {
+      const firewall = new MatterhornPrivacyFirewall(store);
+      const original = { ...baseInput(), memoryIds: ["memory_private"] };
+      const preflight = firewall.preflight(original).response;
+      const consent = firewall.confirm({
+        challengeId: preflight.challenge!.id,
+        requestHash: preflight.requestHash,
+        workspaceId: original.workspaceId,
+        sessionId: original.sessionId,
+      });
+      expect(firewall.consumeConsent({
+        token: consent.consentToken,
+        requestHash: "f".repeat(64),
+        workspaceId: original.workspaceId,
+        sessionId: original.sessionId,
+      })).toBe(false);
+      expect(firewall.consumeConsent({
+        token: consent.consentToken,
+        requestHash: preflight.requestHash,
+        workspaceId: original.workspaceId,
+        sessionId: original.sessionId,
+      })).toBe(true);
+    } finally {
+      store.close();
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

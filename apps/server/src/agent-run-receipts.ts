@@ -8,12 +8,13 @@ import type {
   MatterhornAgentToolReceipt,
 } from "@matterhorn-work/types/guarded-agent-runtime";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
+import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 const RETENTION_DAYS = 365;
 const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1_000;
 
 function dataRoot(): string {
-  const override = process.env.OPENWORK_DATA_DIR?.trim();
+  const override = process.env.MATTERHORN_WORK_DATA_DIR?.trim() || process.env.OPENWORK_DATA_DIR?.trim();
   if (override) return override.startsWith("~/") ? join(homedir(), override.slice(2)) : override;
   return join(homedir(), ".openwork", "openwork-server");
 }
@@ -51,10 +52,40 @@ export type StartAgentRunReceiptInput = {
   now?: Date;
 };
 
+export class AgentRunReceiptIntegrityError extends Error {
+  readonly code = "agent_run_receipt_integrity_failed";
+
+  constructor(readonly workspaceId: string, readonly file: string) {
+    super("Matterhorn detected a damaged or tampered security receipt chain.");
+  }
+}
+
+export async function purgeAllExpiredAgentRunReceipts(
+  store: MatterhornAgentRunReceiptStore,
+  now = new Date(),
+): Promise<{ workspaces: number; files: number }> {
+  const root = join(dataRoot(), "security-receipts");
+  let workspaces: string[];
+  try {
+    workspaces = await readdir(root);
+  } catch {
+    return { workspaces: 0, files: 0 };
+  }
+  let checked = 0;
+  let files = 0;
+  for (const workspaceId of workspaces.filter((entry) => /^[a-zA-Z0-9_-]{1,160}$/.test(entry))) {
+    checked += 1;
+    files += await store.purgeExpired(workspaceId, now);
+  }
+  return { workspaces: checked, files };
+}
+
 export class MatterhornAgentRunReceiptStore {
   private readonly latest = new Map<string, MatterhornAgentRunReceipt>();
   private readonly previousHashes = new Map<string, string>();
   private readonly writeQueues = new Map<string, Promise<void>>();
+
+  constructor(private readonly stateStore?: MatterhornGuardedRuntimeStateStore) {}
 
   async start(input: StartAgentRunReceiptInput): Promise<MatterhornAgentRunReceipt> {
     const now = input.now ?? new Date();
@@ -185,6 +216,7 @@ export class MatterhornAgentRunReceiptStore {
   }
 
   async purgeExpired(workspaceId: string, now = new Date()): Promise<number> {
+    this.stateStore?.deleteExpired(now.getTime());
     const directory = agentSecurityReceiptDirectory(workspaceId);
     let files: string[];
     try {
@@ -206,6 +238,7 @@ export class MatterhornAgentRunReceiptStore {
       const timestamp = Date.parse(receipt.completedAt ?? receipt.startedAt);
       if (Number.isFinite(timestamp) && now.getTime() - timestamp > RETENTION_MS) {
         this.latest.delete(runId);
+        this.stateStore?.delete("receipt_index", runId);
       }
     }
     return removed;
@@ -222,26 +255,26 @@ export class MatterhornAgentRunReceiptStore {
     }
     const nowMs = now.getTime();
     let expectedPreviousHash: string | null | undefined;
-    let chainValid = true;
     for (const file of files) {
       const day = Date.parse(`${file.slice(0, 10)}T00:00:00.000Z`);
       if (Number.isFinite(day) && nowMs - day > RETENTION_MS) continue;
       const text = await readFile(join(directory, file), "utf8").catch(() => "");
       for (const line of text.split("\n")) {
         if (!line.trim()) continue;
-        if (!chainValid) break;
         try {
           const parsed: unknown = JSON.parse(line);
-          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new AgentRunReceiptIntegrityError(workspaceId, file);
+          }
           const receipt = parsed as MatterhornAgentRunReceipt;
-          if (receipt.version !== "matterhorn.agent-run-receipt.v1" || receipt.workspaceId !== workspaceId) continue;
+          if (receipt.version !== "matterhorn.agent-run-receipt.v1" || receipt.workspaceId !== workspaceId) {
+            throw new AgentRunReceiptIntegrityError(workspaceId, file);
+          }
           if (!receipt.integrity || recordHash(receipt) !== receipt.integrity.recordHash) {
-            chainValid = false;
-            break;
+            throw new AgentRunReceiptIntegrityError(workspaceId, file);
           }
           if (expectedPreviousHash !== undefined && receipt.integrity.previousHash !== expectedPreviousHash) {
-            chainValid = false;
-            break;
+            throw new AgentRunReceiptIntegrityError(workspaceId, file);
           }
           // The oldest retained segment can legitimately point at an expired segment.
           expectedPreviousHash = receipt.integrity.recordHash;
@@ -250,12 +283,11 @@ export class MatterhornAgentRunReceiptStore {
             this.latest.set(receipt.runId, receipt);
           }
           this.previousHashes.set(workspaceId, receipt.integrity.recordHash);
-        } catch {
-          chainValid = false;
-          break;
+        } catch (error) {
+          if (error instanceof AgentRunReceiptIntegrityError) throw error;
+          throw new AgentRunReceiptIntegrityError(workspaceId, file);
         }
       }
-      if (!chainValid) break;
     }
   }
 
@@ -281,6 +313,22 @@ export class MatterhornAgentRunReceiptStore {
       await appendFile(receiptPath(workspaceId, now), `${canonicalJson(snapshot)}\n`, { encoding: "utf8", mode: 0o600 });
       this.previousHashes.set(workspaceId, snapshot.integrity.recordHash);
       receipt.integrity = structuredClone(snapshot.integrity);
+      const receiptExpiryBase = Date.parse(snapshot.completedAt ?? snapshot.startedAt);
+      this.stateStore?.put({
+        kind: "receipt_index",
+        key: snapshot.runId,
+        workspaceId: snapshot.workspaceId,
+        sessionId: snapshot.sessionId,
+        value: {
+          runId: snapshot.runId,
+          receiptId: snapshot.id,
+          status: snapshot.status,
+          recordHash: snapshot.integrity.recordHash,
+          completedAt: snapshot.completedAt,
+        },
+        expiresAtMs: (Number.isFinite(receiptExpiryBase) ? receiptExpiryBase : now.getTime()) + RETENTION_MS,
+        nowMs: now.getTime(),
+      });
       await this.purgeExpired(workspaceId, now);
     });
     this.writeQueues.set(workspaceId, next.catch(() => undefined));

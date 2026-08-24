@@ -99,6 +99,15 @@ export type MatterhornAuthAccountDeletion = {
   deletedOrganizationIds: string[];
 };
 
+export type MatterhornAuthAccountDeletionJob = MatterhornAuthAccountDeletion & {
+  jobId: string;
+  status: "pending" | "processing" | "failed" | "completed";
+  steps: { memory: boolean; workspaces: boolean; identity: boolean };
+  attempts: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type MatterhornAuthAccountExport = {
   version: "matterhorn.account-export.v1";
   generatedAt: string;
@@ -140,6 +149,7 @@ export class MatterhornAuthError extends Error {
       | "expired_reset_token"
       | "invalid_organization"
       | "account_owns_shared_organization"
+      | "account_deletion_pending"
       | "organization_slug_taken"
       | "signup_capacity_reached"
       | "unauthorized",
@@ -437,6 +447,21 @@ export class MatterhornAuthStore {
         ON password_reset_challenges(user_id);
       CREATE INDEX IF NOT EXISTS password_reset_expires_at_idx
         ON password_reset_challenges(expires_at);
+
+      CREATE TABLE IF NOT EXISTS account_deletion_jobs (
+        job_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL UNIQUE,
+        organization_ids_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'failed', 'completed')),
+        steps_json TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error_code TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        completed_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS account_deletion_jobs_status_idx
+        ON account_deletion_jobs(status, updated_at);
     `);
   }
 
@@ -561,6 +586,12 @@ export class MatterhornAuthStore {
       throw new MatterhornAuthError(
         "email_unverified",
         "Verify your email before signing in.",
+      );
+    }
+    if (this.hasPendingAccountDeletion(row.id)) {
+      throw new MatterhornAuthError(
+        "account_deletion_pending",
+        "This account is being deleted and can no longer be used.",
       );
     }
     if (passwordVerification.needsUpgrade) {
@@ -806,6 +837,10 @@ export class MatterhornAuthStore {
         FROM users WHERE id = ? LIMIT 1`,
     ).get(row.user_id) as UserRow | undefined;
     if (!user) return null;
+    if (this.hasPendingAccountDeletion(user.id)) {
+      statement(this.db, "DELETE FROM sessions WHERE token_hash = ?").run(tokenHash);
+      return null;
+    }
 
     const activeOrg = row.active_org_id
       ? (statement(
@@ -979,16 +1014,99 @@ export class MatterhornAuthStore {
     token: string,
     password: string,
   ): MatterhornAuthAccountDeletion {
+    const job = this.beginAccountDeletion(token, password);
+    this.markAccountDeletionStep(job.jobId, "memory");
+    this.markAccountDeletionStep(job.jobId, "workspaces");
+    this.finalizeAccountDeletion(job.jobId);
+    return { userId: job.userId, deletedOrganizationIds: job.deletedOrganizationIds };
+  }
+
+  beginAccountDeletion(token: string, password: string): MatterhornAuthAccountDeletionJob {
     const deletion = this.prepareAccountDeletion(token, password);
+    const now = Date.now();
+    const jobId = `account_deletion_${randomUUID().replaceAll("-", "")}`;
     this.withTransaction(() => {
-      for (const organizationId of deletion.deletedOrganizationIds) {
-        statement(this.db, "DELETE FROM organizations WHERE id = ?").run(
-          organizationId,
-        );
-      }
-      statement(this.db, "DELETE FROM users WHERE id = ?").run(deletion.userId);
+      statement(this.db, `
+        INSERT INTO account_deletion_jobs(
+          job_id, user_id, organization_ids_json, status, steps_json,
+          attempts, last_error_code, created_at, updated_at, completed_at
+        ) VALUES (?, ?, ?, 'pending', ?, 0, NULL, ?, ?, NULL)
+        ON CONFLICT(user_id) DO NOTHING
+      `).run(
+        jobId,
+        deletion.userId,
+        JSON.stringify(deletion.deletedOrganizationIds),
+        JSON.stringify({ memory: false, workspaces: false, identity: false }),
+        now,
+        now,
+      );
+      statement(this.db, "DELETE FROM sessions WHERE user_id = ?").run(deletion.userId);
     });
-    return deletion;
+    const job = this.accountDeletionJobForUser(deletion.userId);
+    if (!job) throw new Error("Failed to persist account deletion manifest.");
+    return job;
+  }
+
+  listPendingAccountDeletionJobs(): MatterhornAuthAccountDeletionJob[] {
+    return (statement(this.db, `
+      SELECT job_id, user_id, organization_ids_json, status, steps_json,
+        attempts, created_at, updated_at
+      FROM account_deletion_jobs
+      WHERE status <> 'completed'
+      ORDER BY created_at ASC
+    `).all() as Array<Record<string, unknown>>).map((row) => this.accountDeletionJobFromRow(row));
+  }
+
+  markAccountDeletionStep(
+    jobId: string,
+    step: "memory" | "workspaces",
+  ): MatterhornAuthAccountDeletionJob {
+    const job = this.accountDeletionJob(jobId);
+    if (!job || job.status === "completed") throw new Error("account_deletion_job_not_found");
+    const steps = { ...job.steps, [step]: true };
+    statement(this.db, `
+      UPDATE account_deletion_jobs
+      SET status = 'processing', steps_json = ?, attempts = attempts + 1,
+        last_error_code = NULL, updated_at = ?
+      WHERE job_id = ?
+    `).run(JSON.stringify(steps), Date.now(), jobId);
+    return this.accountDeletionJob(jobId)!;
+  }
+
+  failAccountDeletionJob(jobId: string, safeErrorCode: string): MatterhornAuthAccountDeletionJob {
+    statement(this.db, `
+      UPDATE account_deletion_jobs
+      SET status = 'failed', attempts = attempts + 1, last_error_code = ?, updated_at = ?
+      WHERE job_id = ? AND status <> 'completed'
+    `).run(safeErrorCode.slice(0, 80), Date.now(), jobId);
+    const job = this.accountDeletionJob(jobId);
+    if (!job) throw new Error("account_deletion_job_not_found");
+    return job;
+  }
+
+  finalizeAccountDeletion(jobId: string): MatterhornAuthAccountDeletionJob {
+    const job = this.accountDeletionJob(jobId);
+    if (!job || job.status === "completed") {
+      if (job) return job;
+      throw new Error("account_deletion_job_not_found");
+    }
+    if (!job.steps.memory || !job.steps.workspaces) {
+      throw new Error("account_deletion_purge_incomplete");
+    }
+    const completedAt = Date.now();
+    this.withTransaction(() => {
+      for (const organizationId of job.deletedOrganizationIds) {
+        statement(this.db, "DELETE FROM organizations WHERE id = ?").run(organizationId);
+      }
+      statement(this.db, "DELETE FROM users WHERE id = ?").run(job.userId);
+      statement(this.db, `
+        UPDATE account_deletion_jobs
+        SET status = 'completed', steps_json = ?, last_error_code = NULL,
+          updated_at = ?, completed_at = ?
+        WHERE job_id = ?
+      `).run(JSON.stringify({ ...job.steps, identity: true }), completedAt, completedAt, jobId);
+    });
+    return this.accountDeletionJob(jobId)!;
   }
 
   prepareAccountDeletion(
@@ -1135,6 +1253,12 @@ export class MatterhornAuthStore {
     userId: string,
     activeOrgId: string | null,
   ): MatterhornAuthSession {
+    if (this.hasPendingAccountDeletion(userId)) {
+      throw new MatterhornAuthError(
+        "account_deletion_pending",
+        "This account is being deleted and can no longer be used.",
+      );
+    }
     const token = randomBytes(32).toString("base64url");
     const now = Date.now();
     const expiresAt = now + SESSION_TTL_MS;
@@ -1162,5 +1286,58 @@ export class MatterhornAuthStore {
       this.db.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  private hasPendingAccountDeletion(userId: string): boolean {
+    return Boolean(statement(this.db, `
+      SELECT 1 FROM account_deletion_jobs
+      WHERE user_id = ? AND status <> 'completed'
+      LIMIT 1
+    `).get(userId));
+  }
+
+  private accountDeletionJobForUser(userId: string): MatterhornAuthAccountDeletionJob | null {
+    const row = statement(this.db, `
+      SELECT job_id, user_id, organization_ids_json, status, steps_json,
+        attempts, created_at, updated_at
+      FROM account_deletion_jobs WHERE user_id = ? LIMIT 1
+    `).get(userId) as Record<string, unknown> | undefined;
+    return row ? this.accountDeletionJobFromRow(row) : null;
+  }
+
+  private accountDeletionJob(jobId: string): MatterhornAuthAccountDeletionJob | null {
+    const row = statement(this.db, `
+      SELECT job_id, user_id, organization_ids_json, status, steps_json,
+        attempts, created_at, updated_at
+      FROM account_deletion_jobs WHERE job_id = ? LIMIT 1
+    `).get(jobId) as Record<string, unknown> | undefined;
+    return row ? this.accountDeletionJobFromRow(row) : null;
+  }
+
+  private accountDeletionJobFromRow(row: Record<string, unknown>): MatterhornAuthAccountDeletionJob {
+    const organizations = JSON.parse(String(row.organization_ids_json)) as unknown;
+    const steps = JSON.parse(String(row.steps_json)) as unknown;
+    if (!Array.isArray(organizations) || !steps || typeof steps !== "object" || Array.isArray(steps)) {
+      throw new Error("account_deletion_manifest_corrupt");
+    }
+    const status = String(row.status);
+    if (status !== "pending" && status !== "processing" && status !== "failed" && status !== "completed") {
+      throw new Error("account_deletion_manifest_corrupt");
+    }
+    const stepRecord = steps as Record<string, unknown>;
+    return {
+      jobId: String(row.job_id),
+      userId: String(row.user_id),
+      deletedOrganizationIds: organizations.map(String),
+      status,
+      steps: {
+        memory: stepRecord.memory === true,
+        workspaces: stepRecord.workspaces === true,
+        identity: stepRecord.identity === true,
+      },
+      attempts: Number(row.attempts) || 0,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+    };
   }
 }

@@ -211,4 +211,36 @@ describe("account verification and password recovery", () => {
     expect(fixture.store.getSession(session.token)).toBeNull();
     fixture.store.close();
   });
+
+  test("tombstones an account immediately and resumes a failed purge after restart", () => {
+    const fixture = createStore();
+    const session = fixture.store.createAccount({
+      email: "deletion-resume@example.com",
+      password: PASSWORD,
+    });
+    const job = fixture.store.beginAccountDeletion(session.token, PASSWORD);
+    expect(fixture.store.getSession(session.token)).toBeNull();
+    expectAuthCode(
+      () => fixture.store.signIn("deletion-resume@example.com", PASSWORD),
+      "account_deletion_pending",
+    );
+    const failed = fixture.store.failAccountDeletionJob(job.jobId, "forced_test_failure");
+    expect(failed.status).toBe("failed");
+    fixture.store.close();
+
+    const resumed = new MatterhornAuthStore(fixture.path);
+    expect(resumed.listPendingAccountDeletionJobs()).toHaveLength(1);
+    expect(resumed.markAccountDeletionStep(job.jobId, "memory").steps.memory).toBe(true);
+    expect(resumed.markAccountDeletionStep(job.jobId, "workspaces").steps.workspaces).toBe(true);
+    expect(resumed.finalizeAccountDeletion(job.jobId)).toMatchObject({
+      status: "completed",
+      steps: { memory: true, workspaces: true, identity: true },
+    });
+    expect(resumed.listPendingAccountDeletionJobs()).toEqual([]);
+    expectAuthCode(
+      () => resumed.signIn("deletion-resume@example.com", PASSWORD),
+      "invalid_credentials",
+    );
+    resumed.close();
+  });
 });

@@ -25,20 +25,20 @@ The wallet is the final authority. The agent may read public data and prepare ex
 | Cross-tenant access | Authenticated workspace resolution plus workspace/session claims on run grants, capabilities, preflights, consents, receipts, and actions. | 403/404 without cross-tenant existence disclosure. |
 | Permission escalation | Capability authority is the intersection of global policy, selected desk, execution mode, server tool profile, run grant, and exact call. Client profiles can only narrow. | Tool call denied. |
 | Tool argument mutation | HMAC capability contains a canonical argument hash and is consumed atomically. | Mutated or replayed call denied. |
-| Capability disclosure | Signed capability remains in server memory; OpenCode receives only its own non-secret call id. The MCP bridge redeems and deletes it. | Unknown, expired, or replayed call denied. |
+| Capability disclosure | Signed capability remains server-side in the durable guarded-runtime store; OpenCode receives only its own non-secret call id. The MCP bridge redeems and atomically consumes it. | Unknown, expired, or replayed call denied. |
 | Transaction mutation | v2 handoff hashes full typed terms, policy, signer, network, amount, recipient, slippage, expiry, and simulation reference. | Review invalidated and must be regenerated. |
 | Chain confusion | Exact protocol/network/signer fields and protocol-specific wallet surfaces are part of the intent hash. | Wrong network or signer cannot reuse review. |
 | Replay | Consent and capabilities are single-use; capabilities expire after 60 seconds; reviewed actions expire and simulations become stale. | Replay denied. |
 | Malicious metadata | Keys shaped as instructions, prompts, permissions, or tool calls are quarantined. Original evidence remains outside model context. | Metadata cannot control runtime. |
 | Wallet rejection or timeout | No server or agent submit capability exists. Only connected wallet approval can submit. | No transaction is broadcast. |
-| Receipt tampering | Date-segmented JSONL receipts are allowlisted, hash chained, verified on load, and expire after 365 days. | Tampered tail is ignored. |
+| Receipt tampering | Date-segmented JSONL receipts are allowlisted, hash chained, verified on load, and expire after 365 days. | The affected chain fails integrity validation; no damaged tail is silently accepted or truncated. |
 | Deletion conflict | User content and minimal security metadata are separated. An owner-confirmed `POST /workspace/:id/user-content/purge` first deletes engine chats, then Matterhorn-managed notes, memory, outputs, feedback, mission and workflow content; transient consents and grants are revoked. | The purge fails before local deletion when the engine cannot confirm chat removal. Only content-free security records remain until normal expiry. |
 
 ## Residual risks
 
 - Provider privacy statements are an external policy dependency; Matterhorn discloses verification status and requires exact consent when the status is unverified.
 - A compromised Matterhorn server can subvert server-side controls. Runtime and capability secrets must be independently generated, server-only, rotated after suspected exposure, and never placed in `VITE_*` variables.
-- Capability issuance and atomic single-use consumption are process-local in this release. Guarded `shadow` or `enforce` mode therefore requires the documented single-instance control-plane topology. Before horizontal scaling, move grants, call bindings, nonces, and consumption into one shared transactional store; load balancing alone is not sufficient.
+- Grants, consent challenges, call bindings, replay records, and atomic single-use capability consumption are durable in the host SQLite store. Guarded `shadow` or `enforce` mode still requires the documented single-instance control-plane topology because that database is local to one persistent `/data` volume. Before horizontal scaling, move this state into one shared transactional store; load balancing alone is not sufficient.
 - Browser extensions or a compromised wallet can alter or reject a transaction. The wallet UI must refresh simulation, compare the v2 intent, and show exact changed fields before approval.
 - Public on-chain addresses become private context when associated with a Matterhorn account even though they remain public on-chain.
 

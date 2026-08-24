@@ -12,6 +12,7 @@ import {
 import { getMatterhornDeskAgentById } from "@matterhorn-work/types/desk-agents";
 import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-mode";
 import { canonicalJson, equalDigest, sha256 } from "./guarded-runtime-crypto.js";
+import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 export const MATTERHORN_CAPABILITY_ARGUMENT = "_matterhornCapability";
 export const MATTERHORN_CAPABILITY_CALL_ARGUMENT = "_matterhornCallId";
@@ -42,6 +43,40 @@ type ConsumedCapability = {
   claims: MatterhornAgentCapabilityClaims;
   consumedAtMs: number;
 };
+
+type StoredRunGrant = Omit<RunGrant,
+  "allowedTools" | "prepareAttempts" | "successfulPrepareFamilies" | "issuedPrepareFamilies" | "issuedCallIds"
+> & {
+  allowedTools: string[];
+  prepareAttempts: Array<[string, number]>;
+  successfulPrepareFamilies: string[];
+  issuedPrepareFamilies: Array<[string, string]>;
+  issuedCallIds: string[];
+  decisions: MatterhornAgentCapabilityDecision[];
+};
+
+function serializeGrant(grant: RunGrant, decisions: MatterhornAgentCapabilityDecision[]): StoredRunGrant {
+  return {
+    ...grant,
+    allowedTools: [...grant.allowedTools],
+    prepareAttempts: [...grant.prepareAttempts],
+    successfulPrepareFamilies: [...grant.successfulPrepareFamilies],
+    issuedPrepareFamilies: [...grant.issuedPrepareFamilies],
+    issuedCallIds: [...grant.issuedCallIds],
+    decisions,
+  };
+}
+
+function deserializeGrant(stored: StoredRunGrant): RunGrant {
+  return {
+    ...stored,
+    allowedTools: new Set(stored.allowedTools),
+    prepareAttempts: new Map(stored.prepareAttempts),
+    successfulPrepareFamilies: new Set(stored.successfulPrepareFamilies),
+    issuedPrepareFamilies: new Map(stored.issuedPrepareFamilies),
+    issuedCallIds: new Set(stored.issuedCallIds),
+  };
+}
 
 function guardedMode(value = process.env.MATTERHORN_GUARDED_RUNTIME_MODE): MatterhornGuardedRuntimeMode {
   const normalized = value?.trim().toLowerCase();
@@ -226,8 +261,22 @@ export class MatterhornAgentCapabilityBroker {
 
   readonly mode: MatterhornGuardedRuntimeMode;
 
-  constructor(mode = matterhornGuardedRuntimeMode()) {
+  constructor(
+    mode = matterhornGuardedRuntimeMode(),
+    private readonly stateStore?: MatterhornGuardedRuntimeStateStore,
+  ) {
     this.mode = mode;
+    if (!stateStore) return;
+    for (const stored of stateStore.list<StoredRunGrant>("run_grant")) {
+      const grant = deserializeGrant(stored);
+      this.grants.set(grant.runId, grant);
+      this.activeRunBySession.set(grant.sessionId, grant.runId);
+      if (stored.decisions.length) this.decisions.set(grant.runId, stored.decisions.slice(-100));
+    }
+    for (const claims of stateStore.listConsumedCapabilities<MatterhornAgentCapabilityClaims>()) {
+      this.consumed.set(claims.jti, { claims, consumedAtMs: Date.parse(claims.issuedAt) });
+      this.consumedByCallId.set(claims.callId, claims);
+    }
   }
 
   ready(): boolean {
@@ -271,6 +320,7 @@ export class MatterhornAgentCapabilityBroker {
     };
     this.grants.set(input.runId, grant);
     this.activeRunBySession.set(input.sessionId, input.runId);
+    this.persistGrant(grant);
   }
 
   issue(input: {
@@ -357,6 +407,7 @@ export class MatterhornAgentCapabilityBroker {
       decidedAt: new Date().toISOString(),
       latencyMs: Math.max(0, Date.now() - startedAt),
     });
+    this.persistGrant(grant);
     return { version: "matterhorn.agent-capability.v1", token: encodeClaims(claims, secret), claims };
   }
 
@@ -391,6 +442,16 @@ export class MatterhornAgentCapabilityBroker {
     if (!equalDigest(claims.argsHash, capabilityArgsHash(input.args))) deny("capability_argument_mutation");
     const grant = this.grants.get(claims.runId);
     if (!grant || grant.workspaceId !== claims.workspaceId || grant.sessionId !== claims.sessionId) deny("capability_scope_mismatch");
+    if (this.stateStore && !this.stateStore.consumeCapability({
+      jti: claims.jti,
+      runId: claims.runId,
+      callId: claims.callId,
+      workspaceId: claims.workspaceId,
+      sessionId: claims.sessionId,
+      claims,
+      consumedAtMs: nowMs,
+      expiresAtMs: Date.parse(claims.expiresAt) + CAPABILITY_TTL_MS,
+    })) deny("capability_replayed");
     this.consumed.set(claims.jti, { claims, consumedAtMs: nowMs });
     this.consumedByCallId.set(claims.callId, claims);
     this.recordDecision(claims.runId, {
@@ -428,6 +489,7 @@ export class MatterhornAgentCapabilityBroker {
     const actualFamily = resolvedPrepareFamily?.trim().toLowerCase();
     const family = actualFamily || grant.issuedPrepareFamilies.get(callId) || prepareFamily(definition.name, definition.actionIds);
     grant.successfulPrepareFamilies.add(family);
+    this.persistGrant(grant);
   }
 
   decisionsForRun(runId: string): MatterhornAgentCapabilityDecision[] {
@@ -438,10 +500,16 @@ export class MatterhornAgentCapabilityBroker {
     return this.activeRunBySession.get(sessionId) ?? null;
   }
 
+  scopeForRun(runId: string): { workspaceId: string; sessionId: string } | null {
+    const grant = this.grants.get(runId);
+    return grant ? { workspaceId: grant.workspaceId, sessionId: grant.sessionId } : null;
+  }
+
   closeRun(runId: string): { callIds: string[] } {
     const grant = this.grants.get(runId);
     if (!grant) return { callIds: [] };
     this.grants.delete(runId);
+    this.stateStore?.delete("run_grant", runId);
     this.decisions.delete(runId);
     if (this.activeRunBySession.get(grant.sessionId) === runId) {
       this.activeRunBySession.delete(grant.sessionId);
@@ -475,6 +543,7 @@ export class MatterhornAgentCapabilityBroker {
       this.consumedByCallId.delete(entry.claims.callId);
       consumed += 1;
     }
+    this.stateStore?.purgeWorkspace(workspaceId, ["run_grant"], { includeConsumedCapabilities: true });
     return { runIds, callIds, consumed };
   }
 
@@ -482,12 +551,26 @@ export class MatterhornAgentCapabilityBroker {
     const current = this.decisions.get(runId) ?? [];
     current.push(decision);
     this.decisions.set(runId, current.slice(-100));
+    const grant = this.grants.get(runId);
+    if (grant) this.persistGrant(grant);
+  }
+
+  private persistGrant(grant: RunGrant): void {
+    this.stateStore?.put({
+      kind: "run_grant",
+      key: grant.runId,
+      workspaceId: grant.workspaceId,
+      sessionId: grant.sessionId,
+      value: serializeGrant(grant, this.decisions.get(grant.runId) ?? []),
+      expiresAtMs: grant.expiresAtMs,
+    });
   }
 
   private cleanup(nowMs: number): void {
     for (const [runId, grant] of this.grants) {
       if (grant.expiresAtMs > nowMs) continue;
       this.grants.delete(runId);
+      this.stateStore?.delete("run_grant", runId);
       if (this.activeRunBySession.get(grant.sessionId) === runId) this.activeRunBySession.delete(grant.sessionId);
       this.decisions.delete(runId);
     }
@@ -497,5 +580,6 @@ export class MatterhornAgentCapabilityBroker {
         this.consumedByCallId.delete(consumed.claims.callId);
       }
     }
+    this.stateStore?.deleteExpired(nowMs);
   }
 }
