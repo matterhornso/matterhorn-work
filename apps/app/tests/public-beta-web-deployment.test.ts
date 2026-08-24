@@ -130,6 +130,10 @@ describe("public Beta web deployment", () => {
       new URL("../src/app/lib/matterhorn-server.ts", import.meta.url),
       "utf8",
     );
+    const sessionSurface = readFileSync(
+      new URL("../src/react-app/domains/session/surface/session-surface.tsx", import.meta.url),
+      "utf8",
+    );
 
     expect(sessionRoute).toContain("Shell commands are unavailable in Matterhorn web workspaces.");
     expect(sessionRoute).toContain('draft.command.name.trim().toLowerCase() !== "compact"');
@@ -140,5 +144,13 @@ describe("public Beta web deployment", () => {
     expect(settingsPage).toContain("developerMode && !isPublicBetaWebDeployment()");
     expect(globalSync).toContain("if (isPublicBetaWebDeployment()) return;");
     expect(serverClient).toContain("/sessions/${encodeURIComponent(sessionId)}/compact");
+    expect(serverClient).toContain("sendAgentMessage:");
+    expect(serverClient).toContain("/sessions/${encodeURIComponent(sessionId)}/messages");
+    expect(sessionRoute).toContain("await client.sendAgentMessage(selectedWorkspaceId, selectedSessionId");
+    expect(sessionRoute).toContain("await endpoint.client.sendAgentMessage(endpoint.workspaceId, session.id");
+    expect(sessionRoute).toContain("!publicBetaWeb && options?.sendImmediately && selectedProviderPrivacyPolicy?.allowed === false");
+    expect(sessionSurface).toContain("Public research can proceed; private context requires");
+    expect(sessionSurface).toContain("(!publicBetaWeb && props.providerPrivacyPolicy?.allowed === false)");
+    expect(sessionRoute).toContain("publicBetaWeb\n            ? Promise.resolve(undefined)");
   });
 });

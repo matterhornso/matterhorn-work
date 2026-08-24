@@ -121,9 +121,6 @@ export class MatterhornGuardedAgentRuntime {
 
   async acceptPrompt(input: GuardedPromptInput): Promise<GuardedPromptAcceptance> {
     const evaluation = this.privacy.preflight(input);
-    if (this.capabilities.mode === "off") {
-      return { runId: `agent_run_off_${randomUUID()}`, preflight: evaluation.response, consentUsed: false };
-    }
     let consentUsed = false;
     if (evaluation.response.decision === "blocked") {
       throw new GuardedRuntimeError(
@@ -149,6 +146,17 @@ export class MatterhornGuardedAgentRuntime {
           evaluation.response,
         );
       }
+    }
+
+    // Privacy is an account-facing dispatch boundary, not a guarded-tool
+    // rollout flag. `off` disables capability grants and receipts only; it
+    // must never disable secret blocking or exact-request consent.
+    if (this.capabilities.mode === "off") {
+      return {
+        runId: `agent_run_off_${randomUUID()}`,
+        preflight: evaluation.response,
+        consentUsed,
+      };
     }
 
     const previousRunId = this.capabilities.activeRun(input.sessionId);

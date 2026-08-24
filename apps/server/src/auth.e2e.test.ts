@@ -45,6 +45,9 @@ const priorUsageEnforcement = process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT;
 const priorTurnstileSiteKey = process.env.MATTERHORN_TURNSTILE_SITEKEY;
 const priorTurnstileSecret = process.env.TURNSTILE_SECRET;
 const priorTurnstileHostnames = process.env.TURNSTILE_HOSTNAMES;
+const priorAccountMessageGatewayRequired = process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED;
+const priorAgentRuntimeSecret = process.env.MATTERHORN_AGENT_RUNTIME_SECRET;
+const priorHostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA;
 
 function config(port: number, root: string): ServerConfig {
   return {
@@ -222,6 +225,12 @@ afterEach(async () => {
   else process.env.TURNSTILE_SECRET = priorTurnstileSecret;
   if (priorTurnstileHostnames === undefined) delete process.env.TURNSTILE_HOSTNAMES;
   else process.env.TURNSTILE_HOSTNAMES = priorTurnstileHostnames;
+  if (priorAccountMessageGatewayRequired === undefined) delete process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED;
+  else process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED = priorAccountMessageGatewayRequired;
+  if (priorAgentRuntimeSecret === undefined) delete process.env.MATTERHORN_AGENT_RUNTIME_SECRET;
+  else process.env.MATTERHORN_AGENT_RUNTIME_SECRET = priorAgentRuntimeSecret;
+  if (priorHostedPublicBeta === undefined) delete process.env.MATTERHORN_HOSTED_PUBLIC_BETA;
+  else process.env.MATTERHORN_HOSTED_PUBLIC_BETA = priorHostedPublicBeta;
 });
 
 describe("public account authentication", () => {
@@ -960,6 +969,8 @@ describe("public account authentication", () => {
 
     const blockedRequests = [
       { path: `/workspace/${workspaceId}/opencode/session/${sessionId}/shell`, body: { command: "env" } },
+      { path: `/workspace/${workspaceId}/opencode/session/${sessionId}/prompt_async`, body: { parts: [{ type: "text", text: "bypass" }] } },
+      { path: `/workspace/${workspaceId}/opencode/session/${sessionId}/message`, body: { parts: [{ type: "text", text: "sync bypass" }] } },
       { path: `/w/${workspaceId}/opencode/session/${sessionId}/command`, body: { command: "compact", arguments: "" } },
       { path: `/opencode/session/${sessionId}/summarize`, body: { providerID: "test", modelID: "test" } },
       { path: `/workspace/${workspaceId}/opencode/session/${sessionId}/share`, body: {} },
@@ -1000,6 +1011,39 @@ describe("public account authentication", () => {
     );
     expect(operatorShell.response.status).toBe(400);
     expect(operatorShell.payload.code).toBe("opencode_unconfigured");
+
+    process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED = "1";
+    process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "trusted-runtime-secret-for-auth-route-tests";
+    const blockedRawAccountPrompt = await jsonRequest(
+      app.base,
+      `/workspace/ws_auth/opencode/session/${sessionId}/prompt_async`,
+      { bearer: TOKEN, body: { parts: [{ type: "text", text: "raw account prompt" }] } },
+    );
+    expect(blockedRawAccountPrompt.response.status).toBe(403);
+    expect(blockedRawAccountPrompt.payload.code).toBe("hosted_operation_not_allowed");
+
+    const blockedRawSynchronousPrompt = await jsonRequest(
+      app.base,
+      `/workspace/ws_auth/opencode/session/${sessionId}/message`,
+      { bearer: TOKEN, body: { parts: [{ type: "text", text: "raw synchronous account prompt" }] } },
+    );
+    expect(blockedRawSynchronousPrompt.response.status).toBe(403);
+    expect(blockedRawSynchronousPrompt.payload.code).toBe("hosted_operation_not_allowed");
+
+    const trustedRuntimePrompt = await fetch(
+      `${app.base}/workspace/ws_auth/opencode/session/${sessionId}/prompt_async`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${TOKEN}`,
+          "Content-Type": "application/json",
+          "x-matterhorn-agent-runtime-secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        },
+        body: JSON.stringify({ parts: [{ type: "text", text: "trusted runtime prompt" }] }),
+      },
+    );
+    expect(trustedRuntimePrompt.status).toBe(400);
+    await expect(trustedRuntimePrompt.json()).resolves.toMatchObject({ code: "opencode_unconfigured" });
   });
 
   test("reports the restricted hosted browser policy in readiness", async () => {
@@ -1008,6 +1052,16 @@ describe("public account authentication", () => {
     expect(readiness.response.status).toBe(200);
     expect(readiness.payload.checks.hostedBrowserOpencodePolicy).toBe("restricted");
     expect(readiness.payload.checks.hostedBrowserOpencodePolicyReady).toBe(true);
+    expect(readiness.payload.checks.accountMessageGatewayReady).toBe(true);
+  });
+
+  test("fails hosted Public Beta readiness when the authoritative message gateway is disabled", async () => {
+    process.env.MATTERHORN_HOSTED_PUBLIC_BETA = "1";
+    process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED = "0";
+    const app = await boot();
+    const readiness = await jsonRequest(app.base, "/health/ready");
+    expect(readiness.response.status).toBe(503);
+    expect(readiness.payload.checks.accountMessageGatewayReady).toBe(false);
   });
 
   test("rejects invalid, duplicate, and incorrect credentials safely", async () => {

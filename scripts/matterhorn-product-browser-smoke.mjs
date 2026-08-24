@@ -563,7 +563,7 @@ const primaryDeskSmokeScenarios = [
     name: "Sui",
     openLabel: "Open Sui",
     heading: "Sui desk",
-    expectedTask: "Review transfer fees",
+    expectedTask: "Read Sui wallet",
   },
 ];
 

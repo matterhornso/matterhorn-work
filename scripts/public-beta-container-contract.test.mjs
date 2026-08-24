@@ -14,6 +14,8 @@ for (const required of [
   "MATTERHORN_WORK_DATA_DIR=/data/matterhorn",
   "MATTERHORN_WORK_WORKSPACES=/data/workspace",
   "MATTERHORN_WORK_APPROVAL_MODE=manual",
+  "MATTERHORN_HOSTED_PUBLIC_BETA=1",
+  "MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED=1",
   "gosu",
   "/health/live",
 ]) {

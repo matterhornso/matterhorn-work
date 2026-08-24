@@ -108,7 +108,7 @@ for (const visibleText of [
   "Explore subnets",
   "Read market overview",
   "Check compliance",
-  "Review transfer fees",
+  "Read Sui wallet",
   "7 stages",
   "Run in chat",
   "Start task",
