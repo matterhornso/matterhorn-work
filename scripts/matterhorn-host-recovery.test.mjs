@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { closeSync, fstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -60,8 +60,13 @@ try {
     "opencode/opencode.db",
     "usage/model-usage.db",
   ]);
-  assert.equal(statSync(archive).mode & 0o777, 0o600);
-  assert.equal(readFileSync(archive).includes(Buffer.from("identity")), false);
+  const archiveFd = openSync(archive, "r");
+  try {
+    assert.equal(fstatSync(archiveFd).mode & 0o777, 0o600);
+    assert.equal(readFileSync(archiveFd).includes(Buffer.from("identity")), false);
+  } finally {
+    closeSync(archiveFd);
+  }
 
   const restore = run([
     "--restore",

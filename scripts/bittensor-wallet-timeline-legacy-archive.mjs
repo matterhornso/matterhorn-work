@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 
@@ -38,11 +38,6 @@ async function main() {
   const source = resolve(config.source);
   const output = resolve(config.output);
   if (source === output) throw new Error("The encrypted archive must not overwrite its source timeline.");
-  const outputExists = await lstat(output).then(() => true).catch((error) => {
-    if (error?.code === "ENOENT") return false;
-    throw error;
-  });
-  if (outputExists) throw new Error("The encrypted archive output already exists.");
   if (config.apply && resolve(config.confirmSource) !== source) {
     throw new Error("--apply requires --confirm-source to exactly match --source.");
   }
@@ -53,8 +48,12 @@ async function main() {
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const archive = Buffer.concat([MAGIC, iv, cipher.getAuthTag(), ciphertext]);
   await mkdir(dirname(output), { recursive: true, mode: 0o700 });
-  await writeFile(output, archive, { mode: 0o600 });
-  await chmod(output, 0o600);
+  try {
+    await writeFile(output, archive, { mode: 0o600, flag: "wx" });
+  } catch (error) {
+    if (error?.code === "EEXIST") throw new Error("The encrypted archive output already exists.");
+    throw error;
+  }
 
   const decodedIv = archive.subarray(MAGIC.length, MAGIC.length + 12);
   const decodedTag = archive.subarray(MAGIC.length + 12, MAGIC.length + 28);
@@ -66,12 +65,16 @@ async function main() {
   let retiredSource = null;
   if (config.apply) {
     retiredSource = `${source}.operator-archived`;
-    const retiredExists = await lstat(retiredSource).then(() => true).catch((error) => {
-      if (error?.code === "ENOENT") return false;
+    try {
+      // The archive lives beside the source, so an atomic hard link gives us
+      // no-replace semantics. A competing process cannot swap in a destination
+      // between a separate existence check and rename.
+      await link(source, retiredSource);
+    } catch (error) {
+      if (error?.code === "EEXIST") throw new Error("The retired source destination already exists.");
       throw error;
-    });
-    if (retiredExists) throw new Error("The retired source destination already exists.");
-    await rename(source, retiredSource);
+    }
+    await unlink(source);
   }
   process.stdout.write(`${JSON.stringify({
     version: "matterhorn.bittensor-legacy-timeline-archive.v1",
