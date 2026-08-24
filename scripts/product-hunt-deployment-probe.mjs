@@ -15,7 +15,7 @@ function parseArgs(argv) {
     expectedWebCommit: process.env.VITE_MATTERHORN_BUILD_COMMIT ?? "",
     expectedGuardedMode: "",
     expectedSignupStatus: "",
-    healthPath: "/health",
+    healthPath: "/health/ready",
     json: false,
     jsonOutput: "",
     strict: false,

@@ -42,6 +42,8 @@
     "template:guarded-runtime-shadow-review": "node scripts/guarded-runtime-shadow-evidence.mjs review-template",
     "gate:guarded-runtime-shadow": "node scripts/guarded-runtime-shadow-evidence.mjs evaluate --strict",
     "test:guarded-runtime-shadow-evidence": "node scripts/guarded-runtime-shadow-evidence.test.mjs",
+    "gate:guarded-runtime-tokens": "node scripts/guarded-runtime-token-acceptance.mjs --strict",
+    "test:guarded-runtime-token-acceptance": "node scripts/guarded-runtime-token-acceptance.test.mjs",
     "drill:workspace-backup-restore": "node scripts/workspace-backup-restore-drill.mjs",
     "test:workspace-backup-restore-drill": "node scripts/workspace-backup-restore-drill.test.mjs",
     "backup:workspace-user-data": "node scripts/workspace-user-data-recovery.mjs",

@@ -169,6 +169,13 @@ export class MatterhornAgentRunReceiptStore {
     await this.rehashAndAppend(receipt, input.now ?? new Date());
   }
 
+  async recordMemoryWrite(input: { runId: string; memoryId: string; now?: Date }): Promise<void> {
+    const receipt = this.latest.get(input.runId);
+    if (!receipt) return;
+    receipt.memory.writtenIds = [...new Set([...receipt.memory.writtenIds, input.memoryId])].sort();
+    await this.rehashAndAppend(receipt, input.now ?? new Date());
+  }
+
   async complete(input: {
     runId: string;
     status: Exclude<MatterhornAgentRunReceipt["status"], "pending">;

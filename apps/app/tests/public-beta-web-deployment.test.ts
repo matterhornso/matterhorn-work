@@ -50,6 +50,10 @@ describe("public Beta web deployment", () => {
       new URL("../src/index.react.tsx", import.meta.url),
       "utf8",
     );
+    const bootstrapEntry = readFileSync(
+      new URL("../src/index.bootstrap.ts", import.meta.url),
+      "utf8",
+    );
     const den = readFileSync(
       new URL("../src/app/lib/den.ts", import.meta.url),
       "utf8",
@@ -66,6 +70,10 @@ describe("public Beta web deployment", () => {
       new URL("../src/react-app/domains/workspace/create-workspace-modal.tsx", import.meta.url),
       "utf8",
     );
+    const viteConfig = readFileSync(
+      new URL("../vite.config.ts", import.meta.url),
+      "utf8",
+    );
 
     expect(den).toContain('target.searchParams.set("returnTo", `${window.location.origin}/onboarding`)');
     expect(den).toContain('credentials: "include"');
@@ -74,11 +82,16 @@ describe("public Beta web deployment", () => {
     expect(appEntry).toContain("const publicTrustEntry = isPublicTrustPath(window.location.pathname)");
     expect(appEntry).toContain("const bootstrapConfig = publicTrustEntry");
     expect(appEntry).toContain("denModule.setDenBootstrapConfig(publicCloudConfig)");
+    expect(bootstrapEntry).toContain("requestAnimationFrame(startMatterhorn)");
+    expect(bootstrapEntry).toContain('import("./index.react")');
     expect(remoteLinks).toContain("stripRemoteConnectQuery");
     expect(remoteLinks).toContain("if (isPublicBetaWebDeployment())");
     expect(sessionRoute).toContain("onConfirmRemote={publicBetaWeb ? undefined : handleCreateRemoteWorkspace}");
     expect(sessionRoute).toContain("onRecoverWorkspace: publicBetaWeb");
     expect(workspaceModal).toContain("Public web does not accept worker URLs or access tokens.");
+    expect(viteConfig).toContain('name: "matterhorn-public-auth-critical-render"');
+    expect(viteConfig).toContain("data-matterhorn-static-auth");
+    expect(viteConfig).toContain("publicAuthCriticalCss");
   });
 
   test("keeps signed-out app routes behind sign-in while trust routes remain public", () => {

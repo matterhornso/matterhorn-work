@@ -22,6 +22,30 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+function publicPreflight(workspaceId: string, sessionId: string) {
+  return {
+    version: "matterhorn.agent-privacy-preflight.v1" as const,
+    requestHash: `hash-${workspaceId}-${sessionId}`,
+    workspaceId,
+    sessionId,
+    requestedMode: "public_research" as const,
+    effectiveMode: "public_research" as const,
+    decision: "allow" as const,
+    provider: {
+      id: "cudos",
+      name: "ASI:Cloud",
+      modelId: "asi1-mini",
+      privacyStatus: "unverified" as const,
+      trainingUse: "unknown" as const,
+      retentionDays: null,
+      policyUrl: null,
+      dataLeavesMatterhorn: true,
+    },
+    detectedData: { labels: ["public" as const], categories: [], redactionCount: 0 },
+    reason: "public research",
+  };
+}
+
 describe("guarded agent run receipts", () => {
   test("stores only bounded security metadata in a hash chain", async () => {
     const store = new MatterhornAgentRunReceiptStore();
@@ -58,14 +82,16 @@ describe("guarded agent run receipts", () => {
       status: "success",
       usage: { inputTokens: 120, outputTokens: 30, estimatedCostUsd: 0.001 },
     });
+    await store.recordMemoryWrite({ runId: "run_receipt_1", memoryId: "memory_saved_from_run" });
     const items = await store.list("ws_receipt");
     expect(items).toHaveLength(1);
     expect(items[0]?.usage.inputTokens).toBe(120);
     expect(items[0]?.provider).toMatchObject({ name: "ASI:Cloud", policyUrl: null });
+    expect(items[0]?.memory.writtenIds).toEqual(["memory_saved_from_run"]);
     expect(items[0]?.integrity.recordHash).toHaveLength(64);
     const files = await readFile(join(root, "security-receipts", "ws_receipt", `${new Date().toISOString().slice(0, 10)}.jsonl`), "utf8");
     expect(files).not.toContain(sensitivePrompt);
-    expect(files.trim().split("\n").length).toBe(2);
+    expect(files.trim().split("\n").length).toBe(3);
   });
 
   test("continues a persisted chain and rejects a tampered tail", async () => {
@@ -119,6 +145,39 @@ describe("guarded agent run receipts", () => {
     await writeFile(path, `${JSON.stringify(records[0])}\n${JSON.stringify(tampered)}\n`, "utf8");
     const reloaded = new MatterhornAgentRunReceiptStore();
     await expect(reloaded.list(workspaceId)).rejects.toBeInstanceOf(AgentRunReceiptIntegrityError);
+  });
+
+  test("reconciles a public wallet receipt onto one intent without crossing workspaces", async () => {
+    const store = new MatterhornAgentRunReceiptStore();
+    await store.start({
+      runId: "run_wallet_receipt",
+      workspaceId: "ws_wallet_receipt",
+      sessionId: "ses_wallet_receipt",
+      consentUsed: false,
+      preflight: publicPreflight("ws_wallet_receipt", "ses_wallet_receipt"),
+    });
+    await store.addReviewedAction({
+      runId: "run_wallet_receipt",
+      intentHash: "intent_hash",
+      policyHash: "policy_hash",
+      simulationReference: "simulation_reference",
+    });
+    await store.addReviewedAction({
+      runId: "run_wallet_receipt",
+      intentHash: "intent_hash",
+      policyHash: "policy_hash",
+      simulationReference: "simulation_reference",
+      publicReceipt: "chain:transaction_digest",
+    });
+
+    const receipt = await store.get("ws_wallet_receipt", "run_wallet_receipt");
+    expect(receipt?.reviewedActions).toEqual([{
+      intentHash: "intent_hash",
+      policyHash: "policy_hash",
+      simulationReference: "simulation_reference",
+      publicReceipt: "chain:transaction_digest",
+    }]);
+    expect(await store.get("ws_other", "run_wallet_receipt")).toBeNull();
   });
 
   test("serializes racing tool and completion records into one valid chain", async () => {

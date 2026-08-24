@@ -36,6 +36,8 @@ import type {
   MatterhornExtensionSource,
   MatterhornExtensionSourceFormat,
 } from "../extensions";
+import { DenApiError } from "./den-api-error";
+export { DenApiError } from "./den-api-error";
 
 const STORAGE_BASE_URL = "matterhorn.den.baseUrl";
 const STORAGE_API_BASE_URL = "matterhorn.den.apiBaseUrl";
@@ -349,20 +351,6 @@ type RawJsonResponse<T> = {
   status: number;
   json: T | null;
 };
-
-export class DenApiError extends Error {
-  status: number;
-  code: string;
-  details?: unknown;
-
-  constructor(status: number, code: string, message: string, details?: unknown) {
-    super(message);
-    this.name = "DenApiError";
-    this.status = status;
-    this.code = code;
-    this.details = details;
-  }
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;

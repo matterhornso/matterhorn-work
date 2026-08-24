@@ -113,7 +113,6 @@ function assistantUsage(value: unknown): {
 }
 
 async function completeRun(runId: string, status: "success" | "cancelled" | "error"): Promise<void> {
-  if (guardedMode() === "off") return;
   const usage = pendingUsage.get(runId);
   pendingUsage.delete(runId);
   try {
@@ -174,7 +173,6 @@ export const MatterhornGuard = async (context: PluginContext) => ({
     }
   },
   event: async ({ event }: { event: OpenCodeEvent }) => {
-    if (guardedMode() === "off") return;
     if (event.type === "message.updated") {
       const observed = assistantUsage(event.properties);
       if (!observed) return;

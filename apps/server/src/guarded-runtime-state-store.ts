@@ -23,6 +23,8 @@ export type GuardedRuntimeStateKind =
   | "run_grant"
   | "staged_capability"
   | "rollout_bypass"
+  | "active_agent_run"
+  | "agent_run_scope"
   | "user_message_binding"
   | "assistant_message_binding"
   | "receipt_index";

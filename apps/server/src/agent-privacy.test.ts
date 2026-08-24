@@ -69,6 +69,18 @@ describe("agent privacy firewall", () => {
       workspaceId: request.workspaceId,
       sessionId: request.sessionId,
     });
+    expect(firewall.validateConsent({
+      token: consent.consentToken,
+      requestHash: preflight.response.requestHash,
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+    })).toBe(true);
+    expect(firewall.validateConsent({
+      token: consent.consentToken,
+      requestHash: preflight.response.requestHash,
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+    })).toBe(true);
     expect(firewall.consumeConsent({
       token: consent.consentToken,
       requestHash: preflight.response.requestHash,

@@ -26,6 +26,16 @@
     <meta name="twitter:card" content="summary" />
     <title>Matterhorn Desks</title>
 
+    <style>
+      :root { color-scheme: light; background: #f6f9ff; color: #101826; font-family: "Avenir Next", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      [data-theme="dark"] { color-scheme: dark; background: #05070b; color: #fafcff; }
+      html, body, #root { min-height: 100%; margin: 0; }
+      body { background: inherit; color: inherit; }
+      button, input, textarea, select { font: inherit; }
+      .matterhorn-entry-fallback { box-sizing: border-box; display: grid; min-height: 100dvh; place-items: center; padding: 24px; background: inherit; color: #596579; font-size: 14px; text-align: center; }
+      [data-theme="dark"] .matterhorn-entry-fallback { color: #c5d0dc; }
+    </style>
+
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="icon" type="image/png" sizes="512x512" href="/matterhorn-logo.png?v=20260712b" />
     <link rel="icon" type="image/svg+xml" href="/matterhorn-logo-square.svg?v=20260712b" />
@@ -33,10 +43,10 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260712b" />
     <link rel="shortcut icon" href="/favicon.ico?v=20260712b" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260712b" />
-    <script src="/theme-bootstrap.js"></script>
+    <script defer src="/theme-bootstrap.js"></script>
   </head>
   <body class="bg-dls-surface text-dls-text mac:bg-transparent">
     <div id="root"></div>
-    <script type="module" src="/src/index.react.tsx"></script>
+    <script type="module" src="/src/index.bootstrap.ts"></script>
   </body>
 </html>

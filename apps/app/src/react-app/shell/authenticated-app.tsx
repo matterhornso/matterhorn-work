@@ -5,6 +5,7 @@ import { BrowserRouter, HashRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "../../app/index.css";
 import { isDesktopRuntime } from "../../app/utils";
+import { initLocale } from "../../i18n";
 import { getReactQueryClient } from "../infra/query-client";
 import {
   createDefaultPlatform,
@@ -17,6 +18,7 @@ import { startDeepLinkBridge } from "./startup-deep-links";
 const queryClient = getReactQueryClient();
 const platform = createDefaultPlatform();
 const Router = isDesktopRuntime() ? HashRouter : BrowserRouter;
+initLocale();
 startDeepLinkBridge();
 
 /**
