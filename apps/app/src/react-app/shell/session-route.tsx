@@ -2655,6 +2655,9 @@ export function SessionRoute() {
         if (selectedModelUnavailable) throw new Error("Selected model is unavailable. Choose another model before sending.");
 
         if (draft.mode === "shell") {
+          if (publicBetaWeb) {
+            throw new Error("Shell commands are unavailable in Matterhorn web workspaces.");
+          }
           if (executionMode !== "work") {
             throw new Error(`${executionMode === "plan" ? "Plan" : "Discuss"} mode does not run shell commands. Switch to Work mode first.`);
           }
@@ -2663,6 +2666,17 @@ export function SessionRoute() {
         }
 
         if (draft.command) {
+          if (publicBetaWeb) {
+            if (draft.command.name.trim().toLowerCase() !== "compact") {
+              throw new Error("Workspace commands are unavailable in Matterhorn web workspaces.");
+            }
+            await client.compactSession(
+              selectedWorkspaceId,
+              selectedSessionId,
+              selectedPromptModel ?? undefined,
+            );
+            return;
+          }
           if (executionMode !== "work") {
             throw new Error(`${executionMode === "plan" ? "Plan" : "Discuss"} mode does not run commands. Switch to Work mode first.`);
           }

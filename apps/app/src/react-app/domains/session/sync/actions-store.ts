@@ -19,6 +19,7 @@ import {
   unrevertSession,
 } from "../../../../app/lib/opencode-session";
 import { trackSessionActive } from "../../../../app/lib/den-telemetry";
+import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import { finishPerf, perfNow, recordPerfLog } from "../../../../app/lib/perf-log";
 import { toSessionTransportDirectory } from "../../../../app/lib/session-scope";
 import { workspaceSessionRoute } from "../../../shell/workspace-routes";
@@ -549,8 +550,14 @@ export function createSessionActionsStore(options: {
       const promptOverrides = reasoningEffort ? ({ reasoning_effort: reasoningEffort } as const) : undefined;
 
       if (resolvedDraft.mode === "shell") {
+        if (isPublicBetaWebDeployment()) {
+          throw new Error("Shell commands are unavailable in Matterhorn web workspaces.");
+        }
         await shellInSession(c, sessionID, content);
       } else if (resolvedDraft.command || compactCommand) {
+        if (isPublicBetaWebDeployment()) {
+          throw new Error("Workspace commands are unavailable in Matterhorn web workspaces.");
+        }
         if (compactCommand) {
           await compactCurrentSession(sessionID);
           finishPerf(perfEnabled, "session.prompt", "done", startedAt, {

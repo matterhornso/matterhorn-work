@@ -957,9 +957,52 @@ function normalizeOpencodeProxyPath(proxyPath: string): string {
   return normalized || "/";
 }
 
-function assertOpencodeProxyAllowed(actor: Actor, method: string, proxyPath: string) {
+const HOSTED_BROWSER_OPENCODE_POLICY = "restricted" as const;
+
+function hostedOperationNotAllowed(): never {
+  throw new ApiError(
+    403,
+    "hosted_operation_not_allowed",
+    "This operation is not available in Matterhorn web workspaces.",
+  );
+}
+
+function isHostedBrowserOpencodeReadAllowed(proxyPath: string): boolean {
+  const normalized = normalizeOpencodeProxyPath(proxyPath);
+  return [
+    /^\/event$/,
+    /^\/global\/event$/,
+    /^\/global\/health$/,
+    /^\/session$/,
+    /^\/session\/status$/,
+    /^\/session\/[^/]+$/,
+    /^\/session\/[^/]+\/message$/,
+    /^\/session\/[^/]+\/message\/[^/]+$/,
+    /^\/session\/[^/]+\/(?:todo|diff|children)$/,
+    /^\/provider$/,
+    /^\/agent$/,
+    /^\/app\/agents$/,
+    /^\/permission$/,
+    /^\/session\/[^/]+\/permission$/,
+  ].some((pattern) => pattern.test(normalized));
+}
+
+function isHostedBrowserOpencodeMutationAllowed(method: string, proxyPath: string): boolean {
+  const normalized = normalizeOpencodeProxyPath(proxyPath);
+  if (method === "POST" && normalized === "/session") return true;
+  if ((method === "PATCH" || method === "DELETE") && /^\/session\/[^/]+$/.test(normalized)) return true;
+  return method === "POST" && /^\/session\/[^/]+\/(?:prompt_async|abort|revert|unrevert|fork)$/.test(normalized);
+}
+
+function assertOpencodeProxyAllowed(access: ClientAccess, method: string, proxyPath: string) {
   const m = method.toUpperCase();
-  const scope = actor.scope ?? "viewer";
+  const scope = access.actor.scope ?? "viewer";
+
+  if (access.session) {
+    if ((m === "GET" || m === "HEAD") && isHostedBrowserOpencodeReadAllowed(proxyPath)) return;
+    if (isHostedBrowserOpencodeMutationAllowed(m, proxyPath)) return;
+    hostedOperationNotAllowed();
+  }
 
   if (scope === "viewer" && m !== "GET" && m !== "HEAD") {
     throw new ApiError(403, "forbidden", "Viewer tokens are read-only");
@@ -1135,7 +1178,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
         try {
           const access = await requireClientAccess(request, config, tokens, authStore);
           assertMatterhornWorkspaceAccess(mount.workspaceId, access);
-          assertOpencodeProxyAllowed(access.actor, request.method, mount.restPath);
+          assertOpencodeProxyAllowed(access, request.method, mount.restPath);
           const workspace = access.workspace ?? await resolveWorkspace(config, mount.workspaceId);
           proxyService = "opencode";
           proxyBaseUrl = workspace.baseUrl?.trim() || undefined;
@@ -1226,7 +1269,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
             throw new ApiError(404, "workspace_not_found", "Workspace not found");
           }
           proxyBaseUrl = workspace.baseUrl?.trim() || undefined;
-          assertOpencodeProxyAllowed(access.actor, request.method, url.pathname);
+          assertOpencodeProxyAllowed(access, request.method, url.pathname);
           proxyService = "opencode";
           const response = await proxyOpencodeRequest({
             config,
@@ -1365,14 +1408,17 @@ function operationalReadiness(config: ServerConfig, guardedRuntime?: MatterhornG
   );
   const authConfigured = Boolean(config.token.trim() && config.hostToken.trim());
   const guardedRuntimeReady = guardedRuntime?.ready() ?? true;
+  const hostedBrowserOpencodePolicyReady = HOSTED_BROWSER_OPENCODE_POLICY === "restricted";
   return {
-    ready: workspaceConfigured && workspaceStorageAvailable && authConfigured && guardedRuntimeReady,
+    ready: workspaceConfigured && workspaceStorageAvailable && authConfigured && guardedRuntimeReady && hostedBrowserOpencodePolicyReady,
     checks: {
       workspaceConfigured,
       workspaceStorageAvailable,
       authConfigured,
       guardedRuntimeReady,
       guardedRuntimeMode: guardedRuntime?.capabilities.mode ?? "off",
+      hostedBrowserOpencodePolicy: HOSTED_BROWSER_OPENCODE_POLICY,
+      hostedBrowserOpencodePolicyReady,
     },
   };
 }
@@ -3791,6 +3837,21 @@ function buildCapabilities(config: ServerConfig): Capabilities {
         maxBytes,
       },
     },
+  };
+}
+
+function buildHostedBrowserCapabilities(config: ServerConfig): Capabilities {
+  const capabilities = buildCapabilities(config);
+  return {
+    ...capabilities,
+    skills: { ...capabilities.skills, write: false },
+    hub: capabilities.hub?.skills
+      ? { skills: { ...capabilities.hub.skills, read: false, install: false } }
+      : capabilities.hub,
+    plugins: { ...capabilities.plugins, write: false },
+    mcp: { ...capabilities.mcp, write: false },
+    commands: { read: false, write: false },
+    config: { read: false, write: false },
   };
 }
 
@@ -8012,8 +8073,12 @@ function createRoutes(
     return jsonResponse({ ok: true, actor: ctx.actor ?? null });
   });
 
-  addRoute(routes, "GET", "/capabilities", "client", async () => {
-    return jsonResponse(buildCapabilities(config));
+  addRoute(routes, "GET", "/capabilities", "client", async (ctx) => {
+    return jsonResponse(
+      ctx.matterhornSession
+        ? buildHostedBrowserCapabilities(config)
+        : buildCapabilities(config),
+    );
   });
 
   addRoute(routes, "GET", "/api/backend/capabilities", "client", async () => {
@@ -8602,6 +8667,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/workspace/:id/opencode-config", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const scope = normalizeOpencodeScope(ctx.url.searchParams.get("scope"));
     const configPath = resolveOpencodeConfigFilePath(scope, workspace.path);
@@ -8610,6 +8676,7 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/workspace/:id/opencode-config", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
@@ -9465,6 +9532,91 @@ function createRoutes(
     return jsonResponse({ item: receipt });
   });
 
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/compact", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) {
+      throw new ApiError(400, "invalid_payload", "sessionId is required");
+    }
+    const body = await readJsonBody(ctx.request, 16_384, "Session compaction");
+    const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
+
+    // Compaction sends existing conversation content back to the selected
+    // provider, so the same provider privacy policy and hard usage allowance
+    // apply as they do to a new message.
+    assertPromptProviderPrivacy(modelResolution.model.providerID);
+    await requireApproval(ctx, {
+      workspaceId: workspace.id,
+      action: "session.compact",
+      summary: `Compact session ${sessionId}`,
+      paths: [workspace.path],
+    });
+
+    const usage = await reserveModelUsage({
+      config,
+      workspace,
+      store: modelUsageStore,
+      access: clientAccessFromRequestContext(ctx, workspace),
+      sessionId,
+      providerId: modelResolution.model.providerID,
+      modelId: modelResolution.model.modelID,
+    });
+
+    const directory = resolveOpencodeDirectory(workspace) ?? undefined;
+    const opencode = createWorkspaceOpencodeClient(config, workspace);
+    const sessionApi = opencode.session as typeof opencode.session & {
+      summarize: (parameters: {
+        sessionID: string;
+        directory?: string;
+        providerID: string;
+        modelID: string;
+      }) => Promise<OpencodeClientResult<unknown, unknown>>;
+    };
+    try {
+      unwrapOpencodeResult(
+        await sessionApi.summarize({
+          sessionID: sessionId,
+          ...(directory ? { directory } : {}),
+          providerID: modelResolution.model.providerID,
+          modelID: modelResolution.model.modelID,
+        }),
+        `/session/${encodeURIComponent(sessionId)}/summarize`,
+      );
+    } catch (error) {
+      modelUsageStore.cancel(usage.reservation.reservationId);
+      throw error;
+    }
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "session.compact",
+      target: sessionId,
+      summary: "Compacted chat session through the Matterhorn gateway",
+      timestamp: Date.now(),
+      metadata: {
+        modelProviderId: modelResolution.model.providerID.slice(0, 120),
+        modelId: modelResolution.model.modelID.slice(0, 120),
+        modelSource: modelResolution.source,
+      },
+    });
+
+    if (usage.reservation.reservationId) {
+      scheduleModelUsageReconciliation({
+        config,
+        workspace,
+        store: modelUsageStore,
+        subject: usage.subject,
+        sessionId,
+      });
+    }
+
+    return jsonResponse({ ok: true, accepted: true, sessionId }, 202);
+  });
+
   addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages", "client", async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
@@ -9746,6 +9898,7 @@ function createRoutes(
   });
 
   addRoute(routes, "PATCH", "/workspace/:id/config", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
@@ -10596,11 +10749,13 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/plugins", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const includeGlobal = ctx.url.searchParams.get("includeGlobal") === "true";
+    if (ctx.matterhornSession && includeGlobal) hostedOperationNotAllowed();
     const result = await listPlugins(workspace.path, includeGlobal);
     return jsonResponse(result);
   });
 
   addRoute(routes, "POST", "/workspace/:id/plugins", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
@@ -10635,6 +10790,7 @@ function createRoutes(
   });
 
   addRoute(routes, "DELETE", "/workspace/:id/plugins/:name", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
@@ -10668,6 +10824,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/hub/skills", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     const owner = ctx.url.searchParams.get("owner")?.trim();
     const repo = ctx.url.searchParams.get("repo")?.trim();
     const ref = ctx.url.searchParams.get("ref")?.trim();
@@ -10682,11 +10839,13 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/skills", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const includeGlobal = ctx.url.searchParams.get("includeGlobal") === "true";
+    if (ctx.matterhornSession && includeGlobal) hostedOperationNotAllowed();
     const items = await listSkills(workspace.path, includeGlobal);
     return jsonResponse({ items });
   });
 
   addRoute(routes, "POST", "/workspace/:id/skills/hub/:name", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
@@ -10735,6 +10894,7 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/skills/:name", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const includeGlobal = ctx.url.searchParams.get("includeGlobal") === "true";
+    if (ctx.matterhornSession && includeGlobal) hostedOperationNotAllowed();
     const name = String(ctx.params.name ?? "").trim();
     if (!name) {
       throw new ApiError(400, "invalid_skill_name", "Skill name is required");
@@ -10749,6 +10909,7 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/workspace/:id/skills", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
@@ -10782,6 +10943,7 @@ function createRoutes(
   });
 
   addRoute(routes, "DELETE", "/workspace/:id/skills/:name", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
@@ -11016,6 +11178,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/workspace/:id/commands", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     const scope = ctx.url.searchParams.get("scope") === "global" ? "global" : "workspace";
     if (scope === "global") {
       await requireHost(ctx.request, config, tokens);
@@ -11026,6 +11189,7 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/workspace/:id/commands", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
@@ -11067,6 +11231,7 @@ function createRoutes(
   });
 
   addRoute(routes, "DELETE", "/workspace/:id/commands/:name", "client", async (ctx) => {
+    if (ctx.matterhornSession) hostedOperationNotAllowed();
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);

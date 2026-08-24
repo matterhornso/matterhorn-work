@@ -277,6 +277,10 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
         return Response.json({ ok: true });
       }
 
+      if (url.pathname === "/session/ses_1/summarize" && request.method === "POST") {
+        return Response.json({ ok: true });
+      }
+
       return Response.json({ code: "not_found", message: "Not found" }, { status: 404 });
     },
   }) as Served;
@@ -775,6 +779,46 @@ describe("workspace session read APIs", () => {
     expect(JSON.stringify(ledgerBody)).not.toContain("Summarize this workspace");
   });
 
+  test("compacts through the Matterhorn privacy and usage gateway", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+      hardModelUsageLimit: 32_000,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const compact = () => fetch(`${base}/workspace/ws_1/sessions/ses_1/compact`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: { providerID: "openai", modelID: "gpt-4.1" },
+      }),
+    });
+
+    const accepted = await compact();
+    expect(accepted.status).toBe(202);
+    await expect(accepted.json()).resolves.toEqual({
+      ok: true,
+      accepted: true,
+      sessionId: "ses_1",
+    });
+    const summarizeRequest = mock.requests.find(
+      (request) => request.method === "POST" && request.pathname === "/session/ses_1/summarize",
+    );
+    expect(summarizeRequest?.directory).toBe(workspaceRoot);
+    expect(summarizeRequest?.body).toMatchObject({
+      providerID: "openai",
+      modelID: "gpt-4.1",
+    });
+
+    const blocked = await compact();
+    expect(blocked.status).toBe(429);
+    await expect(blocked.json()).resolves.toMatchObject({ code: "model_usage_limit_reached" });
+    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/summarize")).toHaveLength(1);
+  });
+
   test("blocks unverified model providers before stable or proxied prompt dispatch", async () => {
     process.env.MATTERHORN_PROVIDER_PRIVACY_MODE = "verified-only";
     const workspaceRoot = await createWorkspaceRoot();
@@ -819,11 +863,27 @@ describe("workspace session read APIs", () => {
       code: "provider_privacy_unverified",
     });
 
+    const compact = await fetch(
+      `${base}/workspace/ws_1/sessions/ses_1/compact`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: { providerID: "openai", modelID: "gpt-4.1" },
+        }),
+      },
+    );
+    expect(compact.status).toBe(403);
+    await expect(compact.json()).resolves.toMatchObject({
+      code: "provider_privacy_unverified",
+    });
+
     expect(
       mock.requests.filter(
         (request) => request.pathname === "/session/ses_1/prompt_async",
       ),
     ).toHaveLength(0);
+    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/summarize")).toHaveLength(0);
   });
 
   test("reserves a hard model allowance before dispatch and exposes account status", async () => {

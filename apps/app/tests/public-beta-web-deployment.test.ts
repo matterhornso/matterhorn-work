@@ -104,4 +104,41 @@ describe("public Beta web deployment", () => {
     );
     expect(denAuthProvider).toContain("setError(userFacingCloudSessionError(nextError));");
   });
+
+  test("removes hosted execution and global runtime controls", () => {
+    const sessionRoute = readFileSync(
+      new URL("../src/react-app/shell/session-route.tsx", import.meta.url),
+      "utf8",
+    );
+    const legacySessionActions = readFileSync(
+      new URL("../src/react-app/domains/session/sync/actions-store.ts", import.meta.url),
+      "utf8",
+    );
+    const settingsRoute = readFileSync(
+      new URL("../src/react-app/shell/settings-route.tsx", import.meta.url),
+      "utf8",
+    );
+    const settingsPage = readFileSync(
+      new URL("../src/react-app/domains/settings/shell/settings-page.tsx", import.meta.url),
+      "utf8",
+    );
+    const globalSync = readFileSync(
+      new URL("../src/react-app/kernel/global-sync-provider.tsx", import.meta.url),
+      "utf8",
+    );
+    const serverClient = readFileSync(
+      new URL("../src/app/lib/matterhorn-server.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(sessionRoute).toContain("Shell commands are unavailable in Matterhorn web workspaces.");
+    expect(sessionRoute).toContain('draft.command.name.trim().toLowerCase() !== "compact"');
+    expect(sessionRoute).toContain("await client.compactSession(");
+    expect(legacySessionActions).toContain("if (isPublicBetaWebDeployment())");
+    expect(settingsRoute).toContain("UNSUPPORTED_HOSTED_SETTINGS_TABS.has(launchRoute.tab)");
+    expect(settingsPage).toContain('isPublicBetaWebDeployment() ? [] : ["shell" as const]');
+    expect(settingsPage).toContain("developerMode && !isPublicBetaWebDeployment()");
+    expect(globalSync).toContain("if (isPublicBetaWebDeployment()) return;");
+    expect(serverClient).toContain("/sessions/${encodeURIComponent(sessionId)}/compact");
+  });
 });

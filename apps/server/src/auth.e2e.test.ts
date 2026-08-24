@@ -115,7 +115,7 @@ async function jsonRequest(
     body?: Record<string, unknown>;
     cookie?: string;
     bearer?: string;
-    method?: "GET" | "POST" | "DELETE";
+    method?: "GET" | "POST" | "PATCH" | "DELETE";
     forwardedProto?: "http" | "https";
     origin?: string;
   } = {},
@@ -892,6 +892,14 @@ describe("public account authentication", () => {
     expect(workspaces.response.status).toBe(200);
     expect(workspaces.payload.items).toHaveLength(1);
     const workspaceId = workspaces.payload.items[0].id as string;
+    const browserCapabilities = await jsonRequest(app.base, "/capabilities", { cookie });
+    expect(browserCapabilities.payload).toMatchObject({
+      skills: { write: false },
+      plugins: { write: false },
+      mcp: { write: false },
+      commands: { read: false, write: false },
+      config: { read: false, write: false },
+    });
 
     for (const config of [
       { type: "local", command: ["node", "server.js"] },
@@ -934,6 +942,72 @@ describe("public account authentication", () => {
         expect.objectContaining({ name: "trusted-desktop-local" }),
       ]),
     );
+  });
+
+  test("restricts hosted browser accounts to the safe OpenCode session surface", async () => {
+    const app = await boot();
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: {
+        email: "hosted-opencode-boundary@example.com",
+        password: PASSWORD,
+        name: "Hosted Boundary",
+      },
+    });
+    const cookie = sessionCookie(signup.response);
+    const workspaces = await jsonRequest(app.base, "/workspaces", { cookie });
+    const workspaceId = String(workspaces.payload.items[0].id);
+    const sessionId = "ses_browser_boundary";
+
+    const blockedRequests = [
+      { path: `/workspace/${workspaceId}/opencode/session/${sessionId}/shell`, body: { command: "env" } },
+      { path: `/w/${workspaceId}/opencode/session/${sessionId}/command`, body: { command: "compact", arguments: "" } },
+      { path: `/opencode/session/${sessionId}/summarize`, body: { providerID: "test", modelID: "test" } },
+      { path: `/workspace/${workspaceId}/opencode/session/${sessionId}/share`, body: {} },
+      { path: `/workspace/${workspaceId}/opencode/permission/request-1/reply`, body: { reply: "once" } },
+      { path: `/workspace/${workspaceId}/opencode-config`, method: "GET" as const },
+      { path: `/workspace/${workspaceId}/commands`, method: "GET" as const },
+      { path: `/workspace/${workspaceId}/plugins?includeGlobal=true`, method: "GET" as const },
+      { path: `/workspace/${workspaceId}/skills?includeGlobal=true`, method: "GET" as const },
+      { path: "/hub/skills", method: "GET" as const },
+    ];
+
+    for (const request of blockedRequests) {
+      const result = await jsonRequest(app.base, request.path, {
+        cookie,
+        ...(request.body ? { body: request.body } : {}),
+        ...(request.method ? { method: request.method } : {}),
+      });
+      expect(result.response.status).toBe(403);
+      expect(result.payload).toEqual({
+        code: "hosted_operation_not_allowed",
+        message: "This operation is not available in Matterhorn web workspaces.",
+      });
+      expect(JSON.stringify(result.payload)).not.toContain(app.root);
+    }
+
+    const allowedRead = await jsonRequest(
+      app.base,
+      `/workspace/${workspaceId}/opencode/session/${sessionId}`,
+      { cookie },
+    );
+    expect(allowedRead.response.status).toBe(400);
+    expect(allowedRead.payload.code).toBe("opencode_unconfigured");
+
+    const operatorShell = await jsonRequest(
+      app.base,
+      `/workspace/ws_auth/opencode/session/${sessionId}/shell`,
+      { bearer: TOKEN, body: { command: "echo operator" } },
+    );
+    expect(operatorShell.response.status).toBe(400);
+    expect(operatorShell.payload.code).toBe("opencode_unconfigured");
+  });
+
+  test("reports the restricted hosted browser policy in readiness", async () => {
+    const app = await boot();
+    const readiness = await jsonRequest(app.base, "/health/ready");
+    expect(readiness.response.status).toBe(200);
+    expect(readiness.payload.checks.hostedBrowserOpencodePolicy).toBe("restricted");
+    expect(readiness.payload.checks.hostedBrowserOpencodePolicyReady).toBe(true);
   });
 
   test("rejects invalid, duplicate, and incorrect credentials safely", async () => {

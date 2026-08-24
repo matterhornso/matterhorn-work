@@ -1813,6 +1813,21 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         { token, hostToken, timeoutMs: timeouts.sessionRead },
       );
     },
+    compactSession: (
+      workspaceId: string,
+      sessionId: string,
+      model?: { providerID: string; modelID: string },
+    ) => requestJson<{ ok: true; accepted: true; sessionId: string }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/compact`,
+      {
+        token,
+        hostToken,
+        method: "POST",
+        body: model ? { model } : {},
+        timeoutMs: timeouts.sessionRead,
+      },
+    ),
     preflightAgentMessage: (
       workspaceId: string,
       sessionId: string,
