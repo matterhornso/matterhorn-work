@@ -18,6 +18,26 @@ const surfacePaceMs = Number.isFinite(parsedSurfacePaceMs)
   : 1_500;
 let activeBrowser = null;
 
+function printHelp() {
+  process.stdout.write(`Matterhorn full platform browser audit
+
+Usage:
+  MATTERHORN_FULL_AUDIT_URL=http://127.0.0.1:<port>/workspace/<id>/session \\
+    node scripts/matterhorn-full-platform-browser-audit.mjs --strict
+
+Environment:
+  MATTERHORN_FULL_AUDIT_URL                   Workspace session URL to audit.
+  MATTERHORN_FULL_AUDIT_OUTPUT_DIR            Evidence directory.
+  MATTERHORN_FULL_AUDIT_STRICT=1              Fail on P0/P1, runtime, console, or network issues.
+  MATTERHORN_FULL_AUDIT_SURFACE_PACE_MS=1500  Delay between surfaces.
+  MATTERHORN_FULL_AUDIT_RESPONSIVE_VIEWPORTS  Optional responsive viewport selection.
+
+Options:
+  --strict  Enable strict failure behavior.
+  --help    Show this help without starting a browser.
+`);
+}
+
 const settingsSurfaces = [
   ["settings-general", "settings/general", ["Settings", "Settings at a glance"]],
   ["settings-overview", "settings/overview", ["Workspace health", "Data & privacy"]],
@@ -971,9 +991,13 @@ async function run() {
   if (strict && !report.summary.ready) process.exitCode = 1;
 }
 
-run().catch(async (error) => {
-  console.error(error);
-  await activeBrowser?.close().catch(() => {});
-  activeBrowser = null;
-  process.exitCode = 1;
-});
+if (process.argv.includes("--help")) {
+  printHelp();
+} else {
+  run().catch(async (error) => {
+    console.error(error);
+    await activeBrowser?.close().catch(() => {});
+    activeBrowser = null;
+    process.exitCode = 1;
+  });
+}
