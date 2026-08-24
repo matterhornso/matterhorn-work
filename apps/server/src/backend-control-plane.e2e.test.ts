@@ -1769,6 +1769,25 @@ describe("backend control plane routes", () => {
     expect(mismatchedReceipt.response.status).toBe(409);
     expect(mismatchedReceipt.payload.code).toBe("reviewed_action_receipt_intent_mismatch");
 
+    const mismatchedTermsReceipt = await jsonFetch(base, "/workspace/ws_backend/sui/transactions/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        reviewedAction,
+        receiptIntentHash: reviewedAction.intentHash,
+        payload: {
+          network: "testnet",
+          previewSha256: preview.payload.preview.previewSha256,
+          transactionDigest: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+          status: "success",
+          sender: "0x2",
+          recipient: "0x4",
+          amountSui: "1",
+        },
+      }),
+    });
+    expect(mismatchedTermsReceipt.response.status).toBe(409);
+    expect(mismatchedTermsReceipt.payload.code).toBe("reviewed_action_receipt_terms_mismatch");
+
     const receipt = await jsonFetch(base, "/workspace/ws_backend/sui/transactions/receipt", {
       method: "POST",
       body: JSON.stringify({

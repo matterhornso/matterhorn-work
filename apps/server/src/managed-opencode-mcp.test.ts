@@ -204,7 +204,12 @@ describe("managed OpenCode Matterhorn MCP", () => {
       },
       serverUrl: "http://127.0.0.1:4130",
       clientToken: "test-client-token",
-      authorizeToolCall: ({ args }) => ({ args, runId: "run_guarded_sui", workspaceId: "ws_guarded" }),
+      authorizeToolCall: ({ args }) => ({
+        args,
+        runId: "run_guarded_sui",
+        callId: "call_guarded_sui",
+        workspaceId: "ws_guarded",
+      }),
       fetchImpl: Object.assign(
         async () => Response.json({ success: true, preview: { amountSui: "0.01", checkpoint: "123" } }),
         { preconnect: fetch.preconnect },

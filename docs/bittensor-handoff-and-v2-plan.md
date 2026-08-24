@@ -63,7 +63,7 @@ New Bittensor MCP tools:
 - `bittensor_get_subnet_capabilities`
 - `bittensor_get_sidecar_status`
 - `bittensor_prepare_extrinsic`
-- `bittensor_submit_signed_extrinsic`
+- `bittensor_submit_signed_extrinsic` (deprecated fail-closed compatibility stub)
 - `bittensor_invoke_subnet`
 - `bittensor_create_watch`
 - `bittensor_list_watches`
@@ -136,7 +136,7 @@ Matterhorn now supports a deterministic handoff step between preview and submiss
    - plain-English review instructions
    - consequence summary
 3. The user signs the payload in an external Bittensor-compatible wallet or CLI flow.
-4. `bittensor_submit_signed_extrinsic` can submit the externally signed payload only when a Subtensor sidecar is configured.
+4. `bittensor_submit_signed_extrinsic` returns `wallet_airlock_required`; a Subtensor sidecar cannot grant submission authority to an agent, MCP, or CLI.
 
 The handoff helper rejects payloads containing signing-material field names before returning a bundle. This keeps the Phase 2 flow non-custodial while making desktop/CLI signing practical from chat.
 

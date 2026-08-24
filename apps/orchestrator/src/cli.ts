@@ -3925,7 +3925,7 @@ function printHelp(): void {
     "  matterhorn-work bittensor chat --message <text> [options]",
     "  matterhorn-work bittensor capabilities [options]",
     "  matterhorn-work bittensor capability --netuid <n> [options]",
-    "  matterhorn-work bittensor extrinsic prepare|handoff|submit [options]",
+    "  matterhorn-work bittensor extrinsic prepare|handoff [options]",
     "  matterhorn-work bittensor subnet-preview --netuid <n> [options]",
     "  matterhorn-work bittensor subnet-invoke --netuid <n> --preview-request-sha256 <hash> [options]",
     "  matterhorn-work bittensor watch create|list|check|digest|act [options]",
@@ -9550,7 +9550,7 @@ async function runBittensor(args: ParsedArgs) {
     const previewJson = readFlag(args.flags, "preview-json");
     const previewFile = readFlag(args.flags, "preview-file");
     if (!previewJson && !previewFile) {
-      throw new Error("preview-json or preview-file is required for bittensor extrinsic handoff/submit");
+      throw new Error("preview-json or preview-file is required for bittensor extrinsic handoff");
     }
     const raw = previewJson ?? readFileSync(resolve(String(previewFile)), "utf8");
     try {
@@ -9673,20 +9673,13 @@ async function runBittensor(args: ParsedArgs) {
     }
 
     if (effectiveSubcommand === "extrinsic-submit" || effectiveSubcommand === "submit-extrinsic" || effectiveSubcommand === "submit") {
-      const signature = readFlag(args.flags, "signature")?.trim();
-      if (!signature) {
-        throw new Error("signature is required for bittensor extrinsic submit");
-      }
-      const result = await fetchJson(`${baseUrl}/api/bittensor/extrinsics/submit`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          preview: readPreviewInput(),
-          signature,
-          ...(readFlag(args.flags, "signer-address") ? { signerAddress: readFlag(args.flags, "signer-address") } : {}),
-        }),
-      });
-      outputResult(result, outputJson);
+      outputResult({
+        success: false,
+        code: "wallet_airlock_required",
+        command: "bittensor extrinsic submit",
+        message: "This deprecated command cannot sign, relay, broadcast, or submit. Regenerate a reviewed action and approve it in the connected Matterhorn wallet UI.",
+      }, outputJson);
+      process.exitCode = 2;
       return;
     }
 

@@ -416,6 +416,10 @@ export function SuiWorkflowPanel(props: {
           const reason = validation.issues.join(", ").replaceAll("_", " ");
           throw new Error(`This Sui wallet review is no longer valid (${reason}). Regenerate and re-simulate it before signing.`);
         }
+        if (!validation.refreshedHandoff || validation.refreshedHandoff.protocol !== "sui") {
+          throw new Error("Matterhorn did not return a fresh Sui dry-run. Regenerate this action before signing.");
+        }
+        setGuardedHandoff(validation.refreshedHandoff);
       }
       const response = await client.workspaceSuiTransactionPreview(
         workspaceId,

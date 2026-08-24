@@ -60,6 +60,7 @@ const GUARDED_OBSERVATION_REASONS = new Set([
   "capability_invalid_signature",
   "capability_prepare_budget_exhausted",
   "capability_prepare_family_already_completed",
+  "capability_prepare_family_resolution_required",
   "capability_prepare_requires_work_mode",
   "capability_read_budget_exhausted",
   "capability_replayed",
@@ -93,6 +94,8 @@ export class MatterhornGuardedAgentRuntime {
     argsHash: string;
   }>();
   private readonly observations = new Map<string, GuardedRuntimeObservationMetric>();
+  private readonly userMessageRunIds = new Map<string, { runId: string; sessionId: string }>();
+  private readonly assistantMessageRunIds = new Map<string, { runId: string; sessionId: string }>();
 
   ready(): boolean {
     return this.capabilities.ready();
@@ -181,8 +184,33 @@ export class MatterhornGuardedAgentRuntime {
     return { runId, preflight: evaluation.response, consentUsed };
   }
 
+  bindUserMessage(input: { runId: string; sessionId: string; messageId: string }): void {
+    if (this.capabilities.mode === "off") return;
+    const activeRunId = this.capabilities.activeRun(input.sessionId);
+    if (activeRunId !== input.runId) {
+      throw new GuardedRuntimeError(409, "agent_run_not_active", "The message no longer belongs to the active guarded run.");
+    }
+    this.userMessageRunIds.set(input.messageId, { runId: input.runId, sessionId: input.sessionId });
+  }
+
+  bindRuntimeMessage(input: {
+    runtimeSecret: string;
+    sessionId: string;
+    userMessageId: string;
+    assistantMessageId: string;
+  }): { runId: string } {
+    this.assertRuntimeSecret(input.runtimeSecret);
+    const bound = this.userMessageRunIds.get(input.userMessageId);
+    if (!bound || bound.sessionId !== input.sessionId) {
+      throw new GuardedRuntimeError(409, "agent_run_message_not_bound", "The assistant message is not bound to an accepted Matterhorn run.");
+    }
+    this.assistantMessageRunIds.set(input.assistantMessageId, bound);
+    return { runId: bound.runId };
+  }
+
   stageRuntimeTool(input: {
     runtimeSecret: string;
+    runId: string;
     workspaceId: string;
     sessionId: string;
     callId: string;
@@ -192,7 +220,7 @@ export class MatterhornGuardedAgentRuntime {
   }): { accepted: true; callId: string; expiresAt: string } {
     this.assertRuntimeSecret(input.runtimeSecret);
     this.cleanupStagedCapabilities();
-    const runId = this.capabilities.activeRun(input.sessionId);
+    const runId = input.runId.trim();
     const toolName = input.toolName.replace(/^matterhorn-work_/, "").trim();
     const argsHash = capabilityArgsHash(input.args);
     if (this.capabilities.mode === "enforce" && !guardedCapabilityEnforcementActive({
@@ -242,12 +270,12 @@ export class MatterhornGuardedAgentRuntime {
   authorizeMcpTool(input: {
     toolName: string;
     args: Record<string, unknown>;
-  }): { args: Record<string, unknown>; runId: string | null; workspaceId: string | null } {
+  }): { args: Record<string, unknown>; runId: string | null; callId: string | null; workspaceId: string | null } {
     this.cleanupStagedCapabilities();
     const callIdValue = input.args[MATTERHORN_CAPABILITY_CALL_ARGUMENT];
     const callId = typeof callIdValue === "string" ? callIdValue.trim() : "";
     const args = stripCapabilityArgument(input.args);
-    if (this.capabilities.mode === "off") return { args, runId: null, workspaceId: null };
+    if (this.capabilities.mode === "off") return { args, runId: null, callId: null, workspaceId: null };
     const bypass = callId ? this.rolloutBypassCallIds.get(callId) : undefined;
     if (callId && bypass) {
       this.rolloutBypassCallIds.delete(callId);
@@ -262,20 +290,20 @@ export class MatterhornGuardedAgentRuntime {
             "Matterhorn rejected a staged rollout call that no longer matches its exact tool and arguments.",
           );
         }
-        return { args, runId: null, workspaceId: null };
+        return { args, runId: null, callId: null, workspaceId: null };
       }
       this.observe("consume", "bypassed", bypass.reason);
-      return { args, runId: null, workspaceId: null };
+      return { args, runId: null, callId: null, workspaceId: null };
     }
     if (this.capabilities.mode === "enforce" && !callId && !guardedCapabilityEnforcementActive({
       toolName: input.toolName,
     })) {
       this.observe("consume", "bypassed", "rollout_not_enforced");
-      return { args, runId: null, workspaceId: null };
+      return { args, runId: null, callId: null, workspaceId: null };
     }
     if (!callId && this.capabilities.mode === "shadow") {
       this.observe("consume", "would_deny", "missing_call_id");
-      return { args, runId: null, workspaceId: null };
+      return { args, runId: null, callId: null, workspaceId: null };
     }
     if (!callId) {
       this.observe("consume", "denied", "missing_call_id");
@@ -286,7 +314,7 @@ export class MatterhornGuardedAgentRuntime {
     if (!staged) {
       if (this.capabilities.mode === "shadow") {
         this.observe("consume", "would_deny", "unknown_or_replayed_call_id");
-        return { args, runId: null, workspaceId: null };
+        return { args, runId: null, callId: null, workspaceId: null };
       }
       this.observe("consume", "denied", "unknown_or_replayed_call_id");
       throw new GuardedRuntimeError(403, "agent_capability_denied", "Matterhorn rejected an unknown, expired, or replayed tool call.");
@@ -294,12 +322,12 @@ export class MatterhornGuardedAgentRuntime {
     try {
       const claims = this.capabilities.consume({ token: staged.token, toolName: input.toolName, args });
       this.observe("consume", this.capabilities.mode === "shadow" ? "would_allow" : "allowed", "policy_allowed");
-      return { args, runId: claims.runId, workspaceId: claims.workspaceId };
+      return { args, runId: claims.runId, callId: claims.callId, workspaceId: claims.workspaceId };
     } catch (error) {
       const reason = guardedObservationReason(error);
       if (this.capabilities.mode === "shadow") {
         this.observe("consume", "would_deny", reason);
-        return { args, runId: null, workspaceId: null };
+        return { args, runId: null, callId: null, workspaceId: null };
       }
       this.observe("consume", "denied", reason);
       throw new GuardedRuntimeError(
@@ -312,12 +340,20 @@ export class MatterhornGuardedAgentRuntime {
 
   async recordMcpTool(input: {
     runId: string | null;
+    callId: string | null;
     metric: ManagedMcpToolCallMetric;
     source?: string | null;
     freshness?: string | null;
   }): Promise<void> {
     if (!input.runId) return;
-    this.capabilities.recordToolOutcome(input.runId, input.metric.tool, input.metric.outcome);
+    if (!input.callId) throw new GuardedRuntimeError(409, "agent_tool_outcome_not_bound", "The tool result is missing its exact guarded call binding.");
+    this.capabilities.recordToolOutcome(
+      input.runId,
+      input.callId,
+      input.metric.tool,
+      input.metric.outcome,
+      input.metric.reviewedAction?.protocol,
+    );
     await this.receipts.recordTool({
       runId: input.runId,
       tool: {
@@ -341,16 +377,14 @@ export class MatterhornGuardedAgentRuntime {
     }
   }
 
-  async completeSessionRun(input: {
+  async completeRun(input: {
     runtimeSecret: string;
-    sessionId: string;
+    runId: string;
     status: Exclude<MatterhornAgentRunReceipt["status"], "pending">;
     usage?: Partial<Omit<MatterhornAgentRunReceipt["usage"], "toolCallBudget">>;
   }): Promise<void> {
     this.assertRuntimeSecret(input.runtimeSecret);
-    const runId = this.capabilities.activeRun(input.sessionId);
-    if (!runId) return;
-    await this.finishRun(runId, input.status, input.usage);
+    await this.finishRun(input.runId, input.status, input.usage);
   }
 
   async failRun(runId: string, status: "cancelled" | "error" = "error"): Promise<void> {
@@ -370,6 +404,12 @@ export class MatterhornGuardedAgentRuntime {
     const privacy = this.privacy.purgeWorkspace(workspaceId);
     const capabilities = this.capabilities.purgeWorkspace(workspaceId);
     for (const callId of capabilities.callIds) this.stagedCapabilities.delete(callId);
+    for (const [messageId, bound] of this.userMessageRunIds) {
+      if (bound.runId && capabilities.runIds.includes(bound.runId)) this.userMessageRunIds.delete(messageId);
+    }
+    for (const [messageId, bound] of this.assistantMessageRunIds) {
+      if (bound.runId && capabilities.runIds.includes(bound.runId)) this.assistantMessageRunIds.delete(messageId);
+    }
     return {
       privacy,
       capabilities: {
@@ -402,6 +442,12 @@ export class MatterhornGuardedAgentRuntime {
     }
     for (const [callId, bypass] of this.rolloutBypassCallIds) {
       if (bypass.runId === runId) this.rolloutBypassCallIds.delete(callId);
+    }
+    for (const [messageId, bound] of this.userMessageRunIds) {
+      if (bound.runId === runId) this.userMessageRunIds.delete(messageId);
+    }
+    for (const [messageId, bound] of this.assistantMessageRunIds) {
+      if (bound.runId === runId) this.assistantMessageRunIds.delete(messageId);
     }
   }
 

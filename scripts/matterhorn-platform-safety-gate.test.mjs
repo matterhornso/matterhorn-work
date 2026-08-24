@@ -69,6 +69,7 @@ for (const required of [
   "matterhorn-desk-agent-contract.test.mjs",
   "customer-ready-crypto-smoke.test.mjs",
   "customer-ready-crypto-smoke.mjs",
+  "crypto-tool-authority-gate.mjs",
   "workflow-stage-card.test.ts",
   "customer-workflow-templates.test.ts",
   "project-evidence-routes.e2e.test.ts",

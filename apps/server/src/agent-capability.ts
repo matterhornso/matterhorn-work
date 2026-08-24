@@ -33,6 +33,7 @@ type RunGrant = {
   readIssues: number;
   prepareAttempts: Map<string, number>;
   successfulPrepareFamilies: Set<string>;
+  issuedPrepareFamilies: Map<string, string>;
   issuedCallIds: Set<string>;
   expiresAtMs: number;
 };
@@ -120,6 +121,24 @@ function prepareFamily(toolName: string, actionIds: readonly string[]): string {
   return prefix || toolName;
 }
 
+function requestedPrepareFamily(
+  toolName: string,
+  actionIds: readonly string[],
+  args: Record<string, unknown>,
+): string {
+  if (toolName !== "matterhorn_crypto_chat") return prepareFamily(toolName, actionIds);
+  const requestedVenue = typeof args.venue === "string" ? args.venue.trim().toLowerCase() : "";
+  if (requestedVenue === "bittensor" || requestedVenue === "hyperliquid" || requestedVenue === "polymarket" || requestedVenue === "sui") {
+    return requestedVenue;
+  }
+  const message = typeof args.message === "string" ? args.message.toLowerCase() : "";
+  if (/\b(?:bittensor|tao|subnet|validator|hotkey|coldkey)\b/.test(message)) return "bittensor";
+  if (/\b(?:hyperliquid|perp|perpetual|funding|reduce.only)\b/.test(message)) return "hyperliquid";
+  if (/\b(?:polymarket|prediction market|outcome|market id)\b/.test(message)) return "polymarket";
+  if (/\b(?:sui|move object|coin type)\b/.test(message)) return "sui";
+  return "crypto_auto";
+}
+
 function deskForAgent(agentId: string, toolDeskIds: readonly string[]): string {
   return getMatterhornDeskAgentById(agentId)?.deskId ?? toolDeskIds[0] ?? "crypto";
 }
@@ -132,10 +151,10 @@ function allowedToolsForRun(input: {
   const managedGlobalPolicy = new Set(
     MATTERHORN_CRYPTO_ACTION_REGISTRY.map((tool) => normalizedToolName(tool.name)),
   );
-  const selectedDeskPolicy = agent
-    ? new Set(agent.toolPolicy.work.map(normalizedToolName))
-    : input.agentId === "matterhorn"
-      ? managedGlobalPolicy
+  const selectedDeskPolicy = input.agentId === "matterhorn"
+    ? managedGlobalPolicy
+    : agent
+      ? new Set(agent.toolPolicy.work.map(normalizedToolName))
       : new Set<string>();
   let allowed = new Set([...managedGlobalPolicy].filter((name) => selectedDeskPolicy.has(name)));
   for (const profile of input.requestToolProfiles ?? []) {
@@ -202,6 +221,7 @@ export class MatterhornAgentCapabilityBroker {
   private readonly grants = new Map<string, RunGrant>();
   private readonly activeRunBySession = new Map<string, string>();
   private readonly consumed = new Map<string, ConsumedCapability>();
+  private readonly consumedByCallId = new Map<string, MatterhornAgentCapabilityClaims>();
   private readonly decisions = new Map<string, MatterhornAgentCapabilityDecision[]>();
 
   readonly mode: MatterhornGuardedRuntimeMode;
@@ -245,6 +265,7 @@ export class MatterhornAgentCapabilityBroker {
       readIssues: 0,
       prepareAttempts: new Map(),
       successfulPrepareFamilies: new Set(),
+      issuedPrepareFamilies: new Map(),
       issuedCallIds: new Set(),
       expiresAtMs: nowMs + 6 * 60 * 60 * 1_000,
     };
@@ -253,6 +274,7 @@ export class MatterhornAgentCapabilityBroker {
   }
 
   issue(input: {
+    runId: string;
     workspaceId: string;
     sessionId: string;
     callId: string;
@@ -264,7 +286,7 @@ export class MatterhornAgentCapabilityBroker {
     const startedAt = Date.now();
     const now = input.now ?? new Date();
     this.cleanup(now.getTime());
-    const runId = this.activeRunBySession.get(input.sessionId);
+    const runId = input.runId.trim();
     const grant = runId ? this.grants.get(runId) : undefined;
     const toolName = normalizedToolName(input.toolName);
     const definition = getMatterhornCryptoTool(toolName);
@@ -294,11 +316,15 @@ export class MatterhornAgentCapabilityBroker {
       if (grant.readIssues >= MAX_READ_CALLS) deny("capability_read_budget_exhausted");
       grant.readIssues += 1;
     } else {
-      const family = prepareFamily(toolName, definition.actionIds);
+      const family = requestedPrepareFamily(toolName, definition.actionIds, input.args);
+      if (family === "crypto_auto" && grant.successfulPrepareFamilies.size > 0) {
+        deny("capability_prepare_family_resolution_required");
+      }
       if (grant.successfulPrepareFamilies.has(family)) deny("capability_prepare_family_already_completed");
       const attempts = grant.prepareAttempts.get(family) ?? 0;
       if (attempts >= MAX_PREPARE_ATTEMPTS_PER_FAMILY) deny("capability_prepare_budget_exhausted");
       grant.prepareAttempts.set(family, attempts + 1);
+      grant.issuedPrepareFamilies.set(input.callId, family);
     }
 
     const secret = signingSecret();
@@ -366,6 +392,7 @@ export class MatterhornAgentCapabilityBroker {
     const grant = this.grants.get(claims.runId);
     if (!grant || grant.workspaceId !== claims.workspaceId || grant.sessionId !== claims.sessionId) deny("capability_scope_mismatch");
     this.consumed.set(claims.jti, { claims, consumedAtMs: nowMs });
+    this.consumedByCallId.set(claims.callId, claims);
     this.recordDecision(claims.runId, {
       toolName,
       access: claims.access,
@@ -378,12 +405,29 @@ export class MatterhornAgentCapabilityBroker {
     return claims;
   }
 
-  recordToolOutcome(runId: string, toolName: string, outcome: "success" | "error" | "timeout"): void {
-    if (outcome !== "success") return;
+  recordToolOutcome(
+    runId: string,
+    callId: string,
+    toolName: string,
+    outcome: "success" | "error" | "timeout",
+    resolvedPrepareFamily?: string | null,
+  ): void {
     const grant = this.grants.get(runId);
     const definition = getMatterhornCryptoTool(normalizedToolName(toolName));
-    if (!grant || definition?.access !== "prepare") return;
-    grant.successfulPrepareFamilies.add(prepareFamily(definition.name, definition.actionIds));
+    const consumed = this.consumedByCallId.get(callId);
+    if (
+      !grant
+      || !consumed
+      || consumed.runId !== runId
+      || consumed.callId !== callId
+      || consumed.toolName !== normalizedToolName(toolName)
+    ) {
+      throw new Error("capability_tool_outcome_not_bound");
+    }
+    if (outcome !== "success" || definition?.access !== "prepare") return;
+    const actualFamily = resolvedPrepareFamily?.trim().toLowerCase();
+    const family = actualFamily || grant.issuedPrepareFamilies.get(callId) || prepareFamily(definition.name, definition.actionIds);
+    grant.successfulPrepareFamilies.add(family);
   }
 
   decisionsForRun(runId: string): MatterhornAgentCapabilityDecision[] {
@@ -403,7 +447,10 @@ export class MatterhornAgentCapabilityBroker {
       this.activeRunBySession.delete(grant.sessionId);
     }
     for (const [jti, entry] of this.consumed) {
-      if (entry.claims.runId === runId) this.consumed.delete(jti);
+      if (entry.claims.runId === runId) {
+        this.consumed.delete(jti);
+        this.consumedByCallId.delete(entry.claims.callId);
+      }
     }
     return { callIds: [...grant.issuedCallIds] };
   }
@@ -425,6 +472,7 @@ export class MatterhornAgentCapabilityBroker {
     for (const [jti, entry] of this.consumed) {
       if (entry.claims.workspaceId !== workspaceId) continue;
       this.consumed.delete(jti);
+      this.consumedByCallId.delete(entry.claims.callId);
       consumed += 1;
     }
     return { runIds, callIds, consumed };
@@ -444,7 +492,10 @@ export class MatterhornAgentCapabilityBroker {
       this.decisions.delete(runId);
     }
     for (const [jti, consumed] of this.consumed) {
-      if (Date.parse(consumed.claims.expiresAt) + CAPABILITY_TTL_MS <= nowMs) this.consumed.delete(jti);
+      if (Date.parse(consumed.claims.expiresAt) + CAPABILITY_TTL_MS <= nowMs) {
+        this.consumed.delete(jti);
+        this.consumedByCallId.delete(consumed.claims.callId);
+      }
     }
   }
 }

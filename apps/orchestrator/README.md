@@ -283,10 +283,10 @@ matterhorn-work bittensor extrinsic submit \
   --openwork-url http://<host>:8787 \
   --token <client-token> \
   --preview-json '<preview-json-from-prepare>' \
-  --signature <externally-signed-payload> \
-  --signer-address <public-signer-address> \
   --json
 ```
+
+The deprecated `submit` command always returns `wallet_airlock_required` and performs no network request. Review, sign, and submit only in the connected wallet UI.
 
 For direct subnet service adapter calls, use the explicit preview-confirm-invoke path. The preview returns a request SHA-256 that must be shown to the user before invoke:
 

@@ -53,6 +53,7 @@ describe("guarded agent runtime transport", () => {
     const args = { message: "Compare Bittensor validators", netuid: 1 };
     const staged = runtime.stageRuntimeTool({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
       workspaceId: "ws_guard",
       sessionId: "ses_guard",
       callId: "call_guard_1",
@@ -88,6 +89,7 @@ describe("guarded agent runtime transport", () => {
     });
     runtime.stageRuntimeTool({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
       workspaceId: "ws_complete",
       sessionId: "ses_complete",
       callId: "call_complete_pending",
@@ -95,9 +97,9 @@ describe("guarded agent runtime transport", () => {
       toolName: "matterhorn-work_matterhorn_sui_get_balance",
       args: { address: `0x${"1".repeat(64)}` },
     });
-    await runtime.completeSessionRun({
+    await runtime.completeRun({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
-      sessionId: "ses_complete",
+      runId: accepted.runId,
       status: "success",
     });
     expect(runtime.capabilities.activeRun("ses_complete")).toBeNull();
@@ -133,6 +135,7 @@ describe("guarded agent runtime transport", () => {
     })).toEqual({
       args: { address: `0x${"1".repeat(64)}` },
       runId: null,
+      callId: null,
       workspaceId: null,
     });
     expect(runtime.observationSnapshot()).toContainEqual(expect.objectContaining({
@@ -185,6 +188,7 @@ describe("guarded agent runtime transport", () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     const staged = runtime.stageRuntimeTool({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: "run_missing",
       workspaceId: "ws_shadow_issue",
       sessionId: "ses_without_grant",
       callId: "call_shadow_denied",
@@ -208,7 +212,7 @@ describe("guarded agent runtime transport", () => {
     process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS = "prepare";
     process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS = "sui";
     const runtime = new MatterhornGuardedAgentRuntime();
-    await runtime.acceptPrompt({
+    const accepted = await runtime.acceptPrompt({
       workspaceId: "ws_rollout",
       sessionId: "ses_rollout",
       parts: [{ type: "text", text: "Read my public Sui balance" }],
@@ -220,6 +224,7 @@ describe("guarded agent runtime transport", () => {
 
     const stagedRead = runtime.stageRuntimeTool({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
       workspaceId: "ws_rollout",
       sessionId: "ses_rollout",
       callId: "call_rollout_read",
@@ -235,6 +240,7 @@ describe("guarded agent runtime transport", () => {
 
     runtime.stageRuntimeTool({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
       workspaceId: "ws_rollout",
       sessionId: "ses_rollout",
       callId: "call_rollout_mutated",
@@ -274,5 +280,52 @@ describe("guarded agent runtime transport", () => {
     process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = savedSigningSecret;
     expect(new MatterhornGuardedAgentRuntime().ready()).toBe(true);
     process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+  });
+
+  test("late messages, tools and completion from an earlier prompt cannot affect the replacement run", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    const first = await runtime.acceptPrompt({
+      workspaceId: "ws_exact_run",
+      sessionId: "ses_exact_run",
+      parts: [{ type: "text", text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+    });
+    runtime.bindUserMessage({ runId: first.runId, sessionId: "ses_exact_run", messageId: "msg_user_first" });
+    const second = await runtime.acceptPrompt({
+      workspaceId: "ws_exact_run",
+      sessionId: "ses_exact_run",
+      parts: [{ type: "text", text: "Read public Sui balance instead" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+    });
+    runtime.bindUserMessage({ runId: second.runId, sessionId: "ses_exact_run", messageId: "msg_user_second" });
+
+    expect(() => runtime.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_exact_run",
+      userMessageId: "msg_user_first",
+      assistantMessageId: "msg_assistant_late",
+    })).toThrow("assistant message is not bound");
+    expect(() => runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: first.runId,
+      workspaceId: "ws_exact_run",
+      sessionId: "ses_exact_run",
+      callId: "call_late_first",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    })).toThrow("capability_run_or_tool_not_found");
+    await runtime.completeRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: first.runId,
+      status: "error",
+    });
+    expect(runtime.capabilities.activeRun("ses_exact_run")).toBe(second.runId);
   });
 });

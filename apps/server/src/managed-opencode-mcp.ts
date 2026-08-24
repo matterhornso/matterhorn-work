@@ -49,6 +49,7 @@ export type ManagedMcpToolCallMetric = {
 export type ManagedMcpToolAuthorization = {
   args: JsonObject;
   runId: string | null;
+  callId: string | null;
   workspaceId: string | null;
 };
 

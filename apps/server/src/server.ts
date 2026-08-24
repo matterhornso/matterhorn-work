@@ -351,7 +351,7 @@ import {
 } from "@matterhorn-work/types/execution-mode";
 import { existsSync, realpathSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -522,8 +522,9 @@ import {
 } from "@matterhorn-work/types/reviewed-actions";
 import {
   assertReviewedActionReceiptBinding,
-  validateReviewedActionHandoffV2,
 } from "./reviewed-action-airlock.js";
+import { refreshReviewedActionHandoffV2 } from "./reviewed-action-refresh.js";
+import { refreshReviewedActionProtocolState } from "./reviewed-action-protocol-refresh.js";
 import pkg from "../package.json" with { type: "json" };
 import constants from "../../../constants.json" with { type: "json" };
 
@@ -580,7 +581,10 @@ function readStringField(value: unknown, key: string): string {
   return typeof field === "string" ? field.trim() : "";
 }
 
-function assertOptionalReviewedActionReceiptBinding(body: Record<string, unknown>): void {
+function assertOptionalReviewedActionReceiptBinding(
+  body: Record<string, unknown>,
+  expectedProtocol?: "hyperliquid" | "polymarket" | "bittensor" | "sui",
+): void {
   const nestedPayload = isRecord(body.payload) ? body.payload : null;
   const handoff = body.reviewedAction ?? nestedPayload?.reviewedAction;
   const receiptIntentHash = readStringField(body, "receiptIntentHash") || (nestedPayload ? readStringField(nestedPayload, "receiptIntentHash") : "");
@@ -592,6 +596,35 @@ function assertOptionalReviewedActionReceiptBinding(body: Record<string, unknown
     assertReviewedActionReceiptBinding({ handoff, receiptIntentHash });
   } catch {
     throw new ApiError(409, "reviewed_action_receipt_intent_mismatch", "The public receipt does not match the reviewed wallet intent.");
+  }
+  if (expectedProtocol && handoff.protocol !== expectedProtocol) {
+    throw new ApiError(409, "reviewed_action_receipt_protocol_mismatch", "The public receipt protocol does not match the reviewed wallet intent.");
+  }
+  const failTerms = () => {
+    throw new ApiError(409, "reviewed_action_receipt_terms_mismatch", "The public receipt metadata does not match the reviewed wallet terms.");
+  };
+  const payload = nestedPayload ?? body;
+  if (handoff.protocol === "sui") {
+    const network = readStringField(payload, "network");
+    const sender = readStringField(payload, "sender");
+    const recipient = readStringField(payload, "recipient");
+    if ((network && network !== handoff.network) || (sender && handoff.signer && sender !== handoff.signer) || (recipient && handoff.recipient && recipient !== handoff.recipient)) failTerms();
+  } else if (handoff.protocol === "bittensor") {
+    const preview = isRecord(payload.preview) ? payload.preview : null;
+    const action = preview ? readStringField(preview, "action") : "";
+    const destination = preview ? readStringField(preview, "destination") : "";
+    const hotkey = preview ? readStringField(preview, "hotkey") : "";
+    if ((action && action !== handoff.operation) || (handoff.recipient && destination && destination !== handoff.recipient) || (handoff.recipient && hotkey && hotkey !== handoff.recipient)) failTerms();
+  } else {
+    const walletHandoff = isRecord(body.handoff) ? body.handoff : null;
+    if (handoff.protocol === "hyperliquid") {
+      const asset = walletHandoff ? readStringField(walletHandoff, "asset") : "";
+      if (asset && handoff.asset && asset !== handoff.asset) failTerms();
+    } else {
+      const marketId = walletHandoff ? readStringField(walletHandoff, "marketId") : "";
+      const outcome = walletHandoff ? readStringField(walletHandoff, "outcome") : "";
+      if ((marketId && handoff.recipient && marketId !== handoff.recipient) || (outcome && handoff.asset && outcome !== handoff.asset)) failTerms();
+    }
   }
 }
 
@@ -7875,7 +7908,11 @@ function createRoutes(
       authorizeToolCall: ({ toolName, args }) => guardedRuntime.authorizeMcpTool({ toolName, args }),
       onToolCall: (metric, authorization) => {
         operationalMetrics.recordAgentTool(metric);
-        void guardedRuntime.recordMcpTool({ runId: authorization?.runId ?? null, metric });
+        void guardedRuntime.recordMcpTool({
+          runId: authorization?.runId ?? null,
+          callId: authorization?.callId ?? null,
+          metric,
+        });
       },
     });
     if (result.body === null) return new Response(null, { status: result.status });
@@ -7886,14 +7923,16 @@ function createRoutes(
     const body = await readJsonBody(ctx.request, 128_000, "Agent capability authorization");
     const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
     const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const runId = typeof body.runId === "string" ? body.runId.trim() : "";
     const callId = typeof body.callId === "string" ? body.callId.trim() : "";
     const toolName = typeof body.toolName === "string" ? body.toolName.trim() : "";
-    if (!sessionId || !callId || !toolName || !isRecord(body.args)) {
-      throw new ApiError(400, "invalid_payload", "sessionId, callId, toolName, and object args are required");
+    if (!runId || !sessionId || !callId || !toolName || !isRecord(body.args)) {
+      throw new ApiError(400, "invalid_payload", "runId, sessionId, callId, toolName, and object args are required");
     }
     try {
       const staged = guardedRuntime.stageRuntimeTool({
         runtimeSecret: ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "",
+        runId,
         workspaceId: workspace.id,
         sessionId,
         callId,
@@ -7908,13 +7947,36 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/internal/agent-runs/bind-message", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 32_000, "Agent run message binding");
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const userMessageId = typeof body.userMessageId === "string" ? body.userMessageId.trim() : "";
+    const assistantMessageId = typeof body.assistantMessageId === "string" ? body.assistantMessageId.trim() : "";
+    if (!sessionId || !userMessageId || !assistantMessageId) {
+      throw new ApiError(400, "invalid_payload", "sessionId, userMessageId, and assistantMessageId are required");
+    }
+    try {
+      const bound = guardedRuntime.bindRuntimeMessage({
+        runtimeSecret: ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "",
+        sessionId,
+        userMessageId,
+        assistantMessageId,
+      });
+      const response = jsonResponse({ ok: true, ...bound });
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+  });
+
   addRoute(routes, "POST", "/internal/agent-runs/complete", "none", async (ctx) => {
     const body = await readJsonBody(ctx.request, 64_000, "Agent run completion");
-    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const runId = typeof body.runId === "string" ? body.runId.trim() : "";
     const status = body.status === "success" || body.status === "partial" || body.status === "cancelled" || body.status === "error"
       ? body.status
       : null;
-    if (!sessionId || !status) throw new ApiError(400, "invalid_payload", "sessionId and a valid completion status are required");
+    if (!runId || !status) throw new ApiError(400, "invalid_payload", "runId and a valid completion status are required");
     const usage = isRecord(body.usage) ? {
       inputTokens: nonNegativeFiniteNumber(body.usage.inputTokens),
       outputTokens: nonNegativeFiniteNumber(body.usage.outputTokens),
@@ -7924,9 +7986,9 @@ function createRoutes(
       estimatedCostUsd: nonNegativeFiniteNumber(body.usage.estimatedCostUsd),
     } : undefined;
     try {
-      await guardedRuntime.completeSessionRun({
+      await guardedRuntime.completeRun({
         runtimeSecret: ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "",
-        sessionId,
+        runId,
         status,
         usage,
       });
@@ -9585,17 +9647,12 @@ function createRoutes(
     if (!isReviewedActionHandoffV2(body.handoff) || !isReviewedActionDraftHandoff(body.currentDraft)) {
       throw new ApiError(400, "reviewed_action_invalid", "A valid v2 reviewed action and its current wallet draft are required.");
     }
-    const issues = validateReviewedActionHandoffV2({
+    const validation = await refreshReviewedActionHandoffV2({
       handoff: body.handoff,
       currentDraft: body.currentDraft,
+      refresh: refreshReviewedActionProtocolState,
     });
-    const response = jsonResponse({
-      success: true,
-      valid: issues.length === 0,
-      issues,
-      validatedAt: new Date().toISOString(),
-      requiresRegeneration: issues.length > 0,
-    });
+    const response = jsonResponse(validation);
     response.headers.set("Cache-Control", "no-store");
     return response;
   });
@@ -9786,6 +9843,12 @@ function createRoutes(
     } catch (error) {
       throw guardedRuntimeApiError(error);
     }
+    const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
+    guardedRuntime.bindUserMessage({
+      runId: guardedAcceptance.runId,
+      sessionId,
+      messageId: userMessageId,
+    });
 
     let usage;
     try {
@@ -9813,7 +9876,7 @@ function createRoutes(
     const promptBody = {
       sessionID: sessionId,
       ...(directory ? { directory } : {}),
-      ...(typeof body.messageID === "string" && body.messageID.trim() ? { messageID: body.messageID.trim() } : {}),
+      messageID: userMessageId,
       ...(modelResolution.model ? { model: modelResolution.model } : {}),
       ...(agent ? { agent } : {}),
       ...(effectiveVariant ? { variant: effectiveVariant } : {}),
@@ -9876,6 +9939,7 @@ function createRoutes(
       accepted: true,
       sessionId,
       runId: guardedAcceptance.runId,
+      messageId: userMessageId,
       privacy: {
         requestHash: guardedAcceptance.preflight.requestHash,
         decision: guardedAcceptance.preflight.decision,
@@ -13314,6 +13378,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
+    assertOptionalReviewedActionReceiptBinding(body, "hyperliquid");
     const forbidden = findForbiddenHyperliquidCredentialInput(body);
     if (forbidden) {
       throw new ApiError(400, "market_secret_rejected", `Hyperliquid receipt evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
@@ -13439,7 +13504,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const ownerKey = hyperliquidExecutionOwnerKey(ctx);
     const body = await readJsonBody(ctx.request);
-    assertOptionalReviewedActionReceiptBinding(body);
+    assertOptionalReviewedActionReceiptBinding(body, "hyperliquid");
     try {
       const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
       const workspace = workspaceId ? await resolveWorkspace(config, workspaceId) : null;
@@ -13786,7 +13851,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
-    assertOptionalReviewedActionReceiptBinding(body);
+    assertOptionalReviewedActionReceiptBinding(body, "polymarket");
     const forbidden = findForbiddenPolymarketCredentialInput(body);
     if (forbidden) {
       throw new ApiError(400, "market_secret_rejected", `Polymarket receipt evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
@@ -13847,7 +13912,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
-    assertOptionalReviewedActionReceiptBinding(body);
+    assertOptionalReviewedActionReceiptBinding(body, "polymarket");
     const forbidden = findForbiddenPolymarketCredentialInput(body);
     if (forbidden) {
       throw new ApiError(400, "market_secret_rejected", `Polymarket cancellation evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
@@ -14045,7 +14110,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
-    assertOptionalReviewedActionReceiptBinding(body);
+    assertOptionalReviewedActionReceiptBinding(body, "sui");
     const payload = body && typeof body === "object" && !Array.isArray(body) && "payload" in body
       ? (body as Record<string, unknown>).payload
       : body;
@@ -14103,7 +14168,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
-    assertOptionalReviewedActionReceiptBinding(body);
+    assertOptionalReviewedActionReceiptBinding(body, "sui");
     const payload = body && typeof body === "object" && !Array.isArray(body) && "payload" in body
       ? (body as Record<string, unknown>).payload
       : body;
@@ -15131,7 +15196,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
-    assertOptionalReviewedActionReceiptBinding(body);
+    assertOptionalReviewedActionReceiptBinding(body, "bittensor");
     const payload = body && typeof body === "object" && !Array.isArray(body) && "payload" in body
       ? (body as Record<string, unknown>).payload
       : body;

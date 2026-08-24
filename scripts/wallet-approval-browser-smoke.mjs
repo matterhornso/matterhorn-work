@@ -367,21 +367,33 @@ async function installMockBaseRpc(page) {
 
 async function connectInjectedWallet(page) {
   await waitForMountedApp(page);
-  const connectedAccount = await page.evaluate(() => {
-    const smoke = window.__matterhornWalletSmoke;
-    if (!smoke?.account) return null;
-    return document.body.innerText.includes(smoke.account.slice(0, 6)) ||
-      document.body.innerText.includes("Connected")
-      ? smoke.account
-      : null;
-  });
-  if (connectedAccount === MOCK_ACCOUNT) return;
-
   const connectorButton = page.getByRole("button", {
     name: /Matterhorn Smoke Wallet|MetaMask|Injected|Browser wallet extension|Wallet connector/i,
   });
-  await clickFirstVisible(connectorButton, "injected wallet connector");
-  await page.getByText(/Connected|Disconnect/i).first().waitFor({ state: "visible", timeout: 20_000 });
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    const connectedAccount = await page.evaluate(() => {
+      const smoke = window.__matterhornWalletSmoke;
+      if (!smoke?.account) return null;
+      return document.body.innerText.includes(smoke.account.slice(0, 6)) ||
+        document.body.innerText.includes("Connected") ||
+        document.body.innerText.includes("Disconnect")
+        ? smoke.account
+        : null;
+    });
+    if (connectedAccount === MOCK_ACCOUNT) return;
+    const count = await connectorButton.count();
+    for (let index = 0; index < count; index += 1) {
+      const candidate = connectorButton.nth(index);
+      if (await candidate.isVisible()) {
+        await candidate.click();
+        await page.getByText(/Connected|Disconnect/i).first().waitFor({ state: "visible", timeout: 20_000 });
+        return;
+      }
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  throw new Error("Could not find a connected or visible injected wallet connector.");
 }
 
 async function navigateWithinSpa(page, targetUrl) {

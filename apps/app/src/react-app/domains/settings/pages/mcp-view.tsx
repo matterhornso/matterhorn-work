@@ -501,7 +501,6 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
       "matterhorn_bittensor_import_receipt",
       "matterhorn_bittensor_check_receipt",
       "matterhorn_bittensor_check_signing_handoff",
-      "matterhorn_bittensor_submit_signed_extrinsic",
       "matterhorn_bittensor_preview_subnet_invocation",
       "matterhorn_bittensor_invoke_subnet",
       "matterhorn_bittensor_create_watch",
@@ -511,7 +510,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
       "matterhorn_bittensor_act_on_watch_alert",
     ],
     toolSummary:
-      "19 tools for chat, wallet reads, readiness, subnets, watches, and receipts.",
+      "18 tools for chat, wallet reads, readiness, subnets, watches, and receipts.",
     boundary:
       "Public reads plus transfer, stake, and unstake drafts. Supported calls move to a separate connected-wallet review; unsupported advanced calls stay unavailable. Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
