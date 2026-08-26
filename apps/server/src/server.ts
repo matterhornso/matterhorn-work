@@ -388,6 +388,7 @@ import { installHubSkill, listHubSkills } from "./skill-hub.js";
 import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./commands.js";
 import { ApiError, formatError } from "./errors.js";
 import { drainMatterhornEmailOutbox } from "./email-outbox.js";
+import { evaluateMatterhornPublicLaunchReadiness } from "./public-launch-readiness.js";
 import {
   resolveMatterhornTurnstileConfig,
   verifyMatterhornTurnstile,
@@ -2679,6 +2680,18 @@ function requireMatterhornEmailDelivery(config: EmailSendConfig): void {
   }
 }
 
+function matterhornLaunchReadiness(authStore?: MatterhornAuthStore) {
+  return evaluateMatterhornPublicLaunchReadiness({
+    production: process.env.NODE_ENV === "production",
+    env: process.env,
+    emailConfig: matterhornEmailConfig(),
+    turnstileReady: resolveMatterhornTurnstileConfig().ready,
+    providerPolicy: resolveProviderPrivacyPolicy("cudos", "ASI:Cloud"),
+    hostBackupFresh: hostBackupFresh(),
+    accountCount: authStore?.accountCount() ?? 0,
+  });
+}
+
 function matterhornPublicAuthConfig(authStore?: MatterhornAuthStore) {
   const production = process.env.NODE_ENV === "production";
   const turnstile = resolveMatterhornTurnstileConfig();
@@ -2693,42 +2706,12 @@ function matterhornPublicAuthConfig(authStore?: MatterhornAuthStore) {
   const legalAcceptanceRequired = enabledEnvironmentFlag(
     "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED",
   );
-  const emailDeliveryAvailable = matterhornEmailDeliveryConfigured(
-    matterhornEmailConfig(),
-  );
-  const emailEventsReady = Boolean(
-    process.env.AWS_SES_CONFIGURATION_SET?.trim() &&
-      (process.env.MATTERHORN_SES_EVENT_SECRET?.trim().length ?? 0) >= 32,
-  );
-  const termsVersion = process.env.MATTERHORN_TERMS_VERSION?.trim() ?? "";
-  const privacyVersion = process.env.MATTERHORN_PRIVACY_VERSION?.trim() ?? "";
-  const legalVersionsReady =
-    Boolean(termsVersion && privacyVersion) &&
-    termsVersion.length <= 64 &&
-    privacyVersion.length <= 64;
-  const productionSafetyReady =
-    !production ||
-    (emailVerificationRequired &&
-      legalAcceptanceRequired &&
-      process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT?.trim().toLowerCase() === "hard" &&
-      turnstile.ready);
-  const configuredCapacity = Number(process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS?.trim() ?? "");
-  const signupCapacityReady = Number.isSafeInteger(configuredCapacity) && configuredCapacity > 0;
-  const signupCapacityAvailable = signupCapacityReady && (!authStore || authStore.accountCount() < configuredCapacity);
-  const inferenceReady = (process.env.CUDOS_API_KEY?.trim().length ?? 0) >= 16;
-  const backupReady = process.env.MATTERHORN_HOST_BACKUP_REQUIRED === "1" && hostBackupFresh();
-  const launchReady = productionSafetyReady &&
-    emailDeliveryAvailable &&
-    emailEventsReady &&
-    legalVersionsReady &&
-    inferenceReady &&
-    backupReady &&
-    signupCapacityAvailable;
+  const launch = matterhornLaunchReadiness(authStore);
   const signupsAvailable =
     signupsAllowedByFlag &&
-    (!production || launchReady) &&
-    (!emailVerificationRequired || emailDeliveryAvailable) &&
-    (!legalAcceptanceRequired || legalVersionsReady);
+    launch.ready &&
+    (!emailVerificationRequired || launch.checks.emailDelivery) &&
+    (!legalAcceptanceRequired || launch.checks.legalVersions);
 
   return {
     signupsAvailable,
@@ -2738,13 +2721,18 @@ function matterhornPublicAuthConfig(authStore?: MatterhornAuthStore) {
         ? "setup_required"
         : "paused",
     emailVerificationRequired,
-    passwordResetAvailable: emailDeliveryAvailable,
+    passwordResetAvailable: launch.checks.passwordReset,
     legalAcceptanceRequired,
     minimumPasswordLength: 12,
     turnstileSiteKey: turnstile.ready ? turnstile.siteKey : null,
-    infrastructureReady: productionSafetyReady,
-    emailTransportReady: emailDeliveryAvailable && (!production || emailEventsReady),
-    launchReady: !production || launchReady,
+    infrastructureReady: !production || (
+      launch.checks.emailVerification &&
+      launch.checks.legalAcceptance &&
+      launch.checks.modelUsage &&
+      launch.checks.turnstile
+    ),
+    emailTransportReady: launch.checks.emailTransport,
+    launchReady: launch.ready,
   } as const;
 }
 
@@ -7588,6 +7576,13 @@ function createRoutes(
         "New accounts are paused while verification, legal acceptance, and usage limits are configured.",
       );
     }
+    if (production && !matterhornLaunchReadiness(authStore).ready) {
+      throw new ApiError(
+        503,
+        "signup_launch_not_ready",
+        "New accounts are paused while launch services are being verified.",
+      );
+    }
     const emailConfig = matterhornEmailConfig();
     if (verificationRequired) requireMatterhornEmailDelivery(emailConfig);
     const body = await readJsonBody(request, 16 * 1024, "Sign-up");
@@ -7762,13 +7757,10 @@ function createRoutes(
     }
     const emailConfig = matterhornEmailConfig();
     requireMatterhornEmailDelivery(emailConfig);
-    const appUrl = new URL(process.env.MATTERHORN_APP_URL?.trim() ?? "");
-    if (
-      appUrl.protocol !== "https:" &&
-      !(process.env.NODE_ENV !== "production" && appUrl.protocol === "http:")
-    ) {
+    if (!matterhornPublicAuthConfig(authStore).passwordResetAvailable) {
       throw new ApiError(503, "password_reset_unavailable", "Password reset is temporarily unavailable.");
     }
+    const appUrl = new URL(process.env.MATTERHORN_APP_URL?.trim() ?? "");
     const challenge = withMatterhornAuthErrorMapping(() =>
       authStore.queuePasswordReset(email, appUrl.toString()),
     );
@@ -8038,13 +8030,17 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/health/email", "none", async () => {
-    const auth = matterhornPublicAuthConfig(authStore);
+    const launch = matterhornLaunchReadiness(authStore);
     const outbox = authStore.emailOutboxStatus();
-    const ok = auth.emailTransportReady;
+    const ok = launch.checks.emailTransport;
     const response = jsonResponse({
       ok,
       status: ok ? "ready" : "not_ready",
       transport: "ses",
+      checks: {
+        deliveryConfiguration: launch.checks.emailDelivery,
+        eventPipeline: launch.checks.emailEvents,
+      },
       pending: outbox.pending,
       terminal: outbox.terminal,
     }, ok ? 200 : 503);
@@ -8054,15 +8050,14 @@ function createRoutes(
 
   addRoute(routes, "GET", "/health/launch", "none", async () => {
     const infrastructure = operationalReadiness(config, guardedRuntime);
-    const auth = matterhornPublicAuthConfig(authStore);
-    const ok = infrastructure.ready && auth.launchReady;
+    const launch = matterhornLaunchReadiness(authStore);
+    const ok = infrastructure.ready && launch.ready;
     const response = jsonResponse({
       ok,
       status: ok ? "ready" : "not_ready",
       checks: {
         infrastructure: infrastructure.ready,
-        emailTransport: auth.emailTransportReady,
-        launchConfiguration: auth.launchReady,
+        ...launch.checks,
       },
     }, ok ? 200 : 503);
     response.headers.set("Cache-Control", "no-store");
