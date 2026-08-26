@@ -8,7 +8,20 @@ export type ManagedOpencodeServer = {
   password: string;
   readonly pid: number | null;
   status: () => ManagedOpencodeStatus;
-  close: () => void;
+  close: () => Promise<void>;
+};
+
+export type ManagedChildProcess = {
+  exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
+  killed: boolean;
+  kill: (signal?: NodeJS.Signals | number) => boolean;
+  once: (event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void) => unknown;
+};
+
+export type ManagedProcessCloseOptions = {
+  termTimeoutMs?: number;
+  killTimeoutMs?: number;
 };
 
 export type ManagedOpencodeStatus = {
@@ -28,6 +41,56 @@ export type ManagedOpencodeEvent =
   | { type: "restart_failed"; reason: string; message: string };
 
 const MANAGED_OPENCODE_OUTPUT_LIMIT = 64 * 1024;
+
+export function createManagedProcessClose(
+  child: ManagedChildProcess,
+  options: ManagedProcessCloseOptions = {},
+): { isAlive: () => boolean; close: () => Promise<void> } {
+  let closePromise: Promise<void> | null = null;
+  let exited = child.exitCode !== null || child.signalCode !== null;
+  const exitedPromise = new Promise<void>((resolve) => {
+    if (exited) {
+      resolve();
+      return;
+    }
+    child.once("exit", () => {
+      exited = true;
+      resolve();
+    });
+  });
+  const waitForExit = async (timeoutMs: number): Promise<boolean> => {
+    if (exited) return true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    });
+    const didExit = await Promise.race([exitedPromise.then(() => true), timedOut]);
+    if (timer !== undefined) clearTimeout(timer);
+    return didExit;
+  };
+  const isAlive = () => !exited && child.exitCode === null && child.signalCode === null;
+  const close = (): Promise<void> => {
+    closePromise ??= (async () => {
+      if (!isAlive()) return;
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // The process may have exited between the liveness check and signal.
+      }
+      if (await waitForExit(options.termTimeoutMs ?? 1_000)) return;
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // Re-check through the exit event below.
+      }
+      if (!await waitForExit(options.killTimeoutMs ?? 500)) {
+        throw new Error("Managed OpenCode process did not exit after SIGKILL");
+      }
+    })();
+    return closePromise;
+  };
+  return { isAlive, close };
+}
 
 function safeManagedOpencodeFailure(error: unknown): string {
   if (error instanceof Error) return error.name || "Error";
@@ -90,16 +153,22 @@ export async function createManagedOpencodeServer(options: {
   let consecutiveHealthFailures = 0;
   let lastRestartReason: string | null = null;
   let lastRestartAt: string | null = null;
+  let closePromise: Promise<void> | null = null;
 
   const spawnChild = async (): Promise<ChildProcess> => {
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...options.env,
+      OPENCODE_SERVER_USERNAME: username,
+      OPENCODE_SERVER_PASSWORD: password,
+    };
+    // The managed model engine receives only what it needs to operate. It must
+    // never inherit keys that decrypt Matterhorn/OpenWork-owned credentials.
+    delete childEnv.MATTERHORN_ENCRYPTION_KEY;
+    delete childEnv.OPENWORK_ENCRYPTION_KEY;
     const nextChild = spawn(options.bin?.trim() || "opencode", args, {
       cwd: options.cwd,
-      env: {
-        ...process.env,
-        ...options.env,
-        OPENCODE_SERVER_USERNAME: username,
-        OPENCODE_SERVER_PASSWORD: password,
-      },
+      env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -147,7 +216,7 @@ export async function createManagedOpencodeServer(options: {
         });
       });
     } catch (error) {
-      if (!nextChild.killed && nextChild.exitCode === null) nextChild.kill("SIGKILL");
+      await createManagedProcessClose(nextChild, { termTimeoutMs: 250, killTimeoutMs: 250 }).close();
       throw error;
     }
 
@@ -261,11 +330,15 @@ export async function createManagedOpencodeServer(options: {
       };
     },
     close() {
-      stopped = true;
-      if (healthTimer) clearInterval(healthTimer);
-      if (restartTimer) clearTimeout(restartTimer);
-      if (child && !child.killed) child.kill("SIGTERM");
-      child = null;
+      closePromise ??= (async () => {
+        stopped = true;
+        if (healthTimer) clearInterval(healthTimer);
+        if (restartTimer) clearTimeout(restartTimer);
+        const current = child;
+        child = null;
+        if (current) await createManagedProcessClose(current).close();
+      })();
+      return closePromise;
     },
   };
 }

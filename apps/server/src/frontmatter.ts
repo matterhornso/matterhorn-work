@@ -6,8 +6,13 @@ export function parseFrontmatter(content: string): { data: Record<string, unknow
     return { data: {}, body: content };
   }
   const raw = match[1] ?? "";
-  const data = (parse(raw) as Record<string, unknown>) ?? {};
   const body = content.slice(match[0].length);
+  // Invalid YAML remains actionable to callers. Valid scalar/array YAML is
+  // not a metadata record and must not leak prototype or positional fields.
+  const parsed: unknown = parse(raw);
+  const data = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ? Object.fromEntries(Object.entries(parsed))
+    : {};
   return { data, body };
 }
 
