@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import zlib from "node:zlib";
 
@@ -297,9 +297,15 @@ export async function importWorkspaceConfig({ archivePath, targetDir, name }) {
   }
   await mkdir(targetDir, { recursive: true });
 
-  const archiveStats = await stat(archivePath);
-  if (archiveStats.size > MAX_ARCHIVE_BYTES) throw new Error("Workspace archive is too large.");
-  const buffer = await readFile(archivePath);
+  const archiveFile = await open(archivePath, "r");
+  let buffer;
+  try {
+    const archiveStats = await archiveFile.stat();
+    if (archiveStats.size > MAX_ARCHIVE_BYTES) throw new Error("Workspace archive is too large.");
+    buffer = await archiveFile.readFile();
+  } finally {
+    await archiveFile.close();
+  }
   for (const entry of listZipEntries(buffer)) {
     if (entry.name === "manifest.json" || entry.name.endsWith("/")) continue;
     if (!isSafeArchivePath(entry.name)) throw new Error("Archive contains an unsafe path");
