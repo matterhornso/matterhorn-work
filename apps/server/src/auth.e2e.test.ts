@@ -444,7 +444,13 @@ describe("public account authentication", () => {
     process.env.AWS_SECRET_ACCESS_KEY = "authenticated-ses-password";
     const authenticatedSes = await jsonRequest(app.base, "/api/auth/config");
     expect(authenticatedSes.payload.signupsAvailable).toBe(true);
-    expect(authenticatedSes.payload.passwordResetAvailable).toBe(true);
+    expect(authenticatedSes.payload.passwordResetAvailable).toBe(false);
+
+    process.env.AWS_SES_CONFIGURATION_SET = "matterhorn-transactional";
+    process.env.MATTERHORN_SES_EVENT_SECRET = "ses-event-secret-at-least-32-characters";
+    process.env.MATTERHORN_APP_URL = "http://127.0.0.1:5173";
+    const completeSes = await jsonRequest(app.base, "/api/auth/config");
+    expect(completeSes.payload.passwordResetAvailable).toBe(true);
   });
 
   test("authenticates SES events and suppresses bounced addresses without storing them in the suppression ledger", async () => {
