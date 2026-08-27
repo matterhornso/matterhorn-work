@@ -193,7 +193,7 @@ export function DeskWorkflowStagePanel({
                   <button
                     type="button"
                     aria-label={`${visual.displayName} safety info`}
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
+                    className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35 sm:size-6"
                   >
                     <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
                   </button>

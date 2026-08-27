@@ -53,9 +53,12 @@ describe("responsive accessibility regressions", () => {
     const composer = readAppSource("domains/session/surface/composer/composer.tsx");
     const editor = readAppSource("domains/session/surface/composer/editor.tsx");
 
-    expect(surface).toContain("inline-flex size-6 shrink-0");
-    expect(workflowPanel).toContain("inline-flex size-6 shrink-0");
-    expect(sessionPage.match(/inline-flex size-6 shrink-0/g)?.length).toBe(3);
+    expect(surface).toContain("inline-flex size-11 shrink-0");
+    expect(surface).toContain("sm:size-6");
+    expect(workflowPanel).toContain("inline-flex size-11 shrink-0");
+    expect(workflowPanel).toContain("sm:size-6");
+    expect(sessionPage.match(/inline-flex size-11 shrink-0/g)?.length).toBe(3);
+    expect(sessionPage.match(/sm:size-6/g)?.length).toBeGreaterThanOrEqual(3);
     expect(composer).toContain("after:-inset-0.5");
     expect(editor).toContain("after:-inset-1");
   });
