@@ -415,7 +415,7 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("Start an editable chat request. Exact terms move to Wallet for review and signature.");
     expect(src).toContain("Start this task, then answer the ${inputRequirement.label.toLowerCase()} question in chat.");
     expect(src).toContain("getDeskTaskInputRequirement(item.prompt)");
-    expect(src).toContain("buildDeskTaskPromptRequestingInput(item.prompt, requirement)");
+    expect(src).toContain("buildDeskTaskPromptRequestingInput(item.title, requirement)");
     expect(src).not.toContain("pendingInput");
     expect(src).not.toContain("desk-task-input-");
   });

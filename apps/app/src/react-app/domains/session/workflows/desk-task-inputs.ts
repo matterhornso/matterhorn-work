@@ -7,6 +7,7 @@ export type DeskTaskInputRequirement = {
   actionLabel: string;
   placeholder: string;
   inputPlaceholder: string;
+  question: string;
   helpText: string;
   missingMessage: string;
   invalidMessage: string;
@@ -42,6 +43,7 @@ export function getDeskTaskInputRequirement(prompt: string): DeskTaskInputRequir
       actionLabel: "Add address",
       placeholder,
       inputPlaceholder: "5GrwvaEF...",
+      question: "What public SS58 address should I use?",
       helpText: "Paste a public coldkey only. Never paste a seed phrase or private key.",
       missingMessage: "Paste the public SS58 address to start this task.",
       invalidMessage: "Use a public SS58 address, not a seed phrase or private key.",
@@ -56,6 +58,7 @@ export function getDeskTaskInputRequirement(prompt: string): DeskTaskInputRequir
       actionLabel: "Add address",
       placeholder,
       inputPlaceholder: "0x...",
+      question: "What public Sui address should I use?",
       helpText: "Use the public wallet address only. Signing stays in your Sui wallet.",
       missingMessage: "Paste the public Sui address to start this task.",
       invalidMessage: "Use a public Sui address beginning with 0x.",
@@ -70,6 +73,7 @@ export function getDeskTaskInputRequirement(prompt: string): DeskTaskInputRequir
       actionLabel: "Add digest",
       placeholder,
       inputPlaceholder: "Transaction digest",
+      question: "What public transaction digest should I look up?",
       helpText: "Use a public transaction digest after signing elsewhere.",
       missingMessage: "Paste the public transaction digest to start this task.",
       invalidMessage: "Use a public transaction digest, not a signed payload.",
@@ -84,6 +88,7 @@ export function getDeskTaskInputRequirement(prompt: string): DeskTaskInputRequir
       actionLabel: "Describe market",
       placeholder,
       inputPlaceholder: "e.g. YES on a September rate cut, $50",
+      question: "Which market or trade would you like me to check?",
       helpText: "Use the market question or your trade idea. A Polymarket link is optional.",
       missingMessage: "Describe the market or paste a Polymarket link to start.",
       invalidMessage: "Use a public market description or link, not wallet or API secrets.",
@@ -98,6 +103,7 @@ export function getDeskTaskInputRequirement(prompt: string): DeskTaskInputRequir
     actionLabel: "Add context",
     placeholder,
     inputPlaceholder: label,
+    question: `What ${label.toLowerCase()} should I use?`,
     helpText: "Use public context only. Never paste secrets.",
     missingMessage: `Add ${label.toLowerCase()} to start this task.`,
     invalidMessage: `Use public ${label.toLowerCase()} only.`,
@@ -142,15 +148,8 @@ Treat the request above as either a natural-language market or trade description
 }
 
 export function buildDeskTaskPromptRequestingInput(
-  prompt: string,
+  taskTitle: string,
   requirement: DeskTaskInputRequirement,
 ): string {
-  const requestedContext = requirement.label.toLowerCase();
-  const taskOutline = prompt.includes(requirement.placeholder)
-    ? prompt.replace(requirement.placeholder, `[waiting for ${requestedContext}]`)
-    : prompt;
-
-  return `${taskOutline}
-
-Before doing this task, ask me to provide ${requestedContext} in chat. Do not guess the missing information or start the task until I reply. Let me answer in the main chat composer. Ask only for public context and never request a seed phrase, private key, raw signature, signed payload, wallet export, or API secret.`;
+  return `Let's start “${taskTitle}.” Ask me: “${requirement.question}”`;
 }

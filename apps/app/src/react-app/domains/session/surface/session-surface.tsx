@@ -171,8 +171,13 @@ import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
 import { WorkflowStageCard } from "../workflows/workflow-stage-card";
 import {
+  buildDeskTaskPromptRequestingInput,
+  getDeskTaskInputRequirement,
+} from "../workflows/desk-task-inputs";
+import {
   groupMatterhornDeskTaskStarters,
   MATTERHORN_DESK_TASK_STARTERS,
+  reviewedActionChatDraft,
   type MatterhornDeskTaskStarterDesk,
 } from "../workflows/desk-task-starters";
 import {
@@ -303,7 +308,7 @@ function DeskSafetyInfoButton({ label, detail }: { label: string; detail: string
           <button
             type="button"
             aria-label={label}
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
+            className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35 sm:size-6"
           >
             <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
           </button>
@@ -383,12 +388,19 @@ function MatterhornDeskFocusedEmptyState({
         </div>
 
         <div className="matterhorn-desk-session-prompts overflow-hidden rounded-xl bg-dls-surface/44" aria-label="Chat starters">
-          {prompts.map((item) => (
-            <button
+          {prompts.map((item) => {
+            const inputRequirement = getDeskTaskInputRequirement(item.prompt);
+            const starterPrompt = item.reviewedAction
+              ? reviewedActionChatDraft(item) ?? item.prompt
+              : inputRequirement
+                ? buildDeskTaskPromptRequestingInput(item.title, inputRequirement)
+                : item.prompt;
+            return (
+              <button
               key={item.id}
               type="button"
               className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-3.5 py-3 text-left transition duration-150 hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-              onClick={() => void onUsePrompt(item.prompt)}
+              onClick={() => void onUsePrompt(starterPrompt)}
             >
               <span className="min-w-0">
                 <span className="block text-[13px] font-semibold text-dls-text">{item.title}</span>
@@ -397,8 +409,9 @@ function MatterhornDeskFocusedEmptyState({
               <span className="text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
                 Start task
               </span>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
       </section>
     </div>
@@ -1571,8 +1584,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
     () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data, {
       reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
     })
-      .filter((card) => card.id !== "blank_chat_workflow"),
-    [customerWorkflowTemplatesQuery.data],
+      .filter((card) => card.id !== "blank_chat_workflow")
+      .filter((card) => !publicBetaWeb || card.iconHint !== "wellness"),
+    [customerWorkflowTemplatesQuery.data, publicBetaWeb],
   );
 
   const currentSnapshot = snapshotQuery.data?.session.id === props.sessionId ? snapshotQuery.data : null;

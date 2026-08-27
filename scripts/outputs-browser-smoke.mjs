@@ -2,10 +2,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
+import { resolveBrowserSmokeTarget } from "./lib/browser-smoke-runtime.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
-const DEFAULT_URL = "http://127.0.0.1:5182/workspace/ws_d6a5b5572860/session";
-const DEFAULT_SERVER_URL = "http://127.0.0.1:4126";
 const DEFAULT_OUTPUT_DIR = "qa-reports/outputs-browser-smoke";
 
 function parseArgs(argv = process.argv.slice(2)) {
@@ -32,8 +31,8 @@ function parseArgs(argv = process.argv.slice(2)) {
     headed: flags.has("--headed") || process.env.MATTERHORN_OUTPUTS_BROWSER_HEADED === "1",
     json: flags.has("--json"),
     strict: flags.has("--strict") || process.env.MATTERHORN_OUTPUTS_BROWSER_STRICT === "1",
-    url: values.get("--url") || process.env.MATTERHORN_OUTPUTS_BROWSER_URL || DEFAULT_URL,
-    serverUrl: (values.get("--server-url") || process.env.MATTERHORN_OUTPUTS_BROWSER_SERVER_URL || DEFAULT_SERVER_URL).replace(/\/$/, ""),
+    url: values.get("--url") || process.env.MATTERHORN_OUTPUTS_BROWSER_URL || "",
+    serverUrl: (values.get("--server-url") || process.env.MATTERHORN_OUTPUTS_BROWSER_SERVER_URL || "").replace(/\/$/, ""),
     token: values.get("--token") || process.env.MATTERHORN_OUTPUTS_BROWSER_TOKEN || process.env.VITE_MATTERHORN_WORK_TOKEN || "",
     outputDir: resolve(repoRoot, values.get("--output-dir") || process.env.MATTERHORN_OUTPUTS_BROWSER_OUTPUT_DIR || DEFAULT_OUTPUT_DIR),
   };
@@ -48,7 +47,7 @@ Usage:
 
 Options:
   --url <url>          Matterhorn app URL.
-  --server-url <url>   Authenticated Matterhorn backend. Default: ${DEFAULT_SERVER_URL}
+  --server-url <url>   Authenticated Matterhorn backend. Uses the live fixture when omitted.
   --token <token>      Collaborator client token. Never written to the report.
   --output-dir <dir>   Evidence directory. Default: ${DEFAULT_OUTPUT_DIR}
   --strict             Exit nonzero on journey, network, console, or page errors.
@@ -180,6 +179,11 @@ if (!config.token) {
   console.error("Matterhorn Outputs browser smoke requires --token or MATTERHORN_OUTPUTS_BROWSER_TOKEN.");
   process.exit(2);
 }
+
+await resolveBrowserSmokeTarget(config, {
+  repoRoot,
+  label: "Outputs browser smoke",
+});
 
 const workspace = workspaceContext(config.url);
 const report = makeReport(config);
