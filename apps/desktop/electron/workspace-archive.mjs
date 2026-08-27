@@ -1,10 +1,14 @@
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import zlib from "node:zlib";
 
 const ZIP_LOCAL_FILE_HEADER = 0x04034b50;
 const ZIP_CENTRAL_DIRECTORY_HEADER = 0x02014b50;
 const ZIP_END_OF_CENTRAL_DIRECTORY = 0x06054b50;
+const MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
+const MAX_ARCHIVE_ENTRIES = 1024;
+const MAX_ENTRY_UNCOMPRESSED_BYTES = 16 * 1024 * 1024;
+const MAX_TOTAL_UNCOMPRESSED_BYTES = 64 * 1024 * 1024;
 
 function nowMs() {
   return Date.now();
@@ -181,10 +185,13 @@ function findEndOfCentralDirectory(buffer) {
 }
 
 function listZipEntries(buffer) {
+  if (buffer.byteLength > MAX_ARCHIVE_BYTES) throw new Error("Workspace archive is too large.");
   const eocd = findEndOfCentralDirectory(buffer);
   const count = buffer.readUInt16LE(eocd + 10);
+  if (count > MAX_ARCHIVE_ENTRIES) throw new Error("Workspace archive contains too many entries.");
   const centralOffset = buffer.readUInt32LE(eocd + 16);
   const entries = [];
+  let totalUncompressed = 0;
   let cursor = centralOffset;
   for (let i = 0; i < count; i += 1) {
     if (buffer.readUInt32LE(cursor) !== ZIP_CENTRAL_DIRECTORY_HEADER) {
@@ -193,6 +200,13 @@ function listZipEntries(buffer) {
     const method = buffer.readUInt16LE(cursor + 10);
     const compressedSize = buffer.readUInt32LE(cursor + 20);
     const uncompressedSize = buffer.readUInt32LE(cursor + 24);
+    if (uncompressedSize > MAX_ENTRY_UNCOMPRESSED_BYTES) {
+      throw new Error(`Archive entry exceeds the ${MAX_ENTRY_UNCOMPRESSED_BYTES}-byte limit.`);
+    }
+    totalUncompressed += uncompressedSize;
+    if (totalUncompressed > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+      throw new Error("Workspace archive contains too much uncompressed data.");
+    }
     const nameLength = buffer.readUInt16LE(cursor + 28);
     const extraLength = buffer.readUInt16LE(cursor + 30);
     const commentLength = buffer.readUInt16LE(cursor + 32);
@@ -205,6 +219,9 @@ function listZipEntries(buffer) {
 }
 
 function readZipEntryData(buffer, entry) {
+  if (entry.uncompressedSize > MAX_ENTRY_UNCOMPRESSED_BYTES) {
+    throw new Error(`Archive entry exceeds the ${MAX_ENTRY_UNCOMPRESSED_BYTES}-byte limit.`);
+  }
   const cursor = entry.localOffset;
   if (buffer.readUInt32LE(cursor) !== ZIP_LOCAL_FILE_HEADER) {
     throw new Error(`Invalid ZIP local header for ${entry.name}.`);
@@ -214,7 +231,12 @@ function readZipEntryData(buffer, entry) {
   const dataStart = cursor + 30 + nameLength + extraLength;
   const compressed = buffer.subarray(dataStart, dataStart + entry.compressedSize);
   if (entry.method === 0) return compressed;
-  if (entry.method === 8) return zlib.inflateRawSync(compressed, { finishFlush: zlib.constants.Z_SYNC_FLUSH });
+  if (entry.method === 8) {
+    return zlib.inflateRawSync(compressed, {
+      finishFlush: zlib.constants.Z_SYNC_FLUSH,
+      maxOutputLength: MAX_ENTRY_UNCOMPRESSED_BYTES,
+    });
+  }
   throw new Error(`Unsupported ZIP compression method ${entry.method} for ${entry.name}.`);
 }
 
@@ -275,7 +297,15 @@ export async function importWorkspaceConfig({ archivePath, targetDir, name }) {
   }
   await mkdir(targetDir, { recursive: true });
 
-  const buffer = await readFile(archivePath);
+  const archiveFile = await open(archivePath, "r");
+  let buffer;
+  try {
+    const archiveStats = await archiveFile.stat();
+    if (archiveStats.size > MAX_ARCHIVE_BYTES) throw new Error("Workspace archive is too large.");
+    buffer = await archiveFile.readFile();
+  } finally {
+    await archiveFile.close();
+  }
   for (const entry of listZipEntries(buffer)) {
     if (entry.name === "manifest.json" || entry.name.endsWith("/")) continue;
     if (!isSafeArchivePath(entry.name)) throw new Error("Archive contains an unsafe path");

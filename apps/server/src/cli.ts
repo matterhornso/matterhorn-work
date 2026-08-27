@@ -120,16 +120,16 @@ if (args.verbose) {
   logger.log("info", `Host token source: ${config.hostTokenSource}`);
 }
 
-const shutdown = () => {
-  managedOpencode?.close();
+const shutdown = async () => {
+  await managedOpencode?.close();
   (server as { stop?: (closeActiveConnections?: boolean) => void }).stop?.(true);
 };
 
-process.once("SIGINT", () => {
-  shutdown();
+process.once("SIGINT", async () => {
+  await shutdown();
   process.exit(0);
 });
-process.once("SIGTERM", () => {
-  shutdown();
+process.once("SIGTERM", async () => {
+  await shutdown();
   process.exit(0);
 });

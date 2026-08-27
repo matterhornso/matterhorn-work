@@ -40,7 +40,7 @@ export type EmbeddedServerHandle = {
   /** Read-only managed engine state for diagnostics. */
   managedOpencodeStatus: () => ManagedOpencodeStatus | null;
   /** Stop the HTTP server and managed OpenCode (if any). */
-  stop: () => void;
+  stop: () => Promise<void>;
 };
 
 export async function startEmbeddedServer(options: EmbeddedServerOptions): Promise<EmbeddedServerHandle> {
@@ -107,8 +107,8 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
     url: `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${server.port}`,
     config,
     managedOpencodeStatus: () => managedOpencode?.status() ?? null,
-    stop() {
-      managedOpencode?.close();
+    async stop() {
+      await managedOpencode?.close();
       server.stop();
     },
   };

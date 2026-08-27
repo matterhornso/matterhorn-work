@@ -1721,7 +1721,7 @@ async function ensureMatterhornSessionPermissionProfile(input: {
   const current = normalizeMatterhornPermissionRules(session.permission);
   if (matterhornPermissionProfileIsActive(current, profile)) return;
 
-  // The generated 1.18.18 SDK serializes a PermissionRuleset array as `{}` on
+  // The generated 1.18.23 SDK serializes a PermissionRuleset array as `{}` on
   // PATCH. Use the upstream HTTP contract directly until that generator bug is
   // fixed; the response is still validated by OpenCode itself.
   const connection = resolveWorkspaceOpencodeConnection(input.config, input.workspace);
