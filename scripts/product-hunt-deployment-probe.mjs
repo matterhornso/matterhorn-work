@@ -67,6 +67,7 @@ function help() {
     "  HTTPS app and API, authenticated same-origin /workspaces and /opencode routing, successful responses,",
     "  defensive security headers, exact-origin CORS, and rejection of an untrusted origin.",
     "  Optional expected web commit, guarded-runtime mode and public signup status checks fail closed on drift.",
+    "  An expected open signup also requires the authoritative /health/launch gate to report ready.",
     "  --allow-loopback-http is only for local contract tests and can never produce production-ready evidence.",
   ].join("\n");
 }
@@ -347,6 +348,45 @@ async function runProbe(config) {
       if (config.expectedSignupStatus === "open") {
         checks.push(check("signup_security", "Public signup security dependencies", false, "Public signup security dependencies could not be verified."));
       }
+    }
+
+    const launchUrl = healthUrlFor(serverUrl, "/health/launch");
+    try {
+      const response = await fetchWithTimeout(launchUrl, {
+        headers: { accept: "application/json" },
+      });
+      const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+      let payload = null;
+      if (contentType.includes("application/json")) {
+        try {
+          payload = await response.json();
+        } catch {
+          // The checks below fail without preserving the response body.
+        }
+      }
+      checks.push(check(
+        "launch_config_origin",
+        "Launch readiness origin",
+        new URL(response.url).origin === serverUrl.origin,
+        "The authoritative launch gate stays on the configured API origin.",
+        { statusCode: response.status },
+      ));
+      const expectedReady = config.expectedSignupStatus === "open";
+      const reportsState = contentType.includes("application/json")
+        && typeof payload?.ok === "boolean"
+        && ["ready", "not_ready"].includes(payload?.status);
+      checks.push(check(
+        "launch_readiness",
+        "Authoritative launch readiness",
+        reportsState && (!expectedReady || (response.ok && payload?.ok === true && payload?.status === "ready")),
+        reportsState
+          ? `API launch gate reports ${payload.status}.`
+          : `API launch gate returned HTTP ${response.status} with ${contentType || "no content type"}.`,
+        { statusCode: response.status },
+      ));
+    } catch (error) {
+      checks.push(check("launch_config_origin", "Launch readiness origin", false, "The authoritative launch gate origin could not be verified."));
+      checks.push(check("launch_readiness", "Authoritative launch readiness", false, `Launch readiness request failed: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 

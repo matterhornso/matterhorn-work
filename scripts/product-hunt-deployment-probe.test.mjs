@@ -50,6 +50,7 @@ for (const required of [
   "--expected-guarded-mode",
   "--expected-signup-status",
   "signup_security",
+  "launch_readiness",
   "--allow-loopback-http",
 ]) assert.ok(source.includes(required), `deployment probe missing ${required}`);
 
@@ -103,6 +104,7 @@ const app = await listen((request, response) => {
 
 let allowUntrusted = false;
 let guardedMode = "shadow";
+let launchReady = true;
 const api = await listen((request, response) => {
   const origin = request.headers.origin;
   const headers = {
@@ -117,11 +119,15 @@ const api = await listen((request, response) => {
     headers["access-control-allow-origin"] = origin;
     headers.vary = "Origin";
   }
-  response.writeHead(request.method === "OPTIONS" ? 204 : 200, headers);
-  response.end(request.method === "OPTIONS" ? undefined : JSON.stringify({
-    ok: true,
-    checks: { guardedRuntimeMode: guardedMode, guardedRuntimeReady: true },
-  }));
+  const launchRequest = request.url === "/health/launch";
+  const responseStatus = request.method === "OPTIONS" ? 204 : launchRequest && !launchReady ? 503 : 200;
+  response.writeHead(responseStatus, headers);
+  response.end(request.method === "OPTIONS" ? undefined : JSON.stringify(launchRequest
+    ? { ok: launchReady, status: launchReady ? "ready" : "not_ready", checks: {} }
+    : {
+      ok: true,
+      checks: { guardedRuntimeMode: guardedMode, guardedRuntimeReady: true },
+    }));
 });
 
 try {
@@ -182,6 +188,20 @@ try {
   ]);
   assert.equal(openSignup.code, 0, openSignup.stderr || openSignup.stdout);
   assert.ok(JSON.parse(openSignup.stdout).checks.some((entry) => entry.id === "signup_security" && entry.status === "pass"));
+  assert.ok(JSON.parse(openSignup.stdout).checks.some((entry) => entry.id === "launch_readiness" && entry.status === "pass"));
+
+  launchReady = false;
+  const launchBlockedSignup = await run([
+    "--app-url", app.url,
+    "--server-url", api.url,
+    "--expected-commit", expectedCommit,
+    "--expected-signup-status", "open",
+    "--allow-loopback-http",
+    "--json",
+  ]);
+  assert.equal(launchBlockedSignup.code, 1, launchBlockedSignup.stderr || launchBlockedSignup.stdout);
+  assert.ok(JSON.parse(launchBlockedSignup.stdout).failures.some((entry) => entry.id === "launch_readiness"));
+  launchReady = true;
 
   signupSecurityReady = false;
   const unsafeSignup = await run([
