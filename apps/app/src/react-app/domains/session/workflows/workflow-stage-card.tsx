@@ -154,7 +154,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
               disabled={actionDisabled}
               title={actionTitle}
               className={cn(
-                "h-8 gap-1 rounded-md bg-dls-surface-muted/[0.38] px-2.5 text-xs font-semibold hover:bg-dls-surface-muted/[0.52]",
+                "h-11 gap-1 rounded-md bg-dls-surface-muted/[0.38] px-3 text-xs font-semibold hover:bg-dls-surface-muted/[0.52] sm:h-8 sm:px-2.5",
                 toneClass ?? "text-[var(--matterhorn-desk-color)]",
                 "hover:text-[var(--matterhorn-desk-color)]",
                 "disabled:cursor-not-allowed disabled:opacity-45",

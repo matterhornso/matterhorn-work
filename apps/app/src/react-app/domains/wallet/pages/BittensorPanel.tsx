@@ -3378,6 +3378,13 @@ export default function BittensorPanel({
     ? "No"
     : CHECK_PENDING_LABEL;
   const activeVenue = VENUE_DESKS[venue];
+  const activeTransactionStatus = venue === "hyperliquid"
+    ? marketExecutionReadiness?.reviewedWalletTickets.hyperliquid.available === true
+      ? "Ready in connected wallet"
+      : marketExecutionReadiness?.reviewedWalletTickets.hyperliquid.available === false
+        ? "Preview only"
+        : "Checking availability"
+    : "Wallet approval required";
   const activeManifest = VENUE_PROTOCOL_MANIFESTS[venue];
   const activeManifestStatus = activeVenue.statusLabel;
   const activeManifestCanSubmit = activeVenue.canSubmit;
@@ -3553,8 +3560,7 @@ export default function BittensorPanel({
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
                   <Metric label="Interface" value={activeVenue.statusLabel} compact />
-                  <Metric label="Can submit" value={activeVenue.canSubmit} compact />
-                  <Metric label="Live submission" value={activeVenue.liveSubmission} compact />
+                  <Metric label="Transaction status" value={activeTransactionStatus} compact />
                   <Metric label="Signer" value={activeVenue.signer} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
@@ -3631,8 +3637,7 @@ export default function BittensorPanel({
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
                   <Metric label="Readiness" value={venue === "hyperliquid" ? hyperliquidReadinessState : polymarketReadinessState} compact />
-                  <Metric label="Execution" value={venue === "hyperliquid" ? "Wallet approved" : "Compliance + wallet"} compact />
-                  <Metric label="Can submit" value={venue === "hyperliquid" ? "After signature" : "Eligible buy/sell/cancel"} compact />
+                  <Metric label="Transaction status" value={activeTransactionStatus} compact />
                   <Metric label="SDK evidence" value={marketSdkValidationState} compact />
                 </div>
                 <Notice tone="info" icon={<Shield className="size-4" />} title="Execution boundary">
@@ -4632,20 +4637,20 @@ function UnifiedWalletPanel({
       ? executionAvailable === true
         ? {
             label: "Perpetual orders",
-            value: "Review, sign, and submit",
+            value: "Ready in connected wallet",
             detail: "Review the exact order, sign its short-lived intent in your connected EVM wallet, and submit it from the trade ticket.",
             button: "Open order ticket",
           }
         : executionAvailable === false
           ? {
               label: "Perpetual orders",
-              value: "Submission disabled",
+              value: "Preview only",
               detail: "Order preparation works, but this deployment has not enabled wallet submission. No order can be sent until the execution gate is enabled.",
               button: "Review order ticket",
             }
           : {
               label: "Perpetual orders",
-              value: "Checking submission",
+              value: "Checking availability",
               detail: "Matterhorn is checking whether reviewed wallet submission is enabled for this deployment.",
               button: "Open order ticket",
             }

@@ -1196,8 +1196,13 @@ async function runSmoke(config) {
         await page
           .getByText("Open a desk", { exact: true })
           .waitFor({ state: "visible", timeout: 20_000 });
+        const longevityCard = page.getByTestId("open-wellness-desk");
+        if (await longevityCard.count() === 0) {
+          report.artifacts.longevityPrimaryNavigation = "hidden_for_crypto_public_beta";
+          return;
+        }
         await clickFirstVisible(
-          page.getByTestId("open-wellness-desk"),
+          longevityCard,
           "Open Longevity desk card",
         );
         await page

@@ -20,6 +20,11 @@ assert.ok(
   "wallet approval browser smoke should expose URL, output, and strict env controls",
 );
 assert.ok(
+  script.includes("resolveBrowserSmokeTarget") &&
+    !script.includes("http://127.0.0.1:5196"),
+  "wallet approval smoke should discover the current fixture URL instead of using a stale port",
+);
+assert.ok(
   script.includes("context.addInitScript") &&
     script.includes("window.__matterhornWalletSmoke") &&
     script.includes('Object.defineProperty(window, "ethereum"'),

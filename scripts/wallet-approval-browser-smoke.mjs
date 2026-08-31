@@ -2,9 +2,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
+import { resolveBrowserSmokeTarget } from "./lib/browser-smoke-runtime.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
-const DEFAULT_URL = "http://127.0.0.1:5196/workspace/ws_d6a5b5572860/session";
 const DEFAULT_OUTPUT_DIR = "qa-reports/wallet-approval-browser-smoke";
 const MOCK_ACCOUNT = "0x1111111111111111111111111111111111111111";
 const REVIEWED_TO = "0x2222222222222222222222222222222222222222";
@@ -44,7 +44,7 @@ function parseArgs(argv = process.argv.slice(2)) {
     headed: flags.has("--headed") || process.env.MATTERHORN_WALLET_BROWSER_HEADED === "1",
     json: flags.has("--json"),
     strict: flags.has("--strict") || process.env.MATTERHORN_WALLET_BROWSER_STRICT === "1",
-    url: values.get("--url") || process.env.MATTERHORN_WALLET_BROWSER_URL || DEFAULT_URL,
+    url: values.get("--url") || process.env.MATTERHORN_WALLET_BROWSER_URL || "",
     outputDir: resolve(repoRoot, values.get("--output-dir") || process.env.MATTERHORN_WALLET_BROWSER_OUTPUT_DIR || DEFAULT_OUTPUT_DIR),
   };
 }
@@ -725,6 +725,11 @@ if (config.help) {
   printHelp();
   process.exit(0);
 }
+
+await resolveBrowserSmokeTarget(config, {
+  repoRoot,
+  label: "wallet approval browser smoke",
+});
 
 const report = await runSmoke(config);
 

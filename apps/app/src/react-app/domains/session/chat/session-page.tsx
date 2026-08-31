@@ -341,7 +341,7 @@ function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
       visual.id,
       MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
     ) ?? visual
-  ).map((visual) => ({
+  ).filter((visual) => !isPublicBetaWebDeployment() || visual.id !== "wellness").map((visual) => ({
       id: visual.id as CustomerWorkflowIconHint,
       title: visual.displayName,
       statusLabel: visual.statusLabel,
@@ -433,7 +433,7 @@ function HomeWalletRuntimeStatus({
               <button
                 type="button"
                 aria-label="Wallet readiness details"
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35 sm:size-6"
               >
                 <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
               </button>
@@ -512,7 +512,7 @@ function HomeCapabilityOverview({
               <button
                 type="button"
                 aria-label="Open a desk details"
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35 sm:size-6"
               >
                 <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
               </button>
@@ -561,7 +561,7 @@ function HomeCapabilityOverview({
                     <button
                       type="button"
                       aria-label={`${item.title} details`}
-                      className="absolute right-2 top-2 inline-flex size-6 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
+                      className="absolute right-1 top-1 inline-flex size-11 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35 sm:right-2 sm:top-2 sm:size-6"
                     >
                       <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
                     </button>
@@ -945,7 +945,7 @@ function ProtocolDeskEmptyState({
       return;
     }
     startTask(
-      buildDeskTaskPromptRequestingInput(item.prompt, requirement),
+      buildDeskTaskPromptRequestingInput(item.title, requirement),
       item.title,
     );
   }, [startTask]);
@@ -984,7 +984,7 @@ function ProtocolDeskEmptyState({
                       <button
                         type="button"
                         aria-label={`${visual?.displayName ?? panel} desk safety info`}
-                        className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
+                        className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35 sm:size-6"
                       >
                         <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
                       </button>
@@ -1031,20 +1031,22 @@ function ProtocolDeskEmptyState({
       {providerNotice ? (
         <div
           className={cn(
-            "mx-1 flex items-start gap-2 rounded-md px-3 py-2 text-xs leading-5 sm:items-center",
+            "mx-1 flex flex-col items-start gap-1 rounded-md px-3 py-2 text-xs leading-5 sm:flex-row sm:items-center sm:gap-2",
             providerNotice.tone === "warning"
               ? "bg-amber-500/[0.08] text-amber-100"
               : "bg-dls-surface-muted/35 text-dls-secondary",
           )}
           role="status"
         >
-          {providerNotice.tone === "warning" ? (
-            <AlertCircle className="size-3.5 shrink-0 text-amber-200" aria-hidden="true" />
-          ) : (
-            <ShieldCheck className="size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" aria-hidden="true" />
-          )}
-          <span className="shrink-0 font-semibold text-dls-text">{providerNotice.label}</span>
-          <span className="min-w-0 text-dls-secondary">{providerNotice.detail}</span>
+          <span className="flex items-center gap-2">
+            {providerNotice.tone === "warning" ? (
+              <AlertCircle className="size-3.5 shrink-0 text-amber-200" aria-hidden="true" />
+            ) : (
+              <ShieldCheck className="size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" aria-hidden="true" />
+            )}
+            <span className="font-semibold text-dls-text">{providerNotice.label}</span>
+          </span>
+          <span className="w-full min-w-0 text-dls-secondary sm:w-auto">{providerNotice.detail}</span>
         </div>
       ) : null}
       {panel === "polymarket" ? (
@@ -1629,12 +1631,14 @@ export function SessionPage(props: SessionPageProps) {
     queryFn: fetchCustomerWorkflowTemplates,
     staleTime: 60_000,
   });
-  const customerWorkflowStarterCards = useMemo(
-    () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data, {
+  const customerWorkflowStarterCards = useMemo(() => {
+    const cards = buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data, {
       reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
-    }),
-    [customerWorkflowTemplatesQuery.data],
-  );
+    });
+    return hostedManagedTools
+      ? cards.filter((card) => card.iconHint !== "wellness")
+      : cards;
+  }, [customerWorkflowTemplatesQuery.data, hostedManagedTools]);
   const mondayBetaDemoCards = useMemo(
     () => buildCustomerBetaDemoStarterCards(customerWorkflowTemplatesQuery.data),
     [customerWorkflowTemplatesQuery.data],
@@ -3609,7 +3613,7 @@ export function SessionPage(props: SessionPageProps) {
                 </Button>
               );
             })}
-            {([
+            {!hostedManagedTools ? ([
               {
                 id: "wellness_creator_workflow",
                 label: getCustomerProtocolDeskVisual("wellness")?.displayName ?? "Longevity",
@@ -3643,7 +3647,7 @@ export function SessionPage(props: SessionPageProps) {
                   <span className={RAIL_LABEL_CLASS}>{item.label}</span>
                 </Button>
               );
-            })}
+            }) : null}
           </aside>
           </div>
           {overlaySidePanelOpen ? (
