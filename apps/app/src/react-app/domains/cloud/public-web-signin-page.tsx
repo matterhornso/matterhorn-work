@@ -600,10 +600,6 @@ export function PublicWebSigninPage({
               <dt>Sui</dt>
               <dd>Inspect accounts and objects, then review transfers in your wallet.</dd>
             </div>
-            <div>
-              <dt>Longevity</dt>
-              <dd>Build a guided program and turn the work into clear outputs.</dd>
-            </div>
           </dl>
           <p className="public-auth-control-boundary">
             <strong>You stay in control.</strong> Financial actions move to a separate

@@ -84,10 +84,11 @@ for (const phrase of [
   '"Preview only"',
   "Wallet execution",
   "Connect wallet to submit",
-  "Review, sign, and submit",
+  "Ready in connected wallet",
   "Authorize and submit",
   "Open order ticket",
-  "Submission disabled",
+  "Preview only",
+  "Checking availability",
 ]) {
   assert.ok(panel.includes(phrase), `Stable protocol UI should use release-accurate copy: ${phrase}`);
 }
@@ -218,8 +219,8 @@ for (const phrase of [
   "Wallet-authorized execution",
   "Execution boundary",
   "external-signer request",
-  "Can submit",
-  "Live submission",
+  "Transaction status",
+  "Wallet approval required",
   "Compliance gated",
   "Eligible EOA buy, sell, and cancel actions",
   "Copy signer examples",

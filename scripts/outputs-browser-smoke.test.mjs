@@ -37,4 +37,8 @@ for (const forbidden of ["privateKey", "seedPhrase", "mnemonic", "signedPayload"
   assert.equal(source.includes(forbidden), false, `Outputs browser smoke must not contain ${forbidden}`);
 }
 
+assert.ok(source.includes("resolveBrowserSmokeTarget"));
+assert.equal(source.includes("http://127.0.0.1:5182"), false);
+assert.equal(source.includes("http://127.0.0.1:4126"), false);
+
 console.log("Matterhorn Outputs browser smoke contract passed.");

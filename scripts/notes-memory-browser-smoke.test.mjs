@@ -31,4 +31,7 @@ for (const forbidden of ["privateKey", "seedPhrase", "mnemonic", "action: \"conf
   assert.equal(source.includes(forbidden), false, `Notes/Memory browser smoke must not contain ${forbidden}`);
 }
 
+assert.ok(source.includes("resolveBrowserSmokeTarget"));
+assert.equal(source.includes("http://127.0.0.1:5182"), false);
+
 console.log("Matterhorn Notes and Memory browser smoke contract passed.");

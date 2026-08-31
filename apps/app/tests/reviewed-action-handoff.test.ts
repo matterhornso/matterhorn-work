@@ -69,7 +69,8 @@ describe("agent card to wallet review handoff", () => {
 
     expect(walletPanel).toContain("const executionUnavailable = executionAvailable !== true;");
     expect(walletPanel).toContain("const executionStatusMessage = executionAvailable === false");
-    expect(walletPanel).toContain('value: "Review, sign, and submit"');
+    expect(walletPanel).toContain('value: "Ready in connected wallet"');
+    expect(walletPanel).toContain('value: "Preview only"');
     expect(walletPanel).toContain("disabled={!firstConnector || connectPending}");
     expect(walletPanel).toContain("disabled={executionUnavailable || busy !== null || !isConnected");
     expect(walletPanel).toContain("onClick={reviewAction} disabled={busy !== null}");

@@ -74,7 +74,7 @@ describe("customer-facing Matterhorn Desks branding", () => {
     expect(publicSignIn).toContain("Bittensor");
     expect(publicSignIn).toContain("Hyperliquid");
     expect(publicSignIn).toContain("Polymarket");
-    expect(publicSignIn).toContain("Longevity");
+    expect(publicSignIn).not.toContain("Longevity");
     expect(publicSignIn).toContain("Matterhorn never holds your keys.");
     expect(publicSignIn).not.toContain("Designed for accountable work");
     expect(publicSignIn).not.toContain("public-auth-principle-index");

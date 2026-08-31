@@ -45,12 +45,13 @@ describe("desk task required inputs", () => {
   test("starts placeholder tasks and asks for missing context in the main chat", () => {
     const prompt = "Find Polymarket markets about <paste research topic>.";
     const requirement = getDeskTaskInputRequirement(prompt)!;
-    const builtPrompt = buildDeskTaskPromptRequestingInput(prompt, requirement);
+    const builtPrompt = buildDeskTaskPromptRequestingInput("Discover markets", requirement);
 
-    expect(builtPrompt).toContain("Find Polymarket markets about [waiting for research topic]");
-    expect(builtPrompt).toContain("ask me to provide research topic in chat");
-    expect(builtPrompt).toContain("Let me answer in the main chat composer");
-    expect(builtPrompt).toContain("Do not guess the missing information or start the task until I reply");
+    expect(builtPrompt).toContain("Let's start “Discover markets.”");
+    expect(builtPrompt).toContain("What research topic should I use?");
+    expect(builtPrompt).toContain("Ask me:");
+    expect(builtPrompt).not.toContain("Find Polymarket markets about");
+    expect(builtPrompt).not.toContain("[waiting for");
     expect(builtPrompt).not.toContain("<paste research topic>");
   });
 
