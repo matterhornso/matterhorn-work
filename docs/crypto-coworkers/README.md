@@ -52,6 +52,8 @@ The Phase 1 registry defaults to `<data-dir>/crypto-apps/registry.db`. Tests and
 
 The Phase 1 adapter-router core is intentionally not connected to an account-facing route. It accepts only an active tenant connection pinned to the exact certified manifest revision; validates the exact action, network, scopes, and closed input schema; performs public-DNS checks; requires server-side run authorization; and returns a typed, quarantined, freshness-annotated result. Its first trusted JSON-over-HTTPS transport pins the socket to a router-approved address while preserving TLS verification against the certified hostname, verifies the actual peer, refuses redirects and non-JSON responses, caps response size, and resolves opaque credentials only inside the server boundary. No third-party adapter code receives authority to select its own destination or metering cost.
 
+The guarded authorization bridge reuses Matterhorn's existing durable single-use capability broker. Certification must bind an app action to one compatible Matterhorn read or prepare tool; runtime authorization then hash-binds the exact manifest revision, connection, action, access, network, run, call, and canonical arguments. Adapter reservations survive restarts, are reconciled once, appear under the certified app/action in the private run receipt, and are revoked when the run closes. The bridge refuses to operate unless the guarded runtime is fully enforced, and it remains disconnected from server startup in this delivery slice.
+
 Future readiness rules are fail-closed:
 
 - Enforced app access requires the guarded agent runtime in `enforce`.

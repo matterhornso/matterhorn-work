@@ -204,6 +204,8 @@ describe("certified crypto app adapter router", () => {
       request({ actionId: "submit_order" }),
       request({ network: "sui:mainnet" }),
       request({ arguments: { market: "SUI", submit: true } }),
+      request({ callId: `call_${"x".repeat(300)}` }),
+      request({ sessionId: "session\nheader" }),
     ]) await expect(app.router.execute(invalid)).rejects.toBeInstanceOf(MatterhornCryptoAppAdapterError);
     expect(app.authorizationCalls).toHaveLength(0);
     expect(app.executorCalls).toHaveLength(0);

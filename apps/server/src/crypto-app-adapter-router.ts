@@ -119,6 +119,10 @@ function nonEmpty(value: string): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function boundedIdentifier(value: string): boolean {
+  return nonEmpty(value) && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
 function executionEnvelopeValid(value: unknown): value is MatterhornCryptoAppAdapterExecution {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const execution = value as Partial<MatterhornCryptoAppAdapterExecution>;
@@ -175,7 +179,7 @@ export class MatterhornCryptoAppAdapterRouter {
 
   async execute(request: MatterhornCryptoAppAdapterRequest): Promise<MatterhornCryptoAppResult> {
     if (![request.workspaceId, request.sessionId, request.runId, request.callId, request.connectionId, request.actionId, request.network]
-      .every(nonEmpty)) throw new MatterhornCryptoAppAdapterError("adapter_request_invalid");
+      .every(boundedIdentifier)) throw new MatterhornCryptoAppAdapterError("adapter_request_invalid");
     if (!request.arguments || typeof request.arguments !== "object" || Array.isArray(request.arguments)) {
       throw new MatterhornCryptoAppAdapterError("adapter_request_invalid");
     }

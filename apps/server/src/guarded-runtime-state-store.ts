@@ -27,6 +27,7 @@ export type GuardedRuntimeStateKind =
   | "agent_run_scope"
   | "user_message_binding"
   | "assistant_message_binding"
+  | "crypto_app_reservation"
   | "receipt_index";
 
 type StateRow = {

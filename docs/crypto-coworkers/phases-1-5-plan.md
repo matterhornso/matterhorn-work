@@ -12,7 +12,8 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 1 tenant-scoped connection grants with opaque vault/wallet references and immediate certification revocation: complete.
 - Phase 1 adapter-router core, closed schema validation, runtime DNS/egress checks, typed output projection, untrusted-data quarantine, timeout handling, usage reservation/reconciliation, and circuit breaking: complete and backend-only.
 - Phase 1 trusted JSON-over-HTTPS transport foundation with DNS address pinning, TLS hostname verification, peer verification, redirect/content/size bounds, and server-side credential resolution: complete and backend-only.
-- Current slice: protocol-specific transport bindings, durable quota/circuit state, guarded-runtime capability bridge, and first-party Sui/Hyperliquid testnet adapters.
+- Phase 1 guarded-runtime authorization bridge with explicit certified-action-to-tool bindings, exact hash-bound single-use capabilities, durable reservations, restart-safe receipts, and run-close revocation: complete and backend-only.
+- Current slice: protocol-specific transport bindings, durable cost/quota and circuit policy, and first-party Sui/Hyperliquid testnet adapters.
 - All new production modes remain `off`; no HTTP routes or upstream adapter traffic are enabled.
 
 ## Goal
@@ -317,10 +318,12 @@ The completed adapter-router core remains backend-only and inert. It now:
 
 The trusted JSON transport additionally pins the HTTPS socket to one router-approved address, preserves TLS verification against the certified hostname, verifies the actual peer address, refuses redirects and non-JSON responses, caps response bytes, and prevents opaque credential references from entering the request body. Upstream adapters cannot declare their own metering cost.
 
+The guarded-runtime bridge requires full `enforce` mode and a trusted certification-time binding between each app action and one existing Matterhorn read or prepare tool. It stages and consumes the existing server-only capability, binds the manifest revision, connection, action, access, network, and canonical argument hash, persists only non-content reservation metadata, records the app/action in the run receipt, survives a process restart, and invalidates outstanding reservations when the run closes. It is not registered in server startup or any account-facing route.
+
 The next Phase 1 slice must:
 
 - Bind MCP/OpenAPI/RPC and first-party SDK protocols to the trusted transport boundary without allowing redirects, destination overrides, arbitrary methods, or raw upstream cost claims.
-- Bridge authorization to the guarded capability broker and durable allowance ledger.
+- Add a durable adapter cost/quota ledger; capability reservation/reconciliation is complete, while monetary/tool allowance accounting remains separate and pending.
 - Persist circuit/quota state needed across process restarts while keeping the hosted release single-instance.
 - Add Sui and Hyperliquid testnet adapters plus conflicting-source, schema-drift, abort, replay, and zero-upstream-denial fixtures.
 - Keep account-facing HTTP routes and runtime capabilities disconnected until that full adversarial gate passes.

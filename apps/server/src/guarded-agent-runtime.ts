@@ -452,11 +452,15 @@ export class MatterhornGuardedAgentRuntime {
     runId: string | null;
     callId: string | null;
     metric: ManagedMcpToolCallMetric;
+    receiptToolName?: string;
     source?: string | null;
     freshness?: string | null;
   }): Promise<void> {
     if (!input.runId) return;
     if (!input.callId) throw new GuardedRuntimeError(409, "agent_tool_outcome_not_bound", "The tool result is missing its exact guarded call binding.");
+    const scope = this.runScope(input.runId);
+    if (!scope) throw new GuardedRuntimeError(409, "agent_run_not_active", "The tool result no longer belongs to an active guarded run.");
+    await this.receipts.get(scope.workspaceId, input.runId);
     this.capabilities.recordToolOutcome(
       input.runId,
       input.callId,
@@ -467,7 +471,7 @@ export class MatterhornGuardedAgentRuntime {
     await this.receipts.recordTool({
       runId: input.runId,
       tool: {
-        name: input.metric.tool,
+        name: input.receiptToolName?.trim() || input.metric.tool,
         access: input.metric.access === "prepare" ? "prepare" : "read",
         outcome: input.metric.outcome,
         latencyMs: input.metric.durationMs,
@@ -522,7 +526,7 @@ export class MatterhornGuardedAgentRuntime {
     }
     this.stateStore.purgeWorkspace(
       workspaceId,
-      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding"],
+      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation"],
       { includeConsumedCapabilities: false },
     );
     return {
@@ -610,10 +614,16 @@ export class MatterhornGuardedAgentRuntime {
       "rollout_bypass",
       "user_message_binding",
       "assistant_message_binding",
+      "crypto_app_reservation",
     ] as const) {
-      for (const entry of this.stateStore.list<{ runId: string; callId?: string; messageId?: string }>(kind)) {
+      for (const entry of this.stateStore.list<{
+        runId: string;
+        callId?: string;
+        messageId?: string;
+        reservationId?: string;
+      }>(kind)) {
         if (entry.runId !== runId) continue;
-        const key = entry.callId ?? entry.messageId;
+        const key = entry.reservationId ?? entry.callId ?? entry.messageId;
         if (key) this.stateStore.delete(kind, key);
       }
     }
