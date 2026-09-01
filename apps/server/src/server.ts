@@ -9166,6 +9166,20 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "GET", "/developer/crypto-apps/status", "client", async (ctx) => {
+    try {
+      if (!cryptoAppRuntime.developerPortal) {
+        throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      }
+      return noStoreJsonResponse({
+        mode: cryptoAppRuntime.mode,
+        status: cryptoAppRuntime.developerPortal.getStatus(cryptoDeveloperAccountId(ctx)),
+      });
+    } catch (error) {
+      throw cryptoDeveloperApiError(error);
+    }
+  });
+
   addRoute(routes, "POST", "/developer/crypto-apps/enroll", "client", async (ctx) => {
     ensureWritable(config);
     try {

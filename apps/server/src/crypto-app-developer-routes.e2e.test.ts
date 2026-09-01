@@ -173,6 +173,8 @@ describe("crypto developer HTTP boundary", () => {
     expect(issuedA.response.status).toBe(201);
     expect(issuedA.response.headers.get("cache-control")).toBe("no-store");
     const inviteA = String(issuedA.payload.invite.token);
+    const initialStatus = await request(server.base, "/developer/crypto-apps/status", { bearer: TOKEN });
+    expect(initialStatus.response.status).toBe(403);
 
     const cliEnrollment = await request(server.base, "/developer/crypto-apps/enroll", {
       bearer: TOKEN,
@@ -191,6 +193,8 @@ describe("crypto developer HTTP boundary", () => {
     expect(signupB.response.status).toBe(200);
     const cookieA = cookie(signupA.response);
     const cookieB = cookie(signupB.response);
+    expect((await request(server.base, "/developer/crypto-apps/status", { cookie: cookieA })).payload.status)
+      .toMatchObject({ nextStep: "enroll", mainnetAvailable: false });
 
     const enrolledA = await request(server.base, "/developer/crypto-apps/enroll", {
       cookie: cookieA,
@@ -198,6 +202,8 @@ describe("crypto developer HTTP boundary", () => {
     });
     expect(enrolledA.response.status).toBe(201);
     expect(JSON.stringify(enrolledA.payload)).not.toContain("crypto-developer-a@example.com");
+    expect((await request(server.base, "/developer/crypto-apps/status", { cookie: cookieA })).payload.status.nextStep)
+      .toBe("register_public_key");
     const stolenInvite = await request(server.base, "/developer/crypto-apps/enroll", {
       cookie: cookieB,
       body: { inviteToken: inviteA, publisherId: "beta.crypto", displayName: "Beta Crypto" },
@@ -226,6 +232,8 @@ describe("crypto developer HTTP boundary", () => {
     });
     expect(keyRegistered.response.status).toBe(201);
     expect(JSON.stringify(keyRegistered.payload)).not.toContain("BEGIN PUBLIC KEY");
+    expect((await request(server.base, "/developer/crypto-apps/status", { cookie: cookieA })).payload.status.nextStep)
+      .toBe("submit_testnet_manifest");
 
     const manifest = developerManifest("acme.crypto", "key-1", keys.privateKey);
     const submitted = await request(server.base, "/developer/crypto-apps/submissions", {
@@ -234,6 +242,8 @@ describe("crypto developer HTTP boundary", () => {
     });
     expect(submitted.response.status).toBe(201);
     expect(submitted.payload.submission.state).toBe("static_passed");
+    expect((await request(server.base, "/developer/crypto-apps/status", { cookie: cookieA })).payload.status.nextStep)
+      .toBe("request_testnet_certification");
     const listA = await request(server.base, "/developer/crypto-apps/submissions", { cookie: cookieA });
     const listB = await request(server.base, "/developer/crypto-apps/submissions", { cookie: cookieB });
     expect(listA.payload.submissions).toHaveLength(1);
@@ -246,6 +256,8 @@ describe("crypto developer HTTP boundary", () => {
     );
     expect(requested.response.status).toBe(200);
     expect(requested.payload.submission.state).toBe("certification_requested");
+    expect((await request(server.base, "/developer/crypto-apps/status", { cookie: cookieA })).payload.status)
+      .toMatchObject({ nextStep: "await_certification_review", submissionCounts: { certificationRequested: 1 } });
     const accountQueue = await request(server.base, "/operator/crypto-developers/certification-requests", {
       cookie: cookieA,
     });

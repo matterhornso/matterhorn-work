@@ -76,6 +76,7 @@ The optional account client follows the same narrow boundary:
 import { createMatterhornCryptoDeveloperClient } from "@matterhorn-work/crypto-app-sdk";
 
 const developer = createMatterhornCryptoDeveloperClient(); // same-origin, signed-in account cookie
+const { status } = await developer.getStatus(); // one deterministic next step; testnet only
 await developer.registerPublisherKey({
   keyId: "publisher-key-1",
   algorithm: "ed25519",

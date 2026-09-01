@@ -40,6 +40,28 @@ export type MatterhornCryptoDeveloperHostSubmission = MatterhornCryptoDeveloperS
   publisherKey: MatterhornCryptoDeveloperPublisherKey;
 };
 
+export type MatterhornCryptoDeveloperStatus = {
+  version: "matterhorn.crypto-developer-status.v1";
+  policyVersion: string;
+  enrolled: boolean;
+  publisherKeyReady: boolean;
+  supportedEnvironments: ["testnet"];
+  mainnetAvailable: false;
+  runtimeCertificationRequired: true;
+  submissionCounts: {
+    staticFailed: number;
+    staticPassed: number;
+    certificationRequested: number;
+  };
+  nextStep:
+    | "enroll"
+    | "register_public_key"
+    | "submit_testnet_manifest"
+    | "fix_static_conformance"
+    | "request_testnet_certification"
+    | "await_certification_review";
+};
+
 export class MatterhornCryptoDeveloperPortalError extends Error {
   constructor(
     public readonly code:
@@ -188,6 +210,39 @@ export class MatterhornCryptoDeveloperPortal {
   getProfile(accountId: string): MatterhornCryptoDeveloperProfileView | null {
     const profile = this.#store.getDeveloperByAccount(accountId);
     return profile ? this.#profileView(profile) : null;
+  }
+
+  getStatus(accountId: string): MatterhornCryptoDeveloperStatus {
+    const profile = this.#store.getDeveloperByAccount(accountId);
+    const keys = profile ? this.#store.listPublisherKeys(profile.id) : [];
+    const submissions = profile ? this.#store.listSubmissions(profile.id) : [];
+    const submissionCounts = {
+      staticFailed: submissions.filter((item) => item.state === "static_failed").length,
+      staticPassed: submissions.filter((item) => item.state === "static_passed").length,
+      certificationRequested: submissions.filter((item) => item.state === "certification_requested").length,
+    };
+    const nextStep: MatterhornCryptoDeveloperStatus["nextStep"] = !profile
+      ? "enroll"
+      : keys.length === 0
+        ? "register_public_key"
+        : submissions.length === 0
+          ? "submit_testnet_manifest"
+          : submissionCounts.certificationRequested > 0
+            ? "await_certification_review"
+            : submissionCounts.staticPassed > 0
+              ? "request_testnet_certification"
+              : "fix_static_conformance";
+    return {
+      version: "matterhorn.crypto-developer-status.v1",
+      policyVersion: this.#policyVersion,
+      enrolled: Boolean(profile),
+      publisherKeyReady: keys.length > 0,
+      supportedEnvironments: ["testnet"],
+      mainnetAvailable: false,
+      runtimeCertificationRequired: true,
+      submissionCounts,
+      nextStep,
+    };
   }
 
   registerPublisherKey(accountId: string, input: {

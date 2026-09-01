@@ -60,6 +60,20 @@ describe("Matterhorn crypto developer client", () => {
       fetch: async (input, init) => {
         const url = String(input);
         calls.push({ url, init: init ?? {} });
+        if (url.endsWith("/status")) return json({
+          mode: "shadow",
+          status: {
+            version: "matterhorn.crypto-developer-status.v1",
+            policyVersion: "policy-1",
+            enrolled: true,
+            publisherKeyReady: true,
+            supportedEnvironments: ["testnet"],
+            mainnetAvailable: false,
+            runtimeCertificationRequired: true,
+            submissionCounts: { staticFailed: 0, staticPassed: 1, certificationRequested: 0 },
+            nextStep: "request_testnet_certification",
+          },
+        });
         if (url.endsWith("/profile")) {
           return json({ mode: "shadow", enrolled: true, profile: { ...profile, privateKey: "must-drop" } });
         }
@@ -73,6 +87,7 @@ describe("Matterhorn crypto developer client", () => {
       },
     });
 
+    expect((await client.getStatus()).status.nextStep).toBe("request_testnet_certification");
     const fetchedProfile = (await client.getProfile()).profile;
     expect(fetchedProfile?.publisherId).toBe("acme.crypto");
     expect(JSON.stringify(fetchedProfile)).not.toContain("must-drop");
@@ -83,14 +98,14 @@ describe("Matterhorn crypto developer client", () => {
     expect((await client.requestTestnetCertification("acme-sui", "revision-1")).state)
       .toBe("certification_requested");
 
-    expect(calls).toHaveLength(6);
+    expect(calls).toHaveLength(7);
     for (const call of calls) {
       expect(call.init.credentials).toBe("include");
       expect(call.init.redirect).toBe("error");
       expect(new Headers(call.init.headers).has("authorization")).toBe(false);
       expect(new Headers(call.init.headers).has("x-matterhorn-host-token")).toBe(false);
     }
-    const submissionBody = JSON.parse(String(calls[4]?.init.body));
+    const submissionBody = JSON.parse(String(calls[5]?.init.body));
     expect(submissionBody.targetEnvironment).toBe("testnet");
     expect(JSON.stringify(calls)).not.toContain("privateKey");
   });

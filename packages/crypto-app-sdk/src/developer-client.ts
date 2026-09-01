@@ -57,6 +57,28 @@ export type MatterhornCryptoDeveloperSubmissionView = {
   certificationRequestedAt: string | null;
 };
 
+export type MatterhornCryptoDeveloperStatus = {
+  version: "matterhorn.crypto-developer-status.v1";
+  policyVersion: string;
+  enrolled: boolean;
+  publisherKeyReady: boolean;
+  supportedEnvironments: ["testnet"];
+  mainnetAvailable: false;
+  runtimeCertificationRequired: true;
+  submissionCounts: {
+    staticFailed: number;
+    staticPassed: number;
+    certificationRequested: number;
+  };
+  nextStep:
+    | "enroll"
+    | "register_public_key"
+    | "submit_testnet_manifest"
+    | "fix_static_conformance"
+    | "request_testnet_certification"
+    | "await_certification_review";
+};
+
 export type MatterhornCryptoDeveloperClientOptions = {
   /** Omit for same-origin browser use. Remote origins must use HTTPS. */
   baseUrl?: string;
@@ -262,6 +284,52 @@ function gatewayMode(value: unknown): MatterhornCryptoGatewayMode {
   return value;
 }
 
+function developerStatusFrom(value: unknown): MatterhornCryptoDeveloperStatus {
+  const steps = [
+    "enroll",
+    "register_public_key",
+    "submit_testnet_manifest",
+    "fix_static_conformance",
+    "request_testnet_certification",
+    "await_certification_review",
+  ];
+  if (!isRecord(value)
+    || value.version !== "matterhorn.crypto-developer-status.v1"
+    || typeof value.policyVersion !== "string"
+    || typeof value.enrolled !== "boolean"
+    || typeof value.publisherKeyReady !== "boolean"
+    || !Array.isArray(value.supportedEnvironments)
+    || value.supportedEnvironments.length !== 1
+    || value.supportedEnvironments[0] !== "testnet"
+    || value.mainnetAvailable !== false
+    || value.runtimeCertificationRequired !== true
+    || !isRecord(value.submissionCounts)
+    || !steps.includes(String(value.nextStep))) {
+    throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+  }
+  const submissionCounts = value.submissionCounts;
+  if (!["staticFailed", "staticPassed", "certificationRequested"].every((key) => (
+    Number.isSafeInteger(submissionCounts[key]) && Number(submissionCounts[key]) >= 0
+  ))) {
+    throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+  }
+  return {
+    version: "matterhorn.crypto-developer-status.v1",
+    policyVersion: value.policyVersion,
+    enrolled: value.enrolled,
+    publisherKeyReady: value.publisherKeyReady,
+    supportedEnvironments: ["testnet"],
+    mainnetAvailable: false,
+    runtimeCertificationRequired: true,
+    submissionCounts: {
+      staticFailed: Number(submissionCounts.staticFailed),
+      staticPassed: Number(submissionCounts.staticPassed),
+      certificationRequested: Number(submissionCounts.certificationRequested),
+    },
+    nextStep: value.nextStep as MatterhornCryptoDeveloperStatus["nextStep"],
+  };
+}
+
 /**
  * Account-scoped invite-only developer API. Authentication is the user's
  * existing HttpOnly Matterhorn session cookie; this client never accepts a
@@ -302,6 +370,14 @@ export function createMatterhornCryptoDeveloperClient(options: MatterhornCryptoD
   }
 
   return Object.freeze({
+    async getStatus(): Promise<{
+      mode: MatterhornCryptoGatewayMode;
+      status: MatterhornCryptoDeveloperStatus;
+    }> {
+      const payload = await request("/developer/crypto-apps/status");
+      return { mode: gatewayMode(payload.mode), status: developerStatusFrom(payload.status) };
+    },
+
     async getProfile(): Promise<{
       mode: MatterhornCryptoGatewayMode;
       enrolled: boolean;

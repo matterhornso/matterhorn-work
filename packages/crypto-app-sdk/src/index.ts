@@ -30,6 +30,7 @@ export {
   type MatterhornCryptoDeveloperClientOptions,
   type MatterhornCryptoDeveloperKeyView,
   type MatterhornCryptoDeveloperProfileView,
+  type MatterhornCryptoDeveloperStatus,
   type MatterhornCryptoDeveloperSubmissionView,
   type MatterhornCryptoGatewayMode,
 } from "./developer-client.js";
