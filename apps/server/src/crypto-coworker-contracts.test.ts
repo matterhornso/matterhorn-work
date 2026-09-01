@@ -2,12 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import {
   MATTERHORN_COWORKER_PROFILE_VERSION,
+  MATTERHORN_COWORKER_WORKING_STATE_VERSION,
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
   MATTERHORN_EVIDENCE_BUNDLE_VERSION,
   type MatterhornCoworkerProfile,
+  type MatterhornCoworkerWorkingState,
   type MatterhornCryptoAppManifest,
   type MatterhornEvidenceBundle,
   validateMatterhornCoworkerProfile,
+  validateMatterhornCoworkerWorkingState,
   validateMatterhornCryptoAppManifest,
   validateMatterhornEvidenceBundle,
 } from "@matterhorn-work/types/crypto-coworkers";
@@ -130,6 +133,36 @@ const evidence: MatterhornEvidenceBundle = {
   walrus: null,
 };
 
+const workingState: MatterhornCoworkerWorkingState = {
+  version: MATTERHORN_COWORKER_WORKING_STATE_VERSION,
+  workspaceId: "ws_alpha",
+  ownerId: "account_alpha",
+  coworkerId: "coworker_risk_monitor",
+  revision: 1,
+  profileRevision: 1,
+  decisions: [],
+  positions: [],
+  unresolvedRisks: [{
+    id: "risk_stale_evidence",
+    severity: "medium",
+    summary: "Refresh the public evidence before making another decision.",
+    evidenceReferenceIds: ["evidence_public_read"],
+    openedAt: "2026-09-01T00:00:00.000Z",
+  }],
+  pendingActions: [],
+  evidenceReferences: [{
+    id: "evidence_public_read",
+    appId: "matterhorn.sui",
+    actionId: "sui_account_read",
+    referenceHash: "a".repeat(64),
+    freshness: "fresh",
+    observedAt: "2026-09-01T00:00:00.000Z",
+  }],
+  approvedMemoryIds: [],
+  createdAt: "2026-09-01T00:00:00.000Z",
+  updatedAt: "2026-09-01T00:00:00.000Z",
+};
+
 describe("crypto coworker public contracts", () => {
   test("accepts a non-custodial crypto app manifest", () => {
     expect(validateMatterhornCryptoAppManifest(manifest)).toEqual([]);
@@ -185,6 +218,21 @@ describe("crypto coworker public contracts", () => {
       "coworker_authority_forbidden",
       "coworker_wallet_boundary_invalid",
     ]));
+  });
+
+  test("accepts closed structured state and rejects dangling evidence or transcript fields", () => {
+    expect(validateMatterhornCoworkerWorkingState(workingState)).toEqual([]);
+    expect(validateMatterhornCoworkerWorkingState({
+      ...workingState,
+      transcript: ["raw chat history"],
+    })).toContain("coworker_working_state_unknown_field");
+    expect(validateMatterhornCoworkerWorkingState({
+      ...workingState,
+      unresolvedRisks: [{
+        ...workingState.unresolvedRisks[0],
+        evidenceReferenceIds: ["missing"],
+      }],
+    })).toContain("coworker_working_state_unresolvedRisks_invalid");
   });
 
   test("accepts encrypted evidence and rejects raw content fields", () => {

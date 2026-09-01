@@ -11,6 +11,7 @@ import {
   MatterhornCoworkerError,
   MatterhornCoworkers,
   type MatterhornCoworkerCreateInput,
+  type MatterhornCoworkerWorkingStateInput,
 } from "./crypto-coworkers.js";
 
 const NOW = "2026-09-01T12:00:00.000Z";
@@ -41,6 +42,55 @@ function input(overrides: Partial<MatterhornCoworkerCreateInput> = {}): Matterho
       allowedDataLabels: ["public", "untrusted_external"],
       allowUnverifiedProviderConsent: false,
     },
+    ...overrides,
+  };
+}
+
+function workingStateInput(
+  overrides: Partial<MatterhornCoworkerWorkingStateInput> = {},
+): MatterhornCoworkerWorkingStateInput {
+  return {
+    expectedRevision: 0,
+    profileRevision: 1,
+    evidenceReferences: [{
+      id: "ev_sui_balance",
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_account_read",
+      referenceHash: "a".repeat(64),
+      freshness: "fresh",
+      observedAt: NOW,
+    }],
+    decisions: [{
+      id: "decision_watch_sui",
+      summary: "Continue observing the approved Sui testnet balance.",
+      status: "active",
+      evidenceReferenceIds: ["ev_sui_balance"],
+      decidedAt: NOW,
+    }],
+    positions: [{
+      id: "position_sui",
+      appId: "matterhorn.sui-testnet",
+      network: "sui:testnet",
+      asset: "SUI",
+      side: "neutral",
+      size: "10.0",
+      evidenceReferenceId: "ev_sui_balance",
+      observedAt: NOW,
+    }],
+    unresolvedRisks: [{
+      id: "risk_stale_balance",
+      severity: "medium",
+      summary: "Refresh the public balance before making a new decision.",
+      evidenceReferenceIds: ["ev_sui_balance"],
+      openedAt: NOW,
+    }],
+    pendingActions: [{
+      id: "pending_wallet_review",
+      intentHash: "b".repeat(64),
+      status: "wallet_review",
+      expiresAt: "2026-09-01T12:05:00.000Z",
+    }],
+    approvedMemoryIds: ["mem_public_strategy"],
     ...overrides,
   };
 }
@@ -130,13 +180,17 @@ describe("durable crypto coworkers", () => {
       id: () => `cw_${++sequence}`,
     });
     try {
-      coworkers.create("ws_delete", "account_alpha", input({ name: "Alpha" }));
+      const deletedStateOwner = coworkers.create("ws_delete", "account_alpha", input({ name: "Alpha" }));
       coworkers.create("ws_delete", "account_beta", input({ name: "Beta" }));
       const retained = coworkers.create("ws_keep", "account_alpha", input({ name: "Retained" }));
+      coworkers.setWorkingState("ws_delete", "account_alpha", deletedStateOwner.id, workingStateInput());
+      coworkers.setWorkingState("ws_keep", "account_alpha", retained.id, workingStateInput());
       expect(coworkers.purgeWorkspace("ws_delete")).toBe(2);
       expect(coworkers.list("ws_delete", "account_alpha")).toEqual([]);
       expect(coworkers.list("ws_delete", "account_beta")).toEqual([]);
+      expect(store.getWorkingState("ws_delete", "account_alpha", deletedStateOwner.id)).toBeNull();
       expect(coworkers.list("ws_keep", "account_alpha").map((item) => item.id)).toEqual([retained.id]);
+      expect(store.getWorkingState("ws_keep", "account_alpha", retained.id)?.coworkerId).toBe(retained.id);
     } finally {
       store.close();
     }
@@ -231,6 +285,95 @@ describe("durable crypto coworkers", () => {
       const stored = coworkers.get("ws_alpha", "account_alpha", profile.id)!;
       expect(stored.allowedAppIds).toEqual(["matterhorn.sui-testnet"]);
       expect(stored.limits.dailyUsd).toBe(0);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("persists structured state without transcript replay and isolates it by tenant", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-state-"));
+    roots.push(root);
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    let sequence = 0;
+    const coworkers = new MatterhornCoworkers({
+      store,
+      policyVersion: "coworker-policy-1",
+      now: () => new Date(NOW),
+      id: () => `cw_${++sequence}`,
+    });
+    try {
+      const alpha = coworkers.create("ws_shared", "account_alpha", input({ name: "Alpha" }));
+      const beta = coworkers.create("ws_shared", "account_beta", input({ name: "Beta" }));
+      const state = coworkers.setWorkingState("ws_shared", "account_alpha", alpha.id, workingStateInput());
+      expect(state).toMatchObject({ revision: 1, profileRevision: 1, coworkerId: alpha.id });
+      expect(JSON.stringify(state)).not.toContain("transcript");
+      expect(coworkers.getWorkingState("ws_shared", "account_alpha", alpha.id)?.decisions[0]?.id)
+        .toBe("decision_watch_sui");
+      expect(coworkers.getWorkingState("ws_shared", "account_beta", beta.id)).toBeNull();
+      expect(() => coworkers.getWorkingState("ws_shared", "account_beta", alpha.id))
+        .toThrow(new MatterhornCoworkerError("coworker_not_found"));
+
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+      try {
+        const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
+        expect(reopened.getWorkingState("ws_shared", "account_alpha", alpha.id)?.approvedMemoryIds)
+          .toEqual(["mem_public_strategy"]);
+      } finally {
+        reopenedStore.close();
+      }
+    } finally {
+      store.close();
+    }
+  });
+
+  test("rejects stale, malformed and secret-bearing structured state", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      const created = coworkers.setWorkingState("ws_alpha", "account_alpha", profile.id, workingStateInput());
+      expect(() => coworkers.setWorkingState("ws_alpha", "account_alpha", profile.id, workingStateInput()))
+        .toThrow(new MatterhornCoworkerError("coworker_revision_conflict"));
+      expect(() => coworkers.setWorkingState("ws_alpha", "account_alpha", profile.id, workingStateInput({
+        expectedRevision: created.revision,
+        decisions: [{
+          ...workingStateInput().decisions[0]!,
+          summary: "Store this private key in the coworker state.",
+        }],
+      }))).toThrow(new MatterhornCoworkerError("coworker_working_state_invalid"));
+      expect(() => coworkers.setWorkingState("ws_alpha", "account_alpha", profile.id, workingStateInput({
+        expectedRevision: created.revision,
+        decisions: [{
+          ...workingStateInput().decisions[0]!,
+          evidenceReferenceIds: ["missing_evidence"],
+        }],
+      }))).toThrow(new MatterhornCoworkerError("coworker_working_state_invalid"));
+    } finally {
+      store.close();
+    }
+  });
+
+  test("clears pending financial work on policy or lifecycle changes and deletes state with the coworker", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      coworkers.setWorkingState("ws_alpha", "account_alpha", profile.id, workingStateInput());
+      const updated = coworkers.update("ws_alpha", "account_alpha", profile.id, {
+        expectedRevision: profile.revision,
+        mission: "Continue public research under the revised policy.",
+      });
+      expect(coworkers.getWorkingState("ws_alpha", "account_alpha", profile.id)).toMatchObject({
+        revision: 2,
+        profileRevision: updated.revision,
+        pendingActions: [],
+      });
+      const paused = coworkers.transition("ws_alpha", "account_alpha", profile.id, "paused", updated.revision);
+      expect(coworkers.getWorkingState("ws_alpha", "account_alpha", profile.id)).toMatchObject({
+        revision: 3,
+        profileRevision: paused.revision,
+        pendingActions: [],
+      });
+      coworkers.delete("ws_alpha", "account_alpha", profile.id, paused.revision);
+      expect(store.getWorkingState("ws_alpha", "account_alpha", profile.id)).toBeNull();
     } finally {
       store.close();
     }

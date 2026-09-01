@@ -5,7 +5,9 @@ import { dirname, join } from "node:path";
 
 import {
   type MatterhornCoworkerProfile,
+  type MatterhornCoworkerWorkingState,
   validateMatterhornCoworkerProfile,
+  validateMatterhornCoworkerWorkingState,
 } from "@matterhorn-work/types/crypto-coworkers";
 
 type SqliteRunResult = { changes?: number };
@@ -30,6 +32,17 @@ type CoworkerRow = {
   state: string;
   policy_version: string;
   profile_json: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type CoworkerWorkingStateRow = {
+  workspace_id: string;
+  owner_id: string;
+  coworker_id: string;
+  revision: number;
+  profile_revision: number;
+  state_json: string;
   created_at: string;
   updated_at: string;
 };
@@ -75,6 +88,29 @@ function profileFromRow(row: CoworkerRow): MatterhornCoworkerProfile {
   return structuredClone(result);
 }
 
+function workingStateFromRow(row: CoworkerWorkingStateRow): MatterhornCoworkerWorkingState {
+  let state: unknown;
+  try {
+    state = JSON.parse(row.state_json);
+  } catch {
+    throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+  }
+  if (validateMatterhornCoworkerWorkingState(state).length > 0) {
+    throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+  }
+  const result = state as MatterhornCoworkerWorkingState;
+  if (result.workspaceId !== row.workspace_id
+    || result.ownerId !== row.owner_id
+    || result.coworkerId !== row.coworker_id
+    || result.revision !== row.revision
+    || result.profileRevision !== row.profile_revision
+    || result.createdAt !== row.created_at
+    || result.updatedAt !== row.updated_at) {
+    throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+  }
+  return structuredClone(result);
+}
+
 export class MatterhornCoworkerStoreError extends Error {
   constructor(public readonly code:
     | "coworker_conflict"
@@ -100,7 +136,7 @@ export class MatterhornCoworkerStore {
   constructor(readonly path = cryptoCoworkerStorePath()) {
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     this.#db = openSqliteDatabase(path);
-    this.#db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;");
+    this.#db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
     this.#db.exec(`
       CREATE TABLE IF NOT EXISTS crypto_coworkers (
         workspace_id TEXT NOT NULL,
@@ -118,6 +154,22 @@ export class MatterhornCoworkerStore {
       );
       CREATE INDEX IF NOT EXISTS crypto_coworkers_owner_idx
         ON crypto_coworkers(workspace_id, owner_id, state, updated_at, coworker_id);
+      CREATE TABLE IF NOT EXISTS crypto_coworker_working_state (
+        workspace_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        coworker_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        profile_revision INTEGER NOT NULL,
+        state_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, owner_id, coworker_id),
+        CHECK (revision >= 1),
+        CHECK (profile_revision >= 1),
+        FOREIGN KEY (workspace_id, owner_id, coworker_id)
+          REFERENCES crypto_coworkers(workspace_id, owner_id, coworker_id)
+          ON DELETE CASCADE
+      );
     `);
     chmodSync(path, 0o600);
   }
@@ -184,16 +236,103 @@ export class MatterhornCoworkerStore {
     return row ? profileFromRow(row) : null;
   }
 
-  delete(workspaceId: string, ownerId: string, coworkerId: string, expectedRevision: number): boolean {
-    return (statement(this.#db, `
-      DELETE FROM crypto_coworkers
+  getWorkingState(workspaceId: string, ownerId: string, coworkerId: string): MatterhornCoworkerWorkingState | null {
+    const row = statement(this.#db, `
+      SELECT * FROM crypto_coworker_working_state
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? LIMIT 1
+    `).get(workspaceId, ownerId, coworkerId) as CoworkerWorkingStateRow | undefined;
+    return row ? workingStateFromRow(row) : null;
+  }
+
+  createWorkingState(state: MatterhornCoworkerWorkingState): MatterhornCoworkerWorkingState {
+    try {
+      statement(this.#db, `
+        INSERT INTO crypto_coworker_working_state(
+          workspace_id, owner_id, coworker_id, revision, profile_revision,
+          state_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        state.workspaceId,
+        state.ownerId,
+        state.coworkerId,
+        state.revision,
+        state.profileRevision,
+        JSON.stringify(state),
+        state.createdAt,
+        state.updatedAt,
+      );
+      return structuredClone(state);
+    } catch (error) {
+      const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+      if (code.startsWith("SQLITE_CONSTRAINT")) throw new MatterhornCoworkerStoreError("coworker_conflict");
+      throw error;
+    }
+  }
+
+  replaceWorkingState(
+    state: MatterhornCoworkerWorkingState,
+    expectedRevision: number,
+  ): MatterhornCoworkerWorkingState | null {
+    const row = statement(this.#db, `
+      UPDATE crypto_coworker_working_state
+      SET revision = ?, profile_revision = ?, state_json = ?, updated_at = ?
       WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND revision = ?
-    `).run(workspaceId, ownerId, coworkerId, expectedRevision).changes ?? 0) === 1;
+      RETURNING *
+    `).get(
+      state.revision,
+      state.profileRevision,
+      JSON.stringify(state),
+      state.updatedAt,
+      state.workspaceId,
+      state.ownerId,
+      state.coworkerId,
+      expectedRevision,
+    ) as CoworkerWorkingStateRow | undefined;
+    return row ? workingStateFromRow(row) : null;
+  }
+
+  deleteWorkingState(workspaceId: string, ownerId: string, coworkerId: string): boolean {
+    return (statement(this.#db, `
+      DELETE FROM crypto_coworker_working_state
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
+    `).run(workspaceId, ownerId, coworkerId).changes ?? 0) === 1;
+  }
+
+  delete(workspaceId: string, ownerId: string, coworkerId: string, expectedRevision: number): boolean {
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      statement(this.#db, `
+        DELETE FROM crypto_coworker_working_state
+        WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
+      `).run(workspaceId, ownerId, coworkerId);
+      const deleted = (statement(this.#db, `
+        DELETE FROM crypto_coworkers
+        WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND revision = ?
+      `).run(workspaceId, ownerId, coworkerId, expectedRevision).changes ?? 0) === 1;
+      if (!deleted) {
+        this.#db.exec("ROLLBACK;");
+        return false;
+      }
+      this.#db.exec("COMMIT;");
+      return true;
+    } catch (error) {
+      this.#db.exec("ROLLBACK;");
+      throw error;
+    }
   }
 
   purgeWorkspace(workspaceId: string): number {
-    return statement(this.#db, "DELETE FROM crypto_coworkers WHERE workspace_id = ?")
-      .run(workspaceId).changes ?? 0;
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      statement(this.#db, "DELETE FROM crypto_coworker_working_state WHERE workspace_id = ?").run(workspaceId);
+      const deleted = statement(this.#db, "DELETE FROM crypto_coworkers WHERE workspace_id = ?")
+        .run(workspaceId).changes ?? 0;
+      this.#db.exec("COMMIT;");
+      return deleted;
+    } catch (error) {
+      this.#db.exec("ROLLBACK;");
+      throw error;
+    }
   }
 
   close(): void {

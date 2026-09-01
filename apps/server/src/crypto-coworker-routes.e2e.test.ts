@@ -93,7 +93,7 @@ async function boot(mode: "off" | "internal") {
 }
 
 async function request(base: string, path: string, options: {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: Record<string, unknown>;
   cookie?: string;
   bearer?: string;
@@ -141,6 +141,32 @@ function coworkerInput() {
       allowedDataLabels: ["public", "untrusted_external"],
       allowUnverifiedProviderConsent: false,
     },
+  };
+}
+
+function workingStateInput() {
+  return {
+    expectedRevision: 0,
+    profileRevision: 1,
+    decisions: [],
+    positions: [],
+    unresolvedRisks: [{
+      id: "risk_refresh",
+      severity: "medium",
+      summary: "Refresh the approved public balance before making a decision.",
+      evidenceReferenceIds: ["ev_balance"],
+      openedAt: "2026-09-01T12:00:00.000Z",
+    }],
+    pendingActions: [],
+    evidenceReferences: [{
+      id: "ev_balance",
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_account_read",
+      referenceHash: "a".repeat(64),
+      freshness: "fresh",
+      observedAt: "2026-09-01T12:00:00.000Z",
+    }],
+    approvedMemoryIds: [],
   };
 }
 
@@ -210,6 +236,37 @@ describe("crypto coworker HTTP boundary", () => {
     expect(created.payload.coworker.ownerId).toBeUndefined();
     const coworkerId = String(created.payload.coworker.id);
 
+    const storedState = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/state`, {
+      method: "PUT",
+      cookie: cookieA,
+      body: workingStateInput(),
+    });
+    expect(storedState.response.status).toBe(200);
+    expect(storedState.payload.state).toMatchObject({ revision: 1, profileRevision: 1 });
+    expect(storedState.payload.state.ownerId).toBeUndefined();
+    const ownState = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/state`, {
+      cookie: cookieA,
+    });
+    expect(ownState.payload.state.unresolvedRisks[0].id).toBe("risk_refresh");
+    const isolatedState = await request(server.base, `/workspace/${workspaceB}/coworkers/${coworkerId}/state`, {
+      cookie: cookieB,
+    });
+    expect(isolatedState.response.status).toBe(404);
+    const secretState = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/state`, {
+      method: "PUT",
+      cookie: cookieA,
+      body: {
+        ...workingStateInput(),
+        expectedRevision: 1,
+        unresolvedRisks: [{
+          ...workingStateInput().unresolvedRisks[0],
+          summary: "Remember this private key for later.",
+        }],
+      },
+    });
+    expect(secretState.response.status).toBe(400);
+    expect(secretState.payload.code).toBe("coworker_working_state_invalid");
+
     const blockedExecution = await request(
       server.base,
       `/workspace/${workspaceA}/sessions/ses_coworker/messages/preflight`,
@@ -250,6 +307,10 @@ describe("crypto coworker HTTP boundary", () => {
     });
     expect(updated.response.status).toBe(200);
     expect(updated.payload.coworker.revision).toBe(2);
+    const reboundState = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/state`, {
+      cookie: cookieA,
+    });
+    expect(reboundState.payload.state).toMatchObject({ revision: 2, profileRevision: 2, pendingActions: [] });
     const stale = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}`, {
       method: "PATCH",
       cookie: cookieA,

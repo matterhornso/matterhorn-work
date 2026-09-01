@@ -3,6 +3,7 @@ export const MATTERHORN_CRYPTO_APP_CONNECTION_VERSION = "matterhorn.crypto-app-c
 export const MATTERHORN_CRYPTO_APP_RESULT_VERSION = "matterhorn.crypto-app-result.v1";
 export const MATTERHORN_CRYPTO_APP_CATALOG_VERSION = "matterhorn.crypto-app-catalog.v1";
 export const MATTERHORN_COWORKER_PROFILE_VERSION = "matterhorn.coworker-profile.v1";
+export const MATTERHORN_COWORKER_WORKING_STATE_VERSION = "matterhorn.coworker-working-state.v1";
 export const MATTERHORN_CRYPTO_INTENT_VERSION = "matterhorn.crypto-intent.v1";
 export const MATTERHORN_POLICY_DECISION_VERSION = "matterhorn.policy-decision.v1";
 export const MATTERHORN_EVIDENCE_BUNDLE_VERSION = "matterhorn.evidence-bundle.v1";
@@ -236,6 +237,56 @@ export type MatterhornCoworkerProfile = {
     transactionRequiresWalletReview: true;
     walletSubmission: "connected_wallet_only";
   };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MatterhornCoworkerWorkingState = {
+  version: typeof MATTERHORN_COWORKER_WORKING_STATE_VERSION;
+  workspaceId: string;
+  ownerId: string;
+  coworkerId: string;
+  revision: number;
+  profileRevision: number;
+  decisions: Array<{
+    id: string;
+    summary: string;
+    status: "active" | "superseded";
+    evidenceReferenceIds: string[];
+    decidedAt: string;
+  }>;
+  positions: Array<{
+    id: string;
+    appId: string;
+    network: string;
+    asset: string;
+    side: "long" | "short" | "neutral" | "unknown";
+    size: string | null;
+    evidenceReferenceId: string;
+    observedAt: string;
+  }>;
+  unresolvedRisks: Array<{
+    id: string;
+    severity: "low" | "medium" | "high" | "critical";
+    summary: string;
+    evidenceReferenceIds: string[];
+    openedAt: string;
+  }>;
+  pendingActions: Array<{
+    id: string;
+    intentHash: string;
+    status: "needs_context" | "wallet_review" | "expired" | "cancelled";
+    expiresAt: string;
+  }>;
+  evidenceReferences: Array<{
+    id: string;
+    appId: string;
+    actionId: string;
+    referenceHash: string;
+    freshness: "fresh" | "stale" | "unknown";
+    observedAt: string;
+  }>;
+  approvedMemoryIds: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -549,6 +600,114 @@ export function validateMatterhornCoworkerProfile(value: unknown): string[] {
     || value.escalation.transactionRequiresWalletReview !== true
     || value.escalation.walletSubmission !== "connected_wallet_only") {
     issues.push("coworker_wallet_boundary_invalid");
+  }
+  return [...new Set(issues)];
+}
+
+export function validateMatterhornCoworkerWorkingState(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) return ["coworker_working_state_not_object"];
+  const topLevelKeys = [
+    "version", "workspaceId", "ownerId", "coworkerId", "revision", "profileRevision",
+    "decisions", "positions", "unresolvedRisks", "pendingActions", "evidenceReferences",
+    "approvedMemoryIds", "createdAt", "updatedAt",
+  ];
+  if (!hasOnlyKeys(value, topLevelKeys)) issues.push("coworker_working_state_unknown_field");
+  if (value.version !== MATTERHORN_COWORKER_WORKING_STATE_VERSION) issues.push("coworker_working_state_version_invalid");
+  for (const key of ["workspaceId", "ownerId", "coworkerId"]) {
+    if (!isNonEmptyString(value[key]) || !/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$/.test(value[key] as string)) {
+      issues.push(`coworker_working_state_${key}_invalid`);
+    }
+  }
+  for (const key of ["revision", "profileRevision"]) {
+    if (!Number.isSafeInteger(value[key]) || (value[key] as number) < 1) issues.push(`coworker_working_state_${key}_invalid`);
+  }
+  for (const key of ["createdAt", "updatedAt"]) {
+    if (!isNonEmptyString(value[key]) || !Number.isFinite(Date.parse(value[key] as string))) {
+      issues.push(`coworker_working_state_${key}_invalid`);
+    }
+  }
+
+  const validText = (text: unknown, max: number) => isNonEmptyString(text)
+    && text.length <= max
+    && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(text);
+  const validId = (id: unknown) => typeof id === "string"
+    && validText(id, 160)
+    && /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/.test(id);
+  const validDate = (date: unknown) => typeof date === "string"
+    && isNonEmptyString(date)
+    && Number.isFinite(Date.parse(date));
+  const validHash = (hash: unknown) => typeof hash === "string" && /^(?:sha256:)?[a-f0-9]{64}$/i.test(hash);
+  const validReferenceIds = (ids: unknown) => isStringArray(ids)
+    && ids.length <= 16
+    && new Set(ids).size === ids.length
+    && ids.every(validId);
+  const validateList = (
+    key: string,
+    max: number,
+    validate: (item: Record<string, unknown>) => boolean,
+  ): Record<string, unknown>[] => {
+    const list = value[key];
+    if (!Array.isArray(list) || list.length > max || list.some((item) => !isRecord(item) || !validate(item))) {
+      issues.push(`coworker_working_state_${key}_invalid`);
+      return [];
+    }
+    const ids = list.map((item) => (item as Record<string, unknown>).id);
+    if (new Set(ids).size !== ids.length) issues.push(`coworker_working_state_${key}_duplicate`);
+    return list as Record<string, unknown>[];
+  };
+
+  const evidence = validateList("evidenceReferences", 64, (item) => hasOnlyKeys(item, [
+    "id", "appId", "actionId", "referenceHash", "freshness", "observedAt",
+  ])
+    && validId(item.id)
+    && validId(item.appId)
+    && validId(item.actionId)
+    && validHash(item.referenceHash)
+    && ["fresh", "stale", "unknown"].includes(String(item.freshness))
+    && validDate(item.observedAt));
+  const evidenceIds = new Set(evidence.map((item) => String(item.id)));
+  validateList("decisions", 24, (item) => hasOnlyKeys(item, [
+    "id", "summary", "status", "evidenceReferenceIds", "decidedAt",
+  ])
+    && validId(item.id)
+    && validText(item.summary, 500)
+    && ["active", "superseded"].includes(String(item.status))
+    && validReferenceIds(item.evidenceReferenceIds)
+    && (item.evidenceReferenceIds as string[]).every((id) => evidenceIds.has(id))
+    && validDate(item.decidedAt));
+  validateList("positions", 32, (item) => hasOnlyKeys(item, [
+    "id", "appId", "network", "asset", "side", "size", "evidenceReferenceId", "observedAt",
+  ])
+    && validId(item.id)
+    && validId(item.appId)
+    && validText(item.network, 160)
+    && validText(item.asset, 128)
+    && ["long", "short", "neutral", "unknown"].includes(String(item.side))
+    && (item.size === null || validText(item.size, 64))
+    && validId(item.evidenceReferenceId)
+    && evidenceIds.has(String(item.evidenceReferenceId))
+    && validDate(item.observedAt));
+  validateList("unresolvedRisks", 24, (item) => hasOnlyKeys(item, [
+    "id", "severity", "summary", "evidenceReferenceIds", "openedAt",
+  ])
+    && validId(item.id)
+    && ["low", "medium", "high", "critical"].includes(String(item.severity))
+    && validText(item.summary, 500)
+    && validReferenceIds(item.evidenceReferenceIds)
+    && (item.evidenceReferenceIds as string[]).every((id) => evidenceIds.has(id))
+    && validDate(item.openedAt));
+  validateList("pendingActions", 16, (item) => hasOnlyKeys(item, ["id", "intentHash", "status", "expiresAt"])
+    && validId(item.id)
+    && validHash(item.intentHash)
+    && ["needs_context", "wallet_review", "expired", "cancelled"].includes(String(item.status))
+    && validDate(item.expiresAt));
+
+  if (!isStringArray(value.approvedMemoryIds)
+    || value.approvedMemoryIds.length > 32
+    || new Set(value.approvedMemoryIds).size !== value.approvedMemoryIds.length
+    || value.approvedMemoryIds.some((id) => !validId(id))) {
+    issues.push("coworker_working_state_approvedMemoryIds_invalid");
   }
   return [...new Set(issues)];
 }

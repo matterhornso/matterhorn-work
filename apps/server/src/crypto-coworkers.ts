@@ -2,11 +2,15 @@ import { randomUUID } from "node:crypto";
 
 import {
   MATTERHORN_COWORKER_PROFILE_VERSION,
+  MATTERHORN_COWORKER_WORKING_STATE_VERSION,
   type MatterhornCoworkerAuthority,
   type MatterhornCoworkerProfile,
   type MatterhornCoworkerState,
+  type MatterhornCoworkerWorkingState,
   validateMatterhornCoworkerProfile,
+  validateMatterhornCoworkerWorkingState,
 } from "@matterhorn-work/types/crypto-coworkers";
+import { containsForbiddenMemorySecretMaterial } from "@matterhorn-work/types/memory";
 
 import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
 
@@ -25,6 +29,13 @@ export type MatterhornCoworkerCreateInput = Pick<
 >;
 
 export type MatterhornCoworkerUpdateInput = Partial<MatterhornCoworkerCreateInput> & {
+  expectedRevision: number;
+};
+
+export type MatterhornCoworkerWorkingStateInput = Omit<
+  MatterhornCoworkerWorkingState,
+  "version" | "workspaceId" | "ownerId" | "coworkerId" | "revision" | "createdAt" | "updatedAt"
+> & {
   expectedRevision: number;
 };
 
@@ -55,6 +66,7 @@ export class MatterhornCoworkerError extends Error {
     | "coworker_input_invalid"
     | "coworker_not_found"
     | "coworker_revision_conflict"
+    | "coworker_working_state_invalid"
     | "coworker_transition_invalid") {
     super(code);
     this.name = "MatterhornCoworkerError";
@@ -172,6 +184,66 @@ export class MatterhornCoworkers {
       && profile.policyVersion === this.#policyVersion;
   }
 
+  getWorkingState(
+    workspaceId: string,
+    ownerId: string,
+    coworkerId: string,
+  ): MatterhornCoworkerWorkingState | null {
+    if (!this.#store.get(workspaceId, ownerId, coworkerId)) {
+      throw new MatterhornCoworkerError("coworker_not_found");
+    }
+    return this.#store.getWorkingState(workspaceId, ownerId, coworkerId);
+  }
+
+  setWorkingState(
+    workspaceId: string,
+    ownerId: string,
+    coworkerId: string,
+    input: MatterhornCoworkerWorkingStateInput,
+  ): MatterhornCoworkerWorkingState {
+    const profile = this.resolveActive(workspaceId, ownerId, coworkerId);
+    if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
+    if (input.profileRevision !== profile.revision) {
+      throw new MatterhornCoworkerError("coworker_revision_conflict");
+    }
+    const expectedRevision = input.expectedRevision;
+    const content = structuredClone({
+      profileRevision: input.profileRevision,
+      decisions: input.decisions,
+      positions: input.positions,
+      unresolvedRisks: input.unresolvedRisks,
+      pendingActions: input.pendingActions,
+      evidenceReferences: input.evidenceReferences,
+      approvedMemoryIds: input.approvedMemoryIds,
+    });
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0
+      || containsForbiddenMemorySecretMaterial(content)) {
+      throw new MatterhornCoworkerError("coworker_working_state_invalid");
+    }
+    const current = this.#store.getWorkingState(workspaceId, ownerId, coworkerId);
+    if ((current?.revision ?? 0) !== expectedRevision) {
+      throw new MatterhornCoworkerError("coworker_revision_conflict");
+    }
+    const now = this.#now().toISOString();
+    const state: MatterhornCoworkerWorkingState = {
+      version: MATTERHORN_COWORKER_WORKING_STATE_VERSION,
+      workspaceId,
+      ownerId,
+      coworkerId,
+      revision: expectedRevision + 1,
+      ...content,
+      createdAt: current?.createdAt ?? now,
+      updatedAt: now,
+    };
+    if (validateMatterhornCoworkerWorkingState(state).length > 0) {
+      throw new MatterhornCoworkerError("coworker_working_state_invalid");
+    }
+    if (!current) return this.#store.createWorkingState(state);
+    const replaced = this.#store.replaceWorkingState(state, expectedRevision);
+    if (!replaced) throw new MatterhornCoworkerError("coworker_revision_conflict");
+    return replaced;
+  }
+
   update(
     workspaceId: string,
     ownerId: string,
@@ -244,6 +316,21 @@ export class MatterhornCoworkers {
   }
 
   #invalidate(profile: MatterhornCoworkerProfile, reason: InvalidationReason): void {
+    if (reason === "deleted") {
+      this.#store.deleteWorkingState(profile.workspaceId, profile.ownerId, profile.id);
+    } else {
+      const state = this.#store.getWorkingState(profile.workspaceId, profile.ownerId, profile.id);
+      if (state) {
+        const next: MatterhornCoworkerWorkingState = {
+          ...state,
+          revision: state.revision + 1,
+          profileRevision: profile.revision,
+          pendingActions: [],
+          updatedAt: this.#now().toISOString(),
+        };
+        this.#store.replaceWorkingState(next, state.revision);
+      }
+    }
     this.#onInvalidate({
       workspaceId: profile.workspaceId,
       ownerId: profile.ownerId,
