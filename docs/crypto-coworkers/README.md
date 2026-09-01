@@ -54,6 +54,8 @@ The Phase 1 adapter-router core is intentionally not connected to an account-fac
 
 The guarded authorization bridge reuses Matterhorn's existing durable single-use capability broker. Certification must bind an app action to one compatible Matterhorn read or prepare tool; runtime authorization then hash-binds the exact manifest revision, connection, action, access, network, run, call, and canonical arguments. Adapter reservations survive restarts, are reconciled once, appear under the certified app/action in the private run receipt, and are revoked when the run closes. The bridge refuses to operate unless the guarded runtime is fully enforced, and it remains disconnected from server startup in this delivery slice.
 
+Signed test-harness contracts now define testnet-only Sui balance/transfer-preview actions and Hyperliquid market/orderbook/account/order-preview actions. They use closed input and model-facing output schemas, map every action to a compatible guarded tool, and never contain production publisher keys or automatic registration. Their offline router fixtures deliberately include private and malicious extra fields to prove projection removes them. Live protocol calls and protocol-aware simulations are still pending and must pass the adversarial gate before internal enablement.
+
 Future readiness rules are fail-closed:
 
 - Enforced app access requires the guarded agent runtime in `enforce`.
