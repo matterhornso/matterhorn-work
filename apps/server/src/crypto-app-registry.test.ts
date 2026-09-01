@@ -1,4 +1,7 @@
 import { generateKeyPairSync, sign } from "node:crypto";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
@@ -8,6 +11,7 @@ import {
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
+import { MatterhornCryptoAppRegistryStore } from "./crypto-app-registry-store.js";
 import {
   canonicalCryptoAppManifestPayload,
   MatterhornCryptoAppRegistry,
@@ -74,7 +78,10 @@ function signedManifest(overrides: Partial<MatterhornCryptoAppManifest> = {}): M
   return manifest;
 }
 
-function registry(): MatterhornCryptoAppRegistry {
+function registry(
+  store?: MatterhornCryptoAppRegistryStore,
+  policyVersion = "gateway-policy-1",
+): MatterhornCryptoAppRegistry {
   return new MatterhornCryptoAppRegistry({
     publisherKeys: [{
       publisherId: "matterhorn",
@@ -82,7 +89,8 @@ function registry(): MatterhornCryptoAppRegistry {
       algorithm: "ed25519",
       publicKey,
     }],
-    policyVersion: "gateway-policy-1",
+    policyVersion,
+    store,
     now: () => new Date("2026-09-01T12:00:00.000Z"),
   });
 }
@@ -206,5 +214,83 @@ describe("crypto app signed registry", () => {
     const entry = store.register(manifest);
     entry.manifest.displayName = "Client mutation";
     expect(store.get(manifest.appId, manifest.manifestRevision)?.manifest.displayName).toBe("Sui");
+  });
+
+  test("hydrates certified and revoked state from durable storage", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "matterhorn-registry-hydrate-")), "registry.db");
+    const firstStore = new MatterhornCryptoAppRegistryStore(path);
+    const first = registry(firstStore);
+    const manifest = signedManifest();
+    first.register(manifest);
+    first.updateCertification({
+      appId: manifest.appId,
+      manifestRevision: manifest.manifestRevision,
+      state: "certified_testnet",
+      report: reportFor(manifest),
+    });
+    firstStore.close();
+
+    const secondStore = new MatterhornCryptoAppRegistryStore(path);
+    const second = registry(secondStore);
+    expect(second.resolve(manifest.appId)?.manifestRevision).toBe("1.0.0");
+    expect(second.certificationHistory(manifest.appId, manifest.manifestRevision)).toHaveLength(1);
+    second.updateCertification({
+      appId: manifest.appId,
+      manifestRevision: manifest.manifestRevision,
+      state: "revoked",
+      reason: "publisher key compromise",
+    });
+    secondStore.close();
+
+    const thirdStore = new MatterhornCryptoAppRegistryStore(path);
+    const third = registry(thirdStore);
+    expect(third.resolve(manifest.appId)).toBeNull();
+    expect(third.certificationHistory(manifest.appId, manifest.manifestRevision).map((item) => item.state))
+      .toEqual(["certified_testnet", "revoked"]);
+    thirdStore.close();
+  });
+
+  test("does not resolve an old certification after the active policy changes", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "matterhorn-registry-policy-")), "registry.db");
+    const firstStore = new MatterhornCryptoAppRegistryStore(path);
+    const first = registry(firstStore);
+    const manifest = signedManifest();
+    first.register(manifest);
+    first.updateCertification({
+      appId: manifest.appId,
+      manifestRevision: manifest.manifestRevision,
+      state: "certified_testnet",
+      report: reportFor(manifest),
+    });
+    firstStore.close();
+
+    const secondStore = new MatterhornCryptoAppRegistryStore(path);
+    expect(registry(secondStore, "gateway-policy-2").resolve(manifest.appId)).toBeNull();
+    secondStore.close();
+  });
+
+  test("fails a stale concurrent certification decision atomically", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "matterhorn-registry-race-")), "registry.db");
+    const firstStore = new MatterhornCryptoAppRegistryStore(path);
+    const manifest = signedManifest();
+    const first = registry(firstStore);
+    first.register(manifest);
+
+    const secondStore = new MatterhornCryptoAppRegistryStore(path);
+    const second = registry(secondStore);
+    first.updateCertification({
+      appId: manifest.appId,
+      manifestRevision: manifest.manifestRevision,
+      state: "certified_testnet",
+      report: reportFor(manifest),
+    });
+    expect(() => second.updateCertification({
+      appId: manifest.appId,
+      manifestRevision: manifest.manifestRevision,
+      state: "suspended",
+      reason: "stale concurrent decision",
+    })).toThrowError(expect.objectContaining({ code: "certification_state_conflict" }));
+    firstStore.close();
+    secondStore.close();
   });
 });

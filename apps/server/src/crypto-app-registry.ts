@@ -12,6 +12,11 @@ import {
   verifyCryptoAppManifestSignature,
   type MatterhornTrustedPublisherKey,
 } from "./crypto-app-signature.js";
+import {
+  MatterhornCryptoAppRegistryStoreError,
+  type MatterhornCryptoAppRegistryStore,
+  type PersistedCryptoAppCertification,
+} from "./crypto-app-registry-store.js";
 
 export {
   canonicalCryptoAppManifestPayload,
@@ -51,7 +56,9 @@ export class MatterhornCryptoAppRegistryError extends Error {
       | "manifest_revision_conflict"
       | "manifest_not_found"
       | "certification_transition_invalid"
-      | "certification_metadata_invalid",
+      | "certification_metadata_invalid"
+      | "certification_state_conflict"
+      | "persisted_registry_state_invalid",
     public readonly issues: string[] = [],
   ) {
     super(code);
@@ -62,6 +69,7 @@ export class MatterhornCryptoAppRegistryError extends Error {
 type RegistryOptions = {
   publisherKeys: MatterhornTrustedPublisherKey[];
   policyVersion: string;
+  store?: MatterhornCryptoAppRegistryStore;
   now?: () => Date;
 };
 
@@ -108,15 +116,79 @@ export class MatterhornCryptoAppRegistry {
   readonly #publisherKeys = new Map<string, MatterhornTrustedPublisherKey>();
   readonly #entries = new Map<string, MatterhornCryptoAppRegistryEntry>();
   readonly #currentRevision = new Map<string, string>();
+  readonly #history = new Map<string, PersistedCryptoAppCertification[]>();
   readonly #policyVersion: string;
   readonly #now: () => Date;
+  readonly #store: MatterhornCryptoAppRegistryStore | null;
 
   constructor(options: RegistryOptions) {
     this.#policyVersion = options.policyVersion;
     this.#now = options.now ?? (() => new Date());
+    this.#store = options.store ?? null;
     for (const key of options.publisherKeys) {
       if (key.algorithm !== "ed25519" || !isTrustedEd25519PublisherKey(key.publicKey)) continue;
       this.#publisherKeys.set(publisherKey(key.publisherId, key.keyId), key);
+    }
+    this.#hydrate();
+  }
+
+  #hydrate(): void {
+    if (!this.#store) return;
+    for (const stored of this.#store.listManifests()) {
+      const issues = validateMatterhornCryptoAppManifest(stored.manifest);
+      const trustedKey = this.#publisherKeys.get(publisherKey(
+        stored.manifest.publisher.id,
+        stored.manifest.publisher.keyId,
+      ));
+      if (issues.length > 0
+        || !trustedKey
+        || !verifyCryptoAppManifestSignature(stored.manifest, trustedKey.publicKey)
+        || cryptoAppManifestHash(stored.manifest) !== stored.manifestHash
+        || stored.manifest.appId !== stored.appId
+        || stored.manifest.manifestRevision !== stored.manifestRevision) {
+        throw new MatterhornCryptoAppRegistryError("persisted_registry_state_invalid", issues);
+      }
+
+      const key = registryKey(stored.appId, stored.manifestRevision);
+      const entry: MatterhornCryptoAppRegistryEntry = {
+        appId: stored.appId,
+        manifestRevision: stored.manifestRevision,
+        manifestHash: stored.manifestHash,
+        manifest: clone(stored.manifest),
+        certification: {
+          state: "pending",
+          reportHash: null,
+          policyVersion: this.#policyVersion,
+          reason: null,
+          updatedAt: stored.registeredAt,
+        },
+        registeredAt: stored.registeredAt,
+      };
+      const history = this.#store.listCertificationHistory(stored.appId, stored.manifestRevision);
+      let previousState: MatterhornCryptoAppCertificationState = "pending";
+      for (const event of history) {
+        if (!TRANSITIONS[previousState].has(event.state)
+          || !certificationMetadataValid(entry, event, event.policyVersion)) {
+          throw new MatterhornCryptoAppRegistryError("persisted_registry_state_invalid");
+        }
+        entry.certification = {
+          state: event.state,
+          reportHash: event.reportHash,
+          policyVersion: event.policyVersion,
+          reason: event.reason,
+          updatedAt: event.updatedAt,
+        };
+        previousState = event.state;
+      }
+      this.#entries.set(key, entry);
+      this.#history.set(key, history.map((event) => clone(event)));
+    }
+    for (const current of this.#store.listCurrentRevisions()) {
+      const entry = this.#entries.get(registryKey(current.appId, current.manifestRevision));
+      if (!entry
+        || !RESOLVABLE_STATES.has(entry.certification.state)
+        || entry.certification.policyVersion !== this.#policyVersion) continue;
+      this.#currentRevision.set(current.appId, current.manifestRevision);
     }
   }
 
@@ -155,7 +227,23 @@ export class MatterhornCryptoAppRegistry {
       },
       registeredAt: now,
     };
+    try {
+      this.#store?.putManifest({
+        appId: entry.appId,
+        manifestRevision: entry.manifestRevision,
+        manifestHash: entry.manifestHash,
+        manifest: entry.manifest,
+        registeredAt: entry.registeredAt,
+      });
+    } catch (error) {
+      if (error instanceof MatterhornCryptoAppRegistryStoreError
+        && error.code === "crypto_app_manifest_revision_conflict") {
+        throw new MatterhornCryptoAppRegistryError("manifest_revision_conflict");
+      }
+      throw error;
+    }
     this.#entries.set(key, entry);
+    this.#history.set(key, []);
     return clone(entry);
   }
 
@@ -167,20 +255,40 @@ export class MatterhornCryptoAppRegistry {
       throw new MatterhornCryptoAppRegistryError("certification_transition_invalid");
     }
 
-    const certifiedState = input.state === "certified_testnet" || input.state === "certified_mainnet";
-    const targetEnvironment = input.state === "certified_mainnet" ? "mainnet" : "testnet";
-    if (certifiedState && (!input.report
-      || !verifyCryptoAppConformanceReport(input.report)
-      || !input.report.passed
-      || input.report.targetEnvironment !== targetEnvironment
-      || input.report.appId !== existing.appId
-      || input.report.manifestRevision !== existing.manifestRevision
-      || input.report.manifestHash !== existing.manifestHash
-      || input.report.policyVersion !== this.#policyVersion)) {
+    if (!certificationMetadataValid(existing, {
+      ...input,
+      reportHash: input.report?.reportHash ?? null,
+      policyVersion: this.#policyVersion,
+    }, this.#policyVersion)) {
       throw new MatterhornCryptoAppRegistryError("certification_metadata_invalid");
     }
-    if ((input.state === "suspended" || input.state === "revoked") && !input.reason?.trim()) {
-      throw new MatterhornCryptoAppRegistryError("certification_metadata_invalid");
+
+    const updatedAt = this.#now().toISOString();
+    const event = {
+      appId: existing.appId,
+      manifestRevision: existing.manifestRevision,
+      state: input.state,
+      report: input.report ?? null,
+      reportHash: input.report?.reportHash ?? null,
+      policyVersion: this.#policyVersion,
+      reason: input.reason?.trim() || null,
+      updatedAt,
+    };
+    let persistedEvent: PersistedCryptoAppCertification = {
+      ...event,
+      sequence: (this.#history.get(key)?.at(-1)?.sequence ?? 0) + 1,
+    };
+    try {
+      persistedEvent = this.#store?.appendCertification({
+        ...event,
+        expectedPreviousState: existing.certification.state,
+      }) ?? persistedEvent;
+    } catch (error) {
+      if (error instanceof MatterhornCryptoAppRegistryStoreError
+        && error.code === "crypto_app_certification_state_conflict") {
+        throw new MatterhornCryptoAppRegistryError("certification_state_conflict");
+      }
+      throw error;
     }
 
     existing.certification = {
@@ -188,8 +296,9 @@ export class MatterhornCryptoAppRegistry {
       reportHash: input.report?.reportHash ?? null,
       policyVersion: this.#policyVersion,
       reason: input.reason?.trim() || null,
-      updatedAt: this.#now().toISOString(),
+      updatedAt,
     };
+    this.#history.set(key, [...(this.#history.get(key) ?? []), clone(persistedEvent)]);
     if (RESOLVABLE_STATES.has(input.state)) this.#currentRevision.set(input.appId, input.manifestRevision);
     else if (this.#currentRevision.get(input.appId) === input.manifestRevision) this.#currentRevision.delete(input.appId);
     return clone(existing);
@@ -214,4 +323,40 @@ export class MatterhornCryptoAppRegistry {
       .sort((left, right) => left.appId.localeCompare(right.appId)
         || left.manifestRevision.localeCompare(right.manifestRevision));
   }
+
+  certificationHistory(appId: string, manifestRevision: string): PersistedCryptoAppCertification[] {
+    return (this.#history.get(registryKey(appId, manifestRevision)) ?? []).map((event) => clone(event));
+  }
+}
+
+function certificationMetadataValid(
+  entry: MatterhornCryptoAppRegistryEntry,
+  input: {
+    state: Exclude<MatterhornCryptoAppCertificationState, "pending">;
+    report?: MatterhornCryptoAppConformanceReport | null;
+    reportHash: string | null;
+    policyVersion: string;
+    reason?: string | null;
+  },
+  expectedPolicyVersion: string,
+): boolean {
+  const certifiedState = input.state === "certified_testnet" || input.state === "certified_mainnet";
+  const targetEnvironment = input.state === "certified_mainnet" ? "mainnet" : "testnet";
+  if (certifiedState) {
+    return Boolean(input.report
+      && verifyCryptoAppConformanceReport(input.report)
+      && input.report.passed
+      && input.report.reportHash === input.reportHash
+      && input.report.targetEnvironment === targetEnvironment
+      && input.report.appId === entry.appId
+      && input.report.manifestRevision === entry.manifestRevision
+      && input.report.manifestHash === entry.manifestHash
+      && input.report.policyVersion === expectedPolicyVersion
+      && input.policyVersion === expectedPolicyVersion);
+  }
+  return Boolean((input.state === "suspended" || input.state === "revoked")
+    && input.reason?.trim()
+    && input.report == null
+    && input.reportHash === null
+    && input.policyVersion === expectedPolicyVersion);
 }
