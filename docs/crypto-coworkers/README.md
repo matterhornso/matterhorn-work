@@ -146,12 +146,15 @@ Exit: coworkers can prepare exact financial work but no agent-facing path can si
 
 ### Phase 4 — Walrus evidence
 
-- Canonical minimal evidence receipt.
-- Envelope encryption before publication.
+- Canonical minimal evidence receipt: local compiler complete for finalized guarded runs, with closed fields and per-bundle salted identity hashes.
+- Envelope encryption before publication: AES-256-GCM sealing, exact recipient binding, and plaintext-key zeroization complete.
+- Public ciphertext boundary: Walrus-eligible bytes exclude local KMS references and plaintext hashes; deterministic Merkle batching and proof verification are complete.
 - Authenticated Walrus publisher/upload relay.
 - Quilt batching for small encrypted bundles.
 - Sui certification/hash anchor and verification UI.
 - Renewal, expiry, user deletion, and encryption-key destruction workflows.
+
+The implemented foundation performs no Walrus or Sui network writes. Production KMS, the authenticated testnet relay, certification verification, anchoring, and lifecycle jobs remain fail-closed and disabled.
 
 Exit: a user can independently verify a financial run without any plaintext prompt, secret, wallet signature, or private attachment appearing in public storage.
 

@@ -8,6 +8,7 @@ import {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
   MATTERHORN_EVIDENCE_BUNDLE_VERSION,
   MATTERHORN_POLICY_DECISION_VERSION,
+  MATTERHORN_WALRUS_PROOF_VERSION,
   type MatterhornCoworkerInboxItem,
   type MatterhornCoworkerProfile,
   type MatterhornCoworkerWatch,
@@ -15,6 +16,7 @@ import {
   type MatterhornCryptoAppManifest,
   type MatterhornEvidenceBundle,
   type MatterhornPolicyDecision,
+  type MatterhornWalrusProof,
   validateMatterhornCoworkerInboxItem,
   validateMatterhornCoworkerProfile,
   validateMatterhornCoworkerWatch,
@@ -22,6 +24,7 @@ import {
   validateMatterhornCryptoAppManifest,
   validateMatterhornEvidenceBundle,
   validateMatterhornPolicyDecision,
+  validateMatterhornWalrusProof,
 } from "@matterhorn-work/types/crypto-coworkers";
 
 const manifest: MatterhornCryptoAppManifest = {
@@ -111,9 +114,9 @@ const coworker: MatterhornCoworkerProfile = {
 const evidence: MatterhornEvidenceBundle = {
   version: MATTERHORN_EVIDENCE_BUNDLE_VERSION,
   id: "evidence_1",
-  workspaceIdHash: "sha256:workspace",
-  runIdHash: "sha256:run",
-  coworkerId: "coworker_risk_monitor",
+  workspaceIdHash: "a".repeat(64),
+  runIdHash: "b".repeat(64),
+  coworkerIdHash: "c".repeat(64),
   createdAt: "2026-09-01T00:00:00.000Z",
   retention: {
     contentClass: "encrypted_user_evidence",
@@ -126,20 +129,22 @@ const evidence: MatterhornEvidenceBundle = {
     recipientKeyIds: ["workspace-key-1"],
   },
   receipt: {
+    status: "success",
     providerId: "cudos",
     modelId: "asi1-mini",
     privacyMode: "transaction",
-    policyHash: "sha256:policy",
-    toolOutcomeHashes: ["sha256:tool"],
-    evidenceReferenceHashes: ["sha256:source"],
-    reviewedIntentHashes: ["sha256:intent"],
-    publicChainReceiptHashes: ["sha256:chain-receipt"],
+    consent: "single_request",
+    dataCategoryHashes: ["d".repeat(64)],
+    redactionCount: 1,
+    policyHash: "e".repeat(64),
+    toolOutcomeHashes: ["f".repeat(64)],
+    evidenceReferenceHashes: ["1".repeat(64)],
+    reviewedIntentHashes: ["2".repeat(64)],
+    publicChainReceiptHashes: ["3".repeat(64)],
     inputTokens: 100,
     outputTokens: 50,
     responseDurationMs: 1_000,
   },
-  ciphertextHash: "sha256:ciphertext",
-  walrus: null,
 };
 
 const workingState: MatterhornCoworkerWorkingState = {
@@ -341,6 +346,24 @@ describe("crypto coworker public contracts", () => {
       },
     };
     expect(validateMatterhornEvidenceBundle(unsafe)).toContain("evidence_forbidden_content_field");
+  });
+
+  test("keeps Walrus proof metadata separate from the encrypted evidence payload", () => {
+    const proof: MatterhornWalrusProof = {
+      version: MATTERHORN_WALRUS_PROOF_VERSION,
+      network: "testnet",
+      blobId: "walrus-blob-public-id",
+      suiObjectId: "0x1234",
+      certifiedEpoch: 10,
+      validUntilEpoch: 20,
+      quiltPatchId: null,
+      merkleRoot: "4".repeat(64),
+      merkleProof: ["5".repeat(64)],
+      suiTransactionDigest: null,
+    };
+    expect(validateMatterhornWalrusProof(proof)).toEqual([]);
+    expect(validateMatterhornEvidenceBundle({ ...evidence, walrus: proof })).toContain("evidence_unknown_field");
+    expect(validateMatterhornWalrusProof({ ...proof, signer: "wallet-private" })).toContain("walrus_proof_unknown_field");
   });
 
   test("requires an internally consistent policy decision before wallet review", () => {

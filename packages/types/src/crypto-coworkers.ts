@@ -10,6 +10,8 @@ export const MATTERHORN_CRYPTO_INTENT_VERSION = "matterhorn.crypto-intent.v1";
 export const MATTERHORN_POLICY_DECISION_VERSION = "matterhorn.policy-decision.v1";
 export const MATTERHORN_CRYPTO_PUBLIC_RECEIPT_VERSION = "matterhorn.crypto-public-receipt.v1";
 export const MATTERHORN_EVIDENCE_BUNDLE_VERSION = "matterhorn.evidence-bundle.v1";
+export const MATTERHORN_ENCRYPTED_EVIDENCE_ENVELOPE_VERSION = "matterhorn.encrypted-evidence-envelope.v1";
+export const MATTERHORN_WALRUS_CIPHERTEXT_VERSION = "matterhorn.walrus-ciphertext.v1";
 export const MATTERHORN_WALRUS_PROOF_VERSION = "matterhorn.walrus-proof.v1";
 
 export type MatterhornCryptoAppActionAccess = "read" | "watch" | "prepare" | "simulate";
@@ -454,7 +456,7 @@ export type MatterhornEvidenceBundle = {
   id: string;
   workspaceIdHash: string;
   runIdHash: string;
-  coworkerId: string;
+  coworkerIdHash: string;
   createdAt: string;
   retention: {
     contentClass: "security_receipt" | "encrypted_user_evidence";
@@ -467,9 +469,13 @@ export type MatterhornEvidenceBundle = {
     recipientKeyIds: string[];
   };
   receipt: {
+    status: "success" | "partial" | "cancelled" | "error";
     providerId: string;
     modelId: string;
     privacyMode: "public_research" | "private_workspace" | "transaction";
+    consent: "not_required" | "single_request";
+    dataCategoryHashes: string[];
+    redactionCount: number;
     policyHash: string;
     toolOutcomeHashes: string[];
     evidenceReferenceHashes: string[];
@@ -479,17 +485,24 @@ export type MatterhornEvidenceBundle = {
     outputTokens: number;
     responseDurationMs: number;
   };
-  ciphertextHash: string;
-  walrus: MatterhornWalrusProof | null;
 };
 
 export type MatterhornEncryptedEvidenceEnvelope = {
-  version: "matterhorn.encrypted-evidence-envelope.v1";
+  version: typeof MATTERHORN_ENCRYPTED_EVIDENCE_ENVELOPE_VERSION;
   algorithm: "aes-256-gcm";
   keyReference: string;
   payloadHash: string;
   ciphertextHash: string;
   merkleLeaf: string;
+  iv: string;
+  authenticationTag: string;
+  ciphertext: string;
+};
+
+/** Public Walrus payload. Key references and plaintext hashes stay tenant-local. */
+export type MatterhornWalrusCiphertext = {
+  version: typeof MATTERHORN_WALRUS_CIPHERTEXT_VERSION;
+  algorithm: "aes-256-gcm";
   iv: string;
   authenticationTag: string;
   ciphertext: string;
@@ -533,12 +546,26 @@ const ACTION_KEYS: readonly string[] = [
 ];
 const FORBIDDEN_ACTION_AUTHORITY = /(^|_)(sign|submit|relay|broadcast)(_|$)/i;
 const FORBIDDEN_EVIDENCE_KEYS = new Set([
+  "accountid",
+  "attachment",
+  "authorization",
   "prompt",
   "rawprompt",
+  "response",
+  "rawresponse",
+  "message",
+  "systemprompt",
+  "email",
   "privatekey",
   "seedphrase",
+  "signature",
+  "signedpayload",
+  "walletaddress",
   "walletsignature",
   "walletexport",
+  "workspaceid",
+  "runid",
+  "coworkerid",
   "capabilitytoken",
   "rawtooloutput",
 ]);
@@ -1227,23 +1254,142 @@ export function validateMatterhornEvidenceBundle(value: unknown): string[] {
   const issues: string[] = [];
   if (!isRecord(value)) return ["evidence_not_object"];
   collectForbiddenEvidenceKeys(value, issues);
+  if (!hasOnlyKeys(value, [
+    "version",
+    "id",
+    "workspaceIdHash",
+    "runIdHash",
+    "coworkerIdHash",
+    "createdAt",
+    "retention",
+    "encryption",
+    "receipt",
+  ])) issues.push("evidence_unknown_field");
   if (value.version !== MATTERHORN_EVIDENCE_BUNDLE_VERSION) issues.push("evidence_version_invalid");
-  for (const key of ["id", "workspaceIdHash", "runIdHash", "coworkerId", "createdAt", "ciphertextHash"]) {
-    if (!isNonEmptyString(value[key])) issues.push(`evidence_${key}_required`);
+  const hash = (candidate: unknown) => typeof candidate === "string" && /^[a-f0-9]{64}$/.test(candidate);
+  const publicText = (text: unknown, maximum: number) => typeof text === "string"
+    && text.trim().length > 0
+    && text.length <= maximum
+    && !/[\u0000-\u001F\u007F]/.test(text);
+  const hashArray = (candidate: unknown, maximum: number) => Array.isArray(candidate)
+    && candidate.length <= maximum
+    && candidate.every(hash)
+    && new Set(candidate).size === candidate.length;
+  const wholeNumber = (candidate: unknown, maximum = Number.MAX_SAFE_INTEGER) => Number.isSafeInteger(candidate)
+    && Number(candidate) >= 0
+    && Number(candidate) <= maximum;
+  if (!publicText(value.id, 160) || !/^evidence_[a-zA-Z0-9_-]+$/.test(String(value.id))) {
+    issues.push("evidence_id_invalid");
+  }
+  for (const key of ["workspaceIdHash", "runIdHash", "coworkerIdHash"]) {
+    if (!hash(value[key])) issues.push(`evidence_${key}_invalid`);
+  }
+  if (typeof value.createdAt !== "string" || !Number.isFinite(Date.parse(value.createdAt))) {
+    issues.push("evidence_created_at_invalid");
   }
   if (!isRecord(value.retention)
+    || !hasOnlyKeys(value.retention, ["contentClass", "deletable", "expiresAt"])
     || (value.retention.contentClass !== "security_receipt" && value.retention.contentClass !== "encrypted_user_evidence")
     || typeof value.retention.deletable !== "boolean"
-    || (value.retention.expiresAt !== null && !isNonEmptyString(value.retention.expiresAt))) {
+    || (value.retention.expiresAt !== null
+      && (typeof value.retention.expiresAt !== "string" || !Number.isFinite(Date.parse(value.retention.expiresAt))))) {
+    issues.push("evidence_retention_invalid");
+  } else if ((value.retention.contentClass === "encrypted_user_evidence" && value.retention.deletable !== true)
+    || (typeof value.retention.expiresAt === "string"
+      && Number.isFinite(Date.parse(value.createdAt as string))
+      && Date.parse(value.retention.expiresAt) <= Date.parse(value.createdAt as string))) {
     issues.push("evidence_retention_invalid");
   }
   if (!isRecord(value.encryption)
+    || !hasOnlyKeys(value.encryption, ["algorithm", "keyReference", "recipientKeyIds"])
     || (value.encryption.algorithm !== "aes-256-gcm" && value.encryption.algorithm !== "xchacha20-poly1305")
-    || !isNonEmptyString(value.encryption.keyReference)
-    || !isStringArray(value.encryption.recipientKeyIds)) {
+    || !publicText(value.encryption.keyReference, 512)
+    || !Array.isArray(value.encryption.recipientKeyIds)
+    || value.encryption.recipientKeyIds.length < 1
+    || value.encryption.recipientKeyIds.length > 32
+    || !value.encryption.recipientKeyIds.every((id) => publicText(id, 256))
+    || new Set(value.encryption.recipientKeyIds).size !== value.encryption.recipientKeyIds.length) {
     issues.push("evidence_encryption_required");
   }
-  if (!isRecord(value.receipt)) issues.push("evidence_receipt_required");
-  if (value.walrus !== null && !isRecord(value.walrus)) issues.push("evidence_walrus_proof_invalid");
+  if (!isRecord(value.receipt)
+    || !hasOnlyKeys(value.receipt, [
+      "status",
+      "providerId",
+      "modelId",
+      "privacyMode",
+      "consent",
+      "dataCategoryHashes",
+      "redactionCount",
+      "policyHash",
+      "toolOutcomeHashes",
+      "evidenceReferenceHashes",
+      "reviewedIntentHashes",
+      "publicChainReceiptHashes",
+      "inputTokens",
+      "outputTokens",
+      "responseDurationMs",
+    ])
+    || !["success", "partial", "cancelled", "error"].includes(String(value.receipt.status))
+    || !publicText(value.receipt.providerId, 256)
+    || !publicText(value.receipt.modelId, 256)
+    || !["public_research", "private_workspace", "transaction"].includes(String(value.receipt.privacyMode))
+    || !["not_required", "single_request"].includes(String(value.receipt.consent))
+    || !hashArray(value.receipt.dataCategoryHashes, 32)
+    || !wholeNumber(value.receipt.redactionCount, 100_000)
+    || !hash(value.receipt.policyHash)
+    || !hashArray(value.receipt.toolOutcomeHashes, 100)
+    || !hashArray(value.receipt.evidenceReferenceHashes, 100)
+    || !hashArray(value.receipt.reviewedIntentHashes, 20)
+    || !hashArray(value.receipt.publicChainReceiptHashes, 20)
+    || !wholeNumber(value.receipt.inputTokens, 100_000_000)
+    || !wholeNumber(value.receipt.outputTokens, 100_000_000)
+    || !wholeNumber(value.receipt.responseDurationMs, 86_400_000)) {
+    issues.push("evidence_receipt_invalid");
+  }
+  return [...new Set(issues)];
+}
+
+export function validateMatterhornWalrusProof(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) return ["walrus_proof_not_object"];
+  if (!hasOnlyKeys(value, [
+    "version",
+    "network",
+    "blobId",
+    "suiObjectId",
+    "certifiedEpoch",
+    "validUntilEpoch",
+    "quiltPatchId",
+    "merkleRoot",
+    "merkleProof",
+    "suiTransactionDigest",
+  ])) issues.push("walrus_proof_unknown_field");
+  const publicText = (text: unknown, maximum: number) => typeof text === "string"
+    && text.trim().length > 0
+    && text.length <= maximum
+    && !/[\u0000-\u001F\u007F]/.test(text);
+  const hash = (candidate: unknown) => typeof candidate === "string" && /^[a-f0-9]{64}$/.test(candidate);
+  const epoch = (candidate: unknown) => Number.isSafeInteger(candidate) && Number(candidate) >= 0;
+  if (value.version !== MATTERHORN_WALRUS_PROOF_VERSION) issues.push("walrus_proof_version_invalid");
+  if (!["testnet", "mainnet"].includes(String(value.network))) issues.push("walrus_proof_network_invalid");
+  if (!publicText(value.blobId, 512)) issues.push("walrus_proof_blob_id_invalid");
+  if (!publicText(value.suiObjectId, 256)) issues.push("walrus_proof_sui_object_id_invalid");
+  if (!epoch(value.certifiedEpoch)
+    || !epoch(value.validUntilEpoch)
+    || Number(value.validUntilEpoch) <= Number(value.certifiedEpoch)) {
+    issues.push("walrus_proof_epoch_invalid");
+  }
+  if (value.quiltPatchId !== null && !publicText(value.quiltPatchId, 512)) {
+    issues.push("walrus_proof_quilt_patch_id_invalid");
+  }
+  if (!hash(value.merkleRoot)) issues.push("walrus_proof_merkle_root_invalid");
+  if (!Array.isArray(value.merkleProof)
+    || value.merkleProof.length > 64
+    || value.merkleProof.some((item) => !hash(item))) {
+    issues.push("walrus_proof_merkle_path_invalid");
+  }
+  if (value.suiTransactionDigest !== null && !publicText(value.suiTransactionDigest, 256)) {
+    issues.push("walrus_proof_sui_transaction_digest_invalid");
+  }
   return [...new Set(issues)];
 }

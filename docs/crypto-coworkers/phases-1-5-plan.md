@@ -31,6 +31,7 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 3 wallet-intent lifecycle foundation: complete and backend-only for certified Sui and Hyperliquid actions. Wallet-review tickets persist in the guarded SQLite boundary, are tenant/owner/coworker scoped, carry exact connection, authorized-argument hash, resolved-term hash, and prior-intent lineage, auto-expire with their simulation, and become non-approvable when coworker authority changes. Refresh requires unchanged authorized arguments plus a different guarded run and consumed capability; it re-executes the certified adapter, creates a new intent, and permanently supersedes the prior review. Scheduled checks remain read-only and cannot prepare, sign, relay, broadcast, or submit.
 - Phase 3 account wallet boundary: complete for owner-scoped list, inspect, cancel, and wallet-reported public metadata. Receipt reconciliation fetches the immutable server-owned intent, verifies the exact authorized arguments, signer, network, operation, guarded run receipt, policy, and simulation, and rejects signatures or credential-shaped content. Transaction preparation is cancelled if the guarded run receipt cannot durably stage the reviewed action.
 - Sui transaction digests remain explicitly wallet-reported and `chainVerified: false`; the approved pinned RPC allowlist excludes `GetTransaction`, so the runtime does not make an unsupported chain-verification claim. Independent chain confirmation is deferred pending a separately approved read-method threat review.
+- Phase 4 local evidence foundation: complete and backend-only. Finalized guarded receipts compile into a closed, identity-hashed evidence schema; AES-256-GCM sealing occurs before any publisher boundary; the transient plaintext data key is zeroed on success and failure; public Walrus bytes exclude the local key reference and plaintext hash; and deterministic Merkle proofs reject duplicate, modified, or mismatched ciphertext. No Walrus relay, Sui anchor, or mainnet write is enabled.
 - Current slice: compile the minimal redacted Phase 4 evidence bundle from guarded run receipts and wallet-reported metadata, then connect it to the existing authenticated-encryption envelope without publishing any bytes.
 - All new production modes remain `off`; the new HTTP routes return a stable disabled response and no upstream adapter traffic is enabled.
 
@@ -231,9 +232,11 @@ Users may opt to publish an encrypted, minimal evidence bundle whose integrity a
 1. **Evidence compiler**
    - Redacted provider/model, policy, tool outcome hashes, evidence references, reviewed intents, public chain receipt hashes, tokens, and latency.
    - Raw prompts, keys, credentials, signatures, wallet exports, identities, and unrestricted tool output are structurally forbidden.
+   - **Implemented locally:** finalized-receipt enforcement, closed-schema projection, per-bundle salted identity hashes, opaque public ciphertext serialization, and ciphertext-only Merkle proofs.
 2. **Encryption and key lifecycle**
    - Envelope encryption before any publisher receives bytes.
    - Workspace-scoped key references, rotation, access audit, deletion, and key destruction.
+   - **Partially implemented:** the key-manager contract, exact-recipient binding, AES-256-GCM envelope, and plaintext-key zeroization are complete. A production KMS implementation, durable lifecycle index, rotation, and destruction jobs remain.
 3. **Walrus publisher**
    - Authenticated relay with strict ciphertext-only content type and maximum size.
    - Quilt batching and Merkle proofs for small bundles.

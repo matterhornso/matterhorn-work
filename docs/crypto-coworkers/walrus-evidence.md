@@ -28,6 +28,8 @@ Official references:
 11. Anchor only the batch ID, Merkle root, schema version, Walrus reference, and epoch/lifetime metadata.
 12. Store the user's Merkle proof and decryption-key reference inside the tenant boundary.
 
+The local encrypted envelope and the public Walrus payload are deliberately different contracts. The local envelope retains the opaque KMS key reference and plaintext payload hash for authorized recovery. The public `matterhorn.walrus-ciphertext.v1` bytes contain only the algorithm, random IV, authentication tag, and ciphertext. The ciphertext hash is computed over those exact public bytes; it is not embedded in the plaintext bundle, which would create a circular integrity field. Walrus certification and Merkle proof metadata are also stored beside the local envelope rather than inside it: putting a proof of a ciphertext inside that ciphertext would create the same circular dependency.
+
 ## Forbidden public content
 
 - Prompt or response text.
@@ -56,6 +58,7 @@ Official references:
 - The publisher receives no plaintext data key.
 - Size, cost, rate, workspace quota, and retention limits are enforced before upload.
 - A returned blob ID is untrusted until Sui certification and the expected ciphertext hash are verified.
+- The relay must accept the serialized public ciphertext contract, never the tenant-local encrypted envelope. Key references and plaintext hashes are rejected at the publisher boundary.
 
 ## Phase 0 proof
 
@@ -70,3 +73,13 @@ The first testnet prototype must use synthetic data and demonstrate:
 - Decryptability only with the authorized test recipient key.
 - No plaintext recovery from the public blob, logs, telemetry, or Sui anchor.
 
+## Implemented local foundation
+
+- Finalized guarded receipts compile through a closed projection that hashes tenant, run, coworker, data-category, tool, evidence-reference, reviewed-intent, and public-receipt identifiers.
+- Per-bundle random correlation salt prevents stable identity hashes across publications.
+- Pending runs and unknown/forbidden evidence fields fail before encryption.
+- AES-256-GCM encryption authenticates the tenant-local key reference and plaintext hash as AAD.
+- The plaintext data key is zeroed after sealing, including error paths.
+- Public serialization excludes the key reference and plaintext hash.
+- Deterministic, order-independent Merkle batches verify ciphertext modification and reject duplicate or mismatched leaves.
+- No publisher, Walrus network call, Sui anchor, or mainnet write is enabled by this foundation.
