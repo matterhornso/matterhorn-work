@@ -1,5 +1,10 @@
 import { request as requestHttps, type RequestOptions } from "node:https";
 import type { ClientRequest, IncomingMessage } from "node:http";
+import {
+  connect as connectTls,
+  type ConnectionOptions as TlsConnectionOptions,
+  type TLSSocket,
+} from "node:tls";
 
 import type { MatterhornCryptoAppConnectionCredential } from "@matterhorn-work/types/crypto-coworkers";
 
@@ -30,10 +35,13 @@ type HttpsRequest = (
   callback: (response: IncomingMessage) => void,
 ) => ClientRequest;
 
+type TlsConnector = (options: TlsConnectionOptions) => TLSSocket;
+
 type TransportOptions = {
   resolveCredentialHeaders?: MatterhornCryptoAppCredentialResolver;
   estimateCostMicros?: MatterhornCryptoAppCostEstimator;
   request?: HttpsRequest;
+  tlsConnect?: TlsConnector;
   maxResponseBytes?: number;
 };
 
@@ -131,11 +139,58 @@ function finiteCost(value: number): number {
   return value;
 }
 
+async function securePinnedSocket(input: {
+  endpoint: URL;
+  pinnedAddress: string;
+  approvedAddresses: readonly string[];
+  signal: AbortSignal;
+  tlsConnect: TlsConnector;
+}): Promise<TLSSocket> {
+  const socket = input.tlsConnect({
+    host: input.pinnedAddress,
+    port: Number(input.endpoint.port || 443),
+    servername: input.endpoint.hostname,
+    rejectUnauthorized: true,
+    ALPNProtocols: ["http/1.1"],
+  });
+  await new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      socket.removeListener("secureConnect", onSecure);
+      socket.removeListener("error", onError);
+      input.signal.removeEventListener("abort", onAbort);
+    };
+    const onSecure = () => { cleanup(); resolve(); };
+    const onError = (error: Error) => { cleanup(); reject(error); };
+    const onAbort = () => {
+      cleanup();
+      socket.destroy(new Error("crypto_app_transport_aborted"));
+      reject(new Error("crypto_app_transport_aborted"));
+    };
+    socket.once("secureConnect", onSecure);
+    socket.once("error", onError);
+    input.signal.addEventListener("abort", onAbort, { once: true });
+    if (input.signal.aborted) onAbort();
+  });
+  try {
+    assertCryptoAdapterConnectedAddress(input.approvedAddresses, socket.remoteAddress ?? "");
+  } catch (error) {
+    socket.destroy();
+    throw error;
+  }
+  if (socket.alpnProtocol && socket.alpnProtocol !== "http/1.1") {
+    socket.destroy();
+    throw new Error("crypto_app_transport_http1_required");
+  }
+  return socket;
+}
+
 export function createPinnedJsonRequester(options: {
   request?: HttpsRequest;
+  tlsConnect?: TlsConnector;
   maxResponseBytes?: number;
 } = {}): MatterhornPinnedJsonRequester {
   const request = options.request ?? requestHttps;
+  const tlsConnect = options.tlsConnect ?? connectTls;
   const maxResponseBytes = Math.max(1_024, options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES);
 
   return async (input): Promise<MatterhornPinnedJsonResponse> => {
@@ -146,84 +201,85 @@ export function createPinnedJsonRequester(options: {
     const headers = safeCredentialHeaders(input.headers ?? {});
     const body = JSON.stringify(input.body);
     const requestBytes = Buffer.byteLength(body, "utf8");
+    const socket = await securePinnedSocket({
+      endpoint: input.endpoint,
+      pinnedAddress,
+      approvedAddresses: input.approvedAddresses,
+      signal: input.signal,
+      tlsConnect,
+    });
 
     return new Promise<MatterhornPinnedJsonResponse>((resolve, reject) => {
       let settled = false;
+      let client: ClientRequest | null = null;
       const finish = (callback: () => void) => {
         if (settled) return;
         settled = true;
         input.signal.removeEventListener("abort", abort);
+        socket.destroy();
         callback();
       };
       const abort = () => {
-        client.destroy(new Error("crypto_app_transport_aborted"));
+        client?.destroy(new Error("crypto_app_transport_aborted"));
         finish(() => reject(new Error("crypto_app_transport_aborted")));
       };
-      const client = request({
-        protocol: "https:",
-        hostname: input.endpoint.hostname,
-        port: input.endpoint.port || 443,
-        method: "POST",
-        path: `${input.endpoint.pathname}${input.endpoint.search}`,
-        servername: input.endpoint.hostname,
-        rejectUnauthorized: true,
-        agent: false,
-        lookup: (_hostname, lookupOptions, callback) => {
-          if (typeof lookupOptions === "object" && lookupOptions.all) {
-            callback(null, [{ address: pinnedAddress, family: 4 }]);
+      try {
+        client = request({
+          protocol: "https:",
+          hostname: input.endpoint.hostname,
+          port: input.endpoint.port || 443,
+          method: "POST",
+          path: `${input.endpoint.pathname}${input.endpoint.search}`,
+          servername: input.endpoint.hostname,
+          rejectUnauthorized: true,
+          agent: false,
+          createConnection: () => socket,
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json",
+            "content-length": String(requestBytes),
+            "user-agent": "Matterhorn-Crypto-App-Gateway/1",
+            ...headers,
+          },
+          signal: input.signal,
+        }, (response) => {
+          const connectedAddress = socket.remoteAddress ?? "";
+          const contentType = String(response.headers["content-type"] ?? "").toLowerCase();
+          if (!contentType.startsWith("application/json")) {
+            response.destroy();
+            finish(() => reject(new Error("crypto_app_transport_content_type_invalid")));
             return;
           }
-          callback(null, pinnedAddress, 4);
-        },
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-          "content-length": String(requestBytes),
-          "user-agent": "Matterhorn-Crypto-App-Gateway/1",
-          ...headers,
-        },
-        signal: input.signal,
-      }, (response) => {
-        const connectedAddress = response.socket.remoteAddress ?? "";
-        try {
-          assertCryptoAdapterConnectedAddress(input.approvedAddresses, connectedAddress);
-        } catch (error) {
-          response.destroy();
-          finish(() => reject(error));
-          return;
-        }
-        const contentType = String(response.headers["content-type"] ?? "").toLowerCase();
-        if (!contentType.startsWith("application/json")) {
-          response.destroy();
-          finish(() => reject(new Error("crypto_app_transport_content_type_invalid")));
-          return;
-        }
-        if ((response.statusCode ?? 0) < 200 || (response.statusCode ?? 0) >= 300) {
-          response.resume();
-          finish(() => reject(new Error("crypto_app_transport_status_invalid")));
-          return;
-        }
-        const chunks: Buffer[] = [];
-        let responseBytes = 0;
-        response.on("data", (chunk: Buffer | string) => {
-          const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          responseBytes += bytes.length;
-          if (responseBytes > maxResponseBytes) {
-            response.destroy(new Error("crypto_app_transport_response_too_large"));
+          if ((response.statusCode ?? 0) < 200 || (response.statusCode ?? 0) >= 300) {
+            response.resume();
+            finish(() => reject(new Error("crypto_app_transport_status_invalid")));
             return;
           }
-          chunks.push(bytes);
+          const chunks: Buffer[] = [];
+          let responseBytes = 0;
+          response.on("data", (chunk: Buffer | string) => {
+            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            responseBytes += bytes.length;
+            if (responseBytes > maxResponseBytes) {
+              response.destroy(new Error("crypto_app_transport_response_too_large"));
+              return;
+            }
+            chunks.push(bytes);
+          });
+          response.on("error", (error) => finish(() => reject(error)));
+          response.on("end", () => {
+            try {
+              const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+              finish(() => resolve({ value, connectedAddress, requestBytes, responseBytes }));
+            } catch (error) {
+              finish(() => reject(error));
+            }
+          });
         });
-        response.on("error", (error) => finish(() => reject(error)));
-        response.on("end", () => {
-          try {
-            const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-            finish(() => resolve({ value, connectedAddress, requestBytes, responseBytes }));
-          } catch (error) {
-            finish(() => reject(error));
-          }
-        });
-      });
+      } catch (error) {
+        finish(() => reject(error));
+        return;
+      }
       client.on("error", (error) => finish(() => reject(error)));
       if (input.signal.aborted) {
         abort();
@@ -240,6 +296,7 @@ export function createPinnedJsonCryptoAppTransport(
 ): MatterhornCryptoAppTransportExecutor {
   const requestJson = createPinnedJsonRequester({
     request: options.request,
+    tlsConnect: options.tlsConnect,
     maxResponseBytes: options.maxResponseBytes,
   });
 

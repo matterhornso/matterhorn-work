@@ -44,12 +44,31 @@ function fakeHttps(input: {
   statusCode?: number;
   contentType?: string;
   connectedAddress?: string;
+  alpnProtocol?: string | false;
   body?: unknown;
 }) {
+  let tlsOptions: Record<string, unknown> | null = null;
   let requestOptions: Record<string, unknown> | null = null;
   let requestBody = "";
+  let socketDestroyed = false;
+  const socket = new EventEmitter() as EventEmitter & {
+    remoteAddress: string;
+    alpnProtocol: string | false;
+    destroy: (error?: Error) => void;
+  };
+  Object.defineProperties(socket, {
+    remoteAddress: { value: input.connectedAddress ?? "93.184.216.34" },
+    alpnProtocol: { value: input.alpnProtocol ?? "http/1.1" },
+  });
+  socket.destroy = () => { socketDestroyed = true; };
+  const tlsConnect = ((options: Record<string, unknown>) => {
+    tlsOptions = options;
+    queueMicrotask(() => socket.emit("secureConnect"));
+    return socket;
+  }) as never;
   const request = ((options: Record<string, unknown>, callback: (response: IncomingMessage) => void) => {
     requestOptions = options;
+    expect((options.createConnection as () => unknown)()).toBe(socket);
     const client = new EventEmitter() as EventEmitter & {
       end: (body?: string) => void;
       destroy: (error?: Error) => ClientRequest;
@@ -70,7 +89,7 @@ function fakeHttps(input: {
       Object.defineProperties(response, {
         statusCode: { value: input.statusCode ?? 200 },
         headers: { value: { "content-type": input.contentType ?? "application/json; charset=utf-8" } },
-        socket: { value: { remoteAddress: input.connectedAddress ?? "93.184.216.34" } },
+        socket: { value: socket },
       });
       queueMicrotask(() => callback(response));
     };
@@ -78,8 +97,11 @@ function fakeHttps(input: {
   }) as never;
   return {
     request,
+    tlsConnect,
+    tlsOptions: () => tlsOptions as Record<string, unknown>,
     options: () => requestOptions as Record<string, unknown>,
     body: () => requestBody,
+    socketDestroyed: () => socketDestroyed,
   };
 }
 
@@ -88,6 +110,7 @@ describe("pinned JSON crypto app transport", () => {
     const fake = fakeHttps({});
     const executor = createPinnedJsonCryptoAppTransport({
       request: fake.request,
+      tlsConnect: fake.tlsConnect,
       resolveCredentialHeaders: async ({ credential }) => {
         expect(credential).toEqual({ type: "api_key_vault", secretReference: "vault://opaque-reference" });
         return { authorization: "Bearer resolved-secret" };
@@ -96,6 +119,13 @@ describe("pinned JSON crypto app transport", () => {
     });
     const result = await executor(requestInput());
     const options = fake.options();
+    expect(fake.tlsOptions()).toMatchObject({
+      host: "93.184.216.34",
+      port: 443,
+      servername: "adapter.example.test",
+      rejectUnauthorized: true,
+      ALPNProtocols: ["http/1.1"],
+    });
     expect(options).toMatchObject({
       protocol: "https:",
       hostname: "adapter.example.test",
@@ -106,14 +136,6 @@ describe("pinned JSON crypto app transport", () => {
       agent: false,
     });
     expect(options.headers).toMatchObject({ authorization: "Bearer resolved-secret" });
-    const lookup = options.lookup as (
-      hostname: string,
-      options: Record<string, unknown>,
-      callback: (error: Error | null, address: string, family: number) => void,
-    ) => void;
-    let pinned: unknown[] = [];
-    lookup("adapter.example.test", {}, (error, address, family) => { pinned = [error, address, family]; });
-    expect(pinned).toEqual([null, "93.184.216.34", 4]);
     expect(fake.body()).not.toContain("vault://opaque-reference");
     expect(fake.body()).not.toContain("resolved-secret");
     expect(JSON.parse(fake.body())).toMatchObject({
@@ -127,27 +149,33 @@ describe("pinned JSON crypto app transport", () => {
       connectedAddress: "93.184.216.34",
       costMicros: expect.any(Number),
     });
+    expect(fake.socketDestroyed()).toBe(true);
   });
 
   test("rejects forbidden credential headers before creating a socket", async () => {
     let requested = false;
+    let connected = false;
     const executor = createPinnedJsonCryptoAppTransport({
       request: (() => { requested = true; throw new Error("must not connect"); }) as never,
+      tlsConnect: (() => { connected = true; throw new Error("must not connect"); }) as never,
       resolveCredentialHeaders: async () => ({ host: "attacker.invalid" }),
     });
     await expect(executor(requestInput())).rejects.toThrow("crypto_app_credential_header_forbidden");
     expect(requested).toBe(false);
+    expect(connected).toBe(false);
   });
 
-  test("rejects redirects, non-JSON bodies, oversized responses, and peer-address changes", async () => {
+  test("rejects redirects, non-JSON bodies, oversized responses, peer changes and wrong ALPN", async () => {
     for (const [fake, code] of [
       [fakeHttps({ statusCode: 302 }), "crypto_app_transport_status_invalid"],
       [fakeHttps({ contentType: "text/html" }), "crypto_app_transport_content_type_invalid"],
       [fakeHttps({ connectedAddress: "93.184.216.35" }), "crypto_app_connected_address_mismatch"],
+      [fakeHttps({ alpnProtocol: "h2" }), "crypto_app_transport_http1_required"],
       [fakeHttps({ body: "x".repeat(2_000) }), "crypto_app_transport_response_too_large"],
     ] as const) {
       const executor = createPinnedJsonCryptoAppTransport({
         request: fake.request,
+        tlsConnect: fake.tlsConnect,
         maxResponseBytes: 1_024,
         resolveCredentialHeaders: async () => ({}),
       });
@@ -167,23 +195,27 @@ describe("pinned JSON crypto app transport", () => {
     });
     const executor = createPinnedJsonCryptoAppTransport({
       request: fake.request,
+      tlsConnect: fake.tlsConnect,
       resolveCredentialHeaders: async () => ({}),
     });
     await expect(executor(requestInput())).rejects.toThrow("crypto_app_transport_envelope_invalid");
   });
 
   test("requires a server credential resolver for credentialed connections", async () => {
-    const executor = createPinnedJsonCryptoAppTransport({ request: fakeHttps({}).request });
+    const fake = fakeHttps({});
+    const executor = createPinnedJsonCryptoAppTransport({ request: fake.request, tlsConnect: fake.tlsConnect });
     await expect(executor(requestInput())).rejects.toThrow("crypto_app_credential_resolver_unavailable");
   });
 
   test("does not resolve credentials or create a socket for an already-aborted call", async () => {
     let resolvedCredential = false;
     let requested = false;
+    let connected = false;
     const controller = new AbortController();
     controller.abort();
     const executor = createPinnedJsonCryptoAppTransport({
       request: (() => { requested = true; throw new Error("must not connect"); }) as never,
+      tlsConnect: (() => { connected = true; throw new Error("must not connect"); }) as never,
       resolveCredentialHeaders: async () => {
         resolvedCredential = true;
         return {};
@@ -192,5 +224,6 @@ describe("pinned JSON crypto app transport", () => {
     await expect(executor(requestInput({ signal: controller.signal }))).rejects.toThrow("crypto_app_transport_aborted");
     expect(resolvedCredential).toBe(false);
     expect(requested).toBe(false);
+    expect(connected).toBe(false);
   });
 });
