@@ -177,6 +177,22 @@ describe("pinned Sui HTTP/2 gRPC-web fetch", () => {
     expect(dialed).toBe(false);
   });
 
+  test("honors an already-aborted outer run before dialing", async () => {
+    let dialed = false;
+    const controller = new AbortController();
+    controller.abort();
+    const fetcher = createPinnedSuiGrpcWebFetch({
+      endpoint: ENDPOINT,
+      approvedAddresses: [PEER],
+      outerSignal: controller.signal,
+      tlsConnect: (() => { dialed = true; throw new Error("must not dial"); }) as never,
+    });
+    await expect(
+      fetcher(new URL(MATTERHORN_SUI_SIMULATE_GRPC_PATH, ENDPOINT), grpcInit()),
+    ).rejects.toThrow("crypto_app_grpc_aborted");
+    expect(dialed).toBe(false);
+  });
+
   test("rejects DNS peer changes, missing h2 and oversized responses", async () => {
     for (const [fake, extra, code] of [
       [harness({ connectedAddress: "93.184.216.35" }), {}, "crypto_app_connected_address_mismatch"],

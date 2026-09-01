@@ -178,7 +178,8 @@ function hyperliquidUniverse(value: unknown): {
 } {
   if (!Array.isArray(value) || value.length < 2) throw new Error("first_party_hyperliquid_meta_invalid");
   const meta = record(value[0]);
-  if (!meta || !Array.isArray(meta.universe) || !Array.isArray(value[1])) {
+  if (!meta || !Array.isArray(meta.universe) || !Array.isArray(value[1])
+    || meta.universe.length !== value[1].length) {
     throw new Error("first_party_hyperliquid_meta_invalid");
   }
   return { universe: meta.universe, contexts: value[1] };
@@ -187,10 +188,11 @@ function hyperliquidUniverse(value: unknown): {
 function marketEntry(universe: unknown[], contexts: unknown[], index: number) {
   const definition = record(universe[index]);
   const context = record(contexts[index]);
+  if (!definition || !context) throw new Error("first_party_hyperliquid_market_invalid");
   const asset = boundedAsset(definition?.name);
-  const markPrice = decimal(context?.markPx ?? "0", "hyperliquid_mark_price");
-  const fundingRate = signedDecimal(context?.funding ?? "0", "hyperliquid_funding");
-  const openInterest = decimal(context?.openInterest ?? "0", "hyperliquid_open_interest");
+  const markPrice = decimal(context.markPx, "hyperliquid_mark_price");
+  const fundingRate = signedDecimal(context.funding, "hyperliquid_funding");
+  const openInterest = decimal(context.openInterest, "hyperliquid_open_interest");
   return {
     asset,
     markPrice,
@@ -202,40 +204,40 @@ function marketEntry(universe: unknown[], contexts: unknown[], index: number) {
 }
 
 function hyperliquidLevels(value: unknown): Array<{ price: string; size: string }> {
-  if (!Array.isArray(value)) return [];
-  return value.slice(0, 50).flatMap((entry) => {
+  if (!Array.isArray(value)) throw new Error("first_party_hyperliquid_book_invalid");
+  return value.slice(0, 50).map((entry) => {
     const level = record(entry);
-    try {
-      return [{
-        price: decimal(level?.px, "hyperliquid_book_price", false),
-        size: decimal(level?.sz, "hyperliquid_book_size"),
-      }];
-    } catch {
-      return [];
-    }
+    if (!level) throw new Error("first_party_hyperliquid_book_invalid");
+    return {
+      price: decimal(level.px, "hyperliquid_book_price", false),
+      size: decimal(level.sz, "hyperliquid_book_size"),
+    };
   });
 }
 
 function accountSummary(value: unknown, address: string) {
   const state = record(value);
   if (!state) throw new Error("first_party_hyperliquid_account_invalid");
-  const margin = record(state.marginSummary) ?? record(state.crossMarginSummary) ?? {};
-  const accountValueUsd = decimal(margin.accountValue ?? margin.totalRawUsd ?? "0", "hyperliquid_account_value");
-  const marginUsedUsd = decimal(margin.totalMarginUsed ?? margin.marginUsed ?? "0", "hyperliquid_margin_used");
-  const positions = Array.isArray(state.assetPositions) ? state.assetPositions.slice(0, 100).flatMap((entry) => {
+  const margin = record(state.marginSummary) ?? record(state.crossMarginSummary);
+  if (!margin || !Array.isArray(state.assetPositions)) throw new Error("first_party_hyperliquid_account_invalid");
+  const accountValueUsd = decimal(margin.accountValue ?? margin.totalRawUsd, "hyperliquid_account_value");
+  const marginUsedUsd = decimal(margin.totalMarginUsed ?? margin.marginUsed, "hyperliquid_margin_used");
+  const positions = state.assetPositions.slice(0, 100).flatMap((entry) => {
     const position = record(record(entry)?.position);
     const signedSize = finiteNumber(position?.szi);
-    if (!position || signedSize === null || signedSize === 0) return [];
+    if (!position || signedSize === null) throw new Error("first_party_hyperliquid_position_invalid");
+    if (signedSize === 0) return [];
     const leverage = record(position.leverage);
+    if (!leverage) throw new Error("first_party_hyperliquid_position_invalid");
     return [{
       asset: boundedAsset(position.coin),
       side: signedSize > 0 ? "long" as const : "short" as const,
       size: decimal(String(Math.abs(signedSize)), "hyperliquid_position_size", false),
-      entryPrice: decimal(position.entryPx ?? "0", "hyperliquid_entry_price"),
-      unrealizedPnlUsd: signedDecimal(position.unrealizedPnl ?? "0", "hyperliquid_unrealized_pnl"),
-      leverage: decimal(leverage?.value ?? "0", "hyperliquid_leverage"),
+      entryPrice: decimal(position.entryPx, "hyperliquid_entry_price"),
+      unrealizedPnlUsd: signedDecimal(position.unrealizedPnl, "hyperliquid_unrealized_pnl"),
+      leverage: decimal(leverage.value, "hyperliquid_leverage"),
     }];
-  }) : [];
+  });
   return { address, accountValueUsd, marginUsedUsd, positions };
 }
 
@@ -338,6 +340,13 @@ async function executeSui(
   const coinType = normalizeStructTag(requestedCoinType);
   const balance = record(await suiRpc(context, 1, "suix_getBalance", [address, coinType]));
   if (!balance) throw new Error("first_party_sui_balance_invalid");
+  const returnedCoinType = nonEmptyString(balance.coinType);
+  if (!returnedCoinType || !isValidStructTag(returnedCoinType)
+    || normalizeStructTag(returnedCoinType) !== coinType) {
+    throw new Error("first_party_sui_balance_conflict");
+  }
+  const balanceAtomic = nonEmptyString(balance.totalBalance);
+  if (!balanceAtomic) throw new Error("first_party_sui_balance_invalid");
   const checkpoint = nonEmptyString(await suiRpc(context, 2, "sui_getLatestCheckpointSequenceNumber", []));
   if (!checkpoint) throw new Error("first_party_sui_checkpoint_invalid");
   let decimals = 9;
@@ -354,7 +363,7 @@ async function executeSui(
     data: {
       address,
       coinType,
-      balanceAtomic: decimal(balance.totalBalance ?? "0", "sui_balance"),
+      balanceAtomic: decimal(balanceAtomic, "sui_balance"),
       decimals,
       symbol: symbol.slice(0, 24),
       checkpoint,
@@ -397,6 +406,7 @@ async function executeHyperliquid(
     const asset = boundedAsset(args.asset);
     const book = record(await hyperliquidInfo(context, { type: "l2Book", coin: asset }));
     if (!book || !Array.isArray(book.levels)) throw new Error("first_party_hyperliquid_book_invalid");
+    if (boundedAsset(book.coin) !== asset) throw new Error("first_party_hyperliquid_book_conflict");
     return {
       data: {
         asset,
@@ -448,6 +458,7 @@ async function executeHyperliquid(
   }
   const book = record(bookValue);
   if (!book || !Array.isArray(book.levels)) throw new Error("first_party_hyperliquid_book_invalid");
+  if (boundedAsset(book.coin) !== asset) throw new Error("first_party_hyperliquid_book_conflict");
   const bids = hyperliquidLevels(book.levels[0]);
   const asks = hyperliquidLevels(book.levels[1]);
   const top = side === "buy" ? asks[0]?.price : bids[0]?.price;

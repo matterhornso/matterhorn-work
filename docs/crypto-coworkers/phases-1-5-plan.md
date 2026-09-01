@@ -16,7 +16,8 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 1 signed, testnet-only Sui and Hyperliquid manifest contracts, closed projections, guarded-tool bindings, and offline routed fixtures: complete and backend-only.
 - Phase 1 pinned live-source executor: Sui balance/checkpoint reads and exact transfer simulations plus Hyperliquid market/orderbook/account reads and exact short-lived order previews are complete and backend-only. Hyperliquid preparation never calls the exchange endpoint.
 - Phase 1 Sui SDK boundary: complete and backend-only. Matterhorn injects an explicit binary gRPC-web transport over a TLS-verified, IPv4-pinned HTTP/2 socket. The allowlist contains only the read-only `StateService/GetBalance` resolution required by the official transaction builder and `TransactionExecutionService/SimulateTransaction`; `ExecuteTransaction` and every other method fail before dialing.
-- Current slice: durable cost/quota and circuit policy, conflicting-source adversarial tests, then completing testnet certification.
+- Phase 1 durable operational policy: complete and backend-only. Workspace/day quota reservations, per-call cost ceilings, replay-safe reconciliation, abandoned-reservation expiry, tenant purge, and circuit state persist atomically in SQLite across process restarts.
+- Current slice: conflicting-source and schema-drift adversarial tests, then completing testnet certification.
 - All new production modes remain `off`; no HTTP routes or upstream adapter traffic are enabled.
 
 ## Goal
@@ -328,7 +329,6 @@ The first-party contracts and backend-only executors cover Sui balance reads and
 The next Phase 1 slice must:
 
 - Extend the trusted transport boundary to future MCP/OpenAPI/RPC protocols without allowing redirects, destination overrides, arbitrary methods, or raw upstream cost claims. The first-party JSON and Sui gRPC transports are complete for the current testnet actions.
-- Add a durable adapter cost/quota ledger; capability reservation/reconciliation is complete, while monetary/tool allowance accounting remains separate and pending.
-- Persist circuit/quota state needed across process restarts while keeping the hosted release single-instance.
+- Wire the completed operational-policy store into the future single-instance gateway bootstrap; it remains deliberately disconnected from current production startup.
 - Complete conflicting-source, schema-drift, abort, replay, and zero-upstream-denial fixtures for the live Sui and Hyperliquid testnet sources.
 - Keep account-facing HTTP routes and runtime capabilities disconnected until that full adversarial gate passes.

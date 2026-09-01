@@ -6,6 +6,7 @@ import type { MatterhornCryptoAppAction } from "@matterhorn-work/types/crypto-co
 import { createFirstPartyCryptoAppExecutor } from "./first-party-crypto-app-executor.js";
 import { buildMatterhornFirstPartyTestnetManifests } from "./first-party-crypto-apps.js";
 import type { MatterhornPinnedJsonRequester } from "./crypto-app-https-transport.js";
+import { SUI_NATIVE_COIN_TYPE } from "./tools/sui.js";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const PEER = "93.184.216.34";
@@ -72,6 +73,7 @@ function hyperliquidFixtureRequester(calls: unknown[]): MatterhornPinnedJsonRequ
     }
     if (body.type === "l2Book") {
       return response({
+        coin: "BTC",
         time: 1_788_264_000_000,
         levels: [
           [{ px: "63990", sz: "3.5", n: 2 }],
@@ -108,7 +110,11 @@ describe("first-party crypto app executor", () => {
       calls.push(request.body);
       const body = request.body as Record<string, unknown>;
       if (body.method === "suix_getBalance") {
-        return response({ jsonrpc: "2.0", id: 1, result: { totalBalance: "1250000000" } });
+        return response({
+          jsonrpc: "2.0",
+          id: 1,
+          result: { coinType: SUI_NATIVE_COIN_TYPE, totalBalance: "1250000000" },
+        });
       }
       if (body.method === "sui_getLatestCheckpointSequenceNumber") {
         return response({ jsonrpc: "2.0", id: 2, result: "123456" });
@@ -359,6 +365,72 @@ describe("first-party crypto app executor", () => {
       },
     }))).rejects.toThrow("first_party_hyperliquid_reduce_only_invalid");
     expect(calls.some((call) => (call as Record<string, unknown>).type === "exchange")).toBe(false);
+  });
+
+  test("rejects conflicting Sui coin identity and Hyperliquid book identity", async () => {
+    const sui = createFirstPartyCryptoAppExecutor({
+      requestJson: async (request) => {
+        const body = request.body as Record<string, unknown>;
+        if (body.method !== "suix_getBalance") throw new Error("unexpected request after conflict");
+        return response({
+          jsonrpc: "2.0",
+          id: 1,
+          result: { coinType: "0x2::coin::COIN", totalBalance: "10" },
+        });
+      },
+      now: () => new Date(NOW),
+    });
+    await expect(sui(input({
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+      arguments: { address: SUI_ADDRESS },
+    }))).rejects.toThrow("first_party_sui_balance_conflict");
+
+    const hyperliquid = createFirstPartyCryptoAppExecutor({
+      requestJson: async () => response({
+        coin: "ETH",
+        time: 1_788_264_000_000,
+        levels: [[{ px: "63990", sz: "1" }], [{ px: "64010", sz: "1" }]],
+      }),
+      now: () => new Date(NOW),
+    });
+    await expect(hyperliquid(input({
+      appId: "matterhorn.hyperliquid-testnet",
+      actionId: "hyperliquid_orderbook_read",
+      network: "hyperliquid:testnet",
+      arguments: { asset: "BTC" },
+    }))).rejects.toThrow("first_party_hyperliquid_book_conflict");
+  });
+
+  test("fails closed on Hyperliquid metadata and account schema drift", async () => {
+    const metadata = createFirstPartyCryptoAppExecutor({
+      requestJson: async () => response([
+        { universe: [{ name: "BTC", szDecimals: 5, maxLeverage: 50 }] },
+        [],
+      ]),
+      now: () => new Date(NOW),
+    });
+    await expect(metadata(input({
+      appId: "matterhorn.hyperliquid-testnet",
+      actionId: "hyperliquid_market_read",
+      network: "hyperliquid:testnet",
+      arguments: {},
+    }))).rejects.toThrow("first_party_hyperliquid_meta_invalid");
+
+    const account = createFirstPartyCryptoAppExecutor({
+      requestJson: async () => response({
+        marginSummary: { accountValue: "100", totalMarginUsed: "0" },
+        assetPositions: [{ position: { coin: "BTC" } }],
+      }),
+      now: () => new Date(NOW),
+    });
+    await expect(account(input({
+      appId: "matterhorn.hyperliquid-testnet",
+      actionId: "hyperliquid_account_exposure",
+      network: "hyperliquid:testnet",
+      arguments: { address: HYPERLIQUID_ADDRESS },
+    }))).rejects.toThrow("first_party_hyperliquid_position_invalid");
   });
 
   test("rejects credentials and invalid networks before sending protocol requests", async () => {

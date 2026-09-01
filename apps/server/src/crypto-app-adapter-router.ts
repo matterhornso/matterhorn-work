@@ -14,6 +14,10 @@ import {
   type MatterhornResolvedAdapterEndpoint,
 } from "./crypto-app-egress.js";
 import { projectCryptoAppOutput, validateCryptoAppInput } from "./crypto-app-json-schema.js";
+import {
+  MatterhornCryptoAppOperationalPolicyError,
+  type MatterhornCryptoAppOperationalPolicy,
+} from "./crypto-app-operational-policy.js";
 import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 import { quarantineUntrustedContent, untrustedContentChanged } from "./untrusted-data-quarantine.js";
@@ -84,6 +88,9 @@ export class MatterhornCryptoAppAdapterError extends Error {
       | "adapter_transport_unavailable"
       | "adapter_endpoint_blocked"
       | "adapter_circuit_open"
+      | "adapter_quota_exceeded"
+      | "adapter_cost_limit_exceeded"
+      | "adapter_policy_unavailable"
       | "adapter_timeout"
       | "adapter_upstream_failed"
       | "adapter_connected_address_invalid"
@@ -103,6 +110,7 @@ type RouterOptions = {
   connections: MatterhornCryptoAppConnections;
   authorization: MatterhornCryptoAppAuthorization;
   executors: Partial<Record<MatterhornCryptoAppTransportKind, MatterhornCryptoAppTransportExecutor>>;
+  operationalPolicy?: MatterhornCryptoAppOperationalPolicy;
   resolveDns?: MatterhornAdapterDnsResolver;
   now?: () => Date;
   circuitFailureThreshold?: number;
@@ -111,6 +119,7 @@ type RouterOptions = {
 };
 
 type CircuitState = { consecutiveFailures: number; openUntilMs: number };
+type OperationalReservation = { reservationId: string; reservedCostMicros: number };
 
 const MAX_ARGUMENT_BYTES = 64 * 1024;
 const MAX_RESULT_BYTES = 256 * 1024;
@@ -159,6 +168,7 @@ export class MatterhornCryptoAppAdapterRouter {
   readonly #authorization: MatterhornCryptoAppAuthorization;
   readonly #executors: Partial<Record<MatterhornCryptoAppTransportKind, MatterhornCryptoAppTransportExecutor>>;
   readonly #resolveDns: MatterhornAdapterDnsResolver | undefined;
+  readonly #operationalPolicy: MatterhornCryptoAppOperationalPolicy | undefined;
   readonly #now: () => Date;
   readonly #circuitFailureThreshold: number;
   readonly #circuitCooldownMs: number;
@@ -170,6 +180,7 @@ export class MatterhornCryptoAppAdapterRouter {
     this.#connections = options.connections;
     this.#authorization = options.authorization;
     this.#executors = options.executors;
+    this.#operationalPolicy = options.operationalPolicy;
     this.#resolveDns = options.resolveDns;
     this.#now = options.now ?? (() => new Date());
     this.#circuitFailureThreshold = Math.max(1, options.circuitFailureThreshold ?? 3);
@@ -212,18 +223,43 @@ export class MatterhornCryptoAppAdapterRouter {
     const canonicalArguments = validated.value as Record<string, unknown>;
     const argumentsHash = sha256(canonicalArguments);
     const circuitKey = `${request.workspaceId}\u0000${connection.id}\u0000${connection.appId}\u0000${connection.manifestRevision}\u0000${action.id}`;
-    if (this.#circuitOpen(circuitKey)) throw new MatterhornCryptoAppAdapterError("adapter_circuit_open");
+    if (this.#circuitOpen(request.workspaceId, circuitKey)) {
+      throw new MatterhornCryptoAppAdapterError("adapter_circuit_open");
+    }
 
     let resolved: MatterhornResolvedAdapterEndpoint;
     try {
       resolved = await resolvePublicCryptoAdapterEndpoint(registryEntry.manifest.transport.endpoint, this.#resolveDns);
     } catch {
-      this.#recordFailure(circuitKey);
+      if (!this.#recordFailure(request.workspaceId, circuitKey)) {
+        throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
+      }
       throw new MatterhornCryptoAppAdapterError("adapter_endpoint_blocked");
     }
 
     const executor = this.#executors[registryEntry.manifest.transport.kind];
     if (!executor) throw new MatterhornCryptoAppAdapterError("adapter_transport_unavailable");
+
+    let operationalReservation: OperationalReservation | null = null;
+    if (this.#operationalPolicy) {
+      try {
+        operationalReservation = this.#operationalPolicy.reserve({
+          workspaceId: request.workspaceId,
+          connectionId: request.connectionId,
+          appId: connection.appId,
+          manifestRevision: connection.manifestRevision,
+          actionId: action.id,
+          runId: request.runId,
+          callId: request.callId,
+        });
+      } catch (error) {
+        if (error instanceof MatterhornCryptoAppOperationalPolicyError
+          && error.code === "crypto_app_daily_quota_exceeded") {
+          throw new MatterhornCryptoAppAdapterError("adapter_quota_exceeded");
+        }
+        throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
+      }
+    }
 
     let reservationId: string;
     try {
@@ -243,6 +279,9 @@ export class MatterhornCryptoAppAdapterRouter {
       if (!nonEmpty(authorization.reservationId)) throw new Error("reservation_required");
       reservationId = authorization.reservationId;
     } catch {
+      if (operationalReservation && this.#reconcileOperationalOnly(operationalReservation, "error", 0) !== "ok") {
+        throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
+      }
       throw new MatterhornCryptoAppAdapterError("adapter_authorization_denied");
     }
 
@@ -271,8 +310,15 @@ export class MatterhornCryptoAppAdapterRouter {
       const outcome = error instanceof MatterhornCryptoAppAdapterError && error.code === "adapter_timeout"
         ? "timeout"
         : "error";
-      this.#recordFailure(circuitKey);
-      await this.#reconcile(reservationId, outcome, 0, completedAt.getTime() - startedAt.getTime());
+      const circuitRecorded = this.#recordFailure(request.workspaceId, circuitKey);
+      await this.#reconcile(
+        reservationId,
+        operationalReservation,
+        outcome,
+        0,
+        completedAt.getTime() - startedAt.getTime(),
+      );
+      if (!circuitRecorded) throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
       if (outcome === "timeout") throw error;
       throw new MatterhornCryptoAppAdapterError("adapter_upstream_failed");
     } finally {
@@ -282,27 +328,43 @@ export class MatterhornCryptoAppAdapterRouter {
     const completedAt = this.#now();
     const durationMs = Math.max(0, completedAt.getTime() - startedAt.getTime());
     if (!executionEnvelopeValid(execution)) {
-      this.#recordFailure(circuitKey);
-      await this.#reconcile(reservationId, "error", 0, durationMs);
+      const circuitRecorded = this.#recordFailure(request.workspaceId, circuitKey);
+      await this.#reconcile(reservationId, operationalReservation, "error", 0, durationMs);
+      if (!circuitRecorded) throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
       throw new MatterhornCryptoAppAdapterError("adapter_output_invalid");
     }
     try {
       assertCryptoAdapterConnectedAddress(resolved.approvedAddresses, execution.connectedAddress);
     } catch {
-      this.#recordFailure(circuitKey);
-      await this.#reconcile(reservationId, "error", 0, durationMs);
+      const circuitRecorded = this.#recordFailure(request.workspaceId, circuitKey);
+      await this.#reconcile(reservationId, operationalReservation, "error", 0, durationMs);
+      if (!circuitRecorded) throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
       throw new MatterhornCryptoAppAdapterError("adapter_connected_address_invalid");
+    }
+    if (operationalReservation && execution.costMicros > operationalReservation.reservedCostMicros) {
+      const circuitRecorded = this.#recordFailure(request.workspaceId, circuitKey);
+      await this.#reconcile(
+        reservationId,
+        operationalReservation,
+        "error",
+        execution.costMicros,
+        durationMs,
+      );
+      if (!circuitRecorded) throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
+      throw new MatterhornCryptoAppAdapterError("adapter_cost_limit_exceeded");
     }
     const projected = projectCryptoAppOutput(action.outputProjectionSchema, execution.data);
     if (!projected.ok) {
-      this.#recordFailure(circuitKey);
-      await this.#reconcile(reservationId, "error", execution.costMicros, durationMs);
+      const circuitRecorded = this.#recordFailure(request.workspaceId, circuitKey);
+      await this.#reconcile(reservationId, operationalReservation, "error", execution.costMicros, durationMs);
+      if (!circuitRecorded) throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
       throw new MatterhornCryptoAppAdapterError("adapter_output_invalid", projected.issues);
     }
     const quarantined = quarantineUntrustedContent(projected.value);
     if (Buffer.byteLength(canonicalJson(quarantined), "utf8") > MAX_RESULT_BYTES) {
-      this.#recordFailure(circuitKey);
-      await this.#reconcile(reservationId, "error", execution.costMicros, durationMs);
+      const circuitRecorded = this.#recordFailure(request.workspaceId, circuitKey);
+      await this.#reconcile(reservationId, operationalReservation, "error", execution.costMicros, durationMs);
+      if (!circuitRecorded) throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
       throw new MatterhornCryptoAppAdapterError("adapter_result_too_large");
     }
 
@@ -318,13 +380,16 @@ export class MatterhornCryptoAppAdapterRouter {
       || ageMs < -60_000
       || action.freshnessMaxAgeMs === null
       || ageMs > action.freshnessMaxAgeMs)) {
-      this.#recordFailure(circuitKey);
-      await this.#reconcile(reservationId, "error", execution.costMicros, durationMs);
+      const circuitRecorded = this.#recordFailure(request.workspaceId, circuitKey);
+      await this.#reconcile(reservationId, operationalReservation, "error", execution.costMicros, durationMs);
+      if (!circuitRecorded) throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
       throw new MatterhornCryptoAppAdapterError("adapter_output_stale");
     }
 
-    await this.#reconcile(reservationId, "success", execution.costMicros, durationMs);
-    this.#recordSuccess(circuitKey);
+    await this.#reconcile(reservationId, operationalReservation, "success", execution.costMicros, durationMs);
+    if (!this.#recordSuccess(request.workspaceId, circuitKey)) {
+      throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
+    }
     const safeSource = quarantineUntrustedContent(execution.source);
     const safeBlockOrVersion = execution.blockOrVersion === null
       ? null
@@ -359,7 +424,14 @@ export class MatterhornCryptoAppAdapterRouter {
     };
   }
 
-  #circuitOpen(key: string): boolean {
+  #circuitOpen(workspaceId: string, key: string): boolean {
+    if (this.#operationalPolicy) {
+      try {
+        return this.#operationalPolicy.circuitOpen({ workspaceId, circuitKey: key });
+      } catch {
+        throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
+      }
+    }
     const state = this.#circuits.get(key);
     if (!state) return false;
     const nowMs = this.#now().getTime();
@@ -368,29 +440,77 @@ export class MatterhornCryptoAppAdapterRouter {
     return false;
   }
 
-  #recordFailure(key: string): void {
+  #recordFailure(workspaceId: string, key: string): boolean {
+    if (this.#operationalPolicy) {
+      try {
+        this.#operationalPolicy.recordFailure({ workspaceId, circuitKey: key });
+        return true;
+      } catch {
+        return false;
+      }
+    }
     const state = this.#circuits.get(key) ?? { consecutiveFailures: 0, openUntilMs: 0 };
     state.consecutiveFailures += 1;
     if (state.consecutiveFailures >= this.#circuitFailureThreshold) {
       state.openUntilMs = this.#now().getTime() + this.#circuitCooldownMs;
     }
     this.#circuits.set(key, state);
+    return true;
   }
 
-  #recordSuccess(key: string): void {
+  #recordSuccess(workspaceId: string, key: string): boolean {
+    if (this.#operationalPolicy) {
+      try {
+        this.#operationalPolicy.recordSuccess({ workspaceId, circuitKey: key });
+        return true;
+      } catch {
+        return false;
+      }
+    }
     this.#circuits.delete(key);
+    return true;
   }
 
   async #reconcile(
     reservationId: string,
+    operationalReservation: OperationalReservation | null,
     outcome: "success" | "error" | "timeout",
     costMicros: number,
     durationMs: number,
   ): Promise<void> {
+    let authorizationFailed = false;
     try {
       await this.#authorization.reconcile({ reservationId, outcome, costMicros, durationMs: Math.max(0, durationMs) });
     } catch {
+      authorizationFailed = true;
+    }
+    if (operationalReservation) {
+      const operational = this.#reconcileOperationalOnly(operationalReservation, outcome, costMicros);
+      if (operational === "failed") throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
+      if (operational === "over_limit") {
+        throw new MatterhornCryptoAppAdapterError("adapter_cost_limit_exceeded");
+      }
+    }
+    if (authorizationFailed) {
       throw new MatterhornCryptoAppAdapterError("adapter_usage_reconciliation_failed");
+    }
+  }
+
+  #reconcileOperationalOnly(
+    reservation: OperationalReservation,
+    outcome: "success" | "error" | "timeout",
+    costMicros: number,
+  ): "ok" | "over_limit" | "failed" {
+    try {
+      const result = this.#operationalPolicy?.reconcile({
+        reservationId: reservation.reservationId,
+        outcome,
+        actualCostMicros: costMicros,
+      });
+      if (!result) return "failed";
+      return result.overCallLimit ? "over_limit" : "ok";
+    } catch {
+      return "failed";
     }
   }
 }

@@ -19,6 +19,10 @@ import {
 import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
+import {
+  MatterhornCryptoAppOperationalPolicyStore,
+  type MatterhornCryptoAppOperationalPolicy,
+} from "./crypto-app-operational-policy.js";
 import { MatterhornCryptoAppRegistry, canonicalCryptoAppManifestPayload } from "./crypto-app-registry.js";
 
 const keys = generateKeyPairSync("ed25519");
@@ -76,6 +80,7 @@ function fixture(options: {
   resolveDns?: () => Promise<Array<{ address: string; family: number }>>;
   timeout?: ConstructorParameters<typeof MatterhornCryptoAppAdapterRouter>[0]["timeout"];
   circuitFailureThreshold?: number;
+  operationalPolicy?: MatterhornCryptoAppOperationalPolicy;
 } = {}) {
   const value = manifest();
   const registry = new MatterhornCryptoAppRegistry({
@@ -151,6 +156,7 @@ function fixture(options: {
     now: () => new Date("2026-09-01T12:00:00.000Z"),
     timeout: options.timeout,
     circuitFailureThreshold: options.circuitFailureThreshold,
+    operationalPolicy: options.operationalPolicy,
   });
   return { registry, store, connections, connection, router, authorizationCalls, reconciliationCalls, executorCalls };
 }
@@ -320,5 +326,101 @@ describe("certified crypto app adapter router", () => {
     expect(attempts).toBe(2);
     expect(app.authorizationCalls).toHaveLength(2);
     app.store.close();
+  });
+
+  test("enforces durable workspace quota before capability authorization or upstream access", async () => {
+    let operationalSequence = 0;
+    const policy = new MatterhornCryptoAppOperationalPolicyStore(join(
+      mkdtempSync(join(tmpdir(), "matterhorn-adapter-policy-")),
+      "operational.db",
+    ), {
+      dailyWorkspaceLimitMicros: 600,
+      maxCallCostMicros: 600,
+      now: () => new Date("2026-09-01T12:00:00.000Z"),
+      id: () => `operational_${++operationalSequence}`,
+    });
+    const app = fixture({ operationalPolicy: policy });
+    await app.router.execute(request({ runId: "run_1", callId: "call_1" }));
+    await expect(app.router.execute(request({ runId: "run_2", callId: "call_2" })))
+      .rejects.toMatchObject({ code: "adapter_quota_exceeded" });
+    expect(app.executorCalls).toHaveLength(1);
+    expect(app.authorizationCalls).toHaveLength(1);
+    expect(policy.usage("ws_a")).toEqual({ actualCostMicros: 600, pendingReservedCostMicros: 0 });
+    app.store.close();
+    policy.close();
+  });
+
+  test("rejects a trusted executor cost above the reserved per-call limit", async () => {
+    const policy = new MatterhornCryptoAppOperationalPolicyStore(join(
+      mkdtempSync(join(tmpdir(), "matterhorn-adapter-policy-")),
+      "operational.db",
+    ), {
+      dailyWorkspaceLimitMicros: 10_000,
+      maxCallCostMicros: 500,
+      now: () => new Date("2026-09-01T12:00:00.000Z"),
+      id: () => "operational_cost_limit",
+    });
+    const app = fixture({ operationalPolicy: policy });
+    await expect(app.router.execute(request())).rejects.toMatchObject({ code: "adapter_cost_limit_exceeded" });
+    expect(app.reconciliationCalls).toEqual([expect.objectContaining({ outcome: "error", costMicros: 600 })]);
+    expect(policy.usage("ws_a")).toEqual({ actualCostMicros: 600, pendingReservedCostMicros: 0 });
+    app.store.close();
+    policy.close();
+  });
+
+  test("releases operational quota when guarded authorization denies the call", async () => {
+    const policy = new MatterhornCryptoAppOperationalPolicyStore(join(
+      mkdtempSync(join(tmpdir(), "matterhorn-adapter-policy-")),
+      "operational.db",
+    ), {
+      now: () => new Date("2026-09-01T12:00:00.000Z"),
+      id: () => "operational_authorization_denied",
+    });
+    const app = fixture({
+      operationalPolicy: policy,
+      authorization: {
+        authorize: async () => { throw new Error("capability denied"); },
+        reconcile: async () => undefined,
+      },
+    });
+    await expect(app.router.execute(request())).rejects.toMatchObject({ code: "adapter_authorization_denied" });
+    expect(app.executorCalls).toHaveLength(0);
+    expect(policy.usage("ws_a")).toEqual({ actualCostMicros: 0, pendingReservedCostMicros: 0 });
+    app.store.close();
+    policy.close();
+  });
+
+  test("restores circuit denial from durable policy after a router restart", async () => {
+    const databasePath = join(mkdtempSync(join(tmpdir(), "matterhorn-adapter-policy-")), "operational.db");
+    let operationalSequence = 0;
+    const policyOptions = {
+      circuitFailureThreshold: 2,
+      now: () => new Date("2026-09-01T12:00:00.000Z"),
+      id: () => `operational_${++operationalSequence}`,
+    };
+    const firstPolicy = new MatterhornCryptoAppOperationalPolicyStore(databasePath, policyOptions);
+    const first = fixture({
+      operationalPolicy: firstPolicy,
+      executor: async () => { throw new Error("upstream failed"); },
+    });
+    await expect(first.router.execute(request({ runId: "run_1", callId: "call_1" })))
+      .rejects.toMatchObject({ code: "adapter_upstream_failed" });
+    first.store.close();
+    firstPolicy.close();
+
+    const secondPolicy = new MatterhornCryptoAppOperationalPolicyStore(databasePath, policyOptions);
+    let attempts = 0;
+    const second = fixture({
+      operationalPolicy: secondPolicy,
+      executor: async () => { attempts += 1; throw new Error("upstream failed"); },
+    });
+    await expect(second.router.execute(request({ runId: "run_2", callId: "call_2" })))
+      .rejects.toMatchObject({ code: "adapter_upstream_failed" });
+    await expect(second.router.execute(request({ runId: "run_3", callId: "call_3" })))
+      .rejects.toMatchObject({ code: "adapter_circuit_open" });
+    expect(attempts).toBe(1);
+    expect(second.authorizationCalls).toHaveLength(1);
+    second.store.close();
+    secondPolicy.close();
   });
 });
