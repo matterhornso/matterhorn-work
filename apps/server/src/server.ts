@@ -572,6 +572,8 @@ import {
   MatterhornGuardedAgentRuntime,
   type GuardedPromptAcceptance,
 } from "./guarded-agent-runtime.js";
+import { awsKmsEvidenceKeyManagerFromEnv } from "./aws-kms-evidence-key-manager.js";
+import type { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import {
   agentSecurityReceiptDirectory,
   purgeAllExpiredAgentRunReceipts,
@@ -1310,6 +1312,10 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
+  const evidenceKeyManager = awsKmsEvidenceKeyManagerFromEnv(process.env);
+  const cryptoEvidenceStore = evidenceKeyManager
+    ? guardedRuntime.createCryptoEvidenceStore(evidenceKeyManager)
+    : null;
   const cryptoAppRuntime = createMatterhornCryptoAppRuntime(process.env, { guardedRuntime });
   const coworkerRuntime = createMatterhornCoworkerRuntime(process.env, {
     onInvalidate: (input) => {
@@ -1358,11 +1364,31 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     });
   }, 24 * 60 * 60 * 1_000);
   receiptExpiryTimer.unref?.();
+  const expireCryptoEvidence = () => cryptoEvidenceStore?.destroyExpired().then((result) => {
+    if (result.failures.length > 0) {
+      logger.log("error", "Crypto evidence key expiry was incomplete", {
+        checked: result.checked,
+        destroyed: result.destroyed,
+        failures: result.failures.length,
+      });
+    }
+    return result;
+  }).catch((error) => {
+    logger.log("error", "Crypto evidence key expiry failed", unhandledErrorAttributes(error));
+    return { checked: 0, destroyed: 0, failures: [] };
+  }) ?? Promise.resolve({ checked: 0, destroyed: 0, failures: [] });
+  let cryptoEvidenceExpiryTask = expireCryptoEvidence();
+  const cryptoEvidenceExpiryTimer = cryptoEvidenceStore ? setInterval(() => {
+    cryptoEvidenceExpiryTask = expireCryptoEvidence();
+  }, 24 * 60 * 60 * 1_000) : null;
+  cryptoEvidenceExpiryTimer?.unref?.();
   let accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
     config,
     authStore,
+    guardedRuntime,
     cryptoAppRuntime,
     coworkerRuntime,
+    cryptoEvidenceStore,
     onWorkspacesChanged: restartReloadWatchers,
   }).catch((error) => {
     logger.log("error", "Account deletion retry failed", unhandledErrorAttributes(error));
@@ -1371,8 +1397,10 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
       config,
       authStore,
+      guardedRuntime,
       cryptoAppRuntime,
       coworkerRuntime,
+      cryptoEvidenceStore,
       onWorkspacesChanged: restartReloadWatchers,
     }).catch((error) => {
       logger.log("error", "Account deletion retry failed", unhandledErrorAttributes(error));
@@ -1394,6 +1422,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     guardedRuntime,
     cryptoAppRuntime,
     coworkerRuntime,
+    cryptoEvidenceStore,
     drainEmailOutbox,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
@@ -1623,6 +1652,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     ...server,
     stop: async (closeActiveConnections?: boolean) => {
       clearInterval(receiptExpiryTimer);
+      if (cryptoEvidenceExpiryTimer) clearInterval(cryptoEvidenceExpiryTimer);
       clearInterval(accountDeletionRetryTimer);
       clearInterval(emailOutboxTimer);
       if (coworkerWatchTimer) clearInterval(coworkerWatchTimer);
@@ -1630,6 +1660,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       reloadBaselineRefreshers.delete(config);
       modelUsageStore.close();
       await receiptExpiryTask;
+      await cryptoEvidenceExpiryTask;
       await accountDeletionRetryTask;
       await emailOutboxTask;
       await coworkerWatchTask;
@@ -1686,6 +1717,7 @@ function operationalReadiness(
   guardedRuntime?: MatterhornGuardedAgentRuntime,
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices,
   coworkerRuntime?: MatterhornCoworkerRuntimeServices,
+  cryptoEvidenceStore?: MatterhornCryptoEvidenceStore | null,
 ) {
   const workspaceConfigured = config.workspaces.length > 0;
   const workspaceStorageAvailable = config.workspaces.every((workspace) =>
@@ -1701,6 +1733,8 @@ function operationalReadiness(
   const coworkerMode = coworkerRuntime?.mode ?? "off";
   const coworkerRuntimeReady = coworkerMode === "off"
     || Boolean(coworkerRuntime?.ready && coworkerRuntime.coworkers);
+  const cryptoEvidenceRecordsPresent = guardedRuntime?.hasCryptoEvidence() ?? false;
+  const cryptoEvidenceKeyLifecycleReady = !cryptoEvidenceRecordsPresent || Boolean(cryptoEvidenceStore);
   const hostedBrowserOpencodePolicyReady = HOSTED_BROWSER_OPENCODE_POLICY === "restricted";
   const hostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA === "1";
   const accountMessageGatewayReady = !hostedPublicBeta
@@ -1715,6 +1749,7 @@ function operationalReadiness(
       && guardedRuntimeTopologyReady
       && cryptoAppGatewayReady
       && coworkerRuntimeReady
+      && cryptoEvidenceKeyLifecycleReady
       && hostedBrowserOpencodePolicyReady
       && accountMessageGatewayReady
       && hostBackupFreshCheck,
@@ -1729,6 +1764,8 @@ function operationalReadiness(
       cryptoAppGatewayReady,
       coworkerMode,
       coworkerRuntimeReady,
+      cryptoEvidenceRecordsPresent,
+      cryptoEvidenceKeyLifecycleReady,
       hostedBrowserOpencodePolicy: HOSTED_BROWSER_OPENCODE_POLICY,
       hostedBrowserOpencodePolicyReady,
       accountMessageGatewayReady,
@@ -3316,8 +3353,10 @@ async function processMatterhornAccountDeletionJob(input: {
   config: ServerConfig;
   authStore: MatterhornAuthStore;
   job: MatterhornAuthAccountDeletionJob;
+  guardedRuntime?: MatterhornGuardedAgentRuntime;
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices;
   coworkerRuntime?: MatterhornCoworkerRuntimeServices;
+  cryptoEvidenceStore?: MatterhornCryptoEvidenceStore | null;
   onWorkspacesChanged?: () => void;
 }): Promise<{ complete: boolean; job: MatterhornAuthAccountDeletionJob }> {
   let job = input.job;
@@ -3331,11 +3370,19 @@ async function processMatterhornAccountDeletionJob(input: {
     }
     if (!job.steps.workspaces) {
       for (const organizationId of job.deletedOrganizationIds) {
+        const workspaceId = matterhornOrganizationWorkspaceId(organizationId);
+        if (!input.cryptoEvidenceStore && input.guardedRuntime?.hasCryptoEvidence(workspaceId)) {
+          throw new Error("workspace_evidence_key_manager_unavailable");
+        }
+        const evidenceDeletion = await input.cryptoEvidenceStore?.destroyWorkspaceForDeletion({ workspaceId });
+        if (evidenceDeletion && evidenceDeletion.failures.length > 0) {
+          throw new Error("workspace_evidence_key_purge_failed");
+        }
         input.cryptoAppRuntime?.purgeWorkspace(
-          matterhornOrganizationWorkspaceId(organizationId),
+          workspaceId,
         );
         input.coworkerRuntime?.coworkers?.purgeWorkspace(
-          matterhornOrganizationWorkspaceId(organizationId),
+          workspaceId,
         );
       }
       const workspaceDeletion = await purgeMatterhornOrganizationWorkspaces(
@@ -3360,8 +3407,10 @@ async function processMatterhornAccountDeletionJob(input: {
 async function retryMatterhornAccountDeletionJobs(input: {
   config: ServerConfig;
   authStore: MatterhornAuthStore;
+  guardedRuntime?: MatterhornGuardedAgentRuntime;
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices;
   coworkerRuntime?: MatterhornCoworkerRuntimeServices;
+  cryptoEvidenceStore?: MatterhornCryptoEvidenceStore | null;
   onWorkspacesChanged?: () => void;
 }): Promise<void> {
   for (const job of input.authStore.listPendingAccountDeletionJobs()) {
@@ -7905,6 +7954,7 @@ function createRoutes(
   guardedRuntime: MatterhornGuardedAgentRuntime,
   cryptoAppRuntime: MatterhornCryptoAppRuntimeServices,
   coworkerRuntime: MatterhornCoworkerRuntimeServices,
+  cryptoEvidenceStore: MatterhornCryptoEvidenceStore | null,
   drainEmailOutbox: () => Promise<void>,
 ): Route[] {
   const routes: Route[] = [];
@@ -8398,9 +8448,11 @@ function createRoutes(
     const processed = await processMatterhornAccountDeletionJob({
       config,
       authStore,
+      guardedRuntime,
       job: deletion,
       cryptoAppRuntime,
       coworkerRuntime,
+      cryptoEvidenceStore,
       onWorkspacesChanged,
     });
 
@@ -8498,7 +8550,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/health/ready", "none", async () => {
-    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime);
+    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime, cryptoEvidenceStore);
     const response = jsonResponse({
       ok: readiness.ready,
       status: readiness.ready ? "ready" : "not_ready",
@@ -8530,7 +8582,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/health/launch", "none", async () => {
-    const infrastructure = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime);
+    const infrastructure = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime, cryptoEvidenceStore);
     const launch = matterhornLaunchReadiness(authStore);
     const ok = infrastructure.ready && launch.ready;
     const response = jsonResponse({
@@ -8546,7 +8598,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/metrics", "host", async () => {
-    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime);
+    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime, cryptoEvidenceStore);
     return new Response(operationalMetrics.renderPrometheus({
       ready: readiness.ready,
       uptimeMs: Date.now() - config.startedAt,

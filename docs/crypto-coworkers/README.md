@@ -107,6 +107,8 @@ Future readiness rules are fail-closed:
 - Walrus evidence requires an HTTPS authenticated publisher and server-side encryption-key reference.
 - Walrus mainnet additionally requires an explicit production acknowledgement.
 
+The evidence-key foundation uses AWS KMS envelope keys when configured. Set `MATTERHORN_EVIDENCE_KMS_REGION` and `MATTERHORN_EVIDENCE_KMS_KEY_ID`; AWS credentials continue through the SDK's server-side credential chain and must never use a browser-visible variable. KMS receives only a random-nonce-bound digest as encryption context—not account, workspace, run, coworker, or wallet identifiers. The durable tenant index stores the KMS-wrapped data key and ciphertext locally, enforces owner/workspace/coworker isolation, and clears the wrapped key before a secure SQLite/WAL checkpoint during expiry, workspace deletion, or user-requested key destruction.
+
 ## Build sequence
 
 The comprehensive execution plan, delivery cadence, metrics, and stop conditions are maintained in [`phases-1-5-plan.md`](./phases-1-5-plan.md). Monid-derived product patterns and the crypto-specific changes are documented in [`monid-reference-audit.md`](./monid-reference-audit.md).

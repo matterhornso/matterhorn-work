@@ -61,8 +61,11 @@ describe("crypto evidence sealer", () => {
       createDataKey: async () => ({
         plaintextKey,
         keyReference: "kms://matterhorn/private/workspace-seal/key-1",
+        wrappedKey: "wrapped-key-1",
+        keyContext: "context-1",
         recipientKeyIds: ["recipient-1"],
       }),
+      decryptDataKey: async () => Buffer.from(decryptionCopy),
       destroyKey: async () => undefined,
     };
     const sealed = await sealMatterhornRunEvidence({
@@ -91,8 +94,11 @@ describe("crypto evidence sealer", () => {
       createDataKey: async () => ({
         plaintextKey,
         keyReference: "kms://matterhorn/private/key-2",
+        wrappedKey: "wrapped-key-2",
+        keyContext: "context-2",
         recipientKeyIds: ["recipient-1", "unrequested-recipient"],
       }),
+      decryptDataKey: async () => randomBytes(32),
       destroyKey: async () => undefined,
     };
     await expect(sealMatterhornRunEvidence({

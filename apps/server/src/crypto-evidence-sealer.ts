@@ -12,6 +12,10 @@ export type MatterhornEvidenceDataKeyLease = {
   plaintextKey: Buffer;
   /** Opaque KMS or accepted recipient-wrapping reference; never sent to Walrus. */
   keyReference: string;
+  /** KMS-wrapped data key retained only inside the tenant evidence index. */
+  wrappedKey: string;
+  /** Random context nonce used to bind KMS decryption to this tenant/run. */
+  keyContext: string;
   recipientKeyIds: string[];
 };
 
@@ -21,10 +25,23 @@ export interface MatterhornEvidenceKeyManager {
     runId: string;
     recipientKeyIds: string[];
   }): Promise<MatterhornEvidenceDataKeyLease>;
+  decryptDataKey(input: {
+    workspaceId: string;
+    runId: string;
+    keyReference: string;
+    wrappedKey: string;
+    keyContext: string;
+  }): Promise<Buffer>;
   destroyKey(input: { workspaceId: string; keyReference: string }): Promise<void>;
 }
 
 export type MatterhornSealedEvidence = {
+  /** Server-only tenant binding. Never serialize this object to the publisher. */
+  binding: {
+    workspaceId: string;
+    runId: string;
+    coworkerId: string;
+  };
   envelope: MatterhornEncryptedEvidenceEnvelope;
   /** The only bytes eligible for the authenticated Walrus relay. */
   walrusCiphertext: Buffer;
@@ -34,6 +51,9 @@ export type MatterhornSealedEvidence = {
     runIdHash: string;
     coworkerIdHash: string;
     keyReference: string;
+    wrappedKey: string;
+    keyContext: string;
+    recipientKeyIds: string[];
     ciphertextHash: string;
     merkleLeaf: string;
     createdAt: string;
@@ -67,6 +87,9 @@ export async function sealMatterhornRunEvidence(input: {
     if (!Buffer.isBuffer(lease.plaintextKey) || lease.plaintextKey.length !== 32) {
       throw new Error("evidence_encryption_key_invalid");
     }
+    if (!lease.keyReference.trim() || !lease.wrappedKey.trim() || !lease.keyContext.trim()) {
+      throw new Error("evidence_wrapped_key_invalid");
+    }
     const actualRecipients = [...new Set(lease.recipientKeyIds.map((id) => id.trim()).filter(Boolean))].sort();
     if (actualRecipients.length !== requestedRecipients.length
       || actualRecipients.some((id, index) => id !== requestedRecipients[index])) {
@@ -85,6 +108,11 @@ export async function sealMatterhornRunEvidence(input: {
     const envelope = encryptMatterhornEvidenceBundle({ bundle, key: lease.plaintextKey });
     const walrusCiphertext = serializeMatterhornWalrusCiphertext(envelope);
     return {
+      binding: {
+        workspaceId: input.receipt.workspaceId,
+        runId: input.receipt.runId,
+        coworkerId: input.coworkerId,
+      },
       envelope,
       walrusCiphertext,
       localIndex: {
@@ -93,6 +121,9 @@ export async function sealMatterhornRunEvidence(input: {
         runIdHash: bundle.runIdHash,
         coworkerIdHash: bundle.coworkerIdHash,
         keyReference: envelope.keyReference,
+        wrappedKey: lease.wrappedKey,
+        keyContext: lease.keyContext,
+        recipientKeyIds: actualRecipients,
         ciphertextHash: envelope.ciphertextHash,
         merkleLeaf: envelope.merkleLeaf,
         createdAt: bundle.createdAt,

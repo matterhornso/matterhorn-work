@@ -236,7 +236,7 @@ Users may opt to publish an encrypted, minimal evidence bundle whose integrity a
 2. **Encryption and key lifecycle**
    - Envelope encryption before any publisher receives bytes.
    - Workspace-scoped key references, rotation, access audit, deletion, and key destruction.
-   - **Partially implemented:** the key-manager contract, exact-recipient binding, AES-256-GCM envelope, and plaintext-key zeroization are complete. A production KMS implementation, durable lifecycle index, rotation, and destruction jobs remain.
+   - **Partially implemented:** the key-manager contract, exact-recipient binding, AES-256-GCM envelope, plaintext-key zeroization, AWS KMS `GenerateDataKey`/exact-context decryption, durable tenant index, startup/daily expiry, account/workspace destruction, readiness enforcement, secure SQLite deletion, and WAL truncation are complete. Rotation, access-audit receipts, and backup-erasure reconciliation remain.
 3. **Walrus publisher**
    - Authenticated relay with strict ciphertext-only content type and maximum size.
    - Quilt batching and Merkle proofs for small bundles.

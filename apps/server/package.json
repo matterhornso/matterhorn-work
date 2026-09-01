@@ -47,6 +47,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-kms": "^3.894.0",
     "@matterhorn-work/email": "workspace:*",
     "@matterhorn-work/memory-vault": "workspace:*",
     "@matterhorn-work/types": "workspace:*",

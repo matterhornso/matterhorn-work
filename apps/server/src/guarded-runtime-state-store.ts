@@ -29,6 +29,7 @@ export type GuardedRuntimeStateKind =
   | "assistant_message_binding"
   | "crypto_app_reservation"
   | "crypto_pending_intent"
+  | "crypto_evidence_record"
   | "receipt_index";
 
 type StateRow = {
@@ -79,7 +80,7 @@ export class MatterhornGuardedRuntimeStateStore {
   constructor(readonly path = guardedRuntimeStatePath()) {
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     this.db = openSqliteDatabase(path);
-    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;");
+    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA secure_delete = ON; PRAGMA busy_timeout = 5000;");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS guarded_state (
         kind TEXT NOT NULL,
@@ -259,6 +260,11 @@ export class MatterhornGuardedRuntimeStateStore {
     const states = statement(this.db, "DELETE FROM guarded_state WHERE expires_at IS NOT NULL AND expires_at <= ?").run(nowMs).changes ?? 0;
     const capabilities = statement(this.db, "DELETE FROM consumed_capabilities WHERE expires_at <= ?").run(nowMs).changes ?? 0;
     return { states, capabilities };
+  }
+
+  /** Removes stale WAL pages after deleting wrapped encryption keys. */
+  secureCheckpoint(): void {
+    this.db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
   }
 
   close(): void {

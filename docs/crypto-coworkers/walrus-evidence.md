@@ -80,6 +80,8 @@ The first testnet prototype must use synthetic data and demonstrate:
 - Pending runs and unknown/forbidden evidence fields fail before encryption.
 - AES-256-GCM encryption authenticates the tenant-local key reference and plaintext hash as AAD.
 - The plaintext data key is zeroed after sealing, including error paths.
+- AWS KMS produces AES-256 data keys and retains only the KMS-wrapped `CiphertextBlob`. Its CloudTrail-visible encryption context contains a random-nonce-bound digest rather than a tenant, run, coworker, account, or wallet identifier.
+- The tenant-scoped SQLite index contains ciphertext and wrapped key material only. Key destruction clears the wrapped key and local envelope with `secure_delete`, then truncates the WAL before reporting success.
 - Public serialization excludes the key reference and plaintext hash.
 - Deterministic, order-independent Merkle batches verify ciphertext modification and reject duplicate or mismatched leaves.
 - No publisher, Walrus network call, Sui anchor, or mainnet write is enabled by this foundation.
