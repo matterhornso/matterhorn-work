@@ -7,6 +7,7 @@ import {
   type MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
 
+import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
 import {
   canonicalCryptoAppManifestPayload,
   MatterhornCryptoAppRegistry,
@@ -86,6 +87,15 @@ function registry(): MatterhornCryptoAppRegistry {
   });
 }
 
+function reportFor(value: MatterhornCryptoAppManifest) {
+  return runCryptoAppManifestConformance(value, {
+    publisherKey: publicKey,
+    policyVersion: "gateway-policy-1",
+    targetEnvironment: "testnet",
+    now: () => new Date("2026-09-01T12:00:00.000Z"),
+  });
+}
+
 describe("crypto app signed registry", () => {
   test("verifies the detached signature over the canonical manifest payload", () => {
     const manifest = signedManifest();
@@ -106,7 +116,7 @@ describe("crypto app signed registry", () => {
       appId: manifest.appId,
       manifestRevision: manifest.manifestRevision,
       state: "certified_testnet",
-      reportHash: "sha256:certification-report",
+      report: reportFor(manifest),
     });
     expect(certified.certification.state).toBe("certified_testnet");
     expect(store.resolve(manifest.appId)?.manifestHash).toBe(pending.manifestHash);
@@ -167,6 +177,27 @@ describe("crypto app signed registry", () => {
       manifestRevision: manifest.manifestRevision,
       state: "certified_testnet",
     })).toThrowError(expect.objectContaining({ code: "certification_transition_invalid" }));
+  });
+
+  test("requires a matching, passing, hash-valid conformance report for certification", () => {
+    const store = registry();
+    const manifest = signedManifest();
+    store.register(manifest);
+
+    expect(() => store.updateCertification({
+      appId: manifest.appId,
+      manifestRevision: manifest.manifestRevision,
+      state: "certified_testnet",
+      report: null,
+    })).toThrowError(expect.objectContaining({ code: "certification_metadata_invalid" }));
+
+    const tamperedReport = { ...reportFor(manifest), policyVersion: "different-policy" };
+    expect(() => store.updateCertification({
+      appId: manifest.appId,
+      manifestRevision: manifest.manifestRevision,
+      state: "certified_testnet",
+      report: tamperedReport,
+    })).toThrowError(expect.objectContaining({ code: "certification_metadata_invalid" }));
   });
 
   test("returns defensive copies so callers cannot mutate registry state", () => {

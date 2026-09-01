@@ -1,11 +1,24 @@
-import { createPublicKey, verify, type KeyObject } from "node:crypto";
-
 import {
   type MatterhornCryptoAppManifest,
   validateMatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
 
-import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
+import type { MatterhornCryptoAppConformanceReport } from "./crypto-app-conformance.js";
+import { verifyCryptoAppConformanceReport } from "./crypto-app-conformance.js";
+import {
+  canonicalCryptoAppManifestPayload,
+  cryptoAppManifestHash,
+  isTrustedEd25519PublisherKey,
+  verifyCryptoAppManifestSignature,
+  type MatterhornTrustedPublisherKey,
+} from "./crypto-app-signature.js";
+
+export {
+  canonicalCryptoAppManifestPayload,
+  cryptoAppManifestHash,
+  verifyCryptoAppManifestSignature,
+  type MatterhornTrustedPublisherKey,
+} from "./crypto-app-signature.js";
 
 export type MatterhornCryptoAppCertificationState =
   | "pending"
@@ -13,13 +26,6 @@ export type MatterhornCryptoAppCertificationState =
   | "certified_mainnet"
   | "suspended"
   | "revoked";
-
-export type MatterhornTrustedPublisherKey = {
-  publisherId: string;
-  keyId: string;
-  algorithm: "ed25519";
-  publicKey: KeyObject | string | Buffer;
-};
 
 export type MatterhornCryptoAppRegistryEntry = {
   appId: string;
@@ -44,7 +50,8 @@ export class MatterhornCryptoAppRegistryError extends Error {
       | "manifest_signature_invalid"
       | "manifest_revision_conflict"
       | "manifest_not_found"
-      | "certification_transition_invalid",
+      | "certification_transition_invalid"
+      | "certification_metadata_invalid",
     public readonly issues: string[] = [],
   ) {
     super(code);
@@ -62,7 +69,7 @@ type CertificationUpdate = {
   appId: string;
   manifestRevision: string;
   state: Exclude<MatterhornCryptoAppCertificationState, "pending">;
-  reportHash?: string | null;
+  report?: MatterhornCryptoAppConformanceReport | null;
   reason?: string | null;
 };
 
@@ -92,58 +99,6 @@ function clone<T>(value: T): T {
 }
 
 /**
- * Returns the exact canonical bytes a publisher signs. The detached signature
- * is excluded; publisher identity, key id and algorithm remain bound.
- */
-export function canonicalCryptoAppManifestPayload(manifest: MatterhornCryptoAppManifest): string {
-  return canonicalJson({
-    ...manifest,
-    publisher: {
-      id: manifest.publisher.id,
-      keyId: manifest.publisher.keyId,
-      algorithm: manifest.publisher.algorithm,
-    },
-  });
-}
-
-export function cryptoAppManifestHash(manifest: MatterhornCryptoAppManifest): string {
-  return sha256(canonicalCryptoAppManifestPayload(manifest));
-}
-
-function decodeSignature(signature: string): Buffer | null {
-  try {
-    const decoded = Buffer.from(signature, "base64url");
-    return decoded.length === 64 ? decoded : null;
-  } catch {
-    return null;
-  }
-}
-
-function normalizePublicKey(value: MatterhornTrustedPublisherKey["publicKey"]): KeyObject | null {
-  try {
-    const key = typeof value === "object"
-      && value !== null
-      && "asymmetricKeyType" in value
-      && "export" in value
-      ? value as KeyObject
-      : createPublicKey(value);
-    return key.asymmetricKeyType === "ed25519" ? key : null;
-  } catch {
-    return null;
-  }
-}
-
-export function verifyCryptoAppManifestSignature(
-  manifest: MatterhornCryptoAppManifest,
-  publicKey: MatterhornTrustedPublisherKey["publicKey"],
-): boolean {
-  const signature = decodeSignature(manifest.publisher.signature);
-  const key = normalizePublicKey(publicKey);
-  if (!signature || !key) return false;
-  return verify(null, Buffer.from(canonicalCryptoAppManifestPayload(manifest), "utf8"), key, signature);
-}
-
-/**
  * Phase 1 registry core. It deliberately exposes no HTTP route and performs no
  * upstream calls. Durable storage and operator routes will wrap this boundary
  * in a later slice; production behavior remains unchanged while the gateway is
@@ -160,7 +115,7 @@ export class MatterhornCryptoAppRegistry {
     this.#policyVersion = options.policyVersion;
     this.#now = options.now ?? (() => new Date());
     for (const key of options.publisherKeys) {
-      if (key.algorithm !== "ed25519" || !normalizePublicKey(key.publicKey)) continue;
+      if (key.algorithm !== "ed25519" || !isTrustedEd25519PublisherKey(key.publicKey)) continue;
       this.#publisherKeys.set(publisherKey(key.publisherId, key.keyId), key);
     }
   }
@@ -212,9 +167,25 @@ export class MatterhornCryptoAppRegistry {
       throw new MatterhornCryptoAppRegistryError("certification_transition_invalid");
     }
 
+    const certifiedState = input.state === "certified_testnet" || input.state === "certified_mainnet";
+    const targetEnvironment = input.state === "certified_mainnet" ? "mainnet" : "testnet";
+    if (certifiedState && (!input.report
+      || !verifyCryptoAppConformanceReport(input.report)
+      || !input.report.passed
+      || input.report.targetEnvironment !== targetEnvironment
+      || input.report.appId !== existing.appId
+      || input.report.manifestRevision !== existing.manifestRevision
+      || input.report.manifestHash !== existing.manifestHash
+      || input.report.policyVersion !== this.#policyVersion)) {
+      throw new MatterhornCryptoAppRegistryError("certification_metadata_invalid");
+    }
+    if ((input.state === "suspended" || input.state === "revoked") && !input.reason?.trim()) {
+      throw new MatterhornCryptoAppRegistryError("certification_metadata_invalid");
+    }
+
     existing.certification = {
       state: input.state,
-      reportHash: input.reportHash ?? null,
+      reportHash: input.report?.reportHash ?? null,
       policyVersion: this.#policyVersion,
       reason: input.reason?.trim() || null,
       updatedAt: this.#now().toISOString(),
