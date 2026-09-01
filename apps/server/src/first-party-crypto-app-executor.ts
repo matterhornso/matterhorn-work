@@ -1,6 +1,12 @@
+import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { isValidStructTag, normalizeStructTag } from "@mysten/sui/utils";
+import { GrpcWebFetchTransport } from "@protobuf-ts/grpcweb-transport";
 
 import type { MatterhornCryptoAppTransportExecutor } from "./crypto-app-adapter-router.js";
+import {
+  createPinnedSuiGrpcWebFetch,
+  type MatterhornGrpcTransportObservation,
+} from "./crypto-app-http2-grpc-fetch.js";
 import {
   createPinnedJsonRequester,
   type MatterhornPinnedJsonRequester,
@@ -11,7 +17,9 @@ import {
   isValidHyperliquidAddress,
 } from "./tools/hyperliquid.js";
 import {
+  buildSuiTransferPreview,
   normalizeMatterhornSuiAddress,
+  simulateSuiTransactionPreview,
   SUI_NATIVE_COIN_TYPE,
 } from "./tools/sui.js";
 
@@ -19,6 +27,7 @@ type JsonObject = Record<string, unknown>;
 
 type FirstPartyExecutorOptions = {
   requestJson?: MatterhornPinnedJsonRequester;
+  createSuiGrpcClient?: SuiGrpcClientFactory;
   now?: () => Date;
   estimateCostMicros?: (input: {
     appId: string;
@@ -28,11 +37,19 @@ type FirstPartyExecutorOptions = {
   }) => number;
 };
 
+type SuiGrpcClientFactory = (input: {
+  endpoint: URL;
+  approvedAddresses: readonly string[];
+  signal: AbortSignal;
+  observe: (observation: MatterhornGrpcTransportObservation) => void;
+}) => SuiGrpcClient;
+
 type RequestContext = {
   endpoint: URL;
   approvedAddresses: readonly string[];
   signal: AbortSignal;
   requestJson: MatterhornPinnedJsonRequester;
+  createSuiGrpcClient: SuiGrpcClientFactory;
   requestBytes: number;
   responseBytes: number;
   connectedAddress: string | null;
@@ -97,6 +114,33 @@ function newestAddress(context: RequestContext, response: MatterhornPinnedJsonRe
   context.requestBytes += response.requestBytes;
   context.responseBytes += response.responseBytes;
   context.connectedAddress = response.connectedAddress;
+}
+
+function observeGrpc(context: RequestContext, observation: MatterhornGrpcTransportObservation): void {
+  context.requestBytes += observation.requestBytes;
+  context.responseBytes += observation.responseBytes;
+  context.connectedAddress = observation.connectedAddress;
+}
+
+function nonNegativeBigInt(value: unknown, field: string): bigint {
+  if (typeof value === "bigint" && value >= 0n) return value;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return BigInt(value);
+  if (typeof value === "string" && /^(?:0|[1-9][0-9]*)$/.test(value)) return BigInt(value);
+  throw new Error(`first_party_${field}_invalid`);
+}
+
+function estimatedSuiGasMist(effects: unknown): string {
+  const gasUsed = record(record(effects)?.gasUsed);
+  if (!gasUsed) throw new Error("first_party_sui_gas_summary_invalid");
+  const computationCost = nonNegativeBigInt(gasUsed.computationCost, "sui_computation_cost");
+  const storageCost = nonNegativeBigInt(gasUsed.storageCost, "sui_storage_cost");
+  const nonRefundableStorageFee = nonNegativeBigInt(
+    gasUsed.nonRefundableStorageFee,
+    "sui_non_refundable_storage_fee",
+  );
+  const storageRebate = nonNegativeBigInt(gasUsed.storageRebate, "sui_storage_rebate");
+  const gross = computationCost + storageCost + nonRefundableStorageFee;
+  return (gross > storageRebate ? gross - storageRebate : 0n).toString();
 }
 
 async function postJson(context: RequestContext, body: unknown): Promise<unknown> {
@@ -242,10 +286,50 @@ async function executeSui(
 ): Promise<{ data: unknown; source: string; observedAt: string; blockOrVersion: string }> {
   if (network !== SUI_NETWORK) throw new Error("first_party_sui_network_invalid");
   if (actionId === "sui_transfer_preview") {
-    // A Sui transfer needs exact object/gas selection plus dry-run. The current
-    // Sui SDK path is gRPC-based and cannot yet share this IPv4-pinned socket.
-    // Fail closed instead of returning a local preview that looks simulated.
-    throw new Error("first_party_sui_pinned_simulation_unavailable");
+    const sender = normalizeMatterhornSuiAddress(nonEmptyString(args.sender) ?? "");
+    const recipient = normalizeMatterhornSuiAddress(nonEmptyString(args.recipient) ?? "");
+    const amountSui = decimal(args.amountSui, "sui_transfer_amount", false);
+    const memo = args.memo === undefined ? undefined : nonEmptyString(args.memo);
+    if (args.memo !== undefined && (memo == null || memo.length > 140)) {
+      throw new Error("first_party_sui_memo_invalid");
+    }
+    const now = () => new Date(observedAt);
+    const previewInput = {
+      network: "testnet",
+      kind: "transfer_sui",
+      sender,
+      recipient,
+      amountSui,
+      memo,
+    } as const;
+    const preview = buildSuiTransferPreview(previewInput, { now, ttlMs: 15_000 });
+    const client = context.createSuiGrpcClient({
+      endpoint: context.endpoint,
+      approvedAddresses: context.approvedAddresses,
+      signal: context.signal,
+      observe: (observation) => observeGrpc(context, observation),
+    });
+    const simulation = await simulateSuiTransactionPreview(previewInput, {
+      client,
+      now,
+      ttlMs: 15_000,
+    });
+    const simulationReference = `sha256:${simulation.reference}`;
+    return {
+      data: {
+        preparedActionId: preview.id,
+        network,
+        sender: preview.sender,
+        recipient: preview.recipient,
+        amountSui: preview.amountSui,
+        estimatedGasMist: estimatedSuiGasMist(simulation.gasSummary),
+        simulationReference,
+        expiresAt: preview.expiresAt,
+      },
+      source: "Sui testnet pinned gRPC simulation",
+      observedAt: simulation.simulatedAt,
+      blockOrVersion: simulation.block ?? simulationReference,
+    };
   }
   if (actionId !== "sui_account_read") throw new Error("first_party_sui_action_invalid");
   const address = normalizeMatterhornSuiAddress(nonEmptyString(args.address) ?? "");
@@ -450,6 +534,22 @@ export function createFirstPartyCryptoAppExecutor(
 ): MatterhornCryptoAppTransportExecutor {
   const requestJson = options.requestJson ?? createPinnedJsonRequester();
   const now = options.now ?? (() => new Date());
+  const createSuiGrpcClient = options.createSuiGrpcClient ?? ((input) => {
+    const transport = new GrpcWebFetchTransport({
+      baseUrl: input.endpoint.href.replace(/\/$/, ""),
+      format: "binary",
+      fetch: createPinnedSuiGrpcWebFetch({
+        endpoint: input.endpoint,
+        approvedAddresses: input.approvedAddresses,
+        outerSignal: input.signal,
+        onObservation: input.observe,
+      }),
+    });
+    return new SuiGrpcClient({
+      network: "testnet",
+      transport,
+    });
+  });
   return async (input) => {
     if (input.credential.type !== "none") throw new Error("first_party_credentials_not_supported");
     const observedAt = now().toISOString();
@@ -458,6 +558,7 @@ export function createFirstPartyCryptoAppExecutor(
       approvedAddresses: input.approvedAddresses,
       signal: input.signal,
       requestJson,
+      createSuiGrpcClient,
       requestBytes: 0,
       responseBytes: 0,
       connectedAddress: null,

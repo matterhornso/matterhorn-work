@@ -14,9 +14,9 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 1 trusted JSON-over-HTTPS transport foundation with DNS address pinning, TLS hostname verification, peer verification, redirect/content/size bounds, and server-side credential resolution: complete and backend-only.
 - Phase 1 guarded-runtime authorization bridge with explicit certified-action-to-tool bindings, exact hash-bound single-use capabilities, durable reservations, restart-safe receipts, and run-close revocation: complete and backend-only.
 - Phase 1 signed, testnet-only Sui and Hyperliquid manifest contracts, closed projections, guarded-tool bindings, and offline routed fixtures: complete and backend-only.
-- Phase 1 pinned live-source executor: Sui balance/checkpoint reads and Hyperliquid market/orderbook/account reads plus exact short-lived order previews are complete and backend-only. Hyperliquid preparation never calls the exchange endpoint.
-- Stop condition reached: exact Sui transaction building/dry-run still uses an SDK gRPC path outside the certified IPv4-pinned requester. The Sui prepare action therefore fails closed before network access pending a transport decision.
-- Current slice after that decision: durable cost/quota and circuit policy, conflicting-source adversarial tests, then completing testnet certification.
+- Phase 1 pinned live-source executor: Sui balance/checkpoint reads and exact transfer simulations plus Hyperliquid market/orderbook/account reads and exact short-lived order previews are complete and backend-only. Hyperliquid preparation never calls the exchange endpoint.
+- Phase 1 Sui SDK boundary: complete and backend-only. Matterhorn injects an explicit binary gRPC-web transport over a TLS-verified, IPv4-pinned HTTP/2 socket. The allowlist contains only the read-only `StateService/GetBalance` resolution required by the official transaction builder and `TransactionExecutionService/SimulateTransaction`; `ExecuteTransaction` and every other method fail before dialing.
+- Current slice: durable cost/quota and circuit policy, conflicting-source adversarial tests, then completing testnet certification.
 - All new production modes remain `off`; no HTTP routes or upstream adapter traffic are enabled.
 
 ## Goal
@@ -323,12 +323,12 @@ The trusted JSON transport additionally pins the HTTPS socket to one router-appr
 
 The guarded-runtime bridge requires full `enforce` mode and a trusted certification-time binding between each app action and one existing Matterhorn read or prepare tool. It stages and consumes the existing server-only capability, binds the manifest revision, connection, action, access, network, and canonical argument hash, persists only non-content reservation metadata, records the app/action in the run receipt, survives a process restart, and invalidates outstanding reservations when the run closes. It is not registered in server startup or any account-facing route.
 
-The first-party contract fixtures cover Sui balance reads and dry-run transfer preparation plus Hyperliquid market, orderbook, account-exposure, and order-preparation actions. Every contract is testnet-only, signed in the test harness, closed-schema projected, wallet-submission-only, and bound to a compatible existing guarded tool. Test fixtures prove unknown/private payload fields do not enter model-facing results. These are certification contracts, not live chain adapters; no production publisher key, automatic registration, startup hook, or upstream endpoint is included.
+The first-party contracts and backend-only executors cover Sui balance reads and dry-run transfer preparation plus Hyperliquid market, orderbook, account-exposure, and order-preparation actions. Every contract is testnet-only, signed in the test harness, closed-schema projected, wallet-submission-only, and bound to a compatible existing guarded tool. Test fixtures prove unknown/private payload fields do not enter model-facing results. Live testnet egress is pinned and method-bounded, but no production publisher key, automatic registration, startup hook, or account-facing route is included.
 
 The next Phase 1 slice must:
 
-- Bind MCP/OpenAPI/RPC and first-party SDK protocols to the trusted transport boundary without allowing redirects, destination overrides, arbitrary methods, or raw upstream cost claims.
+- Extend the trusted transport boundary to future MCP/OpenAPI/RPC protocols without allowing redirects, destination overrides, arbitrary methods, or raw upstream cost claims. The first-party JSON and Sui gRPC transports are complete for the current testnet actions.
 - Add a durable adapter cost/quota ledger; capability reservation/reconciliation is complete, while monetary/tool allowance accounting remains separate and pending.
 - Persist circuit/quota state needed across process restarts while keeping the hosted release single-instance.
-- Implement live Sui and Hyperliquid testnet sources behind the certified contracts, including semantic validation, protocol-aware simulation, conflicting-source, schema-drift, abort, replay, and zero-upstream-denial fixtures.
+- Complete conflicting-source, schema-drift, abort, replay, and zero-upstream-denial fixtures for the live Sui and Hyperliquid testnet sources.
 - Keep account-facing HTTP routes and runtime capabilities disconnected until that full adversarial gate passes.

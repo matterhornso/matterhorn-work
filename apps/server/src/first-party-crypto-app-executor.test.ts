@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { SuiGrpcClient } from "@mysten/sui/grpc";
 
 import type { MatterhornCryptoAppAction } from "@matterhorn-work/types/crypto-coworkers";
 
@@ -142,10 +143,90 @@ describe("first-party crypto app executor", () => {
     });
   });
 
-  test("fails Sui transfer preparation closed before network access until pinned dry-run exists", async () => {
-    let requested = false;
+  test("builds a short-lived Sui wallet preview through pinned gRPC simulation only", async () => {
+    let jsonRequested = false;
+    let simulateCalls = 0;
     const executor = createFirstPartyCryptoAppExecutor({
-      requestJson: async () => { requested = true; return response({}); },
+      requestJson: async () => { jsonRequested = true; return response({}); },
+      createSuiGrpcClient: ({ endpoint, approvedAddresses, observe }) => {
+        expect(endpoint.href).toBe("https://fullnode.testnet.sui.io/");
+        expect(approvedAddresses).toEqual([PEER]);
+        return {
+          simulateTransaction: async () => {
+            simulateCalls += 1;
+            observe({
+              connectedAddress: PEER,
+              requestBytes: 320,
+              responseBytes: 680,
+              path: "/sui.rpc.v2.TransactionExecutionService/SimulateTransaction",
+            });
+            return {
+              $kind: "Transaction",
+              Transaction: {
+                effects: {
+                  lamportVersion: "123457",
+                  gasUsed: {
+                    computationCost: "1000",
+                    storageCost: "2000",
+                    storageRebate: "500",
+                    nonRefundableStorageFee: "100",
+                  },
+                },
+                balanceChanges: [],
+                objectTypes: {},
+              },
+            };
+          },
+        } as unknown as SuiGrpcClient;
+      },
+      now: () => new Date(NOW),
+      estimateCostMicros: ({ requestBytes, responseBytes }) => requestBytes + responseBytes,
+    });
+    const result = await executor(input({
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_transfer_preview",
+      network: "sui:testnet",
+      arguments: { sender: SUI_ADDRESS, recipient: `0x${"2".repeat(64)}`, amountSui: "1" },
+    }));
+    expect(jsonRequested).toBe(false);
+    expect(simulateCalls).toBe(1);
+    expect(result).toMatchObject({
+      data: {
+        network: "sui:testnet",
+        sender: SUI_ADDRESS,
+        recipient: `0x${"2".repeat(64)}`,
+        amountSui: "1",
+        estimatedGasMist: "2600",
+        expiresAt: "2026-09-01T12:00:15.000Z",
+      },
+      source: "Sui testnet pinned gRPC simulation",
+      observedAt: NOW,
+      blockOrVersion: "123457",
+      connectedAddress: PEER,
+      costMicros: 1000,
+    });
+    expect((result.data as Record<string, unknown>).preparedActionId).toMatch(/^sui_preview_[a-f0-9]{16}$/);
+    expect((result.data as Record<string, unknown>).simulationReference).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(JSON.stringify(result.data)).not.toMatch(/transactionBytes|signature|privateKey|execute/i);
+  });
+
+  test("fails a rejected Sui simulation without returning a wallet preview", async () => {
+    const executor = createFirstPartyCryptoAppExecutor({
+      requestJson: async () => { throw new Error("JSON transport must not be used"); },
+      createSuiGrpcClient: ({ observe }) => ({
+        simulateTransaction: async () => {
+          observe({
+            connectedAddress: PEER,
+            requestBytes: 150,
+            responseBytes: 250,
+            path: "/sui.rpc.v2.TransactionExecutionService/SimulateTransaction",
+          });
+          return {
+            $kind: "FailedTransaction",
+            FailedTransaction: { status: { error: { message: "insufficient gas" } } },
+          };
+        },
+      }) as unknown as SuiGrpcClient,
       now: () => new Date(NOW),
     });
     await expect(executor(input({
@@ -153,8 +234,7 @@ describe("first-party crypto app executor", () => {
       actionId: "sui_transfer_preview",
       network: "sui:testnet",
       arguments: { sender: SUI_ADDRESS, recipient: `0x${"2".repeat(64)}`, amountSui: "1" },
-    }))).rejects.toThrow("first_party_sui_pinned_simulation_unavailable");
-    expect(requested).toBe(false);
+    }))).rejects.toThrow("Sui dry-run failed: insufficient gas");
   });
 
   test("projects Hyperliquid market, book, and private account reads without raw protocol fields", async () => {

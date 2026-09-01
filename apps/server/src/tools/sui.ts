@@ -525,8 +525,13 @@ export interface SuiTransactionSimulationRefresh {
  */
 export async function simulateSuiTransactionPreview(
   input: SuiTransactionPreviewInput,
+  options: {
+    client?: SuiGrpcClient;
+    now?: () => Date;
+    ttlMs?: number;
+  } = {},
 ): Promise<SuiTransactionSimulationRefresh> {
-  const preview = buildSuiTransactionPreview(input);
+  const preview = buildSuiTransactionPreview(input, { now: options.now, ttlMs: options.ttlMs });
   const transaction = new Transaction();
   transaction.setSender(preview.sender);
   if (preview.kind === "transfer_object") {
@@ -545,7 +550,7 @@ export async function simulateSuiTransactionPreview(
       }),
     ], preview.recipient!);
   }
-  const client = new SuiGrpcClient({
+  const client = options.client ?? new SuiGrpcClient({
     network: preview.network,
     baseUrl: SUI_GRPC_URLS[preview.network],
   });
@@ -559,7 +564,7 @@ export async function simulateSuiTransactionPreview(
       `Sui dry-run failed: ${result.FailedTransaction.status.error?.message ?? "transaction rejected"}`,
     );
   }
-  const simulatedAt = new Date().toISOString();
+  const simulatedAt = (options.now?.() ?? new Date()).toISOString();
   const evidence = {
     network: preview.network,
     previewSha256: preview.previewSha256,
@@ -569,7 +574,7 @@ export async function simulateSuiTransactionPreview(
   };
   return {
     reference: sha256(evidence),
-    block: null,
+    block: result.Transaction.effects?.lamportVersion ?? null,
     simulatedAt,
     gasSummary: result.Transaction.effects ?? null,
   };
