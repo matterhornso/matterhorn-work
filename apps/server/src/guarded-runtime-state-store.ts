@@ -28,6 +28,7 @@ export type GuardedRuntimeStateKind =
   | "user_message_binding"
   | "assistant_message_binding"
   | "crypto_app_reservation"
+  | "crypto_pending_intent"
   | "receipt_index";
 
 type StateRow = {

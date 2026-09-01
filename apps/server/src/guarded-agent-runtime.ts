@@ -22,6 +22,7 @@ import {
   MatterhornGuardedCryptoAppAuthorization,
   type MatterhornCryptoAppCapabilityBinding,
 } from "./crypto-app-guarded-authorization.js";
+import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
@@ -120,6 +121,7 @@ export class MatterhornGuardedAgentRuntime {
   readonly privacy: MatterhornPrivacyFirewall;
   readonly capabilities: MatterhornAgentCapabilityBroker;
   readonly receipts: MatterhornAgentRunReceiptStore;
+  readonly pendingCryptoIntents: MatterhornPendingCryptoIntentStore;
   private readonly stagedCapabilities = new Map<string, { token: string; expiresAtMs: number; runId: string }>();
   private readonly rolloutBypassCallIds = new Map<string, {
     expiresAtMs: number;
@@ -136,6 +138,7 @@ export class MatterhornGuardedAgentRuntime {
     this.privacy = new MatterhornPrivacyFirewall(stateStore);
     this.capabilities = new MatterhornAgentCapabilityBroker(undefined, stateStore);
     this.receipts = new MatterhornAgentRunReceiptStore(stateStore);
+    this.pendingCryptoIntents = new MatterhornPendingCryptoIntentStore(stateStore);
   }
 
   ready(): boolean {
@@ -687,7 +690,8 @@ export class MatterhornGuardedAgentRuntime {
   invalidateCoworker(input: { workspaceId: string; ownerId: string; coworkerId: string }): number {
     const runIds = this.capabilities.runIdsForCoworker(input);
     for (const runId of runIds) this.revokeRun(runId);
-    return runIds.length;
+    const pendingIntents = this.pendingCryptoIntents.invalidateCoworker(input);
+    return runIds.length + pendingIntents;
   }
 
   observationSnapshot(): GuardedRuntimeObservationMetric[] {
@@ -706,7 +710,7 @@ export class MatterhornGuardedAgentRuntime {
     }
     this.stateStore.purgeWorkspace(
       workspaceId,
-      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation"],
+      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation", "crypto_pending_intent"],
       { includeConsumedCapabilities: false },
     );
     return {

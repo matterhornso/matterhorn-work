@@ -243,6 +243,7 @@ export function compileCertifiedCryptoIntent(input: CertifiedCryptoIntentCompile
     coworkerId: input.coworkerId.trim(),
     workspaceId: input.workspaceId.trim(),
     appId: input.result.app.id,
+    connectionId: input.result.app.connectionId,
     actionId: input.result.action.id,
     protocol: terms.protocol,
     network: terms.network,
@@ -253,6 +254,7 @@ export function compileCertifiedCryptoIntent(input: CertifiedCryptoIntentCompile
     recipient: terms.recipient,
     slippageBps: terms.slippageBps,
     canonicalArguments,
+    authorizedArgumentsHash: sha256(input.canonicalRequestArguments),
     canonicalArgumentsHash: sha256(canonicalArguments),
     policyHash: input.policyHash,
     simulation: {

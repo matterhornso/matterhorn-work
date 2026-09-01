@@ -11,6 +11,10 @@ import type {
   MatterhornCryptoAppAdapterRequest,
   MatterhornCryptoAppAdapterRouter,
 } from "./crypto-app-adapter-router.js";
+import type {
+  MatterhornPendingCryptoIntent,
+  MatterhornPendingCryptoIntentStore,
+} from "./crypto-pending-intent-store.js";
 import {
   compileCertifiedCryptoIntent,
   cryptoIntentToReviewedActionHandoffV2,
@@ -42,6 +46,7 @@ export type MatterhornCryptoTransactionResult = {
   intent: MatterhornCryptoIntent;
   policyDecision: MatterhornPolicyDecision;
   reviewedAction: ReviewedActionHandoffV2 | null;
+  pendingIntent: MatterhornPendingCryptoIntent | null;
 };
 
 type TrustedFactsResolver = (input: {
@@ -54,6 +59,7 @@ type TrustedFactsResolver = (input: {
 type Options = {
   router: Pick<MatterhornCryptoAppAdapterRouter, "execute">;
   capabilities: MatterhornAgentCapabilityBroker;
+  pendingIntents: Pick<MatterhornPendingCryptoIntentStore, "create" | "get" | "transition">;
   resolveTrustedFacts: TrustedFactsResolver;
   now?: () => Date;
 };
@@ -62,6 +68,8 @@ export class MatterhornCryptoTransactionError extends Error {
   constructor(
     public readonly code:
       | "transaction_context_invalid"
+      | "transaction_regeneration_invalid"
+      | "transaction_regeneration_denied"
       | "transaction_policy_preflight_denied"
       | "transaction_proxy_tool_unavailable"
       | "transaction_capability_proof_missing",
@@ -87,17 +95,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export class MatterhornCryptoTransactionService {
   readonly #router: Options["router"];
   readonly #capabilities: MatterhornAgentCapabilityBroker;
+  readonly #pendingIntents: Options["pendingIntents"];
   readonly #resolveTrustedFacts: TrustedFactsResolver;
   readonly #now: () => Date;
 
   constructor(options: Options) {
     this.#router = options.router;
     this.#capabilities = options.capabilities;
+    this.#pendingIntents = options.pendingIntents;
     this.#resolveTrustedFacts = options.resolveTrustedFacts;
     this.#now = options.now ?? (() => new Date());
   }
 
-  async prepare(request: MatterhornCryptoTransactionRequest): Promise<MatterhornCryptoTransactionResult> {
+  async prepare(
+    request: MatterhornCryptoTransactionRequest,
+    lineage: { previousIntentHash?: string | null } = {},
+  ): Promise<MatterhornCryptoTransactionResult> {
     if (request.coworker.workspaceId !== request.workspaceId
       || request.coworker.ownerId !== request.ownerId
       || request.policyLayers.platform.subjectId !== "matterhorn"
@@ -124,7 +137,17 @@ export class MatterhornCryptoTransactionService {
     if (!preflight.allowed) {
       throw new MatterhornCryptoTransactionError("transaction_policy_preflight_denied", preflight.reasonCodes);
     }
-    const adapterResult = await this.#router.execute(request);
+    const exactArguments = canonicalArguments(request.arguments);
+    const adapterResult = await this.#router.execute({
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+      runId: request.runId,
+      callId: request.callId,
+      connectionId: request.connectionId,
+      actionId: request.actionId,
+      network: request.network,
+      arguments: exactArguments,
+    });
     if (adapterResult.app.id !== request.appId
       || adapterResult.app.connectionId !== request.connectionId
       || adapterResult.action.id !== request.actionId
@@ -132,7 +155,6 @@ export class MatterhornCryptoTransactionService {
       || (adapterResult.action.access !== "prepare" && adapterResult.action.access !== "simulate")) {
       throw new MatterhornCryptoTransactionError("transaction_context_invalid");
     }
-    const exactArguments = canonicalArguments(request.arguments);
     const intent = compileCertifiedCryptoIntent({
       workspaceId: request.workspaceId,
       runId: request.runId,
@@ -187,13 +209,104 @@ export class MatterhornCryptoTransactionService {
       },
       now: this.#now(),
     });
+    const reviewedAction = policyDecision.decision === "wallet_review_required"
+      ? cryptoIntentToReviewedActionHandoffV2(intent, policyDecision)
+      : null;
+    const pendingIntent = reviewedAction
+      ? this.#pendingIntents.create({
+          workspaceId: request.workspaceId,
+          sessionId: request.sessionId,
+          ownerId: request.ownerId,
+          coworkerId: request.coworker.id,
+          intent,
+          policyDecision,
+          reviewedAction,
+          previousIntentHash: lineage.previousIntentHash ?? null,
+        })
+      : null;
     return {
       adapterResult,
       intent,
       policyDecision,
-      reviewedAction: policyDecision.decision === "wallet_review_required"
-        ? cryptoIntentToReviewedActionHandoffV2(intent, policyDecision)
-        : null,
+      reviewedAction,
+      pendingIntent,
     };
+  }
+
+  async regenerate(input: {
+    workspaceId: string;
+    ownerId: string;
+    coworkerId: string;
+    pendingIntentId: string;
+    expectedRevision: number;
+    request: MatterhornCryptoTransactionRequest;
+  }): Promise<{
+    result: MatterhornCryptoTransactionResult;
+    supersededIntent: MatterhornPendingCryptoIntent;
+  }> {
+    const current = this.#pendingIntents.get(
+      input.workspaceId,
+      input.ownerId,
+      input.coworkerId,
+      input.pendingIntentId,
+    );
+    const exactArguments = canonicalArguments(input.request.arguments);
+    if (!current
+      || current.state !== "wallet_review"
+      || current.revision !== input.expectedRevision
+      || input.request.workspaceId !== input.workspaceId
+      || input.request.ownerId !== input.ownerId
+      || input.request.coworker.id !== input.coworkerId
+      || input.request.sessionId !== current.sessionId
+      || input.request.runId === current.intent.runId
+      || input.request.appId !== current.intent.appId
+      || input.request.connectionId !== current.intent.connectionId
+      || input.request.actionId !== current.intent.actionId
+      || input.request.network !== current.intent.network
+      || sha256(exactArguments) !== current.intent.authorizedArgumentsHash) {
+      throw new MatterhornCryptoTransactionError("transaction_regeneration_invalid");
+    }
+    const refreshing = this.#pendingIntents.transition({
+      workspaceId: input.workspaceId,
+      ownerId: input.ownerId,
+      coworkerId: input.coworkerId,
+      id: input.pendingIntentId,
+      expectedRevision: input.expectedRevision,
+      nextState: "refreshing",
+    });
+    try {
+      const result = await this.prepare(input.request, {
+        previousIntentHash: current.intent.intentHash,
+      });
+      if (!result.pendingIntent) {
+        throw new MatterhornCryptoTransactionError(
+          "transaction_regeneration_denied",
+          result.policyDecision.reasonCodes,
+        );
+      }
+      const supersededIntent = this.#pendingIntents.transition({
+        workspaceId: input.workspaceId,
+        ownerId: input.ownerId,
+        coworkerId: input.coworkerId,
+        id: input.pendingIntentId,
+        expectedRevision: refreshing.revision,
+        nextState: "regeneration_required",
+      });
+      return { result, supersededIntent };
+    } catch (error) {
+      try {
+        this.#pendingIntents.transition({
+          workspaceId: input.workspaceId,
+          ownerId: input.ownerId,
+          coworkerId: input.coworkerId,
+          id: input.pendingIntentId,
+          expectedRevision: refreshing.revision,
+          nextState: "regeneration_required",
+        });
+      } catch {
+        // A concurrent cancellation or expiry is already fail-closed.
+      }
+      throw error;
+    }
   }
 }

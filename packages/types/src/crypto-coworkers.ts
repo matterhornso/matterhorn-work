@@ -376,6 +376,7 @@ export type MatterhornCryptoIntent = {
   coworkerId: string;
   workspaceId: string;
   appId: string;
+  connectionId: string;
   actionId: string;
   protocol: string;
   network: string;
@@ -386,6 +387,7 @@ export type MatterhornCryptoIntent = {
   recipient: string | null;
   slippageBps: number | null;
   canonicalArguments: Record<string, unknown>;
+  authorizedArgumentsHash: string;
   canonicalArgumentsHash: string;
   policyHash: string;
   simulation: {
@@ -1001,9 +1003,9 @@ export function validateMatterhornCryptoIntent(value: unknown): string[] {
   const issues: string[] = [];
   if (!isRecord(value)) return ["crypto_intent_not_object"];
   const topLevelKeys = [
-    "version", "id", "runId", "coworkerId", "workspaceId", "appId", "actionId", "protocol",
+    "version", "id", "runId", "coworkerId", "workspaceId", "appId", "connectionId", "actionId", "protocol",
     "network", "signer", "operation", "asset", "amount", "recipient", "slippageBps",
-    "canonicalArguments", "canonicalArgumentsHash", "policyHash", "simulation", "intentHash",
+    "canonicalArguments", "authorizedArgumentsHash", "canonicalArgumentsHash", "policyHash", "simulation", "intentHash",
     "capabilityClass", "preparedAt", "expiresAt",
   ];
   if (!hasOnlyKeys(value, topLevelKeys)) issues.push("crypto_intent_unknown_field");
@@ -1016,7 +1018,7 @@ export function validateMatterhornCryptoIntent(value: unknown): string[] {
     && /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/.test(id);
   const validHash = (hash: unknown) => typeof hash === "string" && /^[a-f0-9]{64}$/.test(hash);
   const validDate = (date: unknown) => typeof date === "string" && Number.isFinite(Date.parse(date));
-  for (const key of ["id", "runId", "coworkerId", "workspaceId", "appId", "actionId"]) {
+  for (const key of ["id", "runId", "coworkerId", "workspaceId", "appId", "connectionId", "actionId"]) {
     if (!validId(value[key])) issues.push(`crypto_intent_${key}_invalid`);
   }
   for (const key of ["protocol", "network", "operation"]) {
@@ -1036,7 +1038,7 @@ export function validateMatterhornCryptoIntent(value: unknown): string[] {
     || JSON.stringify(value.canonicalArguments).length > 64 * 1_024) {
     issues.push("crypto_intent_arguments_invalid");
   }
-  for (const key of ["canonicalArgumentsHash", "policyHash", "intentHash"]) {
+  for (const key of ["authorizedArgumentsHash", "canonicalArgumentsHash", "policyHash", "intentHash"]) {
     if (!validHash(value[key])) issues.push(`crypto_intent_${key}_invalid`);
   }
   if (!isRecord(value.simulation)

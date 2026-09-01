@@ -135,7 +135,8 @@ Exit: the user can operate a coworker through chat, see its allowed/approval/pro
 
 - Canonical `crypto-intent.v1` production from certified Sui and Hyperliquid adapter outputs is complete. The compiler cross-checks request and result terms, rejects stale simulations, hash-binds exact terms and policy, and regenerates only wallet-review-only v2 handoffs.
 - Policy intersection across platform, organization, user, coworker, app, run, and call is complete at the guarded server boundary. Static denials occur before adapter egress; a wallet handoff additionally requires an exact durable single-use capability proof and trusted economic/compliance facts.
-- Protocol-aware simulation and freshness refresh.
+- Certified Sui and Hyperliquid pending-review persistence and protocol-aware freshness regeneration are complete at the backend boundary. Reviews are exact-connection bound, auto-expire, are cancelled when coworker authority changes, and can be regenerated only through a new guarded run with identical canonical terms.
+- Account-safe wallet-review routes and public-receipt reconciliation.
 - Wallet review, rejection, expiry, tamper invalidation, regeneration, submission, and public-receipt reconciliation.
 - Sui first, then Hyperliquid, Bittensor, and Polymarket.
 
