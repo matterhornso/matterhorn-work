@@ -1,8 +1,9 @@
 import { createHash, createPublicKey, verify, type KeyObject } from "node:crypto";
 
+import { canonicalCryptoAppManifestPayload as sdkCanonicalCryptoAppManifestPayload } from "@matterhorn-work/crypto-app-sdk";
 import type { MatterhornCryptoAppManifest } from "@matterhorn-work/types/crypto-coworkers";
 
-import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
+import { sha256 } from "./guarded-runtime-crypto.js";
 
 export type MatterhornTrustedPublisherKey = {
   publisherId: string;
@@ -16,14 +17,7 @@ export type MatterhornTrustedPublisherKey = {
  * is excluded; publisher identity, key id and algorithm remain bound.
  */
 export function canonicalCryptoAppManifestPayload(manifest: MatterhornCryptoAppManifest): string {
-  return canonicalJson({
-    ...manifest,
-    publisher: {
-      id: manifest.publisher.id,
-      keyId: manifest.publisher.keyId,
-      algorithm: manifest.publisher.algorithm,
-    },
-  });
+  return sdkCanonicalCryptoAppManifestPayload(manifest);
 }
 
 export function cryptoAppManifestHash(manifest: MatterhornCryptoAppManifest): string {

@@ -1,0 +1,259 @@
+import {
+  MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+  type MatterhornCryptoAppAction,
+  type MatterhornCryptoAppManifest,
+  validateMatterhornCryptoAppManifest,
+} from "@matterhorn-work/types/crypto-coworkers";
+
+type CanonicalValue = null | boolean | number | string | CanonicalValue[] | { [key: string]: CanonicalValue };
+
+export type MatterhornUnsignedCryptoAppManifest = Omit<MatterhornCryptoAppManifest, "version" | "publisher"> & {
+  publisher: {
+    id: string;
+    keyId: string;
+    algorithm: "ed25519";
+  };
+};
+
+export type MatterhornCryptoAppSigningRequest = {
+  version: "matterhorn.crypto-app-signing-request.v1";
+  appId: string;
+  manifestRevision: string;
+  publisherId: string;
+  publisherKeyId: string;
+  algorithm: "ed25519";
+  canonicalPayload: string;
+  payloadEncoding: "utf8";
+  signatureEncoding: "base64url";
+};
+
+export type MatterhornCryptoAppLocalFinding = {
+  severity: "error" | "warning";
+  category: "manifest" | "authority" | "authentication" | "network" | "schema" | "reliability";
+  code: string;
+  actionId: string | null;
+};
+
+export type MatterhornCryptoAppLocalPolicyReport = {
+  version: "matterhorn.crypto-app-local-policy.v1";
+  targetEnvironment: "testnet" | "mainnet";
+  passed: boolean;
+  findings: MatterhornCryptoAppLocalFinding[];
+  /** Local emulation is advisory. Only Matterhorn's server can certify an adapter. */
+  certificationAuthority: "none";
+  runtimeProbesRequired: true;
+};
+
+export class MatterhornCryptoAppSdkError extends Error {
+  constructor(
+    public readonly code:
+      | "manifest_invalid"
+      | "manifest_signature_invalid"
+      | "manifest_private_key_forbidden",
+    public readonly issues: string[] = [],
+  ) {
+    super(code);
+    this.name = "MatterhornCryptoAppSdkError";
+  }
+}
+
+function canonicalValue(value: unknown): CanonicalValue {
+  if (value === null || typeof value === "boolean" || typeof value === "string") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : String(value);
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+        .map(([key, item]) => [key, canonicalValue(item)]),
+    );
+  }
+  return String(value);
+}
+
+export function canonicalCryptoAppJson(value: unknown): string {
+  return JSON.stringify(canonicalValue(value));
+}
+
+/** The detached signature is excluded; publisher identity and key id remain bound. */
+export function canonicalCryptoAppManifestPayload(
+  manifest: MatterhornCryptoAppManifest | MatterhornUnsignedCryptoAppManifest,
+): string {
+  return canonicalCryptoAppJson({
+    ...manifest,
+    version: MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+    publisher: {
+      id: manifest.publisher.id,
+      keyId: manifest.publisher.keyId,
+      algorithm: manifest.publisher.algorithm,
+    },
+  });
+}
+
+function deepClone<T>(value: T): T {
+  return structuredClone(value);
+}
+
+function materializedManifest(
+  draft: MatterhornUnsignedCryptoAppManifest,
+  signature: string,
+): MatterhornCryptoAppManifest {
+  return {
+    version: MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+    ...deepClone(draft),
+    publisher: {
+      id: draft.publisher.id,
+      keyId: draft.publisher.keyId,
+      algorithm: "ed25519",
+      signature,
+    },
+  };
+}
+
+/**
+ * Builds and validates an unsigned manifest. No key material crosses this API;
+ * the caller signs the returned canonical payload in its own key boundary.
+ */
+export function defineCryptoAppManifest(
+  draft: MatterhornUnsignedCryptoAppManifest,
+): MatterhornUnsignedCryptoAppManifest {
+  const candidate = materializedManifest(draft, "pending-detached-signature");
+  const issues = validateMatterhornCryptoAppManifest(candidate);
+  if (issues.length > 0) throw new MatterhornCryptoAppSdkError("manifest_invalid", issues);
+  return deepClone(draft);
+}
+
+export function buildCryptoAppSigningRequest(
+  draft: MatterhornUnsignedCryptoAppManifest,
+): MatterhornCryptoAppSigningRequest {
+  const validated = defineCryptoAppManifest(draft);
+  return {
+    version: "matterhorn.crypto-app-signing-request.v1",
+    appId: validated.appId,
+    manifestRevision: validated.manifestRevision,
+    publisherId: validated.publisher.id,
+    publisherKeyId: validated.publisher.keyId,
+    algorithm: "ed25519",
+    canonicalPayload: canonicalCryptoAppManifestPayload(validated),
+    payloadEncoding: "utf8",
+    signatureEncoding: "base64url",
+  };
+}
+
+function validDetachedEd25519Signature(value: string): boolean {
+  if (!/^[A-Za-z0-9_-]{86}$/.test(value)) return false;
+  try {
+    const bytes = Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/") + "=="), (char) => char.charCodeAt(0));
+    return bytes.length === 64;
+  } catch {
+    return false;
+  }
+}
+
+/** Attaches a detached signature produced outside the SDK's process boundary. */
+export function attachCryptoAppManifestSignature(
+  draft: MatterhornUnsignedCryptoAppManifest,
+  signature: string,
+): MatterhornCryptoAppManifest {
+  if (/PRIVATE KEY|BEGIN [A-Z ]*PRIVATE/i.test(signature)) {
+    throw new MatterhornCryptoAppSdkError("manifest_private_key_forbidden");
+  }
+  if (!validDetachedEd25519Signature(signature)) {
+    throw new MatterhornCryptoAppSdkError("manifest_signature_invalid");
+  }
+  const manifest = materializedManifest(defineCryptoAppManifest(draft), signature);
+  const issues = validateMatterhornCryptoAppManifest(manifest);
+  if (issues.length > 0) throw new MatterhornCryptoAppSdkError("manifest_invalid", issues);
+  return manifest;
+}
+
+function addFinding(
+  findings: MatterhornCryptoAppLocalFinding[],
+  severity: MatterhornCryptoAppLocalFinding["severity"],
+  category: MatterhornCryptoAppLocalFinding["category"],
+  code: string,
+  actionId: string | null = null,
+): void {
+  const key = `${severity}\u0000${category}\u0000${code}\u0000${actionId ?? ""}`;
+  if (!findings.some((item) => `${item.severity}\u0000${item.category}\u0000${item.code}\u0000${item.actionId ?? ""}` === key)) {
+    findings.push({ severity, category, code, actionId });
+  }
+}
+
+function closedObjectSchema(value: Record<string, unknown>): boolean {
+  return value.type === "object" && value.additionalProperties === false;
+}
+
+function inspectAction(
+  action: MatterhornCryptoAppAction,
+  scopes: Set<string>,
+  findings: MatterhornCryptoAppLocalFinding[],
+): void {
+  if (!closedObjectSchema(action.inputSchema)) {
+    addFinding(findings, "error", "schema", "action_input_schema_must_be_closed_object", action.id);
+  }
+  if (!closedObjectSchema(action.outputProjectionSchema)) {
+    addFinding(findings, "error", "schema", "action_output_schema_must_be_closed_object", action.id);
+  }
+  if (action.requiredScopes.some((scope) => !scopes.has(scope))) {
+    addFinding(findings, "error", "authentication", "action_scope_not_declared", action.id);
+  }
+  if (action.requiresFreshness && action.freshnessMaxAgeMs === null) {
+    addFinding(findings, "error", "reliability", "freshness_max_age_required", action.id);
+  }
+  const financial = action.access === "prepare" || action.access === "simulate";
+  if (financial && action.risk !== "financial_low" && action.risk !== "financial_high") {
+    addFinding(findings, "error", "authority", "financial_action_risk_required", action.id);
+  }
+  if (!financial && (action.risk === "financial_low" || action.risk === "financial_high")) {
+    addFinding(findings, "error", "authority", "financial_risk_requires_prepare_or_simulate", action.id);
+  }
+  if (action.walletSubmissionOnly !== true || action.agentMaySubmit !== false) {
+    addFinding(findings, "error", "authority", "wallet_submission_boundary_required", action.id);
+  }
+}
+
+/** Advisory local emulator; it never certifies or contacts Matterhorn. */
+export function emulateCryptoAppPolicy(
+  manifest: MatterhornCryptoAppManifest,
+  targetEnvironment: "testnet" | "mainnet",
+): MatterhornCryptoAppLocalPolicyReport {
+  const findings: MatterhornCryptoAppLocalFinding[] = [];
+  for (const code of validateMatterhornCryptoAppManifest(manifest)) {
+    addFinding(findings, "error", "manifest", code);
+  }
+  try {
+    const endpoint = new URL(manifest.transport.endpoint);
+    if (endpoint.protocol !== "https:"
+      || endpoint.username
+      || endpoint.password
+      || (endpoint.port && endpoint.port !== "443")
+      || endpoint.hostname === "localhost"
+      || endpoint.hostname.endsWith(".local")) {
+      addFinding(findings, "error", "network", "transport_public_https_required");
+    } else {
+      addFinding(findings, "warning", "network", "server_dns_revalidation_required");
+    }
+  } catch {
+    addFinding(findings, "error", "network", "transport_public_https_required");
+  }
+  if (!manifest.networks.some((network) => network.environment === targetEnvironment)) {
+    addFinding(findings, "error", "network", "target_environment_not_declared");
+  }
+  const scopes = new Set(manifest.authentication.scopes);
+  for (const action of manifest.actions) inspectAction(action, scopes, findings);
+  return {
+    version: "matterhorn.crypto-app-local-policy.v1",
+    targetEnvironment,
+    passed: !findings.some((item) => item.severity === "error"),
+    findings,
+    certificationAuthority: "none",
+    runtimeProbesRequired: true,
+  };
+}
+
+export type {
+  MatterhornCryptoAppAction,
+  MatterhornCryptoAppManifest,
+};
