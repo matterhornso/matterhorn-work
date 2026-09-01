@@ -1,18 +1,26 @@
 import { existsSync } from "node:fs";
 
 import { MatterhornCryptoAppCatalog } from "./crypto-app-catalog.js";
+import { MatterhornCryptoAppAdapterRouter } from "./crypto-app-adapter-router.js";
 import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
 import { MatterhornCryptoAppOperator } from "./crypto-app-operator.js";
+import { MatterhornCryptoAppOperationalPolicyStore } from "./crypto-app-operational-policy.js";
 import { MatterhornCryptoAppRegistryStore } from "./crypto-app-registry-store.js";
 import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
 import { isTrustedEd25519PublisherKey, type MatterhornTrustedPublisherKey } from "./crypto-app-signature.js";
 import { cryptoCoworkerFeatureConfig, type MatterhornCryptoAppGatewayMode } from "./crypto-coworker-config.js";
+import { createFirstPartyCryptoAppExecutor } from "./first-party-crypto-app-executor.js";
+import { firstPartyCryptoAppProxyTool } from "./first-party-crypto-apps.js";
+import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 
 export type MatterhornCryptoAppRuntimeServices = {
   mode: MatterhornCryptoAppGatewayMode;
   catalog: MatterhornCryptoAppCatalog | null;
   operator: MatterhornCryptoAppOperator | null;
+  router: MatterhornCryptoAppAdapterRouter | null;
+  ready: boolean;
+  purgeWorkspace(workspaceId: string): { connections: number; usage: number; circuits: number };
   close(): void;
 };
 
@@ -89,10 +97,19 @@ function parsePublisherKeys(value: string | undefined): MatterhornTrustedPublish
  */
 export function createMatterhornCryptoAppRuntime(
   env: NodeJS.ProcessEnv = process.env,
+  options: { guardedRuntime?: MatterhornGuardedAgentRuntime } = {},
 ): MatterhornCryptoAppRuntimeServices {
   const feature = cryptoCoworkerFeatureConfig(env);
   if (feature.cryptoAppGatewayMode === "off") {
-    return { mode: "off", catalog: null, operator: null, close: () => undefined };
+    return {
+      mode: "off",
+      catalog: null,
+      operator: null,
+      router: null,
+      ready: true,
+      purgeWorkspace: () => ({ connections: 0, usage: 0, circuits: 0 }),
+      close: () => undefined,
+    };
   }
   const policyVersion = env.MATTERHORN_CRYPTO_APP_POLICY_VERSION?.trim() ?? "";
   if (!POLICY_VERSION_PATTERN.test(policyVersion)) {
@@ -103,6 +120,7 @@ export function createMatterhornCryptoAppRuntime(
   const connectionPath = env.MATTERHORN_CRYPTO_APP_CONNECTION_DB?.trim();
   const registryStore = new MatterhornCryptoAppRegistryStore(registryPath || undefined);
   let connectionStore: MatterhornCryptoAppConnectionStore | null = null;
+  let operationalPolicy: MatterhornCryptoAppOperationalPolicyStore | null = null;
   try {
     const registry = new MatterhornCryptoAppRegistry({
       publisherKeys,
@@ -117,16 +135,51 @@ export function createMatterhornCryptoAppRuntime(
       mode: feature.cryptoAppGatewayMode,
     });
     const operator = new MatterhornCryptoAppOperator(registry);
+    let router: MatterhornCryptoAppAdapterRouter | null = null;
+    if (feature.cryptoAppGatewayMode === "enforce" && options.guardedRuntime) {
+      const authorization = options.guardedRuntime.createCryptoAppAuthorization({
+        resolveBinding: (input) => {
+          const entry = registry.resolve(input.appId);
+          if (!entry
+            || entry.manifestRevision !== input.manifestRevision
+            || !entry.manifest.actions.some((action) => action.id === input.actionId)) return null;
+          const proxyToolName = firstPartyCryptoAppProxyTool(input.appId, input.actionId);
+          return proxyToolName ? { ...input, proxyToolName } : null;
+        },
+      });
+      const operationalPath = env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB?.trim();
+      operationalPolicy = new MatterhornCryptoAppOperationalPolicyStore(operationalPath || undefined);
+      router = new MatterhornCryptoAppAdapterRouter({
+        registry,
+        connections,
+        authorization,
+        operationalPolicy,
+        executors: { matterhorn_sdk: createFirstPartyCryptoAppExecutor() },
+      });
+    }
     return {
       mode: feature.cryptoAppGatewayMode,
       catalog,
       operator,
+      router,
+      ready: feature.cryptoAppGatewayMode !== "enforce" || Boolean(router),
+      purgeWorkspace: (workspaceId) => {
+        const connectionsPurged = connections.purgeWorkspace(workspaceId);
+        const operational = operationalPolicy?.purgeWorkspace(workspaceId) ?? { usage: 0, circuits: 0 };
+        return {
+          connections: connectionsPurged,
+          usage: operational.usage,
+          circuits: operational.circuits,
+        };
+      },
       close: () => {
+        operationalPolicy?.close();
         connectionStore?.close();
         registryStore.close();
       },
     };
   } catch (error) {
+    operationalPolicy?.close();
     connectionStore?.close();
     registryStore.close();
     throw error;

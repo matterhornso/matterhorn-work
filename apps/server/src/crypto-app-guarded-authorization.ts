@@ -5,7 +5,7 @@ import { getMatterhornCryptoTool } from "@matterhorn-work/types/crypto-action-re
 
 import { MATTERHORN_CAPABILITY_CALL_ARGUMENT } from "./agent-capability.js";
 import type { MatterhornCryptoAppAuthorization } from "./crypto-app-adapter-router.js";
-import { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
+import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 export type MatterhornCryptoAppCapabilityBinding = {
@@ -30,7 +30,10 @@ type StoredReservation = {
 type Options = {
   runtime: MatterhornGuardedAgentRuntime;
   stateStore: MatterhornGuardedRuntimeStateStore;
-  bindings: MatterhornCryptoAppCapabilityBinding[];
+  bindings?: MatterhornCryptoAppCapabilityBinding[];
+  resolveBinding?: (
+    input: { appId: string; manifestRevision: string; actionId: string },
+  ) => MatterhornCryptoAppCapabilityBinding | null;
   runtimeSecret?: () => string;
   now?: () => Date;
 };
@@ -53,6 +56,7 @@ export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCrypto
   readonly #runtime: MatterhornGuardedAgentRuntime;
   readonly #stateStore: MatterhornGuardedRuntimeStateStore;
   readonly #bindings = new Map<string, MatterhornCryptoAppCapabilityBinding>();
+  readonly #resolveBinding: Options["resolveBinding"];
   readonly #runtimeSecret: () => string;
   readonly #now: () => Date;
 
@@ -62,7 +66,8 @@ export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCrypto
     this.#runtimeSecret = options.runtimeSecret
       ?? (() => process.env.MATTERHORN_AGENT_RUNTIME_SECRET?.trim() ?? "");
     this.#now = options.now ?? (() => new Date());
-    for (const binding of options.bindings) {
+    this.#resolveBinding = options.resolveBinding;
+    for (const binding of options.bindings ?? []) {
       const tool = getMatterhornCryptoTool(binding.proxyToolName);
       if (!tool) throw new Error("crypto_app_proxy_tool_unknown");
       const key = bindingKey(binding);
@@ -75,8 +80,13 @@ export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCrypto
     if (this.#runtime.capabilities.mode !== "enforce" || !this.#runtime.ready()) {
       throw new Error("crypto_app_guarded_runtime_enforcement_required");
     }
-    const binding = this.#bindings.get(bindingKey(input));
+    const binding = this.#bindings.get(bindingKey(input)) ?? this.#resolveBinding?.(input) ?? null;
     if (!binding) throw new Error("crypto_app_capability_binding_missing");
+    if (binding.appId !== input.appId
+      || binding.manifestRevision !== input.manifestRevision
+      || binding.actionId !== input.actionId) {
+      throw new Error("crypto_app_capability_binding_mismatch");
+    }
     if (!/^[a-f0-9]{64}$/.test(input.canonicalArgumentsHash)) {
       throw new Error("crypto_app_arguments_hash_invalid");
     }

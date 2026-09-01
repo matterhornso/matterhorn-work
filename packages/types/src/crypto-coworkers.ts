@@ -315,6 +315,10 @@ export type MatterhornCoworkerWatch = {
     nextCheckAt: string;
     lastCheckedAt: string | null;
     maxChecksPerDay: number;
+    dayBucket: string;
+    checksToday: number;
+    lastResultHash: string | null;
+    lastConditionValues: Record<string, string | null>;
   };
   budgets: {
     maxReadCallsPerCheck: number;
@@ -828,7 +832,10 @@ export function validateMatterhornCoworkerWatch(value: unknown): string[] {
     issues.push("coworker_watch_parameters_invalid");
   }
   if (!isRecord(value.schedule)
-    || !hasOnlyKeys(value.schedule, ["intervalMs", "nextCheckAt", "lastCheckedAt", "maxChecksPerDay"])
+    || !hasOnlyKeys(value.schedule, [
+      "intervalMs", "nextCheckAt", "lastCheckedAt", "maxChecksPerDay", "dayBucket", "checksToday",
+      "lastResultHash", "lastConditionValues",
+    ])
     || !Number.isSafeInteger(value.schedule.intervalMs)
     || (value.schedule.intervalMs as number) < 60_000
     || (value.schedule.intervalMs as number) > 7 * 24 * 60 * 60_000
@@ -837,7 +844,18 @@ export function validateMatterhornCoworkerWatch(value: unknown): string[] {
     || !Number.isSafeInteger(value.schedule.maxChecksPerDay)
     || (value.schedule.maxChecksPerDay as number) < 1
     || (value.schedule.maxChecksPerDay as number) > 1_440
-    || (value.schedule.maxChecksPerDay as number) > Math.ceil(86_400_000 / (value.schedule.intervalMs as number))) {
+    || (value.schedule.maxChecksPerDay as number) > Math.ceil(86_400_000 / (value.schedule.intervalMs as number))
+    || typeof value.schedule.dayBucket !== "string"
+    || !/^\d{4}-\d{2}-\d{2}$/.test(value.schedule.dayBucket)
+    || !Number.isSafeInteger(value.schedule.checksToday)
+    || (value.schedule.checksToday as number) < 0
+    || (value.schedule.checksToday as number) > (value.schedule.maxChecksPerDay as number)
+    || (value.schedule.lastResultHash !== null
+      && (typeof value.schedule.lastResultHash !== "string" || !/^[a-f0-9]{64}$/.test(value.schedule.lastResultHash)))
+    || !isRecord(value.schedule.lastConditionValues)
+    || Object.keys(value.schedule.lastConditionValues).length > 8
+    || Object.entries(value.schedule.lastConditionValues).some(([key, item]) => !validId(key)
+      || (item !== null && !validText(item, 160)))) {
     issues.push("coworker_watch_schedule_invalid");
   }
   if (!isRecord(value.budgets)

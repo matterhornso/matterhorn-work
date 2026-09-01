@@ -200,6 +200,23 @@ export class MatterhornCoworkerStoreError extends Error {
   }
 }
 
+export type MatterhornCoworkerWatchCompletion = {
+  workspaceId: string;
+  ownerId: string;
+  coworkerId: string;
+  watchId: string;
+  claimedRevision: number;
+  checkedAt: string;
+  resultHash: string | null;
+  conditionValues: Record<string, string | null> | null;
+  inboxItem?: MatterhornCoworkerInboxItem | null;
+};
+
+function nextUtcDay(dayBucket: string): string {
+  const start = Date.parse(`${dayBucket}T00:00:00.000Z`);
+  return new Date(start + 24 * 60 * 60_000).toISOString();
+}
+
 export function cryptoCoworkerStorePath(): string {
   const explicit = process.env.MATTERHORN_COWORKER_DB?.trim();
   if (explicit) return explicit;
@@ -432,6 +449,248 @@ export class MatterhornCoworkerStore {
       ORDER BY next_check_at ASC, workspace_id ASC, owner_id ASC, coworker_id ASC, watch_id ASC
       LIMIT ?
     `).all(dueBefore, limit) as CoworkerWatchRow[]).map(watchFromRow);
+  }
+
+  claimDueWatches(dueBefore: string, limit = 20, leaseMs = 60_000): MatterhornCoworkerWatch[] {
+    const now = new Date(dueBefore);
+    if (!Number.isFinite(now.getTime())
+      || !Number.isSafeInteger(limit) || limit < 1 || limit > 100
+      || !Number.isSafeInteger(leaseMs) || leaseMs < 10_000 || leaseMs > 10 * 60_000) {
+      throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+    }
+    const nowIso = now.toISOString();
+    const dayBucket = nowIso.slice(0, 10);
+    const claimed: MatterhornCoworkerWatch[] = [];
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      const candidates = (statement(this.#db, `
+        SELECT * FROM crypto_coworker_watches
+        WHERE state = 'active' AND next_check_at <= ?
+        ORDER BY next_check_at ASC, workspace_id ASC, owner_id ASC, coworker_id ASC, watch_id ASC
+        LIMIT ?
+      `).all(nowIso, Math.min(100, limit * 4)) as CoworkerWatchRow[]).map(watchFromRow);
+      for (const watch of candidates) {
+        if (claimed.length >= limit) break;
+        const parent = statement(this.#db, `
+          SELECT revision, state FROM crypto_coworkers
+          WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? LIMIT 1
+        `).get(watch.workspaceId, watch.ownerId, watch.coworkerId) as { revision: number; state: string } | undefined;
+        if (!parent || parent.state !== "active" || parent.revision !== watch.profileRevision) {
+          const paused: MatterhornCoworkerWatch = {
+            ...watch,
+            revision: watch.revision + 1,
+            profileRevision: parent?.revision ?? watch.profileRevision,
+            state: "paused",
+            pauseReason: parent?.state === "active" ? "profile_changed" : "coworker_paused",
+            updatedAt: nowIso,
+          };
+          statement(this.#db, `
+            UPDATE crypto_coworker_watches
+            SET revision = ?, profile_revision = ?, state = ?, watch_json = ?, updated_at = ?
+            WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? AND revision = ?
+          `).run(
+            paused.revision,
+            paused.profileRevision,
+            paused.state,
+            JSON.stringify(paused),
+            paused.updatedAt,
+            paused.workspaceId,
+            paused.ownerId,
+            paused.coworkerId,
+            paused.id,
+            watch.revision,
+          );
+          continue;
+        }
+        const checksToday = watch.schedule.dayBucket === dayBucket ? watch.schedule.checksToday : 0;
+        if (checksToday >= watch.schedule.maxChecksPerDay) {
+          const deferred: MatterhornCoworkerWatch = {
+            ...watch,
+            revision: watch.revision + 1,
+            schedule: {
+              ...watch.schedule,
+              dayBucket,
+              checksToday,
+              nextCheckAt: nextUtcDay(dayBucket),
+            },
+            updatedAt: nowIso,
+          };
+          statement(this.#db, `
+            UPDATE crypto_coworker_watches
+            SET revision = ?, next_check_at = ?, watch_json = ?, updated_at = ?
+            WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? AND revision = ?
+          `).run(
+            deferred.revision,
+            deferred.schedule.nextCheckAt,
+            JSON.stringify(deferred),
+            deferred.updatedAt,
+            deferred.workspaceId,
+            deferred.ownerId,
+            deferred.coworkerId,
+            deferred.id,
+            watch.revision,
+          );
+          continue;
+        }
+        const next: MatterhornCoworkerWatch = {
+          ...watch,
+          revision: watch.revision + 1,
+          schedule: {
+            ...watch.schedule,
+            dayBucket,
+            checksToday: checksToday + 1,
+            nextCheckAt: new Date(now.getTime() + leaseMs).toISOString(),
+          },
+          updatedAt: nowIso,
+        };
+        if (validateMatterhornCoworkerWatch(next).length > 0) {
+          throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+        }
+        const result = statement(this.#db, `
+          UPDATE crypto_coworker_watches
+          SET revision = ?, next_check_at = ?, watch_json = ?, updated_at = ?
+          WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ?
+            AND revision = ? AND state = 'active' AND next_check_at <= ?
+        `).run(
+          next.revision,
+          next.schedule.nextCheckAt,
+          JSON.stringify(next),
+          next.updatedAt,
+          next.workspaceId,
+          next.ownerId,
+          next.coworkerId,
+          next.id,
+          watch.revision,
+          nowIso,
+        );
+        if ((result.changes ?? 0) === 1) claimed.push(next);
+      }
+      this.#db.exec("COMMIT;");
+      return claimed.map((watch) => structuredClone(watch));
+    } catch (error) {
+      this.#db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  completeWatchCheck(input: MatterhornCoworkerWatchCompletion): MatterhornCoworkerWatch | null {
+    const checkedAt = new Date(input.checkedAt);
+    if (!Number.isFinite(checkedAt.getTime())) throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      const row = statement(this.#db, `
+        SELECT * FROM crypto_coworker_watches
+        WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? AND revision = ? LIMIT 1
+      `).get(
+        input.workspaceId,
+        input.ownerId,
+        input.coworkerId,
+        input.watchId,
+        input.claimedRevision,
+      ) as CoworkerWatchRow | undefined;
+      if (!row) {
+        this.#db.exec("ROLLBACK;");
+        return null;
+      }
+      const watch = watchFromRow(row);
+      const parent = statement(this.#db, `
+        SELECT revision, state FROM crypto_coworkers
+        WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? LIMIT 1
+      `).get(input.workspaceId, input.ownerId, input.coworkerId) as { revision: number; state: string } | undefined;
+      if (!parent || parent.state !== "active" || parent.revision !== watch.profileRevision || watch.state !== "active") {
+        this.#db.exec("ROLLBACK;");
+        return null;
+      }
+      const next: MatterhornCoworkerWatch = {
+        ...watch,
+        revision: watch.revision + 1,
+        schedule: {
+          ...watch.schedule,
+          nextCheckAt: new Date(checkedAt.getTime() + watch.schedule.intervalMs).toISOString(),
+          lastCheckedAt: checkedAt.toISOString(),
+          lastResultHash: input.resultHash ?? watch.schedule.lastResultHash,
+          lastConditionValues: input.conditionValues ?? watch.schedule.lastConditionValues,
+        },
+        updatedAt: checkedAt.toISOString(),
+      };
+      if (validateMatterhornCoworkerWatch(next).length > 0) {
+        throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+      }
+      if (input.inboxItem) {
+        const item = input.inboxItem;
+        if (validateMatterhornCoworkerInboxItem(item).length > 0
+          || item.workspaceId !== watch.workspaceId
+          || item.ownerId !== watch.ownerId
+          || item.coworkerId !== watch.coworkerId
+          || item.profileRevision !== watch.profileRevision
+          || item.watchId !== watch.id
+          || (item.source !== null && (item.source.appId !== watch.appId || item.source.actionId !== watch.actionId))) {
+          throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+        }
+      }
+      const result = statement(this.#db, `
+        UPDATE crypto_coworker_watches
+        SET revision = ?, next_check_at = ?, watch_json = ?, updated_at = ?
+        WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ?
+          AND revision = ? AND state = 'active'
+      `).run(
+        next.revision,
+        next.schedule.nextCheckAt,
+        JSON.stringify(next),
+        next.updatedAt,
+        next.workspaceId,
+        next.ownerId,
+        next.coworkerId,
+        next.id,
+        watch.revision,
+      );
+      if ((result.changes ?? 0) !== 1) {
+        this.#db.exec("ROLLBACK;");
+        return null;
+      }
+      if (input.inboxItem) {
+        const item = input.inboxItem;
+        statement(this.#db, `
+          INSERT INTO crypto_coworker_inbox(
+            workspace_id, owner_id, coworker_id, item_id, state, created_at, updated_at, item_json
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          item.workspaceId,
+          item.ownerId,
+          item.coworkerId,
+          item.id,
+          item.state,
+          item.createdAt,
+          item.updatedAt,
+          JSON.stringify(item),
+        );
+        statement(this.#db, `
+          DELETE FROM crypto_coworker_inbox
+          WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
+            AND item_id NOT IN (
+              SELECT item_id FROM crypto_coworker_inbox
+              WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
+              ORDER BY created_at DESC, item_id DESC LIMIT 500
+            )
+        `).run(
+          item.workspaceId,
+          item.ownerId,
+          item.coworkerId,
+          item.workspaceId,
+          item.ownerId,
+          item.coworkerId,
+        );
+      }
+      this.#db.exec("COMMIT;");
+      return structuredClone(next);
+    } catch (error) {
+      try {
+        this.#db.exec("ROLLBACK;");
+      } catch {
+        // An expected stale completion may already have rolled back.
+      }
+      throw error;
+    }
   }
 
   createWatch(watch: MatterhornCoworkerWatch, maxActiveWatches: number): MatterhornCoworkerWatch {

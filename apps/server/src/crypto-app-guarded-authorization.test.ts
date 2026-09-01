@@ -81,6 +81,78 @@ function request(runId: string, sessionId: string, overrides: Record<string, unk
 }
 
 describe("guarded crypto app authorization bridge", () => {
+  test("starts a model-free coworker watch run with one exact dynamic read binding", async () => {
+    const path = join(root, "deterministic-watch.db");
+    const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    runtime.setCoworkerResolver(() => true);
+    const binding = {
+      id: "cw_sui_watch",
+      workspaceId: "ws_sui",
+      ownerId: "account_alpha",
+      revision: 1,
+      policyVersion: "coworker-policy-1",
+      allowedAppIds: ["matterhorn.sui-testnet"],
+      allowedActionIds: ["sui_account_read"],
+      allowedNetworks: ["sui:testnet"],
+      automaticAuthorities: ["read", "watch"] as Array<"read" | "watch">,
+      actionBindings: [{
+        appId: "matterhorn.sui-testnet",
+        actionId: "sui_account_read",
+        proxyToolName: "matterhorn_sui_get_balance",
+        access: "read" as const,
+      }],
+      allowedDataLabels: ["public", "untrusted_external"] as Array<"public" | "untrusted_external">,
+      allowUnverifiedProviderConsent: false,
+      maxReadCallsPerRun: 1,
+      maxPrepareCallsPerFamily: 0,
+    };
+    const accepted = await runtime.startDeterministicCoworkerRun({
+      workspaceId: "ws_sui",
+      sessionId: "ses_sui_watch",
+      coworker: binding,
+      requestToolProfiles: [{ "*": false, matterhorn_sui_get_balance: true }],
+      maxReadCalls: 1,
+    });
+    const authorization = runtime.createCryptoAppAuthorization({
+      resolveBinding: (input) => input.appId === "matterhorn.sui-testnet"
+        && input.manifestRevision === "1.0.0"
+        && input.actionId === "sui_account_read"
+        ? { ...input, proxyToolName: "matterhorn_sui_get_balance" }
+        : null,
+    });
+    const reserved = await authorization.authorize({
+      workspaceId: "ws_sui",
+      sessionId: "ses_sui_watch",
+      runId: accepted.runId,
+      callId: "call_sui_watch",
+      connectionId: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      access: "read",
+      network: "sui:testnet",
+      canonicalArgumentsHash: "a".repeat(64),
+    });
+    await authorization.reconcile({
+      reservationId: reserved.reservationId,
+      outcome: "success",
+      costMicros: 0,
+      durationMs: 15,
+    });
+    const receipt = await runtime.receipts.get("ws_sui", accepted.runId);
+    expect(receipt).toMatchObject({
+      provider: { id: "matterhorn-deterministic-runtime", modelId: "none", trainingUse: "none" },
+      usage: { toolCallBudget: { reads: 1, preparesPerFamily: 0, submits: 0 } },
+      privacy: { dataLeavesMatterhorn: false },
+    });
+    expect(receipt?.tools).toContainEqual(expect.objectContaining({
+      name: "crypto_app:matterhorn.sui-testnet:sui_account_read",
+      access: "read",
+      outcome: "success",
+    }));
+    runtime.close();
+  });
+
   test("consumes one exact guarded capability and records the certified app action in the receipt", async () => {
     const app = await fixture("happy");
     const reserved = await app.authorization.authorize(request(app.runId, app.sessionId));

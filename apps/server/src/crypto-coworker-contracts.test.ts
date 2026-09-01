@@ -189,6 +189,10 @@ const watch: MatterhornCoworkerWatch = {
     nextCheckAt: "2026-09-01T00:05:00.000Z",
     lastCheckedAt: null,
     maxChecksPerDay: 288,
+    dayBucket: "2026-09-01",
+    checksToday: 0,
+    lastResultHash: null,
+    lastConditionValues: {},
   },
   budgets: {
     maxReadCallsPerCheck: 1,

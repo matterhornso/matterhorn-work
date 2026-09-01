@@ -46,10 +46,18 @@ describe("crypto app runtime startup", () => {
     const runtime = createMatterhornCryptoAppRuntime(env);
     expect(runtime.mode).toBe("shadow");
     expect(runtime.catalog?.list()).toEqual([]);
+    expect(runtime.purgeWorkspace("ws_missing")).toEqual({ connections: 0, usage: 0, circuits: 0 });
     expect(cryptoAppRuntimeDatabaseFiles(env)).toEqual({
       registryExists: true,
       connectionsExist: true,
     });
+    runtime.close();
+  });
+
+  test("fails readiness and exposes no executable router when enforce lacks the guarded runtime", () => {
+    const runtime = createMatterhornCryptoAppRuntime(environment("enforce"));
+    expect(runtime).toMatchObject({ mode: "enforce", ready: false, router: null });
+    expect(runtime.purgeWorkspace("ws_missing")).toEqual({ connections: 0, usage: 0, circuits: 0 });
     runtime.close();
   });
 

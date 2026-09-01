@@ -18,6 +18,10 @@ import {
 } from "./agent-capability.js";
 import { MatterhornPrivacyFirewall } from "./agent-privacy.js";
 import { MatterhornAgentRunReceiptStore } from "./agent-run-receipts.js";
+import {
+  MatterhornGuardedCryptoAppAuthorization,
+  type MatterhornCryptoAppCapabilityBinding,
+} from "./crypto-app-guarded-authorization.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
@@ -58,6 +62,15 @@ export type GuardedPromptAcceptance = {
 export type GuardedPromptAuthorization = {
   preflight: MatterhornAgentPrivacyPreflightResponse;
   consentRequired: boolean;
+};
+
+export type DeterministicCoworkerRunInput = {
+  workspaceId: string;
+  sessionId: string;
+  agentId?: string;
+  coworker: MatterhornCoworkerRunBinding;
+  requestToolProfiles: readonly Record<string, boolean>[];
+  maxReadCalls: number;
 };
 
 const GUARDED_OBSERVATION_REASONS = new Set([
@@ -127,6 +140,110 @@ export class MatterhornGuardedAgentRuntime {
 
   ready(): boolean {
     return this.capabilities.ready();
+  }
+
+  createCryptoAppAuthorization(options: {
+    bindings?: MatterhornCryptoAppCapabilityBinding[];
+    resolveBinding?: ConstructorParameters<typeof MatterhornGuardedCryptoAppAuthorization>[0]["resolveBinding"];
+    runtimeSecret?: () => string;
+    now?: () => Date;
+  }): MatterhornGuardedCryptoAppAuthorization {
+    return new MatterhornGuardedCryptoAppAuthorization({
+      runtime: this,
+      stateStore: this.stateStore,
+      ...options,
+    });
+  }
+
+  async startDeterministicCoworkerRun(
+    input: DeterministicCoworkerRunInput,
+  ): Promise<{ runId: string; sessionId: string }> {
+    if (this.capabilities.mode !== "enforce" || !this.ready()) {
+      throw new GuardedRuntimeError(
+        503,
+        "coworker_guarded_runtime_enforcement_required",
+        "Scheduled coworker checks require guarded runtime enforcement.",
+      );
+    }
+    if (!Number.isSafeInteger(input.maxReadCalls) || input.maxReadCalls < 1 || input.maxReadCalls > 12) {
+      throw new GuardedRuntimeError(400, "coworker_run_budget_invalid", "The coworker read budget is invalid.");
+    }
+    const previousRunId = this.activeRun(input.sessionId);
+    if (previousRunId) await this.finishRun(previousRunId, "cancelled");
+    const runId = `coworker_run_${randomUUID()}`;
+    const coworker = {
+      ...structuredClone(input.coworker),
+      maxReadCallsPerRun: Math.min(input.coworker.maxReadCallsPerRun, input.maxReadCalls),
+      maxPrepareCallsPerFamily: 0,
+      automaticAuthorities: input.coworker.automaticAuthorities.filter((authority) => authority !== "prepare"),
+      actionBindings: input.coworker.actionBindings.filter((binding) => binding.access === "read"),
+    };
+    this.capabilities.createRunGrant({
+      runId,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      agentId: input.agentId ?? "matterhorn",
+      executionMode: "work",
+      requestToolProfiles: input.requestToolProfiles,
+      coworker,
+    });
+    const expiresAtMs = Date.now() + 10 * 60_000;
+    this.stateStore.put({
+      kind: "active_agent_run",
+      key: input.sessionId,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      value: { runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
+      expiresAtMs,
+    });
+    this.stateStore.put({
+      kind: "agent_run_scope",
+      key: runId,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      value: { runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
+      expiresAtMs,
+    });
+    await this.receipts.start({
+      runId,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      preflight: {
+        version: "matterhorn.agent-privacy-preflight.v1",
+        requestHash: sha256({
+          kind: "deterministic_coworker_check",
+          workspaceId: input.workspaceId,
+          sessionId: input.sessionId,
+          coworkerId: coworker.id,
+          coworkerRevision: coworker.revision,
+          toolProfiles: input.requestToolProfiles,
+        }),
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        requestedMode: "public_research",
+        effectiveMode: "public_research",
+        decision: "allow",
+        provider: {
+          id: "matterhorn-deterministic-runtime",
+          name: "Matterhorn deterministic runtime",
+          modelId: "none",
+          privacyStatus: "local_processing",
+          trainingUse: "none",
+          retentionDays: 0,
+          policyUrl: null,
+          dataLeavesMatterhorn: false,
+        },
+        detectedData: {
+          labels: ["public", "untrusted_external"],
+          categories: ["scheduled_crypto_watch"],
+          redactionCount: 0,
+        },
+        reason: "This bounded watch is evaluated deterministically without a model provider.",
+      },
+      consentUsed: false,
+      toolCallBudget: { reads: coworker.maxReadCallsPerRun, preparesPerFamily: 0, submits: 0 },
+    });
+    return { runId, sessionId: input.sessionId };
   }
 
   preflight(input: Omit<GuardedPromptInput, "executionMode" | "requestToolProfiles" | "privacyConsentToken">): MatterhornAgentPrivacyPreflightResponse {

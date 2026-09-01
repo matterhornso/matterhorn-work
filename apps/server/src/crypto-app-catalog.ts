@@ -186,4 +186,9 @@ export class MatterhornCryptoAppCatalog {
     this.#assertEnabled();
     return this.#connections.transition(workspaceId, connectionId, nextState);
   }
+
+  purgeWorkspace(workspaceId: string): number {
+    this.#assertEnabled();
+    return this.#connections.purgeWorkspace(workspaceId);
+  }
 }

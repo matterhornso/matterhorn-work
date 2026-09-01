@@ -377,6 +377,8 @@ import {
   createMatterhornCoworkerRuntime,
   type MatterhornCoworkerRuntimeServices,
 } from "./crypto-coworker-runtime.js";
+import { createGuardedCoworkerWatchExecutor } from "./crypto-coworker-guarded-watch-executor.js";
+import { MatterhornCoworkerWatchRunner } from "./crypto-coworker-watch-runner.js";
 import { MatterhornCoworkerStoreError } from "./crypto-coworker-store.js";
 import {
   MatterhornCoworkerError,
@@ -1295,13 +1297,37 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
-  const cryptoAppRuntime = createMatterhornCryptoAppRuntime();
+  const cryptoAppRuntime = createMatterhornCryptoAppRuntime(process.env, { guardedRuntime });
   const coworkerRuntime = createMatterhornCoworkerRuntime(process.env, {
     onInvalidate: (input) => {
       guardedRuntime.invalidateCoworker(input);
     },
   });
   guardedRuntime.setCoworkerResolver((binding) => coworkerBindingIsActive(coworkerRuntime, binding));
+  const coworkerWatchRunner = coworkerRuntime.coworkers
+    && cryptoAppRuntime.mode === "enforce"
+    && cryptoAppRuntime.ready
+    && cryptoAppRuntime.router
+    && guardedRuntime.capabilities.mode === "enforce"
+    && guardedRuntime.ready()
+    ? new MatterhornCoworkerWatchRunner({
+        coworkers: coworkerRuntime.coworkers,
+        execute: createGuardedCoworkerWatchExecutor({
+          coworkers: coworkerRuntime.coworkers,
+          cryptoApps: cryptoAppRuntime,
+          guardedRuntime,
+        }),
+      })
+    : null;
+  const runCoworkerWatches = () => coworkerWatchRunner?.tick().catch(() => {
+    logger.log("error", "Coworker watch runner failed", { code: "coworker_watch_runner_failed" });
+    return { claimed: 0, completed: 0, alerted: 0, failed: 1 };
+  }) ?? Promise.resolve({ claimed: 0, completed: 0, alerted: 0, failed: 0 });
+  let coworkerWatchTask = runCoworkerWatches();
+  const coworkerWatchTimer = coworkerWatchRunner ? setInterval(() => {
+    coworkerWatchTask = runCoworkerWatches();
+  }, 60_000) : null;
+  coworkerWatchTimer?.unref?.();
   const drainEmailOutbox = createEmailOutboxDrainer(authStore, logger);
   let emailOutboxTask = drainEmailOutbox();
   const emailOutboxTimer = setInterval(() => {
@@ -1322,6 +1348,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   let accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
     config,
     authStore,
+    cryptoAppRuntime,
     coworkerRuntime,
     onWorkspacesChanged: restartReloadWatchers,
   }).catch((error) => {
@@ -1331,6 +1358,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
       config,
       authStore,
+      cryptoAppRuntime,
       coworkerRuntime,
       onWorkspacesChanged: restartReloadWatchers,
     }).catch((error) => {
@@ -1584,12 +1612,14 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       clearInterval(receiptExpiryTimer);
       clearInterval(accountDeletionRetryTimer);
       clearInterval(emailOutboxTimer);
+      if (coworkerWatchTimer) clearInterval(coworkerWatchTimer);
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
       modelUsageStore.close();
       await receiptExpiryTask;
       await accountDeletionRetryTask;
       await emailOutboxTask;
+      await coworkerWatchTask;
       await drainEmailOutbox();
       authStore.close();
       guardedRuntime.close();
@@ -1654,7 +1684,7 @@ function operationalReadiness(
   const guardedRuntimeTopologyReady = guardedMode === "off" || guardedRuntimeSingleInstanceReady();
   const cryptoAppGatewayMode = cryptoAppRuntime?.mode ?? "off";
   const cryptoAppGatewayReady = cryptoAppGatewayMode === "off"
-    || Boolean(cryptoAppRuntime?.catalog && cryptoAppRuntime.operator);
+    || Boolean(cryptoAppRuntime?.ready && cryptoAppRuntime.catalog && cryptoAppRuntime.operator);
   const coworkerMode = coworkerRuntime?.mode ?? "off";
   const coworkerRuntimeReady = coworkerMode === "off"
     || Boolean(coworkerRuntime?.ready && coworkerRuntime.coworkers);
@@ -3232,6 +3262,7 @@ async function processMatterhornAccountDeletionJob(input: {
   config: ServerConfig;
   authStore: MatterhornAuthStore;
   job: MatterhornAuthAccountDeletionJob;
+  cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices;
   coworkerRuntime?: MatterhornCoworkerRuntimeServices;
   onWorkspacesChanged?: () => void;
 }): Promise<{ complete: boolean; job: MatterhornAuthAccountDeletionJob }> {
@@ -3246,6 +3277,9 @@ async function processMatterhornAccountDeletionJob(input: {
     }
     if (!job.steps.workspaces) {
       for (const organizationId of job.deletedOrganizationIds) {
+        input.cryptoAppRuntime?.purgeWorkspace(
+          matterhornOrganizationWorkspaceId(organizationId),
+        );
         input.coworkerRuntime?.coworkers?.purgeWorkspace(
           matterhornOrganizationWorkspaceId(organizationId),
         );
@@ -3272,6 +3306,7 @@ async function processMatterhornAccountDeletionJob(input: {
 async function retryMatterhornAccountDeletionJobs(input: {
   config: ServerConfig;
   authStore: MatterhornAuthStore;
+  cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices;
   coworkerRuntime?: MatterhornCoworkerRuntimeServices;
   onWorkspacesChanged?: () => void;
 }): Promise<void> {
@@ -8310,6 +8345,7 @@ function createRoutes(
       config,
       authStore,
       job: deletion,
+      cryptoAppRuntime,
       coworkerRuntime,
       onWorkspacesChanged,
     });

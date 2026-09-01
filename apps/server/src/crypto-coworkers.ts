@@ -18,7 +18,10 @@ import {
 } from "@matterhorn-work/types/crypto-coworkers";
 import { containsForbiddenMemorySecretMaterial } from "@matterhorn-work/types/memory";
 
-import { MatterhornCoworkerStore, MatterhornCoworkerStoreError } from "./crypto-coworker-store.js";
+import {
+  MatterhornCoworkerStore,
+  MatterhornCoworkerStoreError,
+} from "./crypto-coworker-store.js";
 
 export type MatterhornCoworkerCreateInput = Pick<
   MatterhornCoworkerProfile,
@@ -56,6 +59,13 @@ export type MatterhornCoworkerInboxItemInput = Omit<
   MatterhornCoworkerInboxItem,
   "version" | "id" | "workspaceId" | "ownerId" | "coworkerId" | "profileRevision" | "state" | "createdAt" | "updatedAt"
 >;
+
+export type MatterhornCoworkerWatchCheckResult = {
+  checkedAt: Date;
+  resultHash: string | null;
+  conditionValues: Record<string, string | null> | null;
+  inboxItem?: MatterhornCoworkerInboxItemInput | null;
+};
 
 type InvalidationReason = "policy_updated" | "paused" | "revoked" | "deleted";
 
@@ -336,6 +346,10 @@ export class MatterhornCoworkers {
         maxChecksPerDay: normalized.schedule.maxChecksPerDay,
         nextCheckAt: new Date(now.getTime() + normalized.schedule.intervalMs).toISOString(),
         lastCheckedAt: null,
+        dayBucket: nowIso.slice(0, 10),
+        checksToday: 0,
+        lastResultHash: null,
+        lastConditionValues: {},
       },
       budgets: normalized.budgets,
       conditions: normalized.conditions,
@@ -353,6 +367,67 @@ export class MatterhornCoworkers {
       }
       throw error;
     }
+  }
+
+  claimDueWatches(now = this.#now(), limit = 20): MatterhornCoworkerWatch[] {
+    return this.#store.claimDueWatches(now.toISOString(), limit, 120_000);
+  }
+
+  completeWatchCheck(
+    claimed: MatterhornCoworkerWatch,
+    result: MatterhornCoworkerWatchCheckResult,
+  ): MatterhornCoworkerWatch | null {
+    const conditionIds = new Set(claimed.conditions.map((condition) => condition.id));
+    if (validateMatterhornCoworkerWatch(claimed).length > 0
+      || !Number.isFinite(result.checkedAt.getTime())
+      || (result.resultHash !== null && !/^[a-f0-9]{64}$/.test(result.resultHash))
+      || (result.conditionValues !== null && (Object.keys(result.conditionValues).length > 8
+        || Object.entries(result.conditionValues).some(([key, value]) => !conditionIds.has(key)
+          || (value !== null && (typeof value !== "string"
+            || value.length > 160
+            || /[\u0000-\u001f\u007f]/.test(value))))))) {
+      throw new MatterhornCoworkerError("coworker_watch_invalid");
+    }
+    let inboxItem: MatterhornCoworkerInboxItem | null = null;
+    if (result.inboxItem) {
+      const content = structuredClone(result.inboxItem);
+      if (containsForbiddenMemorySecretMaterial(content)
+        || content.watchId !== claimed.id
+        || (content.source !== null && (content.source.appId !== claimed.appId
+          || content.source.actionId !== claimed.actionId))
+        || content.budgetImpact.readCallsConsumed > claimed.budgets.maxReadCallsPerCheck
+        || content.budgetImpact.modelTokensConsumed > claimed.budgets.maxModelTokensPerCheck
+        || content.budgetImpact.costMicros > claimed.budgets.maxCostMicrosPerCheck) {
+        throw new MatterhornCoworkerError("coworker_inbox_item_invalid");
+      }
+      const completedAt = result.checkedAt.toISOString();
+      inboxItem = {
+        ...content,
+        version: MATTERHORN_COWORKER_INBOX_ITEM_VERSION,
+        id: this.#inboxItemId(),
+        workspaceId: claimed.workspaceId,
+        ownerId: claimed.ownerId,
+        coworkerId: claimed.coworkerId,
+        profileRevision: claimed.profileRevision,
+        state: "unread",
+        createdAt: completedAt,
+        updatedAt: completedAt,
+      };
+      if (validateMatterhornCoworkerInboxItem(inboxItem).length > 0) {
+        throw new MatterhornCoworkerError("coworker_inbox_item_invalid");
+      }
+    }
+    return this.#store.completeWatchCheck({
+      workspaceId: claimed.workspaceId,
+      ownerId: claimed.ownerId,
+      coworkerId: claimed.coworkerId,
+      watchId: claimed.id,
+      claimedRevision: claimed.revision,
+      checkedAt: result.checkedAt.toISOString(),
+      resultHash: result.resultHash,
+      conditionValues: result.conditionValues,
+      inboxItem,
+    });
   }
 
   transitionWatch(

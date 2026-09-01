@@ -49,6 +49,7 @@ export type StartAgentRunReceiptInput = {
   preflight: MatterhornAgentPrivacyPreflightResponse;
   consentUsed: boolean;
   memoryReadIds?: string[];
+  toolCallBudget?: MatterhornAgentRunReceipt["usage"]["toolCallBudget"];
   now?: Date;
 };
 
@@ -123,7 +124,9 @@ export class MatterhornAgentRunReceiptStore {
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
         estimatedCostUsd: 0,
-        toolCallBudget: { reads: 12, preparesPerFamily: 1, submits: 0 },
+        toolCallBudget: input.toolCallBudget
+          ? { ...input.toolCallBudget, submits: 0 }
+          : { reads: 12, preparesPerFamily: 1, submits: 0 },
       },
       tools: [],
       memory: { readIds: [...new Set(input.memoryReadIds ?? [])].sort(), writtenIds: [] },
