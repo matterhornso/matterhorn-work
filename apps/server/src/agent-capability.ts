@@ -264,6 +264,7 @@ export class MatterhornAgentCapabilityBroker {
   constructor(
     mode = matterhornGuardedRuntimeMode(),
     private readonly stateStore?: MatterhornGuardedRuntimeStateStore,
+    private readonly resolveSigningSecret: () => string = signingSecret,
   ) {
     this.mode = mode;
     if (!stateStore) return;
@@ -282,7 +283,7 @@ export class MatterhornAgentCapabilityBroker {
   ready(): boolean {
     return this.mode === "off" || Boolean(
       matterhornGuardedRuntimeRollout().valid
-      && signingSecret()
+      && this.resolveSigningSecret()
       && (process.env.MATTERHORN_AGENT_RUNTIME_SECRET?.trim().length ?? 0) >= 32,
     );
   }
@@ -377,7 +378,7 @@ export class MatterhornAgentCapabilityBroker {
       grant.issuedPrepareFamilies.set(input.callId, family);
     }
 
-    const secret = signingSecret();
+    const secret = this.resolveSigningSecret();
     if (!secret) deny("capability_signing_secret_missing");
     grant.issuedCallIds.add(input.callId);
     const expiresAt = new Date(now.getTime() + CAPABILITY_TTL_MS);
@@ -420,7 +421,7 @@ export class MatterhornAgentCapabilityBroker {
     const startedAt = Date.now();
     const nowMs = (input.now ?? new Date()).getTime();
     this.cleanup(nowMs);
-    const secret = signingSecret();
+    const secret = this.resolveSigningSecret();
     const claims = secret ? decodeClaims(input.token, secret) : null;
     const toolName = normalizedToolName(input.toolName);
     const deny = (reason: string): never => {
