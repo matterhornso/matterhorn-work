@@ -4,6 +4,15 @@ Status: active delivery goal
 
 Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 
+## Execution status
+
+- Phase 0 contracts, fail-closed flags, threat model, and offline evidence encryption: complete.
+- Phase 1 signed manifest registry and static conformance gate: complete.
+- Phase 1 durable manifest/certification history, atomic revocation, and policy-version invalidation: complete.
+- Phase 1 tenant-scoped connection grants with opaque vault/wallet references and immediate certification revocation: complete.
+- Current slice: adapter router, runtime DNS/egress enforcement, typed projections, timeouts, quotas, and circuit breakers.
+- All new production modes remain `off`; no HTTP routes or upstream adapter traffic are enabled.
+
 ## Goal
 
 Deliver Matterhorn as the safe middle layer between AI coworkers and crypto applications: users interact through chat; apps expose certified, narrowly scoped capabilities; Matterhorn deterministically controls privacy, permissions, budgets, simulations, and wallet review; connected wallets remain the only signing and submission surface; redacted evidence can be encrypted and independently verified through Walrus and Sui.
@@ -294,11 +303,11 @@ When a stop condition occurs, report the exact decision, evidence, options, reco
 
 ## Immediate implementation slice
 
-The first Phase 1 slice is intentionally backend-only and inert:
+The current Phase 1 slice remains backend-only and inert:
 
-- Canonicalize the signed portion of a crypto app manifest.
-- Verify its detached Ed25519 signature against a trusted publisher keyring.
-- Register immutable revisions with a certification state.
-- Reject signature mismatch, untrusted publisher, revision mutation, revoked revision, and unsafe action authority.
-- Add tests without exposing routes or changing production behavior.
-
+- Route only active tenant connections to their exact certified manifest revision.
+- Resolve and revalidate public DNS at request time before any adapter connection.
+- Validate arguments and project outputs through the certified closed schemas.
+- Attach trust, source, freshness, latency, cost, and sanitization metadata.
+- Enforce timeout, quota, circuit-breaker, and immediate registry/connection revocation.
+- Keep runtime capabilities and HTTP routes disconnected until the router passes adversarial tests.
