@@ -1,0 +1,289 @@
+import { describe, expect, test } from "bun:test";
+
+import type {
+  MatterhornCryptoAppResult,
+  MatterhornCryptoIntent,
+} from "@matterhorn-work/types/crypto-coworkers";
+import { isReviewedActionHandoffV2 } from "@matterhorn-work/types/reviewed-actions";
+
+import {
+  compileCertifiedCryptoIntent,
+  cryptoIntentToReviewedActionHandoffV2,
+  validateCryptoIntentIntegrity,
+} from "./crypto-transaction-coordinator.js";
+
+const NOW = new Date("2026-09-01T12:00:01.000Z");
+
+function envelope(input: {
+  appId: string;
+  connectionId: string;
+  actionId: string;
+  network: string;
+  result: Record<string, unknown>;
+  blockOrVersion?: string | null;
+}): MatterhornCryptoAppResult {
+  return {
+    version: "matterhorn.crypto-app-result.v1",
+    app: { id: input.appId, manifestRevision: "1.0.0", connectionId: input.connectionId },
+    action: { id: input.actionId, access: "prepare", network: input.network },
+    timing: {
+      startedAt: "2026-09-01T12:00:00.000Z",
+      completedAt: "2026-09-01T12:00:00.020Z",
+      durationMs: 20,
+    },
+    observation: {
+      source: "certified testnet simulation",
+      observedAt: "2026-09-01T12:00:00.000Z",
+      blockOrVersion: input.blockOrVersion ?? "checkpoint:100",
+      ageMs: 20,
+      freshnessMaxAgeMs: 15_000,
+    },
+    provenance: {
+      trust: "untrusted_external",
+      sanitization: "typed_projection",
+      evidenceReference: `sha256:${"e".repeat(64)}`,
+    },
+    metering: { costMicros: 0, reservationId: "reservation_prepare" },
+    result: input.result,
+  };
+}
+
+describe("deterministic crypto transaction coordinator", () => {
+  test("compiles exact certified Sui terms and produces a wallet-only v2 handoff", () => {
+    const request = {
+      sender: `0x${"1".repeat(64)}`,
+      recipient: `0x${"2".repeat(64)}`,
+      amountSui: "1.25",
+      memo: "treasury transfer",
+    };
+    const intent = compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_sui_prepare",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "a".repeat(64),
+      canonicalRequestArguments: request,
+      now: NOW,
+      result: envelope({
+        appId: "matterhorn.sui-testnet",
+        connectionId: "cxc_sui",
+        actionId: "sui_transfer_preview",
+        network: "sui:testnet",
+        result: {
+          preparedActionId: "sui_preview_1",
+          network: "sui:testnet",
+          sender: request.sender,
+          recipient: request.recipient,
+          amountSui: request.amountSui,
+          estimatedGasMist: "1000",
+          simulationReference: `sha256:${"b".repeat(64)}`,
+          expiresAt: "2026-09-01T12:00:15.000Z",
+        },
+      }),
+    });
+    expect(intent).toMatchObject({
+      version: "matterhorn.crypto-intent.v1",
+      protocol: "sui",
+      network: "sui:testnet",
+      signer: request.sender,
+      operation: "transfer_sui",
+      amount: "1.25",
+      asset: "SUI",
+      recipient: request.recipient,
+      slippageBps: null,
+      capabilityClass: "wallet_review_only",
+      canonicalArguments: request,
+    });
+    expect(validateCryptoIntentIntegrity(intent)).toEqual([]);
+    const handoff = cryptoIntentToReviewedActionHandoffV2(intent);
+    expect(isReviewedActionHandoffV2(handoff)).toBe(true);
+    expect(handoff).toMatchObject({
+      protocol: "sui",
+      runId: "run_sui_prepare",
+      signer: request.sender,
+      capabilityClass: "wallet_review_only",
+      simulation: { reference: `sha256:${"b".repeat(64)}` },
+      draft: {
+        operation: "transfer_sui",
+        network: "testnet",
+        sender: request.sender,
+        recipient: request.recipient,
+        amount: "1.25",
+      },
+    });
+  });
+
+  test("compiles resolved Hyperliquid price, side and slippage into the reviewed ticket", () => {
+    const address = `0x${"3".repeat(40)}`;
+    const intent = compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_hl_prepare",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "c".repeat(64),
+      canonicalRequestArguments: {
+        address,
+        asset: "BTC",
+        side: "buy",
+        size: "0.1",
+        orderType: "limit",
+        price: "64000",
+        reduceOnly: false,
+        maxSlippageBps: 50,
+      },
+      now: NOW,
+      result: envelope({
+        appId: "matterhorn.hyperliquid-testnet",
+        connectionId: "cxc_hl",
+        actionId: "hyperliquid_preview_order",
+        network: "hyperliquid:testnet",
+        blockOrVersion: `sha256:${"d".repeat(64)}`,
+        result: {
+          preparedActionId: "hl_preview_1",
+          network: "hyperliquid:testnet",
+          address,
+          asset: "BTC",
+          side: "buy",
+          size: "0.1",
+          orderType: "limit",
+          limitPrice: "64000",
+          reduceOnly: false,
+          maxSlippageBps: 50,
+          simulationReference: `sha256:${"d".repeat(64)}`,
+          expiresAt: "2026-09-01T12:00:30.000Z",
+        },
+      }),
+    });
+    expect(intent.canonicalArguments).toEqual({
+      address,
+      asset: "BTC",
+      side: "buy",
+      size: "0.1",
+      orderType: "limit",
+      limitPrice: "64000",
+      reduceOnly: false,
+      maxSlippageBps: 50,
+    });
+    expect(cryptoIntentToReviewedActionHandoffV2(intent)).toMatchObject({
+      protocol: "hyperliquid",
+      signer: address,
+      operation: "place_order",
+      amount: "0.1",
+      asset: "BTC",
+      slippage: "50bps",
+      draft: {
+        operation: "place_order",
+        network: "testnet",
+        side: "buy",
+        size: 0.1,
+        orderType: "limit",
+        limitPrice: 64_000,
+        slippageBps: 50,
+        reduceOnly: false,
+      },
+    });
+  });
+
+  test("rejects request/result confusion, stale evidence and intent mutation", () => {
+    const request = {
+      sender: `0x${"1".repeat(64)}`,
+      recipient: `0x${"2".repeat(64)}`,
+      amountSui: "1.25",
+    };
+    const certified = envelope({
+      appId: "matterhorn.sui-testnet",
+      connectionId: "cxc_sui",
+      actionId: "sui_transfer_preview",
+      network: "sui:testnet",
+      result: {
+        preparedActionId: "sui_preview_1",
+        network: "sui:testnet",
+        sender: request.sender,
+        recipient: request.recipient,
+        amountSui: "2.00",
+        estimatedGasMist: "1000",
+        simulationReference: `sha256:${"b".repeat(64)}`,
+        expiresAt: "2026-09-01T12:00:15.000Z",
+      },
+    });
+    expect(() => compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_sui_prepare",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "a".repeat(64),
+      canonicalRequestArguments: request,
+      result: certified,
+      now: NOW,
+    })).toThrow("crypto_intent_request_result_mismatch");
+
+    certified.result = { ...(certified.result as Record<string, unknown>), amountSui: "1.25" };
+    certified.observation.ageMs = 20_000;
+    expect(() => compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_sui_prepare",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "a".repeat(64),
+      canonicalRequestArguments: request,
+      result: certified,
+      now: NOW,
+    })).toThrow("crypto_intent_simulation_stale");
+
+    certified.observation.ageMs = 20;
+    const intent = compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_sui_prepare",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "a".repeat(64),
+      canonicalRequestArguments: request,
+      result: certified,
+      now: NOW,
+    });
+    const tampered = structuredClone(intent) as MatterhornCryptoIntent;
+    tampered.canonicalArguments.amountSui = "999";
+    expect(validateCryptoIntentIntegrity(tampered)).toEqual(expect.arrayContaining([
+      "crypto_intent_arguments_hash_mismatch",
+      "crypto_intent_hash_mismatch",
+    ]));
+    expect(() => cryptoIntentToReviewedActionHandoffV2(tampered)).toThrow("crypto_intent_invalid");
+  });
+
+  test("rejects a certified Hyperliquid preview that substitutes another limit price", () => {
+    const address = `0x${"3".repeat(40)}`;
+    const certified = envelope({
+      appId: "matterhorn.hyperliquid-testnet",
+      connectionId: "cxc_hl",
+      actionId: "hyperliquid_preview_order",
+      network: "hyperliquid:testnet",
+      result: {
+        preparedActionId: "hl_preview_substituted",
+        network: "hyperliquid:testnet",
+        address,
+        asset: "BTC",
+        side: "buy",
+        size: "0.1",
+        orderType: "limit",
+        limitPrice: "65000",
+        reduceOnly: false,
+        maxSlippageBps: 50,
+        simulationReference: `sha256:${"d".repeat(64)}`,
+        expiresAt: "2026-09-01T12:00:30.000Z",
+      },
+    });
+    expect(() => compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_hl_prepare",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "c".repeat(64),
+      canonicalRequestArguments: {
+        address,
+        asset: "BTC",
+        side: "buy",
+        size: "0.1",
+        orderType: "limit",
+        price: "64000.00",
+        reduceOnly: false,
+        maxSlippageBps: 50,
+      },
+      now: NOW,
+      result: certified,
+    })).toThrow("crypto_intent_request_result_mismatch");
+  });
+});

@@ -133,7 +133,7 @@ Exit: the user can operate a coworker through chat, see its allowed/approval/pro
 
 ### Phase 3 — Transaction Coordinator
 
-- Canonical `crypto-intent.v1` production from certified adapter outputs.
+- Canonical `crypto-intent.v1` production from certified Sui and Hyperliquid adapter outputs is complete. The compiler cross-checks request and result terms, rejects stale simulations, hash-binds exact terms and policy, and regenerates only wallet-review-only v2 handoffs.
 - Policy intersection across platform, organization, user, coworker, app, run, and call.
 - Protocol-aware simulation and freshness refresh.
 - Wallet review, rejection, expiry, tamper invalidation, regeneration, submission, and public-receipt reconciliation.

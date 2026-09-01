@@ -963,6 +963,108 @@ export function validateMatterhornCoworkerInboxItem(value: unknown): string[] {
   return [...new Set(issues)];
 }
 
+const FORBIDDEN_CRYPTO_INTENT_ARGUMENT_KEYS = new Set([
+  "apikey",
+  "authorization",
+  "capabilitytoken",
+  "credential",
+  "mnemonic",
+  "password",
+  "privatekey",
+  "rawsignature",
+  "seedphrase",
+  "signature",
+  "walletexport",
+]);
+
+function validCryptoIntentArguments(value: unknown, depth = 0, budget = { nodes: 0 }): boolean {
+  budget.nodes += 1;
+  if (budget.nodes > 256 || depth > 6) return false;
+  if (value === null || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "string") {
+    return value.length <= 1_024 && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value);
+  }
+  if (Array.isArray(value)) {
+    return value.length <= 32 && value.every((item) => validCryptoIntentArguments(item, depth + 1, budget));
+  }
+  if (!isRecord(value) || Object.keys(value).length > 32) return false;
+  return Object.entries(value).every(([key, nested]) => {
+    const normalizedKey = key.replace(/[^a-z]/gi, "").toLowerCase();
+    return /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(key)
+      && !FORBIDDEN_CRYPTO_INTENT_ARGUMENT_KEYS.has(normalizedKey)
+      && validCryptoIntentArguments(nested, depth + 1, budget);
+  });
+}
+
+export function validateMatterhornCryptoIntent(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) return ["crypto_intent_not_object"];
+  const topLevelKeys = [
+    "version", "id", "runId", "coworkerId", "workspaceId", "appId", "actionId", "protocol",
+    "network", "signer", "operation", "asset", "amount", "recipient", "slippageBps",
+    "canonicalArguments", "canonicalArgumentsHash", "policyHash", "simulation", "intentHash",
+    "capabilityClass", "preparedAt", "expiresAt",
+  ];
+  if (!hasOnlyKeys(value, topLevelKeys)) issues.push("crypto_intent_unknown_field");
+  if (value.version !== MATTERHORN_CRYPTO_INTENT_VERSION) issues.push("crypto_intent_version_invalid");
+  const validText = (text: unknown, max: number) => isNonEmptyString(text)
+    && text.length <= max
+    && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(text);
+  const validId = (id: unknown) => typeof id === "string"
+    && validText(id, 256)
+    && /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/.test(id);
+  const validHash = (hash: unknown) => typeof hash === "string" && /^[a-f0-9]{64}$/.test(hash);
+  const validDate = (date: unknown) => typeof date === "string" && Number.isFinite(Date.parse(date));
+  for (const key of ["id", "runId", "coworkerId", "workspaceId", "appId", "actionId"]) {
+    if (!validId(value[key])) issues.push(`crypto_intent_${key}_invalid`);
+  }
+  for (const key of ["protocol", "network", "operation"]) {
+    if (!validText(value[key], 160)) issues.push(`crypto_intent_${key}_invalid`);
+  }
+  for (const key of ["signer", "asset", "amount", "recipient"]) {
+    if (value[key] !== null && !validText(value[key], key === "recipient" ? 512 : 256)) {
+      issues.push(`crypto_intent_${key}_invalid`);
+    }
+  }
+  if (value.slippageBps !== null
+    && (!Number.isSafeInteger(value.slippageBps) || (value.slippageBps as number) < 0 || (value.slippageBps as number) > 10_000)) {
+    issues.push("crypto_intent_slippage_invalid");
+  }
+  if (!isRecord(value.canonicalArguments)
+    || !validCryptoIntentArguments(value.canonicalArguments)
+    || JSON.stringify(value.canonicalArguments).length > 64 * 1_024) {
+    issues.push("crypto_intent_arguments_invalid");
+  }
+  for (const key of ["canonicalArgumentsHash", "policyHash", "intentHash"]) {
+    if (!validHash(value[key])) issues.push(`crypto_intent_${key}_invalid`);
+  }
+  if (!isRecord(value.simulation)
+    || !hasOnlyKeys(value.simulation, ["reference", "blockOrVersion", "simulatedAt", "validUntil"])
+    || !validText(value.simulation.reference, 256)
+    || (value.simulation.blockOrVersion !== null && !validText(value.simulation.blockOrVersion, 256))
+    || !validDate(value.simulation.simulatedAt)
+    || !validDate(value.simulation.validUntil)) {
+    issues.push("crypto_intent_simulation_invalid");
+  }
+  if (value.capabilityClass !== "wallet_review_only") issues.push("crypto_intent_capability_invalid");
+  if (!validDate(value.preparedAt) || !validDate(value.expiresAt)) issues.push("crypto_intent_dates_invalid");
+  if (isRecord(value.simulation)
+    && validDate(value.simulation.simulatedAt)
+    && validDate(value.simulation.validUntil)
+    && validDate(value.preparedAt)
+    && validDate(value.expiresAt)) {
+    const simulatedAt = Date.parse(value.simulation.simulatedAt as string);
+    const validUntil = Date.parse(value.simulation.validUntil as string);
+    const preparedAt = Date.parse(value.preparedAt as string);
+    const expiresAt = Date.parse(value.expiresAt as string);
+    if (simulatedAt > preparedAt || preparedAt >= expiresAt || validUntil <= simulatedAt || validUntil > expiresAt) {
+      issues.push("crypto_intent_time_order_invalid");
+    }
+  }
+  return [...new Set(issues)];
+}
+
 function collectForbiddenEvidenceKeys(value: unknown, issues: string[]): void {
   if (Array.isArray(value)) {
     for (const item of value) collectForbiddenEvidenceKeys(item, issues);
