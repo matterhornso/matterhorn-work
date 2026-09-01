@@ -399,6 +399,7 @@ import {
 } from "./crypto-app-catalog.js";
 import { MatterhornCryptoAppConnectionError } from "./crypto-app-connections.js";
 import { MatterhornCryptoAppConnectionStoreError } from "./crypto-app-connection-store.js";
+import { MatterhornCryptoDeveloperPortalError } from "./crypto-app-developer-portal.js";
 import type {
   MatterhornCryptoAppActionAccess,
   MatterhornCryptoAppActionRisk,
@@ -2811,6 +2812,47 @@ function cryptoAppOperatorApiError(error: unknown): ApiError {
   return cryptoAppApiError(error);
 }
 
+function cryptoDeveloperApiError(error: unknown): ApiError {
+  if (error instanceof MatterhornCryptoAppCatalogError) return cryptoAppApiError(error);
+  if (!(error instanceof MatterhornCryptoDeveloperPortalError)) {
+    return error instanceof ApiError
+      ? error
+      : new ApiError(500, "crypto_developer_internal_error", "Crypto developer service is unavailable.");
+  }
+  const status = error.code === "developer_not_enrolled" || error.code === "developer_submission_not_found"
+    ? 404
+    : error.code === "developer_invite_expired"
+      ? 410
+      : error.code === "developer_invite_consumed"
+        || error.code.endsWith("_conflict")
+        || error.code === "developer_submission_not_certifiable"
+        || error.code === "developer_submission_policy_stale"
+        || error.code === "developer_mainnet_unavailable"
+        ? 409
+        : error.code === "developer_store_unavailable"
+          ? 500
+          : 400;
+  const message = error.code === "developer_not_enrolled"
+    ? "This account is not enrolled in the crypto developer preview."
+    : error.code === "developer_submission_not_found"
+      ? "Crypto app submission not found."
+      : error.code === "developer_invite_expired"
+        ? "This developer invite has expired."
+        : error.code === "developer_invite_consumed"
+          ? "This developer invite has already been used."
+          : error.code === "developer_mainnet_unavailable"
+            ? "Mainnet certification is not available in this preview."
+            : status === 500
+              ? "Crypto developer service is unavailable."
+              : "Crypto developer request was rejected.";
+  return new ApiError(
+    status,
+    error.code,
+    message,
+    error.issues.length > 0 ? { issues: error.issues } : undefined,
+  );
+}
+
 function cryptoAppStringArray(
   value: unknown,
   field: string,
@@ -2834,6 +2876,18 @@ function cryptoAppCreatedBy(ctx: RequestContext): string {
   const identity = ctx.matterhornSession?.user.id ?? ctx.actor?.clientId ?? ctx.actor?.tokenHash;
   if (!identity) throw new ApiError(401, "unauthorized", "An authenticated identity is required.");
   return identity;
+}
+
+function cryptoDeveloperAccountId(ctx: RequestContext): string {
+  const accountId = ctx.matterhornSession?.user.id;
+  if (!accountId) {
+    throw new ApiError(
+      403,
+      "developer_account_session_required",
+      "A signed-in Matterhorn account is required for developer access.",
+    );
+  }
+  return accountId;
 }
 
 const COWORKER_PROFILE_INPUT_KEYS = [
@@ -3415,6 +3469,7 @@ async function processMatterhornAccountDeletionJob(input: {
           workspaceId,
         );
       }
+      input.cryptoAppRuntime?.purgeAccount(job.userId);
       const workspaceDeletion = await purgeMatterhornOrganizationWorkspaces(
         input.config,
         job.deletedOrganizationIds,
@@ -9028,6 +9083,199 @@ function createRoutes(
         return noStoreJsonResponse({ entry });
       } catch (error) {
         throw cryptoAppOperatorApiError(error);
+      }
+    },
+  );
+
+  addRoute(routes, "POST", "/operator/crypto-developers/invites", "host-token", async (ctx) => {
+    ensureWritable(config);
+    try {
+      if (!cryptoAppRuntime.developerPortal) {
+        throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Crypto developer invite");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => key !== "ttlMinutes")
+        || (body.ttlMinutes !== undefined
+          && (!Number.isSafeInteger(body.ttlMinutes)
+            || (body.ttlMinutes as number) < 1
+            || (body.ttlMinutes as number) > 10_080))) {
+        throw new ApiError(400, "developer_invite_input_invalid", "Developer invite input is invalid.");
+      }
+      const invite = cryptoAppRuntime.developerPortal.issueInvite(
+        body.ttlMinutes === undefined ? undefined : (body.ttlMinutes as number) * 60_000,
+      );
+      // The raw token is deliberately returned once and is never persisted.
+      return noStoreJsonResponse({ invite }, 201);
+    } catch (error) {
+      throw cryptoDeveloperApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/operator/crypto-developers/certification-requests", "host-token", async () => {
+    try {
+      if (!cryptoAppRuntime.developerPortal) {
+        throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      }
+      return noStoreJsonResponse({
+        mode: cryptoAppRuntime.mode,
+        requests: cryptoAppRuntime.developerPortal.listCertificationRequests(),
+      });
+    } catch (error) {
+      throw cryptoDeveloperApiError(error);
+    }
+  });
+
+  addRoute(
+    routes,
+    "GET",
+    "/operator/crypto-developers/submissions/:appId/:manifestRevision",
+    "host-token",
+    async (ctx) => {
+      try {
+        if (!cryptoAppRuntime.developerPortal) {
+          throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+        }
+        const submission = cryptoAppRuntime.developerPortal.inspectSubmission(
+          ctx.params.appId,
+          ctx.params.manifestRevision,
+        );
+        if (!submission) {
+          throw new MatterhornCryptoDeveloperPortalError("developer_submission_not_found");
+        }
+        return noStoreJsonResponse({ submission });
+      } catch (error) {
+        throw cryptoDeveloperApiError(error);
+      }
+    },
+  );
+
+  addRoute(routes, "GET", "/developer/crypto-apps/profile", "client", async (ctx) => {
+    try {
+      if (!cryptoAppRuntime.developerPortal) {
+        throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      }
+      const profile = cryptoAppRuntime.developerPortal.getProfile(cryptoDeveloperAccountId(ctx));
+      return noStoreJsonResponse({
+        mode: cryptoAppRuntime.mode,
+        enrolled: Boolean(profile),
+        profile,
+      });
+    } catch (error) {
+      throw cryptoDeveloperApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/developer/crypto-apps/enroll", "client", async (ctx) => {
+    ensureWritable(config);
+    try {
+      if (!cryptoAppRuntime.developerPortal) {
+        throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      }
+      const body = await readJsonBody(ctx.request, 8_192, "Crypto developer enrollment");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => !["inviteToken", "publisherId", "displayName"].includes(key))
+        || typeof body.inviteToken !== "string"
+        || typeof body.publisherId !== "string"
+        || typeof body.displayName !== "string") {
+        throw new ApiError(400, "developer_enrollment_input_invalid", "Developer enrollment input is invalid.");
+      }
+      const profile = cryptoAppRuntime.developerPortal.enroll(cryptoDeveloperAccountId(ctx), {
+        inviteToken: body.inviteToken,
+        publisherId: body.publisherId,
+        displayName: body.displayName,
+      });
+      return noStoreJsonResponse({ mode: cryptoAppRuntime.mode, profile }, 201);
+    } catch (error) {
+      throw cryptoDeveloperApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/developer/crypto-apps/publisher-keys", "client", async (ctx) => {
+    ensureWritable(config);
+    try {
+      if (!cryptoAppRuntime.developerPortal) {
+        throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      }
+      const body = await readJsonBody(ctx.request, 8_192, "Crypto developer publisher key");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => !["keyId", "algorithm", "publicKeyPem"].includes(key))
+        || typeof body.keyId !== "string"
+        || body.algorithm !== "ed25519"
+        || typeof body.publicKeyPem !== "string") {
+        throw new ApiError(400, "developer_publisher_key_input_invalid", "Publisher key input is invalid.");
+      }
+      const profile = cryptoAppRuntime.developerPortal.registerPublisherKey(
+        cryptoDeveloperAccountId(ctx),
+        {
+          keyId: body.keyId,
+          algorithm: "ed25519",
+          publicKeyPem: body.publicKeyPem,
+        },
+      );
+      return noStoreJsonResponse({ mode: cryptoAppRuntime.mode, profile }, 201);
+    } catch (error) {
+      throw cryptoDeveloperApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/developer/crypto-apps/submissions", "client", async (ctx) => {
+    try {
+      if (!cryptoAppRuntime.developerPortal) {
+        throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      }
+      return noStoreJsonResponse({
+        mode: cryptoAppRuntime.mode,
+        submissions: cryptoAppRuntime.developerPortal.listMySubmissions(cryptoDeveloperAccountId(ctx)),
+      });
+    } catch (error) {
+      throw cryptoDeveloperApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/developer/crypto-apps/submissions", "client", async (ctx) => {
+    ensureWritable(config);
+    try {
+      if (!cryptoAppRuntime.developerPortal) {
+        throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      }
+      const body = await readJsonBody(ctx.request, 320 * 1_024, "Crypto developer manifest submission");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => !["manifest", "targetEnvironment"].includes(key))
+        || !isRecord(body.manifest)
+        || (body.targetEnvironment !== "testnet" && body.targetEnvironment !== "mainnet")) {
+        throw new ApiError(400, "developer_submission_input_invalid", "Manifest submission input is invalid.");
+      }
+      const submission = cryptoAppRuntime.developerPortal.submitManifest(
+        cryptoDeveloperAccountId(ctx),
+        body.manifest as MatterhornCryptoAppManifest,
+        body.targetEnvironment,
+      );
+      return noStoreJsonResponse({ mode: cryptoAppRuntime.mode, submission }, 201);
+    } catch (error) {
+      throw cryptoDeveloperApiError(error);
+    }
+  });
+
+  addRoute(
+    routes,
+    "POST",
+    "/developer/crypto-apps/submissions/:appId/:manifestRevision/certification-request",
+    "client",
+    async (ctx) => {
+      ensureWritable(config);
+      try {
+        if (!cryptoAppRuntime.developerPortal) {
+          throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+        }
+        const submission = cryptoAppRuntime.developerPortal.requestCertification(
+          cryptoDeveloperAccountId(ctx),
+          ctx.params.appId,
+          ctx.params.manifestRevision,
+        );
+        return noStoreJsonResponse({ mode: cryptoAppRuntime.mode, submission });
+      } catch (error) {
+        throw cryptoDeveloperApiError(error);
       }
     },
   );

@@ -25,6 +25,7 @@ function environment(mode: "off" | "shadow" | "enforce" = "shadow") {
     }]),
     MATTERHORN_CRYPTO_APP_REGISTRY_DB: join(root, "registry.db"),
     MATTERHORN_CRYPTO_APP_CONNECTION_DB: join(root, "connections.db"),
+    MATTERHORN_CRYPTO_APP_DEVELOPER_DB: join(root, "developer.db"),
     ...(mode === "enforce" ? { MATTERHORN_GUARDED_RUNTIME_MODE: "enforce" } : {}),
   } as NodeJS.ProcessEnv;
 }
@@ -34,9 +35,11 @@ describe("crypto app runtime startup", () => {
     const env = environment("off");
     const runtime = createMatterhornCryptoAppRuntime(env);
     expect(runtime).toMatchObject({ mode: "off", catalog: null });
+    expect(runtime.purgeAccount("account-missing")).toEqual({ developers: 0, keys: 0, submissions: 0 });
     expect(cryptoAppRuntimeDatabaseFiles(env)).toEqual({
       registryExists: false,
       connectionsExist: false,
+      developerPortalExists: false,
     });
     runtime.close();
   });
@@ -47,9 +50,11 @@ describe("crypto app runtime startup", () => {
     expect(runtime.mode).toBe("shadow");
     expect(runtime.catalog?.list()).toEqual([]);
     expect(runtime.purgeWorkspace("ws_missing")).toEqual({ connections: 0, usage: 0, circuits: 0 });
+    expect(runtime.purgeAccount("account-missing")).toEqual({ developers: 0, keys: 0, submissions: 0 });
     expect(cryptoAppRuntimeDatabaseFiles(env)).toEqual({
       registryExists: true,
       connectionsExist: true,
+      developerPortalExists: true,
     });
     runtime.close();
   });

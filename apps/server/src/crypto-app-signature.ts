@@ -1,4 +1,4 @@
-import { createPublicKey, verify, type KeyObject } from "node:crypto";
+import { createHash, createPublicKey, verify, type KeyObject } from "node:crypto";
 
 import type { MatterhornCryptoAppManifest } from "@matterhorn-work/types/crypto-coworkers";
 
@@ -57,6 +57,18 @@ export function isTrustedEd25519PublisherKey(value: MatterhornTrustedPublisherKe
   return normalizePublicKey(value) !== null;
 }
 
+export function cryptoAppPublisherKeyFingerprint(
+  value: MatterhornTrustedPublisherKey["publicKey"],
+): string | null {
+  if ((typeof value === "string" && /PRIVATE KEY/i.test(value))
+    || (Buffer.isBuffer(value) && /PRIVATE KEY/i.test(value.toString("utf8")))) return null;
+  const key = normalizePublicKey(value);
+  if (!key) return null;
+  return createHash("sha256")
+    .update(key.export({ type: "spki", format: "der" }))
+    .digest("hex");
+}
+
 export function verifyCryptoAppManifestSignature(
   manifest: MatterhornCryptoAppManifest,
   publicKey: MatterhornTrustedPublisherKey["publicKey"],
@@ -66,4 +78,3 @@ export function verifyCryptoAppManifestSignature(
   if (!signature || !key) return false;
   return verify(null, Buffer.from(canonicalCryptoAppManifestPayload(manifest), "utf8"), key, signature);
 }
-

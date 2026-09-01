@@ -45,6 +45,7 @@ These flags are inert in Phase 0 and default to `off`:
 
 ```text
 MATTERHORN_CRYPTO_APP_GATEWAY_MODE=off|shadow|enforce
+MATTERHORN_CRYPTO_APP_DEVELOPER_DB=/data/crypto-apps/developer-portal.db
 MATTERHORN_COWORKER_MODE=off|internal|invite|public
 MATTERHORN_WALRUS_EVIDENCE_MODE=off|testnet|mainnet
 MATTERHORN_WALRUS_PUBLISHER_URL=https://<authenticated-publisher>
@@ -62,6 +63,8 @@ The guarded authorization bridge reuses Matterhorn's existing durable single-use
 The operational-policy store defaults to `<data-dir>/crypto-apps/operational.db` and may be overridden with `MATTERHORN_CRYPTO_APP_OPERATIONAL_DB`. It atomically reserves a bounded per-call allowance against a workspace/day ceiling, reconciles measured cost exactly once, expires abandoned reservations without allowing call replay, and persists tenant-scoped circuit state across restarts. Its rows contain only identifiers, counters, timestamps, and outcomes—never prompts, arguments, credentials, wallet data, or adapter output. The default backend-only policy reserves at most 1,000,000 micro-units per call and 10,000,000 per workspace UTC day; launch-specific values must be explicitly configured when the gateway is wired into startup.
 
 The account-safe catalog service returns only the current certified manifest projection. It exposes action descriptions, authority, risk, freshness, schemas, network, authentication type, and certification hashes while omitting adapter endpoints, detached signatures, publisher key IDs, security contacts, OAuth servers, vault references, and connected-wallet identifiers. Authenticated catalog and tenant connection lifecycle routes fail closed when `MATTERHORN_CRYPTO_APP_GATEWAY_MODE=off`; host-token-only routes own registration, certification, suspension, revocation, inspection, and history.
+
+The invite-only developer staging service defaults to `<data-dir>/crypto-apps/developer-portal.db` and may be overridden with `MATTERHORN_CRYPTO_APP_DEVELOPER_DB`. Host-token operators issue short-lived, single-use invites; only signed-in Matterhorn accounts can consume them. Developers may register Ed25519 public keys, submit immutable signed testnet manifest revisions, inspect static conformance, and request certification. The service stores only a one-way invite hash and rejects private keys. Developer keys are never inserted into the trusted runtime keyring, and the staging service exposes no certification, promotion, execution, credential, wallet, or transaction authority. Host inspection is required before the existing independent runtime-certification and registry-promotion boundary can be used. Mainnet requests fail closed.
 
 Signed test-harness contracts now define testnet-only Sui balance/transfer-preview actions and Hyperliquid market/orderbook/account/order-preview actions. They use closed input and model-facing output schemas, map every action to a compatible guarded tool, and never contain production publisher keys or automatic registration. Their offline router fixtures deliberately include private and malicious extra fields to prove projection removes them.
 
@@ -144,7 +147,7 @@ Exit: the user can operate a coworker through chat, see its allowed/approval/pro
 - Policy intersection across platform, organization, user, coworker, app, run, and call is complete at the guarded server boundary. Static denials occur before adapter egress; a wallet handoff additionally requires an exact durable single-use capability proof and trusted economic/compliance facts.
 - Certified Sui and Hyperliquid pending-review persistence and protocol-aware freshness regeneration are complete at the backend boundary. Reviews are exact-connection bound, auto-expire, are cancelled when coworker authority changes, and can be regenerated only through a new guarded run with identical canonical terms.
 - Account-safe list, inspect, cancel, and public-receipt routes are complete at the backend boundary. They fetch the server-owned intent, require the exact owner/coworker/workspace, bind the connected-wallet metadata to the exact network, signer, operation, authorized arguments, guarded run, policy, and simulation, and reject secrets and raw signatures.
-- Sui receipt digests are currently labeled `wallet_reported_public_metadata` with `chainVerified: false`. The pinned transport deliberately excludes `GetTransaction`; independent chain confirmation requires a separately reviewed allowlist expansion and is not implied by wallet metadata.
+- Sui wallet receipts are accepted only with a null block hash and are first checked through the exact pinned `LedgerService/GetTransaction` lookup. Exact testnet digest, signer, gas owner, native-SUI split/transfer command graph, recipient, amount, effects, and balance changes must match before the receipt is promoted to `chain_verified_public_metadata`; hidden commands or unexplained deltas fail closed. A transient not-found/unavailable lookup may persist the exact wallet-reported digest as unverified metadata for later retry, but it is never represented as chain-confirmed.
 - Wallet review, rejection, expiry, tamper invalidation, regeneration, submission, and public-receipt reconciliation.
 - Sui first, then Hyperliquid, Bittensor, and Polymarket.
 
@@ -166,7 +169,9 @@ Exit: a user can independently verify a financial run without any plaintext prom
 
 ### Phase 5 — Developer platform and private beta
 
-- TypeScript SDK, developer portal, manifest signer, test harness, certification report, health telemetry, and registry revocation.
+- Invite-only backend developer portal: one-time enrollment, account-isolated public publisher keys, immutable signed testnet manifest submissions, static conformance, and host-inspected certification requests are complete.
+- Developer keys remain staging-only; runtime certification and registry promotion stay behind the existing host-token boundary and require independent sealed runtime evidence.
+- TypeScript SDK, manifest builder/signer, local adapter runner, policy emulator, developer UI, health telemetry, and guided certification UX remain pending.
 - Three to five design-partner apps.
 - Invite-only rollout in `shadow`, then sequential enforcement.
 

@@ -4,6 +4,8 @@ import { MatterhornCryptoAppCatalog } from "./crypto-app-catalog.js";
 import { MatterhornCryptoAppAdapterRouter } from "./crypto-app-adapter-router.js";
 import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
+import { MatterhornCryptoDeveloperPortal } from "./crypto-app-developer-portal.js";
+import { MatterhornCryptoDeveloperPortalStore } from "./crypto-app-developer-portal-store.js";
 import { MatterhornCryptoAppOperator } from "./crypto-app-operator.js";
 import { MatterhornCryptoAppOperationalPolicyStore } from "./crypto-app-operational-policy.js";
 import { MatterhornCryptoAppRegistryStore } from "./crypto-app-registry-store.js";
@@ -23,10 +25,12 @@ export type MatterhornCryptoAppRuntimeServices = {
   mode: MatterhornCryptoAppGatewayMode;
   catalog: MatterhornCryptoAppCatalog | null;
   operator: MatterhornCryptoAppOperator | null;
+  developerPortal: MatterhornCryptoDeveloperPortal | null;
   router: MatterhornCryptoAppAdapterRouter | null;
   verifySuiTransaction: MatterhornSuiPublicTransactionVerifier | null;
   ready: boolean;
   purgeWorkspace(workspaceId: string): { connections: number; usage: number; circuits: number };
+  purgeAccount(accountId: string): { developers: number; keys: number; submissions: number };
   close(): void;
 };
 
@@ -111,10 +115,12 @@ export function createMatterhornCryptoAppRuntime(
       mode: "off",
       catalog: null,
       operator: null,
+      developerPortal: null,
       router: null,
       verifySuiTransaction: null,
       ready: true,
       purgeWorkspace: () => ({ connections: 0, usage: 0, circuits: 0 }),
+      purgeAccount: () => ({ developers: 0, keys: 0, submissions: 0 }),
       close: () => undefined,
     };
   }
@@ -127,6 +133,7 @@ export function createMatterhornCryptoAppRuntime(
   const connectionPath = env.MATTERHORN_CRYPTO_APP_CONNECTION_DB?.trim();
   const registryStore = new MatterhornCryptoAppRegistryStore(registryPath || undefined);
   let connectionStore: MatterhornCryptoAppConnectionStore | null = null;
+  let developerPortalStore: MatterhornCryptoDeveloperPortalStore | null = null;
   let operationalPolicy: MatterhornCryptoAppOperationalPolicyStore | null = null;
   try {
     const registry = new MatterhornCryptoAppRegistry({
@@ -142,6 +149,12 @@ export function createMatterhornCryptoAppRuntime(
       mode: feature.cryptoAppGatewayMode,
     });
     const operator = new MatterhornCryptoAppOperator(registry);
+    const developerPath = env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB?.trim();
+    developerPortalStore = new MatterhornCryptoDeveloperPortalStore(developerPath || undefined);
+    const developerPortal = new MatterhornCryptoDeveloperPortal({
+      store: developerPortalStore,
+      policyVersion,
+    });
     let router: MatterhornCryptoAppAdapterRouter | null = null;
     let verifySuiTransaction: MatterhornSuiPublicTransactionVerifier | null = null;
     if (feature.cryptoAppGatewayMode === "enforce" && options.guardedRuntime) {
@@ -172,6 +185,7 @@ export function createMatterhornCryptoAppRuntime(
       mode: feature.cryptoAppGatewayMode,
       catalog,
       operator,
+      developerPortal,
       router,
       verifySuiTransaction,
       ready: feature.cryptoAppGatewayMode !== "enforce" || Boolean(router),
@@ -184,14 +198,17 @@ export function createMatterhornCryptoAppRuntime(
           circuits: operational.circuits,
         };
       },
+      purgeAccount: (accountId) => developerPortal.purgeAccount(accountId),
       close: () => {
         operationalPolicy?.close();
+        developerPortalStore?.close();
         connectionStore?.close();
         registryStore.close();
       },
     };
   } catch (error) {
     operationalPolicy?.close();
+    developerPortalStore?.close();
     connectionStore?.close();
     registryStore.close();
     throw error;
@@ -202,9 +219,13 @@ export function createMatterhornCryptoAppRuntime(
 export function cryptoAppRuntimeDatabaseFiles(env: NodeJS.ProcessEnv): {
   registryExists: boolean;
   connectionsExist: boolean;
+  developerPortalExists: boolean;
 } {
   return {
     registryExists: Boolean(env.MATTERHORN_CRYPTO_APP_REGISTRY_DB && existsSync(env.MATTERHORN_CRYPTO_APP_REGISTRY_DB)),
     connectionsExist: Boolean(env.MATTERHORN_CRYPTO_APP_CONNECTION_DB && existsSync(env.MATTERHORN_CRYPTO_APP_CONNECTION_DB)),
+    developerPortalExists: Boolean(
+      env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB && existsSync(env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB),
+    ),
   };
 }
