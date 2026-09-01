@@ -14,7 +14,9 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 1 trusted JSON-over-HTTPS transport foundation with DNS address pinning, TLS hostname verification, peer verification, redirect/content/size bounds, and server-side credential resolution: complete and backend-only.
 - Phase 1 guarded-runtime authorization bridge with explicit certified-action-to-tool bindings, exact hash-bound single-use capabilities, durable reservations, restart-safe receipts, and run-close revocation: complete and backend-only.
 - Phase 1 signed, testnet-only Sui and Hyperliquid manifest contracts, closed projections, guarded-tool bindings, and offline routed fixtures: complete and backend-only.
-- Current slice: live-source Sui/Hyperliquid adapter implementations, durable cost/quota and circuit policy, and conflicting-source/simulation adversarial tests.
+- Phase 1 pinned live-source executor: Sui balance/checkpoint reads and Hyperliquid market/orderbook/account reads plus exact short-lived order previews are complete and backend-only. Hyperliquid preparation never calls the exchange endpoint.
+- Stop condition reached: exact Sui transaction building/dry-run still uses an SDK gRPC path outside the certified IPv4-pinned requester. The Sui prepare action therefore fails closed before network access pending a transport decision.
+- Current slice after that decision: durable cost/quota and circuit policy, conflicting-source adversarial tests, then completing testnet certification.
 - All new production modes remain `off`; no HTTP routes or upstream adapter traffic are enabled.
 
 ## Goal

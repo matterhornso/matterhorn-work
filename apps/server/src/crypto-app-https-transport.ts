@@ -37,6 +37,25 @@ type TransportOptions = {
   maxResponseBytes?: number;
 };
 
+export type MatterhornPinnedJsonRequest = {
+  endpoint: URL;
+  approvedAddresses: readonly string[];
+  body: unknown;
+  signal: AbortSignal;
+  headers?: Record<string, string>;
+};
+
+export type MatterhornPinnedJsonResponse = {
+  value: unknown;
+  connectedAddress: string;
+  requestBytes: number;
+  responseBytes: number;
+};
+
+export type MatterhornPinnedJsonRequester = (
+  input: MatterhornPinnedJsonRequest,
+) => Promise<MatterhornPinnedJsonResponse>;
+
 const DEFAULT_MAX_RESPONSE_BYTES = 512 * 1024;
 const FORBIDDEN_HEADERS = new Set([
   "accept",
@@ -112,39 +131,23 @@ function finiteCost(value: number): number {
   return value;
 }
 
-export function createPinnedJsonCryptoAppTransport(
-  options: TransportOptions = {},
-): MatterhornCryptoAppTransportExecutor {
+export function createPinnedJsonRequester(options: {
+  request?: HttpsRequest;
+  maxResponseBytes?: number;
+} = {}): MatterhornPinnedJsonRequester {
   const request = options.request ?? requestHttps;
   const maxResponseBytes = Math.max(1_024, options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES);
 
-  return async (input): Promise<MatterhornCryptoAppAdapterExecution> => {
+  return async (input): Promise<MatterhornPinnedJsonResponse> => {
     if (input.signal.aborted) throw new Error("crypto_app_transport_aborted");
     if (input.approvedAddresses.length < 1) throw new Error("crypto_app_transport_address_required");
     const pinnedAddress = input.approvedAddresses[0]!;
     assertCryptoAdapterConnectedAddress(input.approvedAddresses, pinnedAddress);
-
-    const credentialHeaders = input.credential.type === "none"
-      ? {}
-      : safeCredentialHeaders(await (options.resolveCredentialHeaders
-        ? options.resolveCredentialHeaders({
-          appId: input.appId,
-          manifestRevision: input.manifestRevision,
-          credential: input.credential,
-        })
-        : Promise.reject(new Error("crypto_app_credential_resolver_unavailable"))));
-
-    const body = JSON.stringify({
-      version: "matterhorn.crypto-app-call.v1",
-      appId: input.appId,
-      manifestRevision: input.manifestRevision,
-      actionId: input.action.id,
-      network: input.network,
-      arguments: input.arguments,
-    });
+    const headers = safeCredentialHeaders(input.headers ?? {});
+    const body = JSON.stringify(input.body);
     const requestBytes = Buffer.byteLength(body, "utf8");
 
-    return new Promise<MatterhornCryptoAppAdapterExecution>((resolve, reject) => {
+    return new Promise<MatterhornPinnedJsonResponse>((resolve, reject) => {
       let settled = false;
       const finish = (callback: () => void) => {
         if (settled) return;
@@ -177,7 +180,7 @@ export function createPinnedJsonCryptoAppTransport(
           "content-type": "application/json",
           "content-length": String(requestBytes),
           "user-agent": "Matterhorn-Crypto-App-Gateway/1",
-          ...credentialHeaders,
+          ...headers,
         },
         signal: input.signal,
       }, (response) => {
@@ -214,16 +217,8 @@ export function createPinnedJsonCryptoAppTransport(
         response.on("error", (error) => finish(() => reject(error)));
         response.on("end", () => {
           try {
-            const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-            const envelope = parseEnvelope(parsed);
-            const costMicros = finiteCost(options.estimateCostMicros?.({
-              appId: input.appId,
-              manifestRevision: input.manifestRevision,
-              actionId: input.action.id,
-              requestBytes,
-              responseBytes,
-            }) ?? 0);
-            finish(() => resolve({ ...envelope, costMicros, connectedAddress }));
+            const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+            finish(() => resolve({ value, connectedAddress, requestBytes, responseBytes }));
           } catch (error) {
             finish(() => reject(error));
           }
@@ -237,5 +232,53 @@ export function createPinnedJsonCryptoAppTransport(
       input.signal.addEventListener("abort", abort, { once: true });
       client.end(body);
     });
+  };
+}
+
+export function createPinnedJsonCryptoAppTransport(
+  options: TransportOptions = {},
+): MatterhornCryptoAppTransportExecutor {
+  const requestJson = createPinnedJsonRequester({
+    request: options.request,
+    maxResponseBytes: options.maxResponseBytes,
+  });
+
+  return async (input): Promise<MatterhornCryptoAppAdapterExecution> => {
+    if (input.signal.aborted) throw new Error("crypto_app_transport_aborted");
+    if (input.approvedAddresses.length < 1) throw new Error("crypto_app_transport_address_required");
+    const credentialHeaders = input.credential.type === "none"
+      ? {}
+      : safeCredentialHeaders(await (options.resolveCredentialHeaders
+        ? options.resolveCredentialHeaders({
+          appId: input.appId,
+          manifestRevision: input.manifestRevision,
+          credential: input.credential,
+        })
+        : Promise.reject(new Error("crypto_app_credential_resolver_unavailable"))));
+
+    const requestBody = {
+      version: "matterhorn.crypto-app-call.v1",
+      appId: input.appId,
+      manifestRevision: input.manifestRevision,
+      actionId: input.action.id,
+      network: input.network,
+      arguments: input.arguments,
+    };
+    const response = await requestJson({
+      endpoint: input.endpoint,
+      approvedAddresses: input.approvedAddresses,
+      body: requestBody,
+      signal: input.signal,
+      headers: credentialHeaders,
+    });
+    const envelope = parseEnvelope(response.value);
+    const costMicros = finiteCost(options.estimateCostMicros?.({
+      appId: input.appId,
+      manifestRevision: input.manifestRevision,
+      actionId: input.action.id,
+      requestBytes: response.requestBytes,
+      responseBytes: response.responseBytes,
+    }) ?? 0);
+    return { ...envelope, costMicros, connectedAddress: response.connectedAddress };
   };
 }
