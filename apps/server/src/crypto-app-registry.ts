@@ -4,7 +4,10 @@ import {
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import type { MatterhornCryptoAppConformanceReport } from "./crypto-app-conformance.js";
-import { verifyCryptoAppConformanceReport } from "./crypto-app-conformance.js";
+import {
+  runCryptoAppManifestConformance,
+  verifyCryptoAppConformanceReport,
+} from "./crypto-app-conformance.js";
 import type { MatterhornCryptoAppRuntimeCertificationReport } from "./crypto-app-runtime-certification.js";
 import { verifyCryptoAppRuntimeCertificationReport } from "./crypto-app-runtime-certification.js";
 import {
@@ -111,10 +114,10 @@ function clone<T>(value: T): T {
 }
 
 /**
- * Phase 1 registry core. It deliberately exposes no HTTP route and performs no
- * upstream calls. Durable storage and operator routes will wrap this boundary
- * in a later slice; production behavior remains unchanged while the gateway is
- * off.
+ * Phase 1 registry core. It performs no upstream calls. Account routes receive
+ * only catalog projections; a separate host-token operator boundary wraps
+ * registration and certification. Production behavior remains unchanged while
+ * the gateway is off.
  */
 export class MatterhornCryptoAppRegistry {
   readonly #publisherKeys = new Map<string, MatterhornTrustedPublisherKey>();
@@ -252,6 +255,26 @@ export class MatterhornCryptoAppRegistry {
     this.#entries.set(key, entry);
     this.#history.set(key, []);
     return clone(entry);
+  }
+
+  buildStaticConformanceReport(
+    appId: string,
+    manifestRevision: string,
+    targetEnvironment: "testnet" | "mainnet",
+  ): MatterhornCryptoAppConformanceReport {
+    const entry = this.#entries.get(registryKey(appId, manifestRevision));
+    if (!entry) throw new MatterhornCryptoAppRegistryError("manifest_not_found");
+    const trustedKey = this.#publisherKeys.get(publisherKey(
+      entry.manifest.publisher.id,
+      entry.manifest.publisher.keyId,
+    ));
+    if (!trustedKey) throw new MatterhornCryptoAppRegistryError("publisher_key_untrusted");
+    return runCryptoAppManifestConformance(entry.manifest, {
+      publisherKey: trustedKey.publicKey,
+      policyVersion: this.#policyVersion,
+      targetEnvironment,
+      now: this.#now,
+    });
   }
 
   updateCertification(input: CertificationUpdate): MatterhornCryptoAppRegistryEntry {

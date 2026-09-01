@@ -381,7 +381,14 @@ import type {
   MatterhornCryptoAppActionAccess,
   MatterhornCryptoAppActionRisk,
   MatterhornCryptoAppConnectionState,
+  MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
+import type { MatterhornCryptoAppConformanceReport } from "./crypto-app-conformance.js";
+import {
+  MatterhornCryptoAppRegistryError,
+} from "./crypto-app-registry.js";
+import { MatterhornCryptoAppRegistryStoreError } from "./crypto-app-registry-store.js";
+import type { MatterhornCryptoAppRuntimeCertificationReport } from "./crypto-app-runtime-certification.js";
 import {
   buildMatterhornSessionPermissionProfile,
   matterhornPermissionProfileIsActive,
@@ -1596,7 +1603,11 @@ function providerForOperationalRoute(route: string, proxyService?: "opencode"): 
   return undefined;
 }
 
-function operationalReadiness(config: ServerConfig, guardedRuntime?: MatterhornGuardedAgentRuntime) {
+function operationalReadiness(
+  config: ServerConfig,
+  guardedRuntime?: MatterhornGuardedAgentRuntime,
+  cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices,
+) {
   const workspaceConfigured = config.workspaces.length > 0;
   const workspaceStorageAvailable = config.workspaces.every((workspace) =>
     workspace.workspaceType === "remote" || existsSync(workspace.path),
@@ -1605,6 +1616,9 @@ function operationalReadiness(config: ServerConfig, guardedRuntime?: MatterhornG
   const guardedRuntimeReady = guardedRuntime?.ready() ?? true;
   const guardedMode = guardedRuntime?.capabilities.mode ?? "off";
   const guardedRuntimeTopologyReady = guardedMode === "off" || guardedRuntimeSingleInstanceReady();
+  const cryptoAppGatewayMode = cryptoAppRuntime?.mode ?? "off";
+  const cryptoAppGatewayReady = cryptoAppGatewayMode === "off"
+    || Boolean(cryptoAppRuntime?.catalog && cryptoAppRuntime.operator);
   const hostedBrowserOpencodePolicyReady = HOSTED_BROWSER_OPENCODE_POLICY === "restricted";
   const hostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA === "1";
   const accountMessageGatewayReady = !hostedPublicBeta
@@ -1617,6 +1631,7 @@ function operationalReadiness(config: ServerConfig, guardedRuntime?: MatterhornG
       && authConfigured
       && guardedRuntimeReady
       && guardedRuntimeTopologyReady
+      && cryptoAppGatewayReady
       && hostedBrowserOpencodePolicyReady
       && accountMessageGatewayReady
       && hostBackupFreshCheck,
@@ -1627,6 +1642,8 @@ function operationalReadiness(config: ServerConfig, guardedRuntime?: MatterhornG
       guardedRuntimeReady,
       guardedRuntimeMode: guardedMode,
       guardedRuntimeTopologyReady,
+      cryptoAppGatewayMode,
+      cryptoAppGatewayReady,
       hostedBrowserOpencodePolicy: HOSTED_BROWSER_OPENCODE_POLICY,
       hostedBrowserOpencodePolicyReady,
       accountMessageGatewayReady,
@@ -2614,6 +2631,33 @@ function cryptoAppApiError(error: unknown): ApiError {
   return error instanceof ApiError
     ? error
     : new ApiError(500, "crypto_app_internal_error", "Crypto app service is unavailable.");
+}
+
+function cryptoAppOperatorApiError(error: unknown): ApiError {
+  if (error instanceof MatterhornCryptoAppRegistryError) {
+    const status = error.code === "manifest_not_found"
+      ? 404
+      : error.code === "manifest_revision_conflict"
+        || error.code === "certification_transition_invalid"
+        || error.code === "certification_state_conflict"
+        ? 409
+        : error.code === "persisted_registry_state_invalid"
+          ? 500
+          : 400;
+    return new ApiError(status, error.code, status === 500
+      ? "Crypto app registry integrity validation failed."
+      : "Crypto app registry operation was rejected.", error.issues.length ? { issues: error.issues } : undefined);
+  }
+  if (error instanceof MatterhornCryptoAppRegistryStoreError) {
+    const conflict = error.code === "crypto_app_manifest_revision_conflict"
+      || error.code === "crypto_app_certification_state_conflict";
+    return new ApiError(
+      conflict ? 409 : 500,
+      conflict ? error.code : "crypto_app_registry_integrity_error",
+      conflict ? "Crypto app registry state changed; retry with fresh state." : "Crypto app registry is unavailable.",
+    );
+  }
+  return cryptoAppApiError(error);
 }
 
 function cryptoAppStringArray(
@@ -8100,7 +8144,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/health/ready", "none", async () => {
-    const readiness = operationalReadiness(config, guardedRuntime);
+    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime);
     const response = jsonResponse({
       ok: readiness.ready,
       status: readiness.ready ? "ready" : "not_ready",
@@ -8132,7 +8176,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/health/launch", "none", async () => {
-    const infrastructure = operationalReadiness(config, guardedRuntime);
+    const infrastructure = operationalReadiness(config, guardedRuntime, cryptoAppRuntime);
     const launch = matterhornLaunchReadiness(authStore);
     const ok = infrastructure.ready && launch.ready;
     const response = jsonResponse({
@@ -8148,7 +8192,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/metrics", "host", async () => {
-    const readiness = operationalReadiness(config, guardedRuntime);
+    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime);
     return new Response(operationalMetrics.renderPrometheus({
       ready: readiness.ready,
       uptimeMs: Date.now() - config.startedAt,
@@ -8460,6 +8504,97 @@ function createRoutes(
   addRoute(routes, "GET", "/api/backend/models", "client", async () => {
     return jsonResponse(buildBackendModels());
   });
+
+  addRoute(routes, "GET", "/operator/crypto-apps", "host-token", async () => {
+    try {
+      if (!cryptoAppRuntime.operator) throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      return noStoreJsonResponse({
+        mode: cryptoAppRuntime.mode,
+        entries: cryptoAppRuntime.operator.list(),
+      });
+    } catch (error) {
+      throw cryptoAppOperatorApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/operator/crypto-apps/:appId/:manifestRevision", "host-token", async (ctx) => {
+    try {
+      if (!cryptoAppRuntime.operator) throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      const result = cryptoAppRuntime.operator.inspect(ctx.params.appId, ctx.params.manifestRevision);
+      if (!result) throw new MatterhornCryptoAppRegistryError("manifest_not_found");
+      return noStoreJsonResponse(result);
+    } catch (error) {
+      throw cryptoAppOperatorApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/operator/crypto-apps/manifests", "host-token", async (ctx) => {
+    ensureWritable(config);
+    try {
+      if (!cryptoAppRuntime.operator) throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      const body = await readJsonBody(ctx.request, 320 * 1_024, "Crypto app manifest registration");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => key !== "manifest" && key !== "targetEnvironment")
+        || !isRecord(body.manifest)
+        || (body.targetEnvironment !== "testnet" && body.targetEnvironment !== "mainnet")) {
+        throw new ApiError(400, "crypto_app_manifest_registration_invalid", "Crypto app manifest registration is invalid.");
+      }
+      const result = cryptoAppRuntime.operator.register(
+        body.manifest as MatterhornCryptoAppManifest,
+        body.targetEnvironment,
+      );
+      return noStoreJsonResponse(result, 201);
+    } catch (error) {
+      throw cryptoAppOperatorApiError(error);
+    }
+  });
+
+  addRoute(
+    routes,
+    "POST",
+    "/operator/crypto-apps/:appId/:manifestRevision/certification",
+    "host-token",
+    async (ctx) => {
+      ensureWritable(config);
+      try {
+        if (!cryptoAppRuntime.operator) throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+        const body = await readJsonBody(ctx.request, 512 * 1_024, "Crypto app certification update");
+        if (!isRecord(body)
+          || Object.keys(body).some((key) => !["state", "report", "runtimeReport", "reason"].includes(key))
+          || !["certified_testnet", "certified_mainnet", "suspended", "revoked"].includes(String(body.state))) {
+          throw new ApiError(400, "crypto_app_certification_update_invalid", "Crypto app certification update is invalid.");
+        }
+        const certified = body.state === "certified_testnet" || body.state === "certified_mainnet";
+        if (certified) {
+          if (!isRecord(body.report)
+            || !Array.isArray(body.report.findings)
+            || !isRecord(body.runtimeReport)
+            || !Array.isArray(body.runtimeReport.requiredProbeIds)
+            || !Array.isArray(body.runtimeReport.probes)
+            || body.reason !== undefined) {
+            throw new ApiError(400, "crypto_app_certification_update_invalid", "Certification requires complete static and runtime reports.");
+          }
+        } else if (typeof body.reason !== "string"
+          || !body.reason.trim()
+          || body.reason.length > 500
+          || body.report !== undefined
+          || body.runtimeReport !== undefined) {
+          throw new ApiError(400, "crypto_app_certification_update_invalid", "Suspension or revocation requires a bounded reason only.");
+        }
+        const entry = cryptoAppRuntime.operator.updateCertification({
+          appId: ctx.params.appId,
+          manifestRevision: ctx.params.manifestRevision,
+          state: body.state as "certified_testnet" | "certified_mainnet" | "suspended" | "revoked",
+          report: certified ? body.report as MatterhornCryptoAppConformanceReport : null,
+          runtimeReport: certified ? body.runtimeReport as MatterhornCryptoAppRuntimeCertificationReport : null,
+          reason: certified ? null : (body.reason as string).trim(),
+        });
+        return noStoreJsonResponse({ entry });
+      } catch (error) {
+        throw cryptoAppOperatorApiError(error);
+      }
+    },
+  );
 
   addRoute(routes, "GET", "/crypto-apps", "client", async (ctx) => {
     try {

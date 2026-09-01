@@ -6,9 +6,6 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
-import { MatterhornCryptoAppRegistryStore } from "./crypto-app-registry-store.js";
-import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
 import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certification-test-support.js";
 import { buildMatterhornFirstPartyTestnetManifests } from "./first-party-crypto-apps.js";
 import { startServer } from "./server.js";
@@ -86,10 +83,16 @@ async function boot(root: string): Promise<{ base: string; stop: () => Promise<v
 async function request(
   base: string,
   path: string,
-  options: { method?: string; body?: Record<string, unknown>; authenticated?: boolean } = {},
+  options: {
+    method?: string;
+    body?: Record<string, unknown>;
+    authenticated?: boolean;
+    hostToken?: boolean;
+  } = {},
 ) {
   const headers = new Headers();
-  if (options.authenticated !== false) headers.set("Authorization", `Bearer ${TOKEN}`);
+  if (options.hostToken) headers.set("x-matterhorn-host-token", HOST_TOKEN);
+  else if (options.authenticated !== false) headers.set("Authorization", `Bearer ${TOKEN}`);
   if (options.body) headers.set("Content-Type", "application/json");
   const response = await fetch(`${base}${path}`, {
     method: options.method ?? (options.body ? "POST" : "GET"),
@@ -99,7 +102,7 @@ async function request(
   return { response, payload: await response.json().catch(() => null) as any };
 }
 
-function seedCertifiedCatalog(root: string): void {
+function configureCatalog(root: string) {
   const keys = generateKeyPairSync("ed25519");
   const publicKeyPem = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
   const registryPath = join(root, "registry.db");
@@ -123,33 +126,7 @@ function seedCertifiedCatalog(root: string): void {
     statusUrl: "https://status.matterhorn.so",
     securityContact: "private-security@matterhorn.so",
   });
-  const store = new MatterhornCryptoAppRegistryStore(registryPath);
-  const registry = new MatterhornCryptoAppRegistry({
-    publisherKeys: [{
-      publisherId: "matterhorn",
-      keyId: "publisher-1",
-      algorithm: "ed25519",
-      publicKey: keys.publicKey,
-    }],
-    policyVersion: "policy-1",
-    store,
-  });
-  for (const manifest of manifests) {
-    registry.register(manifest);
-    const report = runCryptoAppManifestConformance(manifest, {
-      publisherKey: keys.publicKey,
-      policyVersion: "policy-1",
-      targetEnvironment: "testnet",
-    });
-    registry.updateCertification({
-      appId: manifest.appId,
-      manifestRevision: manifest.manifestRevision,
-      state: "certified_testnet",
-      report,
-      runtimeReport: passingCryptoAppRuntimeReportForTest(manifest, report),
-    });
-  }
-  store.close();
+  return { manifests };
 }
 
 afterEach(async () => {
@@ -176,8 +153,53 @@ describe("crypto app catalog HTTP boundary", () => {
 
     const root = mkdtempSync(join(tmpdir(), "matterhorn-crypto-catalog-routes-"));
     roots.push(root);
-    seedCertifiedCatalog(root);
+    const { manifests } = configureCatalog(root);
     const server = await boot(root);
+    const suiManifest = manifests.find((manifest) => manifest.appId === "matterhorn.sui-testnet")!;
+    const clientPromotion = await request(server.base, "/operator/crypto-apps/manifests", {
+      body: { manifest: suiManifest, targetEnvironment: "testnet" },
+    });
+    expect(clientPromotion.response.status).toBe(401);
+    for (const [index, manifest] of manifests.entries()) {
+      const registered = await request(server.base, "/operator/crypto-apps/manifests", {
+        body: { manifest, targetEnvironment: "testnet" },
+        hostToken: true,
+      });
+      expect(registered.response.status).toBe(201);
+      expect(registered.payload.entry.certification.state).toBe("pending");
+      expect(registered.payload.staticReport.passed).toBe(true);
+      const runtimeReport = passingCryptoAppRuntimeReportForTest(manifest, registered.payload.staticReport);
+      if (index === 0) {
+        const tamperedPromotion = await request(
+          server.base,
+          `/operator/crypto-apps/${manifest.appId}/${manifest.manifestRevision}/certification`,
+          {
+            body: {
+              state: "certified_testnet",
+              report: registered.payload.staticReport,
+              runtimeReport: { ...runtimeReport, reportHash: "0".repeat(64) },
+            },
+            hostToken: true,
+          },
+        );
+        expect(tamperedPromotion.response.status).toBe(400);
+        expect(tamperedPromotion.payload.code).toBe("certification_metadata_invalid");
+      }
+      const promoted = await request(
+        server.base,
+        `/operator/crypto-apps/${manifest.appId}/${manifest.manifestRevision}/certification`,
+        {
+          body: {
+            state: "certified_testnet",
+            report: registered.payload.staticReport,
+            runtimeReport,
+          },
+          hostToken: true,
+        },
+      );
+      expect(promoted.response.status).toBe(200);
+      expect(promoted.payload.entry.certification.state).toBe("certified_testnet");
+    }
     const listed = await request(server.base, "/crypto-apps?environment=testnet");
     expect(listed.response.status).toBe(200);
     expect(listed.response.headers.get("cache-control")).toBe("no-store");
@@ -238,5 +260,24 @@ describe("crypto app catalog HTTP boundary", () => {
     });
     expect(revokedAgain.response.status).toBe(200);
     expect(revokedAgain.payload.connection.state).toBe("revoked");
+
+    const suspended = await request(
+      server.base,
+      `/operator/crypto-apps/${suiManifest.appId}/${suiManifest.manifestRevision}/certification`,
+      {
+        body: { state: "suspended", reason: "operator runtime health circuit opened" },
+        hostToken: true,
+      },
+    );
+    expect(suspended.response.status).toBe(200);
+    const afterSuspension = await request(server.base, "/crypto-apps");
+    expect(afterSuspension.payload.apps.map((app: any) => app.appId))
+      .toEqual(["matterhorn.hyperliquid-testnet"]);
+    const connectionsAfterSuspension = await request(
+      server.base,
+      "/workspace/ws_catalog/crypto-app-connections",
+    );
+    expect(connectionsAfterSuspension.payload.connections[0].availability)
+      .toBe("certification_unavailable");
   });
 });

@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { MatterhornCryptoAppCatalog } from "./crypto-app-catalog.js";
 import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
+import { MatterhornCryptoAppOperator } from "./crypto-app-operator.js";
 import { MatterhornCryptoAppRegistryStore } from "./crypto-app-registry-store.js";
 import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
 import { isTrustedEd25519PublisherKey, type MatterhornTrustedPublisherKey } from "./crypto-app-signature.js";
@@ -11,6 +12,7 @@ import { cryptoCoworkerFeatureConfig, type MatterhornCryptoAppGatewayMode } from
 export type MatterhornCryptoAppRuntimeServices = {
   mode: MatterhornCryptoAppGatewayMode;
   catalog: MatterhornCryptoAppCatalog | null;
+  operator: MatterhornCryptoAppOperator | null;
   close(): void;
 };
 
@@ -90,7 +92,7 @@ export function createMatterhornCryptoAppRuntime(
 ): MatterhornCryptoAppRuntimeServices {
   const feature = cryptoCoworkerFeatureConfig(env);
   if (feature.cryptoAppGatewayMode === "off") {
-    return { mode: "off", catalog: null, close: () => undefined };
+    return { mode: "off", catalog: null, operator: null, close: () => undefined };
   }
   const policyVersion = env.MATTERHORN_CRYPTO_APP_POLICY_VERSION?.trim() ?? "";
   if (!POLICY_VERSION_PATTERN.test(policyVersion)) {
@@ -114,9 +116,11 @@ export function createMatterhornCryptoAppRuntime(
       connections,
       mode: feature.cryptoAppGatewayMode,
     });
+    const operator = new MatterhornCryptoAppOperator(registry);
     return {
       mode: feature.cryptoAppGatewayMode,
       catalog,
+      operator,
       close: () => {
         connectionStore?.close();
         registryStore.close();
