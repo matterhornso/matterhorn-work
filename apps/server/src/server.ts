@@ -372,6 +372,16 @@ import {
   type MatterhornCryptoAppRuntimeServices,
 } from "./crypto-app-runtime.js";
 import {
+  createMatterhornCoworkerRuntime,
+  type MatterhornCoworkerRuntimeServices,
+} from "./crypto-coworker-runtime.js";
+import { MatterhornCoworkerStoreError } from "./crypto-coworker-store.js";
+import {
+  MatterhornCoworkerError,
+  type MatterhornCoworkerCreateInput,
+  type MatterhornCoworkerUpdateInput,
+} from "./crypto-coworkers.js";
+import {
   MatterhornCryptoAppCatalogError,
   type MatterhornCryptoAppCatalogQuery,
 } from "./crypto-app-catalog.js";
@@ -382,6 +392,8 @@ import type {
   MatterhornCryptoAppActionRisk,
   MatterhornCryptoAppConnectionState,
   MatterhornCryptoAppManifest,
+  MatterhornCoworkerProfile,
+  MatterhornCoworkerState,
 } from "@matterhorn-work/types/crypto-coworkers";
 import type { MatterhornCryptoAppConformanceReport } from "./crypto-app-conformance.js";
 import {
@@ -1271,6 +1283,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const modelUsageStore = new MatterhornModelUsageStore();
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
   const cryptoAppRuntime = createMatterhornCryptoAppRuntime();
+  const coworkerRuntime = createMatterhornCoworkerRuntime();
   const drainEmailOutbox = createEmailOutboxDrainer(authStore, logger);
   let emailOutboxTask = drainEmailOutbox();
   const emailOutboxTimer = setInterval(() => {
@@ -1291,6 +1304,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   let accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
     config,
     authStore,
+    coworkerRuntime,
     onWorkspacesChanged: restartReloadWatchers,
   }).catch((error) => {
     logger.log("error", "Account deletion retry failed", unhandledErrorAttributes(error));
@@ -1299,6 +1313,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
       config,
       authStore,
+      coworkerRuntime,
       onWorkspacesChanged: restartReloadWatchers,
     }).catch((error) => {
       logger.log("error", "Account deletion retry failed", unhandledErrorAttributes(error));
@@ -1319,6 +1334,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     modelUsageStore,
     guardedRuntime,
     cryptoAppRuntime,
+    coworkerRuntime,
     drainEmailOutbox,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
@@ -1560,6 +1576,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       authStore.close();
       guardedRuntime.close();
       cryptoAppRuntime.close();
+      coworkerRuntime.close();
       if (ownsRequestRateLimitStore) await requestRateLimitStore.close?.();
       await (server.stop as unknown as (closeActiveConnections?: boolean) => void | Promise<void>)(closeActiveConnections);
     },
@@ -1607,6 +1624,7 @@ function operationalReadiness(
   config: ServerConfig,
   guardedRuntime?: MatterhornGuardedAgentRuntime,
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices,
+  coworkerRuntime?: MatterhornCoworkerRuntimeServices,
 ) {
   const workspaceConfigured = config.workspaces.length > 0;
   const workspaceStorageAvailable = config.workspaces.every((workspace) =>
@@ -1619,6 +1637,9 @@ function operationalReadiness(
   const cryptoAppGatewayMode = cryptoAppRuntime?.mode ?? "off";
   const cryptoAppGatewayReady = cryptoAppGatewayMode === "off"
     || Boolean(cryptoAppRuntime?.catalog && cryptoAppRuntime.operator);
+  const coworkerMode = coworkerRuntime?.mode ?? "off";
+  const coworkerRuntimeReady = coworkerMode === "off"
+    || Boolean(coworkerRuntime?.ready && coworkerRuntime.coworkers);
   const hostedBrowserOpencodePolicyReady = HOSTED_BROWSER_OPENCODE_POLICY === "restricted";
   const hostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA === "1";
   const accountMessageGatewayReady = !hostedPublicBeta
@@ -1632,6 +1653,7 @@ function operationalReadiness(
       && guardedRuntimeReady
       && guardedRuntimeTopologyReady
       && cryptoAppGatewayReady
+      && coworkerRuntimeReady
       && hostedBrowserOpencodePolicyReady
       && accountMessageGatewayReady
       && hostBackupFreshCheck,
@@ -1644,6 +1666,8 @@ function operationalReadiness(
       guardedRuntimeTopologyReady,
       cryptoAppGatewayMode,
       cryptoAppGatewayReady,
+      coworkerMode,
+      coworkerRuntimeReady,
       hostedBrowserOpencodePolicy: HOSTED_BROWSER_OPENCODE_POLICY,
       hostedBrowserOpencodePolicyReady,
       accountMessageGatewayReady,
@@ -2685,6 +2709,89 @@ function cryptoAppCreatedBy(ctx: RequestContext): string {
   return identity;
 }
 
+const COWORKER_PROFILE_INPUT_KEYS = [
+  "name",
+  "role",
+  "mission",
+  "allowedAppIds",
+  "allowedActionIds",
+  "allowedNetworks",
+  "allowedAssets",
+  "automaticAuthorities",
+  "limits",
+  "privacy",
+] as const;
+
+function coworkerProfileInput(
+  body: Record<string, unknown>,
+  partial: boolean,
+): MatterhornCoworkerCreateInput | Partial<MatterhornCoworkerCreateInput> {
+  const present = COWORKER_PROFILE_INPUT_KEYS.filter((key) => Object.hasOwn(body, key));
+  if ((!partial && present.length !== COWORKER_PROFILE_INPUT_KEYS.length)
+    || (partial && present.length === 0)
+    || Object.keys(body).some((key) => !COWORKER_PROFILE_INPUT_KEYS.includes(key as typeof COWORKER_PROFILE_INPUT_KEYS[number]))) {
+    throw new ApiError(400, "coworker_input_invalid", "Coworker profile input is invalid.");
+  }
+  for (const key of ["name", "role", "mission"] as const) {
+    if (Object.hasOwn(body, key) && typeof body[key] !== "string") {
+      throw new ApiError(400, "coworker_input_invalid", "Coworker profile input is invalid.");
+    }
+  }
+  for (const key of ["allowedAppIds", "allowedActionIds", "allowedNetworks", "allowedAssets", "automaticAuthorities"] as const) {
+    if (Object.hasOwn(body, key)
+      && (!Array.isArray(body[key]) || body[key].some((item) => typeof item !== "string"))) {
+      throw new ApiError(400, "coworker_input_invalid", "Coworker profile input is invalid.");
+    }
+  }
+  if (Object.hasOwn(body, "limits")
+    && (!isRecord(body.limits) || Object.values(body.limits).some((value) => typeof value !== "number"))) {
+    throw new ApiError(400, "coworker_input_invalid", "Coworker limits are invalid.");
+  }
+  if (Object.hasOwn(body, "privacy")
+    && (!isRecord(body.privacy)
+      || !Array.isArray(body.privacy.allowedDataLabels)
+      || body.privacy.allowedDataLabels.some((label) => typeof label !== "string")
+      || typeof body.privacy.allowUnverifiedProviderConsent !== "boolean")) {
+    throw new ApiError(400, "coworker_input_invalid", "Coworker privacy settings are invalid.");
+  }
+  return structuredClone(body) as MatterhornCoworkerCreateInput | Partial<MatterhornCoworkerCreateInput>;
+}
+
+function coworkerAccountView(profile: MatterhornCoworkerProfile) {
+  const { ownerId: _ownerId, ...view } = structuredClone(profile);
+  return view;
+}
+
+function coworkerApiError(error: unknown): ApiError {
+  if (error instanceof MatterhornCoworkerError) {
+    const status = error.code === "coworker_not_found"
+      ? 404
+      : error.code === "coworker_revision_conflict" || error.code === "coworker_transition_invalid"
+        ? 409
+        : 400;
+    const message = error.code === "coworker_not_found"
+      ? "Coworker not found."
+      : error.code === "coworker_revision_conflict"
+        ? "Coworker state changed; retry with the latest revision."
+        : error.code === "coworker_transition_invalid"
+          ? "The requested coworker state change is not allowed."
+          : "Coworker profile input is invalid.";
+    return new ApiError(status, error.code, message);
+  }
+  if (error instanceof MatterhornCoworkerStoreError) {
+    return new ApiError(
+      error.code === "coworker_conflict" || error.code === "coworker_revision_conflict" ? 409 : 500,
+      error.code === "coworker_state_corrupt" ? "coworker_integrity_error" : error.code,
+      error.code === "coworker_state_corrupt"
+        ? "Coworker state failed integrity validation."
+        : "Coworker state changed; retry with the latest revision.",
+    );
+  }
+  return error instanceof ApiError
+    ? error
+    : new ApiError(500, "coworker_internal_error", "Coworker service is unavailable.");
+}
+
 const MATTERHORN_SESSION_COOKIE = "mh_session";
 const MATTERHORN_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
@@ -2977,6 +3084,7 @@ async function processMatterhornAccountDeletionJob(input: {
   config: ServerConfig;
   authStore: MatterhornAuthStore;
   job: MatterhornAuthAccountDeletionJob;
+  coworkerRuntime?: MatterhornCoworkerRuntimeServices;
   onWorkspacesChanged?: () => void;
 }): Promise<{ complete: boolean; job: MatterhornAuthAccountDeletionJob }> {
   let job = input.job;
@@ -2989,6 +3097,11 @@ async function processMatterhornAccountDeletionJob(input: {
       job = input.authStore.markAccountDeletionStep(job.jobId, "memory");
     }
     if (!job.steps.workspaces) {
+      for (const organizationId of job.deletedOrganizationIds) {
+        input.coworkerRuntime?.coworkers?.purgeWorkspace(
+          matterhornOrganizationWorkspaceId(organizationId),
+        );
+      }
       const workspaceDeletion = await purgeMatterhornOrganizationWorkspaces(
         input.config,
         job.deletedOrganizationIds,
@@ -3011,6 +3124,7 @@ async function processMatterhornAccountDeletionJob(input: {
 async function retryMatterhornAccountDeletionJobs(input: {
   config: ServerConfig;
   authStore: MatterhornAuthStore;
+  coworkerRuntime?: MatterhornCoworkerRuntimeServices;
   onWorkspacesChanged?: () => void;
 }): Promise<void> {
   for (const job of input.authStore.listPendingAccountDeletionJobs()) {
@@ -7553,6 +7667,7 @@ function createRoutes(
   modelUsageStore: MatterhornModelUsageStore,
   guardedRuntime: MatterhornGuardedAgentRuntime,
   cryptoAppRuntime: MatterhornCryptoAppRuntimeServices,
+  coworkerRuntime: MatterhornCoworkerRuntimeServices,
   drainEmailOutbox: () => Promise<void>,
 ): Route[] {
   const routes: Route[] = [];
@@ -8047,6 +8162,7 @@ function createRoutes(
       config,
       authStore,
       job: deletion,
+      coworkerRuntime,
       onWorkspacesChanged,
     });
 
@@ -8144,7 +8260,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/health/ready", "none", async () => {
-    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime);
+    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime);
     const response = jsonResponse({
       ok: readiness.ready,
       status: readiness.ready ? "ready" : "not_ready",
@@ -8176,7 +8292,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/health/launch", "none", async () => {
-    const infrastructure = operationalReadiness(config, guardedRuntime, cryptoAppRuntime);
+    const infrastructure = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime);
     const launch = matterhornLaunchReadiness(authStore);
     const ok = infrastructure.ready && launch.ready;
     const response = jsonResponse({
@@ -8192,7 +8308,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/metrics", "host", async () => {
-    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime);
+    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime);
     return new Response(operationalMetrics.renderPrometheus({
       ready: readiness.ready,
       uptimeMs: Date.now() - config.startedAt,
@@ -8595,6 +8711,130 @@ function createRoutes(
       }
     },
   );
+
+  addRoute(routes, "GET", "/workspace/:id/coworkers", "client", async (ctx) => {
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const ownerId = cryptoAppCreatedBy(ctx);
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        coworkers: coworkerRuntime.coworkers.list(workspace.id, ownerId).map(coworkerAccountView),
+      });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/coworkers", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request, 64 * 1_024, "Coworker profile");
+      if (!isRecord(body)) throw new ApiError(400, "coworker_input_invalid", "Coworker profile input is invalid.");
+      const coworker = coworkerRuntime.coworkers.create(
+        workspace.id,
+        cryptoAppCreatedBy(ctx),
+        coworkerProfileInput(body, false) as MatterhornCoworkerCreateInput,
+      );
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, coworker: coworkerAccountView(coworker) }, 201);
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/coworkers/:coworkerId", "client", async (ctx) => {
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const coworker = coworkerRuntime.coworkers.get(workspace.id, cryptoAppCreatedBy(ctx), ctx.params.coworkerId);
+      if (!coworker) throw new MatterhornCoworkerError("coworker_not_found");
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, coworker: coworkerAccountView(coworker) });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "PATCH", "/workspace/:id/coworkers/:coworkerId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const body = await readJsonBody(ctx.request, 64 * 1_024, "Coworker update");
+      if (!isRecord(body)
+        || !Number.isSafeInteger(body.expectedRevision)
+        || (body.expectedRevision as number) < 1) {
+        throw new ApiError(400, "coworker_input_invalid", "Coworker update is invalid.");
+      }
+      let coworker;
+      if (Object.hasOwn(body, "state")) {
+        if (Object.keys(body).some((key) => key !== "state" && key !== "expectedRevision")
+          || (body.state !== "active" && body.state !== "paused" && body.state !== "revoked")) {
+          throw new ApiError(400, "coworker_input_invalid", "Coworker state update is invalid.");
+        }
+        coworker = coworkerRuntime.coworkers.transition(
+          workspace.id,
+          ownerId,
+          ctx.params.coworkerId,
+          body.state as MatterhornCoworkerState,
+          body.expectedRevision as number,
+        );
+      } else {
+        const { expectedRevision, ...changes } = body;
+        coworker = coworkerRuntime.coworkers.update(
+          workspace.id,
+          ownerId,
+          ctx.params.coworkerId,
+          {
+            ...coworkerProfileInput(changes, true),
+            expectedRevision: expectedRevision as number,
+          } as MatterhornCoworkerUpdateInput,
+        );
+      }
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, coworker: coworkerAccountView(coworker) });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/coworkers/:coworkerId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request, 4_096, "Coworker deletion");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => key !== "expectedRevision")
+        || !Number.isSafeInteger(body.expectedRevision)
+        || (body.expectedRevision as number) < 1) {
+        throw new ApiError(400, "coworker_input_invalid", "Coworker deletion is invalid.");
+      }
+      coworkerRuntime.coworkers.delete(
+        workspace.id,
+        cryptoAppCreatedBy(ctx),
+        ctx.params.coworkerId,
+        body.expectedRevision as number,
+      );
+      return noStoreJsonResponse({ deleted: true });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
 
   addRoute(routes, "GET", "/crypto-apps", "client", async (ctx) => {
     try {
@@ -12089,6 +12329,7 @@ function createRoutes(
     const workflowRunsDeleted = await workflowRuns.purgeWorkspace(workspace.id);
     const fileSessionState = fileSessions.clearWorkspace(workspace.id);
     const guardedState = guardedRuntime.purgeWorkspace(workspace.id);
+    const coworkersDeleted = coworkerRuntime.coworkers?.purgeWorkspace(workspace.id) ?? 0;
 
     const managedContentPaths = [
       join(workspace.path, "notes"),
@@ -12131,6 +12372,7 @@ function createRoutes(
         memorySuggestions: memory.deletedSuggestions,
         feedback,
         workflowRuns: workflowRunsDeleted,
+        coworkers: coworkersDeleted,
         managedPaths: removedManagedPaths,
         transientFileSessions: fileSessionState.sessions,
         transientFileEvents: fileSessionState.events,

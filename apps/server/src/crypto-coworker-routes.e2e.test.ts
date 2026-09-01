@@ -1,0 +1,273 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, test } from "bun:test";
+
+import { startServer } from "./server.js";
+import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
+import type { ServerConfig } from "./types.js";
+
+type Served = { port: number; stop: (closeActiveConnections?: boolean) => void | Promise<void> };
+
+const TOKEN = "owt_coworker_route_token";
+const HOST_TOKEN = "owt_coworker_route_host_token";
+const PASSWORD = "matterhorn-coworker-test-password";
+const ENV_KEYS = [
+  "MATTERHORN_AUTH_DB",
+  "MATTERHORN_WORK_DATA_DIR",
+  "MATTERHORN_WORK_MEMORY_ROOT",
+  "MATTERHORN_SIGNUPS_ENABLED",
+  "MATTERHORN_EMAIL_VERIFICATION_REQUIRED",
+  "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED",
+  "MATTERHORN_COWORKER_MODE",
+  "MATTERHORN_COWORKER_POLICY_VERSION",
+  "MATTERHORN_COWORKER_DB",
+  "MATTERHORN_CRYPTO_APP_GATEWAY_MODE",
+] as const;
+const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
+const roots: string[] = [];
+const stops: Array<() => void | Promise<void>> = [];
+
+function config(port: number, root: string): ServerConfig {
+  return {
+    host: "127.0.0.1",
+    port,
+    token: TOKEN,
+    hostToken: HOST_TOKEN,
+    approval: { mode: "auto", timeoutMs: 1_000 },
+    corsOrigins: ["http://127.0.0.1:5173"],
+    workspaces: [{
+      id: "ws_coworker",
+      name: "Coworker acceptance workspace",
+      path: root,
+      preset: "default",
+      workspaceType: "local",
+    }],
+    authorizedRoots: [root],
+    readOnly: false,
+    startedAt: Date.now(),
+    tokenSource: "cli",
+    hostTokenSource: "cli",
+    logFormat: "pretty",
+    logRequests: false,
+    reloadWatchers: false,
+  } as ServerConfig;
+}
+
+async function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address() as AddressInfo;
+      server.close(() => resolve(address.port));
+    });
+  });
+}
+
+async function boot(mode: "off" | "internal") {
+  const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-routes-"));
+  roots.push(root);
+  process.env.MATTERHORN_WORK_DATA_DIR = join(root, "data");
+  process.env.MATTERHORN_WORK_MEMORY_ROOT = join(root, "memory");
+  process.env.MATTERHORN_AUTH_DB = join(root, "auth.db");
+  process.env.MATTERHORN_SIGNUPS_ENABLED = "true";
+  process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+  process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "false";
+  process.env.MATTERHORN_COWORKER_MODE = mode;
+  process.env.MATTERHORN_COWORKER_POLICY_VERSION = "coworker-policy-1";
+  const coworkerDb = join(root, "coworkers.db");
+  process.env.MATTERHORN_COWORKER_DB = coworkerDb;
+  process.env.MATTERHORN_CRYPTO_APP_GATEWAY_MODE = "off";
+  const server = await startServer(config(await freePort(), root)) as Served;
+  let stopped = false;
+  const stop = async () => {
+    if (stopped) return;
+    stopped = true;
+    await server.stop(true);
+  };
+  stops.push(stop);
+  return { base: `http://127.0.0.1:${server.port}`, coworkerDb, stop };
+}
+
+async function request(base: string, path: string, options: {
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  body?: Record<string, unknown>;
+  cookie?: string;
+  bearer?: string;
+} = {}) {
+  const headers = new Headers();
+  if (options.body) headers.set("Content-Type", "application/json");
+  if (options.cookie) headers.set("Cookie", options.cookie);
+  if (options.bearer) headers.set("Authorization", `Bearer ${options.bearer}`);
+  const response = await fetch(`${base}${path}`, {
+    method: options.method ?? (options.body ? "POST" : "GET"),
+    headers,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  return { response, payload: await response.json().catch(() => null) as any };
+}
+
+function cookie(response: Response): string {
+  const value = response.headers.get("set-cookie")?.split(";")[0]?.trim() ?? "";
+  if (!value.startsWith("mh_session=")) throw new Error("missing_test_session_cookie");
+  return value;
+}
+
+function coworkerInput() {
+  return {
+    name: "Market Analyst",
+    role: "market_analyst",
+    mission: "Research approved public crypto evidence and cite every conclusion.",
+    allowedAppIds: ["matterhorn.sui-testnet"],
+    allowedActionIds: ["sui_account_read"],
+    allowedNetworks: ["sui:testnet"],
+    allowedAssets: ["SUI"],
+    automaticAuthorities: ["read", "write_note"],
+    limits: {
+      perActionUsd: 0,
+      dailyUsd: 0,
+      weeklyUsd: 0,
+      maxSlippageBps: 0,
+      maxLeverage: 1,
+      minimumReserveUsd: 0,
+      maxActiveWatches: 0,
+      maxReadCallsPerRun: 12,
+      maxPrepareCallsPerFamily: 0,
+    },
+    privacy: {
+      allowedDataLabels: ["public", "untrusted_external"],
+      allowUnverifiedProviderConsent: false,
+    },
+  };
+}
+
+afterEach(async () => {
+  while (stops.length) await stops.pop()?.();
+  while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
+  for (const key of ENV_KEYS) {
+    const value = priorEnv.get(key);
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
+
+describe("crypto coworker HTTP boundary", () => {
+  test("is authenticated and disabled without touching account state", async () => {
+    const server = await boot("off");
+    expect((await request(server.base, "/workspace/ws_coworker/coworkers")).response.status).toBe(401);
+    const disabled = await request(server.base, "/workspace/ws_coworker/coworkers", { bearer: TOKEN });
+    expect(disabled.response.status).toBe(503);
+    expect(disabled.payload.code).toBe("coworker_runtime_disabled");
+  });
+
+  test("creates, isolates, revisions, pauses and deletes account-owned coworkers", async () => {
+    const server = await boot("internal");
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "coworker-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "coworker-b@example.com", password: PASSWORD },
+    });
+    expect(signupA.response.status).toBe(200);
+    expect(signupB.response.status).toBe(200);
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspacesA = await request(server.base, "/workspaces", { cookie: cookieA });
+    const workspacesB = await request(server.base, "/workspaces", { cookie: cookieB });
+    const workspaceA = String(workspacesA.payload.items[0].id);
+    const workspaceB = String(workspacesB.payload.items[0].id);
+
+    const created = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: coworkerInput(),
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.response.headers.get("cache-control")).toBe("no-store");
+    expect(created.payload.mode).toBe("internal");
+    expect(created.payload.coworker).toMatchObject({
+      revision: 1,
+      policyVersion: "coworker-policy-1",
+      state: "active",
+      escalation: { walletSubmission: "connected_wallet_only" },
+    });
+    expect(created.payload.coworker.ownerId).toBeUndefined();
+    const coworkerId = String(created.payload.coworker.id);
+
+    const ownList = await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA });
+    const otherList = await request(server.base, `/workspace/${workspaceB}/coworkers`, { cookie: cookieB });
+    expect(ownList.payload.coworkers.map((item: any) => item.id)).toEqual([coworkerId]);
+    expect(otherList.payload.coworkers).toEqual([]);
+    expect((await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieB })).response.status).toBe(404);
+    expect((await request(server.base, `/workspace/${workspaceB}/coworkers/${coworkerId}`, { cookie: cookieB })).response.status).toBe(404);
+
+    const injected = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: { ...coworkerInput(), ownerId: signupB.payload.user.id },
+    });
+    expect(injected.response.status).toBe(400);
+    expect(injected.payload.code).toBe("coworker_input_invalid");
+
+    const updated = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}`, {
+      method: "PATCH",
+      cookie: cookieA,
+      body: { expectedRevision: 1, mission: "Compare Sui evidence and retain cited decisions." },
+    });
+    expect(updated.response.status).toBe(200);
+    expect(updated.payload.coworker.revision).toBe(2);
+    const stale = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}`, {
+      method: "PATCH",
+      cookie: cookieA,
+      body: { expectedRevision: 1, name: "Stale update" },
+    });
+    expect(stale.response.status).toBe(409);
+    expect(stale.payload.code).toBe("coworker_revision_conflict");
+
+    const paused = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}`, {
+      method: "PATCH",
+      cookie: cookieA,
+      body: { expectedRevision: 2, state: "paused" },
+    });
+    expect(paused.payload.coworker).toMatchObject({ state: "paused", revision: 3 });
+    const deleted = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}`, {
+      method: "DELETE",
+      cookie: cookieA,
+      body: { expectedRevision: 3 },
+    });
+    expect(deleted.payload).toEqual({ deleted: true });
+    expect((await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}`, { cookie: cookieA })).response.status).toBe(404);
+  });
+
+  test("purges durable coworkers before completing account deletion", async () => {
+    const server = await boot("internal");
+    const email = "coworker-delete@example.com";
+    const signup = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email, password: PASSWORD },
+    });
+    expect(signup.response.status).toBe(200);
+    const sessionCookie = cookie(signup.response);
+    const workspaces = await request(server.base, "/workspaces", { cookie: sessionCookie });
+    const workspaceId = String(workspaces.payload.items[0].id);
+    expect((await request(server.base, `/workspace/${workspaceId}/coworkers`, {
+      cookie: sessionCookie,
+      body: coworkerInput(),
+    })).response.status).toBe(201);
+
+    const deleted = await request(server.base, "/api/auth/account", {
+      method: "DELETE",
+      cookie: sessionCookie,
+      body: { confirmationEmail: email, password: PASSWORD },
+    });
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload.status).toBe("deleted");
+
+    const store = new MatterhornCoworkerStore(server.coworkerDb);
+    try {
+      expect(store.purgeWorkspace(workspaceId)).toBe(0);
+    } finally {
+      store.close();
+    }
+  });
+});

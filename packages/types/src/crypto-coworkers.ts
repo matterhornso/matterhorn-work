@@ -205,6 +205,8 @@ export type MatterhornCoworkerProfile = {
   id: string;
   workspaceId: string;
   ownerId: string;
+  revision: number;
+  policyVersion: string;
   name: string;
   role: string;
   mission: string;
@@ -484,25 +486,65 @@ export function validateMatterhornCoworkerProfile(value: unknown): string[] {
   const issues: string[] = [];
   if (!isRecord(value)) return ["coworker_not_object"];
   if (value.version !== MATTERHORN_COWORKER_PROFILE_VERSION) issues.push("coworker_version_invalid");
-  for (const key of ["id", "workspaceId", "ownerId", "name", "role", "mission", "createdAt", "updatedAt"]) {
+  const profileKeys = [
+    "version", "id", "workspaceId", "ownerId", "revision", "policyVersion", "name", "role", "mission",
+    "state", "allowedAppIds", "allowedActionIds", "allowedNetworks", "allowedAssets", "automaticAuthorities",
+    "limits", "privacy", "escalation", "createdAt", "updatedAt",
+  ];
+  if (!hasOnlyKeys(value, profileKeys)) issues.push("coworker_unknown_field");
+  for (const key of ["id", "workspaceId", "ownerId", "policyVersion", "name", "role", "mission", "createdAt", "updatedAt"]) {
     if (!isNonEmptyString(value[key])) issues.push(`coworker_${key}_required`);
+  }
+  if (!Number.isSafeInteger(value.revision) || (value.revision as number) < 1) issues.push("coworker_revision_invalid");
+  if (typeof value.name === "string" && value.name.length > 80) issues.push("coworker_name_invalid");
+  if (typeof value.role === "string" && value.role.length > 80) issues.push("coworker_role_invalid");
+  if (typeof value.mission === "string" && value.mission.length > 2_000) issues.push("coworker_mission_invalid");
+  if (typeof value.policyVersion === "string" && !/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$/.test(value.policyVersion)) issues.push("coworker_policy_version_invalid");
+  for (const key of ["createdAt", "updatedAt"]) {
+    if (typeof value[key] === "string" && !Number.isFinite(Date.parse(value[key] as string))) issues.push(`coworker_${key}_invalid`);
   }
   if (value.state !== "active" && value.state !== "paused" && value.state !== "revoked") issues.push("coworker_state_invalid");
   for (const key of ["allowedAppIds", "allowedActionIds", "allowedNetworks", "allowedAssets", "automaticAuthorities"]) {
-    if (!isStringArray(value[key])) issues.push(`coworker_${key}_invalid`);
+    if (!isStringArray(value[key])
+      || (value[key] as string[]).length > 64
+      || new Set(value[key] as string[]).size !== (value[key] as string[]).length
+      || (value[key] as string[]).some((item) => item.length > 160)) issues.push(`coworker_${key}_invalid`);
   }
   if (Array.isArray(value.automaticAuthorities)) {
     const safeAuthorities: readonly string[] = ["read", "watch", "prepare", "write_note"];
     if (value.automaticAuthorities.some((authority) => !isNonEmptyString(authority) || !safeAuthorities.includes(authority))) issues.push("coworker_authority_forbidden");
   }
-  if (!isRecord(value.limits)) issues.push("coworker_limits_required");
+  const limitKeys = ["perActionUsd", "dailyUsd", "weeklyUsd", "maxSlippageBps", "maxLeverage", "minimumReserveUsd", "maxActiveWatches", "maxReadCallsPerRun", "maxPrepareCallsPerFamily"];
+  if (!isRecord(value.limits) || !hasOnlyKeys(value.limits, limitKeys)) issues.push("coworker_limits_required");
   else {
-    for (const key of ["perActionUsd", "dailyUsd", "weeklyUsd", "maxSlippageBps", "maxLeverage", "minimumReserveUsd", "maxActiveWatches", "maxReadCallsPerRun", "maxPrepareCallsPerFamily"]) {
-      if (typeof value.limits[key] !== "number" || value.limits[key] < 0) issues.push(`coworker_limit_${key}_invalid`);
+    const maxima: Record<string, number> = {
+      perActionUsd: 1_000_000_000,
+      dailyUsd: 10_000_000_000,
+      weeklyUsd: 10_000_000_000,
+      maxSlippageBps: 10_000,
+      maxLeverage: 100,
+      minimumReserveUsd: 10_000_000_000,
+      maxActiveWatches: 100,
+      maxReadCallsPerRun: 100,
+      maxPrepareCallsPerFamily: 10,
+    };
+    for (const key of limitKeys) {
+      const limit = value.limits[key];
+      if (typeof limit !== "number" || !Number.isFinite(limit) || limit < 0 || limit > maxima[key]!) issues.push(`coworker_limit_${key}_invalid`);
+    }
+    for (const key of ["maxSlippageBps", "maxActiveWatches", "maxReadCallsPerRun", "maxPrepareCallsPerFamily"]) {
+      if (!Number.isSafeInteger(value.limits[key])) issues.push(`coworker_limit_${key}_invalid`);
     }
   }
-  if (!isRecord(value.privacy) || !isStringArray(value.privacy.allowedDataLabels) || typeof value.privacy.allowUnverifiedProviderConsent !== "boolean") issues.push("coworker_privacy_invalid");
+  const privacyLabels = ["public", "workspace_private", "wallet_private", "untrusted_external"];
+  if (!isRecord(value.privacy)
+    || !hasOnlyKeys(value.privacy, ["allowedDataLabels", "allowUnverifiedProviderConsent"])
+    || !isStringArray(value.privacy.allowedDataLabels)
+    || value.privacy.allowedDataLabels.some((label) => !privacyLabels.includes(label))
+    || new Set(value.privacy.allowedDataLabels).size !== value.privacy.allowedDataLabels.length
+    || typeof value.privacy.allowUnverifiedProviderConsent !== "boolean") issues.push("coworker_privacy_invalid");
   if (!isRecord(value.escalation)
+    || !hasOnlyKeys(value.escalation, ["privateDataRequiresDisclosure", "transactionRequiresWalletReview", "walletSubmission"])
     || value.escalation.privateDataRequiresDisclosure !== true
     || value.escalation.transactionRequiresWalletReview !== true
     || value.escalation.walletSubmission !== "connected_wallet_only") {

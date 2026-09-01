@@ -61,6 +61,8 @@ const coworker: MatterhornCoworkerProfile = {
   id: "coworker_risk_monitor",
   workspaceId: "ws_alpha",
   ownerId: "account_alpha",
+  revision: 1,
+  policyVersion: "coworker-policy-1",
   name: "Risk Monitor",
   role: "crypto_risk_monitor",
   mission: "Monitor approved positions and escalate risks without submitting transactions.",

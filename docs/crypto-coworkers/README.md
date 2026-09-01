@@ -78,6 +78,12 @@ pnpm certify:crypto-app -- \
 
 The command refuses private keys, seeds, credentials, raw signatures, wallet exports, path aliasing, unsafe input permissions, pre-existing output files, non-testnet manifests, incomplete probes, and failed live simulations. It writes a `0600` output only after both report hashes verify. Publisher signing and testnet funding remain external operator responsibilities.
 
+### Durable coworker profiles
+
+Phase 2 profile storage is available only when `MATTERHORN_COWORKER_MODE` is not `off` and an explicit `MATTERHORN_COWORKER_POLICY_VERSION` is configured. It defaults to `<data-dir>/crypto-coworkers/coworkers.db` and may be overridden with `MATTERHORN_COWORKER_DB`. Off mode performs no database access.
+
+Authenticated routes under `/workspace/:id/coworkers` create, list, inspect, revise, pause, revoke, and delete only the requesting identity's profiles. The server owns workspace, owner, revision, policy version, lifecycle state, and the immutable connected-wallet-only escalation boundary. Client JSON cannot supply those fields. Profiles use optimistic revisions; a stale edit, state transition, or deletion fails without mutation. A policy-version change makes older profiles non-resolvable until an explicit revisioned update rebinds them. Account responses omit the internal owner identifier, and workspace/owner composite scoping prevents enumeration across tenants.
+
 Future readiness rules are fail-closed:
 
 - Enforced app access requires the guarded agent runtime in `enforce`.
