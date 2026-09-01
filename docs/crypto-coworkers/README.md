@@ -48,7 +48,7 @@ MATTERHORN_COWORKER_MODE=off|internal|invite|public
 MATTERHORN_WALRUS_EVIDENCE_MODE=off|testnet|mainnet
 ```
 
-The Phase 1 registry defaults to `<data-dir>/crypto-apps/registry.db`. Tests and operators may override the path with `MATTERHORN_CRYPTO_APP_REGISTRY_DB`; the registry contains signed public manifests and certification history, never workspace credentials.
+The Phase 1 registry defaults to `<data-dir>/crypto-apps/registry.db`. Tests and operators may override the path with `MATTERHORN_CRYPTO_APP_REGISTRY_DB`; the registry contains signed public manifests and certification history, never workspace credentials. Workspace-scoped connection grants default to `<data-dir>/crypto-apps/connections.db` and may be overridden with `MATTERHORN_CRYPTO_APP_CONNECTION_DB`. Connection rows store opaque vault or connected-wallet references, never provider tokens, API keys, private keys, or wallet exports.
 
 Future readiness rules are fail-closed:
 

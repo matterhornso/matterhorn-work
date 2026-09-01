@@ -1,4 +1,5 @@
 export const MATTERHORN_CRYPTO_APP_MANIFEST_VERSION = "matterhorn.crypto-app-manifest.v1";
+export const MATTERHORN_CRYPTO_APP_CONNECTION_VERSION = "matterhorn.crypto-app-connection.v1";
 export const MATTERHORN_COWORKER_PROFILE_VERSION = "matterhorn.coworker-profile.v1";
 export const MATTERHORN_CRYPTO_INTENT_VERSION = "matterhorn.crypto-intent.v1";
 export const MATTERHORN_POLICY_DECISION_VERSION = "matterhorn.policy-decision.v1";
@@ -70,6 +71,38 @@ export type MatterhornCryptoAppManifest = {
     securityContact: string;
     statusUrl: string | null;
   };
+};
+
+export type MatterhornCryptoAppConnectionState = "active" | "paused" | "revoked";
+
+export type MatterhornCryptoAppConnectionCredential =
+  | { type: "oauth2" | "api_key_vault"; secretReference: string }
+  | { type: "wallet_connection"; walletConnectionId: string }
+  | { type: "none" };
+
+/** Internal tenant record. Account-facing views must omit opaque references. */
+export type MatterhornCryptoAppConnection = {
+  version: typeof MATTERHORN_CRYPTO_APP_CONNECTION_VERSION;
+  id: string;
+  workspaceId: string;
+  appId: string;
+  manifestRevision: string;
+  state: MatterhornCryptoAppConnectionState;
+  grantedActionIds: string[];
+  grantedScopes: string[];
+  grantedNetworks: string[];
+  credential: MatterhornCryptoAppConnectionCredential;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MatterhornCryptoAppConnectionView = Omit<MatterhornCryptoAppConnection, "credential"> & {
+  credential: {
+    type: MatterhornCryptoAppConnectionCredential["type"];
+    connected: boolean;
+  };
+  availability: "available" | "certification_unavailable";
 };
 
 export type MatterhornCoworkerState = "active" | "paused" | "revoked";
