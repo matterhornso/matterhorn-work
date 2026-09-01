@@ -112,6 +112,14 @@ import type {
   ReviewedActionValidationResponse,
 } from "@matterhorn-work/types/reviewed-actions";
 import type {
+  MatterhornCryptoAppActionAccess,
+  MatterhornCryptoAppActionRisk,
+  MatterhornCryptoAppCatalogDetail,
+  MatterhornCryptoAppCatalogSummary,
+  MatterhornCryptoAppConnectionState,
+  MatterhornCryptoAppConnectionView,
+} from "@matterhorn-work/types/crypto-coworkers";
+import type {
   MatterhornWorkflowRun,
   MatterhornWorkflowRunListItem,
   MatterhornWorkflowRunStageInput,
@@ -1663,6 +1671,74 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         { token, hostToken, timeoutMs: timeouts.capabilities },
       );
     },
+    listCryptoApps: (filters?: {
+      query?: string;
+      environment?: "testnet" | "mainnet";
+      access?: MatterhornCryptoAppActionAccess;
+      risk?: MatterhornCryptoAppActionRisk;
+    }) => {
+      const params = new URLSearchParams();
+      if (filters?.query?.trim()) params.set("query", filters.query.trim());
+      if (filters?.environment) params.set("environment", filters.environment);
+      if (filters?.access) params.set("access", filters.access);
+      if (filters?.risk) params.set("risk", filters.risk);
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return requestJson<{ mode: "shadow" | "enforce"; apps: MatterhornCryptoAppCatalogSummary[] }>(
+        baseUrl,
+        `/crypto-apps${suffix}`,
+        { token, timeoutMs: timeouts.capabilities },
+      );
+    },
+    getCryptoApp: (appId: string) => requestJson<{
+      mode: "shadow" | "enforce";
+      app: MatterhornCryptoAppCatalogDetail;
+    }>(baseUrl, `/crypto-apps/${encodeURIComponent(appId)}`, {
+      token,
+      timeoutMs: timeouts.capabilities,
+    }),
+    listCryptoAppConnections: (workspaceId: string) => requestJson<{
+      mode: "shadow" | "enforce";
+      connections: MatterhornCryptoAppConnectionView[];
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections`, {
+      token,
+      timeoutMs: timeouts.capabilities,
+    }),
+    createCryptoAppConnection: (workspaceId: string, input: {
+      appId: string;
+      grantedActionIds: string[];
+      grantedScopes: string[];
+      grantedNetworks: string[];
+    }) => requestJson<{ connection: MatterhornCryptoAppConnectionView }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections`,
+      {
+        token,
+        method: "POST",
+        body: input,
+        timeoutMs: timeouts.config,
+      },
+    ),
+    transitionCryptoAppConnection: (
+      workspaceId: string,
+      connectionId: string,
+      state: Exclude<MatterhornCryptoAppConnectionState, "revoked">,
+    ) => requestJson<{ connection: MatterhornCryptoAppConnectionView }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/${encodeURIComponent(connectionId)}`,
+      {
+        token,
+        method: "PATCH",
+        body: { state },
+        timeoutMs: timeouts.config,
+      },
+    ),
+    revokeCryptoAppConnection: (workspaceId: string, connectionId: string) => requestJson<{
+      connection: MatterhornCryptoAppConnectionView;
+    }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/${encodeURIComponent(connectionId)}`,
+      { token, method: "DELETE", timeoutMs: timeouts.config },
+    ),
     backendModels: () =>
       requestJson<MatterhornBackendModelsResponse>(baseUrl, "/api/backend/models", {
         token,

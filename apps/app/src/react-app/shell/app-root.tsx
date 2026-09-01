@@ -35,6 +35,9 @@ const PublicTrustRoute = lazy(() => import("../domains/public/public-trust-route
 const CryptoAppDeveloperRoute = lazy(() => import("../domains/developer/crypto-app-developer-route").then((module) => ({
   default: module.CryptoAppDeveloperRoute,
 })));
+const CryptoAppCatalogRoute = lazy(() => import("../domains/crypto-apps/crypto-app-catalog-route").then((module) => ({
+  default: module.CryptoAppCatalogRoute,
+})));
 type DenSigninGateProps = {
   children: ReactNode;
 };
@@ -282,6 +285,14 @@ export function AppRoot() {
                 element={
                   <Suspense fallback={<RouteFallback />}>
                     <CryptoAppDeveloperRoute />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/workspace/:workspaceId/crypto-apps"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <CryptoAppCatalogRoute />
                   </Suspense>
                 }
               />

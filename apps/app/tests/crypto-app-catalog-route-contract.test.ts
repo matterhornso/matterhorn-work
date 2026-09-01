@@ -1,0 +1,82 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, test } from "bun:test";
+
+function readAppSource(path: string): string {
+  return readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
+}
+
+describe("invite-only crypto app catalog route", () => {
+  test("is lazy, account-gated and workspace scoped", () => {
+    const appRoot = readAppSource("react-app/shell/app-root.tsx");
+
+    expect(appRoot).toContain('path="/workspace/:workspaceId/crypto-apps"');
+    expect(appRoot).toContain('import("../domains/crypto-apps/crypto-app-catalog-route")');
+    expect(appRoot.indexOf("<DenSigninGate>")).toBeLessThan(appRoot.indexOf('path="/workspace/:workspaceId/crypto-apps"'));
+    expect(appRoot).not.toContain('pathname === "/workspace/:workspaceId/crypto-apps"');
+  });
+
+  test("keeps the catalog testnet-only with explicit wallet and credential boundaries", () => {
+    const route = readAppSource("react-app/domains/crypto-apps/crypto-app-catalog-route.tsx");
+
+    expect(route).toContain('client.listCryptoApps({ environment: "testnet" })');
+    expect(route).toContain("Testnet only");
+    expect(route).toContain("No credentials in chat");
+    expect(route).toContain("Connected wallet signs");
+    expect(route).toContain("Research only");
+    expect(route).toContain("Research + wallet previews");
+    expect(route).toContain("Your connected wallet still signs and submits");
+    expect(route).toContain("Matterhorn will never ask you to paste it into chat");
+    expect(route).toContain("Revocation is permanent");
+    expect(route).toContain('role="alert"');
+    expect(route).toContain('role="status"');
+    expect(route).toContain("motion-reduce:animate-none");
+    expect(route).not.toContain('type="password"');
+    expect(route).not.toContain("privateKey");
+    expect(route).not.toContain("seedPhrase");
+    expect(route).not.toContain("signTransaction");
+    expect(route).not.toContain("executeTransaction");
+  });
+
+  test("uses account-token catalog methods without operator authority", () => {
+    const client = readAppSource("app/lib/matterhorn-server.ts");
+    const catalogMethods = client.slice(
+      client.indexOf("listCryptoApps:"),
+      client.indexOf("backendModels:"),
+    );
+
+    expect(catalogMethods).toContain('`/crypto-apps${suffix}`');
+    expect(catalogMethods).toContain("/crypto-app-connections");
+    expect(catalogMethods).toContain("method: \"POST\"");
+    expect(catalogMethods).toContain("method: \"PATCH\"");
+    expect(catalogMethods).toContain("method: \"DELETE\"");
+    expect(catalogMethods).not.toContain("hostToken");
+    expect(catalogMethods).not.toContain("/operator/");
+    expect(catalogMethods).not.toContain("credential:");
+  });
+
+  test("is discoverable from managed tools without exposing operator controls", () => {
+    const settingsRoute = readAppSource("react-app/shell/settings-route.tsx");
+    const mcpView = readAppSource("react-app/domains/settings/pages/mcp-view.tsx");
+    const managedTools = readAppSource("react-app/domains/settings/pages/hosted-mcp-summary.tsx");
+
+    expect(settingsRoute).toContain("onBrowseCryptoApps={selectedWorkspaceId");
+    expect(settingsRoute).toContain("/crypto-apps`");
+    expect(mcpView).toContain("onBrowseCryptoApps={props.onBrowseCryptoApps}");
+    expect(managedTools).toContain("Browse certified crypto apps");
+    expect(managedTools).toContain("Credentials never belong in chat");
+    expect(managedTools).toContain("connected wallet remains the only signer");
+    expect(managedTools).not.toContain("Promote certification");
+    expect(managedTools).not.toContain("host token");
+  });
+
+  test("grants only the user-selected certified actions and testnet networks", () => {
+    const route = readAppSource("react-app/domains/crypto-apps/crypto-app-catalog-route.tsx");
+
+    expect(route).toContain('action.access === "read" || action.access === "watch" || scope === "wallet_previews"');
+    expect(route).toContain('network.environment === "testnet"');
+    expect(route).toContain("grantedActionIds");
+    expect(route).toContain("grantedScopes");
+    expect(route).toContain("grantedNetworks");
+    expect(route).toContain('app.authentication.type === "none"');
+  });
+});

@@ -1,6 +1,6 @@
 # Matterhorn Guarded Crypto Coworkers
 
-Status: Phases 1–2 backend foundations and the first Phase 3 wallet-review boundary. All runtime switches still default to `off`; no production adapter traffic is enabled by this work.
+Status: Phases 1–4 security foundations plus the invite-only testnet developer and workspace integration path. All runtime switches still default to `off`; no production adapter traffic is enabled by this work.
 
 ## Product boundary
 
@@ -65,6 +65,8 @@ The operational-policy store defaults to `<data-dir>/crypto-apps/operational.db`
 The account-safe catalog service returns only the current certified manifest projection. It exposes action descriptions, authority, risk, freshness, schemas, network, authentication type, and certification hashes while omitting adapter endpoints, detached signatures, publisher key IDs, security contacts, OAuth servers, vault references, and connected-wallet identifiers. Authenticated catalog and tenant connection lifecycle routes fail closed when `MATTERHORN_CRYPTO_APP_GATEWAY_MODE=off`; host-token-only routes own registration, certification, suspension, revocation, inspection, and history.
 
 The invite-only developer staging service defaults to `<data-dir>/crypto-apps/developer-portal.db` and may be overridden with `MATTERHORN_CRYPTO_APP_DEVELOPER_DB`. Host-token operators issue short-lived, single-use invites; only signed-in Matterhorn accounts can consume them. Developers may register Ed25519 public keys, submit immutable signed testnet manifest revisions, inspect static conformance, and request certification. The service stores only a one-way invite hash and rejects private keys. Developer keys are never inserted into the trusted runtime keyring, and the staging service exposes no certification, promotion, execution, credential, wallet, or transaction authority. Host inspection is required before the existing independent runtime-certification and registry-promotion boundary can be used. Mainnet requests fail closed.
+
+The web app exposes two authenticated, lazy-loaded testnet surfaces. `/developer/crypto-apps` guides invited developers through public-key registration, signed manifest submission, static findings, and a certification request without accepting a private key. `/workspace/:id/crypto-apps` is discoverable from managed Tools and lets a workspace review certified capabilities, select research-only or wallet-preview access, and pause, resume, or permanently revoke its own connection. The account client deliberately omits host authority; credential-bearing apps require a future server-managed connection flow and the UI never accepts credentials in chat. The connected wallet remains the only signing and submission surface.
 
 Signed test-harness contracts now define testnet-only Sui balance/transfer-preview actions and Hyperliquid market/orderbook/account/order-preview actions. They use closed input and model-facing output schemas, map every action to a compatible guarded tool, and never contain production publisher keys or automatic registration. Their offline router fixtures deliberately include private and malicious extra fields to prove projection removes them.
 

@@ -168,6 +168,8 @@ export type McpViewProps = {
   compact?: boolean;
   /** Opens the full MCP management route from the contextual rail summary. */
   onManageMcp?: () => void;
+  /** Opens the workspace-scoped certified crypto app catalog. */
+  onBrowseCryptoApps?: () => void;
   /** Overrides hosted managed mode for focused rendering and tests. */
   hostedManagedMode?: boolean;
 };
@@ -1350,6 +1352,7 @@ export function McpView(props: McpViewProps) {
           };
         })}
         onViewTools={props.onManageMcp}
+        onBrowseCryptoApps={props.onBrowseCryptoApps}
       />
     );
   }

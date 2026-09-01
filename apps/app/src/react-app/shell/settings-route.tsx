@@ -3190,6 +3190,12 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                     { state: location.state },
                   );
                 } : undefined}
+                onBrowseCryptoApps={selectedWorkspaceId ? () => {
+                  navigate(
+                    `/workspace/${encodeURIComponent(selectedWorkspaceId)}/crypto-apps`,
+                    { state: location.state },
+                  );
+                } : undefined}
                 connectMcp={(entry) => connectionsStore.connectMcp(entry)}
                 configSlotForEntry={(entry) =>
                   getExtensionConfigSlot(entry, {
