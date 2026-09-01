@@ -11,7 +11,8 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 1 durable manifest/certification history, atomic revocation, and policy-version invalidation: complete.
 - Phase 1 tenant-scoped connection grants with opaque vault/wallet references and immediate certification revocation: complete.
 - Phase 1 adapter-router core, closed schema validation, runtime DNS/egress checks, typed output projection, untrusted-data quarantine, timeout handling, usage reservation/reconciliation, and circuit breaking: complete and backend-only.
-- Current slice: trusted address-pinned transports, durable quota/circuit state, guarded-runtime capability bridge, and first-party Sui/Hyperliquid testnet adapters.
+- Phase 1 trusted JSON-over-HTTPS transport foundation with DNS address pinning, TLS hostname verification, peer verification, redirect/content/size bounds, and server-side credential resolution: complete and backend-only.
+- Current slice: protocol-specific transport bindings, durable quota/circuit state, guarded-runtime capability bridge, and first-party Sui/Hyperliquid testnet adapters.
 - All new production modes remain `off`; no HTTP routes or upstream adapter traffic are enabled.
 
 ## Goal
@@ -314,9 +315,11 @@ The completed adapter-router core remains backend-only and inert. It now:
 - Enforces timeout, reservation/reconciliation, per-tenant circuit breaking, and immediate registry/connection revocation.
 - Requires exact run/call/action/network/argument authorization through an injected server-only boundary.
 
+The trusted JSON transport additionally pins the HTTPS socket to one router-approved address, preserves TLS verification against the certified hostname, verifies the actual peer address, refuses redirects and non-JSON responses, caps response bytes, and prevents opaque credential references from entering the request body. Upstream adapters cannot declare their own metering cost.
+
 The next Phase 1 slice must:
 
-- Implement trusted first-party HTTP/RPC transports that connect to an approved resolved address and report the actual peer address; the generic router does not delegate address pinning to third-party adapter code.
+- Bind MCP/OpenAPI/RPC and first-party SDK protocols to the trusted transport boundary without allowing redirects, destination overrides, arbitrary methods, or raw upstream cost claims.
 - Bridge authorization to the guarded capability broker and durable allowance ledger.
 - Persist circuit/quota state needed across process restarts while keeping the hosted release single-instance.
 - Add Sui and Hyperliquid testnet adapters plus conflicting-source, schema-drift, abort, replay, and zero-upstream-denial fixtures.
