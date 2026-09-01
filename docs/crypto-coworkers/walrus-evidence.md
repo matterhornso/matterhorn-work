@@ -59,6 +59,8 @@ The local encrypted envelope and the public Walrus payload are deliberately diff
 - Size, cost, rate, workspace quota, and retention limits are enforced before upload.
 - A returned blob ID is untrusted until Sui certification and the expected ciphertext hash are verified.
 - The relay must accept the serialized public ciphertext contract, never the tenant-local encrypted envelope. Key references and plaintext hashes are rejected at the publisher boundary.
+- The evidence transport is HTTPS peer-pinned after public-DNS resolution, supports only a fixed `PUT /v1/blobs?epochs=<configured>` and strict `GET /v1/blobs/by-object-id/<publisher-object>?strict_consistency_check=true`, refuses redirects, bounds both directions, and requires a server-only bearer credential.
+- A publisher response is not certification. Matterhorn accepts a proof only after a separate pinned Sui testnet verifier confirms the exact blob/object binding and epoch window, then the aggregator returns byte-for-byte identical public ciphertext.
 
 ## Phase 0 proof
 
@@ -87,3 +89,4 @@ The first testnet prototype must use synthetic data and demonstrate:
 - Public serialization excludes the key reference and plaintext hash.
 - Deterministic, order-independent Merkle batches verify ciphertext modification and reject duplicate or mismatched leaves.
 - No publisher, Walrus network call, Sui anchor, or mainnet write is enabled by this foundation.
+- The authenticated testnet publisher client and ciphertext readback gate are implemented but remain disconnected from account-facing routes. The certification verifier is injected as a distinct Sui boundary, so an upload relay can never certify its own response.

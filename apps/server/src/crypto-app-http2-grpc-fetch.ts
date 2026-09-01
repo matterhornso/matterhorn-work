@@ -43,11 +43,13 @@ type PinnedGrpcFetchOptions = {
 const GET_BALANCE_PATH = "/sui.rpc.v2.StateService/GetBalance";
 const GET_COIN_INFO_PATH = "/sui.rpc.v2.StateService/GetCoinInfo";
 const GET_SERVICE_INFO_PATH = "/sui.rpc.v2.LedgerService/GetServiceInfo";
+const BATCH_GET_OBJECTS_PATH = "/sui.rpc.v2.LedgerService/BatchGetObjects";
 const SIMULATE_TRANSACTION_PATH = "/sui.rpc.v2.TransactionExecutionService/SimulateTransaction";
 const ALLOWED_GRPC_PATHS = new Set([
   GET_BALANCE_PATH,
   GET_COIN_INFO_PATH,
   GET_SERVICE_INFO_PATH,
+  BATCH_GET_OBJECTS_PATH,
   SIMULATE_TRANSACTION_PATH,
 ]);
 const DEFAULT_MAX_REQUEST_BYTES = 2 * 1024 * 1024;
@@ -318,3 +320,4 @@ export const MATTERHORN_SUI_SIMULATE_GRPC_PATH = SIMULATE_TRANSACTION_PATH;
 export const MATTERHORN_SUI_GET_BALANCE_GRPC_PATH = GET_BALANCE_PATH;
 export const MATTERHORN_SUI_GET_COIN_INFO_GRPC_PATH = GET_COIN_INFO_PATH;
 export const MATTERHORN_SUI_GET_SERVICE_INFO_GRPC_PATH = GET_SERVICE_INFO_PATH;
+export const MATTERHORN_SUI_BATCH_GET_OBJECTS_GRPC_PATH = BATCH_GET_OBJECTS_PATH;

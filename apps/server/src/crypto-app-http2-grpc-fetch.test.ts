@@ -4,6 +4,7 @@ import { constants as http2Constants } from "node:http2";
 import { describe, expect, test } from "bun:test";
 
 import {
+  MATTERHORN_SUI_BATCH_GET_OBJECTS_GRPC_PATH,
   createPinnedSuiGrpcWebFetch,
   MATTERHORN_SUI_GET_BALANCE_GRPC_PATH,
   MATTERHORN_SUI_GET_COIN_INFO_GRPC_PATH,
@@ -144,6 +145,7 @@ describe("pinned Sui HTTP/2 gRPC-web fetch", () => {
       MATTERHORN_SUI_GET_BALANCE_GRPC_PATH,
       MATTERHORN_SUI_GET_COIN_INFO_GRPC_PATH,
       MATTERHORN_SUI_GET_SERVICE_INFO_GRPC_PATH,
+      MATTERHORN_SUI_BATCH_GET_OBJECTS_GRPC_PATH,
     ]) {
       const fake = harness();
       const fetcher = createPinnedSuiGrpcWebFetch({

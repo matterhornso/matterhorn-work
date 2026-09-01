@@ -401,6 +401,9 @@ importers:
       '@mysten/sui':
         specifier: ^2.20.1
         version: 2.20.1(typescript@5.9.3)
+      '@mysten/walrus':
+        specifier: 1.2.0
+        version: 1.2.0(@mysten/sui@2.20.1(typescript@5.9.3))
       '@opencode-ai/sdk':
         specifier: 1.18.23
         version: 1.18.23
@@ -1821,6 +1824,14 @@ packages:
     resolution: {integrity: sha512-fjG9N6gNQ8xvL6f2xXK0GnoUXK/xJS9WHQVhnLB3MeT1wy6JK0rhazGj0vSmkO+a3g+Ua5s5JzGzgjKSTuhcDA==}
     peerDependencies:
       '@mysten/sui': ^2.20.1
+
+  '@mysten/walrus-wasm@0.3.1':
+    resolution: {integrity: sha512-d+6M4xuZnkhOmLCinpe8F21pxpZ9QDZzw/QWXa9R1h0DM2iqfovfhLeT4ZaUj1pbp5mQ5C/3LJtfppjKhvynig==}
+
+  '@mysten/walrus@1.2.0':
+    resolution: {integrity: sha512-OBgqbgkZurhMkvZHYoR/XeitMcXYDjbu8knP43oIKpUabSp/Cs7pbSRFLFYxQA+9/cTgW3NXGL0KJkKJ/L+JYw==}
+    peerDependencies:
+      '@mysten/sui': ^2.18.0
 
   '@mysten/window-wallet-core@0.2.0':
     resolution: {integrity: sha512-W5Pm3jWPK7tQ8kiqrD3lRRJIFUDNHW3CCGtu6kv0h+n+UPAcKTeqMEkBH9oXrqfa72+QxjMckZUvc0pYWbj3Rw==}
@@ -3926,6 +3937,9 @@ packages:
   data-uri-to-buffer@4.0.1:
     resolution: {integrity: sha512-0R9ikRb668HB7QDxT1vkpuUBtqc53YyAwMwGeUFKRojY/NWKvdZ+9UYtRfGmhqNbRkTSVpMbmyhXipFFv2cb/A==}
     engines: {node: '>= 12'}
+
+  dataloader@2.2.3:
+    resolution: {integrity: sha512-y2krtASINtPFS1rSDjacrFgn1dcUuoREVabwlOGOe4SdxenREqwjwjElAdwvbGM7kgZz9a3KVicWR7vcz8rnzA==}
 
   debounce-fn@6.0.0:
     resolution: {integrity: sha512-rBMW+F2TXryBwB54Q0d8drNEI+TfoS9JpNTAoVpukbWEhjXQq4rySFYLaqXMFXwdv61Zb2OHtj5bviSoimqxRQ==}
@@ -8724,6 +8738,16 @@ snapshots:
       '@mysten/sui': 2.20.1(typescript@5.9.3)
       '@wallet-standard/core': 1.1.2
 
+  '@mysten/walrus-wasm@0.3.1': {}
+
+  '@mysten/walrus@1.2.0(@mysten/sui@2.20.1(typescript@5.9.3))':
+    dependencies:
+      '@mysten/bcs': 2.1.0
+      '@mysten/sui': 2.20.1(typescript@5.9.3)
+      '@mysten/utils': 0.4.0
+      '@mysten/walrus-wasm': 0.3.1
+      dataloader: 2.2.3
+
   '@mysten/window-wallet-core@0.2.0(typescript@5.9.3)':
     dependencies:
       '@mysten/utils': 0.4.0
@@ -10930,6 +10954,8 @@ snapshots:
   csstype@3.2.3: {}
 
   data-uri-to-buffer@4.0.1: {}
+
+  dataloader@2.2.3: {}
 
   debounce-fn@6.0.0:
     dependencies:

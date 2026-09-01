@@ -50,6 +50,8 @@ describe("crypto coworker feature configuration", () => {
     expect(missing.ready).toBe(false);
     expect(missing.issues).toEqual(expect.arrayContaining([
       "walrus_publisher_https_required",
+      "walrus_aggregator_https_required",
+      "walrus_publisher_auth_required",
       "walrus_encryption_key_id_required",
       "walrus_mainnet_acknowledgement_required",
     ]));
@@ -57,6 +59,8 @@ describe("crypto coworker feature configuration", () => {
     const configured = cryptoCoworkerFeatureConfig({
       MATTERHORN_WALRUS_EVIDENCE_MODE: "testnet",
       MATTERHORN_WALRUS_PUBLISHER_URL: "https://publisher.example.test",
+      MATTERHORN_WALRUS_AGGREGATOR_URL: "https://aggregator.example.test",
+      MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN: "server-only-test-token",
       MATTERHORN_WALRUS_ENCRYPTION_KEY_ID: "kms://matterhorn/testnet-evidence",
     });
     expect(configured).toMatchObject({ walrusEvidenceMode: "testnet", ready: true, issues: [] });

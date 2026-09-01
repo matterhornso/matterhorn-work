@@ -6,7 +6,10 @@ import { describe, expect, test } from "bun:test";
 
 import type { MatterhornCryptoAppAction } from "@matterhorn-work/types/crypto-coworkers";
 
-import { createPinnedJsonCryptoAppTransport } from "./crypto-app-https-transport.js";
+import {
+  createPinnedBytesRequester,
+  createPinnedJsonCryptoAppTransport,
+} from "./crypto-app-https-transport.js";
 
 const action: MatterhornCryptoAppAction = {
   id: "read_market",
@@ -224,6 +227,87 @@ describe("pinned JSON crypto app transport", () => {
     await expect(executor(requestInput({ signal: controller.signal }))).rejects.toThrow("crypto_app_transport_aborted");
     expect(resolvedCredential).toBe(false);
     expect(requested).toBe(false);
+    expect(connected).toBe(false);
+  });
+});
+
+describe("pinned binary evidence transport", () => {
+  test("pins the HTTPS peer and sends only the fixed encrypted-evidence request", async () => {
+    const fake = fakeHttps({ contentType: "application/json", body: { stored: true } });
+    const requester = createPinnedBytesRequester({ request: fake.request, tlsConnect: fake.tlsConnect });
+    const response = await requester({
+      endpoint: new URL("https://publisher.example.test/v1/blobs?epochs=5"),
+      approvedAddresses: ["93.184.216.34"],
+      method: "PUT",
+      body: Buffer.from("ciphertext"),
+      signal: new AbortController().signal,
+      headers: {
+        accept: "application/json",
+        authorization: "Bearer server-only",
+        "content-type": "application/vnd.matterhorn.walrus-ciphertext.v1+json",
+        "x-matterhorn-ciphertext-sha256": "a".repeat(64),
+      },
+      acceptedResponseTypes: ["application/json"],
+    });
+    expect(fake.tlsOptions()).toMatchObject({
+      host: "93.184.216.34",
+      servername: "publisher.example.test",
+      rejectUnauthorized: true,
+    });
+    expect(fake.options()).toMatchObject({
+      method: "PUT",
+      path: "/v1/blobs?epochs=5",
+      headers: {
+        authorization: "Bearer server-only",
+        "content-type": "application/vnd.matterhorn.walrus-ciphertext.v1+json",
+      },
+    });
+    expect(Buffer.from(fake.body()).toString("utf8")).toBe("ciphertext");
+    expect(response.bytes.toString("utf8")).toBe(JSON.stringify({ stored: true }));
+    expect(fake.socketDestroyed()).toBe(true);
+  });
+
+  test("rejects redirects, response type changes, oversized bodies and peer changes", async () => {
+    for (const [fake, code] of [
+      [fakeHttps({ statusCode: 302, contentType: "application/json" }), "crypto_app_binary_status_invalid"],
+      [fakeHttps({ contentType: "text/html" }), "crypto_app_binary_content_type_invalid"],
+      [fakeHttps({ connectedAddress: "93.184.216.35", contentType: "application/json" }), "crypto_app_connected_address_mismatch"],
+      [fakeHttps({ body: "x".repeat(2_000), contentType: "application/json" }), "crypto_app_binary_response_too_large"],
+    ] as const) {
+      const requester = createPinnedBytesRequester({
+        request: fake.request,
+        tlsConnect: fake.tlsConnect,
+        maxResponseBytes: 1_024,
+      });
+      await expect(requester({
+        endpoint: new URL("https://publisher.example.test/v1/blobs"),
+        approvedAddresses: ["93.184.216.34"],
+        method: "PUT",
+        body: Buffer.from("ciphertext"),
+        signal: new AbortController().signal,
+        headers: { "content-type": "application/vnd.matterhorn.walrus-ciphertext.v1+json" },
+        acceptedResponseTypes: ["application/json"],
+      })).rejects.toThrow(code);
+    }
+  });
+
+  test("rejects arbitrary headers and GET bodies before creating a socket", async () => {
+    let connected = false;
+    const requester = createPinnedBytesRequester({
+      request: (() => { throw new Error("must not request"); }) as never,
+      tlsConnect: (() => { connected = true; throw new Error("must not connect"); }) as never,
+    });
+    const base = {
+      endpoint: new URL("https://aggregator.example.test/v1/blobs/by-object-id/0x1"),
+      approvedAddresses: ["93.184.216.34"],
+      method: "GET" as const,
+      signal: new AbortController().signal,
+      acceptedResponseTypes: ["application/octet-stream"],
+    };
+    await expect(requester({ ...base, body: Buffer.from("forbidden") }))
+      .rejects.toThrow("crypto_app_binary_body_forbidden");
+    await expect(requester({ ...base, body: null, headers: { host: "attacker.example" } }))
+      .rejects.toThrow("crypto_app_binary_header_invalid");
     expect(connected).toBe(false);
   });
 });

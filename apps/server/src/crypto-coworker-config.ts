@@ -73,6 +73,8 @@ export function cryptoCoworkerFeatureConfig(
   }
   if (evidence !== "off") {
     if (!isHttpsOrigin(env.MATTERHORN_WALRUS_PUBLISHER_URL)) issues.push("walrus_publisher_https_required");
+    if (!isHttpsOrigin(env.MATTERHORN_WALRUS_AGGREGATOR_URL)) issues.push("walrus_aggregator_https_required");
+    if (!env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN?.trim()) issues.push("walrus_publisher_auth_required");
     if (!env.MATTERHORN_WALRUS_ENCRYPTION_KEY_ID?.trim()) issues.push("walrus_encryption_key_id_required");
   }
   if (evidence === "mainnet" && normalized(env.MATTERHORN_WALRUS_MAINNET_ACKNOWLEDGED) !== "true") {

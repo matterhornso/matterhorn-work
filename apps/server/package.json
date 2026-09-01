@@ -53,6 +53,7 @@
     "@matterhorn-work/types": "workspace:*",
     "@msgpack/msgpack": "^3.1.2",
     "@mysten/sui": "^2.20.1",
+    "@mysten/walrus": "1.2.0",
     "@opencode-ai/sdk": "1.18.23",
     "@protobuf-ts/grpcweb-transport": "^2.11.1",
     "better-sqlite3": "^11.10.0",
