@@ -154,20 +154,6 @@ async function postJson(context: RequestContext, body: unknown): Promise<unknown
   return response.value;
 }
 
-async function suiRpc(
-  context: RequestContext,
-  id: number,
-  method: string,
-  params: unknown[],
-): Promise<unknown> {
-  const value = await postJson(context, { jsonrpc: "2.0", id, method, params });
-  const envelope = record(value);
-  if (!envelope || envelope.jsonrpc !== "2.0" || envelope.id !== id || "error" in envelope || !("result" in envelope)) {
-    throw new Error("first_party_sui_rpc_invalid");
-  }
-  return envelope.result;
-}
-
 async function hyperliquidInfo(context: RequestContext, body: JsonObject): Promise<unknown> {
   return postJson(context, body);
 }
@@ -338,25 +324,38 @@ async function executeSui(
   const requestedCoinType = nonEmptyString(args.coinType) ?? SUI_NATIVE_COIN_TYPE;
   if (!isValidStructTag(requestedCoinType)) throw new Error("first_party_sui_coin_type_invalid");
   const coinType = normalizeStructTag(requestedCoinType);
-  const balance = record(await suiRpc(context, 1, "suix_getBalance", [address, coinType]));
-  if (!balance) throw new Error("first_party_sui_balance_invalid");
+  const client = context.createSuiGrpcClient({
+    endpoint: context.endpoint,
+    approvedAddresses: context.approvedAddresses,
+    signal: context.signal,
+    observe: (observation) => observeGrpc(context, observation),
+  });
+  const [balanceResult, serviceInfoCall, metadataResult] = await Promise.all([
+    client.getBalance({ owner: address, coinType, signal: context.signal }),
+    client.ledgerService.getServiceInfo({}, { abort: context.signal }),
+    coinType === SUI_NATIVE_COIN_TYPE
+      ? null
+      : client.getCoinMetadata({ coinType, signal: context.signal }),
+  ]);
+  const serviceInfo = await serviceInfoCall.response;
+  const balance = balanceResult.balance;
   const returnedCoinType = nonEmptyString(balance.coinType);
   if (!returnedCoinType || !isValidStructTag(returnedCoinType)
     || normalizeStructTag(returnedCoinType) !== coinType) {
     throw new Error("first_party_sui_balance_conflict");
   }
-  const balanceAtomic = nonEmptyString(balance.totalBalance);
+  const balanceAtomic = nonEmptyString(balance.balance);
   if (!balanceAtomic) throw new Error("first_party_sui_balance_invalid");
-  const checkpoint = nonEmptyString(await suiRpc(context, 2, "sui_getLatestCheckpointSequenceNumber", []));
-  if (!checkpoint) throw new Error("first_party_sui_checkpoint_invalid");
+  const checkpoint = serviceInfo.checkpointHeight?.toString() ?? "";
+  if (!/^(?:0|[1-9][0-9]*)$/.test(checkpoint)) throw new Error("first_party_sui_checkpoint_invalid");
   let decimals = 9;
   let symbol = "SUI";
   if (coinType !== SUI_NATIVE_COIN_TYPE) {
-    const metadata = record(await suiRpc(context, 3, "suix_getCoinMetadata", [coinType]));
-    if (!metadata || !Number.isInteger(metadata.decimals) || Number(metadata.decimals) < 0 || Number(metadata.decimals) > 30) {
+    const metadata = metadataResult?.coinMetadata;
+    if (!metadata || !Number.isInteger(metadata.decimals) || metadata.decimals < 0 || metadata.decimals > 30) {
       throw new Error("first_party_sui_metadata_invalid");
     }
-    decimals = Number(metadata.decimals);
+    decimals = metadata.decimals;
     symbol = nonEmptyString(metadata.symbol) ?? "TOKEN";
   }
   return {
@@ -369,7 +368,7 @@ async function executeSui(
       checkpoint,
       observedAt,
     },
-    source: "Sui testnet JSON-RPC",
+    source: "Sui testnet pinned gRPC reads",
     observedAt,
     blockOrVersion: checkpoint,
   };

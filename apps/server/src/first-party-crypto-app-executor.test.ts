@@ -102,27 +102,38 @@ function hyperliquidFixtureRequester(calls: unknown[]): MatterhornPinnedJsonRequ
 }
 
 describe("first-party crypto app executor", () => {
-  test("reads Sui testnet balance and checkpoint only through the pinned requester", async () => {
-    const calls: unknown[] = [];
-    const requestJson: MatterhornPinnedJsonRequester = async (request) => {
-      expect(request.endpoint.hostname).toBe("fullnode.testnet.sui.io");
-      expect(request.approvedAddresses).toEqual([PEER]);
-      calls.push(request.body);
-      const body = request.body as Record<string, unknown>;
-      if (body.method === "suix_getBalance") {
-        return response({
-          jsonrpc: "2.0",
-          id: 1,
-          result: { coinType: SUI_NATIVE_COIN_TYPE, totalBalance: "1250000000" },
-        });
-      }
-      if (body.method === "sui_getLatestCheckpointSequenceNumber") {
-        return response({ jsonrpc: "2.0", id: 2, result: "123456" });
-      }
-      throw new Error("unexpected Sui fixture request");
-    };
+  test("reads Sui testnet balance and checkpoint only through pinned gRPC methods", async () => {
+    const paths: string[] = [];
+    let jsonRequested = false;
     const executor = createFirstPartyCryptoAppExecutor({
-      requestJson,
+      requestJson: async () => { jsonRequested = true; return response({}); },
+      createSuiGrpcClient: ({ endpoint, approvedAddresses, observe }) => {
+        expect(endpoint.hostname).toBe("fullnode.testnet.sui.io");
+        expect(approvedAddresses).toEqual([PEER]);
+        return {
+          getBalance: async () => {
+            const path = "/sui.rpc.v2.StateService/GetBalance";
+            paths.push(path);
+            observe({ connectedAddress: PEER, requestBytes: 100, responseBytes: 200, path });
+            return {
+              balance: {
+                coinType: SUI_NATIVE_COIN_TYPE,
+                balance: "1250000000",
+                coinBalance: "1250000000",
+                addressBalance: "0",
+              },
+            };
+          },
+          ledgerService: {
+            getServiceInfo: () => {
+              const path = "/sui.rpc.v2.LedgerService/GetServiceInfo";
+              paths.push(path);
+              observe({ connectedAddress: PEER, requestBytes: 100, responseBytes: 200, path });
+              return { response: Promise.resolve({ checkpointHeight: 123456n }) };
+            },
+          },
+        } as unknown as SuiGrpcClient;
+      },
       now: () => new Date(NOW),
       estimateCostMicros: ({ requestBytes, responseBytes }) => requestBytes + responseBytes,
     });
@@ -132,7 +143,11 @@ describe("first-party crypto app executor", () => {
       network: "sui:testnet",
       arguments: { address: SUI_ADDRESS },
     }));
-    expect(calls).toHaveLength(2);
+    expect(jsonRequested).toBe(false);
+    expect(paths.sort()).toEqual([
+      "/sui.rpc.v2.LedgerService/GetServiceInfo",
+      "/sui.rpc.v2.StateService/GetBalance",
+    ]);
     expect(result).toMatchObject({
       data: {
         address: SUI_ADDRESS,
@@ -146,6 +161,55 @@ describe("first-party crypto app executor", () => {
       blockOrVersion: "123456",
       connectedAddress: PEER,
       costMicros: 600,
+    });
+  });
+
+  test("reads custom Sui coin metadata through the pinned gRPC method", async () => {
+    const customCoinType = "0x0000000000000000000000000000000000000000000000000000000000000002::coin::COIN";
+    const paths: string[] = [];
+    const executor = createFirstPartyCryptoAppExecutor({
+      requestJson: async () => { throw new Error("JSON transport must not be used"); },
+      createSuiGrpcClient: ({ observe }) => ({
+        getBalance: async () => {
+          const path = "/sui.rpc.v2.StateService/GetBalance";
+          paths.push(path);
+          observe({ connectedAddress: PEER, requestBytes: 80, responseBytes: 120, path });
+          return { balance: { coinType: customCoinType, balance: "42000000" } };
+        },
+        getCoinMetadata: async () => {
+          const path = "/sui.rpc.v2.StateService/GetCoinInfo";
+          paths.push(path);
+          observe({ connectedAddress: PEER, requestBytes: 70, responseBytes: 130, path });
+          return { coinMetadata: { decimals: 6, symbol: "COIN" } };
+        },
+        ledgerService: {
+          getServiceInfo: () => {
+            const path = "/sui.rpc.v2.LedgerService/GetServiceInfo";
+            paths.push(path);
+            observe({ connectedAddress: PEER, requestBytes: 5, responseBytes: 75, path });
+            return { response: Promise.resolve({ checkpointHeight: 123457n }) };
+          },
+        },
+      }) as unknown as SuiGrpcClient,
+      now: () => new Date(NOW),
+    });
+    const result = await executor(input({
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+      arguments: { address: SUI_ADDRESS, coinType: "0x2::coin::COIN" },
+    }));
+    expect(paths.sort()).toEqual([
+      "/sui.rpc.v2.LedgerService/GetServiceInfo",
+      "/sui.rpc.v2.StateService/GetBalance",
+      "/sui.rpc.v2.StateService/GetCoinInfo",
+    ]);
+    expect(result.data).toMatchObject({
+      coinType: customCoinType,
+      balanceAtomic: "42000000",
+      decimals: 6,
+      symbol: "COIN",
+      checkpoint: "123457",
     });
   });
 
@@ -369,15 +433,28 @@ describe("first-party crypto app executor", () => {
 
   test("rejects conflicting Sui coin identity and Hyperliquid book identity", async () => {
     const sui = createFirstPartyCryptoAppExecutor({
-      requestJson: async (request) => {
-        const body = request.body as Record<string, unknown>;
-        if (body.method !== "suix_getBalance") throw new Error("unexpected request after conflict");
-        return response({
-          jsonrpc: "2.0",
-          id: 1,
-          result: { coinType: "0x2::coin::COIN", totalBalance: "10" },
-        });
-      },
+      requestJson: async () => { throw new Error("JSON transport must not be used"); },
+      createSuiGrpcClient: ({ observe }) => ({
+        getBalance: async () => {
+          observe({
+            connectedAddress: PEER,
+            requestBytes: 100,
+            responseBytes: 200,
+            path: "/sui.rpc.v2.StateService/GetBalance",
+          });
+          return {
+            balance: {
+              coinType: "0x2::coin::COIN",
+              balance: "10",
+              coinBalance: "10",
+              addressBalance: "0",
+            },
+          };
+        },
+        ledgerService: {
+          getServiceInfo: () => ({ response: Promise.resolve({ checkpointHeight: 123456n }) }),
+        },
+      }) as unknown as SuiGrpcClient,
       now: () => new Date(NOW),
     });
     await expect(sui(input({

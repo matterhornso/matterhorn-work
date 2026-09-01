@@ -6,6 +6,8 @@ import { describe, expect, test } from "bun:test";
 import {
   createPinnedSuiGrpcWebFetch,
   MATTERHORN_SUI_GET_BALANCE_GRPC_PATH,
+  MATTERHORN_SUI_GET_COIN_INFO_GRPC_PATH,
+  MATTERHORN_SUI_GET_SERVICE_INFO_GRPC_PATH,
   MATTERHORN_SUI_SIMULATE_GRPC_PATH,
 } from "./crypto-app-http2-grpc-fetch.js";
 
@@ -137,21 +139,66 @@ describe("pinned Sui HTTP/2 gRPC-web fetch", () => {
     expect(fake.socketDestroyed()).toBe(true);
   });
 
-  test("permits the exact read-only balance resolution required by the Sui transaction builder", async () => {
-    const fake = harness();
+  test("permits only the exact read-only Sui balance, metadata and freshness methods", async () => {
+    for (const path of [
+      MATTERHORN_SUI_GET_BALANCE_GRPC_PATH,
+      MATTERHORN_SUI_GET_COIN_INFO_GRPC_PATH,
+      MATTERHORN_SUI_GET_SERVICE_INFO_GRPC_PATH,
+    ]) {
+      const fake = harness();
+      const fetcher = createPinnedSuiGrpcWebFetch({
+        endpoint: ENDPOINT,
+        approvedAddresses: [PEER],
+        outerSignal: new AbortController().signal,
+        tlsConnect: fake.tlsConnect,
+        http2Connect: fake.http2Connect,
+      });
+      const response = await fetcher(new URL(path, ENDPOINT), grpcInit());
+      expect(response.status).toBe(200);
+      expect(fake.requestHeaders()).toMatchObject({
+        [http2Constants.HTTP2_HEADER_METHOD]: "POST",
+        [http2Constants.HTTP2_HEADER_PATH]: path,
+      });
+    }
+  });
+
+  test("accepts a framed empty protobuf request and rejects empty or malformed frames before dialing", async () => {
+    const valid = harness();
     const fetcher = createPinnedSuiGrpcWebFetch({
       endpoint: ENDPOINT,
       approvedAddresses: [PEER],
       outerSignal: new AbortController().signal,
-      tlsConnect: fake.tlsConnect,
-      http2Connect: fake.http2Connect,
+      tlsConnect: valid.tlsConnect,
+      http2Connect: valid.http2Connect,
     });
-    const response = await fetcher(new URL(MATTERHORN_SUI_GET_BALANCE_GRPC_PATH, ENDPOINT), grpcInit());
+    const emptyMessageFrame = Uint8Array.from([0, 0, 0, 0, 0]);
+    const response = await fetcher(
+      new URL(MATTERHORN_SUI_GET_SERVICE_INFO_GRPC_PATH, ENDPOINT),
+      grpcInit(emptyMessageFrame),
+    );
     expect(response.status).toBe(200);
-    expect(fake.requestHeaders()).toMatchObject({
-      [http2Constants.HTTP2_HEADER_METHOD]: "POST",
-      [http2Constants.HTTP2_HEADER_PATH]: MATTERHORN_SUI_GET_BALANCE_GRPC_PATH,
+    expect(valid.requestBody()).toEqual(Buffer.from(emptyMessageFrame));
+
+    let dialed = false;
+    const rejectingFetcher = createPinnedSuiGrpcWebFetch({
+      endpoint: ENDPOINT,
+      approvedAddresses: [PEER],
+      outerSignal: new AbortController().signal,
+      tlsConnect: (() => { dialed = true; throw new Error("must not dial"); }) as never,
     });
+    await expect(rejectingFetcher(
+      new URL(MATTERHORN_SUI_GET_SERVICE_INFO_GRPC_PATH, ENDPOINT),
+      grpcInit(new Uint8Array()),
+    )).rejects.toThrow("crypto_app_grpc_request_size_invalid");
+    await expect(rejectingFetcher(
+      new URL(MATTERHORN_SUI_GET_SERVICE_INFO_GRPC_PATH, ENDPOINT),
+      grpcInit(Uint8Array.from([0, 0, 0, 0, 1])),
+    )).rejects.toThrow("crypto_app_grpc_request_frame_invalid");
+    await expect(rejectingFetcher(
+      new URL(MATTERHORN_SUI_GET_SERVICE_INFO_GRPC_PATH, ENDPOINT),
+      grpcInit(Uint8Array.from([1, 0, 0, 0, 0])),
+    )).rejects.toThrow("crypto_app_grpc_request_frame_invalid");
+    expect(dialed).toBe(false);
   });
 
   test("rejects execute, alternate origins, credentials and non-binary gRPC before dialing", async () => {

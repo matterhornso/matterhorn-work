@@ -41,8 +41,15 @@ type PinnedGrpcFetchOptions = {
 };
 
 const GET_BALANCE_PATH = "/sui.rpc.v2.StateService/GetBalance";
+const GET_COIN_INFO_PATH = "/sui.rpc.v2.StateService/GetCoinInfo";
+const GET_SERVICE_INFO_PATH = "/sui.rpc.v2.LedgerService/GetServiceInfo";
 const SIMULATE_TRANSACTION_PATH = "/sui.rpc.v2.TransactionExecutionService/SimulateTransaction";
-const ALLOWED_GRPC_PATHS = new Set([GET_BALANCE_PATH, SIMULATE_TRANSACTION_PATH]);
+const ALLOWED_GRPC_PATHS = new Set([
+  GET_BALANCE_PATH,
+  GET_COIN_INFO_PATH,
+  GET_SERVICE_INFO_PATH,
+  SIMULATE_TRANSACTION_PATH,
+]);
 const DEFAULT_MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 const DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const ALLOWED_REQUEST_HEADERS = new Set([
@@ -65,6 +72,18 @@ function bodyBytes(body: BodyInit | null | undefined): Buffer {
   if (body instanceof ArrayBuffer) return Buffer.from(body);
   if (typeof body === "string") return Buffer.from(body, "utf8");
   throw new Error("crypto_app_grpc_body_invalid");
+}
+
+function assertUnaryGrpcWebFrame(body: Buffer, maxRequestBytes: number): void {
+  if (body.length < 5 || body.length > maxRequestBytes) {
+    throw new Error("crypto_app_grpc_request_size_invalid");
+  }
+  // A unary gRPC-web request is one uncompressed data frame. Its protobuf
+  // payload may legitimately be empty (for example GetServiceInfo), but the
+  // five-byte frame header must always be present and internally consistent.
+  if (body[0] !== 0 || body.readUInt32BE(1) !== body.length - 5) {
+    throw new Error("crypto_app_grpc_request_frame_invalid");
+  }
 }
 
 function mergeSignals(primary: AbortSignal, secondary?: AbortSignal | null): AbortSignal {
@@ -241,7 +260,7 @@ export function createPinnedSuiGrpcWebFetch(options: PinnedGrpcFetchOptions): ty
     }
     const headers = requestHeaders(init?.headers);
     const body = bodyBytes(init?.body);
-    if (body.length < 6 || body.length > maxRequestBytes) throw new Error("crypto_app_grpc_request_size_invalid");
+    assertUnaryGrpcWebFrame(body, maxRequestBytes);
     const signal = mergeSignals(options.outerSignal, init?.signal);
     if (signal.aborted) throw new Error("crypto_app_grpc_aborted");
     const socket = await securePinnedSocket({
@@ -297,3 +316,5 @@ export function createPinnedSuiGrpcWebFetch(options: PinnedGrpcFetchOptions): ty
 
 export const MATTERHORN_SUI_SIMULATE_GRPC_PATH = SIMULATE_TRANSACTION_PATH;
 export const MATTERHORN_SUI_GET_BALANCE_GRPC_PATH = GET_BALANCE_PATH;
+export const MATTERHORN_SUI_GET_COIN_INFO_GRPC_PATH = GET_COIN_INFO_PATH;
+export const MATTERHORN_SUI_GET_SERVICE_INFO_GRPC_PATH = GET_SERVICE_INFO_PATH;
