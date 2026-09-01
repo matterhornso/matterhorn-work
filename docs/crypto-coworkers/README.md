@@ -171,7 +171,7 @@ Exit: a user can independently verify a financial run without any plaintext prom
 
 - Invite-only backend developer portal: one-time enrollment, account-isolated public publisher keys, immutable signed testnet manifest submissions, static conformance, and host-inspected certification requests are complete.
 - Developer keys remain staging-only; runtime certification and registry promotion stay behind the existing host-token boundary and require independent sealed runtime evidence.
-- The TypeScript SDK now provides deterministic manifest construction, external-signing requests, detached-signature attachment, and a non-authoritative local policy emulator without loading private keys. A local adapter runner, typed protocol fixtures, developer UI, health telemetry, and guided certification UX remain pending.
+- The TypeScript SDK now provides deterministic manifest construction, external-signing requests, detached-signature attachment, the same closed JSON-schema input/output evaluator used by the server, inert fixture validation, and a non-authoritative local policy emulator without loading private keys. A local adapter runner, protocol-specific fixture packs, developer UI, health telemetry, and guided certification UX remain pending.
 - Three to five design-partner apps.
 - Invite-only rollout in `shadow`, then sequential enforcement.
 

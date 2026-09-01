@@ -18,6 +18,7 @@ import {
   buildCryptoAppSigningRequest,
   defineCryptoAppManifest,
   emulateCryptoAppPolicy,
+  validateCryptoAppFixture,
 } from "@matterhorn-work/crypto-app-sdk";
 
 const draft = defineCryptoAppManifest({
@@ -45,6 +46,12 @@ const detachedSignature = await yourSigner(signingRequest.canonicalPayload);
 
 const manifest = attachCryptoAppManifestSignature(draft, detachedSignature);
 const localReport = emulateCryptoAppPolicy(manifest, "testnet");
+
+const fixtureReport = validateCryptoAppFixture(manifest, {
+  actionId: "your_read_action",
+  input: { /* declared closed-schema input */ },
+  output: { /* sample adapter output; undeclared fields are removed */ },
+});
 ```
 
 Submit the signed manifest through an invite-only Matterhorn developer account. A passing local report is only a fast feedback loop; it cannot register, certify, connect, execute, sign, relay, or submit anything.

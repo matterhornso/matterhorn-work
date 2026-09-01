@@ -5,6 +5,20 @@ import {
   validateMatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
 
+import {
+  projectCryptoAppOutput,
+  validateCryptoAppInput,
+  validateCryptoAppSchemaDefinition,
+  type CryptoAppSchemaResult,
+} from "./json-schema.js";
+
+export {
+  projectCryptoAppOutput,
+  validateCryptoAppInput,
+  validateCryptoAppSchemaDefinition,
+  type CryptoAppSchemaResult,
+} from "./json-schema.js";
+
 type CanonicalValue = null | boolean | number | string | CanonicalValue[] | { [key: string]: CanonicalValue };
 
 export type MatterhornUnsignedCryptoAppManifest = Omit<MatterhornCryptoAppManifest, "version" | "publisher"> & {
@@ -42,6 +56,22 @@ export type MatterhornCryptoAppLocalPolicyReport = {
   /** Local emulation is advisory. Only Matterhorn's server can certify an adapter. */
   certificationAuthority: "none";
   runtimeProbesRequired: true;
+};
+
+export type MatterhornCryptoAppFixture = {
+  actionId: string;
+  input: unknown;
+  output: unknown;
+};
+
+export type MatterhornCryptoAppFixtureReport = {
+  version: "matterhorn.crypto-app-fixture-report.v1";
+  appId: string;
+  manifestRevision: string;
+  actionId: string;
+  passed: boolean;
+  input: CryptoAppSchemaResult;
+  output: CryptoAppSchemaResult;
 };
 
 export class MatterhornCryptoAppSdkError extends Error {
@@ -185,11 +215,53 @@ function closedObjectSchema(value: Record<string, unknown>): boolean {
   return value.type === "object" && value.additionalProperties === false;
 }
 
+function privateIpv4(hostname: string): boolean {
+  const parts = hostname.split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/.test(part))) return false;
+  const octets = parts.map(Number);
+  if (octets.some((octet) => octet > 255)) return true;
+  const [a, b] = octets as [number, number, number, number];
+  return a === 0
+    || a === 10
+    || a === 127
+    || (a === 100 && b >= 64 && b <= 127)
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168)
+    || (a === 198 && (b === 18 || b === 19))
+    || a >= 224;
+}
+
+function publicHttpsShape(value: string): boolean {
+  try {
+    const endpoint = new URL(value);
+    const hostname = endpoint.hostname.toLowerCase();
+    return endpoint.protocol === "https:"
+      && !endpoint.username
+      && !endpoint.password
+      && (!endpoint.port || endpoint.port === "443")
+      && hostname !== "localhost"
+      && !hostname.endsWith(".localhost")
+      && !hostname.endsWith(".local")
+      && !hostname.endsWith(".internal")
+      && !privateIpv4(hostname)
+      && !hostname.includes(":");
+  } catch {
+    return false;
+  }
+}
+
 function inspectAction(
   action: MatterhornCryptoAppAction,
   scopes: Set<string>,
   findings: MatterhornCryptoAppLocalFinding[],
 ): void {
+  for (const issue of validateCryptoAppSchemaDefinition(action.inputSchema)) {
+    addFinding(findings, "error", "schema", `action_input_${issue}`, action.id);
+  }
+  for (const issue of validateCryptoAppSchemaDefinition(action.outputProjectionSchema)) {
+    addFinding(findings, "error", "schema", `action_output_${issue}`, action.id);
+  }
   if (!closedObjectSchema(action.inputSchema)) {
     addFinding(findings, "error", "schema", "action_input_schema_must_be_closed_object", action.id);
   }
@@ -223,20 +295,14 @@ export function emulateCryptoAppPolicy(
   for (const code of validateMatterhornCryptoAppManifest(manifest)) {
     addFinding(findings, "error", "manifest", code);
   }
-  try {
-    const endpoint = new URL(manifest.transport.endpoint);
-    if (endpoint.protocol !== "https:"
-      || endpoint.username
-      || endpoint.password
-      || (endpoint.port && endpoint.port !== "443")
-      || endpoint.hostname === "localhost"
-      || endpoint.hostname.endsWith(".local")) {
-      addFinding(findings, "error", "network", "transport_public_https_required");
-    } else {
-      addFinding(findings, "warning", "network", "server_dns_revalidation_required");
-    }
-  } catch {
+  if (!publicHttpsShape(manifest.transport.endpoint)) {
     addFinding(findings, "error", "network", "transport_public_https_required");
+  } else {
+    addFinding(findings, "warning", "network", "server_dns_revalidation_required");
+  }
+  if (manifest.authentication.type === "oauth2"
+    && !publicHttpsShape(manifest.authentication.authorizationServer)) {
+    addFinding(findings, "error", "authentication", "oauth_public_https_required");
   }
   if (!manifest.networks.some((network) => network.environment === targetEnvironment)) {
     addFinding(findings, "error", "network", "target_environment_not_declared");
@@ -250,6 +316,41 @@ export function emulateCryptoAppPolicy(
     findings,
     certificationAuthority: "none",
     runtimeProbesRequired: true,
+  };
+}
+
+/**
+ * Validates one inert fixture without invoking an adapter or performing I/O.
+ * Unknown input fields fail; undeclared output fields are dropped exactly as
+ * they are at Matterhorn's production projection boundary.
+ */
+export function validateCryptoAppFixture(
+  manifest: MatterhornCryptoAppManifest,
+  fixture: MatterhornCryptoAppFixture,
+): MatterhornCryptoAppFixtureReport {
+  const action = manifest.actions.find((candidate) => candidate.id === fixture.actionId);
+  if (!action) {
+    const missing = { ok: false, value: null, issues: ["$:action_not_found"] };
+    return {
+      version: "matterhorn.crypto-app-fixture-report.v1",
+      appId: manifest.appId,
+      manifestRevision: manifest.manifestRevision,
+      actionId: fixture.actionId,
+      passed: false,
+      input: missing,
+      output: missing,
+    };
+  }
+  const input = validateCryptoAppInput(action.inputSchema, fixture.input);
+  const output = projectCryptoAppOutput(action.outputProjectionSchema, fixture.output);
+  return {
+    version: "matterhorn.crypto-app-fixture-report.v1",
+    appId: manifest.appId,
+    manifestRevision: manifest.manifestRevision,
+    actionId: action.id,
+    passed: input.ok && output.ok,
+    input,
+    output,
   };
 }
 

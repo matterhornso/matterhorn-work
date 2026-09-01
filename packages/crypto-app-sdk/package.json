@@ -8,6 +8,11 @@
       "types": "./src/index.ts",
       "development": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./json-schema": {
+      "types": "./src/json-schema.ts",
+      "development": "./src/json-schema.ts",
+      "default": "./src/json-schema.ts"
     }
   },
   "files": [
