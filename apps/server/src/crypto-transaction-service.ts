@@ -60,6 +60,12 @@ type Options = {
   router: Pick<MatterhornCryptoAppAdapterRouter, "execute">;
   capabilities: MatterhornAgentCapabilityBroker;
   pendingIntents: Pick<MatterhornPendingCryptoIntentStore, "create" | "get" | "transition">;
+  recordReviewedAction: (input: {
+    runId: string;
+    intentHash: string;
+    policyHash: string;
+    simulationReference: string;
+  }) => Promise<void>;
   resolveTrustedFacts: TrustedFactsResolver;
   now?: () => Date;
 };
@@ -72,7 +78,8 @@ export class MatterhornCryptoTransactionError extends Error {
       | "transaction_regeneration_denied"
       | "transaction_policy_preflight_denied"
       | "transaction_proxy_tool_unavailable"
-      | "transaction_capability_proof_missing",
+      | "transaction_capability_proof_missing"
+      | "transaction_receipt_record_failed",
     public readonly reasonCodes: string[] = [],
   ) {
     super(code);
@@ -96,6 +103,7 @@ export class MatterhornCryptoTransactionService {
   readonly #router: Options["router"];
   readonly #capabilities: MatterhornAgentCapabilityBroker;
   readonly #pendingIntents: Options["pendingIntents"];
+  readonly #recordReviewedAction: Options["recordReviewedAction"];
   readonly #resolveTrustedFacts: TrustedFactsResolver;
   readonly #now: () => Date;
 
@@ -103,6 +111,7 @@ export class MatterhornCryptoTransactionService {
     this.#router = options.router;
     this.#capabilities = options.capabilities;
     this.#pendingIntents = options.pendingIntents;
+    this.#recordReviewedAction = options.recordReviewedAction;
     this.#resolveTrustedFacts = options.resolveTrustedFacts;
     this.#now = options.now ?? (() => new Date());
   }
@@ -212,7 +221,7 @@ export class MatterhornCryptoTransactionService {
     const reviewedAction = policyDecision.decision === "wallet_review_required"
       ? cryptoIntentToReviewedActionHandoffV2(intent, policyDecision)
       : null;
-    const pendingIntent = reviewedAction
+    let pendingIntent = reviewedAction
       ? this.#pendingIntents.create({
           workspaceId: request.workspaceId,
           sessionId: request.sessionId,
@@ -224,6 +233,30 @@ export class MatterhornCryptoTransactionService {
           previousIntentHash: lineage.previousIntentHash ?? null,
         })
       : null;
+    if (reviewedAction && pendingIntent) {
+      try {
+        await this.#recordReviewedAction({
+          runId: reviewedAction.runId,
+          intentHash: reviewedAction.intentHash,
+          policyHash: reviewedAction.policyHash,
+          simulationReference: reviewedAction.simulation.reference,
+        });
+      } catch {
+        try {
+          pendingIntent = this.#pendingIntents.transition({
+            workspaceId: request.workspaceId,
+            ownerId: request.ownerId,
+            coworkerId: request.coworker.id,
+            id: pendingIntent.id,
+            expectedRevision: pendingIntent.revision,
+            nextState: "cancelled",
+          });
+        } catch {
+          // A concurrent cancellation or expiry is already fail-closed.
+        }
+        throw new MatterhornCryptoTransactionError("transaction_receipt_record_failed");
+      }
+    }
     return {
       adapterResult,
       intent,

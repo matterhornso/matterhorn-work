@@ -258,11 +258,13 @@ describe("guarded crypto transaction service", () => {
   test("emits a reviewed wallet action only after certified execution, capability proof and policy", async () => {
     const input = request();
     let routerCalls = 0;
+    const recordedActions: Array<Record<string, string>> = [];
     const pendingIntents = pendingStore();
     const service = new MatterhornCryptoTransactionService({
       router: { execute: async () => { routerCalls += 1; return adapterResult(); } },
       capabilities: brokerWithConsumedCapability(input),
       pendingIntents,
+      recordReviewedAction: async (action) => { recordedActions.push(action); },
       resolveTrustedFacts: async () => ({
         notionalUsd: 25,
         dailySpendUsdBefore: 10,
@@ -291,6 +293,14 @@ describe("guarded crypto transaction service", () => {
       ownerId: "account_alpha",
       sessionId: "ses_sui",
     });
+    const reviewedAction = result.reviewedAction;
+    if (!reviewedAction) throw new Error("expected_reviewed_action");
+    expect(recordedActions).toEqual([{
+      runId: reviewedAction.runId,
+      intentHash: reviewedAction.intentHash,
+      policyHash: reviewedAction.policyHash,
+      simulationReference: reviewedAction.simulation.reference,
+    }]);
     expect(pendingIntents.get(
       "ws_alpha",
       "account_alpha",
@@ -332,6 +342,7 @@ describe("guarded crypto transaction service", () => {
       router: { execute: async () => { routerCalls += 1; return adapterResult(); } },
       capabilities: new MatterhornAgentCapabilityBroker("enforce", undefined, () => "s".repeat(64)),
       pendingIntents: pendingStore(),
+      recordReviewedAction: async () => undefined,
       resolveTrustedFacts: async () => {
         throw new Error("facts_must_not_run");
       },
@@ -348,12 +359,39 @@ describe("guarded crypto transaction service", () => {
     expect(routerCalls).toBe(0);
   });
 
+  test("cancels a prepared wallet review when its guarded run receipt cannot be recorded", async () => {
+    const input = request();
+    const pendingIntents = pendingStore();
+    const service = new MatterhornCryptoTransactionService({
+      router: { execute: async () => adapterResult() },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents,
+      recordReviewedAction: async () => { throw new Error("receipt storage unavailable"); },
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 25,
+        dailySpendUsdBefore: 10,
+        weeklySpendUsdBefore: 20,
+        projectedReserveUsd: 75,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 1,
+        regionCode: "ch",
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    await expect(service.prepare(input)).rejects.toThrow("transaction_receipt_record_failed");
+    expect(pendingIntents.list("ws_alpha", "account_alpha", "cw_sui"))
+      .toEqual([expect.objectContaining({ state: "cancelled", revision: 2 })]);
+  });
+
   test("never emits a wallet action without the exact consumed capability proof", async () => {
     const input = request();
     const service = new MatterhornCryptoTransactionService({
       router: { execute: async () => adapterResult() },
       capabilities: new MatterhornAgentCapabilityBroker("enforce", undefined, () => "s".repeat(64)),
       pendingIntents: pendingStore(),
+      recordReviewedAction: async () => undefined,
       resolveTrustedFacts: async () => {
         throw new Error("facts_must_not_run");
       },
@@ -368,6 +406,7 @@ describe("guarded crypto transaction service", () => {
       router: { execute: async () => adapterResult() },
       capabilities: brokerWithConsumedCapability(input),
       pendingIntents: pendingStore(),
+      recordReviewedAction: async () => undefined,
       resolveTrustedFacts: async () => ({
         notionalUsd: 75,
         dailySpendUsdBefore: 75,
@@ -429,6 +468,7 @@ describe("guarded crypto transaction service", () => {
       router,
       capabilities: brokerWithConsumedCapability(initialRequest),
       pendingIntents,
+      recordReviewedAction: async () => undefined,
       resolveTrustedFacts: async () => ({
         notionalUsd: 25,
         dailySpendUsdBefore: 10,
@@ -447,6 +487,7 @@ describe("guarded crypto transaction service", () => {
       router,
       capabilities: brokerWithConsumedCapability(refreshRequest),
       pendingIntents,
+      recordReviewedAction: async () => undefined,
       resolveTrustedFacts: async () => ({
         notionalUsd: 25,
         dailySpendUsdBefore: 10,
@@ -490,6 +531,7 @@ describe("guarded crypto transaction service", () => {
       router: { execute: async () => adapterResult() },
       capabilities: brokerWithConsumedCapability(input),
       pendingIntents,
+      recordReviewedAction: async () => undefined,
       resolveTrustedFacts: async () => ({
         notionalUsd: 25,
         dailySpendUsdBefore: 10,
@@ -521,6 +563,7 @@ describe("guarded crypto transaction service", () => {
       router: { execute: async () => adapterResult() },
       capabilities: brokerWithConsumedCapability(nextInput),
       pendingIntents,
+      recordReviewedAction: async () => undefined,
       resolveTrustedFacts: async () => ({
         notionalUsd: 25,
         dailySpendUsdBefore: 10,
@@ -542,5 +585,109 @@ describe("guarded crypto transaction service", () => {
       "cw_sui",
       expiring.pendingIntent?.id ?? "missing",
     )).toMatchObject({ state: "expired", revision: 2 });
+  });
+
+  test("reconciles only exact wallet-reported Sui metadata without claiming chain verification", async () => {
+    const input = request();
+    const pendingIntents = pendingStore();
+    const service = new MatterhornCryptoTransactionService({
+      router: { execute: async () => adapterResult() },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents,
+      recordReviewedAction: async () => undefined,
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 25,
+        dailySpendUsdBefore: 10,
+        weeklySpendUsdBefore: 20,
+        projectedReserveUsd: 75,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 1,
+        regionCode: "ch",
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    const prepared = await service.prepare(input);
+    const id = prepared.pendingIntent?.id ?? "missing";
+    const digest = "3".repeat(44);
+    const receiptInput = {
+      workspaceId: "ws_alpha",
+      ownerId: "account_alpha",
+      coworkerId: "cw_sui",
+      id,
+      expectedRevision: 1,
+      status: "submitted" as const,
+      publicId: digest,
+      transactionHash: digest,
+      blockHash: null,
+      network: "sui:testnet",
+      signer: SENDER,
+      operation: prepared.intent.operation,
+      authorizedArgumentsHash: prepared.intent.authorizedArgumentsHash,
+    };
+    const reconciled = pendingIntents.reconcileWalletReceipt(receiptInput);
+    expect(reconciled).toMatchObject({
+      revision: 2,
+      state: "submitted",
+      receipt: {
+        intentHash: prepared.intent.intentHash,
+        protocol: "sui",
+        network: "sui:testnet",
+        status: "submitted",
+        publicId: digest,
+        transactionHash: digest,
+        blockHash: null,
+        verification: {
+          kind: "wallet_reported_public_metadata",
+          chainVerified: false,
+        },
+      },
+    });
+    expect(reconciled.receipt?.evidenceHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(pendingIntents.reconcileWalletReceipt(receiptInput)).toEqual(reconciled);
+    expect(pendingIntents.get("ws_alpha", "account_other", "cw_sui", id)).toBeNull();
+  });
+
+  test("rejects wallet receipt mutation and preserves the pending review", async () => {
+    const input = request();
+    const pendingIntents = pendingStore();
+    const service = new MatterhornCryptoTransactionService({
+      router: { execute: async () => adapterResult() },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents,
+      recordReviewedAction: async () => undefined,
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 25,
+        dailySpendUsdBefore: 10,
+        weeklySpendUsdBefore: 20,
+        projectedReserveUsd: 75,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 1,
+        regionCode: "ch",
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    const prepared = await service.prepare(input);
+    const id = prepared.pendingIntent?.id ?? "missing";
+    expect(() => pendingIntents.reconcileWalletReceipt({
+      workspaceId: "ws_alpha",
+      ownerId: "account_alpha",
+      coworkerId: "cw_sui",
+      id,
+      expectedRevision: 1,
+      status: "submitted",
+      publicId: "3".repeat(44),
+      transactionHash: "4".repeat(44),
+      blockHash: null,
+      network: "sui:testnet",
+      signer: SENDER,
+      operation: prepared.intent.operation,
+      authorizedArgumentsHash: prepared.intent.authorizedArgumentsHash,
+    })).toThrow("pending_crypto_receipt_terms_mismatch");
+    expect(pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", id))
+      .toMatchObject({ state: "wallet_review", revision: 1, receipt: null });
   });
 });

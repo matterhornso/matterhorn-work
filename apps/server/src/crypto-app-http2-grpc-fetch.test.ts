@@ -211,6 +211,7 @@ describe("pinned Sui HTTP/2 gRPC-web fetch", () => {
     });
     for (const [url, init, code] of [
       [new URL("/sui.rpc.v2.TransactionExecutionService/ExecuteTransaction", ENDPOINT), grpcInit(), "crypto_app_grpc_method_not_allowed"],
+      [new URL("/sui.rpc.v2.LedgerService/GetTransaction", ENDPOINT), grpcInit(), "crypto_app_grpc_method_not_allowed"],
       [new URL(MATTERHORN_SUI_SIMULATE_GRPC_PATH, "https://attacker.example"), grpcInit(), "crypto_app_grpc_method_not_allowed"],
       [new URL(MATTERHORN_SUI_SIMULATE_GRPC_PATH, ENDPOINT), {
         ...grpcInit(), headers: { ...grpcInit().headers as Record<string, string>, authorization: "Bearer secret" },

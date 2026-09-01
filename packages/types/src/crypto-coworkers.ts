@@ -8,6 +8,7 @@ export const MATTERHORN_COWORKER_WATCH_VERSION = "matterhorn.coworker-watch.v1";
 export const MATTERHORN_COWORKER_INBOX_ITEM_VERSION = "matterhorn.coworker-inbox-item.v1";
 export const MATTERHORN_CRYPTO_INTENT_VERSION = "matterhorn.crypto-intent.v1";
 export const MATTERHORN_POLICY_DECISION_VERSION = "matterhorn.policy-decision.v1";
+export const MATTERHORN_CRYPTO_PUBLIC_RECEIPT_VERSION = "matterhorn.crypto-public-receipt.v1";
 export const MATTERHORN_EVIDENCE_BUNDLE_VERSION = "matterhorn.evidence-bundle.v1";
 export const MATTERHORN_WALRUS_PROOF_VERSION = "matterhorn.walrus-proof.v1";
 
@@ -416,6 +417,23 @@ export type MatterhornPolicyDecision = {
     observed: string;
     passed: boolean;
   }>;
+};
+
+export type MatterhornCryptoPublicReceipt = {
+  version: typeof MATTERHORN_CRYPTO_PUBLIC_RECEIPT_VERSION;
+  intentHash: string;
+  protocol: "sui" | "hyperliquid" | "bittensor" | "polymarket";
+  network: string;
+  status: "submitted" | "confirmed" | "failed";
+  publicId: string;
+  transactionHash: string | null;
+  blockHash: string | null;
+  observedAt: string;
+  verification: {
+    kind: "wallet_reported_public_metadata" | "public_chain";
+    chainVerified: boolean;
+  };
+  evidenceHash: string;
 };
 
 export type MatterhornWalrusProof = {
@@ -1136,6 +1154,59 @@ export function validateMatterhornPolicyDecision(value: unknown): string[] {
     && Array.isArray(value.reasonCodes)
     && (value.reasonCodes.length !== 1 || value.reasonCodes[0] !== "allow_prepare")) {
     issues.push("policy_decision_allow_inconsistent");
+  }
+  return [...new Set(issues)];
+}
+
+export function validateMatterhornCryptoPublicReceipt(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) return ["crypto_public_receipt_not_object"];
+  if (!hasOnlyKeys(value, [
+    "version",
+    "intentHash",
+    "protocol",
+    "network",
+    "status",
+    "publicId",
+    "transactionHash",
+    "blockHash",
+    "observedAt",
+    "verification",
+    "evidenceHash",
+  ])) issues.push("crypto_public_receipt_unknown_field");
+  if (value.version !== MATTERHORN_CRYPTO_PUBLIC_RECEIPT_VERSION) {
+    issues.push("crypto_public_receipt_version_invalid");
+  }
+  const publicText = (text: unknown, maximum: number) => typeof text === "string"
+    && text.trim().length > 0
+    && text.length <= maximum
+    && !/[\u0000-\u001F\u007F]/.test(text);
+  const hash = (candidate: unknown) => typeof candidate === "string" && /^[a-f0-9]{64}$/.test(candidate);
+  if (!hash(value.intentHash)) issues.push("crypto_public_receipt_intent_hash_invalid");
+  if (!hash(value.evidenceHash)) issues.push("crypto_public_receipt_evidence_hash_invalid");
+  if (!["sui", "hyperliquid", "bittensor", "polymarket"].includes(String(value.protocol))) {
+    issues.push("crypto_public_receipt_protocol_invalid");
+  }
+  if (!publicText(value.network, 160)) issues.push("crypto_public_receipt_network_invalid");
+  if (!["submitted", "confirmed", "failed"].includes(String(value.status))) {
+    issues.push("crypto_public_receipt_status_invalid");
+  }
+  if (!publicText(value.publicId, 256)) issues.push("crypto_public_receipt_public_id_invalid");
+  for (const key of ["transactionHash", "blockHash"]) {
+    if (value[key] !== null && !publicText(value[key], 256)) {
+      issues.push(`crypto_public_receipt_${key}_invalid`);
+    }
+  }
+  if (typeof value.observedAt !== "string" || !Number.isFinite(Date.parse(value.observedAt))) {
+    issues.push("crypto_public_receipt_observed_at_invalid");
+  }
+  if (!isRecord(value.verification)
+    || !hasOnlyKeys(value.verification, ["kind", "chainVerified"])
+    || !["wallet_reported_public_metadata", "public_chain"].includes(String(value.verification.kind))
+    || typeof value.verification.chainVerified !== "boolean"
+    || (value.verification.kind === "public_chain") !== value.verification.chainVerified
+    || (value.status === "confirmed" && !value.verification.chainVerified)) {
+    issues.push("crypto_public_receipt_verification_invalid");
   }
   return [...new Set(issues)];
 }

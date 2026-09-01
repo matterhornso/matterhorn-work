@@ -1,6 +1,6 @@
 # Matterhorn Guarded Crypto Coworkers
 
-Status: Phase 1 certification and account-safe gateway foundation. All runtime switches still default to `off`; no production adapter traffic is enabled by this work.
+Status: Phases 1–2 backend foundations and the first Phase 3 wallet-review boundary. All runtime switches still default to `off`; no production adapter traffic is enabled by this work.
 
 ## Product boundary
 
@@ -33,6 +33,7 @@ The public types are exported from `@matterhorn-work/types/crypto-coworkers`:
 - `matterhorn.coworker-profile.v1`
 - `matterhorn.crypto-intent.v1`
 - `matterhorn.policy-decision.v1`
+- `matterhorn.crypto-public-receipt.v1`
 - `matterhorn.evidence-bundle.v1`
 - `matterhorn.walrus-proof.v1`
 
@@ -60,7 +61,7 @@ The account-safe catalog service returns only the current certified manifest pro
 
 Signed test-harness contracts now define testnet-only Sui balance/transfer-preview actions and Hyperliquid market/orderbook/account/order-preview actions. They use closed input and model-facing output schemas, map every action to a compatible guarded tool, and never contain production publisher keys or automatic registration. Their offline router fixtures deliberately include private and malicious extra fields to prove projection removes them.
 
-The first-party executor can now read Sui balance/checkpoint data and Hyperliquid market, orderbook, and account data through DNS-pinned, TLS-verified transports. Hyperliquid order preparation refreshes testnet market definitions, book, margin state, lot precision, leverage, and slippage before producing a short-lived hash-bound wallet-review reference; it never calls the exchange endpoint. Sui transfer preparation uses the official transaction builder and a binary gRPC-web client over a pinned HTTP/2 socket. The exact transport allowlist is `StateService/GetBalance`, `StateService/GetCoinInfo`, `LedgerService/GetServiceInfo`, and `TransactionExecutionService/SimulateTransaction`; `ExecuteTransaction`, signing, and every other gRPC method fail before dialing. Successful simulations return exact terms, a 15-second expiry, gas estimate, simulation hash, and chain version without transaction bytes or signatures. Hyperliquid and Sui public reads have been verified against their pinned live testnet transports. The executor is reachable from scheduled coworkers only in fully enforced mode, through the certified router and a single-use read capability; all production modes still default to `off`.
+The first-party executor can now read Sui balance/checkpoint data and Hyperliquid market, orderbook, and account data through DNS-pinned, TLS-verified transports. Hyperliquid order preparation refreshes testnet market definitions, book, margin state, lot precision, leverage, and slippage before producing a short-lived hash-bound wallet-review reference; it never calls the exchange endpoint. Sui transfer preparation uses the official transaction builder and a binary gRPC-web client over a pinned HTTP/2 socket. The exact transport allowlist is `StateService/GetBalance`, `StateService/GetCoinInfo`, `LedgerService/GetServiceInfo`, and `TransactionExecutionService/SimulateTransaction`; `ExecuteTransaction`, `GetTransaction`, signing, and every other gRPC method fail before dialing. Successful simulations return exact terms, a 15-second expiry, gas estimate, simulation hash, and chain version without transaction bytes or signatures. Hyperliquid and Sui public reads have been verified against their pinned live testnet transports. The executor is reachable from scheduled coworkers only in fully enforced mode, through the certified router and a single-use read capability; all production modes still default to `off`.
 
 ### Operator testnet certification
 
@@ -136,7 +137,8 @@ Exit: the user can operate a coworker through chat, see its allowed/approval/pro
 - Canonical `crypto-intent.v1` production from certified Sui and Hyperliquid adapter outputs is complete. The compiler cross-checks request and result terms, rejects stale simulations, hash-binds exact terms and policy, and regenerates only wallet-review-only v2 handoffs.
 - Policy intersection across platform, organization, user, coworker, app, run, and call is complete at the guarded server boundary. Static denials occur before adapter egress; a wallet handoff additionally requires an exact durable single-use capability proof and trusted economic/compliance facts.
 - Certified Sui and Hyperliquid pending-review persistence and protocol-aware freshness regeneration are complete at the backend boundary. Reviews are exact-connection bound, auto-expire, are cancelled when coworker authority changes, and can be regenerated only through a new guarded run with identical canonical terms.
-- Account-safe wallet-review routes and public-receipt reconciliation.
+- Account-safe list, inspect, cancel, and public-receipt routes are complete at the backend boundary. They fetch the server-owned intent, require the exact owner/coworker/workspace, bind the connected-wallet metadata to the exact network, signer, operation, authorized arguments, guarded run, policy, and simulation, and reject secrets and raw signatures.
+- Sui receipt digests are currently labeled `wallet_reported_public_metadata` with `chainVerified: false`. The pinned transport deliberately excludes `GetTransaction`; independent chain confirmation requires a separately reviewed allowlist expansion and is not implied by wallet metadata.
 - Wallet review, rejection, expiry, tamper invalidation, regeneration, submission, and public-receipt reconciliation.
 - Sui first, then Hyperliquid, Bittensor, and Polymarket.
 

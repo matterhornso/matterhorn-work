@@ -379,6 +379,7 @@ import {
 } from "./crypto-coworker-runtime.js";
 import { createGuardedCoworkerWatchExecutor } from "./crypto-coworker-guarded-watch-executor.js";
 import { MatterhornCoworkerWatchRunner } from "./crypto-coworker-watch-runner.js";
+import type { MatterhornPendingCryptoIntent } from "./crypto-pending-intent-store.js";
 import { MatterhornCoworkerStoreError } from "./crypto-coworker-store.js";
 import {
   MatterhornCoworkerError,
@@ -712,13 +713,11 @@ function publicReviewedActionReceiptReference(value: unknown): string {
   return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
 
-async function reconcileReviewedActionReceipt(input: {
+async function assertReviewedActionRunReceipt(input: {
   guardedRuntime: MatterhornGuardedAgentRuntime;
   workspaceId: string;
-  binding: ReviewedActionReceiptBinding | null;
-  publicReceipt: unknown;
+  binding: ReviewedActionReceiptBinding;
 }): Promise<void> {
-  if (!input.binding) return;
   const existing = await input.guardedRuntime.receipts.get(input.workspaceId, input.binding.handoff.runId);
   if (!existing) {
     throw new ApiError(409, "reviewed_action_run_receipt_not_found", "The wallet receipt is not bound to a run in this workspace.");
@@ -735,6 +734,20 @@ async function reconcileReviewedActionReceipt(input: {
       "The wallet receipt does not match an action prepared by this guarded run.",
     );
   }
+}
+
+async function reconcileReviewedActionReceipt(input: {
+  guardedRuntime: MatterhornGuardedAgentRuntime;
+  workspaceId: string;
+  binding: ReviewedActionReceiptBinding | null;
+  publicReceipt: unknown;
+}): Promise<void> {
+  if (!input.binding) return;
+  await assertReviewedActionRunReceipt({
+    guardedRuntime: input.guardedRuntime,
+    workspaceId: input.workspaceId,
+    binding: input.binding,
+  });
   await input.guardedRuntime.receipts.addReviewedAction({
     runId: input.binding.handoff.runId,
     intentHash: input.binding.handoff.intentHash,
@@ -2825,6 +2838,19 @@ function coworkerInboxItemAccountView(item: MatterhornCoworkerInboxItem) {
   return view;
 }
 
+function pendingCryptoIntentAccountView(item: MatterhornPendingCryptoIntent) {
+  const { ownerId: _ownerId, policyDecision: _policyDecision, ...view } = structuredClone(item);
+  return {
+    ...view,
+    policy: {
+      decision: item.policyDecision.decision,
+      reasonCodes: [...item.policyDecision.reasonCodes],
+      limits: structuredClone(item.policyDecision.limits),
+      evaluatedAt: item.policyDecision.evaluatedAt,
+    },
+  };
+}
+
 function coworkerRunBinding(profile: MatterhornCoworkerProfile): MatterhornCoworkerRunBinding {
   return {
     id: profile.id,
@@ -2968,6 +2994,34 @@ function coworkerApiError(error: unknown): ApiError {
   return error instanceof ApiError
     ? error
     : new ApiError(500, "coworker_internal_error", "Coworker service is unavailable.");
+}
+
+function pendingCryptoIntentApiError(error: unknown): ApiError {
+  const code = error instanceof Error ? error.message : "";
+  if (code === "pending_crypto_intent_not_found") {
+    return new ApiError(404, code, "Wallet review not found.");
+  }
+  if (code === "pending_crypto_intent_revision_conflict") {
+    return new ApiError(409, code, "Wallet review changed; retry with the latest revision.");
+  }
+  if (code === "pending_crypto_intent_expired") {
+    return new ApiError(409, code, "This wallet review expired and must be regenerated.");
+  }
+  if (code === "pending_crypto_intent_transition_invalid"
+    || code === "pending_crypto_receipt_conflict") {
+    return new ApiError(409, code, "This wallet review can no longer accept that state change.");
+  }
+  if (code === "pending_crypto_receipt_terms_mismatch"
+    || code === "pending_crypto_receipt_invalid"
+    || code === "pending_crypto_receipt_protocol_unsupported") {
+    return new ApiError(400, code, "Public receipt metadata does not match the reviewed wallet terms.");
+  }
+  if (code === "pending_crypto_intent_invalid") {
+    return new ApiError(500, "pending_crypto_intent_integrity_error", "Wallet review state failed integrity validation.");
+  }
+  return error instanceof ApiError
+    ? error
+    : new ApiError(500, "pending_crypto_intent_internal_error", "Wallet review state is unavailable.");
 }
 
 const MATTERHORN_SESSION_COOKIE = "mh_session";
@@ -9218,6 +9272,156 @@ function createRoutes(
       return noStoreJsonResponse({ mode: coworkerRuntime.mode, item: coworkerInboxItemAccountView(item) });
     } catch (error) {
       throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/coworkers/:coworkerId/wallet-intents", "client", async (ctx) => {
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const coworker = coworkerRuntime.coworkers.get(workspace.id, ownerId, ctx.params.coworkerId);
+      if (!coworker) throw new ApiError(404, "coworker_not_found", "Coworker not found.");
+      const items = guardedRuntime.pendingCryptoIntents
+        .list(workspace.id, ownerId, coworker.id)
+        .map(pendingCryptoIntentAccountView);
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, items });
+    } catch (error) {
+      throw pendingCryptoIntentApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/coworkers/:coworkerId/wallet-intents/:intentId", "client", async (ctx) => {
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const coworker = coworkerRuntime.coworkers.get(workspace.id, ownerId, ctx.params.coworkerId);
+      if (!coworker) throw new ApiError(404, "coworker_not_found", "Coworker not found.");
+      const item = guardedRuntime.pendingCryptoIntents.get(
+        workspace.id,
+        ownerId,
+        coworker.id,
+        ctx.params.intentId,
+      );
+      if (!item) throw new ApiError(404, "pending_crypto_intent_not_found", "Wallet review not found.");
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, item: pendingCryptoIntentAccountView(item) });
+    } catch (error) {
+      throw pendingCryptoIntentApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/coworkers/:coworkerId/wallet-intents/:intentId/cancel", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const coworker = coworkerRuntime.coworkers.get(workspace.id, ownerId, ctx.params.coworkerId);
+      if (!coworker) throw new ApiError(404, "coworker_not_found", "Coworker not found.");
+      const body = await readJsonBody(ctx.request, 4_096, "Wallet review cancellation");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => key !== "expectedRevision")
+        || !Number.isSafeInteger(body.expectedRevision)
+        || (body.expectedRevision as number) < 1) {
+        throw new ApiError(400, "pending_crypto_intent_cancel_invalid", "Wallet review cancellation input is invalid.");
+      }
+      const item = guardedRuntime.pendingCryptoIntents.transition({
+        workspaceId: workspace.id,
+        ownerId,
+        coworkerId: coworker.id,
+        id: ctx.params.intentId,
+        expectedRevision: body.expectedRevision as number,
+        nextState: "cancelled",
+      });
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, item: pendingCryptoIntentAccountView(item) });
+    } catch (error) {
+      throw pendingCryptoIntentApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/coworkers/:coworkerId/wallet-intents/:intentId/receipt", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const coworker = coworkerRuntime.coworkers.get(workspace.id, ownerId, ctx.params.coworkerId);
+      if (!coworker) throw new ApiError(404, "coworker_not_found", "Coworker not found.");
+      const body = await readJsonBody(ctx.request, 16_384, "Wallet public receipt");
+      const keys = [
+        "expectedRevision", "status", "publicId", "transactionHash", "blockHash",
+        "network", "signer", "operation", "authorizedArgumentsHash",
+      ];
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => !keys.includes(key))
+        || keys.some((key) => !Object.hasOwn(body, key))
+        || !Number.isSafeInteger(body.expectedRevision)
+        || (body.expectedRevision as number) < 1
+        || (body.status !== "submitted" && body.status !== "failed")
+        || typeof body.publicId !== "string"
+        || (body.transactionHash !== null && typeof body.transactionHash !== "string")
+        || (body.blockHash !== null && typeof body.blockHash !== "string")
+        || typeof body.network !== "string"
+        || (body.signer !== null && typeof body.signer !== "string")
+        || typeof body.operation !== "string"
+        || typeof body.authorizedArgumentsHash !== "string") {
+        throw new ApiError(400, "pending_crypto_receipt_invalid", "Wallet public receipt input is invalid.");
+      }
+      const forbidden = findForbiddenUnifiedCryptoCredentialInput(body);
+      if (forbidden) {
+        throw new ApiError(
+          400,
+          "pending_crypto_receipt_secret_rejected",
+          "Wallet receipts may contain public transaction metadata only; signatures and credentials are rejected.",
+        );
+      }
+      const current = guardedRuntime.pendingCryptoIntents.get(
+        workspace.id,
+        ownerId,
+        coworker.id,
+        ctx.params.intentId,
+      );
+      if (!current) throw new ApiError(404, "pending_crypto_intent_not_found", "Wallet review not found.");
+      const binding: ReviewedActionReceiptBinding = {
+        handoff: current.reviewedAction,
+        receiptIntentHash: current.reviewedAction.intentHash,
+      };
+      await assertReviewedActionRunReceipt({ guardedRuntime, workspaceId: workspace.id, binding });
+      const item = guardedRuntime.pendingCryptoIntents.reconcileWalletReceipt({
+        workspaceId: workspace.id,
+        ownerId,
+        coworkerId: coworker.id,
+        id: current.id,
+        expectedRevision: body.expectedRevision as number,
+        status: body.status,
+        publicId: body.publicId,
+        transactionHash: body.transactionHash,
+        blockHash: body.blockHash,
+        network: body.network,
+        signer: body.signer,
+        operation: body.operation,
+        authorizedArgumentsHash: body.authorizedArgumentsHash,
+      });
+      await reconcileReviewedActionReceipt({
+        guardedRuntime,
+        workspaceId: workspace.id,
+        binding,
+        publicReceipt: item.receipt,
+      });
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, item: pendingCryptoIntentAccountView(item) });
+    } catch (error) {
+      throw pendingCryptoIntentApiError(error);
     }
   });
 

@@ -5,9 +5,24 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, test } from "bun:test";
 
+import type {
+  MatterhornAgentPrivacyPreflightResponse,
+} from "@matterhorn-work/types/guarded-agent-runtime";
+import type {
+  MatterhornCryptoAppResult,
+  MatterhornPolicyDecision,
+} from "@matterhorn-work/types/crypto-coworkers";
+
+import { MatterhornAgentRunReceiptStore } from "./agent-run-receipts.js";
+import {
+  compileCertifiedCryptoIntent,
+  cryptoIntentToReviewedActionHandoffV2,
+} from "./crypto-transaction-coordinator.js";
+import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
 import { startServer } from "./server.js";
 import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
 import { MatterhornCoworkers } from "./crypto-coworkers.js";
+import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 import type { ServerConfig } from "./types.js";
 
 type Served = { port: number; stop: (closeActiveConnections?: boolean) => void | Promise<void> };
@@ -26,6 +41,7 @@ const ENV_KEYS = [
   "MATTERHORN_COWORKER_POLICY_VERSION",
   "MATTERHORN_COWORKER_DB",
   "MATTERHORN_CRYPTO_APP_GATEWAY_MODE",
+  "MATTERHORN_GUARDED_RUNTIME_DB",
 ] as const;
 const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
 const roots: string[] = [];
@@ -80,7 +96,9 @@ async function boot(mode: "off" | "internal") {
   process.env.MATTERHORN_COWORKER_MODE = mode;
   process.env.MATTERHORN_COWORKER_POLICY_VERSION = "coworker-policy-1";
   const coworkerDb = join(root, "coworkers.db");
+  const guardedDb = join(root, "guarded-runtime.db");
   process.env.MATTERHORN_COWORKER_DB = coworkerDb;
+  process.env.MATTERHORN_GUARDED_RUNTIME_DB = guardedDb;
   process.env.MATTERHORN_CRYPTO_APP_GATEWAY_MODE = "off";
   const server = await startServer(config(await freePort(), root)) as Served;
   let stopped = false;
@@ -90,7 +108,7 @@ async function boot(mode: "off" | "internal") {
     await server.stop(true);
   };
   stops.push(stop);
-  return { base: `http://127.0.0.1:${server.port}`, coworkerDb, stop };
+  return { base: `http://127.0.0.1:${server.port}`, coworkerDb, guardedDb, stop };
 }
 
 async function request(base: string, path: string, options: {
@@ -180,6 +198,151 @@ function watchCoworkerInput() {
     automaticAuthorities: ["read", "watch"],
     limits: { ...profile.limits, maxActiveWatches: 1 },
   };
+}
+
+function transactionCoworkerInput() {
+  const profile = coworkerInput();
+  return {
+    ...profile,
+    name: "Sui wallet reviewer",
+    mission: "Prepare exact Sui transfer terms for connected-wallet review.",
+    allowedActionIds: ["sui_transfer_preview"],
+    automaticAuthorities: ["read", "prepare"],
+    limits: { ...profile.limits, maxPrepareCallsPerFamily: 1 },
+  };
+}
+
+function certifiedSuiResult(now: Date): MatterhornCryptoAppResult {
+  return {
+    version: "matterhorn.crypto-app-result.v1",
+    app: {
+      id: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      connectionId: "cxc_sui_route",
+    },
+    action: { id: "sui_transfer_preview", access: "prepare", network: "sui:testnet" },
+    timing: {
+      startedAt: new Date(now.getTime() - 300).toISOString(),
+      completedAt: new Date(now.getTime() - 100).toISOString(),
+      durationMs: 200,
+    },
+    observation: {
+      source: "certified Sui testnet simulation",
+      observedAt: new Date(now.getTime() - 200).toISOString(),
+      blockOrVersion: "checkpoint:route-test",
+      ageMs: 100,
+      freshnessMaxAgeMs: 15_000,
+    },
+    provenance: {
+      trust: "untrusted_external",
+      sanitization: "typed_projection",
+      evidenceReference: `sha256:${"e".repeat(64)}`,
+    },
+    metering: { costMicros: 0, reservationId: "reservation_route" },
+    result: {
+      preparedActionId: "sui_preview_route",
+      network: "sui:testnet",
+      sender: `0x${"1".repeat(64)}`,
+      recipient: `0x${"2".repeat(64)}`,
+      amountSui: "1.25",
+      estimatedGasMist: "1000",
+      simulationReference: `sha256:${"b".repeat(64)}`,
+      expiresAt: new Date(now.getTime() + 5 * 60_000).toISOString(),
+    },
+  };
+}
+
+async function seedPendingSuiIntent(input: {
+  guardedDb: string;
+  workspaceId: string;
+  ownerId: string;
+  coworkerId: string;
+  runId: string;
+}) {
+  const now = new Date();
+  const policyHash = "a".repeat(64);
+  const result = certifiedSuiResult(now);
+  const canonicalArguments = {
+    sender: `0x${"1".repeat(64)}`,
+    recipient: `0x${"2".repeat(64)}`,
+    amountSui: "1.25",
+  };
+  const intent = compileCertifiedCryptoIntent({
+    workspaceId: input.workspaceId,
+    runId: input.runId,
+    coworkerId: input.coworkerId,
+    policyHash,
+    canonicalRequestArguments: canonicalArguments,
+    result,
+    now,
+  });
+  const policyDecision: MatterhornPolicyDecision = {
+    version: "matterhorn.policy-decision.v1",
+    runId: intent.runId,
+    intentHash: intent.intentHash,
+    decision: "wallet_review_required",
+    reasonCodes: ["wallet_review_required"],
+    evaluatedPolicyHashes: [policyHash],
+    evaluatedAt: now.toISOString(),
+    limits: [],
+  };
+  const reviewedAction = cryptoIntentToReviewedActionHandoffV2(intent, policyDecision);
+  const state = new MatterhornGuardedRuntimeStateStore(input.guardedDb);
+  try {
+    const pending = new MatterhornPendingCryptoIntentStore(state).create({
+      workspaceId: input.workspaceId,
+      sessionId: `ses_${input.runId}`,
+      ownerId: input.ownerId,
+      coworkerId: input.coworkerId,
+      intent,
+      policyDecision,
+      reviewedAction,
+    });
+    const preflight: MatterhornAgentPrivacyPreflightResponse = {
+      version: "matterhorn.agent-privacy-preflight.v1",
+      requestHash: "c".repeat(64),
+      workspaceId: input.workspaceId,
+      sessionId: pending.sessionId,
+      requestedMode: "transaction",
+      effectiveMode: "transaction",
+      decision: "allow",
+      provider: {
+        id: "matterhorn-deterministic-runtime",
+        name: "Matterhorn deterministic runtime",
+        modelId: "none",
+        privacyStatus: "local_processing",
+        trainingUse: "none",
+        retentionDays: 0,
+        policyUrl: null,
+        dataLeavesMatterhorn: false,
+      },
+      detectedData: {
+        labels: ["wallet_private", "untrusted_external"],
+        categories: ["wallet_address", "transaction_intent"],
+        redactionCount: 0,
+      },
+      reason: "Exact transaction terms remain inside the guarded runtime until wallet review.",
+    };
+    const receipts = new MatterhornAgentRunReceiptStore(state);
+    await receipts.start({
+      runId: intent.runId,
+      workspaceId: input.workspaceId,
+      sessionId: pending.sessionId,
+      preflight,
+      consentUsed: false,
+      now,
+    });
+    await receipts.addReviewedAction({
+      runId: intent.runId,
+      intentHash: reviewedAction.intentHash,
+      policyHash: reviewedAction.policyHash,
+      simulationReference: reviewedAction.simulation.reference,
+      now,
+    });
+    return pending;
+  } finally {
+    state.close();
+  }
 }
 
 function watchInput() {
@@ -472,6 +635,126 @@ describe("crypto coworker HTTP boundary", () => {
       body: { expectedRevision: 2 },
     });
     expect(deletedWatch.payload).toEqual({ deleted: true });
+  });
+
+  test("exposes tenant-scoped wallet review and reconciles public metadata without submission authority", async () => {
+    const server = await boot("internal");
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "wallet-review-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "wallet-review-b@example.com", password: PASSWORD },
+    });
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
+    const workspaceB = String((await request(server.base, "/workspaces", { cookie: cookieB })).payload.items[0].id);
+    const created = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: transactionCoworkerInput(),
+    });
+    expect(created.response.status).toBe(201);
+    const coworkerId = String(created.payload.coworker.id);
+    const pending = await seedPendingSuiIntent({
+      guardedDb: server.guardedDb,
+      workspaceId: workspaceA,
+      ownerId: String(signupA.payload.user.id),
+      coworkerId,
+      runId: "run_route_receipt",
+    });
+
+    const list = await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/wallet-intents`,
+      { cookie: cookieA },
+    );
+    expect(list.response.status).toBe(200);
+    expect(list.response.headers.get("cache-control")).toBe("no-store");
+    expect(list.payload.items).toHaveLength(1);
+    expect(list.payload.items[0]).toMatchObject({
+      id: pending.id,
+      state: "wallet_review",
+      policy: { decision: "wallet_review_required" },
+    });
+    expect(list.payload.items[0].ownerId).toBeUndefined();
+    expect(list.payload.items[0].policyDecision).toBeUndefined();
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceB}/coworkers/${coworkerId}/wallet-intents`,
+      { cookie: cookieB },
+    )).response.status).toBe(404);
+
+    const digest = "3".repeat(44);
+    const receiptBody = {
+      expectedRevision: 1,
+      status: "submitted",
+      publicId: digest,
+      transactionHash: digest,
+      blockHash: null,
+      network: pending.intent.network,
+      signer: pending.intent.signer,
+      operation: pending.intent.operation,
+      authorizedArgumentsHash: pending.intent.authorizedArgumentsHash,
+    };
+    const rejectedSecret = await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/wallet-intents/${pending.id}/receipt`,
+      {
+        cookie: cookieA,
+        body: { ...receiptBody, publicId: "Use this private key: fake-secret-12345" },
+      },
+    );
+    expect(rejectedSecret.response.status).toBe(400);
+    expect(rejectedSecret.payload.code).toBe("pending_crypto_receipt_secret_rejected");
+
+    const reconciled = await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/wallet-intents/${pending.id}/receipt`,
+      { cookie: cookieA, body: receiptBody },
+    );
+    expect(reconciled.response.status).toBe(200);
+    expect(reconciled.payload.item).toMatchObject({
+      id: pending.id,
+      revision: 2,
+      state: "submitted",
+      receipt: {
+        publicId: digest,
+        transactionHash: digest,
+        verification: {
+          kind: "wallet_reported_public_metadata",
+          chainVerified: false,
+        },
+      },
+    });
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/wallet-intents/${pending.id}/receipt`,
+      { cookie: cookieA, body: receiptBody },
+    )).response.status).toBe(200);
+    const runReceipt = await request(
+      server.base,
+      `/workspace/${workspaceA}/agent-run-receipts/${pending.intent.runId}`,
+      { cookie: cookieA },
+    );
+    expect(runReceipt.payload.item.reviewedActions).toContainEqual(expect.objectContaining({
+      intentHash: pending.reviewedAction.intentHash,
+      publicReceipt: digest,
+    }));
+
+    const cancellable = await seedPendingSuiIntent({
+      guardedDb: server.guardedDb,
+      workspaceId: workspaceA,
+      ownerId: String(signupA.payload.user.id),
+      coworkerId,
+      runId: "run_route_cancel",
+    });
+    const cancelled = await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/wallet-intents/${cancellable.id}/cancel`,
+      { cookie: cookieA, body: { expectedRevision: 1 } },
+    );
+    expect(cancelled.response.status).toBe(200);
+    expect(cancelled.payload.item).toMatchObject({ state: "cancelled", revision: 2 });
   });
 
   test("purges durable coworkers before completing account deletion", async () => {
