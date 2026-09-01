@@ -368,6 +368,10 @@ import {
   compileMatterhornCryptoState,
 } from "./crypto-context-compiler.js";
 import {
+  createMatterhornCryptoAppRuntime,
+  type MatterhornCryptoAppRuntimeServices,
+} from "./crypto-app-runtime.js";
+import {
   buildMatterhornSessionPermissionProfile,
   matterhornPermissionProfileIsActive,
   normalizeMatterhornPermissionRules,
@@ -1248,6 +1252,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
+  const cryptoAppRuntime = createMatterhornCryptoAppRuntime();
   const drainEmailOutbox = createEmailOutboxDrainer(authStore, logger);
   let emailOutboxTask = drainEmailOutbox();
   const emailOutboxTimer = setInterval(() => {
@@ -1295,6 +1300,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     requestRateLimitStore,
     modelUsageStore,
     guardedRuntime,
+    cryptoAppRuntime,
     drainEmailOutbox,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
@@ -1535,6 +1541,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       await drainEmailOutbox();
       authStore.close();
       guardedRuntime.close();
+      cryptoAppRuntime.close();
       if (ownsRequestRateLimitStore) await requestRateLimitStore.close?.();
       await (server.stop as unknown as (closeActiveConnections?: boolean) => void | Promise<void>)(closeActiveConnections);
     },
@@ -7426,6 +7433,7 @@ function createRoutes(
   requestRateLimitStore: RequestRateLimitStore,
   modelUsageStore: MatterhornModelUsageStore,
   guardedRuntime: MatterhornGuardedAgentRuntime,
+  cryptoAppRuntime: MatterhornCryptoAppRuntimeServices,
   drainEmailOutbox: () => Promise<void>,
 ): Route[] {
   const routes: Route[] = [];

@@ -1,0 +1,91 @@
+import { generateKeyPairSync } from "node:crypto";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+import {
+  createMatterhornCryptoAppRuntime,
+  cryptoAppRuntimeDatabaseFiles,
+  MatterhornCryptoAppRuntimeConfigurationError,
+} from "./crypto-app-runtime.js";
+
+function environment(mode: "off" | "shadow" | "enforce" = "shadow") {
+  const root = mkdtempSync(join(tmpdir(), "matterhorn-crypto-runtime-"));
+  const keys = generateKeyPairSync("ed25519");
+  return {
+    MATTERHORN_CRYPTO_APP_GATEWAY_MODE: mode,
+    MATTERHORN_CRYPTO_APP_POLICY_VERSION: "policy-1",
+    MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON: JSON.stringify([{
+      publisherId: "matterhorn",
+      keyId: "publisher-1",
+      algorithm: "ed25519",
+      publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    }]),
+    MATTERHORN_CRYPTO_APP_REGISTRY_DB: join(root, "registry.db"),
+    MATTERHORN_CRYPTO_APP_CONNECTION_DB: join(root, "connections.db"),
+    ...(mode === "enforce" ? { MATTERHORN_GUARDED_RUNTIME_MODE: "enforce" } : {}),
+  } as NodeJS.ProcessEnv;
+}
+
+describe("crypto app runtime startup", () => {
+  test("performs no database access while the gateway is off", () => {
+    const env = environment("off");
+    const runtime = createMatterhornCryptoAppRuntime(env);
+    expect(runtime).toMatchObject({ mode: "off", catalog: null });
+    expect(cryptoAppRuntimeDatabaseFiles(env)).toEqual({
+      registryExists: false,
+      connectionsExist: false,
+    });
+    runtime.close();
+  });
+
+  test("opens an empty fail-closed catalog in shadow mode with public keys only", () => {
+    const env = environment("shadow");
+    const runtime = createMatterhornCryptoAppRuntime(env);
+    expect(runtime.mode).toBe("shadow");
+    expect(runtime.catalog?.list()).toEqual([]);
+    expect(cryptoAppRuntimeDatabaseFiles(env)).toEqual({
+      registryExists: true,
+      connectionsExist: true,
+    });
+    runtime.close();
+  });
+
+  test("requires an explicit policy version and trusted public keyring", () => {
+    const missingPolicy = environment();
+    delete missingPolicy.MATTERHORN_CRYPTO_APP_POLICY_VERSION;
+    expect(() => createMatterhornCryptoAppRuntime(missingPolicy))
+      .toThrowError(expect.objectContaining({ code: "crypto_app_policy_version_required" }));
+
+    const missingKeys = environment();
+    delete missingKeys.MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON;
+    expect(() => createMatterhornCryptoAppRuntime(missingKeys))
+      .toThrowError(expect.objectContaining({ code: "crypto_app_publisher_keys_required" }));
+  });
+
+  test("rejects private keys, malformed keyrings and duplicate publisher identities", () => {
+    const privateKeys = generateKeyPairSync("ed25519");
+    const privateEnv = environment();
+    privateEnv.MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON = JSON.stringify([{
+      publisherId: "matterhorn",
+      keyId: "publisher-1",
+      algorithm: "ed25519",
+      publicKeyPem: privateKeys.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    }]);
+    expect(() => createMatterhornCryptoAppRuntime(privateEnv))
+      .toThrowError(expect.objectContaining({ code: "crypto_app_private_key_forbidden" }));
+
+    const duplicateEnv = environment();
+    const entry = JSON.parse(duplicateEnv.MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON!)[0];
+    duplicateEnv.MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON = JSON.stringify([entry, entry]);
+    expect(() => createMatterhornCryptoAppRuntime(duplicateEnv))
+      .toThrowError(expect.objectContaining({ code: "crypto_app_publisher_key_duplicate" }));
+
+    const malformedEnv = environment();
+    malformedEnv.MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON = "not-json";
+    expect(() => createMatterhornCryptoAppRuntime(malformedEnv))
+      .toThrowError(MatterhornCryptoAppRuntimeConfigurationError);
+  });
+});
