@@ -1,6 +1,7 @@
 export const MATTERHORN_CRYPTO_APP_MANIFEST_VERSION = "matterhorn.crypto-app-manifest.v1";
 export const MATTERHORN_CRYPTO_APP_CONNECTION_VERSION = "matterhorn.crypto-app-connection.v1";
 export const MATTERHORN_CRYPTO_APP_RESULT_VERSION = "matterhorn.crypto-app-result.v1";
+export const MATTERHORN_CRYPTO_APP_CATALOG_VERSION = "matterhorn.crypto-app-catalog.v1";
 export const MATTERHORN_COWORKER_PROFILE_VERSION = "matterhorn.coworker-profile.v1";
 export const MATTERHORN_CRYPTO_INTENT_VERSION = "matterhorn.crypto-intent.v1";
 export const MATTERHORN_POLICY_DECISION_VERSION = "matterhorn.policy-decision.v1";
@@ -104,6 +105,60 @@ export type MatterhornCryptoAppConnectionView = Omit<MatterhornCryptoAppConnecti
     connected: boolean;
   };
   availability: "available" | "certification_unavailable";
+};
+
+export type MatterhornCryptoAppCatalogActionView = {
+  id: string;
+  title: string;
+  description: string;
+  access: MatterhornCryptoAppActionAccess;
+  risk: MatterhornCryptoAppActionRisk;
+  requiredScopes: string[];
+  requiresFreshness: boolean;
+  freshnessMaxAgeMs: number | null;
+  timeoutMs: number;
+  simulationRequired: boolean;
+  walletSubmissionOnly: true;
+  agentMaySubmit: false;
+};
+
+export type MatterhornCryptoAppCatalogSummary = {
+  version: typeof MATTERHORN_CRYPTO_APP_CATALOG_VERSION;
+  appId: string;
+  displayName: string;
+  description: string;
+  manifestRevision: string;
+  manifestHash: string;
+  certification: {
+    state: "certified_testnet" | "certified_mainnet";
+    reportHash: string;
+    runtimeReportHash: string;
+    policyVersion: string;
+    updatedAt: string;
+  };
+  authentication: {
+    type: MatterhornCryptoAppAuthentication["type"];
+    scopes: string[];
+    connectionRequired: boolean;
+  };
+  networks: Array<{
+    protocol: string;
+    chainId: string;
+    environment: MatterhornCryptoAppNetworkEnvironment;
+  }>;
+  actions: MatterhornCryptoAppCatalogActionView[];
+  support: {
+    privacyPolicyUrl: string;
+    statusUrl: string | null;
+  };
+};
+
+export type MatterhornCryptoAppCatalogDetail = MatterhornCryptoAppCatalogSummary & {
+  actionSchemas: Array<{
+    actionId: string;
+    inputSchema: Record<string, unknown>;
+    outputProjectionSchema: Record<string, unknown>;
+  }>;
 };
 
 export type MatterhornCryptoAppResult = {
