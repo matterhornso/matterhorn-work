@@ -55,3 +55,22 @@ const fixtureReport = validateCryptoAppFixture(manifest, {
 ```
 
 Submit the signed manifest through an invite-only Matterhorn developer account. A passing local report is only a fast feedback loop; it cannot register, certify, connect, execute, sign, relay, or submit anything.
+
+The optional account client follows the same narrow boundary:
+
+```ts
+import { createMatterhornCryptoDeveloperClient } from "@matterhorn-work/crypto-app-sdk";
+
+const developer = createMatterhornCryptoDeveloperClient(); // same-origin, signed-in account cookie
+await developer.registerPublisherKey({
+  keyId: "publisher-key-1",
+  algorithm: "ed25519",
+  publicKeyPem: yourPublicKeyPem,
+});
+const staged = await developer.submitTestnetManifest(manifest);
+if (staged.staticReport.passed) {
+  await developer.requestTestnetCertification(staged.appId, staged.manifestRevision);
+}
+```
+
+The client has no operator, registry-promotion, execution, wallet, credential, or mainnet methods. Keep the private signing key in your own HSM/KMS or offline signer.

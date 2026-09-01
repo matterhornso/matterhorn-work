@@ -19,6 +19,18 @@ export {
   type CryptoAppSchemaResult,
 } from "./json-schema.js";
 
+export {
+  createMatterhornCryptoDeveloperClient,
+  MatterhornCryptoDeveloperClientError,
+  type MatterhornCryptoAppConformanceFindingView,
+  type MatterhornCryptoAppConformanceReportView,
+  type MatterhornCryptoDeveloperClientOptions,
+  type MatterhornCryptoDeveloperKeyView,
+  type MatterhornCryptoDeveloperProfileView,
+  type MatterhornCryptoDeveloperSubmissionView,
+  type MatterhornCryptoGatewayMode,
+} from "./developer-client.js";
+
 type CanonicalValue = null | boolean | number | string | CanonicalValue[] | { [key: string]: CanonicalValue };
 
 export type MatterhornUnsignedCryptoAppManifest = Omit<MatterhornCryptoAppManifest, "version" | "publisher"> & {
