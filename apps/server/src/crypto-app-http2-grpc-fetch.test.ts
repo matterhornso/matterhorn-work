@@ -9,6 +9,7 @@ import {
   MATTERHORN_SUI_GET_BALANCE_GRPC_PATH,
   MATTERHORN_SUI_GET_COIN_INFO_GRPC_PATH,
   MATTERHORN_SUI_GET_SERVICE_INFO_GRPC_PATH,
+  MATTERHORN_SUI_GET_TRANSACTION_GRPC_PATH,
   MATTERHORN_SUI_SIMULATE_GRPC_PATH,
 } from "./crypto-app-http2-grpc-fetch.js";
 
@@ -146,6 +147,7 @@ describe("pinned Sui HTTP/2 gRPC-web fetch", () => {
       MATTERHORN_SUI_GET_COIN_INFO_GRPC_PATH,
       MATTERHORN_SUI_GET_SERVICE_INFO_GRPC_PATH,
       MATTERHORN_SUI_BATCH_GET_OBJECTS_GRPC_PATH,
+      MATTERHORN_SUI_GET_TRANSACTION_GRPC_PATH,
     ]) {
       const fake = harness();
       const fetcher = createPinnedSuiGrpcWebFetch({
@@ -213,7 +215,7 @@ describe("pinned Sui HTTP/2 gRPC-web fetch", () => {
     });
     for (const [url, init, code] of [
       [new URL("/sui.rpc.v2.TransactionExecutionService/ExecuteTransaction", ENDPOINT), grpcInit(), "crypto_app_grpc_method_not_allowed"],
-      [new URL("/sui.rpc.v2.LedgerService/GetTransaction", ENDPOINT), grpcInit(), "crypto_app_grpc_method_not_allowed"],
+      [new URL("/sui.rpc.v2.LedgerService/BatchGetTransactions", ENDPOINT), grpcInit(), "crypto_app_grpc_method_not_allowed"],
       [new URL(MATTERHORN_SUI_SIMULATE_GRPC_PATH, "https://attacker.example"), grpcInit(), "crypto_app_grpc_method_not_allowed"],
       [new URL(MATTERHORN_SUI_SIMULATE_GRPC_PATH, ENDPOINT), {
         ...grpcInit(), headers: { ...grpcInit().headers as Record<string, string>, authorization: "Bearer secret" },

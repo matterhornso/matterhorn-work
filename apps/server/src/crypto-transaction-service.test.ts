@@ -649,6 +649,137 @@ describe("guarded crypto transaction service", () => {
     expect(pendingIntents.get("ws_alpha", "account_other", "cw_sui", id)).toBeNull();
   });
 
+  test("promotes a wallet-reported Sui digest only after exact public-chain verification", async () => {
+    const input = request();
+    const pendingIntents = pendingStore();
+    const service = new MatterhornCryptoTransactionService({
+      router: { execute: async () => adapterResult() },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents,
+      recordReviewedAction: async () => undefined,
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 25,
+        dailySpendUsdBefore: 10,
+        weeklySpendUsdBefore: 20,
+        projectedReserveUsd: 75,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 1,
+        regionCode: "ch",
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    const prepared = await service.prepare(input);
+    const id = prepared.pendingIntent?.id ?? "missing";
+    const digest = "3".repeat(44);
+    const submitted = pendingIntents.reconcileWalletReceipt({
+      workspaceId: "ws_alpha",
+      ownerId: "account_alpha",
+      coworkerId: "cw_sui",
+      id,
+      expectedRevision: 1,
+      status: "submitted",
+      publicId: digest,
+      transactionHash: digest,
+      blockHash: null,
+      network: "sui:testnet",
+      signer: SENDER,
+      operation: prepared.intent.operation,
+      authorizedArgumentsHash: prepared.intent.authorizedArgumentsHash,
+    });
+    const confirmed = pendingIntents.reconcileVerifiedSuiReceipt({
+      workspaceId: "ws_alpha",
+      ownerId: "account_alpha",
+      coworkerId: "cw_sui",
+      id,
+      expectedRevision: submitted.revision,
+      verification: {
+        network: "sui:testnet",
+        digest,
+        status: "confirmed",
+        signer: SENDER,
+        recipient: RECIPIENT,
+        amountMist: "1250000000",
+        epoch: "912",
+        source: "sui.grpc",
+        observedAt: "2026-09-01T12:00:01.000Z",
+      },
+    });
+    expect(confirmed).toMatchObject({
+      revision: 3,
+      state: "confirmed",
+      receipt: {
+        status: "confirmed",
+        publicId: digest,
+        transactionHash: digest,
+        blockHash: null,
+        verification: { kind: "public_chain", chainVerified: true },
+      },
+    });
+    expect(confirmed.receipt?.evidenceHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  test("rejects forged Sui chain verification and preserves the submitted receipt", async () => {
+    const input = request();
+    const pendingIntents = pendingStore();
+    const service = new MatterhornCryptoTransactionService({
+      router: { execute: async () => adapterResult() },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents,
+      recordReviewedAction: async () => undefined,
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 25,
+        dailySpendUsdBefore: 10,
+        weeklySpendUsdBefore: 20,
+        projectedReserveUsd: 75,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 1,
+        regionCode: "ch",
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    const prepared = await service.prepare(input);
+    const id = prepared.pendingIntent?.id ?? "missing";
+    const digest = "3".repeat(44);
+    const submitted = pendingIntents.reconcileWalletReceipt({
+      workspaceId: "ws_alpha",
+      ownerId: "account_alpha",
+      coworkerId: "cw_sui",
+      id,
+      expectedRevision: 1,
+      status: "submitted",
+      publicId: digest,
+      transactionHash: digest,
+      blockHash: null,
+      network: "sui:testnet",
+      signer: SENDER,
+      operation: prepared.intent.operation,
+      authorizedArgumentsHash: prepared.intent.authorizedArgumentsHash,
+    });
+    expect(() => pendingIntents.reconcileVerifiedSuiReceipt({
+      workspaceId: "ws_alpha",
+      ownerId: "account_alpha",
+      coworkerId: "cw_sui",
+      id,
+      expectedRevision: submitted.revision,
+      verification: {
+        network: "sui:testnet",
+        digest,
+        status: "confirmed",
+        signer: SENDER,
+        recipient: `0x${"f".repeat(64)}`,
+        amountMist: "1250000000",
+        epoch: "912",
+        source: "sui.grpc",
+        observedAt: "2026-09-01T12:00:01.000Z",
+      },
+    })).toThrow("pending_crypto_receipt_chain_verification_mismatch");
+    expect(pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", id)).toEqual(submitted);
+  });
+
   test("rejects wallet receipt mutation and preserves the pending review", async () => {
     const input = request();
     const pendingIntents = pendingStore();

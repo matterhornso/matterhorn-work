@@ -380,6 +380,7 @@ import {
 import { createGuardedCoworkerWatchExecutor } from "./crypto-coworker-guarded-watch-executor.js";
 import { MatterhornCoworkerWatchRunner } from "./crypto-coworker-watch-runner.js";
 import type { MatterhornPendingCryptoIntent } from "./crypto-pending-intent-store.js";
+import type { MatterhornSuiVerifiedPublicTransaction } from "./sui-public-transaction-verifier.js";
 import { MatterhornCoworkerStoreError } from "./crypto-coworker-store.js";
 import {
   MatterhornCoworkerError,
@@ -9479,7 +9480,45 @@ function createRoutes(
         receiptIntentHash: current.reviewedAction.intentHash,
       };
       await assertReviewedActionRunReceipt({ guardedRuntime, workspaceId: workspace.id, binding });
-      const item = guardedRuntime.pendingCryptoIntents.reconcileWalletReceipt({
+      let verifiedSuiTransaction: MatterhornSuiVerifiedPublicTransaction | null = null;
+      if (current.intent.protocol === "sui"
+        && body.status === "submitted"
+        && cryptoAppRuntime.verifySuiTransaction) {
+        const recipient = current.intent.canonicalArguments.recipient;
+        const amountSui = current.intent.canonicalArguments.amountSui;
+        const signer = current.intent.signer;
+        if (typeof recipient !== "string"
+          || typeof amountSui !== "string"
+          || typeof signer !== "string"
+          || body.network !== current.intent.network
+          || body.signer !== signer
+          || body.operation !== current.intent.operation
+          || body.authorizedArgumentsHash !== current.intent.authorizedArgumentsHash
+          || body.transactionHash === null
+          || body.transactionHash !== body.publicId
+          || body.blockHash !== null) {
+          throw new ApiError(409, "pending_crypto_receipt_terms_mismatch", "The Sui wallet receipt does not match the reviewed intent.");
+        }
+        try {
+          verifiedSuiTransaction = await cryptoAppRuntime.verifySuiTransaction({
+            network: "sui:testnet",
+            digest: body.transactionHash,
+            signer,
+            operation: "transfer_sui",
+            recipient,
+            amountSui,
+            signal: ctx.request.signal,
+          });
+        } catch (error) {
+          const code = error instanceof Error ? error.message : "";
+          if (code !== "sui_public_transaction_not_found"
+            && code !== "sui_public_transaction_lookup_failed"
+            && code !== "sui_public_transaction_aborted") throw error;
+          // Persist the exact wallet-reported digest as unverified. A retry can
+          // promote it after the public fullnode observes the transaction.
+        }
+      }
+      let item = guardedRuntime.pendingCryptoIntents.reconcileWalletReceipt({
         workspaceId: workspace.id,
         ownerId,
         coworkerId: coworker.id,
@@ -9494,6 +9533,16 @@ function createRoutes(
         operation: body.operation,
         authorizedArgumentsHash: body.authorizedArgumentsHash,
       });
+      if (item.state === "submitted" && verifiedSuiTransaction) {
+        item = guardedRuntime.pendingCryptoIntents.reconcileVerifiedSuiReceipt({
+          workspaceId: workspace.id,
+          ownerId,
+          coworkerId: coworker.id,
+          id: item.id,
+          expectedRevision: item.revision,
+          verification: verifiedSuiTransaction,
+        });
+      }
       await reconcileReviewedActionReceipt({
         guardedRuntime,
         workspaceId: workspace.id,

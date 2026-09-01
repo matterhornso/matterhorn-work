@@ -13,12 +13,18 @@ import { cryptoCoworkerFeatureConfig, type MatterhornCryptoAppGatewayMode } from
 import { createFirstPartyCryptoAppExecutor } from "./first-party-crypto-app-executor.js";
 import { firstPartyCryptoAppProxyTool } from "./first-party-crypto-apps.js";
 import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
+import {
+  createPinnedSuiPublicTransactionVerifier,
+  type MatterhornSuiPublicTransactionVerifier,
+} from "./sui-public-transaction-verifier.js";
+import { SUI_GRPC_URLS } from "./tools/sui.js";
 
 export type MatterhornCryptoAppRuntimeServices = {
   mode: MatterhornCryptoAppGatewayMode;
   catalog: MatterhornCryptoAppCatalog | null;
   operator: MatterhornCryptoAppOperator | null;
   router: MatterhornCryptoAppAdapterRouter | null;
+  verifySuiTransaction: MatterhornSuiPublicTransactionVerifier | null;
   ready: boolean;
   purgeWorkspace(workspaceId: string): { connections: number; usage: number; circuits: number };
   close(): void;
@@ -106,6 +112,7 @@ export function createMatterhornCryptoAppRuntime(
       catalog: null,
       operator: null,
       router: null,
+      verifySuiTransaction: null,
       ready: true,
       purgeWorkspace: () => ({ connections: 0, usage: 0, circuits: 0 }),
       close: () => undefined,
@@ -136,6 +143,7 @@ export function createMatterhornCryptoAppRuntime(
     });
     const operator = new MatterhornCryptoAppOperator(registry);
     let router: MatterhornCryptoAppAdapterRouter | null = null;
+    let verifySuiTransaction: MatterhornSuiPublicTransactionVerifier | null = null;
     if (feature.cryptoAppGatewayMode === "enforce" && options.guardedRuntime) {
       const authorization = options.guardedRuntime.createCryptoAppAuthorization({
         resolveBinding: (input) => {
@@ -156,12 +164,16 @@ export function createMatterhornCryptoAppRuntime(
         operationalPolicy,
         executors: { matterhorn_sdk: createFirstPartyCryptoAppExecutor() },
       });
+      verifySuiTransaction = createPinnedSuiPublicTransactionVerifier({
+        endpoint: new URL(SUI_GRPC_URLS.testnet),
+      });
     }
     return {
       mode: feature.cryptoAppGatewayMode,
       catalog,
       operator,
       router,
+      verifySuiTransaction,
       ready: feature.cryptoAppGatewayMode !== "enforce" || Boolean(router),
       purgeWorkspace: (workspaceId) => {
         const connectionsPurged = connections.purgeWorkspace(workspaceId);

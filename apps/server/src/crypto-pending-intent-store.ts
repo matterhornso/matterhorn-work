@@ -70,7 +70,7 @@ const TRANSITIONS: Readonly<Record<MatterhornPendingCryptoIntentState, ReadonlyS
   wallet_approved: new Set(["submitted", "confirmed", "failed", "cancelled", "expired"]),
   cancelled: new Set(),
   expired: new Set(),
-  submitted: new Set(),
+  submitted: new Set(["confirmed", "failed"]),
   confirmed: new Set(),
   failed: new Set(),
 };
@@ -369,6 +369,7 @@ export class MatterhornPendingCryptoIntentStore {
         || (current.intent.protocol === "sui"
           && (input.transactionHash === null
             || input.transactionHash !== input.publicId
+            || input.blockHash !== null
             || !/^[1-9A-HJ-NP-Za-km-z]{20,128}$/.test(input.transactionHash)))) {
         throw new Error("pending_crypto_receipt_terms_mismatch");
       }
@@ -421,6 +422,131 @@ export class MatterhornPendingCryptoIntentStore {
         ...current,
         revision: current.revision + 1,
         state: input.status,
+        receipt,
+        updatedAt: now.toISOString(),
+      };
+      validateRecord(next);
+      restore(next);
+      return clone(next);
+    } catch (error) {
+      restore(current);
+      throw error;
+    }
+  }
+
+  reconcileVerifiedSuiReceipt(input: {
+    workspaceId: string;
+    ownerId: string;
+    coworkerId: string;
+    id: string;
+    expectedRevision: number;
+    verification: {
+      network: "sui:testnet";
+      digest: string;
+      status: "confirmed" | "failed";
+      signer: string;
+      recipient: string;
+      amountMist: string;
+      epoch: string | null;
+      source: "sui.grpc";
+      observedAt: string;
+    };
+  }): MatterhornPendingCryptoIntent {
+    const now = this.now();
+    const key = storageKey(input.workspaceId, input.id);
+    const stored = this.stateStore.take<MatterhornPendingCryptoIntent>(
+      "crypto_pending_intent",
+      key,
+      now.getTime(),
+    );
+    if (!stored) throw new Error("pending_crypto_intent_not_found");
+    const current = normalizeRecord(stored);
+    validateRecord(current);
+    const restore = (record: MatterhornPendingCryptoIntent) => this.stateStore.put({
+      kind: "crypto_pending_intent",
+      key,
+      workspaceId: record.workspaceId,
+      sessionId: record.sessionId,
+      value: record,
+      expiresAtMs: Date.parse(record.createdAt) + RETENTION_AFTER_CREATION_MS,
+      nowMs: now.getTime(),
+    });
+    try {
+      const canonical = current.intent.canonicalArguments;
+      const amountSui = typeof canonical.amountSui === "string" ? canonical.amountSui : "";
+      const recipient = typeof canonical.recipient === "string" ? canonical.recipient : "";
+      const [whole = "", fraction = ""] = amountSui.split(".");
+      const amountMist = /^(?:0|[1-9][0-9]*)$/.test(whole)
+        && /^\d{0,9}$/.test(fraction)
+        ? (BigInt(whole) * 1_000_000_000n + BigInt(fraction.padEnd(9, "0"))).toString()
+        : "";
+      const verification = input.verification;
+      if (current.workspaceId !== input.workspaceId
+        || current.ownerId !== input.ownerId
+        || current.coworkerId !== input.coworkerId) {
+        throw new Error("pending_crypto_intent_not_found");
+      }
+      if (current.revision !== input.expectedRevision) {
+        throw new Error("pending_crypto_intent_revision_conflict");
+      }
+      if (current.state !== "submitted"
+        || !current.receipt
+        || current.receipt.verification.kind !== "wallet_reported_public_metadata"
+        || current.intent.protocol !== "sui"
+        || current.intent.network !== verification.network
+        || current.intent.signer !== verification.signer
+        || current.intent.operation !== "transfer_sui"
+        || recipient !== verification.recipient
+        || amountMist !== verification.amountMist
+        || current.receipt.publicId !== verification.digest
+        || current.receipt.transactionHash !== verification.digest
+        || current.receipt.blockHash !== null
+        || !Number.isFinite(Date.parse(verification.observedAt))
+        || Date.parse(verification.observedAt) < Date.parse(current.receipt.observedAt)
+        || (verification.epoch !== null && !/^(?:0|[1-9][0-9]*)$/.test(verification.epoch))
+        || verification.source !== "sui.grpc") {
+        throw new Error("pending_crypto_receipt_chain_verification_mismatch");
+      }
+      if (!TRANSITIONS[current.state].has(verification.status)) {
+        throw new Error("pending_crypto_intent_transition_invalid");
+      }
+      const receiptMaterial = {
+        intentHash: current.intent.intentHash,
+        protocol: current.intent.protocol,
+        network: current.intent.network,
+        status: verification.status,
+        publicId: verification.digest,
+        transactionHash: verification.digest,
+        blockHash: null,
+        verification: {
+          source: verification.source,
+          observedAt: verification.observedAt,
+          epoch: verification.epoch,
+          signer: verification.signer,
+          recipient: verification.recipient,
+          amountMist: verification.amountMist,
+        },
+      };
+      const receipt: MatterhornCryptoPublicReceipt = {
+        version: MATTERHORN_CRYPTO_PUBLIC_RECEIPT_VERSION,
+        intentHash: current.intent.intentHash,
+        protocol: "sui",
+        network: current.intent.network,
+        status: verification.status,
+        publicId: verification.digest,
+        transactionHash: verification.digest,
+        blockHash: null,
+        observedAt: verification.observedAt,
+        verification: { kind: "public_chain", chainVerified: true },
+        evidenceHash: sha256(receiptMaterial),
+      };
+      if (validateMatterhornCryptoPublicReceipt(receipt).length > 0) {
+        throw new Error("pending_crypto_receipt_invalid");
+      }
+      const next: MatterhornPendingCryptoIntent = {
+        ...current,
+        revision: current.revision + 1,
+        state: verification.status,
         receipt,
         updatedAt: now.toISOString(),
       };
