@@ -106,6 +106,9 @@ importers:
       '@lexical/react':
         specifier: ^0.35.0
         version: 0.35.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(yjs@13.6.30)
+      '@matterhorn-work/crypto-app-sdk':
+        specifier: workspace:*
+        version: link:../../packages/crypto-app-sdk
       '@matterhorn-work/types':
         specifier: workspace:*
         version: link:../../packages/types
