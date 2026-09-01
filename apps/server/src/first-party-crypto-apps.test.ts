@@ -6,6 +6,11 @@ import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 
 import { getMatterhornCryptoTool } from "@matterhorn-work/types/crypto-action-registry";
+import {
+  createMatterhornHyperliquidTestnetFixturePack,
+  createMatterhornSuiTestnetFixturePack,
+  validateMatterhornCryptoProtocolFixturePack,
+} from "@matterhorn-work/crypto-app-sdk";
 
 import { MatterhornCryptoAppAdapterRouter } from "./crypto-app-adapter-router.js";
 import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
@@ -65,6 +70,20 @@ describe("Matterhorn first-party crypto app contracts", () => {
       expect(tool).toBeDefined();
       expect(tool?.access).toBe(action.access === "read" || action.access === "watch" ? "read" : "prepare");
     }
+  });
+
+  test("keeps public SDK fixture packs compatible with the certified first-party contracts", () => {
+    const apps = manifests();
+    const sui = apps.find((app) => app.appId === "matterhorn.sui-testnet")!;
+    const hyperliquid = apps.find((app) => app.appId === "matterhorn.hyperliquid-testnet")!;
+    expect(validateMatterhornCryptoProtocolFixturePack(
+      sui,
+      createMatterhornSuiTestnetFixturePack(),
+    ).passed).toBe(true);
+    expect(validateMatterhornCryptoProtocolFixturePack(
+      hyperliquid,
+      createMatterhornHyperliquidTestnetFixturePack(),
+    ).passed).toBe(true);
   });
 
   test("routes certified Sui and Hyperliquid fixtures with typed projection and no private payload leakage", async () => {

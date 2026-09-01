@@ -54,6 +54,20 @@ const fixtureReport = validateCryptoAppFixture(manifest, {
 });
 ```
 
+Reference Sui and Hyperliquid testnet fixture packs are also available for inert schema checks:
+
+```ts
+import {
+  createMatterhornSuiTestnetFixturePack,
+  validateMatterhornCryptoProtocolFixturePack,
+} from "@matterhorn-work/crypto-app-sdk";
+
+const pack = createMatterhornSuiTestnetFixturePack();
+const report = validateMatterhornCryptoProtocolFixturePack(manifest, pack);
+```
+
+Fixture packs contain no credentials or signing material and perform no I/O. They do not replace Matterhorn's live adversarial probes or testnet certification.
+
 Submit the signed manifest through an invite-only Matterhorn developer account. A passing local report is only a fast feedback loop; it cannot register, certify, connect, execute, sign, relay, or submit anything.
 
 The optional account client follows the same narrow boundary:
