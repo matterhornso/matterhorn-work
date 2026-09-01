@@ -30,6 +30,7 @@ export type GuardedRuntimeStateKind =
   | "crypto_app_reservation"
   | "crypto_pending_intent"
   | "crypto_evidence_record"
+  | "crypto_evidence_audit"
   | "receipt_index";
 
 type StateRow = {

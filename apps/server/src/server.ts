@@ -572,7 +572,10 @@ import {
   MatterhornGuardedAgentRuntime,
   type GuardedPromptAcceptance,
 } from "./guarded-agent-runtime.js";
-import { awsKmsEvidenceKeyManagerFromEnv } from "./aws-kms-evidence-key-manager.js";
+import {
+  awsKmsEvidenceKeyManagerFromEnv,
+  evidenceKmsRotationDaysFromEnv,
+} from "./aws-kms-evidence-key-manager.js";
 import type { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import {
   agentSecurityReceiptDirectory,
@@ -1316,6 +1319,9 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const cryptoEvidenceStore = evidenceKeyManager
     ? guardedRuntime.createCryptoEvidenceStore(evidenceKeyManager)
     : null;
+  const cryptoEvidenceRotationDays = cryptoEvidenceStore
+    ? evidenceKmsRotationDaysFromEnv(process.env)
+    : null;
   const cryptoAppRuntime = createMatterhornCryptoAppRuntime(process.env, { guardedRuntime });
   const coworkerRuntime = createMatterhornCoworkerRuntime(process.env, {
     onInvalidate: (input) => {
@@ -1377,9 +1383,31 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     logger.log("error", "Crypto evidence key expiry failed", unhandledErrorAttributes(error));
     return { checked: 0, destroyed: 0, failures: [] };
   }) ?? Promise.resolve({ checked: 0, destroyed: 0, failures: [] });
-  let cryptoEvidenceExpiryTask = expireCryptoEvidence();
+  const rotateCryptoEvidence = () => cryptoEvidenceStore?.rotateDue({
+    maxAgeMs: (cryptoEvidenceRotationDays ?? 90) * 24 * 60 * 60 * 1_000,
+  }).then((result) => {
+    if (result.failures.length > 0) {
+      logger.log("error", "Crypto evidence key rotation was incomplete", {
+        checked: result.checked,
+        rotated: result.rotated,
+        failures: result.failures.length,
+      });
+    }
+    return result;
+  }).catch((error) => {
+    logger.log("error", "Crypto evidence key rotation failed", unhandledErrorAttributes(error));
+    return { checked: 0, rotated: 0, failures: [] };
+  }) ?? Promise.resolve({ checked: 0, rotated: 0, failures: [] });
+  const maintainCryptoEvidence = async () => ({
+    expiry: await expireCryptoEvidence(),
+    rotation: await rotateCryptoEvidence(),
+  });
+  let cryptoEvidenceMaintenanceTask = maintainCryptoEvidence();
   const cryptoEvidenceExpiryTimer = cryptoEvidenceStore ? setInterval(() => {
-    cryptoEvidenceExpiryTask = expireCryptoEvidence();
+    cryptoEvidenceMaintenanceTask = cryptoEvidenceMaintenanceTask.then(
+      maintainCryptoEvidence,
+      maintainCryptoEvidence,
+    );
   }, 24 * 60 * 60 * 1_000) : null;
   cryptoEvidenceExpiryTimer?.unref?.();
   let accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
@@ -1660,7 +1688,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       reloadBaselineRefreshers.delete(config);
       modelUsageStore.close();
       await receiptExpiryTask;
-      await cryptoEvidenceExpiryTask;
+      await cryptoEvidenceMaintenanceTask;
       await accountDeletionRetryTask;
       await emailOutboxTask;
       await coworkerWatchTask;
@@ -3378,6 +3406,7 @@ async function processMatterhornAccountDeletionJob(input: {
         if (evidenceDeletion && evidenceDeletion.failures.length > 0) {
           throw new Error("workspace_evidence_key_purge_failed");
         }
+        input.guardedRuntime?.purgeWorkspace(workspaceId);
         input.cryptoAppRuntime?.purgeWorkspace(
           workspaceId,
         );

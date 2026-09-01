@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { DecryptCommand, GenerateDataKeyCommand } from "@aws-sdk/client-kms";
+import { DecryptCommand, GenerateDataKeyCommand, ReEncryptCommand } from "@aws-sdk/client-kms";
 import type { GenerateDataKeyCommandInput } from "@aws-sdk/client-kms";
 
 import {
   AwsKmsMatterhornEvidenceKeyManager,
   awsKmsEvidenceKeyManagerFromEnv,
+  evidenceKmsRotationDaysFromEnv,
 } from "./aws-kms-evidence-key-manager.js";
 
 describe("AWS KMS evidence key manager", () => {
@@ -80,6 +81,49 @@ describe("AWS KMS evidence key manager", () => {
     expect(JSON.stringify(decryptInput)).not.toContain("run-private");
   });
 
+  test("rotates a wrapped data key entirely inside KMS with the exact source context", async () => {
+    const rotatedSource = Uint8Array.from([7, 7, 7, 7]);
+    let reencryptInput: ReEncryptCommand["input"] | null = null;
+    const sourceKey = "arn:aws:kms:us-east-1:111122223333:key/source";
+    const destinationKey = "arn:aws:kms:us-east-1:111122223333:key/destination";
+    const manager = new AwsKmsMatterhornEvidenceKeyManager({
+      region: "us-east-1",
+      keyId: destinationKey,
+      client: {
+        send: async (command) => {
+          expect(command).toBeInstanceOf(ReEncryptCommand);
+          reencryptInput = structuredClone((command as ReEncryptCommand).input);
+          return {
+            CiphertextBlob: rotatedSource,
+            SourceKeyId: sourceKey,
+            KeyId: destinationKey,
+            $metadata: {},
+          };
+        },
+      },
+    });
+    const rotated = await manager.rotateDataKey({
+      workspaceId: "workspace-rotate",
+      runId: "run-rotate",
+      keyReference: sourceKey,
+      wrappedKey: Buffer.from([1, 2, 3]).toString("base64"),
+      keyContext: "d".repeat(64),
+    });
+    expect(rotated).toEqual({
+      keyReference: destinationKey,
+      wrappedKey: Buffer.from([7, 7, 7, 7]).toString("base64"),
+    });
+    expect([...rotatedSource]).toEqual([0, 0, 0, 0]);
+    expect(reencryptInput).toMatchObject({
+      SourceKeyId: sourceKey,
+      DestinationKeyId: destinationKey,
+    });
+    const capturedReencryptInput = reencryptInput as unknown as ReEncryptCommand["input"];
+    expect(capturedReencryptInput.SourceEncryptionContext).toEqual(capturedReencryptInput.DestinationEncryptionContext);
+    expect(JSON.stringify(reencryptInput)).not.toContain("workspace-rotate");
+    expect(JSON.stringify(reencryptInput)).not.toContain("run-rotate");
+  });
+
   test("fails closed on a mismatched KMS key and requires complete production configuration", async () => {
     const plaintext = Uint8Array.from({ length: 32 }, () => 5);
     const manager = new AwsKmsMatterhornEvidenceKeyManager({
@@ -108,5 +152,10 @@ describe("AWS KMS evidence key manager", () => {
       MATTERHORN_EVIDENCE_KMS_REGION: "us-east-1",
       MATTERHORN_EVIDENCE_KMS_KEY_ID: "alias/evidence",
     })).toBeInstanceOf(AwsKmsMatterhornEvidenceKeyManager);
+    expect(evidenceKmsRotationDaysFromEnv({})).toBe(90);
+    expect(evidenceKmsRotationDaysFromEnv({ MATTERHORN_EVIDENCE_KMS_ROTATION_DAYS: "30" })).toBe(30);
+    expect(() => evidenceKmsRotationDaysFromEnv({
+      MATTERHORN_EVIDENCE_KMS_ROTATION_DAYS: "0",
+    })).toThrow("evidence_kms_rotation_days_invalid");
   });
 });

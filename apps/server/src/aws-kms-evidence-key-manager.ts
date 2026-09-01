@@ -4,8 +4,10 @@ import {
   DecryptCommand,
   GenerateDataKeyCommand,
   KMSClient,
+  ReEncryptCommand,
   type DecryptCommandOutput,
   type GenerateDataKeyCommandOutput,
+  type ReEncryptCommandOutput,
 } from "@aws-sdk/client-kms";
 
 import type {
@@ -136,6 +138,45 @@ export class AwsKmsMatterhornEvidenceKeyManager implements MatterhornEvidenceKey
     }
   }
 
+  async rotateDataKey(input: {
+    workspaceId: string;
+    runId: string;
+    keyReference: string;
+    wrappedKey: string;
+    keyContext: string;
+  }): Promise<{ keyReference: string; wrappedKey: string }> {
+    if (!input.keyReference.trim()) throw new Error("evidence_key_reference_invalid");
+    const wrappedKey = decodeWrappedKey(input.wrappedKey);
+    const encryptionContext = kmsEncryptionContext(input);
+    let response: ReEncryptCommandOutput;
+    try {
+      response = await this.#client.send(new ReEncryptCommand({
+        CiphertextBlob: wrappedKey,
+        SourceKeyId: input.keyReference,
+        DestinationKeyId: this.#keyId,
+        SourceEncryptionContext: encryptionContext,
+        DestinationEncryptionContext: encryptionContext,
+      })) as ReEncryptCommandOutput;
+    } finally {
+      wrappedKey.fill(0);
+    }
+    const rotatedSource = response.CiphertextBlob;
+    try {
+      if (!(rotatedSource instanceof Uint8Array) || rotatedSource.byteLength < 1
+        || rotatedSource.byteLength > MAX_WRAPPED_KEY_BYTES
+        || typeof response.KeyId !== "string" || !response.KeyId.trim()
+        || (response.SourceKeyId !== undefined && response.SourceKeyId !== input.keyReference)) {
+        throw new Error("evidence_kms_response_invalid");
+      }
+      return {
+        keyReference: response.KeyId,
+        wrappedKey: Buffer.from(rotatedSource).toString("base64"),
+      };
+    } finally {
+      rotatedSource?.fill(0);
+    }
+  }
+
   async destroyKey(input: { workspaceId: string; keyReference: string }): Promise<void> {
     if (!input.workspaceId.trim() || !input.keyReference.trim()) throw new Error("evidence_key_reference_invalid");
     // AWS KMS data keys do not exist as independently deletable KMS objects.
@@ -152,4 +193,14 @@ export function awsKmsEvidenceKeyManagerFromEnv(
   if (!region && !keyId) return null;
   if (!region || !keyId) throw new Error("evidence_kms_configuration_incomplete");
   return new AwsKmsMatterhornEvidenceKeyManager({ region, keyId });
+}
+
+export function evidenceKmsRotationDaysFromEnv(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.MATTERHORN_EVIDENCE_KMS_ROTATION_DAYS?.trim();
+  if (!raw) return 90;
+  const days = Number(raw);
+  if (!Number.isSafeInteger(days) || days < 1 || days > 3_650) {
+    throw new Error("evidence_kms_rotation_days_invalid");
+  }
+  return days;
 }

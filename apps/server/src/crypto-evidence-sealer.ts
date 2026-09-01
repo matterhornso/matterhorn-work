@@ -32,6 +32,13 @@ export interface MatterhornEvidenceKeyManager {
     wrappedKey: string;
     keyContext: string;
   }): Promise<Buffer>;
+  rotateDataKey?(input: {
+    workspaceId: string;
+    runId: string;
+    keyReference: string;
+    wrappedKey: string;
+    keyContext: string;
+  }): Promise<{ keyReference: string; wrappedKey: string }>;
   destroyKey(input: { workspaceId: string; keyReference: string }): Promise<void>;
 }
 

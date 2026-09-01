@@ -64,6 +64,7 @@ describe("durable crypto evidence store", () => {
     const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));
     const sourceKey = Buffer.alloc(32, 7);
     let destroyed = 0;
+    let rotated = 0;
     const keyManager: MatterhornEvidenceKeyManager = {
       createDataKey: async ({ recipientKeyIds }) => ({
         plaintextKey: Buffer.from(sourceKey),
@@ -73,6 +74,13 @@ describe("durable crypto evidence store", () => {
         recipientKeyIds,
       }),
       decryptDataKey: async () => Buffer.from(sourceKey),
+      rotateDataKey: async () => {
+        rotated += 1;
+        return {
+          keyReference: "arn:aws:kms:test:key/evidence-rotated",
+          wrappedKey: Buffer.from("rotated-wrapped-key-material").toString("base64"),
+        };
+      },
       destroyKey: async () => { destroyed += 1; },
     };
     try {
@@ -140,12 +148,30 @@ describe("durable crypto evidence store", () => {
         proof: { ...proof, network: "mainnet" },
       })).toThrow("crypto_evidence_mainnet_disabled");
 
-      const destroyedRecord = await store.destroyKey({
+      const rotatedRecord = await store.rotateKey({
         workspaceId: "workspace_store",
         ownerId: "owner_store",
         coworkerId: "coworker_store",
         evidenceId: created.id,
         expectedRevision: published.revision,
+      });
+      expect(rotatedRecord).toMatchObject({
+        state: "published",
+        revision: published.revision + 1,
+        key: {
+          keyReference: "arn:aws:kms:test:key/evidence-rotated",
+          wrappedKey: Buffer.from("rotated-wrapped-key-material").toString("base64"),
+        },
+      });
+      expect(rotatedRecord.envelope).toEqual(published.envelope);
+      expect(rotated).toBe(1);
+
+      const destroyedRecord = await store.destroyKey({
+        workspaceId: "workspace_store",
+        ownerId: "owner_store",
+        coworkerId: "coworker_store",
+        evidenceId: created.id,
+        expectedRevision: rotatedRecord.revision,
       });
       expect(destroyedRecord.state).toBe("key_destroyed");
       expect(destroyedRecord.envelope).toBeNull();
@@ -155,12 +181,15 @@ describe("durable crypto evidence store", () => {
       expect((await readFile(join(directory, "state.db"))).toString("utf8")).not.toContain(
         Buffer.from("wrapped-key-material").toString("base64"),
       );
+      expect((await readFile(join(directory, "state.db"))).toString("utf8")).not.toContain(
+        Buffer.from("rotated-wrapped-key-material").toString("base64"),
+      );
       expect((await store.destroyKey({
         workspaceId: "workspace_store",
         ownerId: "owner_store",
         coworkerId: "coworker_store",
         evidenceId: created.id,
-        expectedRevision: published.revision,
+        expectedRevision: rotatedRecord.revision,
       })).state).toBe("key_destroyed");
       expect(destroyed).toBe(1);
       await expect(store.decrypt({
@@ -169,6 +198,28 @@ describe("durable crypto evidence store", () => {
         coworkerId: "coworker_store",
         evidenceId: created.id,
       })).rejects.toThrow("crypto_evidence_key_destroyed");
+
+      const audit = store.listAccessAudit({
+        workspaceId: "workspace_store",
+        ownerId: "owner_store",
+        evidenceId: created.id,
+      });
+      expect(audit.map((event) => `${event.action}:${event.outcome}`)).toEqual([
+        "seal:allowed",
+        "decrypt:allowed",
+        "attach_proof:allowed",
+        "rotate_key:allowed",
+        "destroy_key:allowed",
+        "decrypt:denied",
+      ]);
+      expect(audit.every((event, index) => index === 0 || event.previousHash === audit[index - 1]?.recordHash)).toBe(true);
+      expect(JSON.stringify(audit)).not.toContain("owner_store");
+      expect(store.listAccessAudit({ workspaceId: "workspace_store", ownerId: "wrong_owner" })).toEqual([]);
+      expect(state.get(
+        "crypto_evidence_record",
+        created.id,
+        Date.now() + 366 * 24 * 60 * 60 * 1_000,
+      )).toBeNull();
 
       const reloaded = new MatterhornCryptoEvidenceStore(state, keyManager);
       expect(reloaded.get({
@@ -187,6 +238,7 @@ describe("durable crypto evidence store", () => {
     const directory = await mkdtemp(join(tmpdir(), "matterhorn-evidence-lifecycle-"));
     const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));
     let destroyed = 0;
+    let rotated = 0;
     const keyManager: MatterhornEvidenceKeyManager = {
       createDataKey: async ({ recipientKeyIds }) => ({
         plaintextKey: Buffer.alloc(32, 3),
@@ -196,6 +248,10 @@ describe("durable crypto evidence store", () => {
         recipientKeyIds,
       }),
       decryptDataKey: async () => Buffer.alloc(32, 3),
+      rotateDataKey: async ({ keyReference, wrappedKey }) => {
+        rotated += 1;
+        return { keyReference, wrappedKey: `${wrappedKey.slice(0, -2)}AA` };
+      },
       destroyKey: async () => { destroyed += 1; },
     };
     try {
@@ -267,6 +323,12 @@ describe("durable crypto evidence store", () => {
         coworkerId: "coworker_c",
         evidenceId: retained.id,
       })?.state).toBe("sealed");
+
+      expect(await store.rotateDue({
+        maxAgeMs: 24 * 60 * 60 * 1_000,
+        now: new Date("2027-01-01T00:00:00.000Z"),
+      })).toMatchObject({ checked: 1, rotated: 1, failures: [] });
+      expect(rotated).toBe(1);
 
       expect(await store.destroyExpired(new Date("2100-01-01T00:00:00.000Z"))).toMatchObject({
         checked: 1,
