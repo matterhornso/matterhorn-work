@@ -1,18 +1,24 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  MATTERHORN_COWORKER_INBOX_ITEM_VERSION,
   MATTERHORN_COWORKER_PROFILE_VERSION,
+  MATTERHORN_COWORKER_WATCH_VERSION,
   MATTERHORN_COWORKER_WORKING_STATE_VERSION,
   type MatterhornCoworkerAuthority,
+  type MatterhornCoworkerInboxItem,
   type MatterhornCoworkerProfile,
   type MatterhornCoworkerState,
+  type MatterhornCoworkerWatch,
   type MatterhornCoworkerWorkingState,
+  validateMatterhornCoworkerInboxItem,
   validateMatterhornCoworkerProfile,
+  validateMatterhornCoworkerWatch,
   validateMatterhornCoworkerWorkingState,
 } from "@matterhorn-work/types/crypto-coworkers";
 import { containsForbiddenMemorySecretMaterial } from "@matterhorn-work/types/memory";
 
-import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
+import { MatterhornCoworkerStore, MatterhornCoworkerStoreError } from "./crypto-coworker-store.js";
 
 export type MatterhornCoworkerCreateInput = Pick<
   MatterhornCoworkerProfile,
@@ -39,6 +45,18 @@ export type MatterhornCoworkerWorkingStateInput = Omit<
   expectedRevision: number;
 };
 
+export type MatterhornCoworkerWatchCreateInput = Pick<
+  MatterhornCoworkerWatch,
+  "profileRevision" | "name" | "appId" | "actionId" | "network" | "parameters" | "budgets" | "conditions"
+> & {
+  schedule: Pick<MatterhornCoworkerWatch["schedule"], "intervalMs" | "maxChecksPerDay">;
+};
+
+export type MatterhornCoworkerInboxItemInput = Omit<
+  MatterhornCoworkerInboxItem,
+  "version" | "id" | "workspaceId" | "ownerId" | "coworkerId" | "profileRevision" | "state" | "createdAt" | "updatedAt"
+>;
+
 type InvalidationReason = "policy_updated" | "paused" | "revoked" | "deleted";
 
 type CoworkerServiceOptions = {
@@ -46,6 +64,8 @@ type CoworkerServiceOptions = {
   policyVersion: string;
   now?: () => Date;
   id?: () => string;
+  watchId?: () => string;
+  inboxItemId?: () => string;
   onInvalidate?: (input: {
     workspaceId: string;
     ownerId: string;
@@ -67,6 +87,13 @@ export class MatterhornCoworkerError extends Error {
     | "coworker_not_found"
     | "coworker_revision_conflict"
     | "coworker_working_state_invalid"
+    | "coworker_watch_invalid"
+    | "coworker_watch_not_found"
+    | "coworker_watch_limit"
+    | "coworker_watch_transition_invalid"
+    | "coworker_inbox_item_invalid"
+    | "coworker_inbox_item_not_found"
+    | "coworker_inbox_state_conflict"
     | "coworker_transition_invalid") {
     super(code);
     this.name = "MatterhornCoworkerError";
@@ -113,6 +140,8 @@ export class MatterhornCoworkers {
   readonly #policyVersion: string;
   readonly #now: () => Date;
   readonly #id: () => string;
+  readonly #watchId: () => string;
+  readonly #inboxItemId: () => string;
   readonly #onInvalidate: NonNullable<CoworkerServiceOptions["onInvalidate"]>;
 
   constructor(options: CoworkerServiceOptions) {
@@ -120,6 +149,8 @@ export class MatterhornCoworkers {
     this.#policyVersion = options.policyVersion;
     this.#now = options.now ?? (() => new Date());
     this.#id = options.id ?? (() => `cw_${randomUUID()}`);
+    this.#watchId = options.watchId ?? (() => `cwatch_${randomUUID()}`);
+    this.#inboxItemId = options.inboxItemId ?? (() => `cinbox_${randomUUID()}`);
     this.#onInvalidate = options.onInvalidate ?? (() => undefined);
   }
 
@@ -244,6 +275,239 @@ export class MatterhornCoworkers {
     return replaced;
   }
 
+  listWatches(workspaceId: string, ownerId: string, coworkerId: string): MatterhornCoworkerWatch[] {
+    if (!this.#store.get(workspaceId, ownerId, coworkerId)) {
+      throw new MatterhornCoworkerError("coworker_not_found");
+    }
+    return this.#store.listWatches(workspaceId, ownerId, coworkerId);
+  }
+
+  getWatch(workspaceId: string, ownerId: string, coworkerId: string, watchId: string): MatterhornCoworkerWatch | null {
+    if (!this.#store.get(workspaceId, ownerId, coworkerId)) {
+      throw new MatterhornCoworkerError("coworker_not_found");
+    }
+    return this.#store.getWatch(workspaceId, ownerId, coworkerId, watchId);
+  }
+
+  createWatch(
+    workspaceId: string,
+    ownerId: string,
+    coworkerId: string,
+    input: MatterhornCoworkerWatchCreateInput,
+  ): MatterhornCoworkerWatch {
+    const profile = this.resolveActive(workspaceId, ownerId, coworkerId);
+    if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
+    if (input.profileRevision !== profile.revision) throw new MatterhornCoworkerError("coworker_revision_conflict");
+    const normalized = structuredClone({
+      ...input,
+      name: input.name.trim(),
+      appId: input.appId.trim(),
+      actionId: input.actionId.trim(),
+      network: input.network.trim(),
+    });
+    if (!profile.automaticAuthorities.includes("watch")
+      || profile.limits.maxActiveWatches < 1
+      || !profile.allowedAppIds.includes(normalized.appId)
+      || !profile.allowedActionIds.includes(normalized.actionId)
+      || !profile.allowedNetworks.includes(normalized.network)
+      || normalized.budgets.maxReadCallsPerCheck > profile.limits.maxReadCallsPerRun
+      || containsForbiddenMemorySecretMaterial(normalized)) {
+      throw new MatterhornCoworkerError("coworker_watch_invalid");
+    }
+    const now = this.#now();
+    const nowIso = now.toISOString();
+    const watch: MatterhornCoworkerWatch = {
+      version: MATTERHORN_COWORKER_WATCH_VERSION,
+      id: this.#watchId(),
+      workspaceId,
+      ownerId,
+      coworkerId,
+      revision: 1,
+      profileRevision: profile.revision,
+      state: "active",
+      pauseReason: null,
+      name: normalized.name,
+      appId: normalized.appId,
+      actionId: normalized.actionId,
+      network: normalized.network,
+      parameters: normalized.parameters,
+      schedule: {
+        intervalMs: normalized.schedule.intervalMs,
+        maxChecksPerDay: normalized.schedule.maxChecksPerDay,
+        nextCheckAt: new Date(now.getTime() + normalized.schedule.intervalMs).toISOString(),
+        lastCheckedAt: null,
+      },
+      budgets: normalized.budgets,
+      conditions: normalized.conditions,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    if (validateMatterhornCoworkerWatch(watch).length > 0) {
+      throw new MatterhornCoworkerError("coworker_watch_invalid");
+    }
+    try {
+      return this.#store.createWatch(watch, profile.limits.maxActiveWatches);
+    } catch (error) {
+      if (error instanceof MatterhornCoworkerStoreError && error.code === "coworker_watch_limit") {
+        throw new MatterhornCoworkerError("coworker_watch_limit");
+      }
+      throw error;
+    }
+  }
+
+  transitionWatch(
+    workspaceId: string,
+    ownerId: string,
+    coworkerId: string,
+    watchId: string,
+    nextState: "active" | "paused",
+    expectedRevision: number,
+  ): MatterhornCoworkerWatch {
+    const profile = this.resolveActive(workspaceId, ownerId, coworkerId);
+    if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
+    const current = this.#store.getWatch(workspaceId, ownerId, coworkerId, watchId);
+    if (!current) throw new MatterhornCoworkerError("coworker_watch_not_found");
+    if (current.revision !== expectedRevision) throw new MatterhornCoworkerError("coworker_revision_conflict");
+    if (current.state === nextState) throw new MatterhornCoworkerError("coworker_watch_transition_invalid");
+    if (nextState === "active" && (!profile.automaticAuthorities.includes("watch")
+      || profile.limits.maxActiveWatches < 1
+      || !profile.allowedAppIds.includes(current.appId)
+      || !profile.allowedActionIds.includes(current.actionId)
+      || !profile.allowedNetworks.includes(current.network))) {
+      throw new MatterhornCoworkerError("coworker_watch_invalid");
+    }
+    const now = this.#now();
+    const next: MatterhornCoworkerWatch = {
+      ...current,
+      revision: current.revision + 1,
+      profileRevision: profile.revision,
+      state: nextState,
+      pauseReason: nextState === "paused" ? "user_paused" : null,
+      schedule: {
+        ...current.schedule,
+        ...(nextState === "active" ? { nextCheckAt: new Date(now.getTime() + current.schedule.intervalMs).toISOString() } : {}),
+      },
+      updatedAt: now.toISOString(),
+    };
+    let replaced: MatterhornCoworkerWatch | null;
+    try {
+      replaced = this.#store.replaceWatch(
+        next,
+        current.revision,
+        nextState === "active" ? profile.limits.maxActiveWatches : undefined,
+      );
+    } catch (error) {
+      if (error instanceof MatterhornCoworkerStoreError && error.code === "coworker_watch_limit") {
+        throw new MatterhornCoworkerError("coworker_watch_limit");
+      }
+      throw error;
+    }
+    if (!replaced) throw new MatterhornCoworkerError("coworker_revision_conflict");
+    return replaced;
+  }
+
+  deleteWatch(
+    workspaceId: string,
+    ownerId: string,
+    coworkerId: string,
+    watchId: string,
+    expectedRevision: number,
+  ): void {
+    if (!this.#store.get(workspaceId, ownerId, coworkerId)) throw new MatterhornCoworkerError("coworker_not_found");
+    if (!this.#store.getWatch(workspaceId, ownerId, coworkerId, watchId)) {
+      throw new MatterhornCoworkerError("coworker_watch_not_found");
+    }
+    if (!this.#store.deleteWatch(workspaceId, ownerId, coworkerId, watchId, expectedRevision)) {
+      throw new MatterhornCoworkerError("coworker_revision_conflict");
+    }
+  }
+
+  createInboxItem(
+    workspaceId: string,
+    ownerId: string,
+    coworkerId: string,
+    input: MatterhornCoworkerInboxItemInput,
+  ): MatterhornCoworkerInboxItem {
+    const profile = this.resolveActive(workspaceId, ownerId, coworkerId);
+    if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
+    const watch = input.watchId === null
+      ? null
+      : this.#store.getWatch(workspaceId, ownerId, coworkerId, input.watchId);
+    if (input.watchId !== null && (!watch
+      || (input.source !== null && (input.source.appId !== watch.appId || input.source.actionId !== watch.actionId))
+      || input.budgetImpact.readCallsConsumed > watch.budgets.maxReadCallsPerCheck
+      || input.budgetImpact.modelTokensConsumed > watch.budgets.maxModelTokensPerCheck
+      || input.budgetImpact.costMicros > watch.budgets.maxCostMicrosPerCheck)) {
+      throw new MatterhornCoworkerError("coworker_inbox_item_invalid");
+    }
+    const content = structuredClone(input);
+    if (containsForbiddenMemorySecretMaterial(content)) {
+      throw new MatterhornCoworkerError("coworker_inbox_item_invalid");
+    }
+    const now = this.#now().toISOString();
+    const item: MatterhornCoworkerInboxItem = {
+      ...content,
+      version: MATTERHORN_COWORKER_INBOX_ITEM_VERSION,
+      id: this.#inboxItemId(),
+      workspaceId,
+      ownerId,
+      coworkerId,
+      profileRevision: profile.revision,
+      state: "unread",
+      createdAt: now,
+      updatedAt: now,
+    };
+    if (validateMatterhornCoworkerInboxItem(item).length > 0) {
+      throw new MatterhornCoworkerError("coworker_inbox_item_invalid");
+    }
+    return this.#store.createInboxItem(item);
+  }
+
+  listInbox(input: {
+    workspaceId: string;
+    ownerId: string;
+    coworkerId: string;
+    includeDismissed?: boolean;
+    limit?: number;
+  }): MatterhornCoworkerInboxItem[] {
+    if (!this.#store.get(input.workspaceId, input.ownerId, input.coworkerId)) {
+      throw new MatterhornCoworkerError("coworker_not_found");
+    }
+    const limit = Number.isSafeInteger(input.limit) ? Math.max(1, Math.min(100, input.limit!)) : 50;
+    return this.#store.listInbox({
+      workspaceId: input.workspaceId,
+      ownerId: input.ownerId,
+      coworkerId: input.coworkerId,
+      includeDismissed: input.includeDismissed === true,
+      limit,
+    });
+  }
+
+  transitionInboxItem(
+    workspaceId: string,
+    ownerId: string,
+    coworkerId: string,
+    itemId: string,
+    nextState: MatterhornCoworkerInboxItem["state"],
+    expectedState: MatterhornCoworkerInboxItem["state"],
+  ): MatterhornCoworkerInboxItem {
+    if (!this.#store.get(workspaceId, ownerId, coworkerId)) throw new MatterhornCoworkerError("coworker_not_found");
+    const current = this.#store.getInboxItem(workspaceId, ownerId, coworkerId, itemId);
+    if (!current) throw new MatterhornCoworkerError("coworker_inbox_item_not_found");
+    if (current.state !== expectedState) throw new MatterhornCoworkerError("coworker_inbox_state_conflict");
+    if (nextState !== "read" && nextState !== "dismissed") {
+      throw new MatterhornCoworkerError("coworker_inbox_item_invalid");
+    }
+    const next: MatterhornCoworkerInboxItem = {
+      ...current,
+      state: nextState,
+      updatedAt: this.#now().toISOString(),
+    };
+    const replaced = this.#store.replaceInboxItem(next, expectedState);
+    if (!replaced) throw new MatterhornCoworkerError("coworker_inbox_state_conflict");
+    return replaced;
+  }
+
   update(
     workspaceId: string,
     ownerId: string,
@@ -330,6 +594,14 @@ export class MatterhornCoworkers {
         };
         this.#store.replaceWorkingState(next, state.revision);
       }
+      this.#store.pauseWatches({
+        workspaceId: profile.workspaceId,
+        ownerId: profile.ownerId,
+        coworkerId: profile.id,
+        profileRevision: profile.revision,
+        reason: reason === "policy_updated" ? "profile_changed" : "coworker_paused",
+        updatedAt: this.#now().toISOString(),
+      });
     }
     this.#onInvalidate({
       workspaceId: profile.workspaceId,

@@ -381,6 +381,7 @@ import { MatterhornCoworkerStoreError } from "./crypto-coworker-store.js";
 import {
   MatterhornCoworkerError,
   type MatterhornCoworkerCreateInput,
+  type MatterhornCoworkerWatchCreateInput,
   type MatterhornCoworkerUpdateInput,
   type MatterhornCoworkerWorkingStateInput,
 } from "./crypto-coworkers.js";
@@ -401,6 +402,8 @@ import type {
   MatterhornCryptoAppManifest,
   MatterhornCoworkerProfile,
   MatterhornCoworkerState,
+  MatterhornCoworkerWatch,
+  MatterhornCoworkerInboxItem,
   MatterhornCoworkerWorkingState,
 } from "@matterhorn-work/types/crypto-coworkers";
 import type { MatterhornCryptoAppConformanceReport } from "./crypto-app-conformance.js";
@@ -2782,6 +2785,16 @@ function coworkerWorkingStateAccountView(state: MatterhornCoworkerWorkingState) 
   return view;
 }
 
+function coworkerWatchAccountView(watch: MatterhornCoworkerWatch) {
+  const { ownerId: _ownerId, ...view } = structuredClone(watch);
+  return view;
+}
+
+function coworkerInboxItemAccountView(item: MatterhornCoworkerInboxItem) {
+  const { ownerId: _ownerId, ...view } = structuredClone(item);
+  return view;
+}
+
 function coworkerRunBinding(profile: MatterhornCoworkerProfile): MatterhornCoworkerRunBinding {
   return {
     id: profile.id,
@@ -2874,27 +2887,51 @@ function resolveMessageCoworker(input: {
 function coworkerApiError(error: unknown): ApiError {
   if (error instanceof MatterhornCoworkerError) {
     const status = error.code === "coworker_not_found"
+      || error.code === "coworker_watch_not_found"
+      || error.code === "coworker_inbox_item_not_found"
       ? 404
-      : error.code === "coworker_revision_conflict" || error.code === "coworker_transition_invalid"
+      : error.code === "coworker_revision_conflict"
+        || error.code === "coworker_transition_invalid"
+        || error.code === "coworker_watch_transition_invalid"
+        || error.code === "coworker_watch_limit"
+        || error.code === "coworker_inbox_state_conflict"
         ? 409
         : 400;
     const message = error.code === "coworker_not_found"
       ? "Coworker not found."
+      : error.code === "coworker_watch_not_found"
+        ? "Coworker watch not found."
+        : error.code === "coworker_inbox_item_not_found"
+          ? "Coworker inbox item not found."
       : error.code === "coworker_revision_conflict"
         ? "Coworker state changed; retry with the latest revision."
+        : error.code === "coworker_watch_limit"
+          ? "The coworker's active watch limit has been reached."
+          : error.code === "coworker_watch_transition_invalid"
+            ? "The requested watch state change is not allowed."
+            : error.code === "coworker_inbox_state_conflict"
+              ? "The inbox item changed; retry with its latest state."
         : error.code === "coworker_transition_invalid"
           ? "The requested coworker state change is not allowed."
           : error.code === "coworker_working_state_invalid"
             ? "Coworker working state is invalid or contains forbidden secret material."
+            : error.code === "coworker_watch_invalid"
+              ? "Coworker watch is outside the active profile, schedule, budget, or privacy boundary."
+              : error.code === "coworker_inbox_item_invalid"
+                ? "Coworker inbox item is invalid or contains forbidden material."
             : "Coworker profile input is invalid.";
     return new ApiError(status, error.code, message);
   }
   if (error instanceof MatterhornCoworkerStoreError) {
     return new ApiError(
-      error.code === "coworker_conflict" || error.code === "coworker_revision_conflict" ? 409 : 500,
+      error.code === "coworker_conflict"
+        || error.code === "coworker_revision_conflict"
+        || error.code === "coworker_watch_limit" ? 409 : 500,
       error.code === "coworker_state_corrupt" ? "coworker_integrity_error" : error.code,
       error.code === "coworker_state_corrupt"
         ? "Coworker state failed integrity validation."
+        : error.code === "coworker_watch_limit"
+          ? "The coworker's active watch limit has been reached."
         : "Coworker state changed; retry with the latest revision.",
     );
   }
@@ -8968,6 +9005,181 @@ function createRoutes(
         body as unknown as MatterhornCoworkerWorkingStateInput,
       );
       return noStoreJsonResponse({ mode: coworkerRuntime.mode, state: coworkerWorkingStateAccountView(state) });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/coworkers/:coworkerId/watches", "client", async (ctx) => {
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const watches = coworkerRuntime.coworkers.listWatches(
+        workspace.id,
+        cryptoAppCreatedBy(ctx),
+        ctx.params.coworkerId,
+      );
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        watches: watches.map(coworkerWatchAccountView),
+      });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/coworkers/:coworkerId/watches", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request, 64 * 1_024, "Coworker watch");
+      const keys = [
+        "profileRevision", "name", "appId", "actionId", "network", "parameters", "schedule", "budgets", "conditions",
+      ];
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => !keys.includes(key))
+        || keys.some((key) => !Object.hasOwn(body, key))
+        || !Number.isSafeInteger(body.profileRevision)
+        || typeof body.name !== "string"
+        || typeof body.appId !== "string"
+        || typeof body.actionId !== "string"
+        || typeof body.network !== "string"
+        || !isRecord(body.parameters)
+        || !isRecord(body.schedule)
+        || !isRecord(body.budgets)
+        || !Array.isArray(body.conditions)) {
+        throw new ApiError(400, "coworker_watch_invalid", "Coworker watch input is invalid.");
+      }
+      const watch = coworkerRuntime.coworkers.createWatch(
+        workspace.id,
+        cryptoAppCreatedBy(ctx),
+        ctx.params.coworkerId,
+        body as unknown as MatterhornCoworkerWatchCreateInput,
+      );
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        watch: coworkerWatchAccountView(watch),
+      }, 201);
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "PATCH", "/workspace/:id/coworkers/:coworkerId/watches/:watchId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request, 4_096, "Coworker watch state");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => key !== "state" && key !== "expectedRevision")
+        || (body.state !== "active" && body.state !== "paused")
+        || !Number.isSafeInteger(body.expectedRevision)
+        || (body.expectedRevision as number) < 1) {
+        throw new ApiError(400, "coworker_watch_invalid", "Coworker watch state input is invalid.");
+      }
+      const watch = coworkerRuntime.coworkers.transitionWatch(
+        workspace.id,
+        cryptoAppCreatedBy(ctx),
+        ctx.params.coworkerId,
+        ctx.params.watchId,
+        body.state,
+        body.expectedRevision as number,
+      );
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, watch: coworkerWatchAccountView(watch) });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/coworkers/:coworkerId/watches/:watchId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request, 4_096, "Coworker watch deletion");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => key !== "expectedRevision")
+        || !Number.isSafeInteger(body.expectedRevision)
+        || (body.expectedRevision as number) < 1) {
+        throw new ApiError(400, "coworker_watch_invalid", "Coworker watch deletion input is invalid.");
+      }
+      coworkerRuntime.coworkers.deleteWatch(
+        workspace.id,
+        cryptoAppCreatedBy(ctx),
+        ctx.params.coworkerId,
+        ctx.params.watchId,
+        body.expectedRevision as number,
+      );
+      return noStoreJsonResponse({ deleted: true });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/coworkers/:coworkerId/inbox", "client", async (ctx) => {
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const rawLimit = ctx.url.searchParams.get("limit");
+      const limit = rawLimit === null ? 50 : Number(rawLimit);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+        throw new ApiError(400, "coworker_inbox_query_invalid", "Coworker inbox query is invalid.");
+      }
+      const items = coworkerRuntime.coworkers.listInbox({
+        workspaceId: workspace.id,
+        ownerId: cryptoAppCreatedBy(ctx),
+        coworkerId: ctx.params.coworkerId,
+        includeDismissed: ctx.url.searchParams.get("includeDismissed") === "true",
+        limit,
+      });
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        items: items.map(coworkerInboxItemAccountView),
+      });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "PATCH", "/workspace/:id/coworkers/:coworkerId/inbox/:itemId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request, 4_096, "Coworker inbox state");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => key !== "state" && key !== "expectedState")
+        || (body.state !== "read" && body.state !== "dismissed")
+        || (body.expectedState !== "unread" && body.expectedState !== "read" && body.expectedState !== "dismissed")) {
+        throw new ApiError(400, "coworker_inbox_item_invalid", "Coworker inbox state input is invalid.");
+      }
+      const item = coworkerRuntime.coworkers.transitionInboxItem(
+        workspace.id,
+        cryptoAppCreatedBy(ctx),
+        ctx.params.coworkerId,
+        ctx.params.itemId,
+        body.state,
+        body.expectedState,
+      );
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, item: coworkerInboxItemAccountView(item) });
     } catch (error) {
       throw coworkerApiError(error);
     }

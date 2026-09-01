@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { startServer } from "./server.js";
 import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
+import { MatterhornCoworkers } from "./crypto-coworkers.js";
 import type { ServerConfig } from "./types.js";
 
 type Served = { port: number; stop: (closeActiveConnections?: boolean) => void | Promise<void> };
@@ -167,6 +168,31 @@ function workingStateInput() {
       observedAt: "2026-09-01T12:00:00.000Z",
     }],
     approvedMemoryIds: [],
+  };
+}
+
+function watchCoworkerInput() {
+  const profile = coworkerInput();
+  return {
+    ...profile,
+    name: "Risk Monitor",
+    role: "risk_monitor",
+    automaticAuthorities: ["read", "watch"],
+    limits: { ...profile.limits, maxActiveWatches: 1 },
+  };
+}
+
+function watchInput() {
+  return {
+    profileRevision: 1,
+    name: "Sui balance change",
+    appId: "matterhorn.sui-testnet",
+    actionId: "sui_account_read",
+    network: "sui:testnet",
+    parameters: { address: "0x1234" },
+    schedule: { intervalMs: 300_000, maxChecksPerDay: 288 },
+    budgets: { maxReadCallsPerCheck: 1, maxModelTokensPerCheck: 0, maxCostMicrosPerCheck: 10_000 },
+    conditions: [{ id: "balance_changed", metric: "totalBalance", operator: "changed", value: null }],
   };
 }
 
@@ -332,6 +358,120 @@ describe("crypto coworker HTTP boundary", () => {
     });
     expect(deleted.payload).toEqual({ deleted: true });
     expect((await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}`, { cookie: cookieA })).response.status).toBe(404);
+  });
+
+  test("exposes bounded watches and a tenant-scoped alert inbox without an account alert-injection route", async () => {
+    const server = await boot("internal");
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "watch-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "watch-b@example.com", password: PASSWORD },
+    });
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
+    const workspaceB = String((await request(server.base, "/workspaces", { cookie: cookieB })).payload.items[0].id);
+    const created = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: watchCoworkerInput(),
+    });
+    expect(created.response.status).toBe(201);
+    const coworkerId = String(created.payload.coworker.id);
+
+    const createdWatch = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/watches`, {
+      cookie: cookieA,
+      body: watchInput(),
+    });
+    expect(createdWatch.response.status).toBe(201);
+    expect(createdWatch.payload.watch).toMatchObject({ state: "active", profileRevision: 1 });
+    expect(createdWatch.payload.watch.ownerId).toBeUndefined();
+    const watchId = String(createdWatch.payload.watch.id);
+    const watchList = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/watches`, { cookie: cookieA });
+    expect(watchList.payload.watches).toHaveLength(1);
+    expect((await request(server.base, `/workspace/${workspaceB}/coworkers/${coworkerId}/watches`, { cookie: cookieB })).response.status)
+      .toBe(404);
+    const overLimit = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/watches`, {
+      cookie: cookieA,
+      body: { ...watchInput(), name: "Second watch" },
+    });
+    expect(overLimit.response.status).toBe(409);
+    expect(overLimit.payload.code).toBe("coworker_watch_limit");
+    const secretWatch = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/watches`, {
+      cookie: cookieA,
+      body: { ...watchInput(), parameters: { privateKey: "secret material" } },
+    });
+    expect(secretWatch.response.status).toBe(400);
+    expect(secretWatch.payload.code).toBe("coworker_watch_invalid");
+
+    const directStore = new MatterhornCoworkerStore(server.coworkerDb);
+    try {
+      const directCoworkers = new MatterhornCoworkers({
+        store: directStore,
+        policyVersion: "coworker-policy-1",
+        now: () => new Date("2026-09-01T12:05:00.000Z"),
+        inboxItemId: () => "cinbox_route_alert",
+      });
+      directCoworkers.createInboxItem(workspaceA, String(signupA.payload.user.id), coworkerId, {
+        watchId,
+        kind: "alert",
+        severity: "medium",
+        title: "Sui balance changed",
+        summary: "The observed Sui balance changed since the previous approved check.",
+        reasonCodes: ["balance_changed"],
+        source: {
+          appId: "matterhorn.sui-testnet",
+          actionId: "sui_account_read",
+          evidenceReferenceHash: "c".repeat(64),
+          freshness: "fresh",
+          observedAt: "2026-09-01T12:05:00.000Z",
+        },
+        budgetImpact: { readCallsConsumed: 1, modelTokensConsumed: 0, costMicros: 1_000 },
+        nextSafeAction: { kind: "review", label: "Review the fresh balance evidence" },
+      });
+    } finally {
+      directStore.close();
+    }
+    const inbox = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/inbox`, { cookie: cookieA });
+    expect(inbox.response.status).toBe(200);
+    expect(inbox.payload.items).toHaveLength(1);
+    expect(inbox.payload.items[0]).toMatchObject({ id: "cinbox_route_alert", state: "unread", watchId });
+    expect(inbox.payload.items[0].ownerId).toBeUndefined();
+    expect((await request(server.base, `/workspace/${workspaceB}/coworkers/${coworkerId}/inbox`, { cookie: cookieB })).response.status)
+      .toBe(404);
+    expect((await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/inbox`, {
+      method: "POST",
+      cookie: cookieA,
+      body: { title: "Injected alert" },
+    })).response.status).toBe(404);
+
+    const read = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/inbox/cinbox_route_alert`, {
+      method: "PATCH",
+      cookie: cookieA,
+      body: { state: "read", expectedState: "unread" },
+    });
+    expect(read.response.status).toBe(200);
+    expect(read.payload.item.state).toBe("read");
+    const staleInbox = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/inbox/cinbox_route_alert`, {
+      method: "PATCH",
+      cookie: cookieA,
+      body: { state: "dismissed", expectedState: "unread" },
+    });
+    expect(staleInbox.response.status).toBe(409);
+    expect(staleInbox.payload.code).toBe("coworker_inbox_state_conflict");
+
+    const paused = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/watches/${watchId}`, {
+      method: "PATCH",
+      cookie: cookieA,
+      body: { state: "paused", expectedRevision: 1 },
+    });
+    expect(paused.payload.watch).toMatchObject({ state: "paused", pauseReason: "user_paused", revision: 2 });
+    const deletedWatch = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/watches/${watchId}`, {
+      method: "DELETE",
+      cookie: cookieA,
+      body: { expectedRevision: 2 },
+    });
+    expect(deletedWatch.payload).toEqual({ deleted: true });
   });
 
   test("purges durable coworkers before completing account deletion", async () => {

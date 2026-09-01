@@ -4,6 +4,8 @@ export const MATTERHORN_CRYPTO_APP_RESULT_VERSION = "matterhorn.crypto-app-resul
 export const MATTERHORN_CRYPTO_APP_CATALOG_VERSION = "matterhorn.crypto-app-catalog.v1";
 export const MATTERHORN_COWORKER_PROFILE_VERSION = "matterhorn.coworker-profile.v1";
 export const MATTERHORN_COWORKER_WORKING_STATE_VERSION = "matterhorn.coworker-working-state.v1";
+export const MATTERHORN_COWORKER_WATCH_VERSION = "matterhorn.coworker-watch.v1";
+export const MATTERHORN_COWORKER_INBOX_ITEM_VERSION = "matterhorn.coworker-inbox-item.v1";
 export const MATTERHORN_CRYPTO_INTENT_VERSION = "matterhorn.crypto-intent.v1";
 export const MATTERHORN_POLICY_DECISION_VERSION = "matterhorn.policy-decision.v1";
 export const MATTERHORN_EVIDENCE_BUNDLE_VERSION = "matterhorn.evidence-bundle.v1";
@@ -287,6 +289,78 @@ export type MatterhornCoworkerWorkingState = {
     observedAt: string;
   }>;
   approvedMemoryIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MatterhornCoworkerWatchState = "active" | "paused";
+
+export type MatterhornCoworkerWatch = {
+  version: typeof MATTERHORN_COWORKER_WATCH_VERSION;
+  id: string;
+  workspaceId: string;
+  ownerId: string;
+  coworkerId: string;
+  revision: number;
+  profileRevision: number;
+  state: MatterhornCoworkerWatchState;
+  pauseReason: "user_paused" | "coworker_paused" | "profile_changed" | "app_disconnected" | null;
+  name: string;
+  appId: string;
+  actionId: string;
+  network: string;
+  parameters: Record<string, string | number | boolean | null>;
+  schedule: {
+    intervalMs: number;
+    nextCheckAt: string;
+    lastCheckedAt: string | null;
+    maxChecksPerDay: number;
+  };
+  budgets: {
+    maxReadCallsPerCheck: number;
+    maxModelTokensPerCheck: number;
+    maxCostMicrosPerCheck: number;
+  };
+  conditions: Array<{
+    id: string;
+    metric: string;
+    operator: "gt" | "gte" | "lt" | "lte" | "eq" | "changed";
+    value: string | null;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MatterhornCoworkerInboxItem = {
+  version: typeof MATTERHORN_COWORKER_INBOX_ITEM_VERSION;
+  id: string;
+  workspaceId: string;
+  ownerId: string;
+  coworkerId: string;
+  profileRevision: number;
+  watchId: string | null;
+  state: "unread" | "read" | "dismissed";
+  kind: "alert" | "question" | "notice";
+  severity: "info" | "low" | "medium" | "high" | "critical";
+  title: string;
+  summary: string;
+  reasonCodes: string[];
+  source: {
+    appId: string;
+    actionId: string;
+    evidenceReferenceHash: string;
+    freshness: "fresh" | "stale" | "unknown";
+    observedAt: string;
+  } | null;
+  budgetImpact: {
+    readCallsConsumed: number;
+    modelTokensConsumed: number;
+    costMicros: number;
+  };
+  nextSafeAction: {
+    kind: "review" | "open_chat" | "pause_watch" | "none";
+    label: string;
+  };
   createdAt: string;
   updatedAt: string;
 };
@@ -708,6 +782,165 @@ export function validateMatterhornCoworkerWorkingState(value: unknown): string[]
     || new Set(value.approvedMemoryIds).size !== value.approvedMemoryIds.length
     || value.approvedMemoryIds.some((id) => !validId(id))) {
     issues.push("coworker_working_state_approvedMemoryIds_invalid");
+  }
+  return [...new Set(issues)];
+}
+
+export function validateMatterhornCoworkerWatch(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) return ["coworker_watch_not_object"];
+  const topLevelKeys = [
+    "version", "id", "workspaceId", "ownerId", "coworkerId", "revision", "profileRevision",
+    "state", "pauseReason", "name", "appId", "actionId", "network", "parameters", "schedule",
+    "budgets", "conditions", "createdAt", "updatedAt",
+  ];
+  if (!hasOnlyKeys(value, topLevelKeys)) issues.push("coworker_watch_unknown_field");
+  if (value.version !== MATTERHORN_COWORKER_WATCH_VERSION) issues.push("coworker_watch_version_invalid");
+  const validText = (text: unknown, max: number) => isNonEmptyString(text)
+    && text.length <= max
+    && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(text);
+  const validId = (id: unknown) => typeof id === "string"
+    && validText(id, 160)
+    && /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/.test(id);
+  const validDate = (date: unknown) => typeof date === "string"
+    && isNonEmptyString(date)
+    && Number.isFinite(Date.parse(date));
+  for (const key of ["id", "workspaceId", "ownerId", "coworkerId", "appId", "actionId"]) {
+    if (!validId(value[key])) issues.push(`coworker_watch_${key}_invalid`);
+  }
+  if (!validText(value.name, 120)) issues.push("coworker_watch_name_invalid");
+  if (!validText(value.network, 160)) issues.push("coworker_watch_network_invalid");
+  for (const key of ["revision", "profileRevision"]) {
+    if (!Number.isSafeInteger(value[key]) || (value[key] as number) < 1) issues.push(`coworker_watch_${key}_invalid`);
+  }
+  if (value.state !== "active" && value.state !== "paused") issues.push("coworker_watch_state_invalid");
+  const pauseReasons = ["user_paused", "coworker_paused", "profile_changed", "app_disconnected"];
+  if (value.pauseReason !== null && !pauseReasons.includes(String(value.pauseReason))) issues.push("coworker_watch_pause_reason_invalid");
+  if ((value.state === "active" && value.pauseReason !== null) || (value.state === "paused" && value.pauseReason === null)) {
+    issues.push("coworker_watch_pause_state_invalid");
+  }
+  if (!isRecord(value.parameters)
+    || Object.keys(value.parameters).length > 24
+    || Object.entries(value.parameters).some(([key, item]) => !validId(key)
+      || (item !== null && typeof item !== "string" && typeof item !== "number" && typeof item !== "boolean")
+      || (typeof item === "string" && !validText(item, 500))
+      || (typeof item === "number" && !Number.isFinite(item)))) {
+    issues.push("coworker_watch_parameters_invalid");
+  }
+  if (!isRecord(value.schedule)
+    || !hasOnlyKeys(value.schedule, ["intervalMs", "nextCheckAt", "lastCheckedAt", "maxChecksPerDay"])
+    || !Number.isSafeInteger(value.schedule.intervalMs)
+    || (value.schedule.intervalMs as number) < 60_000
+    || (value.schedule.intervalMs as number) > 7 * 24 * 60 * 60_000
+    || !validDate(value.schedule.nextCheckAt)
+    || (value.schedule.lastCheckedAt !== null && !validDate(value.schedule.lastCheckedAt))
+    || !Number.isSafeInteger(value.schedule.maxChecksPerDay)
+    || (value.schedule.maxChecksPerDay as number) < 1
+    || (value.schedule.maxChecksPerDay as number) > 1_440
+    || (value.schedule.maxChecksPerDay as number) > Math.ceil(86_400_000 / (value.schedule.intervalMs as number))) {
+    issues.push("coworker_watch_schedule_invalid");
+  }
+  if (!isRecord(value.budgets)
+    || !hasOnlyKeys(value.budgets, ["maxReadCallsPerCheck", "maxModelTokensPerCheck", "maxCostMicrosPerCheck"])
+    || !Number.isSafeInteger(value.budgets.maxReadCallsPerCheck)
+    || (value.budgets.maxReadCallsPerCheck as number) < 1
+    || (value.budgets.maxReadCallsPerCheck as number) > 3
+    || !Number.isSafeInteger(value.budgets.maxModelTokensPerCheck)
+    || (value.budgets.maxModelTokensPerCheck as number) < 0
+    || (value.budgets.maxModelTokensPerCheck as number) > 4_000
+    || !Number.isSafeInteger(value.budgets.maxCostMicrosPerCheck)
+    || (value.budgets.maxCostMicrosPerCheck as number) < 0
+    || (value.budgets.maxCostMicrosPerCheck as number) > 1_000_000_000) {
+    issues.push("coworker_watch_budgets_invalid");
+  }
+  if (!Array.isArray(value.conditions)
+    || value.conditions.length < 1
+    || value.conditions.length > 8
+    || value.conditions.some((condition) => !isRecord(condition)
+      || !hasOnlyKeys(condition, ["id", "metric", "operator", "value"])
+      || !validId(condition.id)
+      || !validText(condition.metric, 160)
+      || !["gt", "gte", "lt", "lte", "eq", "changed"].includes(String(condition.operator))
+      || (condition.value !== null && !validText(condition.value, 160))
+      || (condition.operator === "changed" && condition.value !== null)
+      || (condition.operator !== "changed" && condition.value === null))) {
+    issues.push("coworker_watch_conditions_invalid");
+  } else if (new Set(value.conditions.map((condition) => (condition as Record<string, unknown>).id)).size !== value.conditions.length) {
+    issues.push("coworker_watch_conditions_duplicate");
+  }
+  for (const key of ["createdAt", "updatedAt"]) {
+    if (!validDate(value[key])) issues.push(`coworker_watch_${key}_invalid`);
+  }
+  return [...new Set(issues)];
+}
+
+export function validateMatterhornCoworkerInboxItem(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) return ["coworker_inbox_item_not_object"];
+  const topLevelKeys = [
+    "version", "id", "workspaceId", "ownerId", "coworkerId", "profileRevision", "watchId", "state", "kind",
+    "severity", "title", "summary", "reasonCodes", "source", "budgetImpact", "nextSafeAction",
+    "createdAt", "updatedAt",
+  ];
+  if (!hasOnlyKeys(value, topLevelKeys)) issues.push("coworker_inbox_item_unknown_field");
+  if (value.version !== MATTERHORN_COWORKER_INBOX_ITEM_VERSION) issues.push("coworker_inbox_item_version_invalid");
+  const validText = (text: unknown, max: number) => isNonEmptyString(text)
+    && text.length <= max
+    && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(text);
+  const validId = (id: unknown) => typeof id === "string"
+    && validText(id, 160)
+    && /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/.test(id);
+  const validDate = (date: unknown) => typeof date === "string"
+    && isNonEmptyString(date)
+    && Number.isFinite(Date.parse(date));
+  const validHash = (hash: unknown) => typeof hash === "string" && /^(?:sha256:)?[a-f0-9]{64}$/i.test(hash);
+  for (const key of ["id", "workspaceId", "ownerId", "coworkerId"]) {
+    if (!validId(value[key])) issues.push(`coworker_inbox_item_${key}_invalid`);
+  }
+  if (!Number.isSafeInteger(value.profileRevision) || (value.profileRevision as number) < 1) {
+    issues.push("coworker_inbox_item_profileRevision_invalid");
+  }
+  if (value.watchId !== null && !validId(value.watchId)) issues.push("coworker_inbox_item_watchId_invalid");
+  if (!["unread", "read", "dismissed"].includes(String(value.state))) issues.push("coworker_inbox_item_state_invalid");
+  if (!["alert", "question", "notice"].includes(String(value.kind))) issues.push("coworker_inbox_item_kind_invalid");
+  if (!["info", "low", "medium", "high", "critical"].includes(String(value.severity))) issues.push("coworker_inbox_item_severity_invalid");
+  if (!validText(value.title, 160)) issues.push("coworker_inbox_item_title_invalid");
+  if (!validText(value.summary, 1_000)) issues.push("coworker_inbox_item_summary_invalid");
+  if (!isStringArray(value.reasonCodes)
+    || value.reasonCodes.length < 1
+    || value.reasonCodes.length > 16
+    || new Set(value.reasonCodes).size !== value.reasonCodes.length
+    || value.reasonCodes.some((reason) => !validId(reason))) issues.push("coworker_inbox_item_reason_codes_invalid");
+  if (value.source !== null) {
+    if (!isRecord(value.source)
+      || !hasOnlyKeys(value.source, ["appId", "actionId", "evidenceReferenceHash", "freshness", "observedAt"])
+      || !validId(value.source.appId)
+      || !validId(value.source.actionId)
+      || !validHash(value.source.evidenceReferenceHash)
+      || !["fresh", "stale", "unknown"].includes(String(value.source.freshness))
+      || !validDate(value.source.observedAt)) issues.push("coworker_inbox_item_source_invalid");
+  } else if (value.kind === "alert") {
+    issues.push("coworker_inbox_item_alert_source_required");
+  }
+  if (!isRecord(value.budgetImpact)
+    || !hasOnlyKeys(value.budgetImpact, ["readCallsConsumed", "modelTokensConsumed", "costMicros"])
+    || !Number.isSafeInteger(value.budgetImpact.readCallsConsumed)
+    || (value.budgetImpact.readCallsConsumed as number) < 0
+    || (value.budgetImpact.readCallsConsumed as number) > 3
+    || !Number.isSafeInteger(value.budgetImpact.modelTokensConsumed)
+    || (value.budgetImpact.modelTokensConsumed as number) < 0
+    || (value.budgetImpact.modelTokensConsumed as number) > 4_000
+    || !Number.isSafeInteger(value.budgetImpact.costMicros)
+    || (value.budgetImpact.costMicros as number) < 0
+    || (value.budgetImpact.costMicros as number) > 1_000_000_000) {
+    issues.push("coworker_inbox_item_budget_invalid");
+  }
+  if (!isRecord(value.nextSafeAction)
+    || !hasOnlyKeys(value.nextSafeAction, ["kind", "label"])
+    || !["review", "open_chat", "pause_watch", "none"].includes(String(value.nextSafeAction.kind))
+    || !validText(value.nextSafeAction.label, 160)) issues.push("coworker_inbox_item_next_action_invalid");
+  for (const key of ["createdAt", "updatedAt"]) {
+    if (!validDate(value[key])) issues.push(`coworker_inbox_item_${key}_invalid`);
   }
   return [...new Set(issues)];
 }

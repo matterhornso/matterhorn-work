@@ -90,6 +90,10 @@ The authoritative message preflight and submission routes accept an optional `co
 
 `GET` and `PUT /workspace/:id/coworkers/:coworkerId/state` expose owner-scoped structured working state. The closed schema stores only bounded decisions, observed positions, unresolved risks, pending wallet-review intent hashes, evidence hashes, and explicitly approved Memory IDs—never transcript history, signing material, or unrestricted tool output. Writes require both the latest profile revision and an optimistic state revision. Policy and lifecycle changes immediately clear pending financial work and rebind the retained non-financial state; deletion and workspace purge remove it. Active state is compiled into bounded workspace-private model context and its approved Memory records pass through the normal privacy preflight.
 
+`GET|POST /workspace/:id/coworkers/:coworkerId/watches` lists or creates bounded owner-scoped read/watch schedules. Each schedule is locked to one approved app, action, network, scalar parameter set, cadence, condition set, and per-check budget. `PATCH|DELETE .../watches/:watchId` explicitly pauses/resumes or deletes a watch. Profile edits, coworker pause, and revocation pause every schedule; no watch has prepare, signing, relay, broadcast, or submission authority.
+
+`GET /workspace/:id/coworkers/:coworkerId/inbox` returns bounded alerts, questions, and notices. Account clients can only mark an item read or dismissed through `PATCH .../inbox/:itemId`; there is no account-facing alert creation route. Every alert requires typed evidence provenance, freshness, reason codes, budget impact, and a safe next action. Inbox records never contain raw prompts, secrets, signatures, or unrestricted tool output.
+
 Future readiness rules are fail-closed:
 
 - Enforced app access requires the guarded agent runtime in `enforce`.

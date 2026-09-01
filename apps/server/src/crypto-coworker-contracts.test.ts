@@ -1,15 +1,21 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  MATTERHORN_COWORKER_INBOX_ITEM_VERSION,
   MATTERHORN_COWORKER_PROFILE_VERSION,
+  MATTERHORN_COWORKER_WATCH_VERSION,
   MATTERHORN_COWORKER_WORKING_STATE_VERSION,
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
   MATTERHORN_EVIDENCE_BUNDLE_VERSION,
+  type MatterhornCoworkerInboxItem,
   type MatterhornCoworkerProfile,
+  type MatterhornCoworkerWatch,
   type MatterhornCoworkerWorkingState,
   type MatterhornCryptoAppManifest,
   type MatterhornEvidenceBundle,
+  validateMatterhornCoworkerInboxItem,
   validateMatterhornCoworkerProfile,
+  validateMatterhornCoworkerWatch,
   validateMatterhornCoworkerWorkingState,
   validateMatterhornCryptoAppManifest,
   validateMatterhornEvidenceBundle,
@@ -163,6 +169,64 @@ const workingState: MatterhornCoworkerWorkingState = {
   updatedAt: "2026-09-01T00:00:00.000Z",
 };
 
+const watch: MatterhornCoworkerWatch = {
+  version: MATTERHORN_COWORKER_WATCH_VERSION,
+  id: "watch_sui_balance",
+  workspaceId: "ws_alpha",
+  ownerId: "account_alpha",
+  coworkerId: "coworker_risk_monitor",
+  revision: 1,
+  profileRevision: 1,
+  state: "active",
+  pauseReason: null,
+  name: "Sui balance change",
+  appId: "matterhorn.sui",
+  actionId: "sui_account_read",
+  network: "sui:testnet",
+  parameters: { address: "0x1234" },
+  schedule: {
+    intervalMs: 300_000,
+    nextCheckAt: "2026-09-01T00:05:00.000Z",
+    lastCheckedAt: null,
+    maxChecksPerDay: 288,
+  },
+  budgets: {
+    maxReadCallsPerCheck: 1,
+    maxModelTokensPerCheck: 0,
+    maxCostMicrosPerCheck: 10_000,
+  },
+  conditions: [{ id: "balance_changed", metric: "totalBalance", operator: "changed", value: null }],
+  createdAt: "2026-09-01T00:00:00.000Z",
+  updatedAt: "2026-09-01T00:00:00.000Z",
+};
+
+const inboxItem: MatterhornCoworkerInboxItem = {
+  version: MATTERHORN_COWORKER_INBOX_ITEM_VERSION,
+  id: "inbox_sui_balance",
+  workspaceId: "ws_alpha",
+  ownerId: "account_alpha",
+  coworkerId: "coworker_risk_monitor",
+  profileRevision: 1,
+  watchId: watch.id,
+  state: "unread",
+  kind: "alert",
+  severity: "medium",
+  title: "Sui balance changed",
+  summary: "The observed balance changed since the previous approved check.",
+  reasonCodes: ["balance_changed"],
+  source: {
+    appId: watch.appId,
+    actionId: watch.actionId,
+    evidenceReferenceHash: "c".repeat(64),
+    freshness: "fresh",
+    observedAt: "2026-09-01T00:05:00.000Z",
+  },
+  budgetImpact: { readCallsConsumed: 1, modelTokensConsumed: 0, costMicros: 1_000 },
+  nextSafeAction: { kind: "review", label: "Review the fresh balance evidence" },
+  createdAt: "2026-09-01T00:05:00.000Z",
+  updatedAt: "2026-09-01T00:05:00.000Z",
+};
+
 describe("crypto coworker public contracts", () => {
   test("accepts a non-custodial crypto app manifest", () => {
     expect(validateMatterhornCryptoAppManifest(manifest)).toEqual([]);
@@ -233,6 +297,30 @@ describe("crypto coworker public contracts", () => {
         evidenceReferenceIds: ["missing"],
       }],
     })).toContain("coworker_working_state_unresolvedRisks_invalid");
+  });
+
+  test("accepts bounded read watches and rejects submit-shaped or unbounded schedules", () => {
+    expect(validateMatterhornCoworkerWatch(watch)).toEqual([]);
+    expect(validateMatterhornCoworkerWatch({
+      ...watch,
+      submitTransaction: true,
+      schedule: { ...watch.schedule, intervalMs: 1_000, maxChecksPerDay: 10_000 },
+    })).toEqual(expect.arrayContaining([
+      "coworker_watch_unknown_field",
+      "coworker_watch_schedule_invalid",
+    ]));
+  });
+
+  test("requires alert provenance, budget impact, and a bounded safe next action", () => {
+    expect(validateMatterhornCoworkerInboxItem(inboxItem)).toEqual([]);
+    expect(validateMatterhornCoworkerInboxItem({
+      ...inboxItem,
+      source: null,
+      rawToolOutput: "untrusted payload",
+    })).toEqual(expect.arrayContaining([
+      "coworker_inbox_item_unknown_field",
+      "coworker_inbox_item_alert_source_required",
+    ]));
   });
 
   test("accepts encrypted evidence and rejects raw content fields", () => {

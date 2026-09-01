@@ -11,6 +11,8 @@ import {
   MatterhornCoworkerError,
   MatterhornCoworkers,
   type MatterhornCoworkerCreateInput,
+  type MatterhornCoworkerInboxItemInput,
+  type MatterhornCoworkerWatchCreateInput,
   type MatterhornCoworkerWorkingStateInput,
 } from "./crypto-coworkers.js";
 
@@ -95,6 +97,42 @@ function workingStateInput(
   };
 }
 
+function watchInput(overrides: Partial<MatterhornCoworkerWatchCreateInput> = {}): MatterhornCoworkerWatchCreateInput {
+  return {
+    profileRevision: 1,
+    name: "Sui balance change",
+    appId: "matterhorn.sui-testnet",
+    actionId: "sui_account_read",
+    network: "sui:testnet",
+    parameters: { address: "0x1234" },
+    schedule: { intervalMs: 300_000, maxChecksPerDay: 288 },
+    budgets: { maxReadCallsPerCheck: 1, maxModelTokensPerCheck: 0, maxCostMicrosPerCheck: 10_000 },
+    conditions: [{ id: "balance_changed", metric: "totalBalance", operator: "changed", value: null }],
+    ...overrides,
+  };
+}
+
+function inboxInput(watchId: string, overrides: Partial<MatterhornCoworkerInboxItemInput> = {}): MatterhornCoworkerInboxItemInput {
+  return {
+    watchId,
+    kind: "alert",
+    severity: "medium",
+    title: "Sui balance changed",
+    summary: "The observed Sui balance changed since the previous approved check.",
+    reasonCodes: ["balance_changed"],
+    source: {
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_account_read",
+      evidenceReferenceHash: "c".repeat(64),
+      freshness: "fresh",
+      observedAt: NOW,
+    },
+    budgetImpact: { readCallsConsumed: 1, modelTokensConsumed: 0, costMicros: 1_000 },
+    nextSafeAction: { kind: "review", label: "Review the fresh balance evidence" },
+    ...overrides,
+  };
+}
+
 function fixture(policyVersion = "coworker-policy-1", invalidations: unknown[] = []) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-coworkers-"));
   roots.push(root);
@@ -104,6 +142,8 @@ function fixture(policyVersion = "coworker-policy-1", invalidations: unknown[] =
     policyVersion,
     now: () => new Date(NOW),
     id: () => "cw_market_analyst",
+    watchId: () => "cwatch_sui_balance",
+    inboxItemId: () => "cinbox_sui_balance",
     onInvalidate: (event) => invalidations.push(event),
   });
   return { root, store, coworkers };
@@ -374,6 +414,149 @@ describe("durable crypto coworkers", () => {
       });
       coworkers.delete("ws_alpha", "account_alpha", profile.id, paused.revision);
       expect(store.getWorkingState("ws_alpha", "account_alpha", profile.id)).toBeNull();
+    } finally {
+      store.close();
+    }
+  });
+
+  test("persists bounded tenant-scoped watches and enforces the active-watch limit atomically", () => {
+    const { root, store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      expect(watch).toMatchObject({
+        state: "active",
+        pauseReason: null,
+        profileRevision: profile.revision,
+        schedule: { nextCheckAt: "2026-09-01T12:05:00.000Z", lastCheckedAt: null },
+      });
+      expect(coworkers.listWatches("ws_alpha", "account_alpha", profile.id)).toHaveLength(1);
+      expect(() => coworkers.listWatches("ws_alpha", "account_beta", profile.id))
+        .toThrow(new MatterhornCoworkerError("coworker_not_found"));
+      expect(() => coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput({ name: "Second watch" })))
+        .toThrow(new MatterhornCoworkerError("coworker_watch_limit"));
+
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+      try {
+        const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
+        expect(reopened.getWatch("ws_alpha", "account_alpha", profile.id, watch.id)?.conditions[0]?.operator)
+          .toBe("changed");
+      } finally {
+        reopenedStore.close();
+      }
+    } finally {
+      store.close();
+    }
+  });
+
+  test("rejects watches outside profile scope, budgets, cadence, or secret boundary", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 2 },
+      }));
+      const unsafe: MatterhornCoworkerWatchCreateInput[] = [
+        watchInput({ appId: "unapproved.app" }),
+        watchInput({ actionId: "unapproved_action" }),
+        watchInput({ network: "sui:mainnet" }),
+        watchInput({ budgets: { ...watchInput().budgets, maxReadCallsPerCheck: 13 } }),
+        watchInput({ schedule: { intervalMs: 1_000, maxChecksPerDay: 1_000 } }),
+        watchInput({ parameters: { privateKey: "secret material" } }),
+      ];
+      for (const candidate of unsafe) {
+        expect(() => coworkers.createWatch("ws_alpha", "account_alpha", profile.id, candidate))
+          .toThrow(new MatterhornCoworkerError("coworker_watch_invalid"));
+      }
+      expect(coworkers.listWatches("ws_alpha", "account_alpha", profile.id)).toEqual([]);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("pauses every schedule on profile or lifecycle changes and requires an explicit safe resume", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 2 },
+      }));
+      const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      const updated = coworkers.update("ws_alpha", "account_alpha", profile.id, {
+        expectedRevision: profile.revision,
+        mission: "Monitor the approved Sui balance and surface only evidence-backed changes.",
+      });
+      expect(coworkers.getWatch("ws_alpha", "account_alpha", profile.id, watch.id)).toMatchObject({
+        state: "paused",
+        pauseReason: "profile_changed",
+        profileRevision: updated.revision,
+      });
+      const resumedWatch = coworkers.transitionWatch(
+        "ws_alpha",
+        "account_alpha",
+        profile.id,
+        watch.id,
+        "active",
+        2,
+      );
+      expect(resumedWatch).toMatchObject({ state: "active", pauseReason: null, profileRevision: updated.revision });
+      const pausedCoworker = coworkers.transition("ws_alpha", "account_alpha", profile.id, "paused", updated.revision);
+      expect(coworkers.getWatch("ws_alpha", "account_alpha", profile.id, watch.id)).toMatchObject({
+        state: "paused",
+        pauseReason: "coworker_paused",
+        profileRevision: pausedCoworker.revision,
+      });
+      expect(store.listDueWatches("2026-09-02T00:00:00.000Z")).toEqual([]);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("stores evidence-backed inbox alerts without transaction authority and isolates their state", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      const item = coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
+      expect(item).toMatchObject({ state: "unread", watchId: watch.id, kind: "alert" });
+      expect(JSON.stringify(item)).not.toMatch(/sign|submit|relay|broadcast|private.?key/i);
+      expect(coworkers.listInbox({ workspaceId: "ws_alpha", ownerId: "account_alpha", coworkerId: profile.id }))
+        .toHaveLength(1);
+      expect(() => coworkers.listInbox({ workspaceId: "ws_alpha", ownerId: "account_beta", coworkerId: profile.id }))
+        .toThrow(new MatterhornCoworkerError("coworker_not_found"));
+      const read = coworkers.transitionInboxItem(
+        "ws_alpha",
+        "account_alpha",
+        profile.id,
+        item.id,
+        "read",
+        "unread",
+      );
+      expect(read.state).toBe("read");
+      expect(() => coworkers.transitionInboxItem(
+        "ws_alpha",
+        "account_alpha",
+        profile.id,
+        item.id,
+        "dismissed",
+        "unread",
+      )).toThrow(new MatterhornCoworkerError("coworker_inbox_state_conflict"));
+      expect(() => coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id, {
+        summary: "Store this private key in the alert.",
+      }))).toThrow(new MatterhornCoworkerError("coworker_inbox_item_invalid"));
+      expect(() => coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id, {
+        budgetImpact: { readCallsConsumed: 2, modelTokensConsumed: 0, costMicros: 1_000 },
+      }))).toThrow(new MatterhornCoworkerError("coworker_inbox_item_invalid"));
+
+      coworkers.delete("ws_alpha", "account_alpha", profile.id, profile.revision);
+      expect(store.getWatch("ws_alpha", "account_alpha", profile.id, watch.id)).toBeNull();
+      expect(store.getInboxItem("ws_alpha", "account_alpha", profile.id, item.id)).toBeNull();
     } finally {
       store.close();
     }
