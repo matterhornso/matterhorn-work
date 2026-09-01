@@ -192,13 +192,14 @@ export class MatterhornCryptoAppConnections {
 
   #view(connection: MatterhornCryptoAppConnection): MatterhornCryptoAppConnectionView {
     const registryEntry = this.#registry.resolve(connection.appId);
+    const { credential, createdBy: _createdBy, ...publicConnection } = structuredClone(connection);
     return {
-      ...structuredClone(connection),
+      ...publicConnection,
       credential: {
-        type: connection.credential.type,
-        connected: connection.credential.type === "none"
-          || ("secretReference" in connection.credential && Boolean(connection.credential.secretReference))
-          || ("walletConnectionId" in connection.credential && Boolean(connection.credential.walletConnectionId)),
+        type: credential.type,
+        connected: credential.type === "none"
+          || ("secretReference" in credential && Boolean(credential.secretReference))
+          || ("walletConnectionId" in credential && Boolean(credential.walletConnectionId)),
       },
       availability: registryEntry?.manifestRevision === connection.manifestRevision
         ? "available"

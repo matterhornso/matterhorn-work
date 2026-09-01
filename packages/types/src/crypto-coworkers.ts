@@ -99,7 +99,7 @@ export type MatterhornCryptoAppConnection = {
   updatedAt: string;
 };
 
-export type MatterhornCryptoAppConnectionView = Omit<MatterhornCryptoAppConnection, "credential"> & {
+export type MatterhornCryptoAppConnectionView = Omit<MatterhornCryptoAppConnection, "credential" | "createdBy"> & {
   credential: {
     type: MatterhornCryptoAppConnectionCredential["type"];
     connected: boolean;

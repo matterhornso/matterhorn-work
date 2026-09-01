@@ -372,6 +372,17 @@ import {
   type MatterhornCryptoAppRuntimeServices,
 } from "./crypto-app-runtime.js";
 import {
+  MatterhornCryptoAppCatalogError,
+  type MatterhornCryptoAppCatalogQuery,
+} from "./crypto-app-catalog.js";
+import { MatterhornCryptoAppConnectionError } from "./crypto-app-connections.js";
+import { MatterhornCryptoAppConnectionStoreError } from "./crypto-app-connection-store.js";
+import type {
+  MatterhornCryptoAppActionAccess,
+  MatterhornCryptoAppActionRisk,
+  MatterhornCryptoAppConnectionState,
+} from "@matterhorn-work/types/crypto-coworkers";
+import {
   buildMatterhornSessionPermissionProfile,
   matterhornPermissionProfileIsActive,
   normalizeMatterhornPermissionRules,
@@ -2564,6 +2575,70 @@ function jsonResponse(data: unknown, status = 200) {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function noStoreJsonResponse(data: unknown, status = 200) {
+  const response = jsonResponse(data, status);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
+function cryptoAppApiError(error: unknown): ApiError {
+  if (error instanceof MatterhornCryptoAppCatalogError) {
+    if (error.code === "crypto_app_gateway_disabled") {
+      return new ApiError(503, error.code, "Crypto app connections are not enabled for this deployment.");
+    }
+    return new ApiError(400, error.code, "Crypto app catalog filters are invalid.");
+  }
+  if (error instanceof MatterhornCryptoAppConnectionError) {
+    const status = error.code === "connection_not_found"
+      ? 404
+      : error.code === "app_certification_unavailable" || error.code === "connection_transition_invalid"
+        ? 409
+        : 400;
+    const message = error.code === "connection_not_found"
+      ? "Crypto app connection not found."
+      : error.code === "app_certification_unavailable"
+        ? "This crypto app does not have a current certification."
+        : error.code === "connection_transition_invalid"
+          ? "The requested crypto app connection state change is not allowed."
+          : "Crypto app connection input is invalid.";
+    return new ApiError(status, error.code, message);
+  }
+  if (error instanceof MatterhornCryptoAppConnectionStoreError) {
+    if (error.code === "crypto_app_connection_conflict") {
+      return new ApiError(409, error.code, "Crypto app connection already exists.");
+    }
+    return new ApiError(500, "crypto_app_connection_integrity_error", "Crypto app connection state is unavailable.");
+  }
+  return error instanceof ApiError
+    ? error
+    : new ApiError(500, "crypto_app_internal_error", "Crypto app service is unavailable.");
+}
+
+function cryptoAppStringArray(
+  value: unknown,
+  field: string,
+  options: { allowEmpty?: boolean; maxItems?: number } = {},
+): string[] {
+  const maxItems = options.maxItems ?? 64;
+  if (!Array.isArray(value)
+    || (!options.allowEmpty && value.length === 0)
+    || value.length > maxItems
+    || value.some((item) => typeof item !== "string" || !item.trim() || item.length > 160)) {
+    throw new ApiError(400, "crypto_app_connection_input_invalid", `${field} is invalid.`);
+  }
+  const normalized = value.map((item) => (item as string).trim());
+  if (new Set(normalized).size !== normalized.length) {
+    throw new ApiError(400, "crypto_app_connection_input_invalid", `${field} contains duplicates.`);
+  }
+  return normalized;
+}
+
+function cryptoAppCreatedBy(ctx: RequestContext): string {
+  const identity = ctx.matterhornSession?.user.id ?? ctx.actor?.clientId ?? ctx.actor?.tokenHash;
+  if (!identity) throw new ApiError(401, "unauthorized", "An authenticated identity is required.");
+  return identity;
 }
 
 const MATTERHORN_SESSION_COOKIE = "mh_session";
@@ -8384,6 +8459,136 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/backend/models", "client", async () => {
     return jsonResponse(buildBackendModels());
+  });
+
+  addRoute(routes, "GET", "/crypto-apps", "client", async (ctx) => {
+    try {
+      if (!cryptoAppRuntime.catalog) throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      const query: MatterhornCryptoAppCatalogQuery = {};
+      const search = ctx.url.searchParams.get("query");
+      const environment = ctx.url.searchParams.get("environment");
+      const access = ctx.url.searchParams.get("access");
+      const risk = ctx.url.searchParams.get("risk");
+      if (search !== null) query.query = search;
+      if (environment !== null) query.environment = environment as MatterhornCryptoAppCatalogQuery["environment"];
+      if (access !== null) query.access = access as MatterhornCryptoAppActionAccess;
+      if (risk !== null) query.risk = risk as MatterhornCryptoAppActionRisk;
+      return noStoreJsonResponse({
+        mode: cryptoAppRuntime.mode,
+        apps: cryptoAppRuntime.catalog.list(query),
+      });
+    } catch (error) {
+      throw cryptoAppApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/crypto-apps/:appId", "client", async (ctx) => {
+    try {
+      if (!cryptoAppRuntime.catalog) throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      const app = cryptoAppRuntime.catalog.get(ctx.params.appId);
+      if (!app) throw new ApiError(404, "crypto_app_not_found", "Crypto app not found.");
+      return noStoreJsonResponse({ mode: cryptoAppRuntime.mode, app });
+    } catch (error) {
+      throw cryptoAppApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/crypto-app-connections", "client", async (ctx) => {
+    try {
+      if (!cryptoAppRuntime.catalog) throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      return noStoreJsonResponse({
+        mode: cryptoAppRuntime.mode,
+        connections: cryptoAppRuntime.catalog.listConnections(workspace.id),
+      });
+    } catch (error) {
+      throw cryptoAppApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/crypto-app-connections", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!cryptoAppRuntime.catalog) throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request, 32_768, "Crypto app connection");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => ![
+          "appId",
+          "grantedActionIds",
+          "grantedScopes",
+          "grantedNetworks",
+        ].includes(key))) {
+        throw new ApiError(400, "crypto_app_connection_input_invalid", "Crypto app connection input is invalid.");
+      }
+      const appId = typeof body.appId === "string" ? body.appId.trim() : "";
+      if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(appId)) {
+        throw new ApiError(400, "crypto_app_connection_input_invalid", "appId is invalid.");
+      }
+      const app = cryptoAppRuntime.catalog.get(appId);
+      if (!app) throw new ApiError(404, "crypto_app_not_found", "Crypto app not found.");
+      if (app.authentication.type !== "none") {
+        throw new ApiError(
+          409,
+          "crypto_app_connection_flow_required",
+          "This app requires a server-managed credential or wallet connection flow.",
+        );
+      }
+      const connection = cryptoAppRuntime.catalog.createConnection({
+        workspaceId: workspace.id,
+        createdBy: cryptoAppCreatedBy(ctx),
+        appId,
+        grantedActionIds: cryptoAppStringArray(body.grantedActionIds, "grantedActionIds"),
+        grantedScopes: cryptoAppStringArray(body.grantedScopes, "grantedScopes", { allowEmpty: true }),
+        grantedNetworks: cryptoAppStringArray(body.grantedNetworks, "grantedNetworks"),
+        credential: { type: "none" },
+      });
+      return noStoreJsonResponse({ connection }, 201);
+    } catch (error) {
+      throw cryptoAppApiError(error);
+    }
+  });
+
+  addRoute(routes, "PATCH", "/workspace/:id/crypto-app-connections/:connectionId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!cryptoAppRuntime.catalog) throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request, 8_192, "Crypto app connection state");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => key !== "state")
+        || (body.state !== "active" && body.state !== "paused" && body.state !== "revoked")) {
+        throw new ApiError(400, "crypto_app_connection_state_invalid", "Crypto app connection state is invalid.");
+      }
+      const connection = cryptoAppRuntime.catalog.transitionConnection(
+        workspace.id,
+        ctx.params.connectionId,
+        body.state as MatterhornCryptoAppConnectionState,
+      );
+      return noStoreJsonResponse({ connection });
+    } catch (error) {
+      throw cryptoAppApiError(error);
+    }
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/crypto-app-connections/:connectionId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!cryptoAppRuntime.catalog) throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const current = cryptoAppRuntime.catalog.listConnections(workspace.id)
+        .find((connection) => connection.id === ctx.params.connectionId);
+      if (!current) throw new MatterhornCryptoAppConnectionError("connection_not_found");
+      const connection = current.state === "revoked"
+        ? current
+        : cryptoAppRuntime.catalog.transitionConnection(workspace.id, current.id, "revoked");
+      return noStoreJsonResponse({ connection });
+    } catch (error) {
+      throw cryptoAppApiError(error);
+    }
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/models", "client", async (ctx) => {
