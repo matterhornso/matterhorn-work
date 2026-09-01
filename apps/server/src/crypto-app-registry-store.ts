@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import type { MatterhornCryptoAppManifest } from "@matterhorn-work/types/crypto-coworkers";
 
 import type { MatterhornCryptoAppConformanceReport } from "./crypto-app-conformance.js";
+import type { MatterhornCryptoAppRuntimeCertificationReport } from "./crypto-app-runtime-certification.js";
 import type { MatterhornCryptoAppCertificationState } from "./crypto-app-registry.js";
 
 type SqliteRunResult = { changes?: number };
@@ -37,6 +38,8 @@ export type PersistedCryptoAppCertification = {
   state: Exclude<MatterhornCryptoAppCertificationState, "pending">;
   report: MatterhornCryptoAppConformanceReport | null;
   reportHash: string | null;
+  runtimeReport: MatterhornCryptoAppRuntimeCertificationReport | null;
+  runtimeReportHash: string | null;
   policyVersion: string;
   reason: string | null;
   updatedAt: string;
@@ -57,6 +60,8 @@ type StoredCertificationRow = {
   state: string;
   report_json: string | null;
   report_hash: string | null;
+  runtime_report_json: string | null;
+  runtime_report_hash: string | null;
   policy_version: string;
   reason: string | null;
   updated_at: string;
@@ -135,6 +140,8 @@ export class MatterhornCryptoAppRegistryStore {
         state TEXT NOT NULL,
         report_json TEXT,
         report_hash TEXT,
+        runtime_report_json TEXT,
+        runtime_report_hash TEXT,
         policy_version TEXT NOT NULL,
         reason TEXT,
         updated_at TEXT NOT NULL,
@@ -153,6 +160,16 @@ export class MatterhornCryptoAppRegistryStore {
           ON DELETE RESTRICT
       );
     `);
+    const certificationColumns = new Set(
+      statement(this.#db, "PRAGMA table_info(crypto_app_certification_history)").all()
+        .map((row) => (row as { name: string }).name),
+    );
+    if (!certificationColumns.has("runtime_report_json")) {
+      this.#db.exec("ALTER TABLE crypto_app_certification_history ADD COLUMN runtime_report_json TEXT;");
+    }
+    if (!certificationColumns.has("runtime_report_hash")) {
+      this.#db.exec("ALTER TABLE crypto_app_certification_history ADD COLUMN runtime_report_hash TEXT;");
+    }
     chmodSync(path, 0o600);
   }
 
@@ -217,8 +234,9 @@ export class MatterhornCryptoAppRegistryStore {
 
       const result = statement(this.#db, `
         INSERT INTO crypto_app_certification_history(
-          app_id, manifest_revision, state, report_json, report_hash, policy_version, reason, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          app_id, manifest_revision, state, report_json, report_hash,
+          runtime_report_json, runtime_report_hash, policy_version, reason, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING sequence
       `).get(
         input.appId,
@@ -226,6 +244,8 @@ export class MatterhornCryptoAppRegistryStore {
         input.state,
         input.report ? JSON.stringify(input.report) : null,
         input.reportHash,
+        input.runtimeReport ? JSON.stringify(input.runtimeReport) : null,
+        input.runtimeReportHash,
         input.policyVersion,
         input.reason,
         input.updatedAt,
@@ -271,7 +291,8 @@ export class MatterhornCryptoAppRegistryStore {
 
   listCertificationHistory(appId: string, manifestRevision: string): PersistedCryptoAppCertification[] {
     const rows = statement(this.#db, `
-      SELECT sequence, app_id, manifest_revision, state, report_json, report_hash, policy_version, reason, updated_at
+      SELECT sequence, app_id, manifest_revision, state, report_json, report_hash,
+        runtime_report_json, runtime_report_hash, policy_version, reason, updated_at
       FROM crypto_app_certification_history
       WHERE app_id = ? AND manifest_revision = ?
       ORDER BY sequence ASC
@@ -285,6 +306,13 @@ export class MatterhornCryptoAppRegistryStore {
         ? parseJson<MatterhornCryptoAppConformanceReport>(row.report_json, "crypto_app_registry_report_corrupt")
         : null,
       reportHash: row.report_hash,
+      runtimeReport: row.runtime_report_json
+        ? parseJson<MatterhornCryptoAppRuntimeCertificationReport>(
+          row.runtime_report_json,
+          "crypto_app_registry_runtime_report_corrupt",
+        )
+        : null,
+      runtimeReportHash: row.runtime_report_hash,
       policyVersion: row.policy_version,
       reason: row.reason,
       updatedAt: row.updated_at,

@@ -17,7 +17,8 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 1 pinned live-source executor: Sui balance/checkpoint reads and exact transfer simulations plus Hyperliquid market/orderbook/account reads and exact short-lived order previews are complete and backend-only. Hyperliquid preparation never calls the exchange endpoint.
 - Phase 1 Sui SDK boundary: complete and backend-only. Matterhorn injects an explicit binary gRPC-web transport over a TLS-verified, IPv4-pinned HTTP/2 socket. The allowlist contains only the read-only `StateService/GetBalance` resolution required by the official transaction builder and `TransactionExecutionService/SimulateTransaction`; `ExecuteTransaction` and every other method fail before dialing.
 - Phase 1 durable operational policy: complete and backend-only. Workspace/day quota reservations, per-call cost ceilings, replay-safe reconciliation, abandoned-reservation expiry, tenant purge, and circuit state persist atomically in SQLite across process restarts.
-- Current slice: conflicting-source and schema-drift adversarial tests, then completing testnet certification.
+- Phase 1 certification promotion boundary: complete and backend-only. A passing static manifest report is insufficient by itself; promotion now requires a hash-bound runtime adversarial report covering authority, pinned egress, tenant isolation, schema drift, untrusted output, abort behavior, capability replay, restart-safe quota/circuit state, wallet-only simulation, and authenticated-credential confusion where applicable. Only redacted evidence hashes are retained.
+- Current slice: execute the runtime harness against the pinned Sui and Hyperliquid testnet adapters and seal the resulting certification reports.
 - All new production modes remain `off`; no HTTP routes or upstream adapter traffic are enabled.
 
 ## Goal
@@ -111,6 +112,7 @@ A signed, version-pinned, revocable registry projects multiple crypto protocols 
    - Adversarial output/prompt-injection tests.
    - Auth confusion, tenant isolation, timeout, schema drift, replay, and egress tests.
    - Testnet fixtures for Sui and Hyperliquid.
+   - Promotion requires both the passing static report and a complete passing runtime report cryptographically bound to the manifest, policy, environment, and redacted probe-evidence hashes.
 5. **Catalog API**
    - Search and category filters.
    - Inspect endpoint with schemas, scopes, risk, privacy, freshness, price, and certification.

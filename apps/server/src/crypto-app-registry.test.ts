@@ -11,6 +11,7 @@ import {
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
+import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certification-test-support.js";
 import { MatterhornCryptoAppRegistryStore } from "./crypto-app-registry-store.js";
 import {
   canonicalCryptoAppManifestPayload,
@@ -104,6 +105,11 @@ function reportFor(value: MatterhornCryptoAppManifest) {
   });
 }
 
+function certificationFor(value: MatterhornCryptoAppManifest) {
+  const report = reportFor(value);
+  return { report, runtimeReport: passingCryptoAppRuntimeReportForTest(value, report) };
+}
+
 describe("crypto app signed registry", () => {
   test("verifies the detached signature over the canonical manifest payload", () => {
     const manifest = signedManifest();
@@ -124,7 +130,7 @@ describe("crypto app signed registry", () => {
       appId: manifest.appId,
       manifestRevision: manifest.manifestRevision,
       state: "certified_testnet",
-      report: reportFor(manifest),
+      ...certificationFor(manifest),
     });
     expect(certified.certification.state).toBe("certified_testnet");
     expect(store.resolve(manifest.appId)?.manifestHash).toBe(pending.manifestHash);
@@ -187,7 +193,7 @@ describe("crypto app signed registry", () => {
     })).toThrowError(expect.objectContaining({ code: "certification_transition_invalid" }));
   });
 
-  test("requires a matching, passing, hash-valid conformance report for certification", () => {
+  test("requires matching, passing, hash-valid static and runtime reports for certification", () => {
     const store = registry();
     const manifest = signedManifest();
     store.register(manifest);
@@ -197,6 +203,14 @@ describe("crypto app signed registry", () => {
       manifestRevision: manifest.manifestRevision,
       state: "certified_testnet",
       report: null,
+      runtimeReport: null,
+    })).toThrowError(expect.objectContaining({ code: "certification_metadata_invalid" }));
+
+    expect(() => store.updateCertification({
+      appId: manifest.appId,
+      manifestRevision: manifest.manifestRevision,
+      state: "certified_testnet",
+      report: reportFor(manifest),
     })).toThrowError(expect.objectContaining({ code: "certification_metadata_invalid" }));
 
     const tamperedReport = { ...reportFor(manifest), policyVersion: "different-policy" };
@@ -205,6 +219,16 @@ describe("crypto app signed registry", () => {
       manifestRevision: manifest.manifestRevision,
       state: "certified_testnet",
       report: tamperedReport,
+      runtimeReport: passingCryptoAppRuntimeReportForTest(manifest, reportFor(manifest)),
+    })).toThrowError(expect.objectContaining({ code: "certification_metadata_invalid" }));
+
+    const certification = certificationFor(manifest);
+    expect(() => store.updateCertification({
+      appId: manifest.appId,
+      manifestRevision: manifest.manifestRevision,
+      state: "certified_testnet",
+      report: certification.report,
+      runtimeReport: { ...certification.runtimeReport, reportHash: "0".repeat(64) },
     })).toThrowError(expect.objectContaining({ code: "certification_metadata_invalid" }));
   });
 
@@ -226,13 +250,15 @@ describe("crypto app signed registry", () => {
       appId: manifest.appId,
       manifestRevision: manifest.manifestRevision,
       state: "certified_testnet",
-      report: reportFor(manifest),
+      ...certificationFor(manifest),
     });
     firstStore.close();
 
     const secondStore = new MatterhornCryptoAppRegistryStore(path);
     const second = registry(secondStore);
-    expect(second.resolve(manifest.appId)?.manifestRevision).toBe("1.0.0");
+    const resolved = second.resolve(manifest.appId);
+    expect(resolved?.manifestRevision).toBe("1.0.0");
+    expect(resolved?.certification.runtimeReportHash).toHaveLength(64);
     expect(second.certificationHistory(manifest.appId, manifest.manifestRevision)).toHaveLength(1);
     second.updateCertification({
       appId: manifest.appId,
@@ -260,7 +286,7 @@ describe("crypto app signed registry", () => {
       appId: manifest.appId,
       manifestRevision: manifest.manifestRevision,
       state: "certified_testnet",
-      report: reportFor(manifest),
+      ...certificationFor(manifest),
     });
     firstStore.close();
 
@@ -282,7 +308,7 @@ describe("crypto app signed registry", () => {
       appId: manifest.appId,
       manifestRevision: manifest.manifestRevision,
       state: "certified_testnet",
-      report: reportFor(manifest),
+      ...certificationFor(manifest),
     });
     expect(() => second.updateCertification({
       appId: manifest.appId,

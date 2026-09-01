@@ -13,6 +13,7 @@ import {
 import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
+import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certification-test-support.js";
 import { MatterhornCryptoAppRegistry, canonicalCryptoAppManifestPayload } from "./crypto-app-registry.js";
 
 const keys = generateKeyPairSync("ed25519");
@@ -81,16 +82,18 @@ function certifiedRegistry() {
   });
   const manifest = signedManifest();
   registry.register(manifest);
+  const report = runCryptoAppManifestConformance(manifest, {
+    publisherKey: keys.publicKey,
+    policyVersion: "policy-1",
+    targetEnvironment: "testnet",
+    now: () => new Date("2026-09-01T12:00:00.000Z"),
+  });
   registry.updateCertification({
     appId: manifest.appId,
     manifestRevision: manifest.manifestRevision,
     state: "certified_testnet",
-    report: runCryptoAppManifestConformance(manifest, {
-      publisherKey: keys.publicKey,
-      policyVersion: "policy-1",
-      targetEnvironment: "testnet",
-      now: () => new Date("2026-09-01T12:00:00.000Z"),
-    }),
+    report,
+    runtimeReport: passingCryptoAppRuntimeReportForTest(manifest, report),
   });
   return { registry, manifest };
 }
@@ -214,4 +217,3 @@ describe("workspace-scoped crypto app connections", () => {
     store.close();
   });
 });
-

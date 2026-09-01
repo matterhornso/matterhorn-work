@@ -5,6 +5,8 @@ import {
 
 import type { MatterhornCryptoAppConformanceReport } from "./crypto-app-conformance.js";
 import { verifyCryptoAppConformanceReport } from "./crypto-app-conformance.js";
+import type { MatterhornCryptoAppRuntimeCertificationReport } from "./crypto-app-runtime-certification.js";
+import { verifyCryptoAppRuntimeCertificationReport } from "./crypto-app-runtime-certification.js";
 import {
   canonicalCryptoAppManifestPayload,
   cryptoAppManifestHash,
@@ -40,6 +42,7 @@ export type MatterhornCryptoAppRegistryEntry = {
   certification: {
     state: MatterhornCryptoAppCertificationState;
     reportHash: string | null;
+    runtimeReportHash: string | null;
     policyVersion: string;
     reason: string | null;
     updatedAt: string;
@@ -78,6 +81,7 @@ type CertificationUpdate = {
   manifestRevision: string;
   state: Exclude<MatterhornCryptoAppCertificationState, "pending">;
   report?: MatterhornCryptoAppConformanceReport | null;
+  runtimeReport?: MatterhornCryptoAppRuntimeCertificationReport | null;
   reason?: string | null;
 };
 
@@ -158,6 +162,7 @@ export class MatterhornCryptoAppRegistry {
         certification: {
           state: "pending",
           reportHash: null,
+          runtimeReportHash: null,
           policyVersion: this.#policyVersion,
           reason: null,
           updatedAt: stored.registeredAt,
@@ -174,6 +179,7 @@ export class MatterhornCryptoAppRegistry {
         entry.certification = {
           state: event.state,
           reportHash: event.reportHash,
+          runtimeReportHash: event.runtimeReportHash,
           policyVersion: event.policyVersion,
           reason: event.reason,
           updatedAt: event.updatedAt,
@@ -221,6 +227,7 @@ export class MatterhornCryptoAppRegistry {
       certification: {
         state: "pending",
         reportHash: null,
+        runtimeReportHash: null,
         policyVersion: this.#policyVersion,
         reason: null,
         updatedAt: now,
@@ -258,6 +265,7 @@ export class MatterhornCryptoAppRegistry {
     if (!certificationMetadataValid(existing, {
       ...input,
       reportHash: input.report?.reportHash ?? null,
+      runtimeReportHash: input.runtimeReport?.reportHash ?? null,
       policyVersion: this.#policyVersion,
     }, this.#policyVersion)) {
       throw new MatterhornCryptoAppRegistryError("certification_metadata_invalid");
@@ -270,6 +278,8 @@ export class MatterhornCryptoAppRegistry {
       state: input.state,
       report: input.report ?? null,
       reportHash: input.report?.reportHash ?? null,
+      runtimeReport: input.runtimeReport ?? null,
+      runtimeReportHash: input.runtimeReport?.reportHash ?? null,
       policyVersion: this.#policyVersion,
       reason: input.reason?.trim() || null,
       updatedAt,
@@ -294,6 +304,7 @@ export class MatterhornCryptoAppRegistry {
     existing.certification = {
       state: input.state,
       reportHash: input.report?.reportHash ?? null,
+      runtimeReportHash: input.runtimeReport?.reportHash ?? null,
       policyVersion: this.#policyVersion,
       reason: input.reason?.trim() || null,
       updatedAt,
@@ -335,6 +346,8 @@ function certificationMetadataValid(
     state: Exclude<MatterhornCryptoAppCertificationState, "pending">;
     report?: MatterhornCryptoAppConformanceReport | null;
     reportHash: string | null;
+    runtimeReport?: MatterhornCryptoAppRuntimeCertificationReport | null;
+    runtimeReportHash: string | null;
     policyVersion: string;
     reason?: string | null;
   },
@@ -347,6 +360,9 @@ function certificationMetadataValid(
       && verifyCryptoAppConformanceReport(input.report)
       && input.report.passed
       && input.report.reportHash === input.reportHash
+      && input.runtimeReport
+      && verifyCryptoAppRuntimeCertificationReport(input.runtimeReport, entry.manifest, input.report)
+      && input.runtimeReport.reportHash === input.runtimeReportHash
       && input.report.targetEnvironment === targetEnvironment
       && input.report.appId === entry.appId
       && input.report.manifestRevision === entry.manifestRevision
@@ -358,5 +374,7 @@ function certificationMetadataValid(
     && input.reason?.trim()
     && input.report == null
     && input.reportHash === null
+    && input.runtimeReport == null
+    && input.runtimeReportHash === null
     && input.policyVersion === expectedPolicyVersion);
 }

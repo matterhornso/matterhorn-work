@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -11,6 +12,7 @@ import {
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
+import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certification-test-support.js";
 import { canonicalCryptoAppManifestPayload, cryptoAppManifestHash } from "./crypto-app-signature.js";
 import {
   MatterhornCryptoAppRegistryStore,
@@ -57,6 +59,61 @@ function databasePath(label: string): string {
 }
 
 describe("durable crypto app registry store", () => {
+  test("adds runtime report columns to a legacy registry without weakening certification", () => {
+    const path = databasePath("legacy-migration");
+    const legacy = new Database(path);
+    legacy.exec(`
+      CREATE TABLE crypto_app_manifests (
+        app_id TEXT NOT NULL,
+        manifest_revision TEXT NOT NULL,
+        manifest_hash TEXT NOT NULL,
+        manifest_json TEXT NOT NULL,
+        registered_at TEXT NOT NULL,
+        PRIMARY KEY (app_id, manifest_revision)
+      );
+      CREATE TABLE crypto_app_certification_history (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        app_id TEXT NOT NULL,
+        manifest_revision TEXT NOT NULL,
+        state TEXT NOT NULL,
+        report_json TEXT,
+        report_hash TEXT,
+        policy_version TEXT NOT NULL,
+        reason TEXT,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (app_id, manifest_revision)
+          REFERENCES crypto_app_manifests(app_id, manifest_revision)
+      );
+    `);
+    legacy.close();
+
+    const value = manifest();
+    const store = new MatterhornCryptoAppRegistryStore(path);
+    store.putManifest({
+      appId: value.appId,
+      manifestRevision: value.manifestRevision,
+      manifestHash: cryptoAppManifestHash(value),
+      manifest: value,
+      registeredAt: "2026-09-01T12:00:00.000Z",
+    });
+    const event = store.appendCertification({
+      appId: value.appId,
+      manifestRevision: value.manifestRevision,
+      state: "suspended",
+      report: null,
+      reportHash: null,
+      runtimeReport: null,
+      runtimeReportHash: null,
+      policyVersion: "policy-1",
+      reason: "awaiting runtime recertification",
+      updatedAt: "2026-09-01T12:01:00.000Z",
+      expectedPreviousState: "pending",
+    });
+    expect(event.runtimeReport).toBeNull();
+    expect(store.listCertificationHistory(value.appId, value.manifestRevision)[0]?.runtimeReportHash).toBeNull();
+    store.close();
+  });
+
   test("persists immutable manifests and append-only certification history", () => {
     const path = databasePath("persist");
     const value = manifest();
@@ -66,6 +123,7 @@ describe("durable crypto app registry store", () => {
       targetEnvironment: "testnet",
       now: () => new Date("2026-09-01T12:00:00.000Z"),
     });
+    const runtimeReport = passingCryptoAppRuntimeReportForTest(value, report);
     const first = new MatterhornCryptoAppRegistryStore(path);
     expect(first.putManifest({
       appId: value.appId,
@@ -80,6 +138,8 @@ describe("durable crypto app registry store", () => {
       state: "certified_testnet",
       report,
       reportHash: report.reportHash,
+      runtimeReport,
+      runtimeReportHash: runtimeReport.reportHash,
       policyVersion: "policy-1",
       reason: null,
       updatedAt: "2026-09-01T12:01:00.000Z",
@@ -91,6 +151,8 @@ describe("durable crypto app registry store", () => {
       state: "revoked",
       report: null,
       reportHash: null,
+      runtimeReport: null,
+      runtimeReportHash: null,
       policyVersion: "policy-1",
       reason: "publisher key compromise",
       updatedAt: "2026-09-01T12:02:00.000Z",
@@ -100,8 +162,12 @@ describe("durable crypto app registry store", () => {
 
     const second = new MatterhornCryptoAppRegistryStore(path);
     expect(second.listManifests()).toHaveLength(1);
-    expect(second.listCertificationHistory(value.appId, value.manifestRevision).map((item) => item.state))
+    const history = second.listCertificationHistory(value.appId, value.manifestRevision);
+    expect(history.map((item) => item.state))
       .toEqual(["certified_testnet", "revoked"]);
+    expect(history[0]?.runtimeReportHash).toBe(runtimeReport.reportHash);
+    expect(history[0]?.runtimeReport?.probes.every((probe) => probe.evidenceHash.length === 64)).toBe(true);
+    expect(history[1]?.runtimeReport).toBeNull();
     second.close();
   });
 
@@ -143,6 +209,8 @@ describe("durable crypto app registry store", () => {
       state: "suspended",
       report: null,
       reportHash: null,
+      runtimeReport: null,
+      runtimeReportHash: null,
       policyVersion: "policy-1",
       reason: "health circuit open",
       updatedAt: "2026-09-01T12:01:00.000Z",
@@ -154,6 +222,8 @@ describe("durable crypto app registry store", () => {
       state: "revoked",
       report: null,
       reportHash: null,
+      runtimeReport: null,
+      runtimeReportHash: null,
       policyVersion: "policy-1",
       reason: "stale concurrent decision",
       updatedAt: "2026-09-01T12:01:00.000Z",
@@ -164,4 +234,3 @@ describe("durable crypto app registry store", () => {
     second.close();
   });
 });
-

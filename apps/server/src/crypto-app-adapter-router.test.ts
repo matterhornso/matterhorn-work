@@ -19,6 +19,7 @@ import {
 import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
+import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certification-test-support.js";
 import {
   MatterhornCryptoAppOperationalPolicyStore,
   type MatterhornCryptoAppOperationalPolicy,
@@ -89,16 +90,18 @@ function fixture(options: {
     now: () => new Date("2026-09-01T12:00:00.000Z"),
   });
   registry.register(value);
+  const report = runCryptoAppManifestConformance(value, {
+    publisherKey: keys.publicKey,
+    policyVersion: "policy-1",
+    targetEnvironment: "testnet",
+    now: () => new Date("2026-09-01T12:00:00.000Z"),
+  });
   registry.updateCertification({
     appId: value.appId,
     manifestRevision: value.manifestRevision,
     state: "certified_testnet",
-    report: runCryptoAppManifestConformance(value, {
-      publisherKey: keys.publicKey,
-      policyVersion: "policy-1",
-      targetEnvironment: "testnet",
-      now: () => new Date("2026-09-01T12:00:00.000Z"),
-    }),
+    report,
+    runtimeReport: passingCryptoAppRuntimeReportForTest(value, report),
   });
   const store = new MatterhornCryptoAppConnectionStore(join(
     mkdtempSync(join(tmpdir(), "matterhorn-adapter-router-")),
