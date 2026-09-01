@@ -43,6 +43,15 @@ export {
   type MatterhornCryptoProtocolFixturePackReport,
 } from "./protocol-fixtures.js";
 
+export {
+  runMatterhornCryptoAppLocalAdapter,
+  MatterhornCryptoAppLocalRunnerError,
+  type MatterhornCryptoAppLocalCall,
+  type MatterhornCryptoAppLocalEnvelope,
+  type MatterhornCryptoAppLocalRunnerOptions,
+  type MatterhornCryptoAppLocalRunReport,
+} from "./local-runner.js";
+
 type CanonicalValue = null | boolean | number | string | CanonicalValue[] | { [key: string]: CanonicalValue };
 
 export type MatterhornUnsignedCryptoAppManifest = Omit<MatterhornCryptoAppManifest, "version" | "publisher"> & {

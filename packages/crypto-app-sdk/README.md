@@ -68,6 +68,27 @@ const report = validateMatterhornCryptoProtocolFixturePack(manifest, pack);
 
 Fixture packs contain no credentials or signing material and perform no I/O. They do not replace Matterhorn's live adversarial probes or testnet certification.
 
+For a live developer test, use the advisory local runner with your own test-only invocation callback:
+
+```ts
+import { runMatterhornCryptoAppLocalAdapter } from "@matterhorn-work/crypto-app-sdk";
+
+const report = await runMatterhornCryptoAppLocalAdapter({
+  manifest,
+  actionId: "your_read_action",
+  network: "sui:testnet",
+  arguments: { address: "0x..." },
+}, {
+  invoke: async (call, { signal }) => {
+    // Call your test adapter in your own development boundary. Return only:
+    // { data, source, observedAt, blockOrVersion }.
+    return invokeYourTestAdapter(call, signal);
+  },
+});
+```
+
+The local runner never creates a network client or accepts headers, API credentials, wallets, signers, submit methods, or mainnet targets. It rejects secret-shaped inputs, validates the exact call and closed output projection, enforces freshness, timeout, abort, and response-size bounds, and normalizes adapter failures without returning upstream messages. Its result always states `certificationAuthority: "none"`; only Matterhorn's independent runtime harness can certify an adapter.
+
 Submit the signed manifest through an invite-only Matterhorn developer account. A passing local report is only a fast feedback loop; it cannot register, certify, connect, execute, sign, relay, or submit anything.
 
 The optional account client follows the same narrow boundary:
@@ -88,4 +109,4 @@ if (staged.staticReport.passed) {
 }
 ```
 
-The client has no operator, registry-promotion, execution, wallet, credential, or mainnet methods. Keep the private signing key in your own HSM/KMS or offline signer.
+The account client has no operator, registry-promotion, execution, wallet, credential, or mainnet methods. Keep the private signing key in your own HSM/KMS or offline signer.
