@@ -7,18 +7,21 @@ import {
   MATTERHORN_COWORKER_WORKING_STATE_VERSION,
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
   MATTERHORN_EVIDENCE_BUNDLE_VERSION,
+  MATTERHORN_POLICY_DECISION_VERSION,
   type MatterhornCoworkerInboxItem,
   type MatterhornCoworkerProfile,
   type MatterhornCoworkerWatch,
   type MatterhornCoworkerWorkingState,
   type MatterhornCryptoAppManifest,
   type MatterhornEvidenceBundle,
+  type MatterhornPolicyDecision,
   validateMatterhornCoworkerInboxItem,
   validateMatterhornCoworkerProfile,
   validateMatterhornCoworkerWatch,
   validateMatterhornCoworkerWorkingState,
   validateMatterhornCryptoAppManifest,
   validateMatterhornEvidenceBundle,
+  validateMatterhornPolicyDecision,
 } from "@matterhorn-work/types/crypto-coworkers";
 
 const manifest: MatterhornCryptoAppManifest = {
@@ -338,5 +341,24 @@ describe("crypto coworker public contracts", () => {
       },
     };
     expect(validateMatterhornEvidenceBundle(unsafe)).toContain("evidence_forbidden_content_field");
+  });
+
+  test("requires an internally consistent policy decision before wallet review", () => {
+    const decision: MatterhornPolicyDecision = {
+      version: MATTERHORN_POLICY_DECISION_VERSION,
+      runId: "run_policy",
+      intentHash: "a".repeat(64),
+      decision: "wallet_review_required",
+      reasonCodes: ["wallet_review_required"],
+      evaluatedPolicyHashes: ["b".repeat(64)],
+      evaluatedAt: "2026-09-01T12:00:01.000Z",
+      limits: [{ name: "per_action_usd", configured: "100", observed: "25", passed: true }],
+    };
+    expect(validateMatterhornPolicyDecision(decision)).toEqual([]);
+    expect(validateMatterhornPolicyDecision({
+      ...decision,
+      reasonCodes: ["wallet_review_required", "policy_limit_exceeded"],
+      limits: [{ ...decision.limits[0], passed: false }],
+    })).toContain("policy_decision_allow_inconsistent");
   });
 });

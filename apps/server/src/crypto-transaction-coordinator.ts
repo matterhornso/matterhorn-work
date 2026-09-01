@@ -2,7 +2,9 @@ import {
   MATTERHORN_CRYPTO_INTENT_VERSION,
   type MatterhornCryptoAppResult,
   type MatterhornCryptoIntent,
+  type MatterhornPolicyDecision,
   validateMatterhornCryptoIntent,
+  validateMatterhornPolicyDecision,
 } from "@matterhorn-work/types/crypto-coworkers";
 import type {
   ReviewedActionDraftHandoff,
@@ -280,9 +282,25 @@ function number(value: unknown): number {
   return parsed;
 }
 
-export function cryptoIntentToReviewedActionHandoffV2(intent: MatterhornCryptoIntent): ReviewedActionHandoffV2 {
+export function cryptoIntentToReviewedActionHandoffV2(
+  intent: MatterhornCryptoIntent,
+  policyDecision: MatterhornPolicyDecision,
+): ReviewedActionHandoffV2 {
   const issues = validateCryptoIntentIntegrity(intent);
   if (issues.length > 0) throw new Error(`crypto_intent_invalid:${issues.join(",")}`);
+  const policyIssues = validateMatterhornPolicyDecision(policyDecision);
+  if (policyIssues.length > 0) throw new Error(`crypto_intent_policy_invalid:${policyIssues.join(",")}`);
+  if (policyDecision.decision !== "wallet_review_required"
+    || policyDecision.runId !== intent.runId
+    || !equalDigest(policyDecision.intentHash, intent.intentHash)
+    || !policyDecision.evaluatedPolicyHashes.some((hash) => equalDigest(hash, intent.policyHash))
+    || policyDecision.reasonCodes.length !== 1
+    || policyDecision.reasonCodes[0] !== "wallet_review_required"
+    || policyDecision.limits.some((limit) => !limit.passed)
+    || Date.parse(policyDecision.evaluatedAt) < Date.parse(intent.preparedAt)
+    || Date.parse(policyDecision.evaluatedAt) >= Date.parse(intent.expiresAt)) {
+    throw new Error("crypto_intent_policy_denied");
+  }
   let handoff: ReviewedActionDraftHandoff;
   if (intent.protocol === "sui"
     && intent.appId === "matterhorn.sui-testnet"

@@ -1065,6 +1065,79 @@ export function validateMatterhornCryptoIntent(value: unknown): string[] {
   return [...new Set(issues)];
 }
 
+export function validateMatterhornPolicyDecision(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) return ["policy_decision_not_object"];
+  if (!hasOnlyKeys(value, [
+    "version",
+    "runId",
+    "intentHash",
+    "decision",
+    "reasonCodes",
+    "evaluatedPolicyHashes",
+    "evaluatedAt",
+    "limits",
+  ])) issues.push("policy_decision_unknown_field");
+  if (value.version !== MATTERHORN_POLICY_DECISION_VERSION) issues.push("policy_decision_version_invalid");
+  if (!isNonEmptyString(value.runId) || value.runId.length > 256) issues.push("policy_decision_run_invalid");
+  if (typeof value.intentHash !== "string" || !/^[a-f0-9]{64}$/.test(value.intentHash)) {
+    issues.push("policy_decision_intent_hash_invalid");
+  }
+  if (value.decision !== "allow_prepare"
+    && value.decision !== "wallet_review_required"
+    && value.decision !== "deny") {
+    issues.push("policy_decision_outcome_invalid");
+  }
+  if (!isStringArray(value.reasonCodes)
+    || value.reasonCodes.length < 1
+    || value.reasonCodes.length > 64
+    || value.reasonCodes.some((reason) => reason.length > 128 || !/^[a-z][a-z0-9_]*$/.test(reason))) {
+    issues.push("policy_decision_reasons_invalid");
+  }
+  if (!Array.isArray(value.evaluatedPolicyHashes)
+    || value.evaluatedPolicyHashes.length < 1
+    || value.evaluatedPolicyHashes.length > 16
+    || value.evaluatedPolicyHashes.some((hash) => typeof hash !== "string" || !/^[a-f0-9]{64}$/.test(hash))) {
+    issues.push("policy_decision_hashes_invalid");
+  }
+  if (typeof value.evaluatedAt !== "string" || !Number.isFinite(Date.parse(value.evaluatedAt))) {
+    issues.push("policy_decision_time_invalid");
+  }
+  if (!Array.isArray(value.limits) || value.limits.length > 32) {
+    issues.push("policy_decision_limits_invalid");
+  } else {
+    for (const limit of value.limits) {
+      if (!isRecord(limit)
+        || !hasOnlyKeys(limit, ["name", "configured", "observed", "passed"])
+        || !isNonEmptyString(limit.name)
+        || limit.name.length > 128
+        || !/^[a-z][a-z0-9_]*$/.test(limit.name)
+        || !isNonEmptyString(limit.configured)
+        || limit.configured.length > 128
+        || !isNonEmptyString(limit.observed)
+        || limit.observed.length > 128
+        || typeof limit.passed !== "boolean") {
+        issues.push("policy_decision_limits_invalid");
+        break;
+      }
+    }
+  }
+  if (value.decision === "wallet_review_required") {
+    const reasonsAllow = Array.isArray(value.reasonCodes)
+      && value.reasonCodes.length === 1
+      && value.reasonCodes[0] === "wallet_review_required";
+    const limitsAllow = Array.isArray(value.limits)
+      && value.limits.every((limit) => isRecord(limit) && limit.passed === true);
+    if (!reasonsAllow || !limitsAllow) issues.push("policy_decision_allow_inconsistent");
+  }
+  if (value.decision === "allow_prepare"
+    && Array.isArray(value.reasonCodes)
+    && (value.reasonCodes.length !== 1 || value.reasonCodes[0] !== "allow_prepare")) {
+    issues.push("policy_decision_allow_inconsistent");
+  }
+  return [...new Set(issues)];
+}
+
 function collectForbiddenEvidenceKeys(value: unknown, issues: string[]): void {
   if (Array.isArray(value)) {
     for (const item of value) collectForbiddenEvidenceKeys(item, issues);

@@ -3,7 +3,9 @@ import { describe, expect, test } from "bun:test";
 import type {
   MatterhornCryptoAppResult,
   MatterhornCryptoIntent,
+  MatterhornPolicyDecision,
 } from "@matterhorn-work/types/crypto-coworkers";
+import { MATTERHORN_POLICY_DECISION_VERSION } from "@matterhorn-work/types/crypto-coworkers";
 import { isReviewedActionHandoffV2 } from "@matterhorn-work/types/reviewed-actions";
 
 import {
@@ -13,6 +15,19 @@ import {
 } from "./crypto-transaction-coordinator.js";
 
 const NOW = new Date("2026-09-01T12:00:01.000Z");
+
+function policyDecision(intent: MatterhornCryptoIntent): MatterhornPolicyDecision {
+  return {
+    version: MATTERHORN_POLICY_DECISION_VERSION,
+    runId: intent.runId,
+    intentHash: intent.intentHash,
+    decision: "wallet_review_required",
+    reasonCodes: ["wallet_review_required"],
+    evaluatedPolicyHashes: [intent.policyHash],
+    evaluatedAt: NOW.toISOString(),
+    limits: [],
+  };
+}
 
 function envelope(input: {
   appId: string;
@@ -94,7 +109,7 @@ describe("deterministic crypto transaction coordinator", () => {
       canonicalArguments: request,
     });
     expect(validateCryptoIntentIntegrity(intent)).toEqual([]);
-    const handoff = cryptoIntentToReviewedActionHandoffV2(intent);
+    const handoff = cryptoIntentToReviewedActionHandoffV2(intent, policyDecision(intent));
     expect(isReviewedActionHandoffV2(handoff)).toBe(true);
     expect(handoff).toMatchObject({
       protocol: "sui",
@@ -162,7 +177,7 @@ describe("deterministic crypto transaction coordinator", () => {
       reduceOnly: false,
       maxSlippageBps: 50,
     });
-    expect(cryptoIntentToReviewedActionHandoffV2(intent)).toMatchObject({
+    expect(cryptoIntentToReviewedActionHandoffV2(intent, policyDecision(intent))).toMatchObject({
       protocol: "hyperliquid",
       signer: address,
       operation: "place_order",
@@ -242,7 +257,8 @@ describe("deterministic crypto transaction coordinator", () => {
       "crypto_intent_arguments_hash_mismatch",
       "crypto_intent_hash_mismatch",
     ]));
-    expect(() => cryptoIntentToReviewedActionHandoffV2(tampered)).toThrow("crypto_intent_invalid");
+    expect(() => cryptoIntentToReviewedActionHandoffV2(tampered, policyDecision(intent)))
+      .toThrow("crypto_intent_invalid");
   });
 
   test("rejects a certified Hyperliquid preview that substitutes another limit price", () => {
@@ -285,5 +301,45 @@ describe("deterministic crypto transaction coordinator", () => {
       now: NOW,
       result: certified,
     })).toThrow("crypto_intent_request_result_mismatch");
+  });
+
+  test("requires an exact allow decision before creating a wallet handoff", () => {
+    const request = {
+      sender: `0x${"1".repeat(64)}`,
+      recipient: `0x${"2".repeat(64)}`,
+      amountSui: "1.25",
+    };
+    const intent = compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_sui_prepare",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "a".repeat(64),
+      canonicalRequestArguments: request,
+      now: NOW,
+      result: envelope({
+        appId: "matterhorn.sui-testnet",
+        connectionId: "cxc_sui",
+        actionId: "sui_transfer_preview",
+        network: "sui:testnet",
+        result: {
+          preparedActionId: "sui_preview_1",
+          network: "sui:testnet",
+          sender: request.sender,
+          recipient: request.recipient,
+          amountSui: request.amountSui,
+          estimatedGasMist: "1000",
+          simulationReference: `sha256:${"b".repeat(64)}`,
+          expiresAt: "2026-09-01T12:00:15.000Z",
+        },
+      }),
+    });
+    const denied = policyDecision(intent);
+    denied.decision = "deny";
+    denied.reasonCodes = ["policy_recipient_denied"];
+    expect(() => cryptoIntentToReviewedActionHandoffV2(intent, denied)).toThrow("crypto_intent_policy_denied");
+    const wrongPolicy = policyDecision(intent);
+    wrongPolicy.evaluatedPolicyHashes = ["f".repeat(64)];
+    expect(() => cryptoIntentToReviewedActionHandoffV2(intent, wrongPolicy))
+      .toThrow("crypto_intent_policy_denied");
   });
 });

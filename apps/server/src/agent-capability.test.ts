@@ -183,6 +183,24 @@ describe("agent capability broker", () => {
     });
     expect(broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args }).runId)
       .toBe("run_coworker");
+    expect(broker.consumedCapabilityProof({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_coworker",
+      coworkerId: "cw_sui",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    })).toMatchObject({ access: "read" });
+    expect(broker.consumedCapabilityProof({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_coworker",
+      coworkerId: "cw_sui",
+      toolName: "matterhorn_sui_get_balance",
+      args: { ...args, network: "sui:mainnet" },
+    })).toBeNull();
     expect(() => broker.issue({
       runId: "run_coworker",
       workspaceId: "ws_1",

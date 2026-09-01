@@ -618,6 +618,27 @@ export class MatterhornAgentCapabilityBroker {
     return [...(this.decisions.get(runId) ?? [])];
   }
 
+  consumedCapabilityProof(input: {
+    runId: string;
+    workspaceId: string;
+    sessionId: string;
+    callId: string;
+    coworkerId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+  }): { access: "read" | "prepare"; expiresAt: string } | null {
+    const claims = this.consumedByCallId.get(input.callId);
+    if (!claims
+      || claims.runId !== input.runId
+      || claims.workspaceId !== input.workspaceId
+      || claims.sessionId !== input.sessionId
+      || claims.callId !== input.callId
+      || claims.coworker?.id !== input.coworkerId
+      || claims.toolName !== normalizedToolName(input.toolName)
+      || !equalDigest(claims.argsHash, capabilityArgsHash(input.args))) return null;
+    return { access: claims.access, expiresAt: claims.expiresAt };
+  }
+
   activeRun(sessionId: string): string | null {
     return this.activeRunBySession.get(sessionId) ?? null;
   }
