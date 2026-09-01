@@ -10,7 +10,8 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 1 signed manifest registry and static conformance gate: complete.
 - Phase 1 durable manifest/certification history, atomic revocation, and policy-version invalidation: complete.
 - Phase 1 tenant-scoped connection grants with opaque vault/wallet references and immediate certification revocation: complete.
-- Current slice: adapter router, runtime DNS/egress enforcement, typed projections, timeouts, quotas, and circuit breakers.
+- Phase 1 adapter-router core, closed schema validation, runtime DNS/egress checks, typed output projection, untrusted-data quarantine, timeout handling, usage reservation/reconciliation, and circuit breaking: complete and backend-only.
+- Current slice: trusted address-pinned transports, durable quota/circuit state, guarded-runtime capability bridge, and first-party Sui/Hyperliquid testnet adapters.
 - All new production modes remain `off`; no HTTP routes or upstream adapter traffic are enabled.
 
 ## Goal
@@ -303,11 +304,20 @@ When a stop condition occurs, report the exact decision, evidence, options, reco
 
 ## Immediate implementation slice
 
-The current Phase 1 slice remains backend-only and inert:
+The completed adapter-router core remains backend-only and inert. It now:
 
-- Route only active tenant connections to their exact certified manifest revision.
-- Resolve and revalidate public DNS at request time before any adapter connection.
-- Validate arguments and project outputs through the certified closed schemas.
-- Attach trust, source, freshness, latency, cost, and sanitization metadata.
-- Enforce timeout, quota, circuit-breaker, and immediate registry/connection revocation.
-- Keep runtime capabilities and HTTP routes disconnected until the router passes adversarial tests.
+- Routes only active tenant connections to their exact certified manifest revision.
+- Resolves and revalidates public IPv4 DNS at request time before authorization or adapter execution.
+- Validates arguments and projects outputs through a deliberately closed JSON-schema subset.
+- Quarantines instruction-like external content and model-control-shaped fields after typed projection.
+- Attaches trust, source, freshness, latency, metering, and evidence-hash metadata.
+- Enforces timeout, reservation/reconciliation, per-tenant circuit breaking, and immediate registry/connection revocation.
+- Requires exact run/call/action/network/argument authorization through an injected server-only boundary.
+
+The next Phase 1 slice must:
+
+- Implement trusted first-party HTTP/RPC transports that connect to an approved resolved address and report the actual peer address; the generic router does not delegate address pinning to third-party adapter code.
+- Bridge authorization to the guarded capability broker and durable allowance ledger.
+- Persist circuit/quota state needed across process restarts while keeping the hosted release single-instance.
+- Add Sui and Hyperliquid testnet adapters plus conflicting-source, schema-drift, abort, replay, and zero-upstream-denial fixtures.
+- Keep account-facing HTTP routes and runtime capabilities disconnected until that full adversarial gate passes.

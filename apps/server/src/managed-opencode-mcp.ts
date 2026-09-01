@@ -13,6 +13,11 @@ import type {
 } from "@matterhorn-work/types/reviewed-actions";
 import { sha256 } from "./guarded-runtime-crypto.js";
 import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
+import {
+  containsUntrustedInstruction,
+  quarantineUntrustedContent,
+  untrustedContentChanged,
+} from "./untrusted-data-quarantine.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -391,7 +396,7 @@ function modelFacingToolText(text: string, access: "read" | "prepare" | "system"
   try {
     parsed = JSON.parse(text);
   } catch {
-    const safeText = UNTRUSTED_INSTRUCTION_PATTERN.test(text)
+    const safeText = containsUntrustedInstruction(text)
       ? "[Matterhorn quarantined instruction-like external content]"
       : text;
     if (safeText.length <= maxChars) return safeText;
@@ -590,7 +595,6 @@ function attachReviewedActionToToolResult(result: unknown, reviewedAction: Revie
   return { ...record, reviewedAction, ...(cards ? { cards } : {}) };
 }
 
-const UNTRUSTED_INSTRUCTION_PATTERN = /\b(?:ignore|override|disregard|bypass)\b[\s\S]{0,80}\b(?:instruction|policy|permission|system|tool)|\b(?:call|invoke|run)\b[\s\S]{0,40}\btool\b|\b(?:change|switch|select)\b[\s\S]{0,40}\b(?:agent|provider|model)\b|\b(?:grant|approve|forge|generate)\b[\s\S]{0,40}\b(?:consent|permission|capability|token)\b/i;
 const BITTENSOR_ACTION_INTENT_PATTERN = /\b(?:send|transfer|stake|unstake|delegate)\b/i;
 
 function assertReadToolArguments(tool: ManagedMcpTool, args: JsonObject): void {
@@ -599,22 +603,6 @@ function assertReadToolArguments(tool: ManagedMcpTool, args: JsonObject): void {
   if (BITTENSOR_ACTION_INTENT_PATTERN.test(message)) {
     throw new Error("matterhorn_read_tool_cannot_prepare_action");
   }
-}
-
-function quarantineUntrustedContent(value: unknown, depth = 0): unknown {
-  if (typeof value === "string") {
-    return UNTRUSTED_INSTRUCTION_PATTERN.test(value)
-      ? "[Matterhorn quarantined instruction-like external content]"
-      : value;
-  }
-  if (value == null || typeof value !== "object" || depth >= 10) return value;
-  if (Array.isArray(value)) return value.map((item) => quarantineUntrustedContent(item, depth + 1));
-  return Object.fromEntries(Object.entries(value as JsonObject).map(([key, item]) => [
-    key,
-    /^(?:instruction|systemPrompt|prompt|toolCall|permission|agent|agentId|provider|providerId|model|modelId|privacyConsentToken|consent|capability|grant|access|_matterhornCallId|_matterhornCapability)$/i.test(key)
-      ? "[Matterhorn quarantined an untrusted control field]"
-      : quarantineUntrustedContent(item, depth + 1),
-  ]));
 }
 
 function buildCryptoEvidenceEnvelope(input: {
@@ -653,17 +641,13 @@ function buildCryptoEvidenceEnvelope(input: {
     },
     provenance: {
       trust: "untrusted_external",
-      sanitization: canonicalJsonChanged(input.result, sanitizedResult) ? "quarantined" : "typed_projection",
+      sanitization: untrustedContentChanged(input.result, sanitizedResult) ? "quarantined" : "typed_projection",
       evidenceReference: `sha256:${sha256(input.result)}`,
     },
     warnings: evidenceWarnings(input.result),
     ...(input.reviewedAction ? { reviewedAction: input.reviewedAction } : {}),
     result: sanitizedResult,
   };
-}
-
-function canonicalJsonChanged(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) !== JSON.stringify(right);
 }
 
 function toolCallResult(input: {

@@ -1,5 +1,6 @@
 export const MATTERHORN_CRYPTO_APP_MANIFEST_VERSION = "matterhorn.crypto-app-manifest.v1";
 export const MATTERHORN_CRYPTO_APP_CONNECTION_VERSION = "matterhorn.crypto-app-connection.v1";
+export const MATTERHORN_CRYPTO_APP_RESULT_VERSION = "matterhorn.crypto-app-result.v1";
 export const MATTERHORN_COWORKER_PROFILE_VERSION = "matterhorn.coworker-profile.v1";
 export const MATTERHORN_CRYPTO_INTENT_VERSION = "matterhorn.crypto-intent.v1";
 export const MATTERHORN_POLICY_DECISION_VERSION = "matterhorn.policy-decision.v1";
@@ -103,6 +104,42 @@ export type MatterhornCryptoAppConnectionView = Omit<MatterhornCryptoAppConnecti
     connected: boolean;
   };
   availability: "available" | "certification_unavailable";
+};
+
+export type MatterhornCryptoAppResult = {
+  version: typeof MATTERHORN_CRYPTO_APP_RESULT_VERSION;
+  app: {
+    id: string;
+    manifestRevision: string;
+    connectionId: string;
+  };
+  action: {
+    id: string;
+    access: MatterhornCryptoAppActionAccess;
+    network: string;
+  };
+  timing: {
+    startedAt: string;
+    completedAt: string;
+    durationMs: number;
+  };
+  observation: {
+    source: string;
+    observedAt: string | null;
+    blockOrVersion: string | null;
+    ageMs: number | null;
+    freshnessMaxAgeMs: number | null;
+  };
+  provenance: {
+    trust: "untrusted_external";
+    sanitization: "typed_projection" | "quarantined";
+    evidenceReference: string;
+  };
+  metering: {
+    costMicros: number;
+    reservationId: string;
+  };
+  result: unknown;
 };
 
 export type MatterhornCoworkerState = "active" | "paused" | "revoked";

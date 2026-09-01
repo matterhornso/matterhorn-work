@@ -1,9 +1,9 @@
-import { isIP } from "node:net";
-
 import type { MatterhornCryptoAppManifest } from "@matterhorn-work/types/crypto-coworkers";
 import { validateMatterhornCryptoAppManifest } from "@matterhorn-work/types/crypto-coworkers";
 
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
+import { isPublicHttpsCryptoAdapterEndpoint } from "./crypto-app-egress.js";
+import { validateCryptoAppSchemaDefinition } from "./crypto-app-json-schema.js";
 import {
   cryptoAppManifestHash,
   verifyCryptoAppManifestSignature,
@@ -54,42 +54,6 @@ function finding(
   findings.push({ severity, category, code, actionId });
 }
 
-function isPrivateIpv4(hostname: string): boolean {
-  const parts = hostname.split(".").map(Number);
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
-  const [a, b] = parts;
-  return a === 0
-    || a === 10
-    || a === 127
-    || (a === 169 && b === 254)
-    || (a === 172 && b >= 16 && b <= 31)
-    || (a === 192 && b === 168)
-    || a >= 224;
-}
-
-function publicHttpsUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== "https:" || parsed.username || parsed.password) return false;
-    const hostname = parsed.hostname.toLowerCase();
-    if (!hostname
-      || hostname === "localhost"
-      || hostname.endsWith(".localhost")
-      || hostname.endsWith(".local")
-      || hostname.endsWith(".internal")
-      || hostname.endsWith(".home.arpa")) return false;
-    const ipVersion = isIP(hostname.replace(/^\[|\]$/g, ""));
-    if (ipVersion === 4) return !isPrivateIpv4(hostname);
-    // Literal IPv6 endpoints are rejected at certification. Named hosts may
-    // resolve to IPv6, but the adapter transport must re-resolve and reject
-    // non-public addresses for every request to prevent DNS rebinding.
-    if (ipVersion === 6) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function strictObjectSchema(value: Record<string, unknown>): boolean {
   return value.type === "object" && value.additionalProperties === false;
 }
@@ -125,7 +89,7 @@ export function runCryptoAppManifestConformance(
   if (!verifyCryptoAppManifestSignature(manifest, options.publisherKey)) {
     finding(findings, "error", "authentication", "manifest_signature_invalid");
   }
-  if (!publicHttpsUrl(manifest.transport.endpoint)) {
+  if (!isPublicHttpsCryptoAdapterEndpoint(manifest.transport.endpoint)) {
     finding(findings, "error", "network", "transport_public_https_required");
   } else {
     finding(findings, "warning", "network", "runtime_dns_revalidation_required");
@@ -135,7 +99,7 @@ export function runCryptoAppManifestConformance(
   }
 
   const grantedScopes = new Set(manifest.authentication.scopes);
-  if (manifest.authentication.type === "oauth2" && !publicHttpsUrl(manifest.authentication.authorizationServer)) {
+  if (manifest.authentication.type === "oauth2" && !isPublicHttpsCryptoAdapterEndpoint(manifest.authentication.authorizationServer)) {
     finding(findings, "error", "authentication", "oauth_public_https_required");
   }
   if (manifest.authentication.type === "none" && manifest.authentication.scopes.length > 0) {
@@ -167,6 +131,12 @@ export function runCryptoAppManifestConformance(
     }
     if (schemaSize(action.outputProjectionSchema) > MAX_SCHEMA_BYTES) {
       finding(findings, "error", "schema", "action_output_schema_size_exceeded", action.id);
+    }
+    for (const issue of validateCryptoAppSchemaDefinition(action.inputSchema)) {
+      finding(findings, "error", "schema", `action_input_${issue}`, action.id);
+    }
+    for (const issue of validateCryptoAppSchemaDefinition(action.outputProjectionSchema)) {
+      finding(findings, "error", "schema", `action_output_${issue}`, action.id);
     }
     if (action.requiresFreshness && action.freshnessMaxAgeMs === null) {
       finding(findings, "error", "reliability", "freshness_max_age_required", action.id);
