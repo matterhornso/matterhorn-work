@@ -58,6 +58,8 @@ Future readiness rules are fail-closed:
 
 ## Build sequence
 
+The comprehensive execution plan, delivery cadence, metrics, and stop conditions are maintained in [`phases-1-5-plan.md`](./phases-1-5-plan.md). Monid-derived product patterns and the crypto-specific changes are documented in [`monid-reference-audit.md`](./monid-reference-audit.md).
+
 ### Phase 1 — Crypto App Gateway
 
 - Signed and version-pinned manifest registry.
@@ -128,4 +130,3 @@ Every coworker surface must show:
 ## Deferred delegated execution
 
 Smart-account permissions or session-key execution are explicitly outside the first release. They require a separate protocol, regulatory, recovery, revocation, and adversarial-security review. The initial release must prove the wallet-reviewed model before any delegated-spend experiment begins.
-
