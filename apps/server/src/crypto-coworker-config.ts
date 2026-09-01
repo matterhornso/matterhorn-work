@@ -50,9 +50,8 @@ function isHttpsOrigin(value: string | undefined): boolean {
 }
 
 /**
- * Phase 0 configuration only. No runtime path consumes these switches yet.
- * Unknown values resolve to `off` and make readiness false so future rollout
- * cannot accidentally enable a partially configured security boundary.
+ * Fail-closed rollout configuration. Unknown values resolve to `off` and make
+ * readiness false so no partially configured security boundary is enabled.
  */
 export function cryptoCoworkerFeatureConfig(
   env: NodeJS.ProcessEnv = process.env,

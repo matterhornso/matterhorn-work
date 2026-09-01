@@ -158,6 +158,20 @@ export class MatterhornCoworkers {
     return profile?.state === "active" && profile.policyVersion === this.#policyVersion ? profile : null;
   }
 
+  matchesActiveBinding(input: {
+    id: string;
+    workspaceId: string;
+    ownerId: string;
+    revision: number;
+    policyVersion: string;
+  }): boolean {
+    const profile = this.#store.get(input.workspaceId, input.ownerId, input.id);
+    return profile?.state === "active"
+      && profile.revision === input.revision
+      && profile.policyVersion === input.policyVersion
+      && profile.policyVersion === this.#policyVersion;
+  }
+
   update(
     workspaceId: string,
     ownerId: string,

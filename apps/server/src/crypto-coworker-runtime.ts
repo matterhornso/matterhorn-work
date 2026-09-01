@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
 import { cryptoCoworkerFeatureConfig, type MatterhornCoworkerMode } from "./crypto-coworker-config.js";
 import { MatterhornCoworkers } from "./crypto-coworkers.js";
+import type { MatterhornCoworkerRunBinding } from "./agent-capability.js";
 
 export type MatterhornCoworkerRuntimeServices = {
   mode: MatterhornCoworkerMode;
@@ -26,6 +27,9 @@ const POLICY_VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$/;
  */
 export function createMatterhornCoworkerRuntime(
   env: NodeJS.ProcessEnv = process.env,
+  options: {
+    onInvalidate?: ConstructorParameters<typeof MatterhornCoworkers>[0]["onInvalidate"];
+  } = {},
 ): MatterhornCoworkerRuntimeServices {
   const feature = cryptoCoworkerFeatureConfig(env);
   if (feature.coworkerMode === "off") {
@@ -40,13 +44,24 @@ export function createMatterhornCoworkerRuntime(
   }
   const storePath = env.MATTERHORN_COWORKER_DB?.trim();
   const store = new MatterhornCoworkerStore(storePath || undefined);
-  const coworkers = new MatterhornCoworkers({ store, policyVersion });
+  const coworkers = new MatterhornCoworkers({
+    store,
+    policyVersion,
+    onInvalidate: options.onInvalidate,
+  });
   return {
     mode: feature.coworkerMode,
     ready: true,
     coworkers,
     close: () => store.close(),
   };
+}
+
+export function coworkerBindingIsActive(
+  runtime: MatterhornCoworkerRuntimeServices,
+  binding: MatterhornCoworkerRunBinding,
+): boolean {
+  return runtime.coworkers?.matchesActiveBinding(binding) ?? false;
 }
 
 /** Test-only observability; never reveals profile content. */

@@ -525,8 +525,8 @@ export function validateMatterhornCoworkerProfile(value: unknown): string[] {
       maxLeverage: 100,
       minimumReserveUsd: 10_000_000_000,
       maxActiveWatches: 100,
-      maxReadCallsPerRun: 100,
-      maxPrepareCallsPerFamily: 10,
+      maxReadCallsPerRun: 12,
+      maxPrepareCallsPerFamily: 2,
     };
     for (const key of limitKeys) {
       const limit = value.limits[key];

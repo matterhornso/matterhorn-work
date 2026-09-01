@@ -11,6 +11,7 @@ import type { GuardedRuntimeObservationMetric } from "./operational-metrics.js";
 import {
   MATTERHORN_CAPABILITY_CALL_ARGUMENT,
   MatterhornAgentCapabilityBroker,
+  type MatterhornCoworkerRunBinding,
   capabilityArgsHash,
   guardedCapabilityEnforcementActive,
   stripCapabilityArgument,
@@ -45,6 +46,7 @@ export type GuardedPromptInput = {
   privacyConsentToken?: string;
   executionMode: MatterhornExecutionMode;
   requestToolProfiles?: readonly Record<string, boolean>[];
+  coworker?: MatterhornCoworkerRunBinding;
 };
 
 export type GuardedPromptAcceptance = {
@@ -62,6 +64,11 @@ const GUARDED_OBSERVATION_REASONS = new Set([
   "capability_agent_mismatch",
   "capability_argument_mutation",
   "capability_call_reissued",
+  "capability_coworker_app_binding_required",
+  "capability_coworker_authority_denied",
+  "capability_coworker_inactive",
+  "capability_coworker_mismatch",
+  "capability_coworker_scope_mismatch",
   "capability_expired",
   "capability_invalid_signature",
   "capability_prepare_budget_exhausted",
@@ -81,6 +88,15 @@ const GUARDED_OBSERVATION_REASONS = new Set([
   "rollout_not_enforced",
   "unknown_or_replayed_call_id",
 ]);
+
+function coworkerDisallowedDataLabels(
+  input: Pick<GuardedPromptInput, "coworker">,
+  response: MatterhornAgentPrivacyPreflightResponse,
+): string[] {
+  if (!input.coworker) return [];
+  const allowed = new Set(input.coworker.allowedDataLabels);
+  return response.detectedData.labels.filter((label) => label !== "secret" && !allowed.has(label));
+}
 
 function guardedObservationReason(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
@@ -114,7 +130,26 @@ export class MatterhornGuardedAgentRuntime {
   }
 
   preflight(input: Omit<GuardedPromptInput, "executionMode" | "requestToolProfiles" | "privacyConsentToken">): MatterhornAgentPrivacyPreflightResponse {
-    return this.privacy.preflight(input).response;
+    const evaluation = this.privacy.preflight(input, { issueChallenge: false });
+    const disallowedLabels = coworkerDisallowedDataLabels(input, evaluation.response);
+    if (disallowedLabels.length > 0) {
+      return {
+        ...evaluation.response,
+        decision: "blocked",
+        challenge: undefined,
+        reason: `This coworker is not allowed to receive ${disallowedLabels.join(", ")} context.`,
+      };
+    }
+    if (evaluation.response.decision === "consent_required" && input.coworker?.allowUnverifiedProviderConsent === false) {
+      return {
+        ...evaluation.response,
+        decision: "blocked",
+        reason: "This coworker is configured to use only local or privacy-verified model providers for private context.",
+      };
+    }
+    return evaluation.response.decision === "consent_required"
+      ? this.privacy.preflight(input).response
+      : evaluation.response;
   }
 
   confirmConsent(input: {
@@ -148,7 +183,24 @@ export class MatterhornGuardedAgentRuntime {
         evaluation.response,
       );
     }
+    const disallowedLabels = coworkerDisallowedDataLabels(input, evaluation.response);
+    if (disallowedLabels.length > 0) {
+      throw new GuardedRuntimeError(
+        403,
+        "coworker_data_policy_denied",
+        `This coworker is not allowed to receive ${disallowedLabels.join(", ")} context.`,
+        { ...evaluation.response, decision: "blocked" },
+      );
+    }
     if (evaluation.response.decision === "consent_required") {
+      if (input.coworker?.allowUnverifiedProviderConsent === false) {
+        throw new GuardedRuntimeError(
+          403,
+          "coworker_provider_not_allowed",
+          "This coworker is configured to use only local or privacy-verified model providers for private context.",
+          { ...evaluation.response, decision: "blocked" },
+        );
+      }
       const token = input.privacyConsentToken?.trim() ?? "";
       const consentValid = Boolean(token) && this.privacy.validateConsent({
         token,
@@ -232,6 +284,7 @@ export class MatterhornGuardedAgentRuntime {
         agentId: input.agentId,
         executionMode: input.executionMode,
         requestToolProfiles: input.requestToolProfiles,
+        coworker: input.coworker,
       });
     }
     const expiresAtMs = Date.now() + 6 * 60 * 60 * 1_000;
@@ -508,6 +561,16 @@ export class MatterhornGuardedAgentRuntime {
   runtimeSecretFingerprint(): string | null {
     const secret = process.env.MATTERHORN_AGENT_RUNTIME_SECRET?.trim();
     return secret ? sha256(secret).slice(0, 12) : null;
+  }
+
+  setCoworkerResolver(resolver: ((binding: MatterhornCoworkerRunBinding) => boolean) | null): void {
+    this.capabilities.setCoworkerResolver(resolver);
+  }
+
+  invalidateCoworker(input: { workspaceId: string; ownerId: string; coworkerId: string }): number {
+    const runIds = this.capabilities.runIdsForCoworker(input);
+    for (const runId of runIds) this.revokeRun(runId);
+    return runIds.length;
   }
 
   observationSnapshot(): GuardedRuntimeObservationMetric[] {

@@ -19,6 +19,23 @@ export type MatterhornFirstPartyCryptoAppOptions = {
   securityContact: string;
 };
 
+const FIRST_PARTY_ACTION_PROXY_TOOLS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  "matterhorn.sui-testnet": {
+    sui_account_read: "matterhorn_sui_get_balance",
+    sui_transfer_preview: "matterhorn_sui_preview_transfer",
+  },
+  "matterhorn.hyperliquid-testnet": {
+    hyperliquid_market_read: "matterhorn_hyperliquid_list_markets",
+    hyperliquid_orderbook_read: "matterhorn_hyperliquid_get_orderbook",
+    hyperliquid_account_exposure: "matterhorn_hyperliquid_get_positions",
+    hyperliquid_preview_order: "matterhorn_hyperliquid_preview_order",
+  },
+};
+
+export function firstPartyCryptoAppProxyTool(appId: string, actionId: string): string | null {
+  return FIRST_PARTY_ACTION_PROXY_TOOLS[appId]?.[actionId] ?? null;
+}
+
 const objectSchema = (
   properties: Record<string, unknown>,
   required: string[] = [],
@@ -297,20 +314,8 @@ export function buildMatterhornFirstPartyTestnetManifests(
 export function firstPartyCryptoAppCapabilityBindings(
   manifests: readonly MatterhornCryptoAppManifest[],
 ): MatterhornCryptoAppCapabilityBinding[] {
-  const tools: Record<string, Record<string, string>> = {
-    "matterhorn.sui-testnet": {
-      sui_account_read: "matterhorn_sui_get_balance",
-      sui_transfer_preview: "matterhorn_sui_preview_transfer",
-    },
-    "matterhorn.hyperliquid-testnet": {
-      hyperliquid_market_read: "matterhorn_hyperliquid_list_markets",
-      hyperliquid_orderbook_read: "matterhorn_hyperliquid_get_orderbook",
-      hyperliquid_account_exposure: "matterhorn_hyperliquid_get_positions",
-      hyperliquid_preview_order: "matterhorn_hyperliquid_preview_order",
-    },
-  };
   return manifests.flatMap((manifest) => manifest.actions.map((action) => {
-    const proxyToolName = tools[manifest.appId]?.[action.id];
+    const proxyToolName = firstPartyCryptoAppProxyTool(manifest.appId, action.id);
     if (!proxyToolName) throw new Error("first_party_crypto_app_binding_missing");
     return {
       appId: manifest.appId,

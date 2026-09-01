@@ -81,6 +81,13 @@ describe("durable crypto coworkers", () => {
         },
       });
       expect(coworkers.resolveActive("ws_alpha", "account_alpha", profile.id)?.id).toBe(profile.id);
+      expect(coworkers.matchesActiveBinding({
+        id: profile.id,
+        workspaceId: profile.workspaceId,
+        ownerId: profile.ownerId,
+        revision: profile.revision,
+        policyVersion: profile.policyVersion,
+      })).toBe(true);
     } finally {
       store.close();
     }
@@ -171,6 +178,13 @@ describe("durable crypto coworkers", () => {
       const paused = coworkers.transition("ws_alpha", "account_alpha", created.id, "paused", 1);
       expect(paused.revision).toBe(2);
       expect(coworkers.resolveActive("ws_alpha", "account_alpha", created.id)).toBeNull();
+      expect(coworkers.matchesActiveBinding({
+        id: paused.id,
+        workspaceId: paused.workspaceId,
+        ownerId: paused.ownerId,
+        revision: paused.revision,
+        policyVersion: paused.policyVersion,
+      })).toBe(false);
       const resumed = coworkers.transition("ws_alpha", "account_alpha", created.id, "active", 2);
       const revoked = coworkers.transition("ws_alpha", "account_alpha", created.id, "revoked", resumed.revision);
       expect(() => coworkers.transition("ws_alpha", "account_alpha", created.id, "active", revoked.revision))

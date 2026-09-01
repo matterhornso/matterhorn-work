@@ -180,6 +180,20 @@ describe("crypto coworker HTTP boundary", () => {
     const workspaceA = String(workspacesA.payload.items[0].id);
     const workspaceB = String(workspacesB.payload.items[0].id);
 
+    const templates = await request(server.base, `/workspace/${workspaceA}/coworker-templates`, { cookie: cookieA });
+    expect(templates.response.status).toBe(200);
+    expect(templates.payload.templates.map((item: any) => item.id)).toEqual(["market_analyst", "risk_monitor"]);
+    const fromTemplate = await request(server.base, `/workspace/${workspaceA}/coworkers/from-template`, {
+      cookie: cookieA,
+      body: { templateId: "risk_monitor", name: "My risk monitor" },
+    });
+    expect(fromTemplate.response.status).toBe(201);
+    expect(fromTemplate.payload).toMatchObject({
+      templateId: "risk_monitor",
+      coworker: { name: "My risk monitor", state: "active", revision: 1 },
+    });
+    expect(fromTemplate.payload.coworker.automaticAuthorities).not.toContain("prepare");
+
     const created = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
       cookie: cookieA,
       body: coworkerInput(),
@@ -196,9 +210,28 @@ describe("crypto coworker HTTP boundary", () => {
     expect(created.payload.coworker.ownerId).toBeUndefined();
     const coworkerId = String(created.payload.coworker.id);
 
+    const blockedExecution = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_coworker/messages/preflight`,
+      {
+        cookie: cookieA,
+        body: {
+          coworkerId,
+          parts: [{ type: "text", text: "Read approved Sui state" }],
+          executionMode: "work",
+        },
+      },
+    );
+    expect(blockedExecution.response.status).toBe(503);
+    expect(blockedExecution.payload.code).toBe("coworker_execution_not_ready");
+
     const ownList = await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA });
     const otherList = await request(server.base, `/workspace/${workspaceB}/coworkers`, { cookie: cookieB });
-    expect(ownList.payload.coworkers.map((item: any) => item.id)).toEqual([coworkerId]);
+    expect(ownList.payload.coworkers).toHaveLength(2);
+    expect(ownList.payload.coworkers.map((item: any) => item.id)).toEqual(expect.arrayContaining([
+      fromTemplate.payload.coworker.id,
+      coworkerId,
+    ]));
     expect(otherList.payload.coworkers).toEqual([]);
     expect((await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieB })).response.status).toBe(404);
     expect((await request(server.base, `/workspace/${workspaceB}/coworkers/${coworkerId}`, { cookie: cookieB })).response.status).toBe(404);

@@ -345,6 +345,7 @@ import {
   getMatterhornDeskAgent,
   getMatterhornDeskAgentById,
 } from "@matterhorn-work/types/desk-agents";
+import { getMatterhornCryptoTool } from "@matterhorn-work/types/crypto-action-registry";
 import {
   MATTERHORN_EXECUTION_MODE_HEADER,
   buildMatterhornExecutionModeSystemPrompt,
@@ -372,6 +373,7 @@ import {
   type MatterhornCryptoAppRuntimeServices,
 } from "./crypto-app-runtime.js";
 import {
+  coworkerBindingIsActive,
   createMatterhornCoworkerRuntime,
   type MatterhornCoworkerRuntimeServices,
 } from "./crypto-coworker-runtime.js";
@@ -381,6 +383,10 @@ import {
   type MatterhornCoworkerCreateInput,
   type MatterhornCoworkerUpdateInput,
 } from "./crypto-coworkers.js";
+import {
+  getMatterhornCoworkerTemplate,
+  listMatterhornCoworkerTemplates,
+} from "./crypto-coworker-templates.js";
 import {
   MatterhornCryptoAppCatalogError,
   type MatterhornCryptoAppCatalogQuery,
@@ -401,6 +407,8 @@ import {
 } from "./crypto-app-registry.js";
 import { MatterhornCryptoAppRegistryStoreError } from "./crypto-app-registry-store.js";
 import type { MatterhornCryptoAppRuntimeCertificationReport } from "./crypto-app-runtime-certification.js";
+import { firstPartyCryptoAppProxyTool } from "./first-party-crypto-apps.js";
+import type { MatterhornCoworkerRunBinding } from "./agent-capability.js";
 import {
   buildMatterhornSessionPermissionProfile,
   matterhornPermissionProfileIsActive,
@@ -1283,7 +1291,12 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const modelUsageStore = new MatterhornModelUsageStore();
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
   const cryptoAppRuntime = createMatterhornCryptoAppRuntime();
-  const coworkerRuntime = createMatterhornCoworkerRuntime();
+  const coworkerRuntime = createMatterhornCoworkerRuntime(process.env, {
+    onInvalidate: (input) => {
+      guardedRuntime.invalidateCoworker(input);
+    },
+  });
+  guardedRuntime.setCoworkerResolver((binding) => coworkerBindingIsActive(coworkerRuntime, binding));
   const drainEmailOutbox = createEmailOutboxDrainer(authStore, logger);
   let emailOutboxTask = drainEmailOutbox();
   const emailOutboxTimer = setInterval(() => {
@@ -2760,6 +2773,86 @@ function coworkerProfileInput(
 function coworkerAccountView(profile: MatterhornCoworkerProfile) {
   const { ownerId: _ownerId, ...view } = structuredClone(profile);
   return view;
+}
+
+function coworkerRunBinding(profile: MatterhornCoworkerProfile): MatterhornCoworkerRunBinding {
+  return {
+    id: profile.id,
+    workspaceId: profile.workspaceId,
+    ownerId: profile.ownerId,
+    revision: profile.revision,
+    policyVersion: profile.policyVersion,
+    allowedAppIds: [...profile.allowedAppIds],
+    allowedActionIds: [...profile.allowedActionIds],
+    allowedNetworks: [...profile.allowedNetworks],
+    automaticAuthorities: [...profile.automaticAuthorities],
+    actionBindings: coworkerActionBindings(profile),
+    allowedDataLabels: [...profile.privacy.allowedDataLabels],
+    allowUnverifiedProviderConsent: profile.privacy.allowUnverifiedProviderConsent,
+    maxReadCallsPerRun: profile.limits.maxReadCallsPerRun,
+    maxPrepareCallsPerFamily: profile.limits.maxPrepareCallsPerFamily,
+  };
+}
+
+function coworkerActionBindings(profile: MatterhornCoworkerProfile): MatterhornCoworkerRunBinding["actionBindings"] {
+  const bindings = new Map<string, MatterhornCoworkerRunBinding["actionBindings"][number]>();
+  for (const appId of profile.allowedAppIds) {
+    for (const actionId of profile.allowedActionIds) {
+      const toolName = firstPartyCryptoAppProxyTool(appId, actionId);
+      const tool = toolName ? getMatterhornCryptoTool(toolName) : undefined;
+      if (!tool) continue;
+      const authorityAllowed = tool.access === "prepare"
+        ? profile.automaticAuthorities.includes("prepare")
+        : profile.automaticAuthorities.includes("read") || profile.automaticAuthorities.includes("watch");
+      if (authorityAllowed) {
+        const binding = { appId, actionId, proxyToolName: tool.name, access: tool.access };
+        bindings.set(`${appId}\u0000${actionId}\u0000${tool.name}`, binding);
+      }
+    }
+  }
+  return [...bindings.values()].sort((left, right) => (
+    `${left.appId}:${left.actionId}:${left.proxyToolName}`.localeCompare(`${right.appId}:${right.actionId}:${right.proxyToolName}`)
+  ));
+}
+
+function coworkerToolProfile(profile: MatterhornCoworkerProfile): Record<string, boolean> {
+  const toolProfile: Record<string, boolean> = { "*": false };
+  for (const binding of coworkerActionBindings(profile)) {
+    toolProfile[`matterhorn-work_${binding.proxyToolName}`] = true;
+  }
+  return toolProfile;
+}
+
+function resolveMessageCoworker(input: {
+  body: Record<string, unknown>;
+  workspace: WorkspaceInfo;
+  ctx: RequestContext;
+  coworkerRuntime: MatterhornCoworkerRuntimeServices;
+  cryptoAppRuntime: MatterhornCryptoAppRuntimeServices;
+  guardedRuntime: MatterhornGuardedAgentRuntime;
+}): MatterhornCoworkerProfile | undefined {
+  if (input.body.coworkerId == null) return undefined;
+  const coworkerId = typeof input.body.coworkerId === "string" ? input.body.coworkerId.trim() : "";
+  if (!coworkerId || coworkerId.length > 256) {
+    throw new ApiError(400, "coworker_input_invalid", "coworkerId is invalid.");
+  }
+  if (!input.coworkerRuntime.coworkers
+    || input.cryptoAppRuntime.mode !== "enforce"
+    || input.guardedRuntime.capabilities.mode !== "enforce"
+    || !input.guardedRuntime.ready()) {
+    throw new ApiError(
+      503,
+      "coworker_execution_not_ready",
+      "Crypto coworker execution is unavailable until the gateway and guarded runtime are enforced.",
+    );
+  }
+  const profile = input.coworkerRuntime.coworkers.resolveActive(
+    input.workspace.id,
+    cryptoAppCreatedBy(input.ctx),
+    coworkerId,
+  );
+  if (!profile) throw new ApiError(404, "coworker_not_found", "Coworker not found.");
+  return profile;
 }
 
 function coworkerApiError(error: unknown): ApiError {
@@ -8728,6 +8821,49 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "GET", "/workspace/:id/coworker-templates", "client", async (ctx) => {
+    await resolveWorkspace(config, ctx.params.id);
+    const response = noStoreJsonResponse({ templates: listMatterhornCoworkerTemplates() });
+    return response;
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/coworkers/from-template", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request, 16_384, "Coworker template");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => !["templateId", "name", "mission"].includes(key))
+        || typeof body.templateId !== "string"
+        || (body.name !== undefined && typeof body.name !== "string")
+        || (body.mission !== undefined && typeof body.mission !== "string")) {
+        throw new ApiError(400, "coworker_template_invalid", "Coworker template input is invalid.");
+      }
+      const template = getMatterhornCoworkerTemplate(body.templateId.trim());
+      if (!template) throw new ApiError(404, "coworker_template_not_found", "Coworker template not found.");
+      const coworker = coworkerRuntime.coworkers.create(
+        workspace.id,
+        cryptoAppCreatedBy(ctx),
+        {
+          ...template.profile,
+          ...(typeof body.name === "string" ? { name: body.name } : {}),
+          ...(typeof body.mission === "string" ? { mission: body.mission } : {}),
+        },
+      );
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        templateId: template.id,
+        coworker: coworkerAccountView(coworker),
+      }, 201);
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
   addRoute(routes, "POST", "/workspace/:id/coworkers", "client", async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
@@ -10330,6 +10466,14 @@ function createRoutes(
     const agentId = typeof body.agentId === "string" && body.agentId.trim()
       ? body.agentId.trim()
       : typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
+    const coworker = resolveMessageCoworker({
+      body,
+      workspace,
+      ctx,
+      coworkerRuntime,
+      cryptoAppRuntime,
+      guardedRuntime,
+    });
     const rawParts = parseSessionPromptParts(body);
     const modeTools = buildMatterhornExecutionModeTools(executionMode, agentId);
     const routedTools = modeTools ?? (executionMode === "work"
@@ -10339,7 +10483,11 @@ function createRoutes(
           hasAttachments: promptPartsHaveAttachments(rawParts),
         })
       : undefined);
-    const requestToolProfiles = [routedTools, ...parseAgentRequestToolProfiles(body)]
+    const requestToolProfiles = [
+      routedTools,
+      ...(coworker ? [coworkerToolProfile(coworker)] : []),
+      ...parseAgentRequestToolProfiles(body),
+    ]
       .filter((profile): profile is Record<string, boolean> => Boolean(profile));
     const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
     const privacyMode = parseAgentPrivacyMode(body.privacyMode);
@@ -10353,6 +10501,7 @@ function createRoutes(
       guardedRuntime,
       sessionId,
       privacyMode,
+      coworker,
     });
     const response = guardedRuntime.preflight({
       workspaceId: workspace.id,
@@ -10364,6 +10513,7 @@ function createRoutes(
       attachmentIds: resolved.attachmentIds,
       memoryIds: resolved.memoryIds,
       privacyMode,
+      coworker: coworker ? coworkerRunBinding(coworker) : undefined,
     });
     const result = jsonResponse(response);
     result.headers.set("Cache-Control", "no-store");
@@ -10576,6 +10726,14 @@ function createRoutes(
     const agent = typeof body.agentId === "string" && body.agentId.trim()
       ? body.agentId.trim()
       : typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
+    const coworker = resolveMessageCoworker({
+      body,
+      workspace,
+      ctx,
+      coworkerRuntime,
+      cryptoAppRuntime,
+      guardedRuntime,
+    });
     const modeTools = buildMatterhornExecutionModeTools(executionMode, agent);
     const routedTools = modeTools ?? (executionMode === "work"
       ? buildMatterhornGeneralCryptoToolProfile({
@@ -10589,6 +10747,7 @@ function createRoutes(
       : undefined;
     const requestToolProfiles = [
       routedTools,
+      ...(coworker ? [coworkerToolProfile(coworker)] : []),
       legacyClientRestrictions,
       ...parseAgentRequestToolProfiles(body),
     ]
@@ -10604,6 +10763,7 @@ function createRoutes(
       guardedRuntime,
       sessionId,
       privacyMode,
+      coworker,
     });
     const guardedInput = {
       workspaceId: workspace.id,
@@ -10618,6 +10778,7 @@ function createRoutes(
       privacyConsentToken: typeof body.privacyConsentToken === "string" ? body.privacyConsentToken.trim() : undefined,
       executionMode,
       requestToolProfiles,
+      coworker: coworker ? coworkerRunBinding(coworker) : undefined,
     };
     let guardedAuthorization: ReturnType<typeof guardedRuntime.authorizePrompt>;
     try {
@@ -10741,6 +10902,14 @@ function createRoutes(
         decision: guardedAcceptance.preflight.decision,
         consentUsed: guardedAcceptance.consentUsed,
       },
+      ...(coworker ? {
+        coworker: {
+          id: coworker.id,
+          name: coworker.name,
+          revision: coworker.revision,
+          policyVersion: coworker.policyVersion,
+        },
+      } : {}),
     }, 202);
   });
 
@@ -16793,6 +16962,7 @@ function buildAuthoritativeAgentSystemContext(input: {
   agentId?: string;
   memoryText: string;
   cryptoStateText: string;
+  coworker?: MatterhornCoworkerProfile;
 }): { system: string; privacyParts: MatterhornAgentPrivacyPart[] } {
   const desk = getMatterhornDeskAgentById(input.agentId);
   const publicSections = [
@@ -16804,10 +16974,31 @@ function buildAuthoritativeAgentSystemContext(input: {
       "Never request, reconstruct, reveal, sign, submit, relay, or broadcast secrets or transactions. Wallet review and submission remain user-controlled outside the model.",
     ].join("\n"),
   ].filter(Boolean);
-  const system = [...publicSections, input.cryptoStateText, input.memoryText]
+  const coworkerText = input.coworker ? [
+    "## Active Matterhorn Coworker",
+    `Name: ${input.coworker.name}`,
+    `Role: ${input.coworker.role}`,
+    `Mission: ${input.coworker.mission}`,
+    `Allowed apps: ${input.coworker.allowedAppIds.join(", ") || "none"}`,
+    `Allowed actions: ${input.coworker.allowedActionIds.join(", ") || "none"}`,
+    `Allowed networks: ${input.coworker.allowedNetworks.join(", ") || "none"}`,
+    `Allowed assets: ${input.coworker.allowedAssets.join(", ") || "none"}`,
+    `Automatic authority: ${input.coworker.automaticAuthorities.join(", ") || "none"}`,
+    "These limits are server-enforced. Never claim broader authority. Every transaction remains connected-wallet-only.",
+  ].join("\n") : "";
+  const system = [...publicSections, coworkerText, input.cryptoStateText, input.memoryText]
     .filter(Boolean)
     .join("\n\n")
     .slice(0, AGENT_MESSAGE_MAX_SYSTEM_CHARS);
+  const coworkerPrivacyParts: MatterhornAgentPrivacyPart[] = coworkerText ? [{
+    type: "coworker_profile",
+    name: input.coworker!.name,
+    text: coworkerText,
+    source: "system",
+    label: "workspace_private",
+    contentHash: sha256Bytes(coworkerText),
+    version: `${input.coworker!.policyVersion}:${input.coworker!.revision}`,
+  }] : [];
   return {
     system,
     privacyParts: [
@@ -16817,6 +17008,7 @@ function buildAuthoritativeAgentSystemContext(input: {
         source: "system",
         label: "public",
       })),
+      ...coworkerPrivacyParts,
     ],
   };
 }
@@ -16842,6 +17034,7 @@ async function resolveAuthoritativeAgentMessage(input: {
   guardedRuntime: MatterhornGuardedAgentRuntime;
   sessionId: string;
   privacyMode?: MatterhornAgentPrivacyMode;
+  coworker?: MatterhornCoworkerProfile;
 }): Promise<ResolvedAgentMessageContext> {
   if (typeof input.body.system === "string" && input.body.system.trim()) {
     throw new ApiError(
@@ -16872,6 +17065,7 @@ async function resolveAuthoritativeAgentMessage(input: {
     agentId: input.agentId,
     memoryText: memory.modelText,
     cryptoStateText: crypto.modelText,
+    coworker: input.coworker,
   });
   const toolProfilePart: MatterhornAgentPrivacyPart = {
     type: "tool_profile",

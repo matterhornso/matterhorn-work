@@ -52,6 +52,7 @@ export type MatterhornAgentPrivacyPreflightRequest = {
   parts: MatterhornAgentMessagePart[];
   model: { providerId: string; modelId: string };
   agentId?: string | null;
+  coworkerId?: string | null;
   attachmentIds?: string[];
   memoryIds?: string[];
   privacyMode?: MatterhornAgentPrivacyMode;
@@ -76,6 +77,12 @@ export type MatterhornAgentMessageResponse = {
     requestHash: string;
     decision: MatterhornAgentPrivacyDecision;
     consentUsed: boolean;
+  };
+  coworker?: {
+    id: string;
+    name: string;
+    revision: number;
+    policyVersion: string;
   };
 };
 
@@ -141,6 +148,12 @@ export type MatterhornAgentCapabilityClaims = {
   expiresAt: string;
   policyVersion: string;
   registryVersion: string;
+  coworker?: {
+    id: string;
+    ownerId: string;
+    revision: number;
+    policyVersion: string;
+  };
 };
 
 export type MatterhornAgentCapabilityToken = {

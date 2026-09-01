@@ -124,6 +124,142 @@ describe("agent capability broker", () => {
     })).toThrow("capability_tool_not_in_run_grant");
   });
 
+  test("binds coworker authority to its exact active revision, app, action, network and budget", () => {
+    let active = true;
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    broker.setCoworkerResolver((binding) => active
+      && binding.id === "cw_sui"
+      && binding.revision === 4
+      && binding.policyVersion === "coworker-policy-2");
+    broker.createRunGrant({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker: {
+        id: "cw_sui",
+        workspaceId: "ws_1",
+        ownerId: "account_1",
+        revision: 4,
+        policyVersion: "coworker-policy-2",
+        allowedAppIds: ["matterhorn.sui-testnet"],
+        allowedActionIds: ["sui_account_read"],
+        allowedNetworks: ["sui:testnet"],
+        automaticAuthorities: ["read"],
+        actionBindings: [{
+          appId: "matterhorn.sui-testnet",
+          actionId: "sui_account_read",
+          proxyToolName: "matterhorn_sui_get_balance",
+          access: "read",
+        }],
+        allowedDataLabels: ["public", "workspace_private", "untrusted_external"],
+        allowUnverifiedProviderConsent: false,
+        maxReadCallsPerRun: 1,
+        maxPrepareCallsPerFamily: 0,
+      },
+    });
+    const args = {
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_account_read",
+      access: "read",
+      network: "sui:testnet",
+      canonicalArgumentsHash: "a".repeat(64),
+    };
+    const capability = broker.issue({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_coworker",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    });
+    expect(capability.claims.coworker).toEqual({
+      id: "cw_sui",
+      ownerId: "account_1",
+      revision: 4,
+      policyVersion: "coworker-policy-2",
+    });
+    expect(broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args }).runId)
+      .toBe("run_coworker");
+    expect(() => broker.issue({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_budget",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    })).toThrow("capability_read_budget_exhausted");
+    expect(broker.runIdsForCoworker({ workspaceId: "ws_1", ownerId: "account_1", coworkerId: "cw_sui" }))
+      .toEqual(["run_coworker"]);
+
+    active = false;
+    expect(() => broker.issue({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_inactive",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    })).toThrow("capability_coworker_inactive");
+  });
+
+  test("refuses coworker capabilities on legacy direct tools or broadened app scopes", () => {
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    broker.setCoworkerResolver(() => true);
+    broker.createRunGrant({
+      runId: "run_coworker_scope",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker_scope",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker: {
+        id: "cw_scope",
+        workspaceId: "ws_1",
+        ownerId: "account_1",
+        revision: 1,
+        policyVersion: "coworker-policy-1",
+        allowedAppIds: ["matterhorn.sui-testnet"],
+        allowedActionIds: ["sui_account_read"],
+        allowedNetworks: ["sui:testnet"],
+        automaticAuthorities: ["read"],
+        actionBindings: [{
+          appId: "matterhorn.sui-testnet",
+          actionId: "sui_account_read",
+          proxyToolName: "matterhorn_sui_get_balance",
+          access: "read",
+        }],
+        allowedDataLabels: ["public", "workspace_private", "untrusted_external"],
+        allowUnverifiedProviderConsent: false,
+        maxReadCallsPerRun: 4,
+        maxPrepareCallsPerFamily: 0,
+      },
+    });
+    expect(() => broker.issue({
+      runId: "run_coworker_scope",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker_scope",
+      callId: "call_legacy",
+      toolName: "matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    })).toThrow("capability_coworker_app_binding_required");
+    expect(() => broker.issue({
+      runId: "run_coworker_scope",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker_scope",
+      callId: "call_broadened",
+      toolName: "matterhorn_sui_get_balance",
+      args: {
+        appId: "malicious.app",
+        actionId: "sui_account_read",
+        access: "read",
+        network: "sui:testnet",
+      },
+    })).toThrow("capability_coworker_scope_mismatch");
+  });
+
   test("workspace purge revokes grants and already-issued capabilities", () => {
     const broker = brokerWithRun();
     const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };

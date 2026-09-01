@@ -144,6 +144,128 @@ describe("guarded agent runtime transport", () => {
     expect((await runtime.receipts.get("ws_complete", accepted.runId))?.status).toBe("success");
   });
 
+  test("revokes staged authority immediately when a bound coworker changes state", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    runtime.setCoworkerResolver(() => true);
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_coworker",
+      sessionId: "ses_coworker",
+      parts: [{ type: "text", text: "Read the approved Sui balance" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker: {
+        id: "cw_guarded",
+        workspaceId: "ws_coworker",
+        ownerId: "account_coworker",
+        revision: 2,
+        policyVersion: "coworker-policy-2",
+        allowedAppIds: ["matterhorn.sui-testnet"],
+        allowedActionIds: ["sui_account_read"],
+        allowedNetworks: ["sui:testnet"],
+        automaticAuthorities: ["read"],
+        actionBindings: [{
+          appId: "matterhorn.sui-testnet",
+          actionId: "sui_account_read",
+          proxyToolName: "matterhorn_sui_get_balance",
+          access: "read",
+        }],
+        allowedDataLabels: ["public", "workspace_private", "untrusted_external"],
+        allowUnverifiedProviderConsent: false,
+        maxReadCallsPerRun: 4,
+        maxPrepareCallsPerFamily: 0,
+      },
+    });
+    const args = {
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      connectionId: "cxc_sui",
+      actionId: "sui_account_read",
+      access: "read",
+      network: "sui:testnet",
+      canonicalArgumentsHash: "a".repeat(64),
+    };
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_coworker",
+      sessionId: "ses_coworker",
+      callId: "call_coworker_pending",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args,
+    });
+    expect(runtime.invalidateCoworker({
+      workspaceId: "ws_coworker",
+      ownerId: "account_coworker",
+      coworkerId: "cw_guarded",
+    })).toBe(1);
+    expect(runtime.capabilities.activeRun("ses_coworker")).toBeNull();
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { ...args, _matterhornCallId: "call_coworker_pending" },
+    })).toThrow("unknown, expired, or replayed");
+  });
+
+  test("does not issue one-request consent when the coworker forbids unverified providers", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    const coworker = {
+      id: "cw_private",
+      workspaceId: "ws_private_coworker",
+      ownerId: "account_private",
+      revision: 1,
+      policyVersion: "coworker-policy-1",
+      allowedAppIds: ["matterhorn.sui-testnet"],
+      allowedActionIds: ["sui_account_read"],
+      allowedNetworks: ["sui:testnet"],
+      automaticAuthorities: ["read" as const],
+      actionBindings: [{
+        appId: "matterhorn.sui-testnet",
+        actionId: "sui_account_read",
+        proxyToolName: "matterhorn_sui_get_balance",
+        access: "read" as const,
+      }],
+      allowedDataLabels: [
+        "public" as const,
+        "workspace_private" as const,
+        "untrusted_external" as const,
+      ],
+      allowUnverifiedProviderConsent: false,
+      maxReadCallsPerRun: 4,
+      maxPrepareCallsPerFamily: 0,
+    };
+    const input = {
+      workspaceId: "ws_private_coworker",
+      sessionId: "ses_private_coworker",
+      parts: [{ type: "coworker_profile", text: "Private coworker mission", label: "workspace_private" as const }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      coworker,
+    };
+    const preflight = runtime.preflight(input);
+    expect(preflight.decision).toBe("blocked");
+    expect(preflight.challenge).toBeUndefined();
+    await expect(runtime.acceptPrompt({ ...input, executionMode: "work" })).rejects.toMatchObject({
+      code: "coworker_provider_not_allowed",
+      status: 403,
+    });
+
+    const walletInput = {
+      ...input,
+      parts: [{ type: "wallet_context", text: "Linked wallet state", label: "wallet_private" as const }],
+    };
+    const walletPreflight = runtime.preflight(walletInput);
+    expect(walletPreflight.decision).toBe("blocked");
+    expect(walletPreflight.challenge).toBeUndefined();
+    await expect(runtime.acceptPrompt({ ...walletInput, executionMode: "work" })).rejects.toMatchObject({
+      code: "coworker_data_policy_denied",
+      status: 403,
+    });
+  });
+
   test("keeps capabilities off while still producing an exact provider-usage receipt", async () => {
     process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "off";
     const runtime = new MatterhornGuardedAgentRuntime();

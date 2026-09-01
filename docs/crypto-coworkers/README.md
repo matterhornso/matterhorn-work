@@ -84,6 +84,10 @@ Phase 2 profile storage is available only when `MATTERHORN_COWORKER_MODE` is not
 
 Authenticated routes under `/workspace/:id/coworkers` create, list, inspect, revise, pause, revoke, and delete only the requesting identity's profiles. The server owns workspace, owner, revision, policy version, lifecycle state, and the immutable connected-wallet-only escalation boundary. Client JSON cannot supply those fields. Profiles use optimistic revisions; a stale edit, state transition, or deletion fails without mutation. A policy-version change makes older profiles non-resolvable until an explicit revisioned update rebinds them. Account responses omit the internal owner identifier, and workspace/owner composite scoping prevents enumeration across tenants.
 
+`GET /workspace/:id/coworker-templates` exposes the initial chat-first `Market Analyst` and `Risk Monitor` templates. `POST /workspace/:id/coworkers/from-template` creates an owner-scoped copy with optional name and mission overrides. Neither template has prepare or submission authority.
+
+The authoritative message preflight and submission routes accept an optional `coworkerId`. A selected coworker is resolved only from the signed-in identity and active server record. Its mission becomes versioned workspace-private system context, and its exact profile revision, policy version, app/action/network/data-label allowlist, proxy-tool mapping, and per-run budgets are bound into the hidden run grant. Coworker execution fails closed unless both the Crypto App Gateway and guarded runtime are in `enforce`. Direct legacy crypto tools are denied for coworker runs; only an exact certified app/action proxy binding can receive a capability. Data outside the coworker's allowlist is rejected before provider dispatch, and editing, pausing, revoking, deleting, or changing the deployment policy invalidates active and staged coworker authority. Templates refuse unverified providers for private context rather than offering one-request consent.
+
 Future readiness rules are fail-closed:
 
 - Enforced app access requires the guarded agent runtime in `enforce`.
