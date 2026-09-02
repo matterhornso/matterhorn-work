@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const cli = readFileSync("apps/orchestrator/src/cli.ts", "utf8");
@@ -35,6 +36,8 @@ for (const snippet of [
   "/api/bittensor/chat/execute",
   "/api/bittensor/readiness",
   "function buildMcpServersConfig(args: ParsedArgs)",
+  "function resolveMcpRepositoryPath(args: ParsedArgs)",
+  "function mcpRunner(args: ParsedArgs)",
   "function renderCodexMcpConfig(mcpServers: Record<string, McpConfigEntry>): string",
   "[mcp_servers.${name}]",
   "[mcp_servers.${name}.env]",
@@ -47,6 +50,9 @@ for (const snippet of [
   "MATTERHORN_WORK_SERVER_URL",
   "MATTERHORN_WORK_TOKEN",
   "MATTERHORN_WORK_HOST_TOKEN",
+  "include-host-approvals",
+  "--repo-path",
+  "Matterhorn MCP packages are not published",
   'readMatterhornEnv("OPENWORK_SERVER_URL")',
   'readMatterhornEnv("OPENWORK_TOKEN")',
   'readMatterhornEnv("OPENWORK_HOST_TOKEN")',
@@ -99,5 +105,89 @@ for (const snippet of [
 ]) {
   assert.ok(installDocs.includes(snippet), `missing MCP install docs snippet: ${snippet}`);
 }
+
+function runMcpConfig(args, environment = {}) {
+  return spawnSync(
+    "bun",
+    ["apps/orchestrator/src/cli.ts", "mcp", "config", ...args],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        MATTERHORN_WORK_HOST_TOKEN: "",
+        OPENWORK_HOST_TOKEN: "",
+        ...environment,
+      },
+    },
+  );
+}
+
+const safeConfig = runMcpConfig([
+  "--target", "json",
+  "--profile", "server",
+  "--repo-path", process.cwd(),
+  "--server-url", "http://127.0.0.1:8787",
+  "--token", "test-client-token",
+]);
+assert.equal(safeConfig.status, 0, safeConfig.stderr);
+const safeServers = JSON.parse(safeConfig.stdout).mcpServers;
+assert.equal(safeServers["matterhorn-work"].command, "node");
+assert.equal(
+  safeServers["matterhorn-work"].args[0],
+  `${process.cwd()}/packages/matterhorn-work-mcp/index.mjs`,
+);
+assert.equal(safeServers["matterhorn-work"].env.MATTERHORN_WORK_TOKEN, "test-client-token");
+assert.equal("MATTERHORN_WORK_HOST_TOKEN" in safeServers["matterhorn-work"].env, false);
+assert.equal(safeConfig.stdout.includes("npx"), false);
+
+const inheritedHostToken = runMcpConfig([
+  "--target", "env",
+  "--server-url", "http://127.0.0.1:8787",
+  "--token", "test-client-token",
+], { MATTERHORN_WORK_HOST_TOKEN: "must-not-inherit" });
+assert.equal(inheritedHostToken.status, 0, inheritedHostToken.stderr);
+assert.equal(inheritedHostToken.stdout.includes("must-not-inherit"), false);
+assert.equal(inheritedHostToken.stdout.includes("MATTERHORN_WORK_HOST_TOKEN"), false);
+
+const rejectedHostToken = runMcpConfig([
+  "--target", "json",
+  "--profile", "server",
+  "--repo-path", process.cwd(),
+  "--host-token", "must-require-explicit-authority",
+]);
+assert.notEqual(rejectedHostToken.status, 0);
+assert.match(rejectedHostToken.stderr, /requires --include-host-approvals/);
+assert.equal(rejectedHostToken.stdout.includes("must-require-explicit-authority"), false);
+
+const operatorConfig = runMcpConfig([
+  "--target", "json",
+  "--profile", "server",
+  "--repo-path", process.cwd(),
+  "--include-host-approvals",
+  "--host-token", "explicit-test-host-token",
+]);
+assert.equal(operatorConfig.status, 0, operatorConfig.stderr);
+assert.equal(
+  JSON.parse(operatorConfig.stdout).mcpServers["matterhorn-work"].env.MATTERHORN_WORK_HOST_TOKEN,
+  "explicit-test-host-token",
+);
+
+const invalidCheckout = runMcpConfig([
+  "--target", "json",
+  "--repo-path", "/definitely/not/a/matterhorn/checkout",
+]);
+assert.notEqual(invalidCheckout.status, 0);
+assert.match(invalidCheckout.stderr, /does not contain the Matterhorn MCP entrypoints/);
+
+const explicitFutureRunner = runMcpConfig([
+  "--target", "json",
+  "--profile", "server",
+  "--runner", "npx",
+]);
+assert.equal(explicitFutureRunner.status, 0, explicitFutureRunner.stderr);
+const futureServer = JSON.parse(explicitFutureRunner.stdout).mcpServers["matterhorn-work"];
+assert.equal(futureServer.command, "npx");
+assert.deepEqual(futureServer.args, ["-y", "matterhorn-work-mcp"]);
 
 console.log("Matterhorn MCP config CLI static check passed.");

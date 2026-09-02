@@ -33,9 +33,9 @@ For an executable, end-to-end operator loop, use [Matterhorn Desks Agent Operato
    matterhorn-work mcp config \
      --target codex \
      --profile full \
+     --repo-path /absolute/path/to/matterhorn-work \
      --server-url http://127.0.0.1:8787 \
-     --token <client-token> \
-     --host-token <host-token>
+     --token <client-token>
    ```
 
 4. Or configure an MCP client manually:
@@ -44,12 +44,11 @@ For an executable, end-to-end operator loop, use [Matterhorn Desks Agent Operato
    {
      "mcpServers": {
        "matterhorn-work": {
-         "command": "npx",
-         "args": ["-y", "matterhorn-work-mcp"],
+         "command": "node",
+         "args": ["/absolute/path/to/matterhorn-work/packages/matterhorn-work-mcp/index.mjs"],
          "env": {
            "MATTERHORN_WORK_SERVER_URL": "http://127.0.0.1:8787",
-           "MATTERHORN_WORK_TOKEN": "<client-token>",
-           "MATTERHORN_WORK_HOST_TOKEN": "<host-token>"
+           "MATTERHORN_WORK_TOKEN": "<client-token>"
          }
        }
      }

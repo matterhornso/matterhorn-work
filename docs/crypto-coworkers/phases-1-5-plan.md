@@ -276,6 +276,7 @@ Crypto teams can build, certify, list, meter, and operate safe integrations; inv
    - TypeScript SDK, manifest builder/signer, local adapter runner, typed fixtures, and policy emulator.
    - Setup flows for Matterhorn Skill, MCP, Codex, Claude Code, CLI, and HTTP API.
    - Implemented: `matterhorn.crypto-app-integration-setup.v1` produces inert target-specific setup packets. It accepts no token values, host authority, signing authority, private keys, or mainnet controls; MCP packets use a trusted absolute checkout until packages are actually published.
+   - Implemented: CLI-generated MCP configuration verifies real local checkout entrypoints and excludes host approval authority unless a trusted operator explicitly opts in. An unavailable distribution now fails clearly instead of producing a broken setup.
 2. **Developer portal**
    - Register publisher keys, submit manifest revisions, run conformance, inspect failures, and request certification.
    - Separate testnet and mainnet certification.

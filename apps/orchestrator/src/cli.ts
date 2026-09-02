@@ -4137,7 +4137,10 @@ function printHelp(): void {
     "  --profile <name>         MCP config profile: server | full (default: full)",
     "  --server-url <url>       Matterhorn Desks server URL for MCP config",
     "  --token <token>          Matterhorn Desks client token for MCP config",
-    "  --host-token <token>     Matterhorn Desks host token for approval MCP tools",
+    "  --repo-path <path>       Trusted Matterhorn checkout for local MCP entrypoints",
+    "  --runner <command>       Explicit published-package runner (for example npx)",
+    "  --include-host-approvals Include host approval authority in generated MCP config",
+    "  --host-token <token>     Host token; requires --include-host-approvals",
     "  --opencode-router                Enable opencodeRouter sidecar (default from workspace messaging config)",
     "  --no-opencode-router             Disable opencodeRouter sidecar",
     "  --opencode-router-required       Exit if opencodeRouter stops",
@@ -10242,6 +10245,54 @@ type McpConfigEntry = {
   env?: Record<string, string>;
 };
 
+const MCP_PACKAGE_NAMES = [
+  "matterhorn-work-mcp",
+  "matterhorn-work-ui-mcp",
+  "matterhorn-work-crypto-mcp",
+  "matterhorn-work-wallet-mcp",
+] as const;
+
+function resolveMcpRepositoryPath(args: ParsedArgs): string | null {
+  const explicit = readFlag(args.flags, "repo-path")?.trim();
+  const candidate = explicit || REPO_ROOT_DIR;
+  if (!isAbsolute(candidate) || /[\u0000-\u001f\u007f]/.test(candidate)) {
+    throw new Error("mcp config --repo-path must be an absolute trusted checkout path");
+  }
+  const normalized = resolve(candidate);
+  const available = MCP_PACKAGE_NAMES.every((packageName) =>
+    existsSync(join(normalized, "packages", packageName, "index.mjs")),
+  );
+  if (available) return normalized;
+  if (explicit) {
+    throw new Error("mcp config --repo-path does not contain the Matterhorn MCP entrypoints");
+  }
+  return null;
+}
+
+function mcpRunner(args: ParsedArgs): {
+  command: string;
+  argsFor: (packageName: typeof MCP_PACKAGE_NAMES[number]) => string[];
+} {
+  const explicitRunner = readFlag(args.flags, "runner")?.trim();
+  const repositoryPath = resolveMcpRepositoryPath(args);
+  if (explicitRunner === "npx") {
+    return {
+      command: "npx",
+      argsFor: (packageName) => ["-y", packageName],
+    };
+  }
+  if (repositoryPath) {
+    const command = explicitRunner || "node";
+    return {
+      command,
+      argsFor: (packageName) => [join(repositoryPath, "packages", packageName, "index.mjs")],
+    };
+  }
+  throw new Error(
+    "Matterhorn MCP packages are not published. Run from a checkout or pass --repo-path; use --runner npx only after publication.",
+  );
+}
+
 function placeholder(value: string | undefined, fallback: string): string {
   const trimmed = value?.trim();
   return trimmed || fallback;
@@ -10253,8 +10304,7 @@ function buildMcpServersConfig(args: ParsedArgs): Record<string, McpConfigEntry>
     throw new Error("mcp config --profile must be server or full");
   }
 
-  const runner = readFlag(args.flags, "runner") ?? "npx";
-  const runnerArgs = runner === "npx" ? ["-y"] : [];
+  const runner = mcpRunner(args);
   const serverUrl = placeholder(
     readFlag(args.flags, "server-url") ??
       readMatterhornEnv("OPENWORK_URL") ??
@@ -10265,39 +10315,45 @@ function buildMcpServersConfig(args: ParsedArgs): Record<string, McpConfigEntry>
     readFlag(args.flags, "token") ?? readMatterhornEnv("OPENWORK_TOKEN"),
     "<client-token>",
   );
-  const hostToken = placeholder(
-    readFlag(args.flags, "host-token") ?? readMatterhornEnv("OPENWORK_HOST_TOKEN"),
-    "<host-token>",
-  );
+  const includeHostApprovals = readBool(args.flags, "include-host-approvals", false);
+  const explicitHostToken = readFlag(args.flags, "host-token");
+  if (explicitHostToken && !includeHostApprovals) {
+    throw new Error("mcp config --host-token requires --include-host-approvals");
+  }
+  const hostToken = includeHostApprovals
+    ? placeholder(explicitHostToken ?? readMatterhornEnv("OPENWORK_HOST_TOKEN"), "<host-token>")
+    : null;
+
+  const serverEnvironment: Record<string, string> = {
+    MATTERHORN_WORK_SERVER_URL: serverUrl,
+    MATTERHORN_WORK_TOKEN: clientToken,
+  };
+  if (hostToken) serverEnvironment.MATTERHORN_WORK_HOST_TOKEN = hostToken;
 
   const servers: Record<string, McpConfigEntry> = {
     "matterhorn-work": {
-      command: runner,
-      args: [...runnerArgs, "matterhorn-work-mcp"],
-      env: {
-        MATTERHORN_WORK_SERVER_URL: serverUrl,
-        MATTERHORN_WORK_TOKEN: clientToken,
-        MATTERHORN_WORK_HOST_TOKEN: hostToken,
-      },
+      command: runner.command,
+      args: runner.argsFor("matterhorn-work-mcp"),
+      env: serverEnvironment,
     },
   };
 
   if (profile === "full") {
     servers["matterhorn-work-ui"] = {
-      command: runner,
-      args: [...runnerArgs, "matterhorn-work-ui-mcp"],
+      command: runner.command,
+      args: runner.argsFor("matterhorn-work-ui-mcp"),
     };
     servers["matterhorn-work-crypto"] = {
-      command: runner,
-      args: [...runnerArgs, "matterhorn-work-crypto-mcp"],
+      command: runner.command,
+      args: runner.argsFor("matterhorn-work-crypto-mcp"),
       env: {
         MATTERHORN_SERVER_URL: serverUrl,
         MATTERHORN_WORK_SERVER_URL: serverUrl,
       },
     };
     servers["matterhorn-work-wallet"] = {
-      command: runner,
-      args: [...runnerArgs, "matterhorn-work-wallet-mcp"],
+      command: runner.command,
+      args: runner.argsFor("matterhorn-work-wallet-mcp"),
     };
   }
 
@@ -10315,16 +10371,24 @@ function printMcpEnv(args: ParsedArgs) {
     readFlag(args.flags, "token") ?? readMatterhornEnv("OPENWORK_TOKEN"),
     "<client-token>",
   );
-  const hostToken = placeholder(
-    readFlag(args.flags, "host-token") ?? readMatterhornEnv("OPENWORK_HOST_TOKEN"),
-    "<host-token>",
-  );
-  console.log([
+  const includeHostApprovals = readBool(args.flags, "include-host-approvals", false);
+  const explicitHostToken = readFlag(args.flags, "host-token");
+  if (explicitHostToken && !includeHostApprovals) {
+    throw new Error("mcp config --host-token requires --include-host-approvals");
+  }
+  const lines = [
     `export MATTERHORN_WORK_SERVER_URL=${JSON.stringify(serverUrl)}`,
     `export MATTERHORN_WORK_TOKEN=${JSON.stringify(clientToken)}`,
-    `export MATTERHORN_WORK_HOST_TOKEN=${JSON.stringify(hostToken)}`,
     `export MATTERHORN_SERVER_URL=${JSON.stringify(serverUrl)}`,
-  ].join("\n"));
+  ];
+  if (includeHostApprovals) {
+    const hostToken = placeholder(
+      explicitHostToken ?? readMatterhornEnv("OPENWORK_HOST_TOKEN"),
+      "<host-token>",
+    );
+    lines.push(`export MATTERHORN_WORK_HOST_TOKEN=${JSON.stringify(hostToken)}`);
+  }
+  console.log(lines.join("\n"));
 }
 
 function renderCodexMcpConfig(mcpServers: Record<string, McpConfigEntry>): string {
