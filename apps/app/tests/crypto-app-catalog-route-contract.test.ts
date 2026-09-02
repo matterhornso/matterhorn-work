@@ -58,7 +58,9 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).toContain("Research only");
     expect(route).toContain("Research + wallet previews");
     expect(route).toContain("Your connected wallet still signs and submits");
-    expect(route).toContain("Matterhorn will never ask you to paste it into chat");
+    expect(route).toContain("Matterhorn will never ask you to paste a key into chat");
+    expect(route).toContain("You do not enter an API key here");
+    expect(route).toContain("crypto_app_managed_credential_unavailable");
     expect(route).toContain("Revocation is permanent");
     expect(route).toContain('role="alert"');
     expect(route).toContain('role="status"');
@@ -131,5 +133,6 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).toContain("grantedScopes");
     expect(route).toContain("grantedNetworks");
     expect(route).toContain('app.authentication.type === "none"');
+    expect(route).toContain('app.authentication.type === "api_key_vault"');
   });
 });

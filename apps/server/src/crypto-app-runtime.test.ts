@@ -33,6 +33,7 @@ function environment(mode: "off" | "shadow" | "enforce" = "shadow") {
 describe("crypto app runtime startup", () => {
   test("performs no database access while the gateway is off", () => {
     const env = environment("off");
+    env.MATTERHORN_CRYPTO_APP_MANAGED_CREDENTIALS_JSON = "malformed-but-inert-while-off";
     const runtime = createMatterhornCryptoAppRuntime(env);
     expect(runtime).toMatchObject({ mode: "off", catalog: null });
     expect(runtime.purgeAccount("account-missing")).toEqual({ developers: 0, keys: 0, submissions: 0 });

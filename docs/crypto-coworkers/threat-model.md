@@ -51,6 +51,7 @@ The release has four absolute objectives:
 | Prompt injection in app/tool data | Treat output as `untrusted_external`; typed field projection; quarantine instruction-like text | Malicious metadata cannot cause a second tool call |
 | Manifest advertises submit authority | Strict action allowlist; unknown action fields rejected; no submit class | Contract test and CI registry scan |
 | OAuth token confused across apps | Exact resource and audience binding; PKCE; no token passthrough | Wrong-audience token receives 401/403 |
+| Managed API credential confused across apps | Deployment secret is bound to one certified app and manifest revision; only closed headers and schemes resolve at the pinned transport boundary | Wrong app, revision, reference, header, missing value, or malformed value produces zero upstream traffic |
 | Model broadens permissions | Policy calculated server-side as an intersection; client/model values can only narrow | Mutation test cannot add app/action/network |
 | Capability replay | 60-second single-use capability with durable atomic `jti` consumption | Second call has zero upstream traffic |
 | Tool argument mutation | Canonical argument hash bound to capability | One-byte change is denied |
@@ -112,4 +113,3 @@ No participant—including an administrator client—may use the intersection op
 - No public Walrus object or Sui anchor contains account, workspace, prompt, wallet, or secret plaintext.
 - Pause and revoke stop new capabilities and scheduled work immediately.
 - All failures produce a user-readable reason and a redacted security receipt.
-

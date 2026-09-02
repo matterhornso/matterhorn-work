@@ -124,7 +124,7 @@ A signed, version-pinned, revocable registry projects multiple crypto protocols 
 2. **Workspace connections**
    - Tenant-scoped connection records with granted scopes, networks, and action IDs.
    - OAuth resource/audience binding with PKCE where supported.
-   - API credentials stored only in the existing server-side vault boundary.
+   - API credentials resolved only from exact app/revision bindings in the deployment secret manager; connection rows and account responses retain opaque status only.
    - Connected wallets are references to browser wallet sessions, never exported keys.
 3. **Adapter router**
    - MCP HTTP, OpenAPI, RPC, and first-party SDK adapters behind one server interface.
@@ -155,6 +155,7 @@ A signed, version-pinned, revocable registry projects multiple crypto protocols 
 
 - Tampered, unsigned, revoked, schema-drifted, or submit-capable manifests never resolve.
 - Cross-workspace connections and wrong-audience credentials fail with zero upstream traffic.
+- Missing, malformed, substituted, wrong-app, or wrong-revision managed API credentials fail before adapter egress.
 - Sui, Hyperliquid, and read-only Bittensor pass the conformance suite on testnet.
 - No production behavior changes while gateway mode is `off`.
 

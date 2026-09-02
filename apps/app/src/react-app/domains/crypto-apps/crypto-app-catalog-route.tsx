@@ -32,6 +32,7 @@ function userMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
     if (error.code === "crypto_app_gateway_disabled") return "Certified crypto apps are not enabled for this invite yet.";
     if (error.code === "crypto_app_connection_flow_required") return "This app needs a managed connection flow that is not available in this release.";
+    if (error.code === "crypto_app_managed_credential_unavailable") return "This app connection is not ready yet. Ask your workspace owner to finish its secure setup.";
     if (error.code === "app_certification_unavailable") return "This certification is no longer available. Refresh before reconnecting.";
     if (error.code === "connection_transition_invalid") return "That connection changed. Refresh and try again.";
   }
@@ -288,7 +289,8 @@ export function CryptoAppCatalogRoute() {
                 const scope = scopeByApp[app.appId] ?? defaultScope(app);
                 const supportsResearch = app.actions.some((action) => action.access === "read" || action.access === "watch");
                 const supportsPreview = app.actions.some((action) => action.access === "prepare" || action.access === "simulate");
-                const canConnect = app.authentication.type === "none"
+                const managedConnection = app.authentication.type === "api_key_vault";
+                const canConnect = (app.authentication.type === "none" || managedConnection)
                   && (supportsResearch || supportsPreview);
                 return (
                   <article key={app.appId} className="border-b border-border py-5">
@@ -381,6 +383,11 @@ export function CryptoAppCatalogRoute() {
                           ) : canConnect ? (
                             <div>
                               <h3 className="text-sm font-medium">Choose coworker access</h3>
+                              {managedConnection ? (
+                                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                                  Matterhorn handles this connection. You do not enter an API key here.
+                                </p>
+                              ) : null}
                               {supportsResearch ? (
                                 <label className="mt-3 flex min-h-11 cursor-pointer gap-3 rounded-md py-2 text-sm focus-within:ring-2 focus-within:ring-ring">
                                   <input type="radio" name={`scope-${app.appId}`} value="research" checked={scope === "research"} onChange={() => setScopeByApp((current) => ({ ...current, [app.appId]: "research" }))} />
@@ -401,7 +408,7 @@ export function CryptoAppCatalogRoute() {
                           ) : (
                             <div>
                               <h3 className="text-sm font-medium">Managed setup required</h3>
-                              <p className="mt-2 text-xs leading-5 text-muted-foreground">This app needs a server-managed credential or wallet connection flow. Matterhorn will never ask you to paste it into chat.</p>
+                              <p className="mt-2 text-xs leading-5 text-muted-foreground">This app needs a wallet or sign-in connection that is not ready yet. Matterhorn will never ask you to paste a key into chat.</p>
                             </div>
                           )}
                         </div>

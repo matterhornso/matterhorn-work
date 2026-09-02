@@ -432,6 +432,7 @@ import { MatterhornCryptoDeveloperPortalError } from "./crypto-app-developer-por
 import type {
   MatterhornCryptoAppActionAccess,
   MatterhornCryptoAppActionRisk,
+  MatterhornCryptoAppConnectionCredential,
   MatterhornCryptoAppConnectionState,
   MatterhornCryptoAppManifest,
   MatterhornCoworkerProfile,
@@ -11236,7 +11237,22 @@ function createRoutes(
       }
       const app = cryptoAppRuntime.catalog.get(appId);
       if (!app) throw new ApiError(404, "crypto_app_not_found", "Crypto app not found.");
-      if (app.authentication.type !== "none") {
+      let credential: MatterhornCryptoAppConnectionCredential | null = null;
+      if (app.authentication.type === "none") credential = { type: "none" };
+      if (app.authentication.type === "api_key_vault") {
+        credential = cryptoAppRuntime.managedCredentials?.credentialFor({
+          appId: app.appId,
+          manifestRevision: app.manifestRevision,
+        }) ?? null;
+      }
+      if (!credential) {
+        if (app.authentication.type === "api_key_vault") {
+          throw new ApiError(
+            503,
+            "crypto_app_managed_credential_unavailable",
+            "This managed crypto app connection is not configured for this deployment.",
+          );
+        }
         throw new ApiError(
           409,
           "crypto_app_connection_flow_required",
@@ -11250,7 +11266,7 @@ function createRoutes(
         grantedActionIds: cryptoAppStringArray(body.grantedActionIds, "grantedActionIds"),
         grantedScopes: cryptoAppStringArray(body.grantedScopes, "grantedScopes", { allowEmpty: true }),
         grantedNetworks: cryptoAppStringArray(body.grantedNetworks, "grantedNetworks"),
-        credential: { type: "none" },
+        credential,
       });
       return noStoreJsonResponse({ connection }, 201);
     } catch (error) {

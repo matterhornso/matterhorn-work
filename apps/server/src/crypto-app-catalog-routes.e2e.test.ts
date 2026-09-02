@@ -8,6 +8,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certification-test-support.js";
 import { buildMatterhornFirstPartyTestnetManifests } from "./first-party-crypto-apps.js";
+import { canonicalCryptoAppManifestPayload } from "./crypto-app-signature.js";
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
 
@@ -24,6 +25,8 @@ const ENV_KEYS = [
   "MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON",
   "MATTERHORN_CRYPTO_APP_REGISTRY_DB",
   "MATTERHORN_CRYPTO_APP_CONNECTION_DB",
+  "MATTERHORN_CRYPTO_APP_MANAGED_CREDENTIALS_JSON",
+  "MATTERHORN_CRYPTO_APP_SECRET_HYPERLIQUID_TEST",
   "MATTERHORN_WORK_DATA_DIR",
 ] as const;
 const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -126,6 +129,22 @@ function configureCatalog(root: string) {
     statusUrl: "https://status.matterhorn.so",
     securityContact: "private-security@matterhorn.so",
   });
+  const authenticatedManifest = manifests.find((manifest) => manifest.appId === "matterhorn.hyperliquid-testnet");
+  if (!authenticatedManifest) throw new Error("Hyperliquid test manifest is required.");
+  authenticatedManifest.authentication = { type: "api_key_vault", scopes: [] };
+  authenticatedManifest.publisher.signature = sign(
+    null,
+    Buffer.from(canonicalCryptoAppManifestPayload(authenticatedManifest)),
+    keys.privateKey,
+  ).toString("base64url");
+  process.env.MATTERHORN_CRYPTO_APP_MANAGED_CREDENTIALS_JSON = JSON.stringify([{
+    id: "HYPERLIQUID_TEST",
+    appId: authenticatedManifest.appId,
+    manifestRevision: authenticatedManifest.manifestRevision,
+    header: "x-api-key",
+    scheme: "raw",
+  }]);
+  process.env.MATTERHORN_CRYPTO_APP_SECRET_HYPERLIQUID_TEST = "server-managed-test-secret";
   return { manifests };
 }
 
@@ -226,6 +245,46 @@ describe("crypto app catalog HTTP boundary", () => {
     expect(injectedCredential.response.status).toBe(400);
     expect(JSON.stringify(injectedCredential.payload)).not.toContain("vault://browser/forbidden");
 
+    const hyperliquid = listed.payload.apps.find((app: { appId: string }) => (
+      app.appId === "matterhorn.hyperliquid-testnet"
+    ));
+    if (!hyperliquid) throw new Error("Expected authenticated test app.");
+    const managedConnection = await request(server.base, "/workspace/ws_catalog/crypto-app-connections", {
+      body: {
+        appId: hyperliquid.appId,
+        grantedActionIds: hyperliquid.actions.map((action: { id: string }) => action.id),
+        grantedScopes: [],
+        grantedNetworks: ["hyperliquid:testnet"],
+      },
+    });
+    expect(managedConnection.response.status).toBe(201);
+    expect(managedConnection.payload.connection).toMatchObject({
+      workspaceId: "ws_catalog",
+      appId: "matterhorn.hyperliquid-testnet",
+      state: "active",
+      credential: { type: "api_key_vault", connected: true },
+    });
+    expect(JSON.stringify(managedConnection.payload)).not.toContain("HYPERLIQUID_TEST");
+    expect(JSON.stringify(managedConnection.payload)).not.toContain("server-managed-test-secret");
+    expect(JSON.stringify(managedConnection.payload)).not.toContain("vault://");
+    delete process.env.MATTERHORN_CRYPTO_APP_SECRET_HYPERLIQUID_TEST;
+    const unavailableManagedConnection = await request(
+      server.base,
+      "/workspace/ws_catalog/crypto-app-connections",
+      {
+        body: {
+          appId: hyperliquid.appId,
+          grantedActionIds: hyperliquid.actions.map((action: { id: string }) => action.id),
+          grantedScopes: [],
+          grantedNetworks: ["hyperliquid:testnet"],
+        },
+      },
+    );
+    expect(unavailableManagedConnection.response.status).toBe(503);
+    expect(unavailableManagedConnection.payload.code).toBe("crypto_app_managed_credential_unavailable");
+    expect(JSON.stringify(unavailableManagedConnection.payload)).not.toContain("HYPERLIQUID_TEST");
+    process.env.MATTERHORN_CRYPTO_APP_SECRET_HYPERLIQUID_TEST = "server-managed-test-secret";
+
     const created = await request(server.base, "/workspace/ws_catalog/crypto-app-connections", {
       body: {
         appId: sui.appId,
@@ -277,7 +336,27 @@ describe("crypto app catalog HTTP boundary", () => {
       server.base,
       "/workspace/ws_catalog/crypto-app-connections",
     );
-    expect(connectionsAfterSuspension.payload.connections[0].availability)
+    const suspendedConnection = connectionsAfterSuspension.payload.connections.find((connection: { appId: string }) => (
+      connection.appId === suiManifest.appId
+    ));
+    expect(suspendedConnection?.availability)
       .toBe("certification_unavailable");
+
+    await server.stop();
+    const restarted = await boot(root);
+    const connectionsAfterRestart = await request(
+      restarted.base,
+      "/workspace/ws_catalog/crypto-app-connections",
+    );
+    const restoredManagedConnection = connectionsAfterRestart.payload.connections.find((connection: { appId: string }) => (
+      connection.appId === "matterhorn.hyperliquid-testnet"
+    ));
+    expect(restoredManagedConnection).toMatchObject({
+      id: managedConnection.payload.connection.id,
+      credential: { type: "api_key_vault", connected: true },
+      state: "active",
+    });
+    expect(JSON.stringify(connectionsAfterRestart.payload)).not.toContain("server-managed-test-secret");
+    expect(JSON.stringify(connectionsAfterRestart.payload)).not.toContain("vault://");
   });
 });

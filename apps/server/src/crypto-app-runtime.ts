@@ -4,6 +4,7 @@ import { MatterhornCryptoAppCatalog } from "./crypto-app-catalog.js";
 import { MatterhornCryptoAppAdapterRouter } from "./crypto-app-adapter-router.js";
 import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
+import { MatterhornManagedCryptoAppCredentials } from "./crypto-app-managed-credentials.js";
 import { MatterhornCryptoDeveloperPortal } from "./crypto-app-developer-portal.js";
 import { MatterhornCryptoDeveloperPortalStore } from "./crypto-app-developer-portal-store.js";
 import { MatterhornCryptoAppOperator } from "./crypto-app-operator.js";
@@ -14,6 +15,7 @@ import { isTrustedEd25519PublisherKey, type MatterhornTrustedPublisherKey } from
 import { cryptoCoworkerFeatureConfig, type MatterhornCryptoAppGatewayMode } from "./crypto-coworker-config.js";
 import { createFirstPartyCryptoAppExecutor } from "./first-party-crypto-app-executor.js";
 import { firstPartyCryptoAppProxyTool } from "./first-party-crypto-apps.js";
+import { createPinnedJsonCryptoAppTransport } from "./crypto-app-https-transport.js";
 import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 import {
   createPinnedSuiPublicTransactionVerifier,
@@ -26,6 +28,7 @@ export type MatterhornCryptoAppRuntimeServices = {
   catalog: MatterhornCryptoAppCatalog | null;
   operator: MatterhornCryptoAppOperator | null;
   developerPortal: MatterhornCryptoDeveloperPortal | null;
+  managedCredentials: MatterhornManagedCryptoAppCredentials | null;
   router: MatterhornCryptoAppAdapterRouter | null;
   verifySuiTransaction: MatterhornSuiPublicTransactionVerifier | null;
   ready: boolean;
@@ -116,6 +119,7 @@ export function createMatterhornCryptoAppRuntime(
       catalog: null,
       operator: null,
       developerPortal: null,
+      managedCredentials: null,
       router: null,
       verifySuiTransaction: null,
       ready: true,
@@ -143,6 +147,7 @@ export function createMatterhornCryptoAppRuntime(
     });
     connectionStore = new MatterhornCryptoAppConnectionStore(connectionPath || undefined);
     const connections = new MatterhornCryptoAppConnections({ registry, store: connectionStore });
+    const managedCredentials = new MatterhornManagedCryptoAppCredentials(env);
     const catalog = new MatterhornCryptoAppCatalog({
       registry,
       connections,
@@ -170,12 +175,20 @@ export function createMatterhornCryptoAppRuntime(
       });
       const operationalPath = env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB?.trim();
       operationalPolicy = new MatterhornCryptoAppOperationalPolicyStore(operationalPath || undefined);
+      const pinnedJsonTransport = createPinnedJsonCryptoAppTransport({
+        resolveCredentialHeaders: (input) => managedCredentials.resolveHeaders(input),
+      });
       router = new MatterhornCryptoAppAdapterRouter({
         registry,
         connections,
         authorization,
         operationalPolicy,
-        executors: { matterhorn_sdk: createFirstPartyCryptoAppExecutor() },
+        executors: {
+          matterhorn_sdk: createFirstPartyCryptoAppExecutor(),
+          mcp_http: pinnedJsonTransport,
+          openapi: pinnedJsonTransport,
+          rpc: pinnedJsonTransport,
+        },
       });
       verifySuiTransaction = createPinnedSuiPublicTransactionVerifier({
         endpoint: new URL(SUI_GRPC_URLS.testnet),
@@ -186,6 +199,7 @@ export function createMatterhornCryptoAppRuntime(
       catalog,
       operator,
       developerPortal,
+      managedCredentials,
       router,
       verifySuiTransaction,
       ready: feature.cryptoAppGatewayMode !== "enforce" || Boolean(router),
