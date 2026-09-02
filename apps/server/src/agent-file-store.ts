@@ -7,10 +7,14 @@ import {
 } from "node:crypto";
 
 import {
+  MATTERHORN_AGENT_FILE_WALRUS_PUBLICATION_VERSION,
   MATTERHORN_STORED_AGENT_FILE_VERSION,
+  MATTERHORN_WALRUS_CIPHERTEXT_VERSION,
   type MatterhornAgentFileContextProjection,
   type MatterhornAgentFileDescriptor,
+  type MatterhornAgentFileWalrusPublication,
   type MatterhornStoredAgentFile,
+  type MatterhornWalrusCiphertext,
 } from "@matterhorn-work/types/crypto-coworkers";
 import type { MatterhornAgentPrivacyPart } from "@matterhorn-work/types/guarded-agent-runtime";
 
@@ -46,6 +50,7 @@ export type MatterhornAgentFileRecord = {
   ownerId: string;
   revision: number;
   file: MatterhornAgentFileDescriptor;
+  publication: MatterhornAgentFileWalrusPublication | null;
   envelope: AgentFileEnvelope;
   key: {
     keyReference: string;
@@ -157,9 +162,62 @@ function accountView(record: MatterhornAgentFileRecord): MatterhornStoredAgentFi
     id: record.id,
     revision: record.revision,
     file: structuredClone(record.file),
+    publication: record.publication ? structuredClone(record.publication) : null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
+}
+
+function walrusBytes(record: MatterhornAgentFileRecord): Buffer {
+  if (record.envelope.version !== ENVELOPE_VERSION || record.envelope.algorithm !== ALGORITHM) {
+    throw new MatterhornAgentFileStoreError("agent_file_envelope_invalid");
+  }
+  const iv = exactBase64(record.envelope.iv, "iv", IV_BYTES);
+  const tag = exactBase64(record.envelope.authenticationTag, "authentication_tag", TAG_BYTES);
+  const ciphertext = exactBase64(record.envelope.ciphertext, "ciphertext", MAX_CIPHERTEXT_BYTES);
+  try {
+    if (iv.byteLength !== IV_BYTES || tag.byteLength !== TAG_BYTES
+      || digest(ciphertext) !== record.envelope.ciphertextSha256) {
+      throw new MatterhornAgentFileStoreError("agent_file_envelope_invalid");
+    }
+    const payload: MatterhornWalrusCiphertext = {
+      version: MATTERHORN_WALRUS_CIPHERTEXT_VERSION,
+      algorithm: ALGORITHM,
+      iv: record.envelope.iv,
+      authenticationTag: record.envelope.authenticationTag,
+      ciphertext: record.envelope.ciphertext,
+    };
+    return Buffer.from(canonicalJson(payload));
+  } finally {
+    iv.fill(0);
+    tag.fill(0);
+    ciphertext.fill(0);
+  }
+}
+
+function validPublicReference(value: string, maximum: number): boolean {
+  return value.length > 0 && value.length <= maximum && /^[A-Za-z0-9._:@/-]+$/.test(value);
+}
+
+function validatePublication(value: MatterhornAgentFileWalrusPublication): void {
+  const publishedAt = Date.parse(value.publishedAt);
+  const verifiedAt = Date.parse(value.verifiedAt);
+  if (value.version !== MATTERHORN_AGENT_FILE_WALRUS_PUBLICATION_VERSION
+    || value.network !== "testnet"
+    || !validPublicReference(value.blobId, 256)
+    || !/^0x[a-fA-F0-9]+$/.test(value.suiObjectId)
+    || !/^[a-f0-9]{64}$/.test(value.ciphertextSha256)
+    || !Number.isSafeInteger(value.certifiedEpoch)
+    || value.certifiedEpoch < 0
+    || !Number.isSafeInteger(value.validUntilEpoch)
+    || value.validUntilEpoch <= value.certifiedEpoch
+    || (value.suiTransactionDigest !== null
+      && !validPublicReference(value.suiTransactionDigest, 256))
+    || !Number.isFinite(publishedAt)
+    || !Number.isFinite(verifiedAt)
+    || verifiedAt < publishedAt) {
+    throw new MatterhornAgentFileStoreError("agent_file_publication_invalid");
+  }
 }
 
 function assertTenant(record: MatterhornAgentFileRecord, input: { workspaceId: string; ownerId: string }): void {
@@ -169,6 +227,8 @@ function assertTenant(record: MatterhornAgentFileRecord, input: { workspaceId: s
 }
 
 export class MatterhornAgentFileStore {
+  private readonly activePublications = new Set<string>();
+
   constructor(
     private readonly stateStore: MatterhornGuardedRuntimeStateStore,
     private readonly keyManager: MatterhornEvidenceKeyManager,
@@ -207,6 +267,7 @@ export class MatterhornAgentFileStore {
         ownerId: input.ownerId,
         revision: 1,
         file: scan.descriptor,
+        publication: null,
         envelope: encryptFile({
           id,
           workspaceId: input.workspaceId,
@@ -296,6 +357,97 @@ export class MatterhornAgentFileStore {
     }
   }
 
+  publicationCandidate(input: {
+    workspaceId: string;
+    ownerId: string;
+    fileId: string;
+    expectedRevision?: number;
+    now?: Date;
+  }): {
+    item: MatterhornStoredAgentFile;
+    bytes: Buffer;
+    ciphertextSha256: string;
+  } {
+    if (!FILE_ID.test(input.fileId)) throw new MatterhornAgentFileStoreError("agent_file_not_found");
+    const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
+    if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
+    assertTenant(record, input);
+    if (input.expectedRevision !== undefined && record.revision !== input.expectedRevision) {
+      throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
+    }
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
+    if (record.file.retention.expiresAt
+      && Date.parse(record.file.retention.expiresAt) <= now.getTime()) {
+      throw new MatterhornAgentFileStoreError("agent_file_expired");
+    }
+    const bytes = walrusBytes(record);
+    return { item: accountView(record), bytes, ciphertextSha256: digest(bytes) };
+  }
+
+  beginWalrusPublication(input: {
+    workspaceId: string;
+    ownerId: string;
+    fileId: string;
+    expectedRevision: number;
+    now?: Date;
+  }): ReturnType<MatterhornAgentFileStore["publicationCandidate"]> {
+    if (this.activePublications.has(input.fileId)) {
+      throw new MatterhornAgentFileStoreError("agent_file_walrus_publication_in_progress");
+    }
+    const candidate = this.publicationCandidate(input);
+    this.activePublications.add(input.fileId);
+    return candidate;
+  }
+
+  endWalrusPublication(fileId: string): void {
+    this.activePublications.delete(fileId);
+  }
+
+  attachWalrusPublication(input: {
+    workspaceId: string;
+    ownerId: string;
+    fileId: string;
+    expectedRevision: number;
+    publication: MatterhornAgentFileWalrusPublication;
+    now?: Date;
+  }): MatterhornStoredAgentFile {
+    validatePublication(input.publication);
+    const candidate = this.publicationCandidate(input);
+    try {
+      if (candidate.item.publication) {
+        throw new MatterhornAgentFileStoreError("agent_file_already_published");
+      }
+      if (candidate.ciphertextSha256 !== input.publication.ciphertextSha256) {
+        throw new MatterhornAgentFileStoreError("agent_file_publication_hash_mismatch");
+      }
+    } finally {
+      candidate.bytes.fill(0);
+    }
+    const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
+    if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
+    assertTenant(record, input);
+    if (record.revision !== input.expectedRevision || record.publication) {
+      throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
+    }
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
+    const next: MatterhornAgentFileRecord = {
+      ...record,
+      revision: record.revision + 1,
+      publication: structuredClone(input.publication),
+      updatedAt: now.toISOString(),
+    };
+    this.stateStore.put({
+      kind: STATE_KIND,
+      key: next.id,
+      workspaceId: next.workspaceId,
+      value: next,
+      nowMs: now.getTime(),
+    });
+    return accountView(next);
+  }
+
   async delete(input: {
     workspaceId: string;
     ownerId: string;
@@ -306,6 +458,9 @@ export class MatterhornAgentFileStore {
     const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
     if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
     assertTenant(record, input);
+    if (this.activePublications.has(record.id)) {
+      throw new MatterhornAgentFileStoreError("agent_file_walrus_publication_in_progress");
+    }
     if (record.revision !== input.expectedRevision) {
       throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
     }

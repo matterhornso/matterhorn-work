@@ -544,12 +544,40 @@ export type MatterhornAgentFileContextProjection = {
 };
 
 export const MATTERHORN_STORED_AGENT_FILE_VERSION = "matterhorn.stored-agent-file.v1";
+export const MATTERHORN_AGENT_FILE_WALRUS_PUBLICATION_VERSION =
+  "matterhorn.agent-file-walrus-publication.v1";
+
+export type MatterhornAgentFileWalrusPublication = {
+  version: typeof MATTERHORN_AGENT_FILE_WALRUS_PUBLICATION_VERSION;
+  network: "testnet";
+  blobId: string;
+  suiObjectId: string;
+  ciphertextSha256: string;
+  certifiedEpoch: number;
+  validUntilEpoch: number;
+  suiTransactionDigest: string | null;
+  publishedAt: string;
+  verifiedAt: string;
+};
+
+export type MatterhornAgentFileWalrusVerification = {
+  verified: true;
+  network: "testnet";
+  blobId: string;
+  suiObjectId: string;
+  ciphertextSha256: string;
+  certifiedEpoch: number;
+  currentEpoch: number;
+  validUntilEpoch: number;
+  verifiedAt: string;
+};
 
 export type MatterhornStoredAgentFile = {
   version: typeof MATTERHORN_STORED_AGENT_FILE_VERSION;
   id: string;
   revision: number;
   file: MatterhornAgentFileDescriptor;
+  publication: MatterhornAgentFileWalrusPublication | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -557,6 +585,10 @@ export type MatterhornStoredAgentFile = {
 export type MatterhornAgentFileListResponse = {
   mode: "off" | "encrypted";
   available: boolean;
+  cloudBackup: {
+    available: boolean;
+    network: "testnet" | null;
+  };
   items: MatterhornStoredAgentFile[];
 };
 

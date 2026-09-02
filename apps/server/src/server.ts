@@ -386,6 +386,14 @@ import {
   MatterhornAgentFileStoreError,
   type MatterhornAgentFileStore,
 } from "./agent-file-store.js";
+import {
+  createMatterhornAgentFileWalrusPublisher,
+} from "./agent-file-walrus-runtime.js";
+import type { MatterhornAgentFileWalrusPublisher } from "./agent-file-walrus-publisher.js";
+import type {
+  MatterhornWalrusCertificationVerifier,
+  MatterhornWalrusEvidenceTransport,
+} from "./crypto-evidence-walrus-publisher.js";
 import { cryptoCoworkerFeatureConfig } from "./crypto-coworker-config.js";
 import type { MatterhornPendingCryptoIntent } from "./crypto-pending-intent-store.js";
 import type { MatterhornSuiVerifiedPublicTransaction } from "./sui-public-transaction-verifier.js";
@@ -1309,6 +1317,8 @@ type ClientAccess = {
 
 export type MatterhornServerDependencies = {
   evidenceKeyManager?: MatterhornEvidenceKeyManager | null;
+  agentFileWalrusTransport?: MatterhornWalrusEvidenceTransport;
+  agentFileWalrusCertificationVerifier?: MatterhornWalrusCertificationVerifier;
 };
 
 export async function startServer(
@@ -1360,6 +1370,14 @@ export async function startServer(
     && evidenceKeyManager
     ? guardedRuntime.createAgentFileStore(evidenceKeyManager)
     : null;
+  const agentFileWalrusPublisher = createMatterhornAgentFileWalrusPublisher(
+    process.env,
+    agentFileStore,
+    {
+      transport: dependencies.agentFileWalrusTransport,
+      certificationVerifier: dependencies.agentFileWalrusCertificationVerifier,
+    },
+  );
   guardedRuntime.setCoworkerResolver((binding) => coworkerBindingIsActive(coworkerRuntime, binding));
   const coworkerWatchRunner = coworkerRuntime.coworkers
     && cryptoAppRuntime.mode === "enforce"
@@ -1505,6 +1523,7 @@ export async function startServer(
     cryptoEvidenceStore,
     cryptoEvidenceRuntime,
     agentFileStore,
+    agentFileWalrusPublisher,
     drainEmailOutbox,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
@@ -1803,6 +1822,7 @@ function operationalReadiness(
   coworkerRuntime?: MatterhornCoworkerRuntimeServices,
   cryptoEvidenceStore?: MatterhornCryptoEvidenceStore | null,
   agentFileStore?: MatterhornAgentFileStore | null,
+  agentFileWalrusPublisher?: MatterhornAgentFileWalrusPublisher | null,
 ) {
   const workspaceConfigured = config.workspaces.length > 0;
   const workspaceStorageAvailable = config.workspaces.every((workspace) =>
@@ -1824,6 +1844,9 @@ function operationalReadiness(
   const agentFileRecordsPresent = guardedRuntime?.hasAgentFiles() ?? false;
   const agentFileKeyLifecycleReady = !agentFileRecordsPresent || Boolean(agentFileStore);
   const agentFilesReady = agentFilesMode === "off" || Boolean(agentFileStore);
+  const agentFileWalrusRequired = agentFilesMode === "encrypted"
+    && cryptoCoworkerFeatureConfig(process.env).walrusEvidenceMode === "testnet";
+  const agentFileWalrusReady = !agentFileWalrusRequired || Boolean(agentFileWalrusPublisher);
   const hostedBrowserOpencodePolicyReady = HOSTED_BROWSER_OPENCODE_POLICY === "restricted";
   const hostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA === "1";
   const accountMessageGatewayReady = !hostedPublicBeta
@@ -1841,6 +1864,7 @@ function operationalReadiness(
       && cryptoEvidenceKeyLifecycleReady
       && agentFileKeyLifecycleReady
       && agentFilesReady
+      && agentFileWalrusReady
       && hostedBrowserOpencodePolicyReady
       && accountMessageGatewayReady
       && hostBackupFreshCheck,
@@ -1861,6 +1885,8 @@ function operationalReadiness(
       agentFileRecordsPresent,
       agentFileKeyLifecycleReady,
       agentFilesReady,
+      agentFileWalrusRequired,
+      agentFileWalrusReady,
       hostedBrowserOpencodePolicy: HOSTED_BROWSER_OPENCODE_POLICY,
       hostedBrowserOpencodePolicyReady,
       accountMessageGatewayReady,
@@ -3194,6 +3220,12 @@ function agentFileApiError(error: unknown): ApiError {
   if (error.code === "agent_file_revision_conflict") {
     return new ApiError(409, error.code, "The file changed. Refresh and try again.");
   }
+  if (error.code === "agent_file_already_published") {
+    return new ApiError(409, error.code, "This file is already backed up.");
+  }
+  if (error.code === "agent_file_walrus_publication_in_progress") {
+    return new ApiError(409, error.code, "This file is already being backed up.");
+  }
   if (error.code === "agent_file_blocked") {
     return new ApiError(
       400,
@@ -3212,6 +3244,28 @@ function agentFileApiError(error: unknown): ApiError {
     return new ApiError(400, error.code, "Agent file input is invalid.");
   }
   return new ApiError(503, "agent_files_unavailable", "Agent Files are temporarily unavailable.");
+}
+
+function agentFileWalrusApiError(error: unknown): ApiError {
+  if (error instanceof MatterhornAgentFileStoreError) return agentFileApiError(error);
+  const code = error instanceof Error ? error.message : "";
+  if (code === "agent_file_already_published") {
+    return new ApiError(409, code, "This file is already backed up.");
+  }
+  if (code === "agent_file_walrus_not_published") {
+    return new ApiError(409, code, "Back up this file before verifying it.");
+  }
+  if (code === "agent_file_walrus_aborted") {
+    return new ApiError(409, code, "The backup request was cancelled.");
+  }
+  if (code === "agent_file_walrus_publication_in_progress") {
+    return new ApiError(409, code, "This file is already being backed up.");
+  }
+  return new ApiError(
+    503,
+    "agent_file_walrus_unavailable",
+    "Secure cloud backup is temporarily unavailable.",
+  );
 }
 
 function decodeAgentFileUpload(value: unknown): Buffer {
@@ -8164,6 +8218,7 @@ function createRoutes(
   cryptoEvidenceStore: MatterhornCryptoEvidenceStore | null,
   cryptoEvidenceRuntime: MatterhornCryptoEvidenceRuntime,
   agentFileStore: MatterhornAgentFileStore | null,
+  agentFileWalrusPublisher: MatterhornAgentFileWalrusPublisher | null,
   drainEmailOutbox: () => Promise<void>,
 ): Route[] {
   const routes: Route[] = [];
@@ -8767,6 +8822,7 @@ function createRoutes(
       coworkerRuntime,
       cryptoEvidenceStore,
       agentFileStore,
+      agentFileWalrusPublisher,
     );
     const response = jsonResponse({
       ok: readiness.ready,
@@ -8806,6 +8862,7 @@ function createRoutes(
       coworkerRuntime,
       cryptoEvidenceStore,
       agentFileStore,
+      agentFileWalrusPublisher,
     );
     const launch = matterhornLaunchReadiness(authStore);
     const ok = infrastructure.ready && launch.ready;
@@ -8829,6 +8886,7 @@ function createRoutes(
       coworkerRuntime,
       cryptoEvidenceStore,
       agentFileStore,
+      agentFileWalrusPublisher,
     );
     return new Response(operationalMetrics.renderPrometheus({
       ready: readiness.ready,
@@ -9500,11 +9558,79 @@ function createRoutes(
     return noStoreJsonResponse({
       mode,
       available: Boolean(agentFileStore),
+      cloudBackup: {
+        available: Boolean(agentFileWalrusPublisher),
+        network: agentFileWalrusPublisher ? "testnet" : null,
+      },
       items: agentFileStore?.list({
         workspaceId: workspace.id,
         ownerId: cryptoAppCreatedBy(ctx),
       }) ?? [],
     });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/agent-files/:fileId/publish", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!agentFileWalrusPublisher) {
+      throw new ApiError(503, "agent_file_walrus_unavailable", "Secure cloud backup is not enabled.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request, 4_096, "Agent file cloud backup");
+    const expectedRevision = isRecord(body) && typeof body.expectedRevision === "number"
+      && Number.isSafeInteger(body.expectedRevision) && body.expectedRevision > 0
+      ? body.expectedRevision
+      : null;
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => ![
+        "expectedRevision", "network", "acknowledgePublicCiphertext",
+      ].includes(key))
+      || expectedRevision === null
+      || body.network !== "testnet"
+      || body.acknowledgePublicCiphertext !== true) {
+      throw new ApiError(
+        400,
+        "agent_file_walrus_confirmation_required",
+        "Confirm that encrypted bytes will be stored on the public Walrus test network.",
+      );
+    }
+    try {
+      const item = await agentFileWalrusPublisher.publish({
+        workspaceId: workspace.id,
+        ownerId: cryptoAppCreatedBy(ctx),
+        fileId: ctx.params.fileId,
+        expectedRevision,
+        signal: ctx.request.signal,
+      });
+      return noStoreJsonResponse({
+        item,
+        disclosure: {
+          network: "testnet",
+          stored: "encrypted_bytes_only",
+          publicBytesMayRemainAfterDeletion: true,
+          deletionDestroysRecoveryKey: true,
+        },
+      });
+    } catch (error) {
+      throw agentFileWalrusApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/agent-files/:fileId/verify", "client", async (ctx) => {
+    if (!agentFileWalrusPublisher) {
+      throw new ApiError(503, "agent_file_walrus_unavailable", "Secure cloud backup is not enabled.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    try {
+      return noStoreJsonResponse(await agentFileWalrusPublisher.verify({
+        workspaceId: workspace.id,
+        ownerId: cryptoAppCreatedBy(ctx),
+        fileId: ctx.params.fileId,
+        signal: ctx.request.signal,
+      }));
+    } catch (error) {
+      throw agentFileWalrusApiError(error);
+    }
   });
 
   addRoute(routes, "POST", "/workspace/:id/agent-files", "client", async (ctx) => {

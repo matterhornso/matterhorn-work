@@ -20,7 +20,7 @@ import {
   cryptoIntentToReviewedActionHandoffV2,
 } from "./crypto-transaction-coordinator.js";
 import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
-import { startServer } from "./server.js";
+import { startServer, type MatterhornServerDependencies } from "./server.js";
 import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
 import { MatterhornCoworkers } from "./crypto-coworkers.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
@@ -28,6 +28,10 @@ import type {
   MatterhornEvidenceDataKeyLease,
   MatterhornEvidenceKeyManager,
 } from "./crypto-evidence-sealer.js";
+import type {
+  MatterhornWalrusCertification,
+  MatterhornWalrusEvidenceTransport,
+} from "./crypto-evidence-walrus-publisher.js";
 import type { ServerConfig } from "./types.js";
 
 type Served = { port: number; stop: (closeActiveConnections?: boolean) => void | Promise<void> };
@@ -50,6 +54,11 @@ const ENV_KEYS = [
   "MATTERHORN_AGENT_FILES_MODE",
   "MATTERHORN_EVIDENCE_KMS_REGION",
   "MATTERHORN_EVIDENCE_KMS_KEY_ID",
+  "MATTERHORN_WALRUS_EVIDENCE_MODE",
+  "MATTERHORN_WALRUS_PUBLISHER_URL",
+  "MATTERHORN_WALRUS_AGGREGATOR_URL",
+  "MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN",
+  "MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT",
 ] as const;
 const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
 const roots: string[] = [];
@@ -119,7 +128,42 @@ class RouteTestKeyManager implements MatterhornEvidenceKeyManager {
   }
 }
 
-async function boot(mode: "off" | "internal", options: { agentFiles?: boolean } = {}) {
+class RouteTestWalrusTransport implements MatterhornWalrusEvidenceTransport {
+  publishedBytes = Buffer.alloc(0);
+  publishCalls = 0;
+
+  async publish(input: { bytes: Uint8Array }): Promise<{
+    blobId: string;
+    suiObjectId: string;
+    declaredEndEpoch: number;
+  }> {
+    this.publishCalls += 1;
+    this.publishedBytes = Buffer.from(input.bytes);
+    return { blobId: "route-agent-file-blob", suiObjectId: "0x1234", declaredEndEpoch: 15 };
+  }
+
+  async readByObjectId(): Promise<Buffer> {
+    return Buffer.from(this.publishedBytes);
+  }
+}
+
+function routeTestCertification(): MatterhornWalrusCertification {
+  return {
+    network: "testnet",
+    blobId: "route-agent-file-blob",
+    suiObjectId: "0x1234",
+    certifiedEpoch: 10,
+    currentEpoch: 11,
+    validUntilEpoch: 15,
+    deletable: true,
+    suiTransactionDigest: "route-agent-file-testnet-transaction",
+  };
+}
+
+async function boot(
+  mode: "off" | "internal",
+  options: { agentFiles?: boolean; walrus?: boolean } = {},
+) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-routes-"));
   roots.push(root);
   process.env.MATTERHORN_WORK_DATA_DIR = join(root, "data");
@@ -135,6 +179,7 @@ async function boot(mode: "off" | "internal", options: { agentFiles?: boolean } 
   process.env.MATTERHORN_COWORKER_DB = coworkerDb;
   process.env.MATTERHORN_GUARDED_RUNTIME_DB = guardedDb;
   process.env.MATTERHORN_CRYPTO_APP_GATEWAY_MODE = "off";
+  process.env.MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT = "1";
   if (options.agentFiles) {
     process.env.MATTERHORN_AGENT_FILES_MODE = "encrypted";
     process.env.MATTERHORN_EVIDENCE_KMS_REGION = "us-east-1";
@@ -144,10 +189,28 @@ async function boot(mode: "off" | "internal", options: { agentFiles?: boolean } 
     delete process.env.MATTERHORN_EVIDENCE_KMS_REGION;
     delete process.env.MATTERHORN_EVIDENCE_KMS_KEY_ID;
   }
+  if (options.walrus) {
+    process.env.MATTERHORN_WALRUS_EVIDENCE_MODE = "testnet";
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = "https://publisher.example";
+    process.env.MATTERHORN_WALRUS_AGGREGATOR_URL = "https://aggregator.example";
+    process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN = "route-test-publisher-token";
+  } else {
+    delete process.env.MATTERHORN_WALRUS_EVIDENCE_MODE;
+    delete process.env.MATTERHORN_WALRUS_PUBLISHER_URL;
+    delete process.env.MATTERHORN_WALRUS_AGGREGATOR_URL;
+    delete process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN;
+  }
   const keyManager = options.agentFiles ? new RouteTestKeyManager() : null;
+  const walrusTransport = options.walrus ? new RouteTestWalrusTransport() : null;
+  const dependencies: MatterhornServerDependencies = {};
+  if (keyManager) dependencies.evidenceKeyManager = keyManager;
+  if (walrusTransport) {
+    dependencies.agentFileWalrusTransport = walrusTransport;
+    dependencies.agentFileWalrusCertificationVerifier = async () => routeTestCertification();
+  }
   const server = await startServer(
     config(await freePort(), root),
-    keyManager ? { evidenceKeyManager: keyManager } : {},
+    dependencies,
   ) as Served;
   let stopped = false;
   const stop = async () => {
@@ -156,7 +219,14 @@ async function boot(mode: "off" | "internal", options: { agentFiles?: boolean } 
     await server.stop(true);
   };
   stops.push(stop);
-  return { base: `http://127.0.0.1:${server.port}`, coworkerDb, guardedDb, keyManager, stop };
+  return {
+    base: `http://127.0.0.1:${server.port}`,
+    coworkerDb,
+    guardedDb,
+    keyManager,
+    walrusTransport,
+    stop,
+  };
 }
 
 async function request(base: string, path: string, options: {
@@ -502,6 +572,117 @@ describe("crypto coworker HTTP boundary", () => {
     expect(deleted.response.status).toBe(200);
     expect((await request(server.base, `/workspace/${workspaceA}/agent-files`, { cookie: cookieA })).payload.items)
       .toEqual([]);
+    expect(server.keyManager?.keys.size).toBe(0);
+  });
+
+  test("requires explicit consent before ciphertext-only Walrus testnet backup", async () => {
+    const server = await boot("internal", { agentFiles: true, walrus: true });
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "agent-file-walrus-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "agent-file-walrus-b@example.com", password: PASSWORD },
+    });
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
+    const coworker = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: coworkerInput(),
+    });
+    const coworkerId = String(coworker.payload.coworker.id);
+    const privateText = "Private portfolio policy: keep 70% liquid.";
+    const created = await request(server.base, `/workspace/${workspaceA}/agent-files`, {
+      cookie: cookieA,
+      body: {
+        name: "private-policy.md",
+        mimeType: "text/markdown",
+        coworkerIds: [coworkerId],
+        expiresAt: null,
+        contentBase64: Buffer.from(privateText).toString("base64"),
+      },
+    });
+    const fileId = String(created.payload.item.id);
+
+    const missingConsent = await request(
+      server.base,
+      `/workspace/${workspaceA}/agent-files/${fileId}/publish`,
+      { cookie: cookieA, body: { expectedRevision: 1, network: "testnet" } },
+    );
+    expect(missingConsent.response.status).toBe(400);
+    expect(missingConsent.payload.code).toBe("agent_file_walrus_confirmation_required");
+    expect(server.walrusTransport?.publishCalls).toBe(0);
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceA}/agent-files/${fileId}/publish`,
+      {
+        cookie: cookieB,
+        body: { expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true },
+      },
+    )).response.status).toBe(404);
+
+    const published = await request(
+      server.base,
+      `/workspace/${workspaceA}/agent-files/${fileId}/publish`,
+      {
+        cookie: cookieA,
+        body: { expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true },
+      },
+    );
+    expect(published.response.status).toBe(200);
+    expect(published.payload).toMatchObject({
+      item: {
+        revision: 2,
+        publication: { network: "testnet", blobId: "route-agent-file-blob" },
+      },
+      disclosure: {
+        stored: "encrypted_bytes_only",
+        publicBytesMayRemainAfterDeletion: true,
+        deletionDestroysRecoveryKey: true,
+      },
+    });
+    expect(server.walrusTransport?.publishCalls).toBe(1);
+    const publicPayload = server.walrusTransport?.publishedBytes.toString("utf8") ?? "";
+    expect(publicPayload).toContain("matterhorn.walrus-ciphertext.v1");
+    for (const forbidden of [privateText, "private-policy.md", coworkerId, workspaceA]) {
+      expect(publicPayload).not.toContain(forbidden);
+    }
+    expect(JSON.stringify(published.payload)).not.toContain(privateText);
+    expect(JSON.stringify(published.payload)).not.toContain('"ciphertext":"');
+
+    const verified = await request(
+      server.base,
+      `/workspace/${workspaceA}/agent-files/${fileId}/verify`,
+      { cookie: cookieA, method: "POST" },
+    );
+    expect(verified.payload).toMatchObject({
+      verified: true,
+      network: "testnet",
+      blobId: "route-agent-file-blob",
+      currentEpoch: 11,
+    });
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceA}/agent-files/${fileId}/verify`,
+      { method: "POST" },
+    )).response.status).toBe(401);
+    const replay = await request(
+      server.base,
+      `/workspace/${workspaceA}/agent-files/${fileId}/publish`,
+      {
+        cookie: cookieA,
+        body: { expectedRevision: 2, network: "testnet", acknowledgePublicCiphertext: true },
+      },
+    );
+    expect(replay.response.status).toBe(409);
+    expect(server.walrusTransport?.publishCalls).toBe(1);
+
+    const deleted = await request(server.base, `/workspace/${workspaceA}/agent-files/${fileId}`, {
+      method: "DELETE",
+      cookie: cookieA,
+      body: { expectedRevision: 2 },
+    });
+    expect(deleted.response.status).toBe(200);
     expect(server.keyManager?.keys.size).toBe(0);
   });
 

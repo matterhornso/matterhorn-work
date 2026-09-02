@@ -170,7 +170,7 @@ export function createPinnedWalrusEvidenceTransport(
   const maxEvidenceBytes = boundedPositiveInteger(
     options.maxEvidenceBytes ?? DEFAULT_MAX_EVIDENCE_BYTES,
     "crypto_evidence_walrus_size_limit_invalid",
-    10 * 1024 * 1024,
+    16 * 1024 * 1024,
   );
   const requestBytes = options.requestBytes ?? createPinnedBytesRequester({ maxResponseBytes: maxEvidenceBytes });
   const resolver = options.resolver;

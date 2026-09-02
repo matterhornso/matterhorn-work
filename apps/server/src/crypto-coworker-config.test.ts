@@ -89,4 +89,21 @@ describe("crypto coworker feature configuration", () => {
     });
     expect(configured).toMatchObject({ walrusEvidenceMode: "testnet", ready: true, issues: [] });
   });
+
+  test("keeps Agent File publication on one backend instance", () => {
+    const result = cryptoCoworkerFeatureConfig({
+      MATTERHORN_COWORKER_MODE: "internal",
+      MATTERHORN_COWORKER_POLICY_VERSION: "policy-1",
+      MATTERHORN_AGENT_FILES_MODE: "encrypted",
+      MATTERHORN_WALRUS_EVIDENCE_MODE: "testnet",
+      MATTERHORN_WALRUS_PUBLISHER_URL: "https://publisher.example",
+      MATTERHORN_WALRUS_AGGREGATOR_URL: "https://aggregator.example",
+      MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN: "server-only",
+      MATTERHORN_EVIDENCE_KMS_REGION: "us-east-1",
+      MATTERHORN_EVIDENCE_KMS_KEY_ID: "alias/test",
+      MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT: "2",
+    });
+    expect(result.ready).toBe(false);
+    expect(result.issues).toContain("agent_file_walrus_requires_single_instance");
+  });
 });

@@ -93,6 +93,10 @@ export function cryptoCoworkerFeatureConfig(
     if (workers === "off") issues.push("agent_files_require_coworkers");
     if (!env.MATTERHORN_EVIDENCE_KMS_REGION?.trim()) issues.push("agent_files_kms_region_required");
     if (!env.MATTERHORN_EVIDENCE_KMS_KEY_ID?.trim()) issues.push("agent_files_kms_key_id_required");
+    const instanceCount = Number(env.MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT ?? "1");
+    if (evidence === "testnet" && (!Number.isSafeInteger(instanceCount) || instanceCount !== 1)) {
+      issues.push("agent_file_walrus_requires_single_instance");
+    }
   }
   if (evidence === "mainnet" && normalized(env.MATTERHORN_WALRUS_MAINNET_ACKNOWLEDGED) !== "true") {
     issues.push("walrus_mainnet_acknowledgement_required");
