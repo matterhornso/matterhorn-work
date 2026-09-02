@@ -1801,26 +1801,41 @@ export function ReactSessionComposer(props: ComposerProps) {
               ) : null}
             </div>
 
-            {props.privateModeAvailable && props.onPrivateModeChange ? (
-              <button
-                type="button"
-                role="switch"
-                aria-checked={Boolean(props.privateModeEnabled)}
-                className={cn(
-                  "inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",
-                  props.privateModeEnabled
-                    ? "bg-[rgb(var(--dls-accent-rgb)/0.16)] text-dls-text"
-                    : "text-dls-secondary hover:bg-dls-surface-muted/[0.2] hover:text-dls-text",
-                )}
-                onClick={() => props.onPrivateModeChange?.(!props.privateModeEnabled)}
-                disabled={props.busy}
-                title={props.privateModeEnabled
-                  ? "Private mode is on. Venice does not retain this prompt or response."
-                  : "Use a Venice private model with zero prompt and response retention."}
-              >
-                <LockKeyhole size={12} aria-hidden="true" />
-                <span>Private</span>
-              </button>
+            {props.onPrivateModeChange ? (
+              props.privateModeAvailable ? (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(props.privateModeEnabled)}
+                  aria-label={props.privateModeEnabled ? "Turn off private model" : "Turn on private model"}
+                  className={cn(
+                    "inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",
+                    props.privateModeEnabled
+                      ? "bg-[rgb(var(--dls-accent-rgb)/0.16)] text-dls-text"
+                      : "text-dls-secondary hover:bg-dls-surface-muted/[0.2] hover:text-dls-text",
+                  )}
+                  onClick={() => props.onPrivateModeChange?.(!props.privateModeEnabled)}
+                  disabled={props.busy}
+                  title={props.privateModeEnabled
+                    ? "Private model is on. Venice does not retain this prompt or response."
+                    : "Use a Venice model that does not retain prompts or responses."}
+                >
+                  <LockKeyhole size={12} aria-hidden="true" />
+                  <span>{props.privateModeEnabled ? "Private on" : "Private"}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  aria-label="Set up a private model"
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:bg-dls-surface-muted/[0.2] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none"
+                  onClick={() => props.onPrivateModeChange?.(true)}
+                  disabled={props.busy}
+                  title="Set up a Venice private model"
+                >
+                  <LockKeyhole size={12} aria-hidden="true" />
+                  <span>Private setup</span>
+                </button>
+              )
             ) : null}
 
             {props.showModelPicker !== false ? (

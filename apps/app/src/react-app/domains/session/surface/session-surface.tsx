@@ -3536,24 +3536,20 @@ export function SessionSurface(props: SessionSurfaceProps) {
           <p className="min-w-0">
               {props.privateModeEnabled ? (
                 <>
-                  Private mode is on. Venice processes this request without retaining the prompt or response.
+                  Private mode · Venice does not retain this prompt or response.
                 </>
               ) : props.providerPrivacyPolicy ? (
                 props.providerPrivacyPolicy.allowed ? (
                   <>
-                    Matterhorn does not use prompts to train models.{" "}
-                    {props.providerPrivacyPolicy.providerName} processes this
-                    prompt. {props.providerPrivacyPolicy.label}.
+                    Matterhorn does not train on your chats · {props.providerPrivacyPolicy.providerName} processes this chat · {props.providerPrivacyPolicy.label}.
                   </>
                 ) : (
                   <>
-                    Sending is blocked because{" "}
-                    {props.providerPrivacyPolicy.providerName}&apos;s training and
-                    retention terms are not verified.
+                    Sending blocked · {props.providerPrivacyPolicy.providerName}&apos;s training and retention terms are not verified.
                   </>
                 )
               ) : (
-                <>Checking how the selected provider handles prompts.</>
+                <>Checking model privacy.</>
               )}{" "}
               <button
                 type="button"

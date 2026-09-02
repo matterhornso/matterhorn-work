@@ -46,7 +46,7 @@ describe("private model mode", () => {
     expect(isPrivateModeModel(null)).toBe(false);
   });
 
-  test("keeps the privacy control accessible and sends private workspace mode", () => {
+  test("keeps private mode discoverable, accessible, and bound to private workspace mode", () => {
     const composer = readFileSync(
       new URL(
         "../src/react-app/domains/session/surface/composer/composer.tsx",
@@ -62,8 +62,14 @@ describe("private model mode", () => {
       "utf8",
     );
 
+    expect(composer).toContain('aria-label="Set up a private model"');
+    expect(composer).toContain('aria-label={props.privateModeEnabled ? "Turn off private model" : "Turn on private model"}');
     expect(composer).toContain('role="switch"');
     expect(composer).toContain("aria-checked={Boolean(props.privateModeEnabled)}");
+    expect(composer).toContain('<span>{props.privateModeEnabled ? "Private on" : "Private"}</span>');
+    expect(composer).toContain("props.onPrivateModeChange?.(true)");
     expect(sessionSurface).toContain('mode: "private_workspace"');
+    expect(sessionSurface).toContain("Private mode · Venice does not retain this prompt or response.");
+    expect(sessionSurface).toContain("Matterhorn does not train on your chats");
   });
 });
