@@ -1,6 +1,11 @@
 import { openworkExtensionsPreviewPluginPath } from "./openwork-extensions-plugin-path.js";
 import { buildManagedCudosProviderConfig, CUDOS_PROVIDER_ID } from "./cudos-provider.js";
 import { matterhornGuardPluginPath } from "./matterhorn-guard-plugin-path.js";
+import {
+  buildManagedVeniceProviderConfig,
+  VENICE_PROVIDER_ID,
+  type VenicePrivateModel,
+} from "./venice-provider.js";
 
 const BUILTIN_MCP_NAME = "matterhorn-work";
 
@@ -36,12 +41,26 @@ export function buildManagedOpencodeRuntimeConfig(input: {
   serverUrl: string;
   clientToken: string;
   enableCudosProvider?: boolean;
+  venicePrivateModels?: readonly VenicePrivateModel[];
 }): string {
   const serverUrl = input.serverUrl.trim().replace(/\/+$/, "");
   const clientToken = input.clientToken.trim();
   if (!serverUrl || !clientToken) {
     throw new Error("Managed OpenCode requires a Matterhorn server URL and client token");
   }
+
+  const managedProviders = {
+    ...(input.enableCudosProvider
+      ? { [CUDOS_PROVIDER_ID]: buildManagedCudosProviderConfig() }
+      : {}),
+    ...(input.venicePrivateModels?.length
+      ? {
+          [VENICE_PROVIDER_ID]: buildManagedVeniceProviderConfig(
+            input.venicePrivateModels,
+          ),
+        }
+      : {}),
+  };
 
   return JSON.stringify({
     permission: MANAGED_OPENCODE_PERMISSION_POLICY,
@@ -58,13 +77,7 @@ export function buildManagedOpencodeRuntimeConfig(input: {
       openworkExtensionsPreviewPluginPath(),
       matterhornGuardPluginPath(),
     ],
-    ...(input.enableCudosProvider
-      ? {
-          provider: {
-            [CUDOS_PROVIDER_ID]: buildManagedCudosProviderConfig(),
-          },
-        }
-      : {}),
+    ...(Object.keys(managedProviders).length ? { provider: managedProviders } : {}),
     mcp: {
       [BUILTIN_MCP_NAME]: {
         type: "remote",

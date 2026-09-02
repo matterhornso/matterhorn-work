@@ -16,6 +16,7 @@ import {
 import { startServer } from "./server.js";
 import { ensureWorkspaceFiles } from "./workspace-init.js";
 import { buildManagedOpencodeRuntimeConfig } from "./managed-opencode-runtime-config.js";
+import { resolveManagedVenicePrivateModels } from "./venice-provider.js";
 import type { ServeResult } from "./serve-node.js";
 import type { ServerConfig } from "./types.js";
 
@@ -64,10 +65,12 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
   if (!config.opencodeBaseUrl && options.manageOpencode) {
     const workspace = config.workspaces[0];
     if (workspace?.path) {
+      const venicePrivateModels = await resolveManagedVenicePrivateModels();
       const managedRuntimeConfig = buildManagedOpencodeRuntimeConfig({
         serverUrl,
         clientToken: config.token,
         enableCudosProvider: Boolean(process.env.CUDOS_API_KEY?.trim()),
+        venicePrivateModels,
       });
       const cwd = options.opencodeCwd
         || process.env.OPENWORK_MANAGED_OPENCODE_CWD?.trim()

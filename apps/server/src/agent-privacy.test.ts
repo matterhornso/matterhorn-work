@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentPrivacyRequestHash, MatterhornPrivacyFirewall } from "./agent-privacy.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import { configureVenicePrivateModelRegistry } from "./venice-provider.js";
 
 function baseInput() {
   return {
@@ -211,6 +212,44 @@ describe("agent privacy firewall", () => {
         if (value === undefined) delete process.env[key];
         else process.env[key] = value;
       }
+    }
+  });
+
+  test("allows private mode only for an exact runtime-verified Venice model", () => {
+    configureVenicePrivateModelRegistry([
+      { id: "private-tools", name: "Private Tools" },
+    ]);
+    try {
+      const firewall = new MatterhornPrivacyFirewall();
+      const approved = firewall.preflight({
+        ...baseInput(),
+        providerId: "venice",
+        modelId: "private-tools",
+        privacyMode: "private_workspace",
+      });
+      const rejected = firewall.preflight({
+        ...baseInput(),
+        providerId: "venice",
+        modelId: "anonymized-tools",
+        privacyMode: "private_workspace",
+      });
+
+      expect(approved.response).toMatchObject({
+        decision: "allow",
+        effectiveMode: "private_workspace",
+        provider: {
+          privacyStatus: "verified_no_training",
+          retentionDays: 0,
+        },
+      });
+      expect(rejected.response).toMatchObject({
+        decision: "blocked",
+        provider: {
+          privacyStatus: "unverified",
+        },
+      });
+    } finally {
+      configureVenicePrivateModelRegistry([]);
     }
   });
 

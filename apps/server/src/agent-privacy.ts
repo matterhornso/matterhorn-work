@@ -6,9 +6,13 @@ import type {
   MatterhornAgentPrivacyPart,
   MatterhornAgentPrivacyPreflightResponse,
 } from "@matterhorn-work/types/guarded-agent-runtime";
-import { resolveProviderPrivacyPolicy } from "./provider-privacy.js";
+import { resolveModelProviderPrivacyPolicy } from "./provider-privacy.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import {
+  isRegisteredVenicePrivateModel,
+  VENICE_PROVIDER_ID,
+} from "./venice-provider.js";
 
 const CONSENT_TTL_MS = 5 * 60 * 1_000;
 const MAX_TRACKED_CHALLENGES = 2_000;
@@ -216,15 +220,27 @@ export class MatterhornPrivacyFirewall {
     this.cleanup(now.getTime());
     const requestHash = agentPrivacyRequestHash(input);
     const classified = classify(input);
-    const policy = resolveProviderPrivacyPolicy(input.providerId, input.providerName, process.env, now);
+    const policy = resolveModelProviderPrivacyPolicy(
+      input.providerId,
+      input.modelId,
+      input.providerName,
+      process.env,
+      now,
+    );
     const dataLeavesMatterhorn = policy.status !== "local_processing";
     const providerVerified = policy.status === "local_processing" || policy.status === "verified_no_training";
+    const invalidVeniceModel =
+      input.providerId.trim().toLowerCase() === VENICE_PROVIDER_ID &&
+      !isRegisteredVenicePrivateModel(input.modelId);
     let decision: MatterhornAgentPrivacyPreflightResponse["decision"] = "allow";
     let reason = classified.effectiveMode === "public_research"
       ? "Public research can use the disclosed provider without private workspace context."
       : "The selected provider is approved for this private context.";
 
-    if (classified.labels.includes("secret")) {
+    if (invalidVeniceModel) {
+      decision = "blocked";
+      reason = "Matterhorn could not verify this model in Venice's current private-model catalog. Choose an available private model and try again.";
+    } else if (classified.labels.includes("secret")) {
       decision = "blocked";
       reason = "Matterhorn blocked secret material before any provider or runtime dispatch. Remove the secret and try again.";
     } else if (classified.effectiveMode !== "public_research" && !providerVerified) {

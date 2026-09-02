@@ -5,6 +5,12 @@ import type {
   MatterhornProviderPrivacySummary,
   MatterhornProviderTrainingUse,
 } from "@matterhorn-work/types/backend-models";
+import {
+  hasRegisteredVenicePrivateModels,
+  isRegisteredVenicePrivateModel,
+  VENICE_PRIVACY_POLICY_URL,
+  VENICE_PROVIDER_ID,
+} from "./venice-provider.js";
 
 type ProviderPrivacyEnvironment = Record<string, string | undefined>;
 
@@ -101,6 +107,22 @@ export function resolveProviderPrivacyPolicy(
     };
   }
 
+  if (id === VENICE_PROVIDER_ID && hasRegisteredVenicePrivateModels()) {
+    return {
+      providerId,
+      providerName: suppliedName || "Venice Private",
+      status: "verified_no_training",
+      trainingUse: "none",
+      retentionDays: 0,
+      policyUrl: VENICE_PRIVACY_POLICY_URL,
+      verifiedAt: null,
+      allowed: true,
+      label: "Private model · zero retention",
+      description:
+        "Matterhorn exposes only models that Venice currently labels private and tool-capable. Venice documents no prompt or response retention for private API models.",
+    };
+  }
+
   if (id === "cudos") {
     const trainingUse = cudosTrainingUse(env);
     const retentionDays = nonNegativeInteger(
@@ -168,6 +190,33 @@ export function resolveProviderPrivacyPolicy(
     label: "Provider policy not verified",
     description:
       "Matterhorn has not verified this provider's training and prompt-retention terms for this deployment.",
+  };
+}
+
+export function resolveModelProviderPrivacyPolicy(
+  providerId: string,
+  modelId: string,
+  providerName = providerId,
+  env: ProviderPrivacyEnvironment = process.env,
+  now = new Date(),
+): MatterhornProviderPrivacyPolicy {
+  const policy = resolveProviderPrivacyPolicy(providerId, providerName, env, now);
+  if (
+    providerId.trim().toLowerCase() !== VENICE_PROVIDER_ID ||
+    isRegisteredVenicePrivateModel(modelId)
+  ) {
+    return policy;
+  }
+  return {
+    ...policy,
+    status: "unverified",
+    trainingUse: "unknown",
+    retentionDays: null,
+    verifiedAt: null,
+    allowed: false,
+    label: "Model privacy not verified",
+    description:
+      "This model was not present in Matterhorn's verified Venice private-model registry and cannot receive prompts.",
   };
 }
 

@@ -114,6 +114,11 @@ import {
   type MatterhornExecutionMode,
 } from "../domains/session/modes/execution-mode";
 import { buildMatterhornPromptTools } from "../domains/session/modes/prompt-tool-policy";
+import {
+  isPrivateModeModel,
+  privateModeModelFromProviders,
+  standardModeModelFromProviders,
+} from "../domains/session/private-model-mode";
 import { buildOpenworkEnvSystemContext } from "../domains/session/sync/env-context";
 import {
   permissionKey as reactPermissionKey,
@@ -1932,6 +1937,27 @@ export function SessionRoute() {
     workspaceModelSelection,
   }), [local.prefs.defaultModel, workspaceModelSelection]);
   const selectedPromptModel = selectedPromptModelResolution.model;
+  const privateModeModel = useMemo(
+    () => privateModeModelFromProviders(providers, providerConnectedIds),
+    [providerConnectedIds, providers],
+  );
+  const standardModeModel = useMemo(
+    () => standardModeModelFromProviders(providers, providerConnectedIds),
+    [providerConnectedIds, providers],
+  );
+  const privateModeEnabled = Boolean(
+    privateModeModel &&
+    selectedPromptModel &&
+    isPrivateModeModel(selectedPromptModel) &&
+    providerListQuery.data &&
+    isModelAvailableInConnectedProviders(providerListQuery.data, selectedPromptModel),
+  );
+  const lastNonPrivateModelRef = useRef<ModelRef | null>(null);
+  useEffect(() => {
+    if (selectedPromptModel && !isPrivateModeModel(selectedPromptModel)) {
+      lastNonPrivateModelRef.current = selectedPromptModel;
+    }
+  }, [selectedPromptModel]);
   const selectedProviderPrivacyPolicy: MatterhornProviderPrivacyPolicy | null =
     workspaceModelSelection?.privacy?.providers?.find(
       (policy) => policy.providerId === selectedPromptModel?.providerID,
@@ -2635,6 +2661,38 @@ export function SessionRoute() {
       modelUnavailable: selectedModelUnavailable,
       selectedModel: selectedPromptModel ?? { providerID: "", modelID: "" },
       providerPrivacyPolicy: selectedProviderPrivacyPolicy,
+      privateModeAvailable: Boolean(privateModeModel),
+      privateModeEnabled,
+      onPrivateModeChange: (enabled: boolean) => {
+        if (enabled) {
+          if (!privateModeModel) {
+            handleOpenSettings("/settings/ai");
+            return;
+          }
+          local.setPrefs((previous) => ({
+            ...previous,
+            defaultModel: privateModeModel,
+            modelVariant: null,
+          }));
+          setCompactModelPickerOpen(false);
+          return;
+        }
+        const fallback = lastNonPrivateModelRef.current ?? standardModeModel;
+        if (
+          fallback &&
+          providerListQuery.data &&
+          isModelAvailableInConnectedProviders(providerListQuery.data, fallback)
+        ) {
+          local.setPrefs((previous) => ({
+            ...previous,
+            defaultModel: fallback,
+            modelVariant: null,
+          }));
+          return;
+        }
+        setModelPickerQuery("");
+        setModelPickerOpen(true);
+      },
       onModelPickerOpenChange: setCompactModelPickerOpen,
       onModelChange: (model: ModelRef) => {
         local.setPrefs((previous) => ({
@@ -2973,6 +3031,9 @@ export function SessionRoute() {
     navigate,
     opencodeBaseUrl,
     opencodeClient,
+    privateModeEnabled,
+    privateModeModel,
+    providerListQuery.data,
     recoverMissingSession,
     responsePerspective,
     selectedAgent,
@@ -2982,6 +3043,7 @@ export function SessionRoute() {
     selectedModelUnavailable,
     selectedProviderPrivacyPolicy,
     selectedPromptModel,
+    standardModeModel,
     selectedWorkspace,
     selectedWorkspaceEndpoint,
     selectedWorkspaceId,

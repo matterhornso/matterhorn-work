@@ -61,6 +61,11 @@ user failure.
   prompts until the exact inference service has written no-training and
   prompt-retention terms. A policy for a related provider product is not proof
   for the configured API endpoint.
+- Venice private mode is optional. When `VENICE_API_KEY` is present, the
+  managed runtime verifies Venice's live public catalog at startup and exposes
+  only text models labeled `private` with function calling enabled. Catalog
+  failure disables the provider; anonymized Venice models are never admitted
+  to the private-mode selector.
 - Keep Sui publishing on `sui-testnet` until reviewed mainnet packages and a separate money-path review exist.
 - Keep Matterhorn Cloud disabled unless its full acceptance flow has passed.
 - Public Beta web traffic must use the authenticated same-origin deployment
@@ -116,6 +121,15 @@ user failure.
    `0` or `30` from unrelated product or analytics language. The prompt gate
    remains closed unless either contractual terms or the explicit reviewed
    provider-policy declarations above are present.
+
+   To offer the optional chat-level `Private` control, add `VENICE_API_KEY` to
+   the backend secret manager and restart the managed runtime. Do not add it to
+   Vercel or any `VITE_*` variable. The control appears only after the backend
+   reports at least one connected Venice model from the runtime-verified
+   private catalog. Turning it on selects that private model and marks the
+   request `private_workspace`; turning it off returns to the last connected
+   standard model. Matterhorn still hard-blocks secret material before either
+   provider receives a request.
 7. Configure Stripe test credentials, webhook secret, Plus/Max test prices, and a test customer. Free-beta allowance is not a paid subscription and never creates an automatic charge.
 8. Configure OpenAI image generation, public HTTPS Walrus endpoints, and reviewed Sui testnet package IDs.
 9. Leave Cloud disabled for desktop/local builds, or complete the separate Cloud acceptance flow before setting `VITE_MATTERHORN_CLOUD_ENABLED=1` for public web.

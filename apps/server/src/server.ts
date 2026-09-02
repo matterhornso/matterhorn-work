@@ -513,6 +513,7 @@ import {
 } from "./backend-models.js";
 import {
   providerPrivacyEnforcementMode,
+  resolveModelProviderPrivacyPolicy,
   resolveProviderPrivacyPolicy,
 } from "./provider-privacy.js";
 import {
@@ -2534,7 +2535,7 @@ async function proxyOpencodeRequest(input: {
         parseSessionPromptModel(payload),
       );
       if (input.guardedRuntime.capabilities.mode === "off") {
-        assertPromptProviderPrivacy(modelResolution.model.providerID);
+        assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
       }
       try {
         const acceptance = await input.guardedRuntime.acceptPrompt({
@@ -2584,7 +2585,7 @@ async function proxyOpencodeRequest(input: {
         parseSessionCommandModel(payload),
       );
       if (input.guardedRuntime.capabilities.mode === "off" && providerPrivacyEnforcementMode() === "verified_only") {
-        assertPromptProviderPrivacy(modelResolution.model.providerID);
+        assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
       }
       const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
       const command = typeof payload.command === "string" ? payload.command.trim() : "";
@@ -2633,7 +2634,7 @@ async function proxyOpencodeRequest(input: {
       workspace,
       undefined,
     );
-    assertPromptProviderPrivacy(modelResolution.model.providerID);
+    assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
   }
   if (promptPermissionRequest) {
     try {
@@ -10607,7 +10608,7 @@ function createRoutes(
     }
     const currentModels = await buildWorkspaceBackendModels(config, workspace);
     assertModelSelectionInCatalog(currentModels.catalog, requestSelection);
-    assertPromptProviderPrivacy(requestSelection.providerId);
+    assertPromptProviderPrivacy(requestSelection.providerId, requestSelection.modelId);
 
     let selection;
     try {
@@ -12083,7 +12084,7 @@ function createRoutes(
     // Compaction sends existing conversation content back to the selected
     // provider, so the same provider privacy policy and hard usage allowance
     // apply as they do to a new message.
-    assertPromptProviderPrivacy(modelResolution.model.providerID);
+    assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
     await requireApproval(ctx, {
       workspaceId: workspace.id,
       action: "session.compact",
@@ -18754,8 +18755,8 @@ function parseSessionCommandModel(
   };
 }
 
-function assertPromptProviderPrivacy(providerId: string): void {
-  const policy = resolveProviderPrivacyPolicy(providerId);
+function assertPromptProviderPrivacy(providerId: string, modelId: string): void {
+  const policy = resolveModelProviderPrivacyPolicy(providerId, modelId);
   if (policy.allowed) return;
   throw new ApiError(
     403,

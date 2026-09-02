@@ -662,6 +662,9 @@ export type SessionSurfaceProps = {
   modelUnavailable?: boolean;
   selectedModel: ModelRef;
   providerPrivacyPolicy?: MatterhornProviderPrivacyPolicy | null;
+  privateModeAvailable?: boolean;
+  privateModeEnabled?: boolean;
+  onPrivateModeChange?: (enabled: boolean) => void;
   onModelPickerOpenChange: (open: boolean) => void;
   onModelChange: (model: ModelRef) => void;
   onSendDraft: (draft: ComposerDraft) => Promise<void> | void;
@@ -2131,9 +2134,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
       resolvedText: resolved,
       command: resolvedSlashMatch ? { name: resolvedSlashMatch[1] ?? "", arguments: resolvedSlashMatch[2] ?? "" } : undefined,
       ...(
-        options?.privacyConsentToken || attachmentIds.length > 0 || memoryIds.length > 0 || agentFileIds.length > 0 || coworkerId
+        props.privateModeEnabled || options?.privacyConsentToken || attachmentIds.length > 0 || memoryIds.length > 0 || agentFileIds.length > 0 || coworkerId
           ? {
               privacy: {
+                ...(props.privateModeEnabled ? { mode: "private_workspace" as const } : {}),
                 ...(options?.privacyConsentToken ? { consentToken: options.privacyConsentToken } : {}),
                 ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
                 ...(coworkerId ? { coworkerId } : {}),
@@ -2144,7 +2148,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
           : {}
       ),
     };
-  }, [agentFileContext, coworkerContext?.id, memoryContext?.records, mentions, pasteParts]);
+  }, [agentFileContext, coworkerContext?.id, memoryContext?.records, mentions, pasteParts, props.privateModeEnabled]);
 
   const handleComposerDraftChange = useCallback((value: string) => {
     setComposerDraft(props.sessionId, value);
@@ -3530,7 +3534,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
         >
           <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
           <p className="min-w-0">
-              {props.providerPrivacyPolicy ? (
+              {props.privateModeEnabled ? (
+                <>
+                  Private mode is on. Venice processes this request without retaining the prompt or response.
+                </>
+              ) : props.providerPrivacyPolicy ? (
                 props.providerPrivacyPolicy.allowed ? (
                   <>
                     Matterhorn does not use prompts to train models.{" "}
@@ -3577,6 +3585,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
         showModelPicker={shellConfig.modelPicker && !props.modelUnavailable}
         modelPickerOpen={props.modelPickerOpen}
         selectedModel={props.selectedModel}
+        privateModeAvailable={Boolean(props.privateModeAvailable)}
+        privateModeEnabled={Boolean(props.privateModeEnabled)}
+        onPrivateModeChange={props.onPrivateModeChange}
         onModelPickerOpenChange={props.onModelPickerOpenChange}
         onModelChange={props.onModelChange}
         attachments={attachments}

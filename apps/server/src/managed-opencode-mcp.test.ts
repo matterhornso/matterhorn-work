@@ -66,6 +66,34 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(content).not.toContain("apiKey");
   });
 
+  test("registers only verified Venice private models without embedding its API key", () => {
+    const content = buildManagedOpencodeRuntimeConfig({
+      serverUrl: "http://127.0.0.1:4130/",
+      clientToken: "test-client-token",
+      venicePrivateModels: [
+        { id: "z-ai-glm-5-3-flash", name: "GLM 5.3 Flash" },
+        { id: "private-tools", name: "Private Tools" },
+      ],
+    });
+    const config = JSON.parse(content);
+
+    expect(config.provider.venice).toMatchObject({
+      npm: "@ai-sdk/openai-compatible",
+      name: "Venice Private",
+      env: ["VENICE_API_KEY"],
+      options: {
+        baseURL: "https://api.venice.ai/api/v1",
+      },
+    });
+    expect(Object.keys(config.provider.venice.models)).toEqual([
+      "z-ai-glm-5-3-flash",
+      "private-tools",
+    ]);
+    const providerContent = JSON.stringify(config.provider.venice);
+    expect(providerContent).not.toContain("apiKey");
+    expect(providerContent).not.toContain("Bearer");
+  });
+
   test("keeps the authenticated MCP config out of workspace files", async () => {
     const root = await mkdtemp(join(tmpdir(), "matterhorn-managed-mcp-"));
     try {

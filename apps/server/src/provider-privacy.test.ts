@@ -3,8 +3,10 @@ import { describe, expect, test } from "bun:test";
 import {
   buildProviderPrivacySummary,
   providerPrivacyEnforcementMode,
+  resolveModelProviderPrivacyPolicy,
   resolveProviderPrivacyPolicy,
 } from "./provider-privacy.js";
+import { configureVenicePrivateModelRegistry } from "./venice-provider.js";
 
 const verifiedCudosEnvironment = {
   MATTERHORN_PROVIDER_PRIVACY_MODE: "verified-only",
@@ -126,6 +128,41 @@ describe("provider privacy policy", () => {
       trainingUse: "none",
       allowed: true,
     });
+  });
+
+  test("allows only runtime-verified Venice private models", () => {
+    configureVenicePrivateModelRegistry([
+      { id: "private-tools", name: "Private Tools" },
+    ]);
+    try {
+      const approved = resolveModelProviderPrivacyPolicy(
+        "venice",
+        "private-tools",
+        "Venice Private",
+        { MATTERHORN_PROVIDER_PRIVACY_MODE: "verified-only" },
+      );
+      const rejected = resolveModelProviderPrivacyPolicy(
+        "venice",
+        "anonymized-tools",
+        "Venice Private",
+        { MATTERHORN_PROVIDER_PRIVACY_MODE: "disclosure" },
+      );
+
+      expect(approved).toMatchObject({
+        status: "verified_no_training",
+        trainingUse: "none",
+        retentionDays: 0,
+        allowed: true,
+        label: "Private model · zero retention",
+      });
+      expect(rejected).toMatchObject({
+        status: "unverified",
+        allowed: false,
+        label: "Model privacy not verified",
+      });
+    } finally {
+      configureVenicePrivateModelRegistry([]);
+    }
   });
 
   test("reports one policy per provider without prompt content", () => {
