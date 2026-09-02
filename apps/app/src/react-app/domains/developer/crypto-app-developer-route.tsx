@@ -21,6 +21,7 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Textarea } from "../../../components/ui/textarea";
 import { resolveMatterhornConnection } from "../../shell/matterhorn-connection";
+import { DeveloperIntegrationSetup } from "./developer-integration-setup";
 
 const QUERY_KEY = ["crypto-app-developer-portal"] as const;
 
@@ -86,7 +87,11 @@ function readableFinding(code: string): string {
   return code.replaceAll("_", " ");
 }
 
-async function connect(): Promise<{ client: DeveloperClient; snapshot: PortalSnapshot }> {
+async function connect(): Promise<{
+  client: DeveloperClient;
+  snapshot: PortalSnapshot;
+  serverOrigin: string;
+}> {
   const connection = await resolveMatterhornConnection();
   if (!connection.normalizedBaseUrl) throw new Error("developer_connection_unavailable");
   const client = createMatterhornCryptoDeveloperClient({ baseUrl: connection.normalizedBaseUrl });
@@ -94,7 +99,7 @@ async function connect(): Promise<{ client: DeveloperClient; snapshot: PortalSna
     if (error instanceof MatterhornCryptoDeveloperClientError && error.serverCode === "developer_not_enrolled") return [];
     throw error;
   })]);
-  return { client, snapshot: { status, submissions } };
+  return { client, snapshot: { status, submissions }, serverOrigin: connection.normalizedBaseUrl };
 }
 
 function StateMark({ step }: { step: MatterhornCryptoDeveloperStatus["nextStep"] }) {
@@ -300,6 +305,10 @@ export function CryptoAppDeveloperRoute() {
                 {error ? <p className="mt-4 text-sm text-destructive" role="alert">{error}</p> : null}
               </div>
             </section>
+
+            {snapshot.status.enrolled && portal.data ? (
+              <DeveloperIntegrationSetup serverOrigin={portal.data.serverOrigin} />
+            ) : null}
 
             <section className="py-8">
               <div className="flex items-baseline justify-between gap-4">

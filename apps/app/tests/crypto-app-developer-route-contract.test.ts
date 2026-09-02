@@ -14,11 +14,21 @@ function readRepoSource(path: string): string {
 describe("invite-only crypto app developer route", () => {
   test("is lazy, account-gated, and absent from public trust paths", () => {
     const appRoot = readAppSource("shell/app-root.tsx");
+    const viteConfig = readRepoSource("apps/app/vite.config.ts");
+    const vercel = JSON.parse(readRepoSource("vercel.json")) as {
+      rewrites: Array<{ source: string; destination: string; missing?: Array<{ key: string; value: string }> }>;
+    };
 
     expect(appRoot).toContain('path="/developer/crypto-apps"');
     expect(appRoot).toContain('import("../domains/developer/crypto-app-developer-route")');
     expect(appRoot.indexOf("<DenSigninGate>")).toBeLessThan(appRoot.indexOf('path="/developer/crypto-apps"'));
     expect(appRoot).not.toContain('pathname === "/developer/crypto-apps"');
+    expect(viteConfig).toContain('"/developer": sameOriginWorkspaceProxy');
+    expect(vercel.rewrites).toContainEqual({
+      source: "/developer/:path*",
+      missing: [{ type: "header", key: "accept", value: ".*text/html.*" }],
+      destination: "/api/matterhorn-proxy?__matterhorn_path=/developer/:path*",
+    });
   });
 
   test("exposes one guided testnet certification step without custody controls", () => {
@@ -66,5 +76,27 @@ describe("invite-only crypto app developer route", () => {
       "requestTestnetCertification",
       "submitTestnetManifest",
     ]);
+  });
+
+  test("generates client-only setup for enrolled developers without sending local paths", () => {
+    const route = readAppSource("domains/developer/crypto-app-developer-route.tsx");
+    const setup = readAppSource("domains/developer/developer-integration-setup.tsx");
+
+    expect(route).toContain("snapshot.status.enrolled");
+    expect(route).toContain("<DeveloperIntegrationSetup");
+    expect(setup).toContain("createMatterhornCryptoIntegrationSetup");
+    expect(setup).toContain("Connect your development tool");
+    expect(setup).toContain("Codex");
+    expect(setup).toContain("Claude Code");
+    expect(setup).toContain("Agent skill");
+    expect(setup).toContain("Other MCP client");
+    expect(setup).toContain("Command line");
+    expect(setup).toContain("HTTP API");
+    expect(setup).toContain("Nothing is sent to Matterhorn.");
+    expect(setup).toContain("No wallet submission");
+    expect(setup).not.toContain("MATTERHORN_WORK_HOST_TOKEN");
+    expect(setup).not.toContain("signTransaction");
+    expect(setup).not.toContain("executeTransaction");
+    expect(setup).not.toContain("fetch(");
   });
 });

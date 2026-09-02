@@ -83,12 +83,12 @@ for (const route of ['"/api"', '"/workspaces"', '"/opencode"']) {
   );
 }
 assert.ok(
-  appViteConfig.includes('"/workspace": sameOriginWorkspaceProxy') &&
+  appViteConfig.includes('"/developer": sameOriginWorkspaceProxy') &&
+    appViteConfig.includes('"/workspace": sameOriginWorkspaceProxy') &&
     appViteConfig.includes('req.method === "HEAD"') &&
     appViteConfig.includes('req.headers.accept?.includes("text/html")'),
-  "Vite should proxy workspace APIs without intercepting workspace page navigation",
+  "Vite should proxy developer and workspace APIs without intercepting their page navigation",
 );
-
 const generatedMediaDev = readFileSync("scripts/dev-generated-media-smoke.mjs", "utf8");
 assert.match(generatedMediaDev, /"--cors",\s*"loopback"/, "generated media smoke should pass --cors loopback");
 assert.ok(!/"--cors",\s*"\*"/.test(generatedMediaDev), "generated media smoke must not pass wildcard CORS");
