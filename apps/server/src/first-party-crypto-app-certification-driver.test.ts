@@ -9,7 +9,10 @@ import {
   type MatterhornFirstPartyCertificationInputs,
 } from "./first-party-crypto-app-certification-driver.js";
 import { certifyMatterhornFirstPartyCryptoApp } from "./first-party-crypto-app-certifier.js";
-import { buildMatterhornFirstPartyTestnetManifests } from "./first-party-crypto-apps.js";
+import {
+  buildMatterhornFirstPartyPolymarketResearchManifest,
+  buildMatterhornFirstPartyTestnetManifests,
+} from "./first-party-crypto-apps.js";
 import { runCryptoAppRuntimeCertificationHarness } from "./crypto-app-runtime-certification-harness.js";
 import { verifyCryptoAppRuntimeCertificationReport } from "./crypto-app-runtime-certification.js";
 
@@ -213,5 +216,29 @@ describe("first-party crypto app certification driver", () => {
     const serialized = JSON.stringify(promotion);
     expect(serialized).not.toContain(SUI_ADDRESS);
     expect(serialized).not.toContain(SUI_RECIPIENT);
+  });
+
+  test("does not promote the mainnet Polymarket research contract through the testnet certifier", async () => {
+    const manifest = buildMatterhornFirstPartyPolymarketResearchManifest({
+      publisherId: "matterhorn",
+      publisherKeyId: "certification-test",
+      sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
+      polymarketGammaEndpoint: "https://gamma-api.polymarket.com",
+      privacyPolicyUrl: "https://matterhorn.so/privacy",
+      securityContact: "security@matterhorn.so",
+    });
+    await expect(certifyMatterhornFirstPartyCryptoApp({
+      manifest,
+      publisherPublicKey: keys.publicKey,
+      policyVersion: "policy-certification-1",
+      actionInputs: { polymarket_market_search: { query: "SUI", limit: 5 } },
+      driver: createFirstPartyCryptoAppCertificationDriver({
+        actionInputs: { polymarket_market_search: { query: "SUI", limit: 5 } },
+        executor,
+        resolveDns: async () => [{ address: PEER, family: 4 }],
+        now: () => new Date(NOW),
+      }),
+      now: () => new Date(NOW),
+    })).rejects.toThrow("first_party_certification_scope_invalid");
   });
 });

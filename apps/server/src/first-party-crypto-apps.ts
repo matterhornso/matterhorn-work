@@ -19,6 +19,13 @@ export type MatterhornFirstPartyCryptoAppOptions = {
   securityContact: string;
 };
 
+export type MatterhornFirstPartyPolymarketResearchOptions = Omit<
+  MatterhornFirstPartyCryptoAppOptions,
+  "suiTestnetEndpoint" | "hyperliquidTestnetEndpoint"
+> & {
+  polymarketGammaEndpoint: string;
+};
+
 const FIRST_PARTY_ACTION_PROXY_TOOLS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "matterhorn.sui-testnet": {
     sui_account_read: "matterhorn_sui_get_balance",
@@ -29,6 +36,9 @@ const FIRST_PARTY_ACTION_PROXY_TOOLS: Readonly<Record<string, Readonly<Record<st
     hyperliquid_orderbook_read: "matterhorn_hyperliquid_get_orderbook",
     hyperliquid_account_exposure: "matterhorn_hyperliquid_get_positions",
     hyperliquid_preview_order: "matterhorn_hyperliquid_preview_order",
+  },
+  "matterhorn.polymarket-research": {
+    polymarket_market_search: "matterhorn_polymarket_search_markets",
   },
 };
 
@@ -126,6 +136,19 @@ export function firstPartyCryptoAppAdapterArguments(input: {
       maxSlippageBps: Math.round(slippagePercent * 100),
     };
   }
+  if (input.appId === "matterhorn.polymarket-research" && input.actionId === "polymarket_market_search") {
+    const query = textArgument(args.query);
+    const limit = args.limit === undefined ? 8 : Number(args.limit);
+    if (!query
+      || query.length > 200
+      || /[\u0000-\u001F\u007F]/.test(query)
+      || !Number.isSafeInteger(limit)
+      || limit < 1
+      || limit > 10) {
+      throw new Error("first_party_crypto_app_arguments_invalid");
+    }
+    return { query, limit };
+  }
   throw new Error("first_party_crypto_app_action_unsupported");
 }
 
@@ -144,8 +167,13 @@ const addressString = { type: "string", minLength: 3, maxLength: 128 };
 const identifierString = { type: "string", minLength: 1, maxLength: 160 };
 const timestampString = { type: "string", minLength: 20, maxLength: 40 };
 
+type FirstPartyManifestIdentity = Pick<
+  MatterhornFirstPartyCryptoAppOptions,
+  "publisherId" | "publisherKeyId" | "sign" | "privacyPolicyUrl" | "statusUrl" | "securityContact"
+>;
+
 function signedManifest(
-  options: MatterhornFirstPartyCryptoAppOptions,
+  options: FirstPartyManifestIdentity,
   manifest: Omit<MatterhornCryptoAppManifest, "version" | "publisher" | "support">,
 ): MatterhornCryptoAppManifest {
   const result: MatterhornCryptoAppManifest = {
@@ -405,6 +433,82 @@ function hyperliquidManifest(options: MatterhornFirstPartyCryptoAppOptions): Mat
         agentMaySubmit: false,
       },
     ],
+  });
+}
+
+/**
+ * Read-only mainnet market metadata. This contract intentionally excludes the
+ * CLOB, geoblock, wallet, prepare, sign, relay, and submit surfaces. Registering
+ * or certifying it remains an explicit operator action.
+ */
+export function buildMatterhornFirstPartyPolymarketResearchManifest(
+  options: MatterhornFirstPartyPolymarketResearchOptions,
+): MatterhornCryptoAppManifest {
+  const nullableText = { oneOf: [identifierString, { type: "null" }] };
+  return signedManifest(options, {
+    appId: "matterhorn.polymarket-research",
+    displayName: "Polymarket Public Research",
+    description: "Read-only public Polymarket market discovery. No wallet or order authority.",
+    manifestRevision: "1.0.0",
+    transport: { kind: "matterhorn_sdk", endpoint: options.polymarketGammaEndpoint },
+    authentication: { type: "none", scopes: [] },
+    networks: [{ protocol: "polymarket", chainId: "polymarket:public", environment: "mainnet" }],
+    actions: [{
+      id: "polymarket_market_search",
+      title: "Search Polymarket markets",
+      description: "Search bounded public market metadata without wallet, profile, or order access.",
+      access: "read",
+      risk: "informational",
+      inputSchema: objectSchema({
+        query: { type: "string", minLength: 1, maxLength: 200 },
+        limit: { type: "integer", minimum: 1, maximum: 10 },
+      }, ["query"]),
+      outputProjectionSchema: objectSchema({
+        markets: {
+          type: "array",
+          maxItems: 10,
+          items: objectSchema({
+            id: identifierString,
+            question: { type: "string", minLength: 1, maxLength: 500 },
+            slug: nullableText,
+            conditionId: nullableText,
+            eventId: nullableText,
+            eventTitle: { oneOf: [{ type: "string", minLength: 1, maxLength: 500 }, { type: "null" }] },
+            outcomes: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 120 } },
+            outcomePrices: { type: "array", maxItems: 20, items: decimalString },
+            liquidity: { oneOf: [decimalString, { type: "null" }] },
+            volume: { oneOf: [decimalString, { type: "null" }] },
+            active: { type: "boolean" },
+            closed: { type: "boolean" },
+            restricted: { type: "boolean" },
+            endDate: { oneOf: [timestampString, { type: "null" }] },
+          }, [
+            "id",
+            "question",
+            "slug",
+            "conditionId",
+            "eventId",
+            "eventTitle",
+            "outcomes",
+            "outcomePrices",
+            "liquidity",
+            "volume",
+            "active",
+            "closed",
+            "restricted",
+            "endDate",
+          ]),
+        },
+        observedAt: timestampString,
+      }, ["markets", "observedAt"]),
+      requiredScopes: [],
+      requiresFreshness: true,
+      freshnessMaxAgeMs: 15_000,
+      timeoutMs: 10_000,
+      simulationRequired: false,
+      walletSubmissionOnly: true,
+      agentMaySubmit: false,
+    }],
   });
 }
 

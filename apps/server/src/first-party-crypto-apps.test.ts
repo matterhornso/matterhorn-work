@@ -19,6 +19,7 @@ import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
 import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certification-test-support.js";
 import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
 import {
+  buildMatterhornFirstPartyPolymarketResearchManifest,
   buildMatterhornFirstPartyTestnetManifests,
   firstPartyCryptoAppAdapterArguments,
   firstPartyCryptoAppCapabilityBindings,
@@ -33,6 +34,18 @@ function manifests() {
     sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
     suiTestnetEndpoint: "https://gateway.matterhorn.so/v1/crypto-apps/sui-testnet",
     hyperliquidTestnetEndpoint: "https://gateway.matterhorn.so/v1/crypto-apps/hyperliquid-testnet",
+    privacyPolicyUrl: "https://matterhorn.so/privacy",
+    statusUrl: "https://matterhorn.so/status",
+    securityContact: "security@matterhorn.so",
+  });
+}
+
+function polymarketResearchManifest() {
+  return buildMatterhornFirstPartyPolymarketResearchManifest({
+    publisherId: "matterhorn",
+    publisherKeyId: "first-party-test-key",
+    sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
+    polymarketGammaEndpoint: "https://gamma-api.polymarket.com",
     privacyPolicyUrl: "https://matterhorn.so/privacy",
     statusUrl: "https://matterhorn.so/status",
     securityContact: "security@matterhorn.so",
@@ -58,6 +71,40 @@ describe("Matterhorn first-party crypto app contracts", () => {
       expect(report.passed).toBe(true);
       expect(report.findings.filter((finding) => finding.severity === "error")).toEqual([]);
     }
+  });
+
+  test("keeps Polymarket public research in a separate read-only mainnet contract", () => {
+    const app = polymarketResearchManifest();
+    expect(app.appId).toBe("matterhorn.polymarket-research");
+    expect(app.networks).toEqual([{
+      protocol: "polymarket",
+      chainId: "polymarket:public",
+      environment: "mainnet",
+    }]);
+    expect(app.actions).toHaveLength(1);
+    expect(app.actions[0]).toMatchObject({
+      id: "polymarket_market_search",
+      access: "read",
+      risk: "informational",
+      simulationRequired: false,
+      walletSubmissionOnly: true,
+      agentMaySubmit: false,
+    });
+    expect(app.transport.endpoint).toBe("https://gamma-api.polymarket.com");
+    expect(app.actions.map((action) => action.id).join(" ")).not.toMatch(/clob|geoblock|sign|submit|relay/i);
+    const report = runCryptoAppManifestConformance(app, {
+      publisherKey: keys.publicKey,
+      policyVersion: "policy-1",
+      targetEnvironment: "mainnet",
+      now: () => new Date("2026-09-01T12:00:00.000Z"),
+    });
+    expect(report.passed).toBe(true);
+    expect(firstPartyCryptoAppCapabilityBindings([app])).toEqual([{
+      appId: "matterhorn.polymarket-research",
+      manifestRevision: "1.0.0",
+      actionId: "polymarket_market_search",
+      proxyToolName: "matterhorn_polymarket_search_markets",
+    }]);
   });
 
   test("binds every certified action to a compatible existing guarded tool", () => {
@@ -128,6 +175,17 @@ describe("Matterhorn first-party crypto app contracts", () => {
       recipient: `0x${"2".repeat(64)}`,
       amountSui: "1.25",
     });
+    expect(firstPartyCryptoAppAdapterArguments({
+      appId: "matterhorn.polymarket-research",
+      actionId: "polymarket_market_search",
+      arguments: {
+        query: "  SUI ETF  ",
+        limit: 5,
+        endpoint: "https://attacker.invalid",
+        method: "POST",
+        privateKey: "must-not-forward",
+      },
+    })).toEqual({ query: "SUI ETF", limit: 5 });
   });
 
   test("fails closed when certified financial inputs are incomplete or unsafe", () => {
@@ -135,6 +193,11 @@ describe("Matterhorn first-party crypto app contracts", () => {
       appId: "matterhorn.hyperliquid-testnet",
       actionId: "hyperliquid_preview_order",
       arguments: { asset: "BTC", side: "buy", size: "0.01" },
+    })).toThrow("first_party_crypto_app_arguments_invalid");
+    expect(() => firstPartyCryptoAppAdapterArguments({
+      appId: "matterhorn.polymarket-research",
+      actionId: "polymarket_market_search",
+      arguments: { query: "markets\nX-Injected: true", limit: 11 },
     })).toThrow("first_party_crypto_app_arguments_invalid");
     expect(() => firstPartyCryptoAppAdapterArguments({
       appId: "matterhorn.hyperliquid-testnet",
