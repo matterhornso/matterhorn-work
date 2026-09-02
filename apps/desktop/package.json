@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@opencode-ai/sdk": "1.18.23",
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^13.0.3",
     "electron-updater": "^6.8.9",
     "hyperliquid": "^1.7.7",
     "jsonc-parser": "^3.2.1",
