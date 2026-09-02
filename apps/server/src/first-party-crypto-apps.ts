@@ -36,6 +36,99 @@ export function firstPartyCryptoAppProxyTool(appId: string, actionId: string): s
   return FIRST_PARTY_ACTION_PROXY_TOOLS[appId]?.[actionId] ?? null;
 }
 
+function decimalArgument(value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const text = String(value).trim();
+  return /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text) ? text : null;
+}
+
+function textArgument(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Projects model-visible MCP arguments into the smaller, certified first-party
+ * adapter contract. Unknown fields are discarded and financial defaults are
+ * explicit, so a prompt cannot smuggle authority through an unrelated field.
+ */
+export function firstPartyCryptoAppAdapterArguments(input: {
+  appId: string;
+  actionId: string;
+  arguments: Record<string, unknown>;
+}): Record<string, unknown> {
+  const args = input.arguments;
+  if (input.appId === "matterhorn.sui-testnet" && input.actionId === "sui_account_read") {
+    const address = textArgument(args.address);
+    if (!address) throw new Error("first_party_crypto_app_arguments_invalid");
+    const coinType = textArgument(args.coinType);
+    return { address, ...(coinType ? { coinType } : {}) };
+  }
+  if (input.appId === "matterhorn.sui-testnet" && input.actionId === "sui_transfer_preview") {
+    const sender = textArgument(args.sender);
+    const recipient = textArgument(args.recipient);
+    const amountSui = decimalArgument(args.amountSui);
+    if (!sender || !recipient || !amountSui) {
+      throw new Error("first_party_crypto_app_arguments_invalid");
+    }
+    const memo = typeof args.memo === "string" ? args.memo : null;
+    return { sender, recipient, amountSui, ...(memo === null ? {} : { memo }) };
+  }
+  if (input.appId === "matterhorn.hyperliquid-testnet" && input.actionId === "hyperliquid_market_read") {
+    if (args.limit === undefined) return {};
+    if (!Number.isSafeInteger(args.limit) || Number(args.limit) < 1 || Number(args.limit) > 50) {
+      throw new Error("first_party_crypto_app_arguments_invalid");
+    }
+    return { limit: Number(args.limit) };
+  }
+  if (input.appId === "matterhorn.hyperliquid-testnet" && input.actionId === "hyperliquid_orderbook_read") {
+    const asset = textArgument(args.asset)?.toUpperCase();
+    if (!asset) throw new Error("first_party_crypto_app_arguments_invalid");
+    return { asset };
+  }
+  if (input.appId === "matterhorn.hyperliquid-testnet" && input.actionId === "hyperliquid_account_exposure") {
+    const address = textArgument(args.address);
+    if (!address) throw new Error("first_party_crypto_app_arguments_invalid");
+    return { address };
+  }
+  if (input.appId === "matterhorn.hyperliquid-testnet" && input.actionId === "hyperliquid_preview_order") {
+    const address = textArgument(args.address);
+    const asset = textArgument(args.asset)?.toUpperCase();
+    const rawSide = textArgument(args.side)?.toLowerCase();
+    const side = rawSide === "buy" || rawSide === "long"
+      ? "buy"
+      : rawSide === "sell" || rawSide === "short"
+        ? "sell"
+        : null;
+    const size = decimalArgument(args.size);
+    const orderType = args.orderType === "limit" ? "limit" : args.orderType === undefined || args.orderType === "market"
+      ? "market"
+      : null;
+    const price = decimalArgument(args.price);
+    const slippagePercent = args.slippageTolerance === undefined
+      ? 1
+      : Number(args.slippageTolerance);
+    if (!address || !asset || !side || !size || !orderType
+      || (orderType === "limit" && !price)
+      || !Number.isFinite(slippagePercent)
+      || slippagePercent < 0
+      || slippagePercent > 10
+      || (args.reduceOnly !== undefined && typeof args.reduceOnly !== "boolean")) {
+      throw new Error("first_party_crypto_app_arguments_invalid");
+    }
+    return {
+      address,
+      asset,
+      side,
+      size,
+      orderType,
+      ...(orderType === "limit" ? { price } : {}),
+      reduceOnly: args.reduceOnly === true,
+      maxSlippageBps: Math.round(slippagePercent * 100),
+    };
+  }
+  throw new Error("first_party_crypto_app_action_unsupported");
+}
+
 const objectSchema = (
   properties: Record<string, unknown>,
   required: string[] = [],
@@ -163,7 +256,7 @@ function hyperliquidManifest(options: MatterhornFirstPartyCryptoAppOptions): Mat
     appId: "matterhorn.hyperliquid-testnet",
     displayName: "Hyperliquid Testnet",
     description: "Certified Hyperliquid testnet market reads and wallet-reviewed order preparation.",
-    manifestRevision: "1.0.0",
+    manifestRevision: "1.1.0",
     transport: { kind: "matterhorn_sdk", endpoint: options.hyperliquidTestnetEndpoint },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "hyperliquid", chainId: "hyperliquid:testnet", environment: "testnet" }],
@@ -277,6 +370,11 @@ function hyperliquidManifest(options: MatterhornFirstPartyCryptoAppOptions): Mat
           limitPrice: { oneOf: [decimalString, { type: "null" }] },
           reduceOnly: { type: "boolean" },
           maxSlippageBps: { type: "integer", minimum: 0, maximum: 1_000 },
+          notionalUsd: decimalString,
+          accountValueUsd: decimalString,
+          marginUsedUsd: decimalString,
+          projectedReserveUsd: decimalString,
+          effectiveLeverage: decimalString,
           simulationReference: identifierString,
           expiresAt: timestampString,
         }, [
@@ -290,6 +388,11 @@ function hyperliquidManifest(options: MatterhornFirstPartyCryptoAppOptions): Mat
           "limitPrice",
           "reduceOnly",
           "maxSlippageBps",
+          "notionalUsd",
+          "accountValueUsd",
+          "marginUsedUsd",
+          "projectedReserveUsd",
+          "effectiveLeverage",
           "simulationReference",
           "expiresAt",
         ]),

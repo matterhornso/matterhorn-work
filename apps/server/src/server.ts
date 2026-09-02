@@ -434,6 +434,7 @@ import {
 import { MatterhornCryptoAppRegistryStoreError } from "./crypto-app-registry-store.js";
 import type { MatterhornCryptoAppRuntimeCertificationReport } from "./crypto-app-runtime-certification.js";
 import { firstPartyCryptoAppProxyTool } from "./first-party-crypto-apps.js";
+import { createMatterhornCertifiedCoworkerToolExecutor } from "./crypto-coworker-certified-tool-executor.js";
 import type { MatterhornCoworkerRunBinding } from "./agent-capability.js";
 import {
   buildMatterhornSessionPermissionProfile,
@@ -9030,6 +9031,13 @@ function createRoutes(
     return jsonResponse({ ok: true, version: SERVER_VERSION, opencodeVersion: OPENCODE_VERSION, uptimeMs: Date.now() - config.startedAt });
   });
 
+  const executeCertifiedCoworkerTool = createMatterhornCertifiedCoworkerToolExecutor({
+    router: cryptoAppRuntime.router,
+    coworkers: coworkerRuntime.coworkers,
+    guardedRuntime,
+    resolveWorkspace: (workspaceId) => resolveWorkspace(config, workspaceId),
+  });
+
   addRoute(routes, "POST", "/mcp/opencode", "client", async (ctx) => {
     const payload = await readJsonBody(ctx.request, 256_000, "MCP");
     const result = await handleManagedOpencodeMcp({
@@ -9037,38 +9045,7 @@ function createRoutes(
       serverUrl: ctx.url.origin,
       clientToken: config.token,
       authorizeToolCall: ({ toolName, args }) => guardedRuntime.authorizeMcpTool({ toolName, args }),
-      executeCertifiedTool: async ({ toolName, args, authorization }) => {
-        const coworker = authorization.coworker;
-        if (!coworker) return null;
-        if (!cryptoAppRuntime.router
-          || !authorization.workspaceId
-          || !authorization.sessionId
-          || !authorization.runId
-          || !authorization.callId) {
-          throw new Error("coworker_certified_gateway_unavailable");
-        }
-        const tool = getMatterhornCryptoTool(toolName);
-        if (!tool || tool.access !== "read") {
-          throw new Error("coworker_transaction_airlock_required");
-        }
-        const adapterArguments = { ...args };
-        delete adapterArguments.network;
-        return cryptoAppRuntime.router.execute({
-          workspaceId: authorization.workspaceId,
-          sessionId: authorization.sessionId,
-          runId: authorization.runId,
-          callId: authorization.callId,
-          connectionId: coworker.connectionId,
-          actionId: coworker.actionId,
-          network: coworker.network,
-          arguments: adapterArguments,
-          consumedCapability: {
-            coworkerId: coworker.id,
-            toolName,
-            arguments: args,
-          },
-        });
-      },
+      executeCertifiedTool: executeCertifiedCoworkerTool,
       onToolCall: (metric, authorization) => {
         operationalMetrics.recordAgentTool(metric);
         if (authorization?.coworker) return;

@@ -387,6 +387,11 @@ describe("first-party crypto app executor", () => {
       limitPrice: "64331",
       reduceOnly: false,
       maxSlippageBps: 50,
+      notionalUsd: "6433.1",
+      accountValueUsd: "10000",
+      marginUsedUsd: "100",
+      projectedReserveUsd: "3466.9",
+      effectiveLeverage: "3",
       expiresAt: "2026-09-01T12:00:30.000Z",
     });
     expect((result.data as Record<string, unknown>).simulationReference).toMatch(/^sha256:[a-f0-9]{64}$/);

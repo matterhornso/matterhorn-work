@@ -204,7 +204,7 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
       slippageTolerance: numberOrStringSchema,
       address: { type: "string" },
       message: { type: "string" },
-    }, ["asset", "side", "size"]),
+    }, ["address", "asset", "side", "size"]),
     deskIds: ["hyperliquid"],
     actionIds: ["hyperliquid_preview_order"],
     access: "prepare",

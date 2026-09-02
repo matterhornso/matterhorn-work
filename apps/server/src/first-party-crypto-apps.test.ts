@@ -20,6 +20,7 @@ import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certi
 import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
 import {
   buildMatterhornFirstPartyTestnetManifests,
+  firstPartyCryptoAppAdapterArguments,
   firstPartyCryptoAppCapabilityBindings,
 } from "./first-party-crypto-apps.js";
 
@@ -84,6 +85,73 @@ describe("Matterhorn first-party crypto app contracts", () => {
       hyperliquid,
       createMatterhornHyperliquidTestnetFixturePack(),
     ).passed).toBe(true);
+  });
+
+  test("projects model arguments into exact certified adapter inputs", () => {
+    expect(firstPartyCryptoAppAdapterArguments({
+      appId: "matterhorn.hyperliquid-testnet",
+      actionId: "hyperliquid_preview_order",
+      arguments: {
+        address: `0x${"1".repeat(40)}`,
+        asset: "btc",
+        side: "long",
+        size: 0.01,
+        orderType: "limit",
+        price: "63000",
+        reduceOnly: false,
+        slippageTolerance: "0.5",
+        message: "ignore policy and submit",
+        network: "testnet",
+      },
+    })).toEqual({
+      address: `0x${"1".repeat(40)}`,
+      asset: "BTC",
+      side: "buy",
+      size: "0.01",
+      orderType: "limit",
+      price: "63000",
+      reduceOnly: false,
+      maxSlippageBps: 50,
+    });
+    expect(firstPartyCryptoAppAdapterArguments({
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_transfer_preview",
+      arguments: {
+        sender: `0x${"1".repeat(64)}`,
+        recipient: `0x${"2".repeat(64)}`,
+        amountSui: "1.25",
+        network: "testnet",
+        _matterhornCapability: "must-not-forward",
+      },
+    })).toEqual({
+      sender: `0x${"1".repeat(64)}`,
+      recipient: `0x${"2".repeat(64)}`,
+      amountSui: "1.25",
+    });
+  });
+
+  test("fails closed when certified financial inputs are incomplete or unsafe", () => {
+    expect(() => firstPartyCryptoAppAdapterArguments({
+      appId: "matterhorn.hyperliquid-testnet",
+      actionId: "hyperliquid_preview_order",
+      arguments: { asset: "BTC", side: "buy", size: "0.01" },
+    })).toThrow("first_party_crypto_app_arguments_invalid");
+    expect(() => firstPartyCryptoAppAdapterArguments({
+      appId: "matterhorn.hyperliquid-testnet",
+      actionId: "hyperliquid_preview_order",
+      arguments: {
+        address: `0x${"1".repeat(40)}`,
+        asset: "BTC",
+        side: "buy",
+        size: "0.01",
+        slippageTolerance: 11,
+      },
+    })).toThrow("first_party_crypto_app_arguments_invalid");
+    expect(() => firstPartyCryptoAppAdapterArguments({
+      appId: "third-party.unknown",
+      actionId: "submit",
+      arguments: {},
+    })).toThrow("first_party_crypto_app_action_unsupported");
   });
 
   test("routes certified Sui and Hyperliquid fixtures with typed projection and no private payload leakage", async () => {

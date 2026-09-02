@@ -14,6 +14,7 @@ import {
   buildManagedOpencodeRuntimeConfig,
   MANAGED_OPENCODE_PERMISSION_POLICY,
 } from "./managed-opencode-runtime-config.js";
+import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
 import { ensureWorkspaceFiles } from "./workspace-init.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -347,6 +348,100 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(result).toMatchObject({
       status: 200,
       body: { result: { structuredContent: { status: "success" } } },
+    });
+  });
+
+  test("surfaces only the transaction-airlock handoff from a certified coworker prepare call", async () => {
+    const args = {
+      network: "testnet",
+      sender: `0x${"1".repeat(64)}`,
+      recipient: `0x${"2".repeat(64)}`,
+      amountSui: "0.01",
+    };
+    const reviewedAction = buildReviewedActionHandoffV2({
+      handoff: {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "sui",
+        source: "agent-card",
+        draft: {
+          operation: "transfer_sui",
+          network: "testnet",
+          sender: args.sender,
+          recipient: args.recipient,
+          amount: args.amountSui,
+          coinType: null,
+          objectId: null,
+          transfers: [],
+        },
+      },
+      runId: "run_certified_prepare",
+      signer: args.sender,
+      simulation: {
+        reference: `sha256:${"a".repeat(64)}`,
+        block: "checkpoint:101",
+        simulatedAt: new Date("2026-09-01T12:00:00.000Z"),
+      },
+      preparedAt: new Date("2026-09-01T12:00:00.000Z"),
+    });
+    const metrics: ManagedMcpToolCallMetric[] = [];
+    let legacyCalls = 0;
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: "certified-coworker-prepare",
+        method: "tools/call",
+        params: { name: "matterhorn_sui_preview_transfer", arguments: args },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      authorizeToolCall: () => ({
+        args,
+        runId: "run_certified_prepare",
+        callId: "call_certified_prepare",
+        workspaceId: "ws_coworker",
+        sessionId: "ses_coworker",
+        coworker: {
+          id: "cw_sui",
+          ownerId: "account_sui",
+          revision: 1,
+          policyVersion: "coworker-policy-1",
+          connectionId: "cxc_sui",
+          appId: "matterhorn.sui-testnet",
+          manifestRevision: "1.0.0",
+          actionId: "sui_transfer_preview",
+          network: "sui:testnet",
+        },
+      }),
+      executeCertifiedTool: async () => ({
+        version: "matterhorn.crypto-wallet-review-result.v1",
+        status: "wallet_review_required",
+        reviewedAction,
+        pendingIntent: { id: "cpending_sui", revision: 1, state: "wallet_review" },
+      }),
+      fetchImpl: Object.assign(async () => {
+        legacyCalls += 1;
+        throw new Error("legacy_route_must_not_run");
+      }, { preconnect: fetch.preconnect }),
+      onToolCall: (metric) => metrics.push(metric),
+    });
+    expect(legacyCalls).toBe(0);
+    expect(result).toMatchObject({
+      status: 200,
+      body: {
+        result: {
+          structuredContent: {
+            status: "success",
+            reviewedAction: { intentHash: reviewedAction.intentHash },
+          },
+        },
+      },
+    });
+    expect(metrics).toHaveLength(1);
+    expect(metrics[0]).toMatchObject({
+      tool: "matterhorn_sui_preview_transfer",
+      access: "prepare",
+      outcome: "success",
+      reviewedAction: { intentHash: reviewedAction.intentHash },
     });
   });
 

@@ -95,6 +95,11 @@ function output(actionId: string): unknown {
     limitPrice: "64320",
     reduceOnly: false,
     maxSlippageBps: 50,
+    notionalUsd: "643.2",
+    accountValueUsd: "1000",
+    marginUsedUsd: "0",
+    projectedReserveUsd: "356.8",
+    effectiveLeverage: "2",
     simulationReference: `sha256:${"2".repeat(64)}`,
     expiresAt: "2026-09-01T12:00:30.000Z",
   };

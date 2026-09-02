@@ -249,6 +249,23 @@ export class MatterhornPendingCryptoIntentStore {
     )).filter((record): record is MatterhornPendingCryptoIntent => record !== null);
   }
 
+  listForOwner(workspaceId: string, ownerId: string): MatterhornPendingCryptoIntent[] {
+    const records = this.stateStore.list<MatterhornPendingCryptoIntent>("crypto_pending_intent", {
+      workspaceId,
+      nowMs: this.now().getTime(),
+    }).map((stored) => {
+      const record = normalizeRecord(stored);
+      validateRecord(record);
+      return record;
+    }).filter((record) => record.ownerId === ownerId);
+    return records.map((record) => this.get(
+      workspaceId,
+      ownerId,
+      record.coworkerId,
+      record.id,
+    )).filter((record): record is MatterhornPendingCryptoIntent => record !== null);
+  }
+
   transition(input: {
     workspaceId: string;
     ownerId: string;

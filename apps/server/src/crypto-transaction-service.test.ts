@@ -229,7 +229,7 @@ function brokerWithConsumedCapability(input: MatterhornCryptoTransactionRequest)
     },
     now: NOW,
   });
-  const args = {
+  const args = input.consumedCapability?.arguments ?? {
     appId: input.appId,
     manifestRevision: "1.0.0",
     connectionId: input.connectionId,
@@ -258,6 +258,51 @@ function brokerWithConsumedCapability(input: MatterhornCryptoTransactionRequest)
 }
 
 describe("guarded crypto transaction service", () => {
+  test("accepts an exact already-consumed interactive capability without issuing hidden authority", async () => {
+    const rawArguments = {
+      network: "testnet",
+      sender: SENDER,
+      recipient: RECIPIENT,
+      amountSui: "1.25",
+    };
+    const input: MatterhornCryptoTransactionRequest = {
+      ...request(),
+      consumedCapability: {
+        coworkerId: "cw_sui",
+        toolName: "matterhorn_sui_preview_transfer",
+        arguments: rawArguments,
+      },
+    };
+    const routed: unknown[] = [];
+    const service = new MatterhornCryptoTransactionService({
+      router: { execute: async (adapterRequest) => {
+        routed.push(adapterRequest);
+        return adapterResult();
+      } },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents: pendingStore(),
+      recordReviewedAction: async () => undefined,
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 0,
+        dailySpendUsdBefore: 0,
+        weeklySpendUsdBefore: 0,
+        projectedReserveUsd: 100,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 0,
+        regionCode: null,
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    const result = await service.prepare(input);
+    expect(result.policyDecision.decision).toBe("wallet_review_required");
+    expect(routed).toEqual([expect.objectContaining({
+      arguments: input.arguments,
+      consumedCapability: input.consumedCapability,
+    })]);
+  });
+
   test("emits a reviewed wallet action only after certified execution, capability proof and policy", async () => {
     const input = request();
     let routerCalls = 0;
@@ -299,6 +344,7 @@ describe("guarded crypto transaction service", () => {
     const reviewedAction = result.reviewedAction;
     if (!reviewedAction) throw new Error("expected_reviewed_action");
     expect(recordedActions).toEqual([{
+      workspaceId: "ws_alpha",
       runId: reviewedAction.runId,
       intentHash: reviewedAction.intentHash,
       policyHash: reviewedAction.policyHash,
@@ -316,6 +362,8 @@ describe("guarded crypto transaction service", () => {
       "cw_sui",
       result.pendingIntent?.id ?? "missing",
     )).toBeNull();
+    expect(pendingIntents.listForOwner("ws_alpha", "account_alpha")).toHaveLength(1);
+    expect(pendingIntents.listForOwner("ws_alpha", "account_other")).toEqual([]);
     const pendingId = result.pendingIntent?.id ?? "missing";
     const refreshing = pendingIntents.transition({
       workspaceId: "ws_alpha",

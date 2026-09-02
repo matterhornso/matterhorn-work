@@ -78,6 +78,35 @@ function decimal(value: unknown, field: string, allowZero = true): string {
   return text;
 }
 
+function decimalParts(value: string): { units: bigint; scale: number } {
+  const [whole = "0", fraction = ""] = value.split(".");
+  return { units: BigInt(`${whole}${fraction}`), scale: fraction.length };
+}
+
+function decimalFromParts(units: bigint, scale: number): string {
+  const negative = units < 0n;
+  const digits = (negative ? -units : units).toString().padStart(scale + 1, "0");
+  if (scale === 0) return `${negative ? "-" : ""}${digits}`;
+  const whole = digits.slice(0, -scale) || "0";
+  const fraction = digits.slice(-scale).replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
+function multiplyDecimals(left: string, right: string): string {
+  const a = decimalParts(left);
+  const b = decimalParts(right);
+  return decimalFromParts(a.units * b.units, a.scale + b.scale);
+}
+
+function subtractDecimalsAtZero(first: string, ...rest: string[]): string {
+  const values = [first, ...rest].map(decimalParts);
+  const scale = Math.max(...values.map((value) => value.scale));
+  const normalized = values.map((value) => value.units * (10n ** BigInt(scale - value.scale)));
+  const [head = 0n, ...tail] = normalized;
+  const result = tail.reduce((current, value) => current - value, head);
+  return decimalFromParts(result < 0n ? 0n : result, scale);
+}
+
 function signedDecimal(value: unknown, field: string): string {
   const text = typeof value === "number" && Number.isFinite(value) ? String(value) : nonEmptyString(value);
   if (!text || !SIGNED_DECIMAL_RE.test(text)) throw new Error(`first_party_${field}_invalid`);
@@ -479,7 +508,8 @@ async function executeHyperliquid(
   const numericSize = finiteNumber(size);
   const numericLimitPrice = finiteNumber(limitPrice);
   if (!numericSize || !numericLimitPrice) throw new Error("first_party_hyperliquid_order_invalid");
-  const notional = numericSize * numericLimitPrice;
+  const notionalUsd = multiplyDecimals(size, limitPrice);
+  const notional = Number(notionalUsd);
   if (!Number.isFinite(notional) || (!args.reduceOnly && notional < 10)) {
     throw new Error("first_party_hyperliquid_notional_invalid");
   }
@@ -493,6 +523,18 @@ async function executeHyperliquid(
   if (!args.reduceOnly && market.maxLeverage && notional > Math.max(0, accountValue - marginUsed) * market.maxLeverage) {
     throw new Error("first_party_hyperliquid_margin_insufficient");
   }
+  const existingPosition = account.positions.find((item) => item.asset === asset);
+  const effectiveLeverage = finiteNumber(existingPosition?.leverage) ?? market.maxLeverage;
+  if (!effectiveLeverage || effectiveLeverage <= 0) {
+    throw new Error("first_party_hyperliquid_leverage_unavailable");
+  }
+  // Reserve assumes one-times collateral for a new order. This is stricter
+  // than venue maximum leverage and avoids overstating remaining capacity.
+  const projectedReserveUsd = subtractDecimalsAtZero(
+    account.accountValueUsd,
+    account.marginUsedUsd,
+    ...(args.reduceOnly ? [] : [notionalUsd]),
+  );
   const exactIntent = {
     version: "matterhorn.hyperliquid.testnet-preview.v1",
     network,
@@ -530,6 +572,11 @@ async function executeHyperliquid(
       limitPrice,
       reduceOnly: args.reduceOnly,
       maxSlippageBps,
+      notionalUsd,
+      accountValueUsd: account.accountValueUsd,
+      marginUsedUsd: account.marginUsedUsd,
+      projectedReserveUsd,
+      effectiveLeverage: String(effectiveLeverage),
       simulationReference,
       expiresAt,
     },

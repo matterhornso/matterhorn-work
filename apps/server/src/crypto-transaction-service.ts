@@ -61,6 +61,7 @@ type Options = {
   capabilities: MatterhornAgentCapabilityBroker;
   pendingIntents: Pick<MatterhornPendingCryptoIntentStore, "create" | "get" | "transition">;
   recordReviewedAction: (input: {
+    workspaceId: string;
     runId: string;
     intentHash: string;
     policyHash: string;
@@ -156,6 +157,7 @@ export class MatterhornCryptoTransactionService {
       actionId: request.actionId,
       network: request.network,
       arguments: exactArguments,
+      consumedCapability: request.consumedCapability,
     });
     if (adapterResult.app.id !== request.appId
       || adapterResult.app.connectionId !== request.connectionId
@@ -175,7 +177,7 @@ export class MatterhornCryptoTransactionService {
     });
     const proxyToolName = firstPartyCryptoAppProxyTool(adapterResult.app.id, adapterResult.action.id);
     if (!proxyToolName) throw new MatterhornCryptoTransactionError("transaction_proxy_tool_unavailable");
-    const capabilityArgs = {
+    const capabilityArgs = request.consumedCapability?.arguments ?? {
       appId: adapterResult.app.id,
       manifestRevision: adapterResult.app.manifestRevision,
       connectionId: adapterResult.app.connectionId,
@@ -241,6 +243,7 @@ export class MatterhornCryptoTransactionService {
     if (reviewedAction && pendingIntent) {
       try {
         await this.#recordReviewedAction({
+          workspaceId: request.workspaceId,
           runId: reviewedAction.runId,
           intentHash: reviewedAction.intentHash,
           policyHash: reviewedAction.policyHash,

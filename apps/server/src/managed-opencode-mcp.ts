@@ -7,9 +7,10 @@ import {
   MATTERHORN_CRYPTO_EVIDENCE_VERSION,
   type MatterhornCryptoEvidenceEnvelope,
 } from "@matterhorn-work/types/crypto-evidence";
-import type {
-  ReviewedActionDraftHandoff,
-  ReviewedActionHandoffV2,
+import {
+  isReviewedActionHandoffV2,
+  type ReviewedActionDraftHandoff,
+  type ReviewedActionHandoffV2,
 } from "@matterhorn-work/types/reviewed-actions";
 import type { MatterhornAgentCapabilityClaims } from "@matterhorn-work/types/guarded-agent-runtime";
 import { sha256 } from "./guarded-runtime-crypto.js";
@@ -720,6 +721,13 @@ async function callBackendTool(input: {
       if (certified !== null) {
         outcome = "success";
         const completedAtMs = Date.now();
+        const certifiedRecord = certified && typeof certified === "object" && !Array.isArray(certified)
+          ? certified as JsonObject
+          : null;
+        const certifiedReviewedAction = certifiedRecord?.reviewedAction;
+        reviewedAction = isReviewedActionHandoffV2(certifiedReviewedAction)
+          ? certifiedReviewedAction
+          : undefined;
         source = findEvidenceString(certified, ["source", "provider", "venue"]);
         freshness = findEvidenceString(certified, ["freshness", "freshnessStatus", "dataStatus", "observedAt", "asOf"]);
         return toolCallResult({
@@ -728,6 +736,7 @@ async function callBackendTool(input: {
           ok: true,
           startedAtMs,
           completedAtMs,
+          reviewedAction,
         });
       }
     }
