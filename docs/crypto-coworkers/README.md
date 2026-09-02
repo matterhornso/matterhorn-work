@@ -95,7 +95,9 @@ Phase 2 profile storage is available only when `MATTERHORN_COWORKER_MODE` is not
 
 Authenticated routes under `/workspace/:id/coworkers` create, list, inspect, revise, pause, revoke, and delete only the requesting identity's profiles. The server owns workspace, owner, revision, policy version, lifecycle state, and the immutable connected-wallet-only escalation boundary. Client JSON cannot supply those fields. Profiles use optimistic revisions; a stale edit, state transition, or deletion fails without mutation. A policy-version change makes older profiles non-resolvable until an explicit revisioned update rebinds them. Account responses omit the internal owner identifier, and workspace/owner composite scoping prevents enumeration across tenants.
 
-`GET /workspace/:id/coworker-templates` exposes the initial chat-first `Market Analyst` and `Risk Monitor` templates. `POST /workspace/:id/coworkers/from-template` creates an owner-scoped copy with optional name and mission overrides. Neither template has prepare or submission authority.
+`GET /workspace/:id/coworker-templates` exposes four chat-first templates: `Market Analyst`, `Risk Monitor`, `Transaction Coordinator`, and `Treasury Coworker`. `POST /workspace/:id/coworkers/from-template` creates an owner-scoped copy with optional name and mission overrides. The first two remain read/watch only. The latter two can prepare at most one exact testnet wallet review per action family; they have no signing, relay, broadcast, or submission authority.
+
+Every selected coworker also receives a concise, versioned, server-owned master prompt from `apps/server/src/crypto-coworker-master-prompt.ts`. Browser input, Memory, files, app metadata, MCP output, and the model cannot alter this layer. The prompt narrows the role, treats external content as untrusted data, requires exact user terms for preparation, and ends all financial work at an expiring connected-wallet review. The authoritative privacy hash includes this server context, so a prompt change invalidates one-request consent.
 
 The authoritative message preflight and submission routes accept an optional `coworkerId`. A selected coworker is resolved only from the signed-in identity and active server record. Its mission becomes versioned workspace-private system context, and its exact profile revision, policy version, app/action/network/data-label allowlist, proxy-tool mapping, and per-run budgets are bound into the hidden run grant. Coworker execution fails closed unless both the Crypto App Gateway and guarded runtime are in `enforce`. Direct legacy crypto tools are denied for coworker runs; only an exact certified app/action proxy binding can receive a capability. Data outside the coworker's allowlist is rejected before provider dispatch, and editing, pausing, revoking, deleting, or changing the deployment policy invalidates active and staged coworker authority. Templates refuse unverified providers for private context rather than offering one-request consent.
 
@@ -145,7 +147,7 @@ Exit: a malicious or malformed adapter cannot broaden authority or expose a mode
 ### Phase 2 — Persistent coworkers
 
 - Coworker storage, ownership, mission, pause/revoke, limits, and policy versioning.
-- Chat-first setup for Market Analyst and Risk Monitor.
+- Chat-first setup for all four initial roles, with prepare authority available only to the Transaction Coordinator and Treasury Coworker and only as an exact connected-wallet review.
 - Durable watches with an inbox for alerts and questions.
 - One active run per session and bounded tool/model budgets.
 - Explicit data disclosure and Memory selection.

@@ -32,12 +32,15 @@ describe("chat-operated coworker UI", () => {
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
     expect(panel).toContain("Start chat");
     expect(panel).toContain("Add coworker");
-    expect(panel).toContain("Market researcher");
-    expect(panel).toContain("Risk monitor");
+    expect(panel).toContain("Research markets");
+    expect(panel).toContain("Monitor risk");
+    expect(panel).toContain("Prepare wallet actions");
+    expect(panel).toContain("Track treasury");
     expect(panel).toContain("Pause");
     expect(panel).toContain("Resume");
     expect(panel).toContain("Revoke");
     expect(panel).toContain("Wallet reviews");
+    expect(panel).toContain("Wallet reviews per request");
     expect(panel).toContain("Checks");
     expect(panel).toContain("Updates");
     expect(panel).toContain("Not available");

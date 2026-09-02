@@ -8,12 +8,16 @@ import {
 } from "./crypto-coworker-templates.js";
 
 describe("crypto coworker templates", () => {
-  test("ships chat-first analyst and monitor profiles without prepare or submit authority", () => {
+  test("ships all four chat-first roles with bounded authority", () => {
     const templates = listMatterhornCoworkerTemplates();
-    expect(templates.map((template) => template.id)).toEqual(["market_analyst", "risk_monitor"]);
+    expect(templates.map((template) => template.id)).toEqual([
+      "market_analyst",
+      "risk_monitor",
+      "transaction_coordinator",
+      "treasury_coworker",
+    ]);
     for (const template of templates) {
       expect(template.suggestedPrompts.length).toBeGreaterThanOrEqual(3);
-      expect(template.profile.automaticAuthorities).not.toContain("prepare");
       expect(JSON.stringify(template)).not.toMatch(/\b(?:sign|submit|relay|broadcast)\b/i);
       expect(validateMatterhornCoworkerProfile({
         version: "matterhorn.coworker-profile.v1",
@@ -32,6 +36,21 @@ describe("crypto coworker templates", () => {
         createdAt: "2026-09-01T12:00:00.000Z",
         updatedAt: "2026-09-01T12:00:00.000Z",
       })).toEqual([]);
+    }
+
+    for (const id of ["market_analyst", "risk_monitor"] as const) {
+      const template = getMatterhornCoworkerTemplate(id)!;
+      expect(template.profile.automaticAuthorities).not.toContain("prepare");
+      expect(template.profile.limits.maxPrepareCallsPerFamily).toBe(0);
+    }
+
+    for (const id of ["transaction_coordinator", "treasury_coworker"] as const) {
+      const template = getMatterhornCoworkerTemplate(id)!;
+      expect(template.profile.automaticAuthorities).toContain("prepare");
+      expect(template.profile.limits.maxPrepareCallsPerFamily).toBe(1);
+      expect(template.profile.allowedNetworks.every((network) => network.endsWith(":testnet"))).toBe(true);
+      expect(template.profile.allowedActionIds.some((action) => action.endsWith("_preview"))).toBe(true);
+      expect(template.profile.privacy.allowUnverifiedProviderConsent).toBe(false);
     }
   });
 

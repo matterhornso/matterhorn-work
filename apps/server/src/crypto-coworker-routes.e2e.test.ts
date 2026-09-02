@@ -788,7 +788,12 @@ describe("crypto coworker HTTP boundary", () => {
 
     const templates = await request(server.base, `/workspace/${workspaceA}/coworker-templates`, { cookie: cookieA });
     expect(templates.response.status).toBe(200);
-    expect(templates.payload.templates.map((item: any) => item.id)).toEqual(["market_analyst", "risk_monitor"]);
+    expect(templates.payload.templates.map((item: any) => item.id)).toEqual([
+      "market_analyst",
+      "risk_monitor",
+      "transaction_coordinator",
+      "treasury_coworker",
+    ]);
     const fromTemplate = await request(server.base, `/workspace/${workspaceA}/coworkers/from-template`, {
       cookie: cookieA,
       body: { templateId: "risk_monitor", name: "My risk monitor" },
@@ -799,6 +804,24 @@ describe("crypto coworker HTTP boundary", () => {
       coworker: { name: "My risk monitor", state: "active", revision: 1 },
     });
     expect(fromTemplate.payload.coworker.automaticAuthorities).not.toContain("prepare");
+    const transactionTemplate = await request(server.base, `/workspace/${workspaceA}/coworkers/from-template`, {
+      cookie: cookieA,
+      body: { templateId: "transaction_coordinator" },
+    });
+    expect(transactionTemplate.response.status).toBe(201);
+    expect(transactionTemplate.payload).toMatchObject({
+      templateId: "transaction_coordinator",
+      coworker: {
+        role: "transaction_coordinator",
+        state: "active",
+        escalation: { walletSubmission: "connected_wallet_only" },
+      },
+    });
+    expect(transactionTemplate.payload.coworker.automaticAuthorities).toContain("prepare");
+    expect(transactionTemplate.payload.coworker.allowedNetworks).toEqual([
+      "sui:testnet",
+      "hyperliquid:testnet",
+    ]);
 
     const created = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
       cookie: cookieA,
@@ -864,9 +887,10 @@ describe("crypto coworker HTTP boundary", () => {
 
     const ownList = await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA });
     const otherList = await request(server.base, `/workspace/${workspaceB}/coworkers`, { cookie: cookieB });
-    expect(ownList.payload.coworkers).toHaveLength(2);
+    expect(ownList.payload.coworkers).toHaveLength(3);
     expect(ownList.payload.coworkers.map((item: any) => item.id)).toEqual(expect.arrayContaining([
       fromTemplate.payload.coworker.id,
+      transactionTemplate.payload.coworker.id,
       coworkerId,
     ]));
     expect(otherList.payload.coworkers).toEqual([]);

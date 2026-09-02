@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { MatterhornCoworkerTemplateId } from "@matterhorn-work/types/crypto-coworkers";
 import {
   Bell,
   Pause,
@@ -55,6 +56,16 @@ type ConfirmAction =
   | { kind: "revoke"; coworker: MatterhornCoworkerAccountProfile }
   | { kind: "delete"; coworker: MatterhornCoworkerAccountProfile }
   | null;
+
+const COWORKER_CHOICES: ReadonlyArray<{
+  id: MatterhornCoworkerTemplateId;
+  label: string;
+}> = [
+  { id: "market_analyst", label: "Research markets" },
+  { id: "risk_monitor", label: "Monitor risk" },
+  { id: "transaction_coordinator", label: "Prepare wallet actions" },
+  { id: "treasury_coworker", label: "Track treasury" },
+];
 
 function coworkerErrorMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
@@ -180,7 +191,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const workspaceId = props.workspaceId?.trim() ?? "";
   const listKey = useMemo(() => [QUERY_PREFIX, workspaceId, "list"], [workspaceId]);
   const [coworkerChoice, setCoworkerChoice] = useState("");
-  const [creating, setCreating] = useState<"market_analyst" | "risk_monitor" | null>(null);
+  const [creating, setCreating] = useState<MatterhornCoworkerTemplateId | null>(null);
   const [showCreateChoices, setShowCreateChoices] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
@@ -231,7 +242,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     ]);
   }, [detailKey, listKey, queryClient]);
 
-  const createCoworker = useCallback(async (templateId: "market_analyst" | "risk_monitor") => {
+  const createCoworker = useCallback(async (templateId: MatterhornCoworkerTemplateId) => {
     if (!props.client || !workspaceId) return;
     setCreating(templateId);
     setError(null);
@@ -398,14 +409,18 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
           <div className="py-8">
             <UserRound aria-hidden="true" className="size-5 text-dls-secondary" />
             <h3 className="mt-3 text-sm font-semibold text-dls-text">Who should help first?</h3>
-            <p className="mt-2 text-sm leading-6 text-dls-secondary">Start with research or monitoring. You can pause or remove a coworker at any time.</p>
+            <p className="mt-2 text-sm leading-6 text-dls-secondary">Choose one job. Anything involving funds stops for your wallet approval.</p>
             <div className="mt-4 grid gap-2">
-              <Button disabled={creating !== null} onClick={() => void createCoworker("market_analyst")}>
-                {creating === "market_analyst" ? "Adding…" : "Research markets"}
-              </Button>
-              <Button variant="outline" disabled={creating !== null} onClick={() => void createCoworker("risk_monitor")}>
-                {creating === "risk_monitor" ? "Adding…" : "Monitor risk"}
-              </Button>
+              {COWORKER_CHOICES.map((choice, index) => (
+                <Button
+                  key={choice.id}
+                  variant={index === 0 ? "default" : "outline"}
+                  disabled={creating !== null}
+                  onClick={() => void createCoworker(choice.id)}
+                >
+                  {creating === choice.id ? "Adding…" : choice.label}
+                </Button>
+              ))}
             </div>
           </div>
         ) : selectedCoworker ? (
@@ -436,12 +451,17 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
               </div>
               {showCreateChoices ? (
                 <div className="mt-2 grid grid-cols-2 gap-2" role="group" aria-label="Choose a coworker to add">
-                  <Button size="sm" disabled={creating !== null} onClick={() => void createCoworker("market_analyst")}>
-                    {creating === "market_analyst" ? "Adding…" : "Market researcher"}
-                  </Button>
-                  <Button size="sm" variant="outline" disabled={creating !== null} onClick={() => void createCoworker("risk_monitor")}>
-                    {creating === "risk_monitor" ? "Adding…" : "Risk monitor"}
-                  </Button>
+                  {COWORKER_CHOICES.map((choice, index) => (
+                    <Button
+                      key={choice.id}
+                      size="sm"
+                      variant={index === 0 ? "default" : "outline"}
+                      disabled={creating !== null}
+                      onClick={() => void createCoworker(choice.id)}
+                    >
+                      {creating === choice.id ? "Adding…" : choice.label}
+                    </Button>
+                  ))}
                 </div>
               ) : null}
             </div>
@@ -483,6 +503,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
               <dl className="mt-3 grid gap-2 text-xs leading-5">
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Connected apps</dt><dd className="text-right text-dls-text">{selectedCoworker.allowedAppIds.map(humanizeId).join(", ") || "None"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Reads per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxReadCallsPerRun}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Wallet reviews per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxPrepareCallsPerFamily > 0 ? selectedCoworker.limits.maxPrepareCallsPerFamily : "Not available"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Active checks</dt><dd className="text-dls-text">{selectedCoworker.limits.maxActiveWatches > 0 ? `${detailQuery.data?.watches.filter((watch) => watch.state === "active").length ?? 0} of ${selectedCoworker.limits.maxActiveWatches}` : "Not available"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Per wallet action</dt><dd className="text-dls-text">{selectedCoworker.limits.perActionUsd > 0 ? `Up to $${selectedCoworker.limits.perActionUsd.toLocaleString()}` : "Not allowed"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Daily wallet actions</dt><dd className="text-dls-text">{selectedCoworker.limits.dailyUsd > 0 ? `Up to $${selectedCoworker.limits.dailyUsd.toLocaleString()}` : "Not allowed"}</dd></div>

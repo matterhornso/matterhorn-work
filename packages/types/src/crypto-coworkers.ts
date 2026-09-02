@@ -205,6 +205,11 @@ export type MatterhornCryptoAppResult = {
 
 export type MatterhornCoworkerState = "active" | "paused" | "revoked";
 export type MatterhornCoworkerAuthority = "read" | "watch" | "prepare" | "write_note";
+export type MatterhornCoworkerTemplateId =
+  | "market_analyst"
+  | "risk_monitor"
+  | "transaction_coordinator"
+  | "treasury_coworker";
 
 export type MatterhornCoworkerProfile = {
   version: typeof MATTERHORN_COWORKER_PROFILE_VERSION;

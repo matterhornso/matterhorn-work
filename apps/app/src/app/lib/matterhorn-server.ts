@@ -125,6 +125,7 @@ import type {
   MatterhornCoworkerInboxItem,
   MatterhornCoworkerProfile,
   MatterhornCoworkerState,
+  MatterhornCoworkerTemplateId,
   MatterhornCoworkerWatch,
   MatterhornCoworkerWorkingState,
   MatterhornEvidenceVerificationListResponse,
@@ -1802,10 +1803,10 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     }),
     createCoworkerFromTemplate: (
       workspaceId: string,
-      input: { templateId: "market_analyst" | "risk_monitor"; name?: string; mission?: string },
+      input: { templateId: MatterhornCoworkerTemplateId; name?: string; mission?: string },
     ) => requestJson<{
       mode: "off" | "internal" | "invite" | "public";
-      templateId: "market_analyst" | "risk_monitor";
+      templateId: MatterhornCoworkerTemplateId;
       coworker: MatterhornCoworkerAccountProfile;
     }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/from-template`, {
       token,
