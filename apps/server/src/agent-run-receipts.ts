@@ -331,6 +331,8 @@ export class MatterhornAgentRunReceiptStore {
         sessionId: snapshot.sessionId,
         value: {
           runId: snapshot.runId,
+          workspaceId: snapshot.workspaceId,
+          sessionId: snapshot.sessionId,
           receiptId: snapshot.id,
           status: snapshot.status,
           recordHash: snapshot.integrity.recordHash,

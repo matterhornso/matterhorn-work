@@ -34,6 +34,36 @@ function brokerWithRun() {
 }
 
 describe("agent capability broker", () => {
+  test("bounds persisted run-grant expiry to the exact accepted run", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-expiry-"));
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
+    const broker = new MatterhornAgentCapabilityBroker("enforce", state);
+    const now = new Date("2026-09-02T12:00:00.000Z");
+    const expiresAtMs = now.getTime() + 10 * 60_000;
+    broker.createRunGrant({
+      runId: "run_short_lived",
+      workspaceId: "ws_short_lived",
+      sessionId: "ses_short_lived",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      expiresAtMs,
+      now,
+    });
+    expect(state.list<{ expiresAtMs: number }>("run_grant", { nowMs: now.getTime() })).toEqual([
+      expect.objectContaining({ expiresAtMs }),
+    ]);
+    expect(() => broker.createRunGrant({
+      runId: "run_too_long",
+      workspaceId: "ws_short_lived",
+      sessionId: "ses_too_long",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      expiresAtMs: now.getTime() + 6 * 60 * 60 * 1_000 + 1,
+      now,
+    })).toThrow("capability_run_expiry_invalid");
+    state.close();
+  });
+
   test("binds a single-use capability to scope, tool and canonical arguments", () => {
     const broker = brokerWithRun();
     const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };

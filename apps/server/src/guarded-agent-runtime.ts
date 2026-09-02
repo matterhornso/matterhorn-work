@@ -563,23 +563,28 @@ export class MatterhornGuardedAgentRuntime {
     const runId = input.runId.trim();
     const toolName = input.toolName.replace(/^matterhorn-work_/, "").trim();
     const argsHash = capabilityArgsHash(input.args);
-    if (this.capabilities.mode === "enforce" && !guardedCapabilityEnforcementActive({
-      toolName: input.toolName,
-      agentId: input.agentId,
-    })) {
-      const expiresAtMs = Date.now() + 60_000;
-      this.rolloutBypassCallIds.set(input.callId, {
-        expiresAtMs,
-        reason: "rollout_not_enforced",
-        runId,
-        toolName,
-        argsHash,
-      });
-      this.persistRolloutBypass(input.callId, input.workspaceId, input.sessionId);
-      this.observe("issue", "bypassed", "rollout_not_enforced");
-      return { accepted: true, callId: input.callId, expiresAt: new Date(expiresAtMs).toISOString() };
-    }
     try {
+      this.assertRunDispatchReady({
+        runId,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+      });
+      if (this.capabilities.mode === "enforce" && !guardedCapabilityEnforcementActive({
+        toolName: input.toolName,
+        agentId: input.agentId,
+      })) {
+        const expiresAtMs = Date.now() + 60_000;
+        this.rolloutBypassCallIds.set(input.callId, {
+          expiresAtMs,
+          reason: "rollout_not_enforced",
+          runId,
+          toolName,
+          argsHash,
+        });
+        this.persistRolloutBypass(input.callId, input.workspaceId, input.sessionId);
+        this.observe("issue", "bypassed", "rollout_not_enforced");
+        return { accepted: true, callId: input.callId, expiresAt: new Date(expiresAtMs).toISOString() };
+      }
       const capability = this.capabilities.issue(input);
       const expiresAtMs = Date.parse(capability.claims.expiresAt);
       this.stagedCapabilities.set(capability.claims.callId, {
@@ -903,6 +908,7 @@ export class MatterhornGuardedAgentRuntime {
             executionMode: input.executionMode,
             requestToolProfiles: input.requestToolProfiles,
             coworker: input.coworker,
+            expiresAtMs: input.expiresAtMs,
           });
         }
       });
@@ -926,6 +932,39 @@ export class MatterhornGuardedAgentRuntime {
       value: { ...staged, callId },
       expiresAtMs: staged.expiresAtMs,
     });
+  }
+
+  private assertRunDispatchReady(input: {
+    runId: string;
+    workspaceId: string;
+    sessionId: string;
+  }): void {
+    const active = this.stateStore.get<{ runId: string; workspaceId: string; sessionId: string }>(
+      "active_agent_run",
+      input.sessionId,
+    );
+    const scope = this.stateStore.get<{ runId: string; workspaceId: string; sessionId: string }>(
+      "agent_run_scope",
+      input.runId,
+    );
+    const receipt = this.stateStore.get<{
+      runId: string;
+      workspaceId?: string;
+      sessionId?: string;
+      status: MatterhornAgentRunReceipt["status"];
+    }>("receipt_index", input.runId);
+    if (!active || active.runId !== input.runId || !scope || scope.runId !== input.runId || !receipt
+      || receipt.runId !== input.runId || receipt.status !== "pending") {
+      throw new Error("capability_run_or_tool_not_found");
+    }
+    if (active.workspaceId !== input.workspaceId
+      || active.sessionId !== input.sessionId
+      || scope.workspaceId !== input.workspaceId
+      || scope.sessionId !== input.sessionId
+      || receipt.workspaceId !== input.workspaceId
+      || receipt.sessionId !== input.sessionId) {
+      throw new Error("capability_scope_mismatch");
+    }
   }
 
   private persistRolloutBypass(callId: string, workspaceId: string, sessionId: string): void {
@@ -1002,13 +1041,11 @@ export class MatterhornGuardedAgentRuntime {
   }
 
   private activeRun(sessionId: string): string | null {
-    return this.stateStore.get<{ runId: string }>("active_agent_run", sessionId)?.runId
-      ?? this.capabilities.activeRun(sessionId);
+    return this.stateStore.get<{ runId: string }>("active_agent_run", sessionId)?.runId ?? null;
   }
 
   private runScope(runId: string): { workspaceId: string; sessionId: string } | null {
-    return this.stateStore.get<{ workspaceId: string; sessionId: string }>("agent_run_scope", runId)
-      ?? this.capabilities.scopeForRun(runId);
+    return this.stateStore.get<{ workspaceId: string; sessionId: string }>("agent_run_scope", runId);
   }
 
   private observe(

@@ -158,6 +158,95 @@ describe("guarded agent runtime transport", () => {
     runtime.close();
   });
 
+  test("rejects a restored grant when its receipt never became dispatch-ready", async () => {
+    const path = join(dataDir, "restored-run-without-receipt-index.db");
+    const firstStore = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornGuardedAgentRuntime(firstStore);
+    const prompt = {
+      workspaceId: "ws_restored_orphan",
+      sessionId: "ses_restored_orphan",
+      parts: [{ type: "text" as const, text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work" as const,
+    };
+    const accepted = await first.acceptPrompt(prompt);
+    expect(firstStore.delete("receipt_index", accepted.runId)).toBe(true);
+    first.close();
+
+    const secondStore = new MatterhornGuardedRuntimeStateStore(path);
+    const second = new MatterhornGuardedAgentRuntime(secondStore);
+    expect(second.capabilities.activeRun(prompt.sessionId)).toBe(accepted.runId);
+    expect(() => second.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: prompt.workspaceId,
+      sessionId: prompt.sessionId,
+      callId: "call_restored_orphan",
+      agentId: prompt.agentId,
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    })).toThrow("capability_run_or_tool_not_found");
+    expect(secondStore.list("staged_capability", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+
+    const replacement = await second.acceptPrompt(prompt);
+    expect(replacement.runId).not.toBe(accepted.runId);
+    expect((await second.receipts.get(prompt.workspaceId, accepted.runId))?.status).toBe("cancelled");
+    expect(second.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: replacement.runId,
+      workspaceId: prompt.workspaceId,
+      sessionId: prompt.sessionId,
+      callId: "call_restored_replacement",
+      agentId: prompt.agentId,
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"2".repeat(64)}` },
+    })).toEqual(expect.objectContaining({ accepted: true, callId: "call_restored_replacement" }));
+    second.close();
+  });
+
+  test("rejects a receipt index rebound to another tenant", async () => {
+    const path = join(dataDir, "receipt-index-tenant-substitution.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_receipt_scope",
+      sessionId: "ses_receipt_scope",
+      parts: [{ type: "text", text: "Read public Hyperliquid markets" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-hyperliquid",
+      executionMode: "work",
+    });
+    store.put({
+      kind: "receipt_index",
+      key: accepted.runId,
+      workspaceId: "ws_receipt_other",
+      sessionId: "ses_receipt_other",
+      value: {
+        runId: accepted.runId,
+        workspaceId: "ws_receipt_other",
+        sessionId: "ses_receipt_other",
+        status: "pending",
+      },
+      expiresAtMs: Date.now() + 60_000,
+    });
+
+    expect(() => runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_receipt_scope",
+      sessionId: "ses_receipt_scope",
+      callId: "call_receipt_scope_substitution",
+      agentId: "matterhorn-hyperliquid",
+      toolName: "matterhorn-work_matterhorn_hyperliquid_markets",
+      args: {},
+    })).toThrow("capability_scope_mismatch");
+    expect(store.list("staged_capability", { workspaceId: "ws_receipt_scope" })).toHaveLength(0);
+    runtime.close();
+  });
+
   test("keeps the signed capability server-side and atomically redeems a non-secret call id", async () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     const accepted = await runtime.acceptPrompt({

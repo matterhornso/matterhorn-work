@@ -410,10 +410,16 @@ export class MatterhornAgentCapabilityBroker {
     executionMode: MatterhornExecutionMode;
     requestToolProfiles?: readonly Record<string, boolean>[];
     coworker?: MatterhornCoworkerRunBinding;
+    expiresAtMs?: number;
     now?: Date;
   }): void {
     const nowMs = (input.now ?? new Date()).getTime();
     this.cleanup(nowMs);
+    const maximumExpiresAtMs = nowMs + 6 * 60 * 60 * 1_000;
+    const expiresAtMs = input.expiresAtMs ?? maximumExpiresAtMs;
+    if (!Number.isSafeInteger(expiresAtMs) || expiresAtMs <= nowMs || expiresAtMs > maximumExpiresAtMs) {
+      throw new Error("capability_run_expiry_invalid");
+    }
     const agentId = input.agentId?.trim() || "matterhorn";
     if (input.coworker && !validCoworkerBinding(input.coworker, input.workspaceId)) {
       throw new Error("capability_coworker_binding_invalid");
@@ -442,7 +448,7 @@ export class MatterhornAgentCapabilityBroker {
       successfulPrepareFamilies: new Set(),
       issuedPrepareFamilies: new Map(),
       issuedCallIds: new Set(),
-      expiresAtMs: nowMs + 6 * 60 * 60 * 1_000,
+      expiresAtMs,
     };
     this.persistGrant(grant);
     this.grants.set(input.runId, grant);
