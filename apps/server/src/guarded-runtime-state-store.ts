@@ -36,6 +36,7 @@ export type GuardedRuntimeStateKind =
   | "crypto_evidence_operation_claim"
   | "crypto_evidence_finalization"
   | "crypto_evidence_audit"
+  | "crypto_evidence_verification_status"
   | "agent_file_record"
   | "agent_file_renewal_intent"
   | "receipt_index";

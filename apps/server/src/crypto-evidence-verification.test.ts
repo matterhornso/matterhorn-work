@@ -108,14 +108,19 @@ describe("crypto evidence verification boundary", () => {
           suiTransactionDigest: null,
         },
       });
+      let currentTime = new Date("2026-09-01T00:05:00.000Z");
+      let liveChecks = 0;
+      let liveFailure: string | null = null;
       const service = new MatterhornCryptoEvidenceVerificationService(
         store,
         async (input) => {
+          liveChecks += 1;
           expect(input).toMatchObject({
             workspaceId: "workspace_evidence",
             ownerId: "owner_private",
             evidenceId: published.id,
           });
+          if (liveFailure) throw new Error(liveFailure);
           return {
             certification: {
               network: "testnet",
@@ -129,10 +134,25 @@ describe("crypto evidence verification boundary", () => {
             },
           };
         },
-        () => new Date("2026-09-01T00:05:00.000Z"),
+        () => new Date(currentTime),
       );
+      const aborted = new AbortController();
+      aborted.abort();
+      await expect(service.verifyDue({
+        minimumIntervalMs: 60_000,
+        timeoutMs: 1_000,
+        signal: aborted.signal,
+      })).resolves.toEqual({ checked: 0, verified: 0, expired: 0, failed: 0 });
+      await expect(service.verifyDue({ concurrency: 0 })).rejects.toThrow(
+        "crypto_evidence_verification_concurrency_invalid",
+      );
+      await expect(service.verifyDue({ timeoutMs: 999 })).rejects.toThrow(
+        "crypto_evidence_verification_timeout_invalid",
+      );
+      expect(liveChecks).toBe(0);
       const items = service.list({ workspaceId: "workspace_evidence", ownerId: "owner_private" });
       expect(items).toHaveLength(1);
+      expect(items[0]?.lastVerification).toBeNull();
       const serialized = JSON.stringify(items);
       for (const forbidden of [
         "owner_private",
@@ -161,6 +181,52 @@ describe("crypto evidence verification boundary", () => {
           walrusReadback: true,
         },
       });
+      expect(verified.evidence.lastVerification).toEqual(verified.verification);
+      expect(service.list({
+        workspaceId: "workspace_evidence",
+        ownerId: "owner_private",
+      })[0]?.lastVerification).toEqual(verified.verification);
+
+      const notDue = await service.verifyDue({
+        minimumIntervalMs: 60_000,
+        timeoutMs: 1_000,
+      });
+      expect(notDue).toEqual({ checked: 0, verified: 0, expired: 0, failed: 0 });
+      currentTime = new Date("2026-09-01T00:07:00.000Z");
+      const automatic = await service.verifyDue({
+        minimumIntervalMs: 60_000,
+        timeoutMs: 1_000,
+      });
+      expect(automatic).toEqual({ checked: 1, verified: 1, expired: 0, failed: 0 });
+      expect(liveChecks).toBe(2);
+
+      currentTime = new Date("2026-09-01T00:09:00.000Z");
+      liveFailure = "upstream accidentally returned secret-token-value";
+      const failedAutomatic = await service.verifyDue({
+        minimumIntervalMs: 60_000,
+        timeoutMs: 1_000,
+      });
+      expect(failedAutomatic).toEqual({ checked: 1, verified: 0, expired: 0, failed: 1 });
+      const failedStatus = service.list({
+        workspaceId: "workspace_evidence",
+        ownerId: "owner_private",
+      })[0]?.lastVerification;
+      expect(failedStatus?.reason).toBe("crypto_evidence_verification_failed");
+      expect(JSON.stringify(failedStatus)).not.toContain("secret-token-value");
+
+      const destroyed = await store.destroyKey({
+        workspaceId: "workspace_evidence",
+        ownerId: "owner_private",
+        coworkerId: "coworker_private",
+        evidenceId: published.id,
+        expectedRevision: published.revision,
+        now: currentTime,
+      });
+      expect(destroyed.state).toBe("key_destroyed");
+      expect(service.list({
+        workspaceId: "workspace_evidence",
+        ownerId: "owner_private",
+      })[0]?.lastVerification).toBeNull();
       await expect(service.verify({
         workspaceId: "workspace_evidence",
         ownerId: "attacker",

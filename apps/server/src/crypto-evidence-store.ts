@@ -1,6 +1,7 @@
 import type {
   MatterhornEncryptedEvidenceEnvelope,
   MatterhornEvidenceBundle,
+  MatterhornEvidenceVerificationStatus,
   MatterhornWalrusProof,
 } from "@matterhorn-work/types/crypto-coworkers";
 import { validateMatterhornWalrusProof } from "@matterhorn-work/types/crypto-coworkers";
@@ -25,6 +26,7 @@ const RUN_INDEX_KIND = "crypto_evidence_run_index" as const;
 const OPERATION_CLAIM_KIND = "crypto_evidence_operation_claim" as const;
 const AUDIT_VERSION = "matterhorn.crypto-evidence-access.v1" as const;
 const AUDIT_KIND = "crypto_evidence_audit" as const;
+const VERIFICATION_STATUS_KIND = "crypto_evidence_verification_status" as const;
 const SECURITY_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
 const OPERATION_CLAIM_TTL_MS = 5 * 60 * 1_000;
 
@@ -50,6 +52,14 @@ type MatterhornCryptoEvidenceLegacyPublicationClaim = {
 type MatterhornCryptoEvidencePublicationCandidate = MatterhornCryptoEvidenceRecord & {
   state: "sealed";
   envelope: MatterhornEncryptedEvidenceEnvelope;
+};
+
+type MatterhornCryptoEvidenceVerificationStatusRecord = {
+  version: "matterhorn.crypto-evidence-verification-status.v1";
+  evidenceId: string;
+  evidenceRevision: number;
+  ownerIdHash: string;
+  verification: MatterhornEvidenceVerificationStatus;
 };
 
 export type MatterhornCryptoEvidenceAccessEvent = {
@@ -183,6 +193,18 @@ export class MatterhornCryptoEvidenceStore {
       workspaceId: input.workspaceId,
       evidenceId: input.evidenceId,
     });
+  }
+
+  private verificationStatusKey(input: { workspaceId: string; evidenceId: string }): string {
+    return sha256({
+      domain: "matterhorn:crypto-evidence-verification-status:v1",
+      workspaceId: input.workspaceId,
+      evidenceId: input.evidenceId,
+    });
+  }
+
+  private clearVerificationStatus(input: { workspaceId: string; evidenceId: string }): void {
+    this.stateStore.delete(VERIFICATION_STATUS_KIND, this.verificationStatusKey(input));
   }
 
   private beginExclusiveOperation(input: {
@@ -492,6 +514,101 @@ export class MatterhornCryptoEvidenceStore {
       .map(clone);
   }
 
+  getVerificationStatus(input: {
+    workspaceId: string;
+    ownerId: string;
+    evidenceId: string;
+  }): MatterhornEvidenceVerificationStatus | null {
+    const record = this.get(input);
+    if (!record) return null;
+    const status = this.stateStore.get<MatterhornCryptoEvidenceVerificationStatusRecord>(
+      VERIFICATION_STATUS_KIND,
+      this.verificationStatusKey(input),
+    );
+    if (!status
+      || status.evidenceId !== record.id
+      || status.evidenceRevision !== record.revision
+      || status.ownerIdHash !== this.identityHash("owner", record.workspaceId, record.ownerId)) {
+      return null;
+    }
+    return structuredClone(status.verification);
+  }
+
+  recordVerificationStatus(input: {
+    workspaceId: string;
+    ownerId: string;
+    evidenceId: string;
+    expectedRevision: number;
+    verification: MatterhornEvidenceVerificationStatus;
+  }): void {
+    const record = this.get(input);
+    if (!record) throw new Error("crypto_evidence_not_found");
+    if (record.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
+    const verifiedAt = Date.parse(input.verification.verifiedAt);
+    if (!Number.isFinite(verifiedAt)
+      || (input.verification.currentEpoch !== null
+        && (!Number.isSafeInteger(input.verification.currentEpoch) || input.verification.currentEpoch < 0))
+      || (input.verification.reason !== null && input.verification.reason.length > 80)) {
+      throw new Error("crypto_evidence_verification_status_invalid");
+    }
+    const status: MatterhornCryptoEvidenceVerificationStatusRecord = {
+      version: "matterhorn.crypto-evidence-verification-status.v1",
+      evidenceId: record.id,
+      evidenceRevision: record.revision,
+      ownerIdHash: this.identityHash("owner", record.workspaceId, record.ownerId),
+      verification: structuredClone(input.verification),
+    };
+    this.stateStore.put({
+      kind: VERIFICATION_STATUS_KIND,
+      key: this.verificationStatusKey(input),
+      workspaceId: record.workspaceId,
+      value: status,
+      expiresAtMs: runIndexExpiry(record),
+      nowMs: verifiedAt,
+    });
+  }
+
+  listPublishedForVerification(input: {
+    limit: number;
+    minimumIntervalMs: number;
+    now?: Date;
+  }): Array<{ workspaceId: string; ownerId: string; evidenceId: string }> {
+    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100) {
+      throw new Error("crypto_evidence_verification_limit_invalid");
+    }
+    if (!Number.isSafeInteger(input.minimumIntervalMs) || input.minimumIntervalMs < 60_000) {
+      throw new Error("crypto_evidence_verification_interval_invalid");
+    }
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    return this.stateStore.list<MatterhornCryptoEvidenceRecord>(STATE_KIND)
+      .filter((record) => record.state === "published")
+      .map((record) => ({
+        record,
+        verification: this.getVerificationStatus({
+          workspaceId: record.workspaceId,
+          ownerId: record.ownerId,
+          evidenceId: record.id,
+        }),
+      }))
+      .filter(({ verification }) => {
+        if (!verification) return true;
+        const verifiedAt = Date.parse(verification.verifiedAt);
+        return !Number.isFinite(verifiedAt) || verifiedAt + input.minimumIntervalMs <= now.getTime();
+      })
+      .sort((left, right) => {
+        const leftAt = left.verification ? Date.parse(left.verification.verifiedAt) : Number.NEGATIVE_INFINITY;
+        const rightAt = right.verification ? Date.parse(right.verification.verifiedAt) : Number.NEGATIVE_INFINITY;
+        return leftAt - rightAt || Date.parse(left.record.createdAt) - Date.parse(right.record.createdAt);
+      })
+      .slice(0, input.limit)
+      .map(({ record }) => ({
+        workspaceId: record.workspaceId,
+        ownerId: record.ownerId,
+        evidenceId: record.id,
+      }));
+  }
+
   /**
    * Atomically claims one exact encrypted evidence revision for publication.
    * The expiring claim is durable across processes sharing the runtime SQLite
@@ -557,6 +674,7 @@ export class MatterhornCryptoEvidenceStore {
       updatedAt: now.toISOString(),
     };
     this.stateStore.put({ kind: STATE_KIND, key: next.id, workspaceId: next.workspaceId, value: next, nowMs: now.getTime() });
+    this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
     this.recordAccess({ record: next, action: "attach_proof", outcome: "allowed", reason: "proof_verified", now });
     return clone(next);
   }
@@ -648,6 +766,7 @@ export class MatterhornCryptoEvidenceStore {
           value: record,
           nowMs: now.getTime(),
         });
+        this.clearVerificationStatus({ workspaceId: record.workspaceId, evidenceId: record.id });
         this.recordAccess({
           record,
           action: "attach_proof",
@@ -757,6 +876,7 @@ export class MatterhornCryptoEvidenceStore {
         updatedAt: now.toISOString(),
       };
       this.stateStore.put({ kind: STATE_KIND, key: next.id, workspaceId: next.workspaceId, value: next, nowMs: now.getTime() });
+      this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
       this.recordAccess({ record: next, action: "rotate_key", outcome: "allowed", reason: "rewrapped", now });
       this.stateStore.secureCheckpoint();
       return clone(next);
@@ -861,6 +981,7 @@ export class MatterhornCryptoEvidenceStore {
         expiresAtMs: now.getTime() + SECURITY_RETENTION_MS,
         nowMs: now.getTime(),
       });
+      this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
       this.stateStore.put({
         kind: RUN_INDEX_KIND,
         key: this.runIndexKey(next),

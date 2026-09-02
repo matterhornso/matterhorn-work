@@ -1533,6 +1533,27 @@ export async function startServer(
     logger.log("error", "Crypto evidence key rotation failed", unhandledErrorAttributes(error));
     return { checked: 0, rotated: 0, failures: [] };
   }) ?? Promise.resolve({ checked: 0, rotated: 0, failures: [] });
+  const verifyCryptoEvidence = () => cryptoEvidenceRuntime.mode === "testnet"
+    ? cryptoEvidenceRuntime.verification?.verifyDue({
+        limit: 25,
+        concurrency: 4,
+        minimumIntervalMs: 6 * 60 * 60 * 1_000,
+        timeoutMs: 15_000,
+      }).then((result) => {
+        if (result.expired > 0 || result.failed > 0) {
+          logger.log("warn", "Encrypted evidence verification needs attention", {
+            checked: result.checked,
+            verified: result.verified,
+            expired: result.expired,
+            failed: result.failed,
+          });
+        }
+        return result;
+      }).catch((error) => {
+        logger.log("error", "Encrypted evidence verification failed", unhandledErrorAttributes(error));
+        return { checked: 0, verified: 0, expired: 0, failed: 1 };
+      }) ?? Promise.resolve({ checked: 0, verified: 0, expired: 0, failed: 0 })
+    : Promise.resolve({ checked: 0, verified: 0, expired: 0, failed: 0 });
   const maintainCryptoEvidence = async () => ({
     expiry: await expireCryptoEvidence(),
     rotation: await rotateCryptoEvidence(),
@@ -1545,6 +1566,14 @@ export async function startServer(
     );
   }, 24 * 60 * 60 * 1_000) : null;
   cryptoEvidenceExpiryTimer?.unref?.();
+  let cryptoEvidenceVerificationTask = verifyCryptoEvidence();
+  const cryptoEvidenceVerificationTimer = cryptoEvidenceRuntime.mode === "testnet" ? setInterval(() => {
+    cryptoEvidenceVerificationTask = cryptoEvidenceVerificationTask.then(
+      verifyCryptoEvidence,
+      verifyCryptoEvidence,
+    );
+  }, 6 * 60 * 60 * 1_000) : null;
+  cryptoEvidenceVerificationTimer?.unref?.();
   const expireAgentFiles = () => agentFileStore?.destroyExpired().then((result) => {
     if (result.failures.length > 0) {
       logger.log("error", "Agent file expiry was incomplete", {
@@ -1841,6 +1870,7 @@ export async function startServer(
     stop: async (closeActiveConnections?: boolean) => {
       clearInterval(receiptExpiryTimer);
       if (cryptoEvidenceExpiryTimer) clearInterval(cryptoEvidenceExpiryTimer);
+      if (cryptoEvidenceVerificationTimer) clearInterval(cryptoEvidenceVerificationTimer);
       if (agentFileExpiryTimer) clearInterval(agentFileExpiryTimer);
       clearInterval(accountDeletionRetryTimer);
       clearInterval(emailOutboxTimer);
@@ -1851,6 +1881,7 @@ export async function startServer(
       modelUsageStore.close();
       await receiptExpiryTask;
       await cryptoEvidenceMaintenanceTask;
+      await cryptoEvidenceVerificationTask;
       await agentFileMaintenanceTask;
       await accountDeletionRetryTask;
       await emailOutboxTask;

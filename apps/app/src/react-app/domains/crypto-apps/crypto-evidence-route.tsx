@@ -239,6 +239,7 @@ export function CryptoEvidenceRoute() {
             {snapshot.items.map((item) => {
               const expanded = expandedId === item.evidenceId;
               const result = verificationById[item.evidenceId];
+              const verification = result?.verification ?? item.lastVerification;
               const canVerify = item.state === "published" && snapshot.mode === "testnet";
               const canPublish = item.state === "sealed" && snapshot.publicationAvailable;
               const confirmingPublish = publishCandidateId === item.evidenceId;
@@ -253,10 +254,14 @@ export function CryptoEvidenceRoute() {
                         <span className="text-xs text-muted-foreground">{statusLabel(item)}</span>
                       </div>
                       <p className="mt-2 text-sm text-muted-foreground">Created {formatDate(item.createdAt)}</p>
-                      {result ? (
-                        <p className={result.verification.status === "verified" ? "mt-2 text-sm text-emerald-600 dark:text-emerald-400" : "mt-2 text-sm text-destructive"} role="status">
-                          {result.verification.status === "verified" ? "Live verification passed" : `Verification ${result.verification.status.replaceAll("_", " ")}`}
+                      {verification ? (
+                        <p className={verification.status === "verified" ? "mt-2 text-sm text-emerald-600 dark:text-emerald-400" : "mt-2 text-sm text-destructive"} role="status">
+                          {verification.status === "verified"
+                            ? `Integrity checked ${formatDate(verification.verifiedAt)}`
+                            : `Integrity check ${verification.status.replaceAll("_", " ")}`}
                         </p>
+                      ) : item.state === "published" ? (
+                        <p className="mt-2 text-sm text-muted-foreground" role="status">Integrity check pending</p>
                       ) : null}
                     </div>
                     <Button
@@ -303,11 +308,11 @@ export function CryptoEvidenceRoute() {
                           Verification checks
                         </div>
                         <ul className="mt-4 space-y-3">
-                          <CheckLine ok={result?.verification.checks.tenantScope ?? true}>Owner and workspace scope</CheckLine>
-                          <CheckLine ok={result?.verification.checks.ciphertextHash ?? false}>Exact ciphertext hash</CheckLine>
-                          <CheckLine ok={result?.verification.checks.merkleInclusion ?? false}>Merkle inclusion</CheckLine>
-                          <CheckLine ok={result?.verification.checks.suiCertification ?? false}>Sui certification is current</CheckLine>
-                          <CheckLine ok={result?.verification.checks.walrusReadback ?? false}>Walrus bytes match</CheckLine>
+                          <CheckLine ok={verification?.checks.tenantScope ?? true}>Owner and workspace scope</CheckLine>
+                          <CheckLine ok={verification?.checks.ciphertextHash ?? false}>Exact ciphertext hash</CheckLine>
+                          <CheckLine ok={verification?.checks.merkleInclusion ?? false}>Merkle inclusion</CheckLine>
+                          <CheckLine ok={verification?.checks.suiCertification ?? false}>Sui certification is current</CheckLine>
+                          <CheckLine ok={verification?.checks.walrusReadback ?? false}>Walrus bytes match</CheckLine>
                         </ul>
                         {canVerify ? (
                           <Button
@@ -316,7 +321,7 @@ export function CryptoEvidenceRoute() {
                             onClick={() => void verify(item)}
                           >
                             {verifyingId === item.evidenceId ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : <RefreshCw aria-hidden="true" className="size-4" />}
-                            {verifyingId === item.evidenceId ? "Verifying…" : "Verify live"}
+                            {verifyingId === item.evidenceId ? "Checking…" : "Check now"}
                           </Button>
                         ) : null}
                         {canPublish && !confirmingPublish ? (
@@ -442,9 +447,9 @@ export function CryptoEvidenceRoute() {
                                 : "Live verification is available only for published testnet evidence."}
                           </p>
                         ) : null}
-                        {result?.verification.reason ? (
+                        {verification?.reason ? (
                           <p className="mt-3 break-words text-xs leading-5 text-muted-foreground">
-                            {result.verification.reason.replaceAll("_", " ")}
+                            {verification.reason.replaceAll("_", " ")}
                           </p>
                         ) : null}
                       </div>

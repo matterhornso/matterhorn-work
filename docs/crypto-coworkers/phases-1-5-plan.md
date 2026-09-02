@@ -255,7 +255,7 @@ Users may opt to publish an encrypted, minimal evidence bundle whose integrity a
 4. **Sui anchor**
    - Merkle root and non-identifying proof metadata only.
    - Transaction digest reconciliation and explorer/verifier flow.
-   - **Verification surface implemented:** `GET /workspace/:id/crypto-evidence` returns redacted proof packets and `POST /workspace/:id/crypto-evidence/:evidenceId/verify` checks the local ciphertext hash, Merkle inclusion, exact pinned Sui certification, and independent Walrus readback. Automatic anchor creation is not enabled.
+   - **Verification surface implemented:** `GET /workspace/:id/crypto-evidence` returns redacted proof packets with exact-revision verification health and `POST /workspace/:id/crypto-evidence/:evidenceId/verify` checks the local ciphertext hash, Merkle inclusion, exact pinned Sui certification, and independent Walrus readback. A bounded read-only worker refreshes published evidence at startup and every six hours; revision changes invalidate stored status. Automatic publication, renewal, signing, submission, and anchor creation are not enabled.
 5. **Retention and deletion**
    - User content deletes immediately from Matterhorn.
    - Deletable Walrus lifecycle where supported; key destruction for residual ciphertext.

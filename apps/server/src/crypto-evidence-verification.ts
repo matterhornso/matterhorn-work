@@ -4,6 +4,7 @@ import {
   MATTERHORN_EVIDENCE_VERIFICATION_VERSION,
   type MatterhornEvidenceVerificationPacket,
   type MatterhornEvidenceVerificationResult,
+  type MatterhornEvidenceVerificationStatus,
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import type { MatterhornCryptoEvidenceRecord } from "./crypto-evidence-store.js";
@@ -26,6 +27,7 @@ function sha256(bytes: Uint8Array): string {
 /** Closed projection: adding any tenant or key field here requires a review. */
 export function cryptoEvidenceAccountPacket(
   record: MatterhornCryptoEvidenceRecord,
+  lastVerification: MatterhornEvidenceVerificationStatus | null = null,
 ): MatterhornEvidenceVerificationPacket {
   return {
     version: MATTERHORN_EVIDENCE_VERIFICATION_VERSION,
@@ -42,6 +44,7 @@ export function cryptoEvidenceAccountPacket(
       keyAvailable: record.state !== "key_destroyed",
     },
     publication: record.walrusProof ? structuredClone(record.walrusProof) : null,
+    lastVerification: lastVerification ? structuredClone(lastVerification) : null,
   };
 }
 
@@ -84,7 +87,32 @@ export class MatterhornCryptoEvidenceVerificationService {
   ) {}
 
   list(input: { workspaceId: string; ownerId: string }): MatterhornEvidenceVerificationPacket[] {
-    return this.store.list(input).map(cryptoEvidenceAccountPacket);
+    return this.store.list(input).map((record) => cryptoEvidenceAccountPacket(
+      record,
+      this.store.getVerificationStatus({
+        workspaceId: input.workspaceId,
+        ownerId: input.ownerId,
+        evidenceId: record.id,
+      }),
+    ));
+  }
+
+  private persistResult(
+    record: MatterhornCryptoEvidenceRecord,
+    verification: MatterhornEvidenceVerificationStatus,
+  ): MatterhornEvidenceVerificationResult {
+    this.store.recordVerificationStatus({
+      workspaceId: record.workspaceId,
+      ownerId: record.ownerId,
+      evidenceId: record.id,
+      expectedRevision: record.revision,
+      verification,
+    });
+    return {
+      version: MATTERHORN_EVIDENCE_VERIFICATION_VERSION,
+      evidence: cryptoEvidenceAccountPacket(record, verification),
+      verification,
+    };
   }
 
   async verify(input: {
@@ -97,7 +125,6 @@ export class MatterhornCryptoEvidenceVerificationService {
     if (!record) throw new Error("crypto_evidence_not_found");
     const verifiedAt = this.now();
     if (!Number.isFinite(verifiedAt.getTime())) throw new Error("crypto_evidence_time_invalid");
-    const evidence = cryptoEvidenceAccountPacket(record);
     const local = localChecks(record);
     const baseChecks: MatterhornEvidenceVerificationResult["verification"]["checks"] = {
       tenantScope: true,
@@ -107,76 +134,117 @@ export class MatterhornCryptoEvidenceVerificationService {
       walrusReadback: false,
     };
     if (record.state === "key_destroyed") {
-      return {
-        version: MATTERHORN_EVIDENCE_VERIFICATION_VERSION,
-        evidence,
-        verification: {
-          status: "key_destroyed",
-          verifiedAt: verifiedAt.toISOString(),
-          checks: baseChecks,
-          currentEpoch: null,
-          reason: "recovery_material_deleted",
-        },
-      };
+      return this.persistResult(record, {
+        status: "key_destroyed",
+        verifiedAt: verifiedAt.toISOString(),
+        checks: baseChecks,
+        currentEpoch: null,
+        reason: "recovery_material_deleted",
+      });
     }
     if (record.state === "sealed") {
-      return {
-        version: MATTERHORN_EVIDENCE_VERIFICATION_VERSION,
-        evidence,
-        verification: {
-          status: "sealed_local",
-          verifiedAt: verifiedAt.toISOString(),
-          checks: baseChecks,
-          currentEpoch: null,
-          reason: "walrus_publication_not_attached",
-        },
-      };
+      return this.persistResult(record, {
+        status: "sealed_local",
+        verifiedAt: verifiedAt.toISOString(),
+        checks: baseChecks,
+        currentEpoch: null,
+        reason: "walrus_publication_not_attached",
+      });
     }
     if (!this.liveVerify) {
-      return {
-        version: MATTERHORN_EVIDENCE_VERIFICATION_VERSION,
-        evidence,
-        verification: {
-          status: "failed",
-          verifiedAt: verifiedAt.toISOString(),
-          checks: baseChecks,
-          currentEpoch: null,
-          reason: "live_verification_unavailable",
-        },
-      };
+      return this.persistResult(record, {
+        status: "failed",
+        verifiedAt: verifiedAt.toISOString(),
+        checks: baseChecks,
+        currentEpoch: null,
+        reason: "live_verification_unavailable",
+      });
     }
     try {
       const { certification } = await this.liveVerify(input);
-      return {
-        version: MATTERHORN_EVIDENCE_VERIFICATION_VERSION,
-        evidence,
-        verification: {
-          status: "verified",
-          verifiedAt: verifiedAt.toISOString(),
-          checks: {
-            tenantScope: true,
-            ciphertextHash: true,
-            merkleInclusion: true,
-            suiCertification: true,
-            walrusReadback: true,
-          },
-          currentEpoch: certification.currentEpoch,
-          reason: null,
+      return this.persistResult(record, {
+        status: "verified",
+        verifiedAt: verifiedAt.toISOString(),
+        checks: {
+          tenantScope: true,
+          ciphertextHash: true,
+          merkleInclusion: true,
+          suiCertification: true,
+          walrusReadback: true,
         },
-      };
+        currentEpoch: certification.currentEpoch,
+        reason: null,
+      });
     } catch (error) {
       const reason = safeFailureReason(error);
-      return {
-        version: MATTERHORN_EVIDENCE_VERIFICATION_VERSION,
-        evidence,
-        verification: {
-          status: reason === "crypto_evidence_walrus_certification_expired" ? "expired" : "failed",
-          verifiedAt: verifiedAt.toISOString(),
-          checks: baseChecks,
-          currentEpoch: null,
-          reason,
-        },
-      };
+      return this.persistResult(record, {
+        status: reason === "crypto_evidence_walrus_certification_expired" ? "expired" : "failed",
+        verifiedAt: verifiedAt.toISOString(),
+        checks: baseChecks,
+        currentEpoch: null,
+        reason,
+      });
     }
+  }
+
+  async verifyDue(input: {
+    limit?: number;
+    concurrency?: number;
+    minimumIntervalMs?: number;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  } = {}): Promise<{
+    checked: number;
+    verified: number;
+    expired: number;
+    failed: number;
+  }> {
+    if (!this.liveVerify) return { checked: 0, verified: 0, expired: 0, failed: 0 };
+    const limit = input.limit ?? 25;
+    const concurrency = input.concurrency ?? 4;
+    const minimumIntervalMs = input.minimumIntervalMs ?? 6 * 60 * 60 * 1_000;
+    const timeoutMs = input.timeoutMs ?? 15_000;
+    if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 8) {
+      throw new Error("crypto_evidence_verification_concurrency_invalid");
+    }
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 60_000) {
+      throw new Error("crypto_evidence_verification_timeout_invalid");
+    }
+    const candidates = this.store.listPublishedForVerification({
+      limit,
+      minimumIntervalMs,
+      now: this.now(),
+    });
+    let nextIndex = 0;
+    const totals = { checked: 0, verified: 0, expired: 0, failed: 0 };
+    const worker = async () => {
+      while (nextIndex < candidates.length && !input.signal?.aborted) {
+        const candidate = candidates[nextIndex];
+        nextIndex += 1;
+        if (!candidate) continue;
+        const controller = new AbortController();
+        const abort = () => controller.abort();
+        input.signal?.addEventListener("abort", abort, { once: true });
+        const timeout = setTimeout(abort, timeoutMs);
+        timeout.unref?.();
+        totals.checked += 1;
+        try {
+          const result = await this.verify({ ...candidate, signal: controller.signal });
+          if (result.verification.status === "verified") totals.verified += 1;
+          else if (result.verification.status === "expired") totals.expired += 1;
+          else totals.failed += 1;
+        } catch {
+          totals.failed += 1;
+        } finally {
+          clearTimeout(timeout);
+          input.signal?.removeEventListener("abort", abort);
+        }
+      }
+    };
+    await Promise.all(Array.from(
+      { length: Math.min(concurrency, candidates.length) },
+      () => worker(),
+    ));
+    return totals;
   }
 }

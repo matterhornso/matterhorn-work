@@ -459,6 +459,20 @@ export type MatterhornWalrusProof = {
 export const MATTERHORN_EVIDENCE_VERIFICATION_VERSION =
   "matterhorn.evidence-verification.v1" as const;
 
+export type MatterhornEvidenceVerificationStatus = {
+  status: "verified" | "sealed_local" | "key_destroyed" | "expired" | "failed";
+  verifiedAt: string;
+  checks: {
+    tenantScope: true;
+    ciphertextHash: boolean;
+    merkleInclusion: boolean;
+    suiCertification: boolean;
+    walrusReadback: boolean;
+  };
+  currentEpoch: number | null;
+  reason: string | null;
+};
+
 /**
  * Account-facing, shareable verification packet for encrypted coworker
  * evidence. It intentionally excludes tenant identifiers, prompts, key
@@ -479,24 +493,14 @@ export type MatterhornEvidenceVerificationPacket = {
     keyAvailable: boolean;
   };
   publication: MatterhornWalrusProof | null;
+  /** Last server-side check of this exact evidence revision. */
+  lastVerification: MatterhornEvidenceVerificationStatus | null;
 };
 
 export type MatterhornEvidenceVerificationResult = {
   version: typeof MATTERHORN_EVIDENCE_VERIFICATION_VERSION;
   evidence: MatterhornEvidenceVerificationPacket;
-  verification: {
-    status: "verified" | "sealed_local" | "key_destroyed" | "expired" | "failed";
-    verifiedAt: string;
-    checks: {
-      tenantScope: true;
-      ciphertextHash: boolean;
-      merkleInclusion: boolean;
-      suiCertification: boolean;
-      walrusReadback: boolean;
-    };
-    currentEpoch: number | null;
-    reason: string | null;
-  };
+  verification: MatterhornEvidenceVerificationStatus;
 };
 
 export type MatterhornEvidenceVerificationListResponse = {

@@ -43,12 +43,11 @@ The local encrypted envelope and the public Walrus payload are deliberately diff
 
 ## Lifecycle
 
-- Financial run evidence is eligible for automatic encrypted publication after explicit product disclosure.
-- Research/chat evidence remains local unless the user or organization enables publication.
+- Financial and research/chat evidence remain local unless the user explicitly publishes one exact encrypted revision.
 - User-controlled evidence uses deletable blobs and a stated expiry/renewal policy.
 - A non-content batch anchor can be permanent and cannot be removed; the UI must disclose this before enabling evidence publication.
 - Account/workspace deletion removes local content, queues deletable blob cleanup, and destroys Matterhorn-held wrapped keys. It must not promise erasure of public caches or independently copied ciphertext.
-- A scheduled verifier checks certification, remaining epochs, Merkle reconciliation, and renewal state.
+- A bounded read-only verifier checks published run evidence at startup and every six hours. It rechecks the exact ciphertext hash, Merkle proof, pinned Sui certification, and independent Walrus readback, then stores only a revision-bound redacted status. It never publishes, renews, signs, or submits.
 
 ## Publisher security
 
@@ -90,4 +89,4 @@ The first testnet prototype must use synthetic data and demonstrate:
 - Public serialization excludes the key reference and plaintext hash.
 - Deterministic, order-independent Merkle batches verify ciphertext modification and reject duplicate or mismatched leaves.
 - No publisher, Walrus network call, Sui anchor, or mainnet write is enabled by this foundation.
-- The authenticated account boundary exposes redacted proof listing, exact-revision testnet publication, live verification, and exact-revision recovery-key deletion. Publication and deletion share one durable operation claim, so they cannot race across server workers. The certification verifier remains an independent Sui boundary, so an upload relay can never certify its own response.
+- The authenticated account boundary exposes redacted proof listing, exact-revision testnet publication, live verification, automatic read-only verification health, and exact-revision recovery-key deletion. Publication and deletion share one durable operation claim, so they cannot race across server workers. Verification status is invalidated by any evidence revision, excludes tenant and key material, and is refreshed in a bounded four-worker batch. The certification verifier remains an independent Sui boundary, so an upload relay can never certify its own response.
