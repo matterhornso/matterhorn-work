@@ -104,12 +104,14 @@ describe("Agent File server client", () => {
     await client.listCoworkers("workspace one");
     await client.getCoworkerState("workspace one", "coworker one");
     await client.getCoworkerResources("workspace one", "coworker one");
+    await client.getCoworkerResourceRecommendation("workspace one", "coworker one");
     await client.setCoworkerResources("workspace one", "coworker one", {
       expectedRevision: 2,
       profileRevision: 3,
       agentFileIds: ["file one"],
       memoryIds: ["memory one"],
       connectionIds: ["connection one"],
+      recommendationHash: "a".repeat(64),
     });
     await client.listCoworkerWatches("workspace one", "coworker one");
     await client.transitionCoworkerWatch("workspace one", "coworker one", "watch one", { state: "paused", expectedRevision: 2 });
@@ -135,6 +137,7 @@ describe("Agent File server client", () => {
       "GET https://control.example/workspace/workspace%20one/coworkers",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/state",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/resources",
+      "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/resources/recommendation",
       "PUT https://control.example/workspace/workspace%20one/coworkers/coworker%20one/resources",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/watches",
       "PATCH https://control.example/workspace/workspace%20one/coworkers/coworker%20one/watches/watch%20one",
@@ -146,15 +149,16 @@ describe("Agent File server client", () => {
       "PATCH https://control.example/workspace/workspace%20one/coworkers/coworker%20one",
       "DELETE https://control.example/workspace/workspace%20one/coworkers/coworker%20one",
     ]);
-    expect(requests[3]?.body).toEqual({
+    expect(requests[4]?.body).toEqual({
       expectedRevision: 2,
       profileRevision: 3,
       agentFileIds: ["file one"],
       memoryIds: ["memory one"],
       connectionIds: ["connection one"],
+      recommendationHash: "a".repeat(64),
     });
-    expect(requests[9]?.body).toEqual({ expectedRevision: 5 });
-    expect(requests[10]?.body).toEqual({
+    expect(requests[10]?.body).toEqual({ expectedRevision: 5 });
+    expect(requests[11]?.body).toEqual({
       expectedRevision: 5,
       status: "submitted",
       publicId: "public-transaction-id",

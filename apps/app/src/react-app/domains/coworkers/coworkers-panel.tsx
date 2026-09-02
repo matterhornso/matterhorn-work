@@ -95,6 +95,7 @@ function coworkerErrorMessage(error: unknown): string {
     if (error.code === "coworker_not_found") return "This coworker no longer exists.";
     if (error.code === "coworker_revision_conflict") return "This coworker changed. Refresh and try again.";
     if (error.code === "coworker_resource_scope_invalid") return "One of these files, memories, or apps is no longer available. Refresh and choose again.";
+    if (error.code === "coworker_resource_recommendation_stale") return "The suggested access changed. Review the latest suggestion before saving.";
     if (error.code === "coworker_resources_stale") return "This access list changed. Review it again before starting work.";
     if (error.code === "coworker_transition_invalid") return "That change is no longer available for this coworker.";
     if (error.code === "coworker_inbox_state_conflict") return "This alert changed. Refresh and try again.";
@@ -209,6 +210,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [showCreateChoices, setShowCreateChoices] = useState(false);
   const [resourcesOpen, setResourcesOpen] = useState(false);
   const [resourceDraft, setResourceDraft] = useState<CoworkerResourceDraft>(EMPTY_RESOURCE_DRAFT);
+  const [resourceRecommendationHash, setResourceRecommendationHash] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [cancelIntent, setCancelIntent] = useState<MatterhornCoworkerWalletIntentView | null>(null);
@@ -262,14 +264,16 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
           }
           throw cause;
         });
-      const [scope, files, memories, connections] = await Promise.all([
+      const [scope, recommendation, files, memories, connections] = await Promise.all([
         props.client.getCoworkerResources(workspaceId, selectedCoworker.id),
+        props.client.getCoworkerResourceRecommendation(workspaceId, selectedCoworker.id),
         props.client.listAgentFiles(workspaceId),
         props.client.listWorkspaceMemory(workspaceId, { limit: 80 }),
         connectionsRequest,
       ]);
       return {
         scope,
+        recommendation: recommendation.recommendation,
         filesAvailable: files.available,
         files: files.items.filter((item) => item.file.access.coworkerIds.includes(selectedCoworker.id)),
         memories: memories.records.filter((record) => record.canUseInChat && record.sensitivity !== "forbidden_secret"),
@@ -292,6 +296,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       memoryIds: scope.memories.map((item) => item.id),
       connectionIds: scope.connections.map((item) => item.id),
     } : EMPTY_RESOURCE_DRAFT);
+    setResourceRecommendationHash(null);
   }, [resourceQuery.data?.scope.resources?.scopeHash, selectedCoworker?.id]);
 
   const walletIntents = useMemo(
@@ -306,6 +311,15 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const canStartCoworker = selectedCoworker?.state === "active"
     && resourceQuery.data?.scope.active === true
     && (resourceQuery.data.scope.resources?.connections.length ?? 0) > 0;
+  const resourceSuggestionAvailable = Boolean(
+    resourceQuery.data
+    && !resourceQuery.data.scope.active
+    && (
+      resourceQuery.data.recommendation.agentFiles.length
+      + resourceQuery.data.recommendation.memories.length
+      + resourceQuery.data.recommendation.connections.length
+    ) > 0,
+  );
 
   const refresh = useCallback(async () => {
     await Promise.all([
@@ -316,6 +330,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   }, [detailKey, listKey, queryClient, resourceKey]);
 
   const toggleResource = useCallback((key: keyof CoworkerResourceDraft, id: string) => {
+    setResourceRecommendationHash(null);
     setResourceDraft((current) => {
       const selected = current[key];
       const next = selected.includes(id)
@@ -324,6 +339,18 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       return { ...current, [key]: next };
     });
   }, []);
+
+  const reviewResourceRecommendation = useCallback(() => {
+    const recommendation = resourceQuery.data?.recommendation;
+    if (!recommendation) return;
+    setResourceDraft({
+      agentFileIds: recommendation.agentFiles.map((item) => item.id),
+      memoryIds: recommendation.memories.map((item) => item.id),
+      connectionIds: recommendation.connections.map((item) => item.id),
+    });
+    setResourceRecommendationHash(recommendation.recommendationHash);
+    setResourcesOpen(true);
+  }, [resourceQuery.data?.recommendation]);
 
   const saveResources = useCallback(async () => {
     if (!props.client || !workspaceId || !selectedCoworker) return;
@@ -336,9 +363,11 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
         agentFileIds: [...resourceDraft.agentFileIds].sort(),
         memoryIds: [...resourceDraft.memoryIds].sort(),
         connectionIds: [...resourceDraft.connectionIds].sort(),
+        ...(resourceRecommendationHash ? { recommendationHash: resourceRecommendationHash } : {}),
       });
       await queryClient.invalidateQueries({ queryKey: resourceKey });
       setResourcesOpen(false);
+      setResourceRecommendationHash(null);
       showToast({
         title: "Access saved",
         description: `${selectedCoworker.name} can use only the items you selected.`,
@@ -349,7 +378,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     } finally {
       setBusyAction(null);
     }
-  }, [props.client, queryClient, resourceDraft, resourceKey, resourceQuery.data?.scope.resources?.revision, selectedCoworker, showToast, workspaceId]);
+  }, [props.client, queryClient, resourceDraft, resourceKey, resourceQuery.data?.scope.resources?.revision, resourceRecommendationHash, selectedCoworker, showToast, workspaceId]);
 
   const createCoworker = useCallback(async (templateId: MatterhornCoworkerTemplateId) => {
     if (!props.client || !workspaceId) return;
@@ -663,8 +692,29 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                 </Button>
               </div>
 
+              {resourceSuggestionAvailable && resourceQuery.data ? (
+                <div className="mt-4 flex items-start justify-between gap-3 border-t border-dls-border/70 pt-4">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-dls-text">Suggested access</p>
+                    <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                      Matterhorn found {
+                        resourceQuery.data.recommendation.agentFiles.length
+                        + resourceQuery.data.recommendation.memories.length
+                        + resourceQuery.data.recommendation.connections.length
+                      } items that match this coworker. Nothing changes until you review and save.
+                    </p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={reviewResourceRecommendation}>Review suggestion</Button>
+                </div>
+              ) : null}
+
               {resourcesOpen && resourceQuery.data ? (
                 <div className="mt-4 grid gap-4 border-t border-dls-border/70 pt-4">
+                  {resourceRecommendationHash ? (
+                    <p className="text-xs leading-5 text-dls-secondary">
+                      Suggested items are selected below. Uncheck anything you do not want to share, then save.
+                    </p>
+                  ) : null}
                   <fieldset>
                     <legend className="text-xs font-medium text-dls-text">Connected apps</legend>
                     {!resourceQuery.data.connectionsAvailable ? (

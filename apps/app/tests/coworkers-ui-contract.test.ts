@@ -65,6 +65,9 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("Choose at least one connected app before starting chat.");
     expect(panel).toContain("disabled={!canStartCoworker}");
     expect(panel).toContain("Choose access");
+    expect(panel).toContain("Suggested access");
+    expect(panel).toContain("Nothing changes until you review and save.");
+    expect(panel).toContain("Review suggestion");
     expect(panel).toContain("Save access");
     expect(panel).toContain("This coworker cannot bypass that rule.");
     expect(panel).toContain("App connections are not enabled in this environment.");
@@ -72,7 +75,9 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain('cause.code === "crypto_app_gateway_disabled"');
     expect(panel).toContain("setCoworkerResources");
     expect(client).toContain("getCoworkerResources:");
+    expect(client).toContain("getCoworkerResourceRecommendation:");
     expect(client).toContain("setCoworkerResources:");
+    expect(panel).toContain("recommendationHash: resourceRecommendationHash");
     expect(panel).not.toContain("unverifiedProviderConsent: true");
   });
 

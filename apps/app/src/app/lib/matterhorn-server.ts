@@ -132,6 +132,7 @@ import type {
   MatterhornAgentFileWalrusVerification,
   MatterhornCoworkerInboxItem,
   MatterhornCoworkerProfile,
+  MatterhornCoworkerResourceRecommendation,
   MatterhornCoworkerResourceScope,
   MatterhornCoworkerState,
   MatterhornCoworkerTemplateId,
@@ -156,6 +157,7 @@ import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } fro
 export type MatterhornCoworkerAccountProfile = Omit<MatterhornCoworkerProfile, "ownerId">;
 export type MatterhornCoworkerAccountState = Omit<MatterhornCoworkerWorkingState, "ownerId">;
 export type MatterhornCoworkerAccountResourceScope = Omit<MatterhornCoworkerResourceScope, "ownerId">;
+export type MatterhornCoworkerAccountResourceRecommendation = MatterhornCoworkerResourceRecommendation;
 export type MatterhornCoworkerAccountWatch = Omit<MatterhornCoworkerWatch, "ownerId">;
 export type MatterhornCoworkerAccountInboxItem = Omit<MatterhornCoworkerInboxItem, "ownerId">;
 
@@ -1904,6 +1906,13 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       token,
       timeoutMs: timeouts.status,
     }),
+    getCoworkerResourceRecommendation: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      recommendation: MatterhornCoworkerAccountResourceRecommendation;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/resources/recommendation`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
     setCoworkerResources: (
       workspaceId: string,
       coworkerId: string,
@@ -1913,6 +1922,7 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         agentFileIds: string[];
         memoryIds: string[];
         connectionIds: string[];
+        recommendationHash?: string;
       },
     ) => requestJson<{
       mode: "off" | "internal" | "invite" | "public";

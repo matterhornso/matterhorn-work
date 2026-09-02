@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   MATTERHORN_COWORKER_INBOX_ITEM_VERSION,
   MATTERHORN_COWORKER_PROFILE_VERSION,
+  MATTERHORN_COWORKER_RESOURCE_RECOMMENDATION_VERSION,
   MATTERHORN_COWORKER_RESOURCE_SCOPE_VERSION,
   MATTERHORN_COWORKER_WATCH_VERSION,
   MATTERHORN_COWORKER_WORKING_STATE_VERSION,
@@ -12,6 +13,7 @@ import {
   MATTERHORN_WALRUS_PROOF_VERSION,
   type MatterhornCoworkerInboxItem,
   type MatterhornCoworkerProfile,
+  type MatterhornCoworkerResourceRecommendation,
   type MatterhornCoworkerResourceScope,
   type MatterhornCoworkerWatch,
   type MatterhornCoworkerWorkingState,
@@ -21,6 +23,7 @@ import {
   type MatterhornWalrusProof,
   validateMatterhornCoworkerInboxItem,
   validateMatterhornCoworkerProfile,
+  validateMatterhornCoworkerResourceRecommendation,
   validateMatterhornCoworkerResourceScope,
   validateMatterhornCoworkerWatch,
   validateMatterhornCoworkerWorkingState,
@@ -212,6 +215,42 @@ const resourceScope: MatterhornCoworkerResourceScope = {
   scopeHash: "6".repeat(64),
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-01T00:00:00.000Z",
+};
+
+const resourceRecommendation: MatterhornCoworkerResourceRecommendation = {
+  version: MATTERHORN_COWORKER_RESOURCE_RECOMMENDATION_VERSION,
+  workspaceId: "ws_alpha",
+  coworkerId: "coworker_risk_monitor",
+  profileRevision: 1,
+  expectedScopeRevision: 0,
+  agentFiles: [{
+    id: "afile_market_policy",
+    revision: 2,
+    name: "market-policy.md",
+    reason: "assigned_to_this_coworker",
+  }],
+  memories: [{
+    id: "mem_risk_policy",
+    version: "2026-09-01T00:00:00.000Z",
+    title: "Sui risk policy",
+    matchedTags: ["sui"],
+    reason: "matches_approved_topics",
+  }],
+  connections: [{
+    id: "cxc_sui",
+    appId: "matterhorn.sui",
+    manifestRevision: "1.0.0",
+    actionIds: ["prepare_transfer"],
+    networks: ["sui:testnet"],
+    reason: "matches_approved_app",
+  }],
+  approval: {
+    required: true,
+    automaticGrant: false,
+    walletSubmission: "connected_wallet_only",
+  },
+  recommendationHash: "7".repeat(64),
+  generatedAt: "2026-09-01T00:00:00.000Z",
 };
 
 const watch: MatterhornCoworkerWatch = {
@@ -445,6 +484,22 @@ describe("crypto coworker public contracts", () => {
       ...resourceScope,
       agentFiles: [resourceScope.agentFiles[0], resourceScope.agentFiles[0]],
     })).toContain("coworker_resource_scope_agent_files_duplicate");
+  });
+
+  test("keeps resource recommendations advisory, bounded, and content-free", () => {
+    expect(validateMatterhornCoworkerResourceRecommendation(resourceRecommendation)).toEqual([]);
+    expect(validateMatterhornCoworkerResourceRecommendation({
+      ...resourceRecommendation,
+      rawMemoryContent: "private portfolio instructions",
+      approval: { ...resourceRecommendation.approval, automaticGrant: true },
+    })).toEqual(expect.arrayContaining([
+      "coworker_resource_recommendation_unknown_field",
+      "coworker_resource_recommendation_approval_invalid",
+    ]));
+    expect(validateMatterhornCoworkerResourceRecommendation({
+      ...resourceRecommendation,
+      connections: [resourceRecommendation.connections[0], resourceRecommendation.connections[0]],
+    })).toContain("coworker_resource_recommendation_connections_duplicate");
   });
 
   test("accepts bounded read watches and rejects submit-shaped or unbounded schedules", () => {

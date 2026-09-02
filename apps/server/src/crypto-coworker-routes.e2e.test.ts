@@ -709,6 +709,56 @@ describe("crypto coworker HTTP boundary", () => {
     expect(incompatible.payload.code).toBe("agent_file_coworker_incompatible");
 
     const fileId = String(created.payload.item.id);
+    const recommendationPath = `/workspace/${workspaceA}/coworkers/${coworkerId}/resources/recommendation`;
+    expect((await request(server.base, recommendationPath)).response.status).toBe(401);
+    expect((await request(server.base, recommendationPath, { cookie: cookieB })).response.status).toBe(404);
+    const recommendation = await request(server.base, recommendationPath, { cookie: cookieA });
+    expect(recommendation.response.status).toBe(200);
+    expect(recommendation.response.headers.get("cache-control")).toBe("no-store");
+    expect(recommendation.payload.recommendation).toMatchObject({
+      workspaceId: workspaceA,
+      coworkerId,
+      profileRevision: 1,
+      expectedScopeRevision: 0,
+      agentFiles: [{
+        id: fileId,
+        revision: 1,
+        name: "portfolio-policy.md",
+        reason: "assigned_to_this_coworker",
+      }],
+      memories: [],
+      connections: [],
+      approval: {
+        required: true,
+        automaticGrant: false,
+        walletSubmission: "connected_wallet_only",
+      },
+    });
+    expect(recommendation.payload.recommendation.recommendationHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(recommendation.payload)).not.toContain(privateText);
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/resources`,
+      { cookie: cookieA },
+    )).payload.resources).toBeNull();
+    const changedRecommendation = await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/resources`,
+      {
+        method: "PUT",
+        cookie: cookieA,
+        body: {
+          expectedRevision: 0,
+          profileRevision: 1,
+          agentFileIds: [],
+          memoryIds: [],
+          connectionIds: [],
+          recommendationHash: recommendation.payload.recommendation.recommendationHash,
+        },
+      },
+    );
+    expect(changedRecommendation.response.status).toBe(409);
+    expect(changedRecommendation.payload.code).toBe("coworker_resource_recommendation_stale");
     const scoped = await request(
       server.base,
       `/workspace/${workspaceA}/coworkers/${coworkerId}/resources`,
@@ -721,6 +771,7 @@ describe("crypto coworker HTTP boundary", () => {
           agentFileIds: [fileId],
           memoryIds: [],
           connectionIds: [],
+          recommendationHash: recommendation.payload.recommendation.recommendationHash,
         },
       },
     );

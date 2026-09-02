@@ -7,6 +7,8 @@ export const MATTERHORN_CRYPTO_APP_CATALOG_VERSION = "matterhorn.crypto-app-cata
 export const MATTERHORN_COWORKER_PROFILE_VERSION = "matterhorn.coworker-profile.v1";
 export const MATTERHORN_COWORKER_WORKING_STATE_VERSION = "matterhorn.coworker-working-state.v1";
 export const MATTERHORN_COWORKER_RESOURCE_SCOPE_VERSION = "matterhorn.coworker-resource-scope.v1";
+export const MATTERHORN_COWORKER_RESOURCE_RECOMMENDATION_VERSION =
+  "matterhorn.coworker-resource-recommendation.v1";
 export const MATTERHORN_COWORKER_WATCH_VERSION = "matterhorn.coworker-watch.v1";
 export const MATTERHORN_COWORKER_INBOX_ITEM_VERSION = "matterhorn.coworker-inbox-item.v1";
 export const MATTERHORN_CRYPTO_INTENT_VERSION = "matterhorn.crypto-intent.v1";
@@ -395,6 +397,48 @@ export type MatterhornCoworkerResourceScope = {
   scopeHash: string;
   createdAt: string;
   updatedAt: string;
+};
+
+/**
+ * A server-generated, advisory-only sandbox proposal. It contains resource
+ * identity and display metadata, never file or Memory content, credentials,
+ * wallet material, or transaction authority. The server recomputes the
+ * recommendation before accepting it, and the user must explicitly save it.
+ */
+export type MatterhornCoworkerResourceRecommendation = {
+  version: typeof MATTERHORN_COWORKER_RESOURCE_RECOMMENDATION_VERSION;
+  workspaceId: string;
+  coworkerId: string;
+  profileRevision: number;
+  expectedScopeRevision: number;
+  agentFiles: Array<{
+    id: string;
+    revision: number;
+    name: string;
+    reason: "assigned_to_this_coworker";
+  }>;
+  memories: Array<{
+    id: string;
+    version: string;
+    title: string;
+    matchedTags: string[];
+    reason: "matches_approved_topics";
+  }>;
+  connections: Array<{
+    id: string;
+    appId: string;
+    manifestRevision: string;
+    actionIds: string[];
+    networks: string[];
+    reason: "matches_approved_app";
+  }>;
+  approval: {
+    required: true;
+    automaticGrant: false;
+    walletSubmission: "connected_wallet_only";
+  };
+  recommendationHash: string;
+  generatedAt: string;
 };
 
 export type MatterhornCoworkerWatchState = "active" | "paused";
@@ -1331,6 +1375,106 @@ export function validateMatterhornCoworkerResourceScope(value: unknown): string[
     issues.push("coworker_resource_scope_connections_invalid");
   } else if (new Set(connections.map((item) => String(item.id))).size !== connections.length) {
     issues.push("coworker_resource_scope_connections_duplicate");
+  }
+  return [...new Set(issues)];
+}
+
+export function validateMatterhornCoworkerResourceRecommendation(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) return ["coworker_resource_recommendation_not_object"];
+  if (!hasOnlyKeys(value, [
+    "version",
+    "workspaceId",
+    "coworkerId",
+    "profileRevision",
+    "expectedScopeRevision",
+    "agentFiles",
+    "memories",
+    "connections",
+    "approval",
+    "recommendationHash",
+    "generatedAt",
+  ])) issues.push("coworker_resource_recommendation_unknown_field");
+  if (value.version !== MATTERHORN_COWORKER_RESOURCE_RECOMMENDATION_VERSION) {
+    issues.push("coworker_resource_recommendation_version_invalid");
+  }
+  const validText = (text: unknown, maximum: number) => isNonEmptyString(text)
+    && text.length <= maximum
+    && !/[\u0000-\u001F\u007F]/.test(text);
+  const validId = (id: unknown) => typeof id === "string"
+    && validText(id, 256)
+    && /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/.test(id);
+  const validStringList = (candidate: unknown, maximum: number) => isStringArray(candidate)
+    && candidate.length > 0
+    && candidate.length <= maximum
+    && new Set(candidate).size === candidate.length
+    && candidate.every((item) => validText(item, 256));
+  if (!validId(value.workspaceId)) issues.push("coworker_resource_recommendation_workspace_invalid");
+  if (!validId(value.coworkerId)) issues.push("coworker_resource_recommendation_coworker_invalid");
+  if (!Number.isSafeInteger(value.profileRevision) || Number(value.profileRevision) < 1) {
+    issues.push("coworker_resource_recommendation_profile_revision_invalid");
+  }
+  if (!Number.isSafeInteger(value.expectedScopeRevision) || Number(value.expectedScopeRevision) < 0) {
+    issues.push("coworker_resource_recommendation_scope_revision_invalid");
+  }
+  if (typeof value.recommendationHash !== "string" || !/^[a-f0-9]{64}$/.test(value.recommendationHash)) {
+    issues.push("coworker_resource_recommendation_hash_invalid");
+  }
+  if (typeof value.generatedAt !== "string" || !Number.isFinite(Date.parse(value.generatedAt))) {
+    issues.push("coworker_resource_recommendation_generated_at_invalid");
+  }
+  if (!isRecord(value.approval)
+    || !hasOnlyKeys(value.approval, ["required", "automaticGrant", "walletSubmission"])
+    || value.approval.required !== true
+    || value.approval.automaticGrant !== false
+    || value.approval.walletSubmission !== "connected_wallet_only") {
+    issues.push("coworker_resource_recommendation_approval_invalid");
+  }
+
+  const agentFiles = value.agentFiles;
+  if (!Array.isArray(agentFiles) || agentFiles.length > 8 || agentFiles.some((item) => (
+    !isRecord(item)
+    || !hasOnlyKeys(item, ["id", "revision", "name", "reason"])
+    || !validId(item.id)
+    || !Number.isSafeInteger(item.revision)
+    || Number(item.revision) < 1
+    || !validText(item.name, 256)
+    || item.reason !== "assigned_to_this_coworker"
+  ))) {
+    issues.push("coworker_resource_recommendation_agent_files_invalid");
+  } else if (new Set(agentFiles.map((item) => String(item.id))).size !== agentFiles.length) {
+    issues.push("coworker_resource_recommendation_agent_files_duplicate");
+  }
+
+  const memories = value.memories;
+  if (!Array.isArray(memories) || memories.length > 8 || memories.some((item) => (
+    !isRecord(item)
+    || !hasOnlyKeys(item, ["id", "version", "title", "matchedTags", "reason"])
+    || !validId(item.id)
+    || !validText(item.version, 160)
+    || !validText(item.title, 256)
+    || !validStringList(item.matchedTags, 16)
+    || item.reason !== "matches_approved_topics"
+  ))) {
+    issues.push("coworker_resource_recommendation_memories_invalid");
+  } else if (new Set(memories.map((item) => String(item.id))).size !== memories.length) {
+    issues.push("coworker_resource_recommendation_memories_duplicate");
+  }
+
+  const connections = value.connections;
+  if (!Array.isArray(connections) || connections.length > 8 || connections.some((item) => (
+    !isRecord(item)
+    || !hasOnlyKeys(item, ["id", "appId", "manifestRevision", "actionIds", "networks", "reason"])
+    || !validId(item.id)
+    || !validId(item.appId)
+    || !validText(item.manifestRevision, 160)
+    || !validStringList(item.actionIds, 64)
+    || !validStringList(item.networks, 32)
+    || item.reason !== "matches_approved_app"
+  ))) {
+    issues.push("coworker_resource_recommendation_connections_invalid");
+  } else if (new Set(connections.map((item) => String(item.id))).size !== connections.length) {
+    issues.push("coworker_resource_recommendation_connections_duplicate");
   }
   return [...new Set(issues)];
 }
