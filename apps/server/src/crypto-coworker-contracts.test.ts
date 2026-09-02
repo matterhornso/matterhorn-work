@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   MATTERHORN_COWORKER_INBOX_ITEM_VERSION,
   MATTERHORN_COWORKER_PROFILE_VERSION,
+  MATTERHORN_COWORKER_RESOURCE_SCOPE_VERSION,
   MATTERHORN_COWORKER_WATCH_VERSION,
   MATTERHORN_COWORKER_WORKING_STATE_VERSION,
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
@@ -11,6 +12,7 @@ import {
   MATTERHORN_WALRUS_PROOF_VERSION,
   type MatterhornCoworkerInboxItem,
   type MatterhornCoworkerProfile,
+  type MatterhornCoworkerResourceScope,
   type MatterhornCoworkerWatch,
   type MatterhornCoworkerWorkingState,
   type MatterhornCryptoAppManifest,
@@ -19,6 +21,7 @@ import {
   type MatterhornWalrusProof,
   validateMatterhornCoworkerInboxItem,
   validateMatterhornCoworkerProfile,
+  validateMatterhornCoworkerResourceScope,
   validateMatterhornCoworkerWatch,
   validateMatterhornCoworkerWorkingState,
   validateMatterhornCryptoAppManifest,
@@ -177,6 +180,40 @@ const workingState: MatterhornCoworkerWorkingState = {
   updatedAt: "2026-09-01T00:00:00.000Z",
 };
 
+const resourceScope: MatterhornCoworkerResourceScope = {
+  version: MATTERHORN_COWORKER_RESOURCE_SCOPE_VERSION,
+  workspaceId: "ws_alpha",
+  ownerId: "account_alpha",
+  coworkerId: "coworker_risk_monitor",
+  revision: 1,
+  profileRevision: 1,
+  agentFiles: [{
+    id: "afile_market_policy",
+    revision: 2,
+    contentSha256: "4".repeat(64),
+    sizeBytes: 1_024,
+  }],
+  memories: [{
+    id: "mem_risk_policy",
+    version: "2026-09-01T00:00:00.000Z",
+    contentHash: "5".repeat(64),
+  }],
+  connections: [{
+    id: "cxc_sui",
+    appId: "matterhorn.sui",
+    manifestRevision: "1.0.0",
+    actionIds: ["prepare_transfer"],
+    networks: ["sui:testnet"],
+  }],
+  privacy: {
+    mode: "private_workspace",
+    unverifiedProviderConsent: false,
+  },
+  scopeHash: "6".repeat(64),
+  createdAt: "2026-09-01T00:00:00.000Z",
+  updatedAt: "2026-09-01T00:00:00.000Z",
+};
+
 const watch: MatterhornCoworkerWatch = {
   version: MATTERHORN_COWORKER_WATCH_VERSION,
   id: "watch_sui_balance",
@@ -309,6 +346,22 @@ describe("crypto coworker public contracts", () => {
         evidenceReferenceIds: ["missing"],
       }],
     })).toContain("coworker_working_state_unresolvedRisks_invalid");
+  });
+
+  test("accepts a closed coworker resource scope and rejects content or privacy broadening", () => {
+    expect(validateMatterhornCoworkerResourceScope(resourceScope)).toEqual([]);
+    expect(validateMatterhornCoworkerResourceScope({
+      ...resourceScope,
+      rawFileContent: "wallet export",
+    })).toContain("coworker_resource_scope_unknown_field");
+    expect(validateMatterhornCoworkerResourceScope({
+      ...resourceScope,
+      privacy: { ...resourceScope.privacy, unverifiedProviderConsent: true },
+    })).toContain("coworker_resource_scope_privacy_invalid");
+    expect(validateMatterhornCoworkerResourceScope({
+      ...resourceScope,
+      agentFiles: [resourceScope.agentFiles[0], resourceScope.agentFiles[0]],
+    })).toContain("coworker_resource_scope_agent_files_duplicate");
   });
 
   test("accepts bounded read watches and rejects submit-shaped or unbounded schedules", () => {

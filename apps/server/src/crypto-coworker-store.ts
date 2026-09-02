@@ -1,15 +1,18 @@
+import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
+  type MatterhornCoworkerResourceScope,
   type MatterhornCoworkerInboxItem,
   type MatterhornCoworkerProfile,
   type MatterhornCoworkerWatch,
   type MatterhornCoworkerWorkingState,
   validateMatterhornCoworkerInboxItem,
   validateMatterhornCoworkerProfile,
+  validateMatterhornCoworkerResourceScope,
   validateMatterhornCoworkerWatch,
   validateMatterhornCoworkerWorkingState,
 } from "@matterhorn-work/types/crypto-coworkers";
@@ -47,6 +50,18 @@ type CoworkerWorkingStateRow = {
   revision: number;
   profile_revision: number;
   state_json: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type CoworkerResourceScopeRow = {
+  workspace_id: string;
+  owner_id: string;
+  coworker_id: string;
+  revision: number;
+  profile_revision: number;
+  scope_hash: string;
+  scope_json: string;
   created_at: string;
   updated_at: string;
 };
@@ -133,6 +148,41 @@ function workingStateFromRow(row: CoworkerWorkingStateRow): MatterhornCoworkerWo
     || result.coworkerId !== row.coworker_id
     || result.revision !== row.revision
     || result.profileRevision !== row.profile_revision
+    || result.createdAt !== row.created_at
+    || result.updatedAt !== row.updated_at) {
+    throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+  }
+  return structuredClone(result);
+}
+
+function resourceScopeFromRow(row: CoworkerResourceScopeRow): MatterhornCoworkerResourceScope {
+  let scope: unknown;
+  try {
+    scope = JSON.parse(row.scope_json);
+  } catch {
+    throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+  }
+  if (validateMatterhornCoworkerResourceScope(scope).length > 0) {
+    throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+  }
+  const result = scope as MatterhornCoworkerResourceScope;
+  const expectedScopeHash = createHash("sha256").update(JSON.stringify({
+    workspaceId: result.workspaceId,
+    ownerId: result.ownerId,
+    coworkerId: result.coworkerId,
+    profileRevision: result.profileRevision,
+    agentFiles: result.agentFiles,
+    memories: result.memories,
+    connections: result.connections,
+    privacy: result.privacy,
+  })).digest("hex");
+  if (result.workspaceId !== row.workspace_id
+    || result.ownerId !== row.owner_id
+    || result.coworkerId !== row.coworker_id
+    || result.revision !== row.revision
+    || result.profileRevision !== row.profile_revision
+    || result.scopeHash !== row.scope_hash
+    || result.scopeHash !== expectedScopeHash
     || result.createdAt !== row.created_at
     || result.updatedAt !== row.updated_at) {
     throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
@@ -262,6 +312,24 @@ export class MatterhornCoworkerStore {
         PRIMARY KEY (workspace_id, owner_id, coworker_id),
         CHECK (revision >= 1),
         CHECK (profile_revision >= 1),
+        FOREIGN KEY (workspace_id, owner_id, coworker_id)
+          REFERENCES crypto_coworkers(workspace_id, owner_id, coworker_id)
+          ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS crypto_coworker_resource_scopes (
+        workspace_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        coworker_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        profile_revision INTEGER NOT NULL,
+        scope_hash TEXT NOT NULL,
+        scope_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, owner_id, coworker_id),
+        CHECK (revision >= 1),
+        CHECK (profile_revision >= 1),
+        CHECK (length(scope_hash) = 64),
         FOREIGN KEY (workspace_id, owner_id, coworker_id)
           REFERENCES crypto_coworkers(workspace_id, owner_id, coworker_id)
           ON DELETE CASCADE
@@ -424,6 +492,63 @@ export class MatterhornCoworkerStore {
       expectedRevision,
     ) as CoworkerWorkingStateRow | undefined;
     return row ? workingStateFromRow(row) : null;
+  }
+
+  getResourceScope(workspaceId: string, ownerId: string, coworkerId: string): MatterhornCoworkerResourceScope | null {
+    const row = statement(this.#db, `
+      SELECT * FROM crypto_coworker_resource_scopes
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? LIMIT 1
+    `).get(workspaceId, ownerId, coworkerId) as CoworkerResourceScopeRow | undefined;
+    return row ? resourceScopeFromRow(row) : null;
+  }
+
+  createResourceScope(scope: MatterhornCoworkerResourceScope): MatterhornCoworkerResourceScope {
+    try {
+      statement(this.#db, `
+        INSERT INTO crypto_coworker_resource_scopes(
+          workspace_id, owner_id, coworker_id, revision, profile_revision,
+          scope_hash, scope_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        scope.workspaceId,
+        scope.ownerId,
+        scope.coworkerId,
+        scope.revision,
+        scope.profileRevision,
+        scope.scopeHash,
+        JSON.stringify(scope),
+        scope.createdAt,
+        scope.updatedAt,
+      );
+      return structuredClone(scope);
+    } catch (error) {
+      const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+      if (code.startsWith("SQLITE_CONSTRAINT")) throw new MatterhornCoworkerStoreError("coworker_conflict");
+      throw error;
+    }
+  }
+
+  replaceResourceScope(
+    scope: MatterhornCoworkerResourceScope,
+    expectedRevision: number,
+  ): MatterhornCoworkerResourceScope | null {
+    const row = statement(this.#db, `
+      UPDATE crypto_coworker_resource_scopes
+      SET revision = ?, profile_revision = ?, scope_hash = ?, scope_json = ?, updated_at = ?
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND revision = ?
+      RETURNING *
+    `).get(
+      scope.revision,
+      scope.profileRevision,
+      scope.scopeHash,
+      JSON.stringify(scope),
+      scope.updatedAt,
+      scope.workspaceId,
+      scope.ownerId,
+      scope.coworkerId,
+      expectedRevision,
+    ) as CoworkerResourceScopeRow | undefined;
+    return row ? resourceScopeFromRow(row) : null;
   }
 
   listWatches(workspaceId: string, ownerId: string, coworkerId: string): MatterhornCoworkerWatch[] {
@@ -972,6 +1097,10 @@ export class MatterhornCoworkerStore {
         WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
       `).run(workspaceId, ownerId, coworkerId);
       statement(this.#db, `
+        DELETE FROM crypto_coworker_resource_scopes
+        WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
+      `).run(workspaceId, ownerId, coworkerId);
+      statement(this.#db, `
         DELETE FROM crypto_coworker_working_state
         WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
       `).run(workspaceId, ownerId, coworkerId);
@@ -996,6 +1125,7 @@ export class MatterhornCoworkerStore {
     try {
       statement(this.#db, "DELETE FROM crypto_coworker_inbox WHERE workspace_id = ?").run(workspaceId);
       statement(this.#db, "DELETE FROM crypto_coworker_watches WHERE workspace_id = ?").run(workspaceId);
+      statement(this.#db, "DELETE FROM crypto_coworker_resource_scopes WHERE workspace_id = ?").run(workspaceId);
       statement(this.#db, "DELETE FROM crypto_coworker_working_state WHERE workspace_id = ?").run(workspaceId);
       const deleted = statement(this.#db, "DELETE FROM crypto_coworkers WHERE workspace_id = ?")
         .run(workspaceId).changes ?? 0;

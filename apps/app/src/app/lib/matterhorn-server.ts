@@ -126,6 +126,7 @@ import type {
   MatterhornAgentFileWalrusVerification,
   MatterhornCoworkerInboxItem,
   MatterhornCoworkerProfile,
+  MatterhornCoworkerResourceScope,
   MatterhornCoworkerState,
   MatterhornCoworkerTemplateId,
   MatterhornCoworkerWatch,
@@ -148,6 +149,7 @@ import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } fro
 
 export type MatterhornCoworkerAccountProfile = Omit<MatterhornCoworkerProfile, "ownerId">;
 export type MatterhornCoworkerAccountState = Omit<MatterhornCoworkerWorkingState, "ownerId">;
+export type MatterhornCoworkerAccountResourceScope = Omit<MatterhornCoworkerResourceScope, "ownerId">;
 export type MatterhornCoworkerAccountWatch = Omit<MatterhornCoworkerWatch, "ownerId">;
 export type MatterhornCoworkerAccountInboxItem = Omit<MatterhornCoworkerInboxItem, "ownerId">;
 
@@ -1840,6 +1842,34 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/state`, {
       token,
       timeoutMs: timeouts.status,
+    }),
+    getCoworkerResources: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      active: boolean;
+      resources: MatterhornCoworkerAccountResourceScope | null;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/resources`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    setCoworkerResources: (
+      workspaceId: string,
+      coworkerId: string,
+      input: {
+        expectedRevision: number;
+        profileRevision: number;
+        agentFileIds: string[];
+        memoryIds: string[];
+        connectionIds: string[];
+      },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      active: true;
+      resources: MatterhornCoworkerAccountResourceScope;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/resources`, {
+      token,
+      method: "PUT",
+      body: input,
+      timeoutMs: timeouts.config,
     }),
     listCoworkerWatches: (workspaceId: string, coworkerId: string) => requestJson<{
       mode: "off" | "internal" | "invite" | "public";

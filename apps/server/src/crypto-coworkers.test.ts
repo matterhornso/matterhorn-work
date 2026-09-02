@@ -3,15 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 
 import type { MatterhornCoworkerProfile } from "@matterhorn-work/types/crypto-coworkers";
 
-import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
+import { MatterhornCoworkerStore, MatterhornCoworkerStoreError } from "./crypto-coworker-store.js";
 import {
   MatterhornCoworkerError,
   MatterhornCoworkers,
   type MatterhornCoworkerCreateInput,
   type MatterhornCoworkerInboxItemInput,
+  type MatterhornCoworkerResourceScopeInput,
   type MatterhornCoworkerWatchCreateInput,
   type MatterhornCoworkerWorkingStateInput,
 } from "./crypto-coworkers.js";
@@ -93,6 +95,34 @@ function workingStateInput(
       expiresAt: "2026-09-01T12:05:00.000Z",
     }],
     approvedMemoryIds: ["mem_public_strategy"],
+    ...overrides,
+  };
+}
+
+function resourceScopeInput(
+  overrides: Partial<MatterhornCoworkerResourceScopeInput> = {},
+): MatterhornCoworkerResourceScopeInput {
+  return {
+    expectedRevision: 0,
+    profileRevision: 1,
+    agentFiles: [{
+      id: "afile_market_policy",
+      revision: 2,
+      contentSha256: "d".repeat(64),
+      sizeBytes: 1_024,
+    }],
+    memories: [{
+      id: "mem_public_strategy",
+      version: NOW,
+      contentHash: "e".repeat(64),
+    }],
+    connections: [{
+      id: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionIds: ["sui_account_read"],
+      networks: ["sui:testnet"],
+    }],
     ...overrides,
   };
 }
@@ -363,6 +393,156 @@ describe("durable crypto coworkers", () => {
       }
     } finally {
       store.close();
+    }
+  });
+
+  test("persists an exact private resource scope and isolates it by workspace and owner", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-resources-"));
+    roots.push(root);
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    let sequence = 0;
+    const coworkers = new MatterhornCoworkers({
+      store,
+      policyVersion: "coworker-policy-1",
+      now: () => new Date(NOW),
+      id: () => `cw_${++sequence}`,
+    });
+    const privateInput = input({
+      privacy: {
+        allowedDataLabels: ["public", "workspace_private", "untrusted_external"],
+        allowUnverifiedProviderConsent: true,
+      },
+    });
+    try {
+      const alpha = coworkers.create("ws_shared", "account_alpha", privateInput);
+      const beta = coworkers.create("ws_shared", "account_beta", privateInput);
+      const scope = coworkers.setResourceScope(
+        "ws_shared",
+        "account_alpha",
+        alpha.id,
+        resourceScopeInput(),
+      );
+      expect(scope).toMatchObject({
+        revision: 1,
+        profileRevision: 1,
+        coworkerId: alpha.id,
+        privacy: { mode: "private_workspace", unverifiedProviderConsent: false },
+      });
+      expect(scope.scopeHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(JSON.stringify(scope)).not.toContain("wallet export");
+      expect(coworkers.getResourceScope("ws_shared", "account_alpha", alpha.id)?.scopeHash)
+        .toBe(scope.scopeHash);
+      expect(coworkers.getResourceScope("ws_shared", "account_beta", beta.id)).toBeNull();
+      expect(() => coworkers.getResourceScope("ws_shared", "account_beta", alpha.id))
+        .toThrow(new MatterhornCoworkerError("coworker_not_found"));
+
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+      try {
+        const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
+        expect(reopened.getResourceScope("ws_shared", "account_alpha", alpha.id)?.connections)
+          .toEqual(scope.connections);
+      } finally {
+        reopenedStore.close();
+      }
+    } finally {
+      store.close();
+    }
+  });
+
+  test("fails closed for stale, broadened, or privacy-incompatible resource scopes", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const publicProfile = coworkers.create("ws_alpha", "account_alpha", input());
+      expect(() => coworkers.setResourceScope(
+        "ws_alpha",
+        "account_alpha",
+        publicProfile.id,
+        resourceScopeInput(),
+      )).toThrow(new MatterhornCoworkerError("coworker_resource_scope_invalid"));
+
+      const privateProfile = coworkers.update("ws_alpha", "account_alpha", publicProfile.id, {
+        expectedRevision: publicProfile.revision,
+        privacy: {
+          allowedDataLabels: ["public", "workspace_private", "untrusted_external"],
+          allowUnverifiedProviderConsent: true,
+        },
+      });
+      const created = coworkers.setResourceScope(
+        "ws_alpha",
+        "account_alpha",
+        privateProfile.id,
+        resourceScopeInput({ profileRevision: privateProfile.revision }),
+      );
+      expect(() => coworkers.setResourceScope(
+        "ws_alpha",
+        "account_alpha",
+        privateProfile.id,
+        resourceScopeInput({ profileRevision: privateProfile.revision }),
+      )).toThrow(new MatterhornCoworkerError("coworker_revision_conflict"));
+      expect(() => coworkers.setResourceScope(
+        "ws_alpha",
+        "account_alpha",
+        privateProfile.id,
+        resourceScopeInput({
+          expectedRevision: created.revision,
+          profileRevision: privateProfile.revision,
+          connections: [{
+            ...resourceScopeInput().connections[0],
+            appId: "malicious.exchange",
+          }],
+        }),
+      )).toThrow(new MatterhornCoworkerError("coworker_resource_scope_invalid"));
+
+      const revised = coworkers.update("ws_alpha", "account_alpha", privateProfile.id, {
+        expectedRevision: privateProfile.revision,
+        mission: "Use only resources that the user reviews again after this change.",
+      });
+      expect(coworkers.resolveActiveResourceScope("ws_alpha", "account_alpha", privateProfile.id)).toBeNull();
+      expect(coworkers.getResourceScope("ws_alpha", "account_alpha", privateProfile.id)?.profileRevision)
+        .toBe(privateProfile.revision);
+      coworkers.delete("ws_alpha", "account_alpha", privateProfile.id, revised.revision);
+      expect(store.getResourceScope("ws_alpha", "account_alpha", privateProfile.id)).toBeNull();
+    } finally {
+      store.close();
+    }
+  });
+
+  test("detects resource-scope mutation when durable state is reopened", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-resource-integrity-"));
+    roots.push(root);
+    const path = join(root, "coworkers.db");
+    const store = new MatterhornCoworkerStore(path);
+    const coworkers = new MatterhornCoworkers({
+      store,
+      policyVersion: "coworker-policy-1",
+      now: () => new Date(NOW),
+      id: () => "cw_integrity",
+    });
+    const profile = coworkers.create("ws_alpha", "account_alpha", input({
+      privacy: {
+        allowedDataLabels: ["public", "workspace_private", "untrusted_external"],
+        allowUnverifiedProviderConsent: false,
+      },
+    }));
+    coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, resourceScopeInput());
+    store.close();
+
+    const database = new Database(path);
+    const row = database.query("SELECT scope_json FROM crypto_coworker_resource_scopes LIMIT 1")
+      .get() as { scope_json: string };
+    const tampered = JSON.parse(row.scope_json) as Record<string, unknown>;
+    tampered.memories = [];
+    database.query("UPDATE crypto_coworker_resource_scopes SET scope_json = ?")
+      .run(JSON.stringify(tampered));
+    database.close();
+
+    const reopenedStore = new MatterhornCoworkerStore(path);
+    try {
+      const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
+      expect(() => reopened.getResourceScope("ws_alpha", "account_alpha", profile.id))
+        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+    } finally {
+      reopenedStore.close();
     }
   });
 

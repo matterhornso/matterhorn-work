@@ -1,18 +1,21 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import {
   MATTERHORN_COWORKER_INBOX_ITEM_VERSION,
   MATTERHORN_COWORKER_PROFILE_VERSION,
+  MATTERHORN_COWORKER_RESOURCE_SCOPE_VERSION,
   MATTERHORN_COWORKER_WATCH_VERSION,
   MATTERHORN_COWORKER_WORKING_STATE_VERSION,
   type MatterhornCoworkerAuthority,
   type MatterhornCoworkerInboxItem,
   type MatterhornCoworkerProfile,
+  type MatterhornCoworkerResourceScope,
   type MatterhornCoworkerState,
   type MatterhornCoworkerWatch,
   type MatterhornCoworkerWorkingState,
   validateMatterhornCoworkerInboxItem,
   validateMatterhornCoworkerProfile,
+  validateMatterhornCoworkerResourceScope,
   validateMatterhornCoworkerWatch,
   validateMatterhornCoworkerWorkingState,
 } from "@matterhorn-work/types/crypto-coworkers";
@@ -44,6 +47,13 @@ export type MatterhornCoworkerUpdateInput = Partial<MatterhornCoworkerCreateInpu
 export type MatterhornCoworkerWorkingStateInput = Omit<
   MatterhornCoworkerWorkingState,
   "version" | "workspaceId" | "ownerId" | "coworkerId" | "revision" | "createdAt" | "updatedAt"
+> & {
+  expectedRevision: number;
+};
+
+export type MatterhornCoworkerResourceScopeInput = Pick<
+  MatterhornCoworkerResourceScope,
+  "profileRevision" | "agentFiles" | "memories" | "connections"
 > & {
   expectedRevision: number;
 };
@@ -96,6 +106,7 @@ export class MatterhornCoworkerError extends Error {
     | "coworker_input_invalid"
     | "coworker_not_found"
     | "coworker_revision_conflict"
+    | "coworker_resource_scope_invalid"
     | "coworker_working_state_invalid"
     | "coworker_watch_invalid"
     | "coworker_watch_not_found"
@@ -143,6 +154,28 @@ function assertProfile(profile: MatterhornCoworkerProfile): void {
   if (validateMatterhornCoworkerProfile(profile).length > 0 || !policyRelationshipsValid(profile)) {
     throw new MatterhornCoworkerError("coworker_input_invalid");
   }
+}
+
+function resourceScopeHash(input: Pick<
+  MatterhornCoworkerResourceScope,
+  "workspaceId" | "ownerId" | "coworkerId" | "profileRevision" | "agentFiles" | "memories" | "connections" | "privacy"
+>): string {
+  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+
+function normalizeResourceScopeInput(input: MatterhornCoworkerResourceScopeInput) {
+  return {
+    profileRevision: input.profileRevision,
+    agentFiles: structuredClone(input.agentFiles).sort((left, right) => left.id.localeCompare(right.id)),
+    memories: structuredClone(input.memories).sort((left, right) => left.id.localeCompare(right.id)),
+    connections: structuredClone(input.connections)
+      .map((connection) => ({
+        ...connection,
+        actionIds: [...connection.actionIds].sort(),
+        networks: [...connection.networks].sort(),
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  };
 }
 
 export class MatterhornCoworkers {
@@ -234,6 +267,87 @@ export class MatterhornCoworkers {
       throw new MatterhornCoworkerError("coworker_not_found");
     }
     return this.#store.getWorkingState(workspaceId, ownerId, coworkerId);
+  }
+
+  getResourceScope(
+    workspaceId: string,
+    ownerId: string,
+    coworkerId: string,
+  ): MatterhornCoworkerResourceScope | null {
+    if (!this.#store.get(workspaceId, ownerId, coworkerId)) {
+      throw new MatterhornCoworkerError("coworker_not_found");
+    }
+    return this.#store.getResourceScope(workspaceId, ownerId, coworkerId);
+  }
+
+  resolveActiveResourceScope(
+    workspaceId: string,
+    ownerId: string,
+    coworkerId: string,
+  ): MatterhornCoworkerResourceScope | null {
+    const profile = this.resolveActive(workspaceId, ownerId, coworkerId);
+    if (!profile) return null;
+    const scope = this.#store.getResourceScope(workspaceId, ownerId, coworkerId);
+    return scope?.profileRevision === profile.revision ? scope : null;
+  }
+
+  setResourceScope(
+    workspaceId: string,
+    ownerId: string,
+    coworkerId: string,
+    input: MatterhornCoworkerResourceScopeInput,
+  ): MatterhornCoworkerResourceScope {
+    const profile = this.resolveActive(workspaceId, ownerId, coworkerId);
+    if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
+    if (input.profileRevision !== profile.revision) {
+      throw new MatterhornCoworkerError("coworker_revision_conflict");
+    }
+    const current = this.#store.getResourceScope(workspaceId, ownerId, coworkerId);
+    if (!Number.isSafeInteger(input.expectedRevision)
+      || input.expectedRevision < 0
+      || (current?.revision ?? 0) !== input.expectedRevision) {
+      throw new MatterhornCoworkerError("coworker_revision_conflict");
+    }
+    const normalized = normalizeResourceScopeInput(input);
+    if ((normalized.agentFiles.length > 0 || normalized.memories.length > 0)
+      && !profile.privacy.allowedDataLabels.includes("workspace_private")) {
+      throw new MatterhornCoworkerError("coworker_resource_scope_invalid");
+    }
+    const connectionPolicyValid = normalized.connections.every((connection) => (
+      profile.allowedAppIds.includes(connection.appId)
+      && connection.actionIds.every((actionId) => profile.allowedActionIds.includes(actionId))
+      && connection.networks.every((network) => profile.allowedNetworks.includes(network))
+    ));
+    if (!connectionPolicyValid) throw new MatterhornCoworkerError("coworker_resource_scope_invalid");
+    const now = this.#now().toISOString();
+    const content = {
+      workspaceId,
+      ownerId,
+      coworkerId,
+      profileRevision: normalized.profileRevision,
+      agentFiles: normalized.agentFiles,
+      memories: normalized.memories,
+      connections: normalized.connections,
+      privacy: {
+        mode: "private_workspace" as const,
+        unverifiedProviderConsent: false as const,
+      },
+    };
+    const scope: MatterhornCoworkerResourceScope = {
+      version: MATTERHORN_COWORKER_RESOURCE_SCOPE_VERSION,
+      ...content,
+      revision: input.expectedRevision + 1,
+      scopeHash: resourceScopeHash(content),
+      createdAt: current?.createdAt ?? now,
+      updatedAt: now,
+    };
+    if (validateMatterhornCoworkerResourceScope(scope).length > 0) {
+      throw new MatterhornCoworkerError("coworker_resource_scope_invalid");
+    }
+    if (!current) return this.#store.createResourceScope(scope);
+    const replaced = this.#store.replaceResourceScope(scope, input.expectedRevision);
+    if (!replaced) throw new MatterhornCoworkerError("coworker_revision_conflict");
+    return replaced;
   }
 
   setWorkingState(

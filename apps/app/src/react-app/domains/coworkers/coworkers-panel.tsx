@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MatterhornCoworkerTemplateId } from "@matterhorn-work/types/crypto-coworkers";
 import {
@@ -65,6 +65,18 @@ type ConfirmAction =
   | { kind: "delete"; coworker: MatterhornCoworkerAccountProfile }
   | null;
 
+type CoworkerResourceDraft = {
+  agentFileIds: string[];
+  memoryIds: string[];
+  connectionIds: string[];
+};
+
+const EMPTY_RESOURCE_DRAFT: CoworkerResourceDraft = {
+  agentFileIds: [],
+  memoryIds: [],
+  connectionIds: [],
+};
+
 const COWORKER_CHOICES: ReadonlyArray<{
   id: MatterhornCoworkerTemplateId;
   label: string;
@@ -82,6 +94,8 @@ function coworkerErrorMessage(error: unknown): string {
     }
     if (error.code === "coworker_not_found") return "This coworker no longer exists.";
     if (error.code === "coworker_revision_conflict") return "This coworker changed. Refresh and try again.";
+    if (error.code === "coworker_resource_scope_invalid") return "One of these files, memories, or apps is no longer available. Refresh and choose again.";
+    if (error.code === "coworker_resources_stale") return "This access list changed. Review it again before starting work.";
     if (error.code === "coworker_transition_invalid") return "That change is no longer available for this coworker.";
     if (error.code === "coworker_inbox_state_conflict") return "This alert changed. Refresh and try again.";
     if (error.code === "pending_crypto_intent_revision_conflict") return "This wallet review changed. Refresh and try again.";
@@ -193,6 +207,8 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [coworkerChoice, setCoworkerChoice] = useState("");
   const [creating, setCreating] = useState<MatterhornCoworkerTemplateId | null>(null);
   const [showCreateChoices, setShowCreateChoices] = useState(false);
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const [resourceDraft, setResourceDraft] = useState<CoworkerResourceDraft>(EMPTY_RESOURCE_DRAFT);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [cancelIntent, setCancelIntent] = useState<MatterhornCoworkerWalletIntentView | null>(null);
@@ -228,6 +244,55 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       return { state: state.state, watches: watches.watches, inbox: inbox.items, walletIntents: walletIntents.items };
     },
   });
+  const resourceKey = useMemo(
+    () => [QUERY_PREFIX, workspaceId, selectedCoworker?.id ?? "none", selectedCoworker?.revision ?? 0, "resources"],
+    [selectedCoworker?.id, selectedCoworker?.revision, workspaceId],
+  );
+  const resourceQuery = useQuery({
+    queryKey: resourceKey,
+    enabled: Boolean(props.client && workspaceId && selectedCoworker),
+    retry: false,
+    queryFn: async () => {
+      if (!props.client || !selectedCoworker) throw new Error("coworker_unavailable");
+      const connectionsRequest = props.client.listCryptoAppConnections(workspaceId)
+        .then((response) => ({ available: true, connections: response.connections }))
+        .catch((cause: unknown) => {
+          if (cause instanceof MatterhornServerError && cause.code === "crypto_app_gateway_disabled") {
+            return { available: false, connections: [] };
+          }
+          throw cause;
+        });
+      const [scope, files, memories, connections] = await Promise.all([
+        props.client.getCoworkerResources(workspaceId, selectedCoworker.id),
+        props.client.listAgentFiles(workspaceId),
+        props.client.listWorkspaceMemory(workspaceId, { limit: 80 }),
+        connectionsRequest,
+      ]);
+      return {
+        scope,
+        filesAvailable: files.available,
+        files: files.items.filter((item) => item.file.access.coworkerIds.includes(selectedCoworker.id)),
+        memories: memories.records.filter((record) => record.canUseInChat && record.sensitivity !== "forbidden_secret"),
+        connectionsAvailable: connections.available,
+        connections: connections.connections.filter((connection) => (
+          connection.state === "active"
+          && connection.availability === "available"
+          && selectedCoworker.allowedAppIds.includes(connection.appId)
+          && connection.grantedActionIds.some((actionId) => selectedCoworker.allowedActionIds.includes(actionId))
+          && connection.grantedNetworks.some((network) => selectedCoworker.allowedNetworks.includes(network))
+        )),
+      };
+    },
+  });
+
+  useEffect(() => {
+    const scope = resourceQuery.data?.scope.resources;
+    setResourceDraft(scope ? {
+      agentFileIds: scope.agentFiles.map((item) => item.id),
+      memoryIds: scope.memories.map((item) => item.id),
+      connectionIds: scope.connections.map((item) => item.id),
+    } : EMPTY_RESOURCE_DRAFT);
+  }, [resourceQuery.data?.scope.resources?.scopeHash, selectedCoworker?.id]);
 
   const walletIntents = useMemo(
     () => sortCoworkerWalletIntents(detailQuery.data?.walletIntents ?? []),
@@ -238,13 +303,53 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     ...activeIntents,
     ...walletIntents.filter((item) => !isActiveCoworkerWalletIntent(item)),
   ].slice(0, 4), [activeIntents, walletIntents]);
+  const canStartCoworker = selectedCoworker?.state === "active"
+    && resourceQuery.data?.scope.active === true
+    && (resourceQuery.data.scope.resources?.connections.length ?? 0) > 0;
 
   const refresh = useCallback(async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: listKey }),
       queryClient.invalidateQueries({ queryKey: detailKey }),
+      queryClient.invalidateQueries({ queryKey: resourceKey }),
     ]);
-  }, [detailKey, listKey, queryClient]);
+  }, [detailKey, listKey, queryClient, resourceKey]);
+
+  const toggleResource = useCallback((key: keyof CoworkerResourceDraft, id: string) => {
+    setResourceDraft((current) => {
+      const selected = current[key];
+      const next = selected.includes(id)
+        ? selected.filter((candidate) => candidate !== id)
+        : selected.length < 8 ? [...selected, id] : selected;
+      return { ...current, [key]: next };
+    });
+  }, []);
+
+  const saveResources = useCallback(async () => {
+    if (!props.client || !workspaceId || !selectedCoworker) return;
+    setBusyAction(`resources:${selectedCoworker.id}`);
+    setError(null);
+    try {
+      await props.client.setCoworkerResources(workspaceId, selectedCoworker.id, {
+        expectedRevision: resourceQuery.data?.scope.resources?.revision ?? 0,
+        profileRevision: selectedCoworker.revision,
+        agentFileIds: [...resourceDraft.agentFileIds].sort(),
+        memoryIds: [...resourceDraft.memoryIds].sort(),
+        connectionIds: [...resourceDraft.connectionIds].sort(),
+      });
+      await queryClient.invalidateQueries({ queryKey: resourceKey });
+      setResourcesOpen(false);
+      showToast({
+        title: "Access saved",
+        description: `${selectedCoworker.name} can use only the items you selected.`,
+        tone: "success",
+      });
+    } catch (cause) {
+      setError(coworkerErrorMessage(cause));
+    } finally {
+      setBusyAction(null);
+    }
+  }, [props.client, queryClient, resourceDraft, resourceKey, resourceQuery.data?.scope.resources?.revision, selectedCoworker, showToast, workspaceId]);
 
   const createCoworker = useCallback(async (templateId: MatterhornCoworkerTemplateId) => {
     if (!props.client || !workspaceId) return;
@@ -514,7 +619,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button size="sm" disabled={selectedCoworker.state !== "active"} onClick={() => startChat(selectedCoworker)}>Start chat</Button>
+                <Button size="sm" disabled={!canStartCoworker} onClick={() => startChat(selectedCoworker)}>Start chat</Button>
                 {selectedCoworker.state === "active" ? (
                   <Button size="sm" variant="outline" disabled={busyAction !== null} onClick={() => void transitionCoworker(selectedCoworker, "paused")}>
                     <Pause aria-hidden="true" /> Pause
@@ -529,10 +634,119 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
 
             <CoworkerBoundary coworker={selectedCoworker} />
 
+            <section className="border-b border-dls-border/70 py-4" aria-labelledby="coworker-resources-title">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 id="coworker-resources-title" className="text-sm font-semibold text-dls-text">Files, Memory, and apps</h3>
+                  <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                    {resourceQuery.isLoading
+                      ? "Loading access…"
+                      : resourceQuery.isError
+                        ? "Access could not be loaded."
+                        : !resourceQuery.data?.scope.resources
+                          ? "Nothing is shared until you choose."
+                          : !resourceQuery.data.scope.active
+                            ? "Review access again because this coworker changed."
+                            : resourceQuery.data.scope.resources.connections.length === 0
+                              ? "Choose at least one connected app before starting chat."
+                            : `${resourceQuery.data.scope.resources.agentFiles.length} files · ${resourceQuery.data.scope.resources.memories.length} memories · ${resourceQuery.data.scope.resources.connections.length} apps`}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={resourceQuery.isLoading || resourceQuery.isError}
+                  aria-expanded={resourcesOpen}
+                  onClick={() => setResourcesOpen((open) => !open)}
+                >
+                  {resourcesOpen ? "Close" : "Choose access"}
+                </Button>
+              </div>
+
+              {resourcesOpen && resourceQuery.data ? (
+                <div className="mt-4 grid gap-4 border-t border-dls-border/70 pt-4">
+                  <fieldset>
+                    <legend className="text-xs font-medium text-dls-text">Connected apps</legend>
+                    {!resourceQuery.data.connectionsAvailable ? (
+                      <p className="mt-2 text-xs leading-5 text-dls-secondary">App connections are not enabled in this environment.</p>
+                    ) : resourceQuery.data.connections.length ? (
+                      <div className="mt-2 grid gap-2">
+                        {resourceQuery.data.connections.map((connection) => (
+                          <label key={connection.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-current"
+                              checked={resourceDraft.connectionIds.includes(connection.id)}
+                              onChange={() => toggleResource("connectionIds", connection.id)}
+                            />
+                            <span>{humanizeId(connection.appId)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : <p className="mt-2 text-xs leading-5 text-dls-secondary">No approved apps are connected for this coworker.</p>}
+                  </fieldset>
+
+                  <fieldset>
+                    <legend className="text-xs font-medium text-dls-text">Private files</legend>
+                    {!resourceQuery.data.filesAvailable ? (
+                      <p className="mt-2 text-xs leading-5 text-dls-secondary">Private files are not enabled in this environment.</p>
+                    ) : resourceQuery.data.files.length ? (
+                      <div className="mt-2 grid gap-2">
+                        {resourceQuery.data.files.map((item) => (
+                          <label key={item.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-current"
+                              checked={resourceDraft.agentFileIds.includes(item.id)}
+                              onChange={() => toggleResource("agentFileIds", item.id)}
+                            />
+                            <span className="truncate">{item.file.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : <p className="mt-2 text-xs leading-5 text-dls-secondary">No private files are available for this coworker.</p>}
+                  </fieldset>
+
+                  <fieldset>
+                    <legend className="text-xs font-medium text-dls-text">Memory</legend>
+                    {resourceQuery.data.memories.length ? (
+                      <div className="mt-2 grid gap-2">
+                        {resourceQuery.data.memories.map((record) => (
+                          <label key={record.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-current"
+                              checked={resourceDraft.memoryIds.includes(record.id)}
+                              onChange={() => toggleResource("memoryIds", record.id)}
+                            />
+                            <span className="truncate">{record.title}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : <p className="mt-2 text-xs leading-5 text-dls-secondary">No approved Memory is available yet.</p>}
+                  </fieldset>
+
+                  <p className="text-xs leading-5 text-dls-secondary">
+                    Private files and Memory use only an approved private model. This coworker cannot bypass that rule.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={busyAction !== null}
+                      onClick={() => void saveResources()}
+                    >
+                      {busyAction === `resources:${selectedCoworker.id}` ? "Saving…" : "Save access"}
+                    </Button>
+                    <Button size="sm" variant="ghost" disabled={busyAction !== null} onClick={() => setResourcesOpen(false)}>Cancel</Button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+
             <section className="py-4" aria-labelledby="coworker-access-title">
               <h3 id="coworker-access-title" className="text-sm font-semibold text-dls-text">Access and limits</h3>
               <dl className="mt-3 grid gap-2 text-xs leading-5">
-                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Connected apps</dt><dd className="text-right text-dls-text">{selectedCoworker.allowedAppIds.map(humanizeId).join(", ") || "None"}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Apps this role can use</dt><dd className="text-right text-dls-text">{selectedCoworker.allowedAppIds.map(humanizeId).join(", ") || "None"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Reads per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxReadCallsPerRun}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Wallet reviews per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxPrepareCallsPerFamily > 0 ? selectedCoworker.limits.maxPrepareCallsPerFamily : "Not available"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Active checks</dt><dd className="text-dls-text">{selectedCoworker.limits.maxActiveWatches > 0 ? `${detailQuery.data?.watches.filter((watch) => watch.state === "active").length ?? 0} of ${selectedCoworker.limits.maxActiveWatches}` : "Not available"}</dd></div>

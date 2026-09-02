@@ -41,6 +41,7 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("Revoke");
     expect(panel).toContain("Wallet activity");
     expect(panel).toContain("Wallet reviews per request");
+    expect(panel).toContain("Apps this role can use");
     expect(panel).toContain("Only your connected wallet can approve and send.");
     expect(panel).toContain("Exact review details");
     expect(panel).toContain("Policy checks:");
@@ -54,6 +55,25 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("Not allowed");
     expect(panel).not.toContain("signTransaction");
     expect(panel).not.toContain("submitTransaction");
+  });
+
+  test("lets the user approve an exact resource sandbox without privacy bypasses", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const client = appSource("app/lib/matterhorn-server.ts");
+    expect(panel).toContain("Files, Memory, and apps");
+    expect(panel).toContain("Nothing is shared until you choose.");
+    expect(panel).toContain("Choose at least one connected app before starting chat.");
+    expect(panel).toContain("disabled={!canStartCoworker}");
+    expect(panel).toContain("Choose access");
+    expect(panel).toContain("Save access");
+    expect(panel).toContain("This coworker cannot bypass that rule.");
+    expect(panel).toContain("App connections are not enabled in this environment.");
+    expect(panel).toContain("Private files are not enabled in this environment.");
+    expect(panel).toContain('cause.code === "crypto_app_gateway_disabled"');
+    expect(panel).toContain("setCoworkerResources");
+    expect(client).toContain("getCoworkerResources:");
+    expect(client).toContain("setCoworkerResources:");
+    expect(panel).not.toContain("unverifiedProviderConsent: true");
   });
 
   test("binds the selected coworker through the authoritative privacy gateway", () => {

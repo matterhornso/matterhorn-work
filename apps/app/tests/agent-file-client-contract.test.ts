@@ -103,6 +103,14 @@ describe("Agent File server client", () => {
 
     await client.listCoworkers("workspace one");
     await client.getCoworkerState("workspace one", "coworker one");
+    await client.getCoworkerResources("workspace one", "coworker one");
+    await client.setCoworkerResources("workspace one", "coworker one", {
+      expectedRevision: 2,
+      profileRevision: 3,
+      agentFileIds: ["file one"],
+      memoryIds: ["memory one"],
+      connectionIds: ["connection one"],
+    });
     await client.listCoworkerWatches("workspace one", "coworker one");
     await client.transitionCoworkerWatch("workspace one", "coworker one", "watch one", { state: "paused", expectedRevision: 2 });
     await client.listCoworkerInbox("workspace one", "coworker one");
@@ -126,6 +134,8 @@ describe("Agent File server client", () => {
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://control.example/workspace/workspace%20one/coworkers",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/state",
+      "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/resources",
+      "PUT https://control.example/workspace/workspace%20one/coworkers/coworker%20one/resources",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/watches",
       "PATCH https://control.example/workspace/workspace%20one/coworkers/coworker%20one/watches/watch%20one",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/inbox?limit=50",
@@ -136,8 +146,15 @@ describe("Agent File server client", () => {
       "PATCH https://control.example/workspace/workspace%20one/coworkers/coworker%20one",
       "DELETE https://control.example/workspace/workspace%20one/coworkers/coworker%20one",
     ]);
-    expect(requests[7]?.body).toEqual({ expectedRevision: 5 });
-    expect(requests[8]?.body).toEqual({
+    expect(requests[3]?.body).toEqual({
+      expectedRevision: 2,
+      profileRevision: 3,
+      agentFileIds: ["file one"],
+      memoryIds: ["memory one"],
+      connectionIds: ["connection one"],
+    });
+    expect(requests[9]?.body).toEqual({ expectedRevision: 5 });
+    expect(requests[10]?.body).toEqual({
       expectedRevision: 5,
       status: "submitted",
       publicId: "public-transaction-id",

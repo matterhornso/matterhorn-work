@@ -412,6 +412,7 @@ import { MatterhornCoworkerStoreError } from "./crypto-coworker-store.js";
 import {
   MatterhornCoworkerError,
   type MatterhornCoworkerCreateInput,
+  type MatterhornCoworkerResourceScopeInput,
   type MatterhornCoworkerWatchCreateInput,
   type MatterhornCoworkerUpdateInput,
   type MatterhornCoworkerWorkingStateInput,
@@ -434,6 +435,7 @@ import type {
   MatterhornCryptoAppConnectionState,
   MatterhornCryptoAppManifest,
   MatterhornCoworkerProfile,
+  MatterhornCoworkerResourceScope,
   MatterhornCoworkerState,
   MatterhornCoworkerWatch,
   MatterhornCoworkerInboxItem,
@@ -3168,6 +3170,11 @@ function coworkerWorkingStateAccountView(state: MatterhornCoworkerWorkingState) 
   return view;
 }
 
+function coworkerResourceScopeAccountView(scope: MatterhornCoworkerResourceScope) {
+  const { ownerId: _ownerId, ...view } = structuredClone(scope);
+  return view;
+}
+
 function coworkerWatchAccountView(watch: MatterhornCoworkerWatch) {
   const { ownerId: _ownerId, ...view } = structuredClone(watch);
   return view;
@@ -3194,6 +3201,7 @@ function pendingCryptoIntentAccountView(item: MatterhornPendingCryptoIntent) {
 export function buildCoworkerRunBinding(
   profile: MatterhornCoworkerProfile,
   cryptoAppRuntime: MatterhornCryptoAppRuntimeServices,
+  resourceScope?: MatterhornCoworkerResourceScope,
 ): MatterhornCoworkerRunBinding {
   return {
     id: profile.id,
@@ -3205,9 +3213,11 @@ export function buildCoworkerRunBinding(
     allowedActionIds: [...profile.allowedActionIds],
     allowedNetworks: [...profile.allowedNetworks],
     automaticAuthorities: [...profile.automaticAuthorities],
-    actionBindings: coworkerActionBindings(profile, cryptoAppRuntime),
+    actionBindings: coworkerActionBindings(profile, cryptoAppRuntime, resourceScope),
     allowedDataLabels: [...profile.privacy.allowedDataLabels],
-    allowUnverifiedProviderConsent: profile.privacy.allowUnverifiedProviderConsent,
+    allowUnverifiedProviderConsent: resourceScope
+      ? resourceScope.privacy.unverifiedProviderConsent
+      : profile.privacy.allowUnverifiedProviderConsent,
     maxReadCallsPerRun: profile.limits.maxReadCallsPerRun,
     maxPrepareCallsPerFamily: profile.limits.maxPrepareCallsPerFamily,
   };
@@ -3216,10 +3226,16 @@ export function buildCoworkerRunBinding(
 function coworkerActionBindings(
   profile: MatterhornCoworkerProfile,
   cryptoAppRuntime: MatterhornCryptoAppRuntimeServices,
+  resourceScope?: MatterhornCoworkerResourceScope,
 ): MatterhornCoworkerRunBinding["actionBindings"] {
   const bindings = new Map<string, MatterhornCoworkerRunBinding["actionBindings"][number]>();
-  if (!cryptoAppRuntime.catalog) return [];
+  if (!cryptoAppRuntime.catalog || !resourceScope) return [];
+  const scopedConnections = new Map(resourceScope.connections.map((connection) => [connection.id, connection]));
   for (const connection of cryptoAppRuntime.catalog.listConnections(profile.workspaceId)) {
+    const scopedConnection = scopedConnections.get(connection.id);
+    if (!scopedConnection
+      || scopedConnection.appId !== connection.appId
+      || scopedConnection.manifestRevision !== connection.manifestRevision) continue;
     if (connection.state !== "active"
       || connection.availability !== "available"
       || !profile.allowedAppIds.includes(connection.appId)) continue;
@@ -3228,7 +3244,8 @@ function coworkerActionBindings(
     for (const action of app.actions) {
       const actionId = action.id;
       if (!profile.allowedActionIds.includes(actionId)
-        || !connection.grantedActionIds.includes(actionId)) continue;
+        || !connection.grantedActionIds.includes(actionId)
+        || !scopedConnection.actionIds.includes(actionId)) continue;
       const toolName = firstPartyCryptoAppProxyTool(connection.appId, actionId);
       const tool = toolName ? getMatterhornCryptoTool(toolName) : undefined;
       if (!tool) continue;
@@ -3238,6 +3255,7 @@ function coworkerActionBindings(
       if (!authorityAllowed) continue;
       for (const network of connection.grantedNetworks) {
         if (!profile.allowedNetworks.includes(network)
+          || !scopedConnection.networks.includes(network)
           || !app.networks.some((candidate) => candidate.chainId === network)) continue;
         const binding = {
           connectionId: connection.id,
@@ -3294,10 +3312,75 @@ export function coworkerAppBindingsAreActive(
   });
 }
 
+function coworkerResourceConnectionsAreActive(
+  cryptoAppRuntime: MatterhornCryptoAppRuntimeServices,
+  scope: MatterhornCoworkerResourceScope,
+): boolean {
+  if (!cryptoAppRuntime.catalog) return scope.connections.length === 0;
+  const current = new Map(
+    cryptoAppRuntime.catalog.listConnections(scope.workspaceId).map((connection) => [connection.id, connection]),
+  );
+  return scope.connections.every((expected) => {
+    const connection = current.get(expected.id);
+    if (!connection
+      || connection.state !== "active"
+      || connection.availability !== "available"
+      || connection.appId !== expected.appId
+      || connection.manifestRevision !== expected.manifestRevision
+      || expected.actionIds.some((actionId) => !connection.grantedActionIds.includes(actionId))
+      || expected.networks.some((network) => !connection.grantedNetworks.includes(network))) return false;
+    const app = cryptoAppRuntime.catalog?.get(expected.appId);
+    return Boolean(app
+      && app.manifestRevision === expected.manifestRevision
+      && expected.actionIds.every((actionId) => app.actions.some((action) => action.id === actionId))
+      && expected.networks.every((network) => app.networks.some((candidate) => candidate.chainId === network)));
+  });
+}
+
+async function coworkerResourceScopeIsCurrent(input: {
+  scope: MatterhornCoworkerResourceScope;
+  profile: MatterhornCoworkerProfile;
+  workspace: WorkspaceInfo;
+  memoryVault: MatterhornMemoryVault;
+  agentFileStore: MatterhornAgentFileStore | null;
+  cryptoAppRuntime: MatterhornCryptoAppRuntimeServices;
+}): Promise<boolean> {
+  if (input.profile.state !== "active"
+    || input.scope.profileRevision !== input.profile.revision
+    || !coworkerResourceConnectionsAreActive(input.cryptoAppRuntime, input.scope)) return false;
+  if (input.scope.agentFiles.length > 0 && !input.agentFileStore) return false;
+  for (const expected of input.scope.agentFiles) {
+    const current = input.agentFileStore?.get({
+      workspaceId: input.workspace.id,
+      ownerId: input.profile.ownerId,
+      fileId: expected.id,
+    });
+    if (!current
+      || !current.file.access.coworkerIds.includes(input.profile.id)
+      || current.revision !== expected.revision
+      || current.file.contentSha256 !== expected.contentSha256
+      || current.file.sizeBytes !== expected.sizeBytes) return false;
+  }
+  try {
+    const workspaceVault = memoryVaultForWorkspace(input.memoryVault, input.workspace);
+    for (const expected of input.scope.memories) {
+      const record = assertWorkspaceMemoryRecord(await workspaceVault.getRecord(expected.id), input.workspace);
+      if (!record.canUseInChat
+        || record.sensitivity === "forbidden_secret"
+        || record.updatedAt !== expected.version
+        || sha256Bytes(JSON.stringify(record)) !== expected.contentHash) return false;
+    }
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 function coworkerAuthorizationContextHash(input: {
   executionMode: MatterhornExecutionMode;
   requestToolProfiles: readonly Record<string, boolean>[];
   coworker: MatterhornCoworkerRunBinding | undefined;
+  resourceScopeHash?: string;
 }): string {
   const normalizedProfiles = input.requestToolProfiles.map((profile) => (
     Object.fromEntries(Object.entries(profile).sort(([left], [right]) => left.localeCompare(right)))
@@ -3306,6 +3389,7 @@ function coworkerAuthorizationContextHash(input: {
     executionMode: input.executionMode,
     requestToolProfiles: normalizedProfiles,
     coworker: input.coworker ?? null,
+    resourceScopeHash: input.resourceScopeHash ?? null,
   }));
 }
 
@@ -3318,9 +3402,118 @@ function activeCoworkerWorkingState(
   return state?.profileRevision === profile.revision ? state : undefined;
 }
 
+function coworkerResourceScopeIds(value: unknown, label: string, maximum: number): string[] {
+  if (!Array.isArray(value)
+    || value.length > maximum
+    || value.some((item) => typeof item !== "string" || !item.trim() || item.trim().length > 256)) {
+    throw new ApiError(400, "coworker_resource_scope_invalid", `${label} is invalid.`);
+  }
+  const ids = value.map((item) => String(item).trim());
+  if (new Set(ids).size !== ids.length) {
+    throw new ApiError(400, "coworker_resource_scope_invalid", `${label} contains duplicates.`);
+  }
+  return ids.sort();
+}
+
+async function resolveCoworkerResourceScopeInput(input: {
+  body: Record<string, unknown>;
+  workspace: WorkspaceInfo;
+  ownerId: string;
+  profile: MatterhornCoworkerProfile;
+  memoryVault: MatterhornMemoryVault;
+  agentFileStore: MatterhornAgentFileStore | null;
+  cryptoAppRuntime: MatterhornCryptoAppRuntimeServices;
+}): Promise<MatterhornCoworkerResourceScopeInput> {
+  const keys = ["expectedRevision", "profileRevision", "agentFileIds", "memoryIds", "connectionIds"];
+  if (Object.keys(input.body).some((key) => !keys.includes(key))
+    || keys.some((key) => !Object.hasOwn(input.body, key))
+    || !Number.isSafeInteger(input.body.expectedRevision)
+    || Number(input.body.expectedRevision) < 0
+    || input.body.profileRevision !== input.profile.revision) {
+    throw new ApiError(400, "coworker_resource_scope_invalid", "Coworker file and app access is invalid.");
+  }
+  const agentFileIds = coworkerResourceScopeIds(input.body.agentFileIds, "agentFileIds", 8);
+  const memoryIds = coworkerResourceScopeIds(input.body.memoryIds, "memoryIds", 8);
+  const connectionIds = coworkerResourceScopeIds(input.body.connectionIds, "connectionIds", 8);
+
+  if (agentFileIds.length > 0 && !input.agentFileStore) {
+    throw new ApiError(503, "agent_files_unavailable", "Encrypted Agent Files are unavailable.");
+  }
+  const agentFiles = agentFileIds.map((fileId) => {
+    const item = input.agentFileStore?.get({
+      workspaceId: input.workspace.id,
+      ownerId: input.ownerId,
+      fileId,
+    });
+    if (!item || !item.file.access.coworkerIds.includes(input.profile.id)) {
+      throw new ApiError(400, "coworker_resource_scope_invalid", "A selected file is not available to this coworker.");
+    }
+    return {
+      id: item.id,
+      revision: item.revision,
+      contentSha256: item.file.contentSha256,
+      sizeBytes: item.file.sizeBytes,
+    };
+  });
+
+  const workspaceVault = memoryVaultForWorkspace(input.memoryVault, input.workspace);
+  const memories = await Promise.all(memoryIds.map(async (memoryId) => {
+    const record = assertWorkspaceMemoryRecord(await workspaceVault.getRecord(memoryId), input.workspace);
+    if (!record.canUseInChat || record.sensitivity === "forbidden_secret") {
+      throw new ApiError(400, "coworker_resource_scope_invalid", "A selected Memory record is not available to this coworker.");
+    }
+    return {
+      id: record.id,
+      version: record.updatedAt,
+      contentHash: sha256Bytes(JSON.stringify(record)),
+    };
+  }));
+
+  if (connectionIds.length > 0 && !input.cryptoAppRuntime.catalog) {
+    throw new ApiError(503, "crypto_app_runtime_disabled", "Connected crypto apps are unavailable.");
+  }
+  const availableConnections = new Map(
+    (input.cryptoAppRuntime.catalog?.listConnections(input.workspace.id) ?? [])
+      .map((connection) => [connection.id, connection]),
+  );
+  const connections = connectionIds.map((connectionId) => {
+    const connection = availableConnections.get(connectionId);
+    if (!connection
+      || connection.state !== "active"
+      || connection.availability !== "available"
+      || !input.profile.allowedAppIds.includes(connection.appId)) {
+      throw new ApiError(400, "coworker_resource_scope_invalid", "A selected app connection is not available to this coworker.");
+    }
+    const actionIds = connection.grantedActionIds
+      .filter((actionId) => input.profile.allowedActionIds.includes(actionId))
+      .sort();
+    const networks = connection.grantedNetworks
+      .filter((network) => input.profile.allowedNetworks.includes(network))
+      .sort();
+    if (actionIds.length === 0 || networks.length === 0) {
+      throw new ApiError(400, "coworker_resource_scope_invalid", "A selected app has no approved actions for this coworker.");
+    }
+    return {
+      id: connection.id,
+      appId: connection.appId,
+      manifestRevision: connection.manifestRevision,
+      actionIds,
+      networks,
+    };
+  });
+  return {
+    expectedRevision: Number(input.body.expectedRevision),
+    profileRevision: input.profile.revision,
+    agentFiles,
+    memories,
+    connections,
+  };
+}
+
 type ResolvedMessageCoworker = {
   profile: MatterhornCoworkerProfile;
   binding: MatterhornCoworkerRunBinding;
+  resourceScope?: MatterhornCoworkerResourceScope;
 };
 
 function resolveMessageCoworker(input: {
@@ -3352,7 +3545,26 @@ function resolveMessageCoworker(input: {
     coworkerId,
   );
   if (!profile) throw new ApiError(404, "coworker_not_found", "Coworker not found.");
-  const binding = buildCoworkerRunBinding(profile, input.cryptoAppRuntime);
+  const storedResourceScope = input.coworkerRuntime.coworkers.getResourceScope(
+    profile.workspaceId,
+    profile.ownerId,
+    profile.id,
+  );
+  if (storedResourceScope && storedResourceScope.profileRevision !== profile.revision) {
+    throw new ApiError(
+      409,
+      "coworker_resources_stale",
+      "Review the files and apps this coworker can use after changing its settings.",
+    );
+  }
+  if (storedResourceScope && !coworkerResourceConnectionsAreActive(input.cryptoAppRuntime, storedResourceScope)) {
+    throw new ApiError(
+      409,
+      "coworker_resources_stale",
+      "One of this coworker's connected apps changed. Review its files and apps before continuing.",
+    );
+  }
+  const binding = buildCoworkerRunBinding(profile, input.cryptoAppRuntime, storedResourceScope ?? undefined);
   if (binding.actionBindings.length === 0) {
     throw new ApiError(
       409,
@@ -3360,7 +3572,11 @@ function resolveMessageCoworker(input: {
       "Connect an approved crypto app for this coworker before starting chat.",
     );
   }
-  return { profile, binding };
+  return {
+    profile,
+    binding,
+    ...(storedResourceScope ? { resourceScope: storedResourceScope } : {}),
+  };
 }
 
 function coworkerApiError(error: unknown): ApiError {
@@ -3394,6 +3610,8 @@ function coworkerApiError(error: unknown): ApiError {
           ? "The requested coworker state change is not allowed."
           : error.code === "coworker_working_state_invalid"
             ? "Coworker working state is invalid or contains forbidden secret material."
+            : error.code === "coworker_resource_scope_invalid"
+              ? "Choose only current files, Memory, and connected apps allowed for this coworker."
             : error.code === "coworker_watch_invalid"
               ? "Coworker watch is outside the active profile, schedule, budget, or privacy boundary."
               : error.code === "coworker_inbox_item_invalid"
@@ -10224,8 +10442,16 @@ function createRoutes(
     }
     const coworkerIds = body.coworkerIds.filter((id) => typeof id === "string");
     for (const coworkerId of coworkerIds) {
-      if (!coworkerRuntime.coworkers.get(workspace.id, ownerId, coworkerId)) {
+      const coworker = coworkerRuntime.coworkers.get(workspace.id, ownerId, coworkerId);
+      if (!coworker) {
         throw new ApiError(404, "coworker_not_found", "Coworker not found.");
+      }
+      if (!coworker.privacy.allowedDataLabels.includes("workspace_private")) {
+        throw new ApiError(
+          400,
+          "agent_file_coworker_incompatible",
+          "Private files can only be assigned to coworkers allowed to use private workspace data.",
+        );
       }
     }
     const bytes = decodeAgentFileUpload(body.contentBase64);
@@ -10425,6 +10651,74 @@ function createRoutes(
       );
       return noStoreJsonResponse({ mode: coworkerRuntime.mode, state: coworkerWorkingStateAccountView(state) });
     } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/coworkers/:coworkerId/resources", "client", async (ctx) => {
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const profile = coworkerRuntime.coworkers.get(workspace.id, ownerId, ctx.params.coworkerId);
+      if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
+      const scope = coworkerRuntime.coworkers.getResourceScope(workspace.id, ownerId, profile.id);
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        active: scope ? await coworkerResourceScopeIsCurrent({
+          scope,
+          profile,
+          workspace,
+          memoryVault,
+          agentFileStore,
+          cryptoAppRuntime,
+        }) : false,
+        resources: scope ? coworkerResourceScopeAccountView(scope) : null,
+      });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "PUT", "/workspace/:id/coworkers/:coworkerId/resources", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!coworkerRuntime.coworkers) {
+        throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const profile = coworkerRuntime.coworkers.resolveActive(workspace.id, ownerId, ctx.params.coworkerId);
+      if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
+      const body = await readJsonBody(ctx.request, 64 * 1_024, "Coworker files and apps");
+      if (!isRecord(body)) {
+        throw new ApiError(400, "coworker_resource_scope_invalid", "Coworker file and app access is invalid.");
+      }
+      const resolved = await resolveCoworkerResourceScopeInput({
+        body,
+        workspace,
+        ownerId,
+        profile,
+        memoryVault,
+        agentFileStore,
+        cryptoAppRuntime,
+      });
+      const resources = coworkerRuntime.coworkers.setResourceScope(
+        workspace.id,
+        ownerId,
+        profile.id,
+        resolved,
+      );
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        active: true,
+        resources: coworkerResourceScopeAccountView(resources),
+      });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
       throw coworkerApiError(error);
     }
   });
@@ -12409,11 +12703,13 @@ function createRoutes(
       privacyMode,
       coworker: coworker?.profile,
       coworkerState,
+      resourceScope: coworker?.resourceScope,
     });
     const authorizationContextHash = coworkerAuthorizationContextHash({
       executionMode,
       requestToolProfiles,
       coworker: coworker?.binding,
+      resourceScopeHash: coworker?.resourceScope?.scopeHash,
     });
     const response = guardedRuntime.preflight({
       workspaceId: workspace.id,
@@ -12681,11 +12977,13 @@ function createRoutes(
       privacyMode,
       coworker: coworker?.profile,
       coworkerState,
+      resourceScope: coworker?.resourceScope,
     });
     const authorizationContextHash = coworkerAuthorizationContextHash({
       executionMode,
       requestToolProfiles,
       coworker: coworker?.binding,
+      resourceScopeHash: coworker?.resourceScope?.scopeHash,
     });
     const guardedInput = {
       workspaceId: workspace.id,
@@ -18788,6 +19086,7 @@ async function resolveSelectedMemoryContext(input: {
   memoryVault: MatterhornMemoryVault;
   workspace: WorkspaceInfo;
   memoryIds: string[];
+  expected?: MatterhornCoworkerResourceScope["memories"];
 }): Promise<{ modelText: string; privacyParts: MatterhornAgentPrivacyPart[] }> {
   if (input.memoryIds.length > AGENT_MESSAGE_MAX_MEMORY_IDS) {
     throw new ApiError(400, "invalid_payload", `memoryIds must include no more than ${AGENT_MESSAGE_MAX_MEMORY_IDS} records`);
@@ -18797,6 +19096,16 @@ async function resolveSelectedMemoryContext(input: {
     const record = assertWorkspaceMemoryRecord(await workspaceVault.getRecord(id), input.workspace);
     if (!record.canUseInChat) {
       throw new ApiError(403, "memory_not_available_in_chat", "A selected Memory record is not approved for chat use.");
+    }
+    const expected = input.expected?.find((candidate) => candidate.id === id);
+    if (input.expected && (!expected
+      || expected.version !== record.updatedAt
+      || expected.contentHash !== sha256Bytes(JSON.stringify(record)))) {
+      throw new ApiError(
+        409,
+        "coworker_resources_stale",
+        "One of this coworker's Memory records changed. Review its files and apps before continuing.",
+      );
     }
     return record;
   }));
@@ -18824,6 +19133,7 @@ async function resolveSelectedAgentFileContext(input: {
   ownerId: string;
   coworker: MatterhornCoworkerProfile | undefined;
   fileIds: string[];
+  expected?: MatterhornCoworkerResourceScope["agentFiles"];
 }): Promise<{ modelText: string; privacyParts: MatterhornAgentPrivacyPart[] }> {
   if (input.fileIds.length === 0) return { modelText: "", privacyParts: [] };
   if (input.fileIds.length > AGENT_MESSAGE_MAX_AGENT_FILE_IDS) {
@@ -18842,12 +19152,27 @@ async function resolveSelectedAgentFileContext(input: {
   const store = input.store;
   const coworker = input.coworker;
   try {
-    const contexts = await Promise.all(input.fileIds.map((fileId) => store.readContext({
-      workspaceId: input.workspaceId,
-      ownerId: input.ownerId,
-      coworkerId: coworker.id,
-      fileId,
-    })));
+    const contexts = await Promise.all(input.fileIds.map(async (fileId) => {
+      const expected = input.expected?.find((candidate) => candidate.id === fileId);
+      const current = store.get({ workspaceId: input.workspaceId, ownerId: input.ownerId, fileId });
+      if (input.expected && (!expected
+        || !current
+        || current.revision !== expected.revision
+        || current.file.contentSha256 !== expected.contentSha256
+        || current.file.sizeBytes !== expected.sizeBytes)) {
+        throw new ApiError(
+          409,
+          "coworker_resources_stale",
+          "One of this coworker's files changed. Review its files and apps before continuing.",
+        );
+      }
+      return store.readContext({
+        workspaceId: input.workspaceId,
+        ownerId: input.ownerId,
+        coworkerId: coworker.id,
+        fileId,
+      });
+    }));
     return {
       modelText: contexts.length
         ? ["## User-selected Agent Files", ...contexts.map((context) => context.part.text)].join("\n\n")
@@ -18855,6 +19180,7 @@ async function resolveSelectedAgentFileContext(input: {
       privacyParts: contexts.map((context) => context.part),
     };
   } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw agentFileApiError(error);
   }
 }
@@ -19031,6 +19357,7 @@ async function resolveAuthoritativeAgentMessage(input: {
   privacyMode?: MatterhornAgentPrivacyMode;
   coworker?: MatterhornCoworkerProfile;
   coworkerState?: MatterhornCoworkerWorkingState;
+  resourceScope?: MatterhornCoworkerResourceScope;
 }): Promise<ResolvedAgentMessageContext> {
   if (typeof input.body.system === "string" && input.body.system.trim()) {
     throw new ApiError(
@@ -19042,15 +19369,34 @@ async function resolveAuthoritativeAgentMessage(input: {
   const rawParts = parseSessionPromptParts(input.body);
   const resolvedParts = await resolveAgentPromptParts(input.workspace, rawParts);
   const attachmentIds = promptPrivateContextIds(input.body, "attachmentIds");
-  const memoryIds = [...new Set([
+  const requestedMemoryIds = [...new Set([
     ...promptPrivateContextIds(input.body, "memoryIds", "selectedMemoryIds"),
     ...(input.coworkerState?.approvedMemoryIds ?? []),
   ])].sort().slice(0, AGENT_MESSAGE_MAX_MEMORY_IDS);
-  const agentFileIds = promptPrivateContextIds(input.body, "agentFileIds");
+  const requestedAgentFileIds = promptPrivateContextIds(input.body, "agentFileIds");
+  if (input.resourceScope) {
+    const allowedMemoryIds = new Set(input.resourceScope.memories.map((memory) => memory.id));
+    const allowedAgentFileIds = new Set(input.resourceScope.agentFiles.map((file) => file.id));
+    if (requestedMemoryIds.some((id) => !allowedMemoryIds.has(id))
+      || requestedAgentFileIds.some((id) => !allowedAgentFileIds.has(id))) {
+      throw new ApiError(
+        403,
+        "coworker_resource_not_allowed",
+        "This chat requested a file or Memory record outside the coworker's approved workspace.",
+      );
+    }
+  }
+  const memoryIds = input.resourceScope
+    ? input.resourceScope.memories.map((memory) => memory.id)
+    : requestedMemoryIds;
+  const agentFileIds = input.resourceScope
+    ? input.resourceScope.agentFiles.map((file) => file.id)
+    : requestedAgentFileIds;
   const memory = await resolveSelectedMemoryContext({
     memoryVault: input.memoryVault,
     workspace: input.workspace,
     memoryIds,
+    expected: input.resourceScope?.memories,
   });
   const agentFiles = await resolveSelectedAgentFileContext({
     store: input.agentFileStore,
@@ -19058,6 +19404,7 @@ async function resolveAuthoritativeAgentMessage(input: {
     ownerId: input.ownerId,
     coworker: input.coworker,
     fileIds: agentFileIds,
+    expected: input.resourceScope?.agentFiles,
   });
   const crypto = await resolveCryptoRunContext({
     guardedRuntime: input.guardedRuntime,
@@ -19101,6 +19448,14 @@ async function resolveAuthoritativeAgentMessage(input: {
       }] : []),
       ...memory.privacyParts,
       ...agentFiles.privacyParts,
+      ...(input.resourceScope ? [{
+        type: "coworker_resource_scope",
+        name: "Files and apps this coworker can use",
+        source: "system" as const,
+        label: "workspace_private" as const,
+        contentHash: input.resourceScope.scopeHash,
+        version: `${input.resourceScope.profileRevision}:${input.resourceScope.revision}`,
+      }] : []),
       toolProfilePart,
     ],
     system: authoritativeSystem.system,

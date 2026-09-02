@@ -343,6 +343,16 @@ function coworkerInput() {
   };
 }
 
+function privateCoworkerInput() {
+  return {
+    ...coworkerInput(),
+    privacy: {
+      allowedDataLabels: ["public", "workspace_private", "untrusted_external"],
+      allowUnverifiedProviderConsent: false,
+    },
+  };
+}
+
 function workingStateInput() {
   return {
     expectedRevision: 0,
@@ -646,7 +656,7 @@ describe("crypto coworker HTTP boundary", () => {
     const workspaceB = String((await request(server.base, "/workspaces", { cookie: cookieB })).payload.items[0].id);
     const coworker = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
       cookie: cookieA,
-      body: coworkerInput(),
+      body: privateCoworkerInput(),
     });
     const coworkerId = String(coworker.payload.coworker.id);
     expect((await request(server.base, `/workspace/${workspaceA}/agent-files`)).response.status).toBe(401);
@@ -681,6 +691,54 @@ describe("crypto coworker HTTP boundary", () => {
     expect((await request(server.base, `/workspace/${workspaceB}/agent-files`, { cookie: cookieB })).payload.items)
       .toEqual([]);
 
+    const publicCoworker = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: coworkerInput(),
+    });
+    const incompatible = await request(server.base, `/workspace/${workspaceA}/agent-files`, {
+      cookie: cookieA,
+      body: {
+        name: "public-role-private-file.md",
+        mimeType: "text/markdown",
+        coworkerIds: [String(publicCoworker.payload.coworker.id)],
+        expiresAt: null,
+        contentBase64: Buffer.from(privateText).toString("base64"),
+      },
+    });
+    expect(incompatible.response.status).toBe(400);
+    expect(incompatible.payload.code).toBe("agent_file_coworker_incompatible");
+
+    const fileId = String(created.payload.item.id);
+    const scoped = await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/resources`,
+      {
+        method: "PUT",
+        cookie: cookieA,
+        body: {
+          expectedRevision: 0,
+          profileRevision: 1,
+          agentFileIds: [fileId],
+          memoryIds: [],
+          connectionIds: [],
+        },
+      },
+    );
+    expect(scoped.response.status).toBe(200);
+    expect(scoped.payload).toMatchObject({
+      active: true,
+      resources: {
+        agentFiles: [{ id: fileId, revision: 1 }],
+        privacy: { mode: "private_workspace", unverifiedProviderConsent: false },
+      },
+    });
+    expect(JSON.stringify(scoped.payload)).not.toContain(privateText);
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/resources`,
+      { cookie: cookieA },
+    )).payload.active).toBe(true);
+
     const secretRejected = await request(server.base, `/workspace/${workspaceA}/agent-files`, {
       cookie: cookieA,
       body: {
@@ -701,7 +759,6 @@ describe("crypto coworker HTTP boundary", () => {
     expect((await request(server.base, `/workspace/${workspaceA}/agent-files`, { cookie: cookieA })).payload.items)
       .toHaveLength(1);
 
-    const fileId = String(created.payload.item.id);
     const recovered = await fetch(`${server.base}/workspace/${workspaceA}/agent-files/${fileId}/recover`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookieA },
@@ -739,6 +796,11 @@ describe("crypto coworker HTTP boundary", () => {
       body: { expectedRevision: 1 },
     });
     expect(deleted.response.status).toBe(200);
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/resources`,
+      { cookie: cookieA },
+    )).payload.active).toBe(false);
     expect((await request(server.base, `/workspace/${workspaceA}/agent-files`, { cookie: cookieA })).payload.items)
       .toEqual([]);
     expect(server.keyManager?.keys.size).toBe(0);
@@ -757,7 +819,7 @@ describe("crypto coworker HTTP boundary", () => {
     const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
     const coworker = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
       cookie: cookieA,
-      body: coworkerInput(),
+      body: privateCoworkerInput(),
     });
     const coworkerId = String(coworker.payload.coworker.id);
     const privateText = "Private portfolio policy: keep 70% liquid.";
@@ -877,7 +939,7 @@ describe("crypto coworker HTTP boundary", () => {
     const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
     const coworker = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
       cookie: cookieA,
-      body: coworkerInput(),
+      body: privateCoworkerInput(),
     });
     const created = await request(server.base, `/workspace/${workspaceA}/agent-files`, {
       cookie: cookieA,
@@ -1003,7 +1065,7 @@ describe("crypto coworker HTTP boundary", () => {
     );
     const coworker = await request(server.base, `/workspace/${workspaceId}/coworkers`, {
       cookie: sessionCookie,
-      body: coworkerInput(),
+      body: privateCoworkerInput(),
     });
     expect((await request(server.base, `/workspace/${workspaceId}/agent-files`, {
       cookie: sessionCookie,
@@ -1336,6 +1398,56 @@ describe("crypto coworker HTTP boundary", () => {
     expect(created.payload.coworker.ownerId).toBeUndefined();
     const coworkerId = String(created.payload.coworker.id);
 
+    const storedResources = await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/resources`,
+      {
+        method: "PUT",
+        cookie: cookieA,
+        body: {
+          expectedRevision: 0,
+          profileRevision: 1,
+          agentFileIds: [],
+          memoryIds: [],
+          connectionIds: [],
+        },
+      },
+    );
+    expect(storedResources.response.status).toBe(200);
+    expect(storedResources.response.headers.get("cache-control")).toBe("no-store");
+    expect(storedResources.payload).toMatchObject({
+      active: true,
+      resources: {
+        revision: 1,
+        profileRevision: 1,
+        privacy: { mode: "private_workspace", unverifiedProviderConsent: false },
+      },
+    });
+    expect(storedResources.payload.resources.ownerId).toBeUndefined();
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceB}/coworkers/${coworkerId}/resources`,
+      { cookie: cookieB },
+    )).response.status).toBe(404);
+    const injectedResources = await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/resources`,
+      {
+        method: "PUT",
+        cookie: cookieA,
+        body: {
+          expectedRevision: 1,
+          profileRevision: 1,
+          agentFileIds: [],
+          memoryIds: [],
+          connectionIds: [],
+          ownerId: signupB.payload.user.id,
+        },
+      },
+    );
+    expect(injectedResources.response.status).toBe(400);
+    expect(injectedResources.payload.code).toBe("coworker_resource_scope_invalid");
+
     const storedState = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/state`, {
       method: "PUT",
       cookie: cookieA,
@@ -1408,6 +1520,34 @@ describe("crypto coworker HTTP boundary", () => {
     });
     expect(updated.response.status).toBe(200);
     expect(updated.payload.coworker.revision).toBe(2);
+    const staleResources = await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/resources`,
+      { cookie: cookieA },
+    );
+    expect(staleResources.payload).toMatchObject({
+      active: false,
+      resources: { revision: 1, profileRevision: 1 },
+    });
+    const reboundResources = await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/resources`,
+      {
+        method: "PUT",
+        cookie: cookieA,
+        body: {
+          expectedRevision: 1,
+          profileRevision: 2,
+          agentFileIds: [],
+          memoryIds: [],
+          connectionIds: [],
+        },
+      },
+    );
+    expect(reboundResources.payload).toMatchObject({
+      active: true,
+      resources: { revision: 2, profileRevision: 2 },
+    });
     const reboundState = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/state`, {
       cookie: cookieA,
     });

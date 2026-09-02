@@ -4,6 +4,7 @@ export const MATTERHORN_CRYPTO_APP_RESULT_VERSION = "matterhorn.crypto-app-resul
 export const MATTERHORN_CRYPTO_APP_CATALOG_VERSION = "matterhorn.crypto-app-catalog.v1";
 export const MATTERHORN_COWORKER_PROFILE_VERSION = "matterhorn.coworker-profile.v1";
 export const MATTERHORN_COWORKER_WORKING_STATE_VERSION = "matterhorn.coworker-working-state.v1";
+export const MATTERHORN_COWORKER_RESOURCE_SCOPE_VERSION = "matterhorn.coworker-resource-scope.v1";
 export const MATTERHORN_COWORKER_WATCH_VERSION = "matterhorn.coworker-watch.v1";
 export const MATTERHORN_COWORKER_INBOX_ITEM_VERSION = "matterhorn.coworker-inbox-item.v1";
 export const MATTERHORN_CRYPTO_INTENT_VERSION = "matterhorn.crypto-intent.v1";
@@ -297,6 +298,46 @@ export type MatterhornCoworkerWorkingState = {
     observedAt: string;
   }>;
   approvedMemoryIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * A closed, user-approved resource boundary for one coworker. The scope stores
+ * only immutable identifiers, revisions, and hashes. It never stores file or
+ * Memory content, credentials, wallet secrets, signatures, or submission
+ * authority.
+ */
+export type MatterhornCoworkerResourceScope = {
+  version: typeof MATTERHORN_COWORKER_RESOURCE_SCOPE_VERSION;
+  workspaceId: string;
+  ownerId: string;
+  coworkerId: string;
+  revision: number;
+  profileRevision: number;
+  agentFiles: Array<{
+    id: string;
+    revision: number;
+    contentSha256: string;
+    sizeBytes: number;
+  }>;
+  memories: Array<{
+    id: string;
+    version: string;
+    contentHash: string;
+  }>;
+  connections: Array<{
+    id: string;
+    appId: string;
+    manifestRevision: string;
+    actionIds: string[];
+    networks: string[];
+  }>;
+  privacy: {
+    mode: "private_workspace";
+    unverifiedProviderConsent: false;
+  };
+  scopeHash: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -1054,6 +1095,99 @@ export function validateMatterhornCoworkerWorkingState(value: unknown): string[]
     || new Set(value.approvedMemoryIds).size !== value.approvedMemoryIds.length
     || value.approvedMemoryIds.some((id) => !validId(id))) {
     issues.push("coworker_working_state_approvedMemoryIds_invalid");
+  }
+  return [...new Set(issues)];
+}
+
+export function validateMatterhornCoworkerResourceScope(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) return ["coworker_resource_scope_not_object"];
+  const topLevelKeys = [
+    "version", "workspaceId", "ownerId", "coworkerId", "revision", "profileRevision",
+    "agentFiles", "memories", "connections", "privacy", "scopeHash", "createdAt", "updatedAt",
+  ];
+  if (!hasOnlyKeys(value, topLevelKeys)) issues.push("coworker_resource_scope_unknown_field");
+  if (value.version !== MATTERHORN_COWORKER_RESOURCE_SCOPE_VERSION) {
+    issues.push("coworker_resource_scope_version_invalid");
+  }
+  const validText = (text: unknown, max: number) => isNonEmptyString(text)
+    && text.length <= max
+    && !/[\u0000-\u001F\u007F]/.test(text);
+  const validId = (id: unknown) => typeof id === "string"
+    && validText(id, 256)
+    && /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/.test(id);
+  const validHash = (hash: unknown) => typeof hash === "string" && /^[a-f0-9]{64}$/.test(hash);
+  const validDate = (date: unknown) => typeof date === "string" && Number.isFinite(Date.parse(date));
+  for (const key of ["workspaceId", "ownerId", "coworkerId"]) {
+    if (!validId(value[key])) issues.push(`coworker_resource_scope_${key}_invalid`);
+  }
+  for (const key of ["revision", "profileRevision"]) {
+    if (!Number.isSafeInteger(value[key]) || (value[key] as number) < 1) {
+      issues.push(`coworker_resource_scope_${key}_invalid`);
+    }
+  }
+  for (const key of ["createdAt", "updatedAt"]) {
+    if (!validDate(value[key])) issues.push(`coworker_resource_scope_${key}_invalid`);
+  }
+  if (!validHash(value.scopeHash)) issues.push("coworker_resource_scope_hash_invalid");
+  if (!isRecord(value.privacy)
+    || !hasOnlyKeys(value.privacy, ["mode", "unverifiedProviderConsent"])
+    || value.privacy.mode !== "private_workspace"
+    || value.privacy.unverifiedProviderConsent !== false) {
+    issues.push("coworker_resource_scope_privacy_invalid");
+  }
+
+  const agentFiles = value.agentFiles;
+  if (!Array.isArray(agentFiles) || agentFiles.length > 8 || agentFiles.some((item) => (
+    !isRecord(item)
+    || !hasOnlyKeys(item, ["id", "revision", "contentSha256", "sizeBytes"])
+    || !validId(item.id)
+    || !Number.isSafeInteger(item.revision)
+    || Number(item.revision) < 1
+    || !validHash(item.contentSha256)
+    || !Number.isSafeInteger(item.sizeBytes)
+    || Number(item.sizeBytes) < 1
+    || Number(item.sizeBytes) > 10 * 1_024 * 1_024
+  ))) {
+    issues.push("coworker_resource_scope_agent_files_invalid");
+  } else if (new Set(agentFiles.map((item) => String(item.id))).size !== agentFiles.length) {
+    issues.push("coworker_resource_scope_agent_files_duplicate");
+  }
+
+  const memories = value.memories;
+  if (!Array.isArray(memories) || memories.length > 8 || memories.some((item) => (
+    !isRecord(item)
+    || !hasOnlyKeys(item, ["id", "version", "contentHash"])
+    || !validId(item.id)
+    || !validText(item.version, 160)
+    || !validHash(item.contentHash)
+  ))) {
+    issues.push("coworker_resource_scope_memories_invalid");
+  } else if (new Set(memories.map((item) => String(item.id))).size !== memories.length) {
+    issues.push("coworker_resource_scope_memories_duplicate");
+  }
+
+  const connections = value.connections;
+  if (!Array.isArray(connections) || connections.length > 8 || connections.some((item) => (
+    !isRecord(item)
+    || !hasOnlyKeys(item, ["id", "appId", "manifestRevision", "actionIds", "networks"])
+    || !validId(item.id)
+    || !validId(item.appId)
+    || !validText(item.manifestRevision, 160)
+    || !isStringArray(item.actionIds)
+    || item.actionIds.length < 1
+    || item.actionIds.length > 64
+    || new Set(item.actionIds).size !== item.actionIds.length
+    || item.actionIds.some((id) => !validId(id))
+    || !isStringArray(item.networks)
+    || item.networks.length < 1
+    || item.networks.length > 32
+    || new Set(item.networks).size !== item.networks.length
+    || item.networks.some((network) => !validText(network, 160))
+  ))) {
+    issues.push("coworker_resource_scope_connections_invalid");
+  } else if (new Set(connections.map((item) => String(item.id))).size !== connections.length) {
+    issues.push("coworker_resource_scope_connections_duplicate");
   }
   return [...new Set(issues)];
 }
