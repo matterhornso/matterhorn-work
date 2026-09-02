@@ -11,7 +11,7 @@ import { containsForbiddenMemorySecretMaterial } from "@matterhorn-work/types/me
 
 import { quarantineUntrustedContent } from "./untrusted-data-quarantine.js";
 
-const MAX_FILE_BYTES = 10 * 1_024 * 1_024;
+export const MATTERHORN_AGENT_FILE_MAX_BYTES = 10 * 1_024 * 1_024;
 const MAX_CONTEXT_CHARACTERS = 2_000;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$/;
 const SAFE_NAME = /^[^\u0000-\u001F\u007F/\\]{1,160}$/;
@@ -103,10 +103,12 @@ export function scanMatterhornAgentFile(input: {
 }): MatterhornAgentFileScanResult {
   const parsed = parseRequest(input.request);
   const issues = [...parsed.issues];
-  if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength < 1 || input.bytes.byteLength > MAX_FILE_BYTES) {
+  if (!(input.bytes instanceof Uint8Array)
+    || input.bytes.byteLength < 1
+    || input.bytes.byteLength > MATTERHORN_AGENT_FILE_MAX_BYTES) {
     issues.push("agent_file_size_invalid");
   }
-  const text = input.bytes instanceof Uint8Array && input.bytes.byteLength <= MAX_FILE_BYTES
+  const text = input.bytes instanceof Uint8Array && input.bytes.byteLength <= MATTERHORN_AGENT_FILE_MAX_BYTES
     ? decodeText(input.bytes)
     : null;
   if (text === null) issues.push("agent_file_text_decode_failed");

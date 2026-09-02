@@ -1,11 +1,13 @@
 export type MatterhornCryptoAppGatewayMode = "off" | "shadow" | "enforce";
 export type MatterhornCoworkerMode = "off" | "internal" | "invite" | "public";
 export type MatterhornWalrusEvidenceMode = "off" | "testnet" | "mainnet";
+export type MatterhornAgentFilesMode = "off" | "encrypted";
 
 export type MatterhornCryptoCoworkerFeatureConfig = {
   cryptoAppGatewayMode: MatterhornCryptoAppGatewayMode;
   coworkerMode: MatterhornCoworkerMode;
   walrusEvidenceMode: MatterhornWalrusEvidenceMode;
+  agentFilesMode: MatterhornAgentFilesMode;
   ready: boolean;
   issues: string[];
 };
@@ -38,6 +40,14 @@ function walrusEvidenceMode(value: string | undefined, issues: string[]): Matter
   return "off";
 }
 
+function agentFilesMode(value: string | undefined, issues: string[]): MatterhornAgentFilesMode {
+  const mode = normalized(value);
+  if (!mode || mode === "off") return "off";
+  if (mode === "encrypted") return mode;
+  issues.push("agent_files_mode_invalid");
+  return "off";
+}
+
 function isHttpsOrigin(value: string | undefined): boolean {
   const origin = value?.trim() ?? "";
   if (!origin) return false;
@@ -61,6 +71,7 @@ export function cryptoCoworkerFeatureConfig(
   const runtimeMode = normalized(env.MATTERHORN_GUARDED_RUNTIME_MODE) || "off";
   const workers = coworkerMode(env.MATTERHORN_COWORKER_MODE, issues);
   const evidence = walrusEvidenceMode(env.MATTERHORN_WALRUS_EVIDENCE_MODE, issues);
+  const files = agentFilesMode(env.MATTERHORN_AGENT_FILES_MODE, issues);
 
   if (gatewayMode === "enforce" && runtimeMode !== "enforce") {
     issues.push("crypto_app_gateway_requires_guarded_enforcement");
@@ -78,6 +89,11 @@ export function cryptoCoworkerFeatureConfig(
     if (!env.MATTERHORN_EVIDENCE_KMS_REGION?.trim()) issues.push("evidence_kms_region_required");
     if (!env.MATTERHORN_EVIDENCE_KMS_KEY_ID?.trim()) issues.push("evidence_kms_key_id_required");
   }
+  if (files === "encrypted") {
+    if (workers === "off") issues.push("agent_files_require_coworkers");
+    if (!env.MATTERHORN_EVIDENCE_KMS_REGION?.trim()) issues.push("agent_files_kms_region_required");
+    if (!env.MATTERHORN_EVIDENCE_KMS_KEY_ID?.trim()) issues.push("agent_files_kms_key_id_required");
+  }
   if (evidence === "mainnet" && normalized(env.MATTERHORN_WALRUS_MAINNET_ACKNOWLEDGED) !== "true") {
     issues.push("walrus_mainnet_acknowledgement_required");
   }
@@ -86,6 +102,7 @@ export function cryptoCoworkerFeatureConfig(
     cryptoAppGatewayMode: gatewayMode,
     coworkerMode: workers,
     walrusEvidenceMode: evidence,
+    agentFilesMode: files,
     ready: issues.length === 0,
     issues: [...new Set(issues)],
   };

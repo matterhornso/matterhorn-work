@@ -379,6 +379,14 @@ import {
 } from "./crypto-coworker-runtime.js";
 import { createGuardedCoworkerWatchExecutor } from "./crypto-coworker-guarded-watch-executor.js";
 import { MatterhornCoworkerWatchRunner } from "./crypto-coworker-watch-runner.js";
+import {
+  MATTERHORN_AGENT_FILE_MAX_BYTES,
+} from "./agent-file-boundary.js";
+import {
+  MatterhornAgentFileStoreError,
+  type MatterhornAgentFileStore,
+} from "./agent-file-store.js";
+import { cryptoCoworkerFeatureConfig } from "./crypto-coworker-config.js";
 import type { MatterhornPendingCryptoIntent } from "./crypto-pending-intent-store.js";
 import type { MatterhornSuiVerifiedPublicTransaction } from "./sui-public-transaction-verifier.js";
 import { MatterhornCoworkerStoreError } from "./crypto-coworker-store.js";
@@ -579,6 +587,7 @@ import {
   evidenceKmsRotationDaysFromEnv,
 } from "./aws-kms-evidence-key-manager.js";
 import type { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
+import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import {
   createMatterhornCryptoEvidenceRuntime,
   type MatterhornCryptoEvidenceRuntime,
@@ -617,6 +626,7 @@ const FILE_SESSION_MAX_BATCH_ITEMS = 64;
 const FILE_SESSION_MAX_FILE_BYTES = 5_000_000;
 const FILE_SESSION_CATALOG_DEFAULT_LIMIT = 2000;
 const FILE_SESSION_CATALOG_MAX_LIMIT = 10000;
+const AGENT_FILE_UPLOAD_BODY_MAX_BYTES = Math.ceil(MATTERHORN_AGENT_FILE_MAX_BYTES * 4 / 3) + 16_384;
 const OPENWORK_VOICE_REALTIME_MODEL = "gpt-realtime-2";
 const OPENWORK_VOICE_TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
 
@@ -1297,7 +1307,14 @@ type ClientAccess = {
   workspace?: WorkspaceInfo;
 };
 
-export async function startServer(config: ServerConfig): Promise<ServeResult> {
+export type MatterhornServerDependencies = {
+  evidenceKeyManager?: MatterhornEvidenceKeyManager | null;
+};
+
+export async function startServer(
+  config: ServerConfig,
+  dependencies: MatterhornServerDependencies = {},
+): Promise<ServeResult> {
   const approvals = new ApprovalService(config.approval);
   const reloadEvents = new ReloadEventStore();
   const tokens = new TokenService(config);
@@ -1321,7 +1338,9 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
-  const evidenceKeyManager = awsKmsEvidenceKeyManagerFromEnv(process.env);
+  const evidenceKeyManager = dependencies.evidenceKeyManager === undefined
+    ? awsKmsEvidenceKeyManagerFromEnv(process.env)
+    : dependencies.evidenceKeyManager;
   const cryptoEvidenceStore = evidenceKeyManager
     ? guardedRuntime.createCryptoEvidenceStore(evidenceKeyManager)
     : null;
@@ -1335,6 +1354,12 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       guardedRuntime.invalidateCoworker(input);
     },
   });
+  const cryptoCoworkerConfig = cryptoCoworkerFeatureConfig(process.env);
+  const agentFileStore = cryptoCoworkerConfig.agentFilesMode === "encrypted"
+    && coworkerRuntime.mode !== "off"
+    && evidenceKeyManager
+    ? guardedRuntime.createAgentFileStore(evidenceKeyManager)
+    : null;
   guardedRuntime.setCoworkerResolver((binding) => coworkerBindingIsActive(coworkerRuntime, binding));
   const coworkerWatchRunner = coworkerRuntime.coworkers
     && cryptoAppRuntime.mode === "enforce"
@@ -1417,6 +1442,24 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     );
   }, 24 * 60 * 60 * 1_000) : null;
   cryptoEvidenceExpiryTimer?.unref?.();
+  const expireAgentFiles = () => agentFileStore?.destroyExpired().then((result) => {
+    if (result.failures.length > 0) {
+      logger.log("error", "Agent file expiry was incomplete", {
+        checked: result.checked,
+        destroyed: result.destroyed,
+        failures: result.failures.length,
+      });
+    }
+    return result;
+  }).catch((error) => {
+    logger.log("error", "Agent file expiry failed", unhandledErrorAttributes(error));
+    return { checked: 0, destroyed: 0, failures: [] };
+  }) ?? Promise.resolve({ checked: 0, destroyed: 0, failures: [] });
+  let agentFileMaintenanceTask = expireAgentFiles();
+  const agentFileExpiryTimer = agentFileStore ? setInterval(() => {
+    agentFileMaintenanceTask = agentFileMaintenanceTask.then(expireAgentFiles, expireAgentFiles);
+  }, 24 * 60 * 60 * 1_000) : null;
+  agentFileExpiryTimer?.unref?.();
   let accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
     config,
     authStore,
@@ -1424,6 +1467,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     cryptoAppRuntime,
     coworkerRuntime,
     cryptoEvidenceStore,
+    agentFileStore,
     onWorkspacesChanged: restartReloadWatchers,
   }).catch((error) => {
     logger.log("error", "Account deletion retry failed", unhandledErrorAttributes(error));
@@ -1436,6 +1480,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       cryptoAppRuntime,
       coworkerRuntime,
       cryptoEvidenceStore,
+      agentFileStore,
       onWorkspacesChanged: restartReloadWatchers,
     }).catch((error) => {
       logger.log("error", "Account deletion retry failed", unhandledErrorAttributes(error));
@@ -1459,6 +1504,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     coworkerRuntime,
     cryptoEvidenceStore,
     cryptoEvidenceRuntime,
+    agentFileStore,
     drainEmailOutbox,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
@@ -1689,6 +1735,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     stop: async (closeActiveConnections?: boolean) => {
       clearInterval(receiptExpiryTimer);
       if (cryptoEvidenceExpiryTimer) clearInterval(cryptoEvidenceExpiryTimer);
+      if (agentFileExpiryTimer) clearInterval(agentFileExpiryTimer);
       clearInterval(accountDeletionRetryTimer);
       clearInterval(emailOutboxTimer);
       if (coworkerWatchTimer) clearInterval(coworkerWatchTimer);
@@ -1697,6 +1744,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       modelUsageStore.close();
       await receiptExpiryTask;
       await cryptoEvidenceMaintenanceTask;
+      await agentFileMaintenanceTask;
       await accountDeletionRetryTask;
       await emailOutboxTask;
       await coworkerWatchTask;
@@ -1754,6 +1802,7 @@ function operationalReadiness(
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices,
   coworkerRuntime?: MatterhornCoworkerRuntimeServices,
   cryptoEvidenceStore?: MatterhornCryptoEvidenceStore | null,
+  agentFileStore?: MatterhornAgentFileStore | null,
 ) {
   const workspaceConfigured = config.workspaces.length > 0;
   const workspaceStorageAvailable = config.workspaces.every((workspace) =>
@@ -1771,6 +1820,10 @@ function operationalReadiness(
     || Boolean(coworkerRuntime?.ready && coworkerRuntime.coworkers);
   const cryptoEvidenceRecordsPresent = guardedRuntime?.hasCryptoEvidence() ?? false;
   const cryptoEvidenceKeyLifecycleReady = !cryptoEvidenceRecordsPresent || Boolean(cryptoEvidenceStore);
+  const agentFilesMode = cryptoCoworkerFeatureConfig(process.env).agentFilesMode;
+  const agentFileRecordsPresent = guardedRuntime?.hasAgentFiles() ?? false;
+  const agentFileKeyLifecycleReady = !agentFileRecordsPresent || Boolean(agentFileStore);
+  const agentFilesReady = agentFilesMode === "off" || Boolean(agentFileStore);
   const hostedBrowserOpencodePolicyReady = HOSTED_BROWSER_OPENCODE_POLICY === "restricted";
   const hostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA === "1";
   const accountMessageGatewayReady = !hostedPublicBeta
@@ -1786,6 +1839,8 @@ function operationalReadiness(
       && cryptoAppGatewayReady
       && coworkerRuntimeReady
       && cryptoEvidenceKeyLifecycleReady
+      && agentFileKeyLifecycleReady
+      && agentFilesReady
       && hostedBrowserOpencodePolicyReady
       && accountMessageGatewayReady
       && hostBackupFreshCheck,
@@ -1802,6 +1857,10 @@ function operationalReadiness(
       coworkerRuntimeReady,
       cryptoEvidenceRecordsPresent,
       cryptoEvidenceKeyLifecycleReady,
+      agentFilesMode,
+      agentFileRecordsPresent,
+      agentFileKeyLifecycleReady,
+      agentFilesReady,
       hostedBrowserOpencodePolicy: HOSTED_BROWSER_OPENCODE_POLICY,
       hostedBrowserOpencodePolicyReady,
       accountMessageGatewayReady,
@@ -3122,6 +3181,54 @@ function coworkerApiError(error: unknown): ApiError {
     : new ApiError(500, "coworker_internal_error", "Coworker service is unavailable.");
 }
 
+function agentFileApiError(error: unknown): ApiError {
+  if (!(error instanceof MatterhornAgentFileStoreError)) {
+    return new ApiError(503, "agent_files_unavailable", "Agent Files are temporarily unavailable.");
+  }
+  if (error.code === "agent_file_not_found") {
+    return new ApiError(404, error.code, "Agent file not found.");
+  }
+  if (error.code === "agent_file_access_denied" || error.code === "agent_file_expired") {
+    return new ApiError(404, "agent_file_not_found", "Agent file not found.");
+  }
+  if (error.code === "agent_file_revision_conflict") {
+    return new ApiError(409, error.code, "The file changed. Refresh and try again.");
+  }
+  if (error.code === "agent_file_blocked") {
+    return new ApiError(
+      400,
+      error.code,
+      "This file cannot be added safely.",
+      { issues: error.issues },
+    );
+  }
+  const clientCodes = new Set([
+    "agent_file_id_invalid",
+    "agent_file_identity_invalid",
+    "agent_file_size_invalid",
+    "agent_file_time_invalid",
+  ]);
+  if (clientCodes.has(error.code)) {
+    return new ApiError(400, error.code, "Agent file input is invalid.");
+  }
+  return new ApiError(503, "agent_files_unavailable", "Agent Files are temporarily unavailable.");
+}
+
+function decodeAgentFileUpload(value: unknown): Buffer {
+  if (typeof value !== "string"
+    || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+    throw new ApiError(400, "agent_file_content_invalid", "File content is invalid.");
+  }
+  const bytes = Buffer.from(value, "base64");
+  if (bytes.byteLength < 1
+    || bytes.byteLength > MATTERHORN_AGENT_FILE_MAX_BYTES
+    || bytes.toString("base64") !== value) {
+    bytes.fill(0);
+    throw new ApiError(400, "agent_file_content_invalid", "File content is invalid.");
+  }
+  return bytes;
+}
+
 function pendingCryptoIntentApiError(error: unknown): ApiError {
   const code = error instanceof Error ? error.message : "";
   if (code === "pending_crypto_intent_not_found") {
@@ -3446,6 +3553,7 @@ async function processMatterhornAccountDeletionJob(input: {
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices;
   coworkerRuntime?: MatterhornCoworkerRuntimeServices;
   cryptoEvidenceStore?: MatterhornCryptoEvidenceStore | null;
+  agentFileStore?: MatterhornAgentFileStore | null;
   onWorkspacesChanged?: () => void;
 }): Promise<{ complete: boolean; job: MatterhornAuthAccountDeletionJob }> {
   let job = input.job;
@@ -3463,9 +3571,16 @@ async function processMatterhornAccountDeletionJob(input: {
         if (!input.cryptoEvidenceStore && input.guardedRuntime?.hasCryptoEvidence(workspaceId)) {
           throw new Error("workspace_evidence_key_manager_unavailable");
         }
+        if (!input.agentFileStore && input.guardedRuntime?.hasAgentFiles(workspaceId)) {
+          throw new Error("workspace_agent_file_key_manager_unavailable");
+        }
         const evidenceDeletion = await input.cryptoEvidenceStore?.destroyWorkspaceForDeletion({ workspaceId });
         if (evidenceDeletion && evidenceDeletion.failures.length > 0) {
           throw new Error("workspace_evidence_key_purge_failed");
+        }
+        const agentFileDeletion = await input.agentFileStore?.destroyWorkspace({ workspaceId });
+        if (agentFileDeletion && agentFileDeletion.failures.length > 0) {
+          throw new Error("workspace_agent_file_purge_failed");
         }
         input.guardedRuntime?.purgeWorkspace(workspaceId);
         input.cryptoAppRuntime?.purgeWorkspace(
@@ -3502,6 +3617,7 @@ async function retryMatterhornAccountDeletionJobs(input: {
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices;
   coworkerRuntime?: MatterhornCoworkerRuntimeServices;
   cryptoEvidenceStore?: MatterhornCryptoEvidenceStore | null;
+  agentFileStore?: MatterhornAgentFileStore | null;
   onWorkspacesChanged?: () => void;
 }): Promise<void> {
   for (const job of input.authStore.listPendingAccountDeletionJobs()) {
@@ -8047,6 +8163,7 @@ function createRoutes(
   coworkerRuntime: MatterhornCoworkerRuntimeServices,
   cryptoEvidenceStore: MatterhornCryptoEvidenceStore | null,
   cryptoEvidenceRuntime: MatterhornCryptoEvidenceRuntime,
+  agentFileStore: MatterhornAgentFileStore | null,
   drainEmailOutbox: () => Promise<void>,
 ): Route[] {
   const routes: Route[] = [];
@@ -8545,6 +8662,7 @@ function createRoutes(
       cryptoAppRuntime,
       coworkerRuntime,
       cryptoEvidenceStore,
+      agentFileStore,
       onWorkspacesChanged,
     });
 
@@ -8642,7 +8760,14 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/health/ready", "none", async () => {
-    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime, cryptoEvidenceStore);
+    const readiness = operationalReadiness(
+      config,
+      guardedRuntime,
+      cryptoAppRuntime,
+      coworkerRuntime,
+      cryptoEvidenceStore,
+      agentFileStore,
+    );
     const response = jsonResponse({
       ok: readiness.ready,
       status: readiness.ready ? "ready" : "not_ready",
@@ -8674,7 +8799,14 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/health/launch", "none", async () => {
-    const infrastructure = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime, cryptoEvidenceStore);
+    const infrastructure = operationalReadiness(
+      config,
+      guardedRuntime,
+      cryptoAppRuntime,
+      coworkerRuntime,
+      cryptoEvidenceStore,
+      agentFileStore,
+    );
     const launch = matterhornLaunchReadiness(authStore);
     const ok = infrastructure.ready && launch.ready;
     const response = jsonResponse({
@@ -8690,7 +8822,14 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/metrics", "host", async () => {
-    const readiness = operationalReadiness(config, guardedRuntime, cryptoAppRuntime, coworkerRuntime, cryptoEvidenceStore);
+    const readiness = operationalReadiness(
+      config,
+      guardedRuntime,
+      cryptoAppRuntime,
+      coworkerRuntime,
+      cryptoEvidenceStore,
+      agentFileStore,
+    );
     return new Response(operationalMetrics.renderPrometheus({
       ready: readiness.ready,
       uptimeMs: Date.now() - config.startedAt,
@@ -9354,6 +9493,94 @@ function createRoutes(
       }
     },
   );
+
+  addRoute(routes, "GET", "/workspace/:id/agent-files", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const mode = cryptoCoworkerFeatureConfig(process.env).agentFilesMode;
+    return noStoreJsonResponse({
+      mode,
+      available: Boolean(agentFileStore),
+      items: agentFileStore?.list({
+        workspaceId: workspace.id,
+        ownerId: cryptoAppCreatedBy(ctx),
+      }) ?? [],
+    });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/agent-files", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!agentFileStore || !coworkerRuntime.coworkers) {
+      throw new ApiError(503, "agent_files_unavailable", "Agent Files are not enabled for this deployment.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const ownerId = cryptoAppCreatedBy(ctx);
+    const body = await readJsonBody(ctx.request, AGENT_FILE_UPLOAD_BODY_MAX_BYTES, "Agent file upload");
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => !["name", "mimeType", "coworkerIds", "expiresAt", "contentBase64"].includes(key))
+      || typeof body.name !== "string"
+      || typeof body.mimeType !== "string"
+      || !Array.isArray(body.coworkerIds)
+      || body.coworkerIds.some((id) => typeof id !== "string")
+      || (body.expiresAt !== null && body.expiresAt !== undefined && typeof body.expiresAt !== "string")) {
+      throw new ApiError(400, "agent_file_input_invalid", "File details are invalid.");
+    }
+    const coworkerIds = body.coworkerIds.filter((id) => typeof id === "string");
+    for (const coworkerId of coworkerIds) {
+      if (!coworkerRuntime.coworkers.get(workspace.id, ownerId, coworkerId)) {
+        throw new ApiError(404, "coworker_not_found", "Coworker not found.");
+      }
+    }
+    const bytes = decodeAgentFileUpload(body.contentBase64);
+    try {
+      const item = await agentFileStore.create({
+        workspaceId: workspace.id,
+        ownerId,
+        request: {
+          name: body.name,
+          mimeType: body.mimeType,
+          coworkerIds,
+          expiresAt: body.expiresAt ?? null,
+        },
+        bytes,
+      });
+      return noStoreJsonResponse({ mode: "encrypted", item }, 201);
+    } catch (error) {
+      throw agentFileApiError(error);
+    } finally {
+      bytes.fill(0);
+    }
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/agent-files/:fileId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!agentFileStore) {
+      throw new ApiError(503, "agent_files_unavailable", "Agent Files are not enabled for this deployment.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request, 4_096, "Agent file deletion");
+    const expectedRevision = isRecord(body) && typeof body.expectedRevision === "number"
+      && Number.isSafeInteger(body.expectedRevision) && body.expectedRevision > 0
+      ? body.expectedRevision
+      : null;
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => key !== "expectedRevision")
+      || expectedRevision === null) {
+      throw new ApiError(400, "agent_file_input_invalid", "File deletion details are invalid.");
+    }
+    try {
+      await agentFileStore.delete({
+        workspaceId: workspace.id,
+        ownerId: cryptoAppCreatedBy(ctx),
+        fileId: ctx.params.fileId,
+        expectedRevision,
+      });
+      return noStoreJsonResponse({ deleted: true });
+    } catch (error) {
+      throw agentFileApiError(error);
+    }
+  });
 
   addRoute(routes, "GET", "/workspace/:id/coworkers", "client", async (ctx) => {
     try {
@@ -11479,6 +11706,8 @@ function createRoutes(
       agentId,
       requestToolProfiles,
       guardedRuntime,
+      agentFileStore,
+      ownerId: cryptoAppCreatedBy(ctx),
       sessionId,
       privacyMode,
       coworker,
@@ -11491,7 +11720,7 @@ function createRoutes(
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
       agentId,
-      attachmentIds: resolved.attachmentIds,
+      attachmentIds: [...resolved.attachmentIds, ...resolved.agentFileIds],
       memoryIds: resolved.memoryIds,
       privacyMode,
       coworker: coworker ? coworkerRunBinding(coworker) : undefined,
@@ -11743,6 +11972,8 @@ function createRoutes(
       agentId: agent,
       requestToolProfiles,
       guardedRuntime,
+      agentFileStore,
+      ownerId: cryptoAppCreatedBy(ctx),
       sessionId,
       privacyMode,
       coworker,
@@ -11755,7 +11986,7 @@ function createRoutes(
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
       agentId: agent,
-      attachmentIds: resolved.attachmentIds,
+      attachmentIds: [...resolved.attachmentIds, ...resolved.agentFileIds],
       memoryIds: resolved.memoryIds,
       privacyMode,
       privacyConsentToken: typeof body.privacyConsentToken === "string" ? body.privacyConsentToken.trim() : undefined,
@@ -17669,6 +17900,7 @@ const AGENT_MESSAGE_MAX_PARTS = 64;
 const AGENT_MESSAGE_MAX_ATTACHMENT_BYTES = FILE_SESSION_MAX_FILE_BYTES;
 const AGENT_MESSAGE_MAX_SYSTEM_CHARS = 32_000;
 const AGENT_MESSAGE_MAX_MEMORY_IDS = 32;
+const AGENT_MESSAGE_MAX_AGENT_FILE_IDS = 8;
 
 type ResolvedAgentMessageContext = {
   upstreamParts: unknown[];
@@ -17676,6 +17908,7 @@ type ResolvedAgentMessageContext = {
   system: string;
   attachmentIds: string[];
   memoryIds: string[];
+  agentFileIds: string[];
 };
 
 type ResolvedCryptoRunContext = {
@@ -17876,6 +18109,47 @@ async function resolveSelectedMemoryContext(input: {
   return { modelText, privacyParts };
 }
 
+async function resolveSelectedAgentFileContext(input: {
+  store: MatterhornAgentFileStore | null;
+  workspaceId: string;
+  ownerId: string;
+  coworker: MatterhornCoworkerProfile | undefined;
+  fileIds: string[];
+}): Promise<{ modelText: string; privacyParts: MatterhornAgentPrivacyPart[] }> {
+  if (input.fileIds.length === 0) return { modelText: "", privacyParts: [] };
+  if (input.fileIds.length > AGENT_MESSAGE_MAX_AGENT_FILE_IDS) {
+    throw new ApiError(
+      400,
+      "invalid_payload",
+      `agentFileIds must include no more than ${AGENT_MESSAGE_MAX_AGENT_FILE_IDS} files`,
+    );
+  }
+  if (!input.store) {
+    throw new ApiError(503, "agent_files_unavailable", "Agent Files are not enabled for this deployment.");
+  }
+  if (!input.coworker) {
+    throw new ApiError(400, "agent_file_coworker_required", "Choose a coworker before adding Agent Files to a chat.");
+  }
+  const store = input.store;
+  const coworker = input.coworker;
+  try {
+    const contexts = await Promise.all(input.fileIds.map((fileId) => store.readContext({
+      workspaceId: input.workspaceId,
+      ownerId: input.ownerId,
+      coworkerId: coworker.id,
+      fileId,
+    })));
+    return {
+      modelText: contexts.length
+        ? ["## User-selected Agent Files", ...contexts.map((context) => context.part.text)].join("\n\n")
+        : "",
+      privacyParts: contexts.map((context) => context.part),
+    };
+  } catch (error) {
+    throw agentFileApiError(error);
+  }
+}
+
 async function resolveCryptoRunContext(input: {
   guardedRuntime: MatterhornGuardedAgentRuntime;
   workspaceId: string;
@@ -17970,6 +18244,7 @@ function buildAuthoritativeAgentSystemContext(input: {
   agentId?: string;
   memoryText: string;
   cryptoStateText: string;
+  agentFileText: string;
   coworker?: MatterhornCoworkerProfile;
 }): { system: string; privacyParts: MatterhornAgentPrivacyPart[] } {
   const desk = getMatterhornDeskAgentById(input.agentId);
@@ -17994,7 +18269,7 @@ function buildAuthoritativeAgentSystemContext(input: {
     `Automatic authority: ${input.coworker.automaticAuthorities.join(", ") || "none"}`,
     "These limits are server-enforced. Never claim broader authority. Every transaction remains connected-wallet-only.",
   ].join("\n") : "";
-  const system = [...publicSections, coworkerText, input.cryptoStateText, input.memoryText]
+  const system = [...publicSections, coworkerText, input.cryptoStateText, input.memoryText, input.agentFileText]
     .filter(Boolean)
     .join("\n\n")
     .slice(0, AGENT_MESSAGE_MAX_SYSTEM_CHARS);
@@ -18040,6 +18315,8 @@ async function resolveAuthoritativeAgentMessage(input: {
   agentId?: string;
   requestToolProfiles: Record<string, boolean>[];
   guardedRuntime: MatterhornGuardedAgentRuntime;
+  agentFileStore: MatterhornAgentFileStore | null;
+  ownerId: string;
   sessionId: string;
   privacyMode?: MatterhornAgentPrivacyMode;
   coworker?: MatterhornCoworkerProfile;
@@ -18059,10 +18336,18 @@ async function resolveAuthoritativeAgentMessage(input: {
     ...promptPrivateContextIds(input.body, "memoryIds", "selectedMemoryIds"),
     ...(input.coworkerState?.approvedMemoryIds ?? []),
   ])].sort().slice(0, AGENT_MESSAGE_MAX_MEMORY_IDS);
+  const agentFileIds = promptPrivateContextIds(input.body, "agentFileIds");
   const memory = await resolveSelectedMemoryContext({
     memoryVault: input.memoryVault,
     workspace: input.workspace,
     memoryIds,
+  });
+  const agentFiles = await resolveSelectedAgentFileContext({
+    store: input.agentFileStore,
+    workspaceId: input.workspace.id,
+    ownerId: input.ownerId,
+    coworker: input.coworker,
+    fileIds: agentFileIds,
   });
   const crypto = await resolveCryptoRunContext({
     guardedRuntime: input.guardedRuntime,
@@ -18078,6 +18363,7 @@ async function resolveAuthoritativeAgentMessage(input: {
     agentId: input.agentId,
     memoryText: memory.modelText,
     cryptoStateText: [crypto.modelText, coworkerStateText].filter(Boolean).join("\n\n"),
+    agentFileText: agentFiles.modelText,
     coworker: input.coworker,
   });
   const toolProfilePart: MatterhornAgentPrivacyPart = {
@@ -18104,11 +18390,13 @@ async function resolveAuthoritativeAgentMessage(input: {
         version: `${input.coworkerState.profileRevision}:${input.coworkerState.revision}`,
       }] : []),
       ...memory.privacyParts,
+      ...agentFiles.privacyParts,
       toolProfilePart,
     ],
     system: authoritativeSystem.system,
     attachmentIds,
     memoryIds,
+    agentFileIds,
   };
 }
 

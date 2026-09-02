@@ -8,6 +8,7 @@ describe("crypto coworker feature configuration", () => {
       cryptoAppGatewayMode: "off",
       coworkerMode: "off",
       walrusEvidenceMode: "off",
+      agentFilesMode: "off",
       ready: true,
       issues: [],
     });
@@ -18,18 +19,39 @@ describe("crypto coworker feature configuration", () => {
       MATTERHORN_CRYPTO_APP_GATEWAY_MODE: "unsafe",
       MATTERHORN_COWORKER_MODE: "everyone",
       MATTERHORN_WALRUS_EVIDENCE_MODE: "automatic",
+      MATTERHORN_AGENT_FILES_MODE: "public",
     });
     expect(result).toMatchObject({
       cryptoAppGatewayMode: "off",
       coworkerMode: "off",
       walrusEvidenceMode: "off",
+      agentFilesMode: "off",
       ready: false,
     });
     expect(result.issues).toEqual(expect.arrayContaining([
       "crypto_app_gateway_mode_invalid",
       "coworker_mode_invalid",
       "walrus_evidence_mode_invalid",
+      "agent_files_mode_invalid",
     ]));
+  });
+
+  test("requires coworkers and KMS before encrypted Agent Files can start", () => {
+    const missing = cryptoCoworkerFeatureConfig({ MATTERHORN_AGENT_FILES_MODE: "encrypted" });
+    expect(missing.ready).toBe(false);
+    expect(missing.issues).toEqual(expect.arrayContaining([
+      "agent_files_require_coworkers",
+      "agent_files_kms_region_required",
+      "agent_files_kms_key_id_required",
+    ]));
+
+    const configured = cryptoCoworkerFeatureConfig({
+      MATTERHORN_AGENT_FILES_MODE: "encrypted",
+      MATTERHORN_COWORKER_MODE: "internal",
+      MATTERHORN_EVIDENCE_KMS_REGION: "us-east-1",
+      MATTERHORN_EVIDENCE_KMS_KEY_ID: "alias/matterhorn-agent-files",
+    });
+    expect(configured).toMatchObject({ agentFilesMode: "encrypted", ready: true, issues: [] });
   });
 
   test("does not allow public coworkers without enforced guarded boundaries", () => {

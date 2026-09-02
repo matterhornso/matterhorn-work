@@ -31,6 +31,7 @@ export type GuardedRuntimeStateKind =
   | "crypto_pending_intent"
   | "crypto_evidence_record"
   | "crypto_evidence_audit"
+  | "agent_file_record"
   | "receipt_index";
 
 type StateRow = {

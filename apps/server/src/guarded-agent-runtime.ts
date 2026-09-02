@@ -23,6 +23,7 @@ import {
   type MatterhornCryptoAppCapabilityBinding,
 } from "./crypto-app-guarded-authorization.js";
 import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
+import { MatterhornAgentFileStore } from "./agent-file-store.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
@@ -167,8 +168,16 @@ export class MatterhornGuardedAgentRuntime {
     return new MatterhornCryptoEvidenceStore(this.stateStore, keyManager, options);
   }
 
+  createAgentFileStore(keyManager: MatterhornEvidenceKeyManager): MatterhornAgentFileStore {
+    return new MatterhornAgentFileStore(this.stateStore, keyManager);
+  }
+
   hasCryptoEvidence(workspaceId?: string): boolean {
     return this.stateStore.list("crypto_evidence_record", workspaceId ? { workspaceId } : {}).length > 0;
+  }
+
+  hasAgentFiles(workspaceId?: string): boolean {
+    return this.stateStore.list("agent_file_record", workspaceId ? { workspaceId } : {}).length > 0;
   }
 
   async startDeterministicCoworkerRun(

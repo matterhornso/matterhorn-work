@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -23,6 +24,10 @@ import { startServer } from "./server.js";
 import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
 import { MatterhornCoworkers } from "./crypto-coworkers.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import type {
+  MatterhornEvidenceDataKeyLease,
+  MatterhornEvidenceKeyManager,
+} from "./crypto-evidence-sealer.js";
 import type { ServerConfig } from "./types.js";
 
 type Served = { port: number; stop: (closeActiveConnections?: boolean) => void | Promise<void> };
@@ -42,6 +47,9 @@ const ENV_KEYS = [
   "MATTERHORN_COWORKER_DB",
   "MATTERHORN_CRYPTO_APP_GATEWAY_MODE",
   "MATTERHORN_GUARDED_RUNTIME_DB",
+  "MATTERHORN_AGENT_FILES_MODE",
+  "MATTERHORN_EVIDENCE_KMS_REGION",
+  "MATTERHORN_EVIDENCE_KMS_KEY_ID",
 ] as const;
 const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
 const roots: string[] = [];
@@ -84,7 +92,34 @@ async function freePort(): Promise<number> {
   });
 }
 
-async function boot(mode: "off" | "internal") {
+class RouteTestKeyManager implements MatterhornEvidenceKeyManager {
+  readonly keys = new Map<string, Buffer>();
+
+  async createDataKey(input: { runId: string; recipientKeyIds: string[] }): Promise<MatterhornEvidenceDataKeyLease> {
+    const keyReference = `route-test-${input.runId}`;
+    const plaintextKey = randomBytes(32);
+    this.keys.set(keyReference, Buffer.from(plaintextKey));
+    return {
+      plaintextKey,
+      keyReference,
+      wrappedKey: Buffer.from(keyReference).toString("base64"),
+      keyContext: randomBytes(32).toString("hex"),
+      recipientKeyIds: [...input.recipientKeyIds],
+    };
+  }
+
+  async decryptDataKey(input: { keyReference: string }): Promise<Buffer> {
+    const key = this.keys.get(input.keyReference);
+    if (!key) throw new Error("route_test_key_missing");
+    return Buffer.from(key);
+  }
+
+  async destroyKey(input: { keyReference: string }): Promise<void> {
+    this.keys.delete(input.keyReference);
+  }
+}
+
+async function boot(mode: "off" | "internal", options: { agentFiles?: boolean } = {}) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-routes-"));
   roots.push(root);
   process.env.MATTERHORN_WORK_DATA_DIR = join(root, "data");
@@ -100,7 +135,20 @@ async function boot(mode: "off" | "internal") {
   process.env.MATTERHORN_COWORKER_DB = coworkerDb;
   process.env.MATTERHORN_GUARDED_RUNTIME_DB = guardedDb;
   process.env.MATTERHORN_CRYPTO_APP_GATEWAY_MODE = "off";
-  const server = await startServer(config(await freePort(), root)) as Served;
+  if (options.agentFiles) {
+    process.env.MATTERHORN_AGENT_FILES_MODE = "encrypted";
+    process.env.MATTERHORN_EVIDENCE_KMS_REGION = "us-east-1";
+    process.env.MATTERHORN_EVIDENCE_KMS_KEY_ID = "alias/route-test-agent-files";
+  } else {
+    delete process.env.MATTERHORN_AGENT_FILES_MODE;
+    delete process.env.MATTERHORN_EVIDENCE_KMS_REGION;
+    delete process.env.MATTERHORN_EVIDENCE_KMS_KEY_ID;
+  }
+  const keyManager = options.agentFiles ? new RouteTestKeyManager() : null;
+  const server = await startServer(
+    config(await freePort(), root),
+    keyManager ? { evidenceKeyManager: keyManager } : {},
+  ) as Served;
   let stopped = false;
   const stop = async () => {
     if (stopped) return;
@@ -108,7 +156,7 @@ async function boot(mode: "off" | "internal") {
     await server.stop(true);
   };
   stops.push(stop);
-  return { base: `http://127.0.0.1:${server.port}`, coworkerDb, guardedDb, stop };
+  return { base: `http://127.0.0.1:${server.port}`, coworkerDb, guardedDb, keyManager, stop };
 }
 
 async function request(base: string, path: string, options: {
@@ -370,6 +418,135 @@ afterEach(async () => {
 });
 
 describe("crypto coworker HTTP boundary", () => {
+  test("stores encrypted Agent Files for the selected tenant and coworker only", async () => {
+    const server = await boot("internal", { agentFiles: true });
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "agent-files-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "agent-files-b@example.com", password: PASSWORD },
+    });
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
+    const workspaceB = String((await request(server.base, "/workspaces", { cookie: cookieB })).payload.items[0].id);
+    const coworker = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: coworkerInput(),
+    });
+    const coworkerId = String(coworker.payload.coworker.id);
+    expect((await request(server.base, `/workspace/${workspaceA}/agent-files`)).response.status).toBe(401);
+
+    const privateText = "Use a maximum 20% TAO allocation and review weekly.";
+    const created = await request(server.base, `/workspace/${workspaceA}/agent-files`, {
+      cookie: cookieA,
+      body: {
+        name: "portfolio-policy.md",
+        mimeType: "text/markdown",
+        coworkerIds: [coworkerId],
+        expiresAt: "2026-10-01T00:00:00.000Z",
+        contentBase64: Buffer.from(privateText).toString("base64"),
+      },
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.payload.item).toMatchObject({
+      revision: 1,
+      file: {
+        name: "portfolio-policy.md",
+        dataLabel: "workspace_private",
+        access: { coworkerIds: [coworkerId], readOnly: true },
+        security: { walletAuthority: "none" },
+      },
+    });
+    expect(JSON.stringify(created.payload)).not.toContain(privateText);
+    const ownList = await request(server.base, `/workspace/${workspaceA}/agent-files`, { cookie: cookieA });
+    expect(ownList.payload).toMatchObject({ mode: "encrypted", available: true });
+    expect(ownList.payload.items).toHaveLength(1);
+    expect((await request(server.base, `/workspace/${workspaceA}/agent-files`, { cookie: cookieB })).response.status)
+      .toBe(404);
+    expect((await request(server.base, `/workspace/${workspaceB}/agent-files`, { cookie: cookieB })).payload.items)
+      .toEqual([]);
+
+    const secretRejected = await request(server.base, `/workspace/${workspaceA}/agent-files`, {
+      cookie: cookieA,
+      body: {
+        name: "wallet.txt",
+        mimeType: "text/plain",
+        coworkerIds: [coworkerId],
+        expiresAt: null,
+        contentBase64: Buffer.from(
+          "private key: 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ).toString("base64"),
+      },
+    });
+    expect(secretRejected.response.status).toBe(400);
+    expect(secretRejected.payload).toMatchObject({
+      code: "agent_file_blocked",
+      details: { issues: expect.arrayContaining(["agent_file_secret_content_blocked"]) },
+    });
+    expect((await request(server.base, `/workspace/${workspaceA}/agent-files`, { cookie: cookieA })).payload.items)
+      .toHaveLength(1);
+
+    const fileId = String(created.payload.item.id);
+    const staleDelete = await request(server.base, `/workspace/${workspaceA}/agent-files/${fileId}`, {
+      method: "DELETE",
+      cookie: cookieA,
+      body: { expectedRevision: 2 },
+    });
+    expect(staleDelete.response.status).toBe(409);
+    const deleted = await request(server.base, `/workspace/${workspaceA}/agent-files/${fileId}`, {
+      method: "DELETE",
+      cookie: cookieA,
+      body: { expectedRevision: 1 },
+    });
+    expect(deleted.response.status).toBe(200);
+    expect((await request(server.base, `/workspace/${workspaceA}/agent-files`, { cookie: cookieA })).payload.items)
+      .toEqual([]);
+    expect(server.keyManager?.keys.size).toBe(0);
+  });
+
+  test("destroys Agent File recovery keys before account deletion completes", async () => {
+    const server = await boot("internal", { agentFiles: true });
+    const email = "agent-files-delete@example.com";
+    const signup = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email, password: PASSWORD },
+    });
+    const sessionCookie = cookie(signup.response);
+    const workspaceId = String(
+      (await request(server.base, "/workspaces", { cookie: sessionCookie })).payload.items[0].id,
+    );
+    const coworker = await request(server.base, `/workspace/${workspaceId}/coworkers`, {
+      cookie: sessionCookie,
+      body: coworkerInput(),
+    });
+    expect((await request(server.base, `/workspace/${workspaceId}/agent-files`, {
+      cookie: sessionCookie,
+      body: {
+        name: "delete-with-account.md",
+        mimeType: "text/markdown",
+        coworkerIds: [String(coworker.payload.coworker.id)],
+        expiresAt: null,
+        contentBase64: Buffer.from("Delete this private context with the account.").toString("base64"),
+      },
+    })).response.status).toBe(201);
+    expect(server.keyManager?.keys.size).toBe(1);
+
+    const deleted = await request(server.base, "/api/auth/account", {
+      method: "DELETE",
+      cookie: sessionCookie,
+      body: { confirmationEmail: email, password: PASSWORD },
+    });
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload.status).toBe("deleted");
+    expect(server.keyManager?.keys.size).toBe(0);
+    const state = new MatterhornGuardedRuntimeStateStore(server.guardedDb);
+    try {
+      expect(state.list("agent_file_record", { workspaceId })).toEqual([]);
+    } finally {
+      state.close();
+    }
+  });
+
   test("is authenticated and disabled without touching account state", async () => {
     const server = await boot("off");
     expect((await request(server.base, "/workspace/ws_coworker/coworkers")).response.status).toBe(401);

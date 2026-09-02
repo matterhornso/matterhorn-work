@@ -543,6 +543,23 @@ export type MatterhornAgentFileContextProjection = {
   originalCharacters: number;
 };
 
+export const MATTERHORN_STORED_AGENT_FILE_VERSION = "matterhorn.stored-agent-file.v1";
+
+export type MatterhornStoredAgentFile = {
+  version: typeof MATTERHORN_STORED_AGENT_FILE_VERSION;
+  id: string;
+  revision: number;
+  file: MatterhornAgentFileDescriptor;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MatterhornAgentFileListResponse = {
+  mode: "off" | "encrypted";
+  available: boolean;
+  items: MatterhornStoredAgentFile[];
+};
+
 export type MatterhornEvidenceBundle = {
   version: typeof MATTERHORN_EVIDENCE_BUNDLE_VERSION;
   id: string;
