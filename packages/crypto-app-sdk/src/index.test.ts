@@ -114,14 +114,10 @@ describe("Matterhorn crypto app SDK", () => {
 
     const loopbackDraft = draft();
     loopbackDraft.transport.endpoint = "https://127.0.0.1/v1";
-    const loopbackSigning = buildCryptoAppSigningRequest(loopbackDraft);
-    const loopbackManifest = attachCryptoAppManifestSignature(
-      loopbackDraft,
-      sign(null, Buffer.from(loopbackSigning.canonicalPayload), keys.privateKey).toString("base64url"),
-    );
-    const loopback = emulateCryptoAppPolicy(loopbackManifest, "testnet");
-    expect(loopback.passed).toBe(false);
-    expect(loopback.findings.map((item) => item.code)).toContain("transport_public_https_required");
+    expect(() => buildCryptoAppSigningRequest(loopbackDraft)).toThrowError(expect.objectContaining({
+      code: "manifest_invalid",
+      issues: expect.arrayContaining(["transport_https_required"]),
+    }));
   });
 
   test("fails malformed drafts before producing signing bytes", () => {

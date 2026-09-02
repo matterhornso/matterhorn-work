@@ -37,7 +37,7 @@ The public types are exported from `@matterhorn-work/types/crypto-coworkers`:
 - `matterhorn.evidence-bundle.v1`
 - `matterhorn.walrus-proof.v1`
 
-Runtime validation fails manifests that advertise signing/submission authority, omit wallet-controlled submission, omit simulations for prepare/simulate actions, use an HTTP endpoint, or configure OAuth without resource and audience binding.
+Runtime validation fails manifests that advertise signing/submission authority, omit wallet-controlled submission, omit simulations for prepare/simulate actions, use a non-public or ambiguous transport/support destination, provide an invalid security contact, or configure OAuth without exact public issuer, resource, and audience binding.
 
 ## Rollout flags
 

@@ -846,7 +846,12 @@ function canonicalPublicHttpsUrl(value: unknown): boolean {
   try {
     const parsed = new URL(value);
     const hostname = parsed.hostname.toLowerCase();
-    return parsed.href === value
+    const canonicalRootWithoutSlash = parsed.pathname === "/"
+      && !parsed.search
+      && !parsed.hash
+      ? parsed.origin
+      : null;
+    return (parsed.href === value || canonicalRootWithoutSlash === value)
       && parsed.protocol === "https:"
       && !parsed.username
       && !parsed.password
@@ -915,6 +920,7 @@ const FORBIDDEN_ACTION_AUTHORITY = /(^|_)(sign|submit|relay|broadcast)(_|$)/i;
 const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:@+/-]{0,159}$/;
 const SAFE_SCOPE = /^[A-Za-z0-9][A-Za-z0-9._:@+/-]{0,159}$/;
 const SAFE_AUDIENCE = /^[A-Za-z0-9][A-Za-z0-9._:@+/-]{0,511}$/;
+const SAFE_SECURITY_EMAIL = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?\.[A-Za-z]{2,63}$/;
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 const FORBIDDEN_EVIDENCE_KEYS = new Set([
   "accountid",
@@ -967,10 +973,7 @@ export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
   else {
     if (!hasOnlyKeys(value.transport, TRANSPORT_KEYS)) issues.push("transport_unknown_field");
     if (!isNonEmptyString(value.transport.kind) || !SAFE_TRANSPORTS.includes(value.transport.kind)) issues.push("transport_kind_invalid");
-    if (!isNonEmptyString(value.transport.endpoint)
-      || value.transport.endpoint.length > 2_048
-      || CONTROL_CHARACTER.test(value.transport.endpoint)
-      || !/^https:\/\//.test(value.transport.endpoint)) issues.push("transport_https_required");
+    if (!canonicalPublicHttpsUrl(value.transport.endpoint)) issues.push("transport_https_required");
   }
 
   if (!isRecord(value.authentication)) issues.push("authentication_required");
@@ -1046,18 +1049,15 @@ export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
   if (!isRecord(value.support)) issues.push("support_required");
   else {
     if (!hasOnlyKeys(value.support, SUPPORT_KEYS)) issues.push("support_unknown_field");
-    if (!isNonEmptyString(value.support.privacyPolicyUrl)
-      || value.support.privacyPolicyUrl.length > 2_048
-      || CONTROL_CHARACTER.test(value.support.privacyPolicyUrl)
-      || !/^https:\/\//.test(value.support.privacyPolicyUrl)) issues.push("privacy_policy_url_invalid");
+    if (!canonicalPublicHttpsUrl(value.support.privacyPolicyUrl)) issues.push("privacy_policy_url_invalid");
     if (!isNonEmptyString(value.support.securityContact)
       || value.support.securityContact.length > 320
-      || CONTROL_CHARACTER.test(value.support.securityContact)) issues.push("security_contact_required");
+      || value.support.securityContact !== value.support.securityContact.trim()
+      || CONTROL_CHARACTER.test(value.support.securityContact)
+      || (!SAFE_SECURITY_EMAIL.test(value.support.securityContact)
+        && !canonicalPublicHttpsUrl(value.support.securityContact))) issues.push("security_contact_required");
     if (value.support.statusUrl !== null
-      && (!isNonEmptyString(value.support.statusUrl)
-        || value.support.statusUrl.length > 2_048
-        || CONTROL_CHARACTER.test(value.support.statusUrl)
-        || !/^https:\/\//.test(value.support.statusUrl))) issues.push("status_url_invalid");
+      && !canonicalPublicHttpsUrl(value.support.statusUrl)) issues.push("status_url_invalid");
   }
 
   return [...new Set(issues)];

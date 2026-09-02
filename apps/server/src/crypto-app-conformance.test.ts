@@ -159,6 +159,25 @@ describe("crypto app manifest conformance", () => {
       expect.objectContaining({ category: "authentication", code: "oauth_resource_required" }),
       expect.objectContaining({ category: "authentication", code: "oauth_audience_required" }),
     ]));
+
+    const unsafeDestinations = manifest();
+    unsafeDestinations.transport.endpoint = "https://gateway.matterhorn.so/v1?destination=internal";
+    unsafeDestinations.support.privacyPolicyUrl = "https://localhost/privacy";
+    unsafeDestinations.support.statusUrl = "https://status.matterhorn.so/ready#operator";
+    unsafeDestinations.support.securityContact = "not a contact";
+    unsafeDestinations.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(unsafeDestinations), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    const unsafeDestinationReport = conformance(unsafeDestinations);
+    expect(unsafeDestinationReport.passed).toBe(false);
+    expect(unsafeDestinationReport.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "schema", code: "transport_https_required" }),
+      expect.objectContaining({ category: "schema", code: "privacy_policy_url_invalid" }),
+      expect.objectContaining({ category: "schema", code: "status_url_invalid" }),
+      expect.objectContaining({ category: "schema", code: "security_contact_required" }),
+    ]));
   });
 
   test("rejects missing freshness bounds and invalid financial classification", () => {

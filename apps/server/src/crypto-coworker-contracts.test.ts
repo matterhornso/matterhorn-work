@@ -340,8 +340,8 @@ describe("crypto coworker public contracts", () => {
       ...structuredClone(manifest),
       authentication: {
         type: "oauth2",
-        authorizationServer: "https://auth.example/",
-        resource: "https://api.example/",
+        authorizationServer: "https://auth.example",
+        resource: "https://api.example",
         audience: "matterhorn:testnet",
         scopes: ["markets:read"],
       },
@@ -370,6 +370,33 @@ describe("crypto coworker public contracts", () => {
       expect(validateMatterhornCryptoAppManifest({ ...valid, authentication }))
         .toContain(expectedIssues[index]);
     });
+  });
+
+  test("requires canonical public transport and support destinations", () => {
+    const valid = structuredClone(manifest);
+    valid.transport.endpoint = "https://gateway.matterhorn.example";
+    valid.support.securityContact = "https://matterhorn.example/security";
+    expect(validateMatterhornCryptoAppManifest(valid)).toEqual([]);
+
+    const unsafe = [
+      { field: "transport", value: "https://user:password@gateway.matterhorn.example/v1", issue: "transport_https_required" },
+      { field: "transport", value: "https://127.0.0.1/v1", issue: "transport_https_required" },
+      { field: "transport", value: "https://gateway.matterhorn.example/v1?method=submit", issue: "transport_https_required" },
+      { field: "transport", value: "https://gateway.matterhorn.example/safe/../v1", issue: "transport_https_required" },
+      { field: "privacy", value: "https://localhost/privacy", issue: "privacy_policy_url_invalid" },
+      { field: "status", value: "https://status.matterhorn.example/ok#admin", issue: "status_url_invalid" },
+      { field: "contact", value: "security contact", issue: "security_contact_required" },
+      { field: "contact", value: "https://169.254.169.254/security", issue: "security_contact_required" },
+    ] as const;
+
+    for (const item of unsafe) {
+      const candidate = structuredClone(manifest);
+      if (item.field === "transport") candidate.transport.endpoint = item.value;
+      if (item.field === "privacy") candidate.support.privacyPolicyUrl = item.value;
+      if (item.field === "status") candidate.support.statusUrl = item.value;
+      if (item.field === "contact") candidate.support.securityContact = item.value;
+      expect(validateMatterhornCryptoAppManifest(candidate)).toContain(item.issue);
+    }
   });
 
   test("accepts a bounded coworker and rejects a broadened wallet boundary", () => {
