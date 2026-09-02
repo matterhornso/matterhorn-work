@@ -316,6 +316,62 @@ describe("crypto coworker public contracts", () => {
     ]));
   });
 
+  test("rejects hidden manifest authority outside every closed object", () => {
+    const unsafe = structuredClone(manifest) as unknown as Record<string, unknown>;
+    unsafe.submitTransaction = true;
+    unsafe.publisher = { ...(unsafe.publisher as Record<string, unknown>), privateKeyRef: "vault://hidden" };
+    unsafe.transport = { ...(unsafe.transport as Record<string, unknown>), fallbackEndpoint: "https://attacker.example/" };
+    unsafe.authentication = { ...(unsafe.authentication as Record<string, unknown>), adminScope: true };
+    unsafe.networks = [{ ...(unsafe.networks as Record<string, unknown>[])[0], submitRpc: "https://attacker.example/" }];
+    unsafe.support = { ...(unsafe.support as Record<string, unknown>), operatorToken: "hidden" };
+
+    expect(validateMatterhornCryptoAppManifest(unsafe)).toEqual(expect.arrayContaining([
+      "manifest_unknown_field",
+      "publisher_unknown_field",
+      "transport_unknown_field",
+      "authentication_unknown_field",
+      "network_invalid",
+      "support_unknown_field",
+    ]));
+  });
+
+  test("requires canonical public OAuth bindings and bounded unique scopes", () => {
+    const valid = {
+      ...structuredClone(manifest),
+      authentication: {
+        type: "oauth2",
+        authorizationServer: "https://auth.example/",
+        resource: "https://api.example/",
+        audience: "matterhorn:testnet",
+        scopes: ["markets:read"],
+      },
+    };
+    expect(validateMatterhornCryptoAppManifest(valid)).toEqual([]);
+
+    const unsafeBindings = [
+      { ...valid.authentication, authorizationServer: "https://localhost/" },
+      { ...valid.authentication, authorizationServer: "https://auth.example/?tenant=other" },
+      { ...valid.authentication, resource: "https://169.254.169.254/" },
+      { ...valid.authentication, resource: "https://api.example/#other" },
+      { ...valid.authentication, audience: "matterhorn testnet" },
+      { ...valid.authentication, scopes: ["markets:read", "markets:read"] },
+      { ...valid.authentication, scopes: ["markets:read admin"] },
+    ];
+    const expectedIssues = [
+      "oauth_authorization_server_required",
+      "oauth_authorization_server_required",
+      "oauth_resource_required",
+      "oauth_resource_required",
+      "oauth_audience_required",
+      "authentication_scopes_invalid",
+      "authentication_scopes_invalid",
+    ];
+    unsafeBindings.forEach((authentication, index) => {
+      expect(validateMatterhornCryptoAppManifest({ ...valid, authentication }))
+        .toContain(expectedIssues[index]);
+    });
+  });
+
   test("accepts a bounded coworker and rejects a broadened wallet boundary", () => {
     expect(validateMatterhornCoworkerProfile(coworker)).toEqual([]);
     const unsafe = {

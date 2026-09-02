@@ -83,7 +83,12 @@ export function runCryptoAppManifestConformance(
 ): MatterhornCryptoAppConformanceReport {
   const findings: MatterhornCryptoAppConformanceFinding[] = [];
   for (const code of validateMatterhornCryptoAppManifest(manifest)) {
-    finding(findings, "error", code.includes("oauth") ? "authentication" : "schema", code);
+    finding(
+      findings,
+      "error",
+      code.includes("oauth") || code.includes("authentication") ? "authentication" : "schema",
+      code,
+    );
   }
 
   if (!verifyCryptoAppManifestSignature(manifest, options.publisherKey)) {

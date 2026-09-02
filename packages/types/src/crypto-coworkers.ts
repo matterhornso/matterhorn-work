@@ -841,10 +841,60 @@ function hasOnlyKeys(record: Record<string, unknown>, keys: readonly string[]): 
   return Object.keys(record).every((key) => keys.includes(key));
 }
 
+function canonicalPublicHttpsUrl(value: unknown): boolean {
+  if (typeof value !== "string" || value.length < 1 || value.length > 2_048 || value !== value.trim()) return false;
+  try {
+    const parsed = new URL(value);
+    const hostname = parsed.hostname.toLowerCase();
+    return parsed.href === value
+      && parsed.protocol === "https:"
+      && !parsed.username
+      && !parsed.password
+      && !parsed.search
+      && !parsed.hash
+      && (!parsed.port || parsed.port === "443")
+      && Boolean(hostname)
+      && hostname !== "localhost"
+      && !hostname.endsWith(".localhost")
+      && !hostname.endsWith(".local")
+      && !hostname.endsWith(".internal")
+      && !hostname.endsWith(".home.arpa")
+      && !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)
+      && !hostname.includes(":");
+  } catch {
+    return false;
+  }
+}
+
 const SAFE_ACTION_ACCESS: readonly string[] = ["read", "watch", "prepare", "simulate"];
 const SAFE_ACTION_RISK: readonly string[] = ["informational", "private_data", "financial_low", "financial_high"];
 const SAFE_TRANSPORTS: readonly string[] = ["mcp_http", "openapi", "rpc", "matterhorn_sdk"];
 const SAFE_AUTH_TYPES: readonly string[] = ["oauth2", "api_key_vault", "wallet_connection", "none"];
+const MANIFEST_KEYS: readonly string[] = [
+  "version",
+  "appId",
+  "displayName",
+  "description",
+  "manifestRevision",
+  "publisher",
+  "transport",
+  "authentication",
+  "networks",
+  "actions",
+  "support",
+];
+const PUBLISHER_KEYS: readonly string[] = ["id", "keyId", "algorithm", "signature"];
+const TRANSPORT_KEYS: readonly string[] = ["kind", "endpoint"];
+const AUTHENTICATION_KEYS: readonly string[] = ["type", "scopes"];
+const OAUTH_AUTHENTICATION_KEYS: readonly string[] = [
+  "type",
+  "authorizationServer",
+  "resource",
+  "audience",
+  "scopes",
+];
+const NETWORK_KEYS: readonly string[] = ["protocol", "chainId", "environment"];
+const SUPPORT_KEYS: readonly string[] = ["privacyPolicyUrl", "securityContact", "statusUrl"];
 const ACTION_KEYS: readonly string[] = [
   "id",
   "title",
@@ -862,6 +912,10 @@ const ACTION_KEYS: readonly string[] = [
   "agentMaySubmit",
 ];
 const FORBIDDEN_ACTION_AUTHORITY = /(^|_)(sign|submit|relay|broadcast)(_|$)/i;
+const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:@+/-]{0,159}$/;
+const SAFE_SCOPE = /^[A-Za-z0-9][A-Za-z0-9._:@+/-]{0,159}$/;
+const SAFE_AUDIENCE = /^[A-Za-z0-9][A-Za-z0-9._:@+/-]{0,511}$/;
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 const FORBIDDEN_EVIDENCE_KEYS = new Set([
   "accountid",
   "attachment",
@@ -890,43 +944,64 @@ const FORBIDDEN_EVIDENCE_KEYS = new Set([
 export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
   const issues: string[] = [];
   if (!isRecord(value)) return ["manifest_not_object"];
+  if (!hasOnlyKeys(value, MANIFEST_KEYS)) issues.push("manifest_unknown_field");
   if (value.version !== MATTERHORN_CRYPTO_APP_MANIFEST_VERSION) issues.push("manifest_version_invalid");
   if (!isNonEmptyString(value.appId) || !/^[a-z0-9][a-z0-9._-]{2,127}$/.test(value.appId)) issues.push("app_id_invalid");
-  if (!isNonEmptyString(value.displayName)) issues.push("display_name_required");
-  if (!isNonEmptyString(value.description)) issues.push("description_required");
-  if (!isNonEmptyString(value.manifestRevision)) issues.push("manifest_revision_required");
+  if (!isNonEmptyString(value.displayName) || value.displayName.length > 120 || CONTROL_CHARACTER.test(value.displayName)) issues.push("display_name_required");
+  if (!isNonEmptyString(value.description) || value.description.length > 2_000 || CONTROL_CHARACTER.test(value.description)) issues.push("description_required");
+  if (!isNonEmptyString(value.manifestRevision) || !SAFE_IDENTIFIER.test(value.manifestRevision)) issues.push("manifest_revision_required");
 
   if (!isRecord(value.publisher)) issues.push("publisher_required");
   else {
-    if (!isNonEmptyString(value.publisher.id)) issues.push("publisher_id_required");
-    if (!isNonEmptyString(value.publisher.keyId)) issues.push("publisher_key_id_required");
+    if (!hasOnlyKeys(value.publisher, PUBLISHER_KEYS)) issues.push("publisher_unknown_field");
+    if (!isNonEmptyString(value.publisher.id) || !SAFE_IDENTIFIER.test(value.publisher.id)) issues.push("publisher_id_required");
+    if (!isNonEmptyString(value.publisher.keyId) || !SAFE_IDENTIFIER.test(value.publisher.keyId)) issues.push("publisher_key_id_required");
     if (value.publisher.algorithm !== "ed25519") issues.push("publisher_algorithm_invalid");
-    if (!isNonEmptyString(value.publisher.signature)) issues.push("publisher_signature_required");
+    if (!isNonEmptyString(value.publisher.signature)
+      || value.publisher.signature.length > 1_024
+      || CONTROL_CHARACTER.test(value.publisher.signature)
+      || /PRIVATE KEY|seed phrase|mnemonic/i.test(value.publisher.signature)) issues.push("publisher_signature_required");
   }
 
   if (!isRecord(value.transport)) issues.push("transport_required");
   else {
+    if (!hasOnlyKeys(value.transport, TRANSPORT_KEYS)) issues.push("transport_unknown_field");
     if (!isNonEmptyString(value.transport.kind) || !SAFE_TRANSPORTS.includes(value.transport.kind)) issues.push("transport_kind_invalid");
-    if (!isNonEmptyString(value.transport.endpoint) || !/^https:\/\//.test(value.transport.endpoint)) issues.push("transport_https_required");
+    if (!isNonEmptyString(value.transport.endpoint)
+      || value.transport.endpoint.length > 2_048
+      || CONTROL_CHARACTER.test(value.transport.endpoint)
+      || !/^https:\/\//.test(value.transport.endpoint)) issues.push("transport_https_required");
   }
 
   if (!isRecord(value.authentication)) issues.push("authentication_required");
   else {
+    const authenticationKeys = value.authentication.type === "oauth2"
+      ? OAUTH_AUTHENTICATION_KEYS
+      : AUTHENTICATION_KEYS;
+    if (!hasOnlyKeys(value.authentication, authenticationKeys)) issues.push("authentication_unknown_field");
     if (!isNonEmptyString(value.authentication.type) || !SAFE_AUTH_TYPES.includes(value.authentication.type)) issues.push("authentication_type_invalid");
-    if (!isStringArray(value.authentication.scopes)) issues.push("authentication_scopes_invalid");
+    if (!isStringArray(value.authentication.scopes)
+      || value.authentication.scopes.length > 64
+      || new Set(value.authentication.scopes).size !== value.authentication.scopes.length
+      || value.authentication.scopes.some((scope) => scope !== scope.trim() || !SAFE_SCOPE.test(scope))) issues.push("authentication_scopes_invalid");
     if (value.authentication.type === "oauth2") {
-      if (!isNonEmptyString(value.authentication.authorizationServer)) issues.push("oauth_authorization_server_required");
-      if (!isNonEmptyString(value.authentication.resource)) issues.push("oauth_resource_required");
-      if (!isNonEmptyString(value.authentication.audience)) issues.push("oauth_audience_required");
+      if (!canonicalPublicHttpsUrl(value.authentication.authorizationServer)) issues.push("oauth_authorization_server_required");
+      if (!canonicalPublicHttpsUrl(value.authentication.resource)) issues.push("oauth_resource_required");
+      if (!isNonEmptyString(value.authentication.audience)
+        || value.authentication.audience !== value.authentication.audience.trim()
+        || !SAFE_AUDIENCE.test(value.authentication.audience)) issues.push("oauth_audience_required");
     }
   }
 
-  if (!Array.isArray(value.networks) || value.networks.length === 0) issues.push("networks_required");
+  if (!Array.isArray(value.networks) || value.networks.length === 0 || value.networks.length > 32) issues.push("networks_required");
   else {
     for (const network of value.networks) {
       if (!isRecord(network)
+        || !hasOnlyKeys(network, NETWORK_KEYS)
         || !isNonEmptyString(network.protocol)
+        || !SAFE_IDENTIFIER.test(network.protocol)
         || !isNonEmptyString(network.chainId)
+        || !SAFE_IDENTIFIER.test(network.chainId)
         || (network.environment !== "testnet" && network.environment !== "mainnet")) {
         issues.push("network_invalid");
       }
@@ -934,7 +1009,7 @@ export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
   }
 
   const actionIds = new Set<string>();
-  if (!Array.isArray(value.actions) || value.actions.length === 0) issues.push("actions_required");
+  if (!Array.isArray(value.actions) || value.actions.length === 0 || value.actions.length > 128) issues.push("actions_required");
   else {
     for (const action of value.actions) {
       if (!isRecord(action)) {
@@ -948,13 +1023,16 @@ export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
         actionIds.add(action.id);
         if (FORBIDDEN_ACTION_AUTHORITY.test(action.id)) issues.push("action_submit_authority_forbidden");
       }
-      if (!isNonEmptyString(action.title)) issues.push("action_title_required");
-      if (!isNonEmptyString(action.description)) issues.push("action_description_required");
+      if (!isNonEmptyString(action.title) || action.title.length > 160 || CONTROL_CHARACTER.test(action.title)) issues.push("action_title_required");
+      if (!isNonEmptyString(action.description) || action.description.length > 2_000 || CONTROL_CHARACTER.test(action.description)) issues.push("action_description_required");
       if (!isNonEmptyString(action.access) || !SAFE_ACTION_ACCESS.includes(action.access)) issues.push("action_access_invalid");
       if (!isNonEmptyString(action.risk) || !SAFE_ACTION_RISK.includes(action.risk)) issues.push("action_risk_invalid");
       if (!isRecord(action.inputSchema)) issues.push("action_input_schema_invalid");
       if (!isRecord(action.outputProjectionSchema)) issues.push("action_output_schema_invalid");
-      if (!isStringArray(action.requiredScopes)) issues.push("action_scopes_invalid");
+      if (!isStringArray(action.requiredScopes)
+        || action.requiredScopes.length > 64
+        || new Set(action.requiredScopes).size !== action.requiredScopes.length
+        || action.requiredScopes.some((scope) => scope !== scope.trim() || !SAFE_SCOPE.test(scope))) issues.push("action_scopes_invalid");
       if (typeof action.requiresFreshness !== "boolean") issues.push("action_freshness_invalid");
       if (action.freshnessMaxAgeMs !== null && (typeof action.freshnessMaxAgeMs !== "number" || action.freshnessMaxAgeMs <= 0)) issues.push("action_freshness_age_invalid");
       if (typeof action.timeoutMs !== "number" || action.timeoutMs < 1_000 || action.timeoutMs > 60_000) issues.push("action_timeout_invalid");
@@ -967,9 +1045,19 @@ export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
 
   if (!isRecord(value.support)) issues.push("support_required");
   else {
-    if (!isNonEmptyString(value.support.privacyPolicyUrl) || !/^https:\/\//.test(value.support.privacyPolicyUrl)) issues.push("privacy_policy_url_invalid");
-    if (!isNonEmptyString(value.support.securityContact)) issues.push("security_contact_required");
-    if (value.support.statusUrl !== null && (!isNonEmptyString(value.support.statusUrl) || !/^https:\/\//.test(value.support.statusUrl))) issues.push("status_url_invalid");
+    if (!hasOnlyKeys(value.support, SUPPORT_KEYS)) issues.push("support_unknown_field");
+    if (!isNonEmptyString(value.support.privacyPolicyUrl)
+      || value.support.privacyPolicyUrl.length > 2_048
+      || CONTROL_CHARACTER.test(value.support.privacyPolicyUrl)
+      || !/^https:\/\//.test(value.support.privacyPolicyUrl)) issues.push("privacy_policy_url_invalid");
+    if (!isNonEmptyString(value.support.securityContact)
+      || value.support.securityContact.length > 320
+      || CONTROL_CHARACTER.test(value.support.securityContact)) issues.push("security_contact_required");
+    if (value.support.statusUrl !== null
+      && (!isNonEmptyString(value.support.statusUrl)
+        || value.support.statusUrl.length > 2_048
+        || CONTROL_CHARACTER.test(value.support.statusUrl)
+        || !/^https:\/\//.test(value.support.statusUrl))) issues.push("status_url_invalid");
   }
 
   return [...new Set(issues)];

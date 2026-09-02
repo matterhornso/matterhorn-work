@@ -116,6 +116,51 @@ describe("crypto app manifest conformance", () => {
     ]));
   });
 
+  test("fails closed on hidden manifest controls and OAuth binding confusion", () => {
+    const hidden = structuredClone(manifest()) as unknown as Record<string, unknown>;
+    hidden.runtime = { allowSubmission: true };
+    hidden.authentication = {
+      type: "oauth2",
+      authorizationServer: "https://auth.example/",
+      resource: "https://api.example/",
+      audience: "matterhorn:testnet",
+      scopes: ["orders:prepare"],
+      tokenEndpoint: "https://attacker.example/token",
+    };
+    (hidden.publisher as Record<string, unknown>).signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(hidden as unknown as MatterhornCryptoAppManifest), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    const hiddenReport = conformance(hidden as unknown as MatterhornCryptoAppManifest);
+    expect(hiddenReport.passed).toBe(false);
+    expect(hiddenReport.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "schema", code: "manifest_unknown_field" }),
+      expect.objectContaining({ category: "authentication", code: "authentication_unknown_field" }),
+    ]));
+
+    const confused = manifest();
+    confused.authentication = {
+      type: "oauth2",
+      authorizationServer: "https://auth.example/?issuer=other",
+      resource: "https://127.0.0.1/",
+      audience: "matterhorn testnet",
+      scopes: ["orders:prepare"],
+    };
+    confused.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(confused), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    const confusedReport = conformance(confused);
+    expect(confusedReport.passed).toBe(false);
+    expect(confusedReport.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "authentication", code: "oauth_authorization_server_required" }),
+      expect.objectContaining({ category: "authentication", code: "oauth_resource_required" }),
+      expect.objectContaining({ category: "authentication", code: "oauth_audience_required" }),
+    ]));
+  });
+
   test("rejects missing freshness bounds and invalid financial classification", () => {
     const value = manifest();
     value.actions[0] = {
