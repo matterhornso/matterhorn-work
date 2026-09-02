@@ -151,6 +151,7 @@ Exit: a malicious or malformed adapter cannot broaden authority or expose a mode
 - Durable watches with an inbox for alerts and questions.
 - One active run per session and bounded tool/model budgets.
 - Explicit data disclosure and Memory selection.
+- Compact mobile workspace navigation exposes Coworkers, Files, MCPs, Memory, Notes, Wallet, Profile, and all crypto desks through the same shareable panel routes as the desktop rail.
 
 Exit: the user can operate a coworker through chat, see its allowed/approval/prohibited boundary, and stop it immediately.
 

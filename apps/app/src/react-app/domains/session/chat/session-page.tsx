@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Copy,
   Dumbbell,
+  Ellipsis,
   FileText,
   Files,
   FolderOpen,
@@ -503,6 +504,41 @@ function DeskBrandMark({
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[id as CustomerWorkflowIconHint] ?? FileText;
   if (visual) return <ProtocolDeskMark id={visual.id} visual={visual} size={size} />;
   return <Icon className="size-4" />;
+}
+
+function MobileWorkspaceMenuAction({
+  active = false,
+  badge,
+  icon,
+  label,
+  onSelect,
+  style,
+}: {
+  active?: boolean;
+  badge?: ReactNode;
+  icon: ReactNode;
+  label: string;
+  onSelect: () => void;
+  style?: CSSProperties;
+}) {
+  return (
+    <button
+      type="button"
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium text-dls-secondary transition-colors hover:bg-dls-hover hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/35",
+        active && "bg-dls-hover text-dls-text",
+      )}
+      onClick={onSelect}
+      style={style}
+    >
+      <span className="flex size-7 shrink-0 items-center justify-center" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge}
+    </button>
+  );
 }
 
 function HomeCapabilityOverview({
@@ -1727,6 +1763,7 @@ export function SessionPage(props: SessionPageProps) {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [sessionActionId, setSessionActionId] = useState<string | null>(null);
   const [homePathCopyLabel, setHomePathCopyLabel] = useState<string | null>(null);
+  const [mobileWorkspaceMenuOpen, setMobileWorkspaceMenuOpen] = useState(false);
   const activeWorkflowDeskId: WorkflowDeskId | null = routeWorkflowDesk;
   const [workflowLaunchState, setWorkflowLaunchState] = useState<WorkflowDeskLaunchState | null>(null);
   const homeSurfaceTitle = activeWorkflowDeskId
@@ -2361,6 +2398,10 @@ export function SessionPage(props: SessionPageProps) {
     }
     if (options?.primePrompt) primeProtocolRailPrompt(panel, options);
   }, [navigate, primeProtocolRailPrompt, props.selectedSessionId, props.selectedWorkspaceId, props.surface, setCurrentSidePanel]);
+  const runMobileWorkspaceAction = useCallback((action: () => void) => {
+    setMobileWorkspaceMenuOpen(false);
+    action();
+  }, []);
   const removeAccessibleTarget = useCallback((target: OpenTarget) => {
     setHiddenAccessibleTargetIds((current) => new Set(current).add(target.id));
     setArtifactTarget((current) => current?.id === target.id ? null : current);
@@ -2855,6 +2896,124 @@ export function SessionPage(props: SessionPageProps) {
                   <NotebookPen className="size-3.5" />
                 </Button>
               ) : null}
+              <Popover open={mobileWorkspaceMenuOpen} onOpenChange={setMobileWorkspaceMenuOpen}>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-11 text-dls-secondary hover:bg-dls-hover hover:text-dls-text md:size-8 lg:hidden"
+                      title="Open workspace menu"
+                      aria-label="Open workspace menu"
+                      aria-expanded={mobileWorkspaceMenuOpen}
+                    >
+                      <Ellipsis className="size-4" aria-hidden="true" />
+                    </Button>
+                  }
+                />
+                <PopoverContent
+                  side="bottom"
+                  align="end"
+                  sideOffset={6}
+                  className="max-h-[calc(100dvh-4rem)] w-[min(20rem,calc(100vw-1rem))] gap-0 overflow-y-auto rounded-lg border border-dls-border bg-dls-surface p-1.5 shadow-lg lg:hidden"
+                >
+                  <nav aria-label="Workspace menu" className="grid gap-0.5">
+                    <p className="px-3 pb-1 pt-2 text-xs font-medium text-dls-muted">Workspace</p>
+                    <MobileWorkspaceMenuAction
+                      active={coworkersRailActive}
+                      icon={<UsersRound className="size-4" />}
+                      label="Coworkers"
+                      onSelect={() => runMobileWorkspaceAction(openCoworkersRailPane)}
+                    />
+                    <MobileWorkspaceMenuAction
+                      active={filesRailActive}
+                      icon={<Files className="size-4" />}
+                      label="Coworker files"
+                      onSelect={() => runMobileWorkspaceAction(openAgentFilesRailPane)}
+                    />
+                    <MobileWorkspaceMenuAction
+                      active={extensionsRailActive}
+                      icon={<Settings2 className="size-4" />}
+                      label={hostedManagedTools ? "Tools & MCPs" : "MCPs & connectors"}
+                      onSelect={() => runMobileWorkspaceAction(props.settingsSlot ? openExtensionsRailPane : props.onOpenSettings)}
+                    />
+                    <MobileWorkspaceMenuAction
+                      active={memoryRailActive}
+                      badge={memorySuggestionUnreadCount > 0 ? (
+                        <span className="rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-semibold text-dls-secondary">
+                          {memorySuggestionUnreadCount > 99 ? "99+" : memorySuggestionUnreadCount}
+                        </span>
+                      ) : null}
+                      icon={<Brain className="size-4" />}
+                      label="Memory"
+                      onSelect={() => runMobileWorkspaceAction(openMemoryRailPane)}
+                    />
+                    {workspaceNotesAvailable ? (
+                      <MobileWorkspaceMenuAction
+                        active={notesRailActive}
+                        icon={<NotebookPen className="size-4" />}
+                        label="Notes"
+                        onSelect={() => runMobileWorkspaceAction(openNotesRailPane)}
+                      />
+                    ) : null}
+                    {showArtifactRailItem ? (
+                      <MobileWorkspaceMenuAction
+                        active={artifactRailActive}
+                        badge={artifactTargetCount > 0 ? (
+                          <span className="text-xs tabular-nums text-dls-muted">{artifactTargetCount}</span>
+                        ) : null}
+                        icon={<FileText className="size-4" />}
+                        label="Outputs"
+                        onSelect={() => runMobileWorkspaceAction(openArtifactRailPane)}
+                      />
+                    ) : null}
+                    <MobileWorkspaceMenuAction
+                      active={walletRailActive}
+                      icon={<WalletIcon className="size-4" />}
+                      label="Wallet"
+                      onSelect={() => runMobileWorkspaceAction(() => setCurrentSidePanel("wallet"))}
+                    />
+                    <MobileWorkspaceMenuAction
+                      active={profileRailActive}
+                      icon={<CircleUserRound className="size-4" />}
+                      label="Profile & account"
+                      onSelect={() => runMobileWorkspaceAction(() => setCurrentSidePanel("profile"))}
+                    />
+
+                    <div className="my-1 h-px bg-dls-border" aria-hidden="true" />
+                    <p className="px-3 pb-1 pt-2 text-xs font-medium text-dls-muted">Desks</p>
+                    {VENUE_SIDE_PANELS.map((panel) => {
+                      const visual = getCustomerProtocolDeskVisualForLaunch(
+                        panel,
+                        MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+                      );
+                      return (
+                        <MobileWorkspaceMenuAction
+                          key={panel}
+                          active={activeSidePanel === panel}
+                          icon={<ProtocolLogo venue={panel} size={20} />}
+                          label={visual?.displayName ?? panel}
+                          onSelect={() => runMobileWorkspaceAction(() => openVenueRailPane(panel))}
+                          style={deskToneStyle(panel)}
+                        />
+                      );
+                    })}
+                    {!hostedManagedTools && wellnessRailLauncher ? (
+                      <MobileWorkspaceMenuAction
+                        icon={<Dumbbell className="size-4" />}
+                        label={getCustomerProtocolDeskVisual("wellness")?.displayName ?? "Longevity"}
+                        onSelect={() => runMobileWorkspaceAction(() => {
+                          openWorkflowDesk("wellness", wellnessRailLauncher.prompt, {
+                            title: wellnessRailLauncher.title,
+                            sourceId: "wellness-mobile-menu-launcher",
+                          });
+                        })}
+                        style={deskToneStyle("wellness")}
+                      />
+                    ) : null}
+                  </nav>
+                </PopoverContent>
+              </Popover>
               {/* Revert/redo moved to per-message actions */}
               {props.developerMode ? (
                 <Button
