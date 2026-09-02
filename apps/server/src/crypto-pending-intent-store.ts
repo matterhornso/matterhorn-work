@@ -276,15 +276,15 @@ export class MatterhornPendingCryptoIntentStore {
   }): MatterhornPendingCryptoIntent {
     const now = this.now();
     const key = storageKey(input.workspaceId, input.id);
-    const stored = this.stateStore.take<MatterhornPendingCryptoIntent>(
-      "crypto_pending_intent",
-      key,
-      now.getTime(),
-    );
-    if (!stored) throw new Error("pending_crypto_intent_not_found");
-    const current = normalizeRecord(stored);
-    validateRecord(current);
-    try {
+    return this.stateStore.transaction(() => {
+      const stored = this.stateStore.take<MatterhornPendingCryptoIntent>(
+        "crypto_pending_intent",
+        key,
+        now.getTime(),
+      );
+      if (!stored) throw new Error("pending_crypto_intent_not_found");
+      const current = normalizeRecord(stored);
+      validateRecord(current);
       if (current.workspaceId !== input.workspaceId
         || current.ownerId !== input.ownerId
         || current.coworkerId !== input.coworkerId) {
@@ -309,18 +309,7 @@ export class MatterhornPendingCryptoIntentStore {
         nowMs: now.getTime(),
       });
       return clone(next);
-    } catch (error) {
-      this.stateStore.put({
-        kind: "crypto_pending_intent",
-        key,
-        workspaceId: current.workspaceId,
-        sessionId: current.sessionId,
-        value: current,
-        expiresAtMs: Date.parse(current.createdAt) + RETENTION_AFTER_CREATION_MS,
-        nowMs: now.getTime(),
-      });
-      throw error;
-    }
+    });
   }
 
   reconcileWalletReceipt(input: {
@@ -340,36 +329,38 @@ export class MatterhornPendingCryptoIntentStore {
   }): MatterhornPendingCryptoIntent {
     const now = this.now();
     const key = storageKey(input.workspaceId, input.id);
-    const stored = this.stateStore.take<MatterhornPendingCryptoIntent>(
-      "crypto_pending_intent",
-      key,
-      now.getTime(),
-    );
-    if (!stored) throw new Error("pending_crypto_intent_not_found");
-    const current = normalizeRecord(stored);
-    validateRecord(current);
-    const restore = (record: MatterhornPendingCryptoIntent) => this.stateStore.put({
-      kind: "crypto_pending_intent",
-      key,
-      workspaceId: record.workspaceId,
-      sessionId: record.sessionId,
-      value: record,
-      expiresAtMs: Date.parse(record.createdAt) + RETENTION_AFTER_CREATION_MS,
-      nowMs: now.getTime(),
-    });
-    if (Date.parse(current.expiresAt) <= now.getTime()
-      && TRANSITIONS[current.state].has("expired")) {
-      const expired: MatterhornPendingCryptoIntent = {
-        ...current,
-        revision: current.revision + 1,
-        state: "expired",
-        updatedAt: now.toISOString(),
-      };
-      validateRecord(expired);
-      restore(expired);
-      throw new Error("pending_crypto_intent_expired");
-    }
-    try {
+    let expiredTransition = false;
+    const record = this.stateStore.transaction(() => {
+      const stored = this.stateStore.take<MatterhornPendingCryptoIntent>(
+        "crypto_pending_intent",
+        key,
+        now.getTime(),
+      );
+      if (!stored) throw new Error("pending_crypto_intent_not_found");
+      const current = normalizeRecord(stored);
+      validateRecord(current);
+      const restore = (record: MatterhornPendingCryptoIntent) => this.stateStore.put({
+        kind: "crypto_pending_intent",
+        key,
+        workspaceId: record.workspaceId,
+        sessionId: record.sessionId,
+        value: record,
+        expiresAtMs: Date.parse(record.createdAt) + RETENTION_AFTER_CREATION_MS,
+        nowMs: now.getTime(),
+      });
+      if (Date.parse(current.expiresAt) <= now.getTime()
+        && TRANSITIONS[current.state].has("expired")) {
+        const expiredRecord: MatterhornPendingCryptoIntent = {
+          ...current,
+          revision: current.revision + 1,
+          state: "expired",
+          updatedAt: now.toISOString(),
+        };
+        validateRecord(expiredRecord);
+        restore(expiredRecord);
+        expiredTransition = true;
+        return clone(expiredRecord);
+      }
       if (current.workspaceId !== input.workspaceId
         || current.ownerId !== input.ownerId
         || current.coworkerId !== input.coworkerId) {
@@ -445,10 +436,9 @@ export class MatterhornPendingCryptoIntentStore {
       validateRecord(next);
       restore(next);
       return clone(next);
-    } catch (error) {
-      restore(current);
-      throw error;
-    }
+    });
+    if (expiredTransition) throw new Error("pending_crypto_intent_expired");
+    return record;
   }
 
   reconcileVerifiedSuiReceipt(input: {
@@ -471,24 +461,24 @@ export class MatterhornPendingCryptoIntentStore {
   }): MatterhornPendingCryptoIntent {
     const now = this.now();
     const key = storageKey(input.workspaceId, input.id);
-    const stored = this.stateStore.take<MatterhornPendingCryptoIntent>(
-      "crypto_pending_intent",
-      key,
-      now.getTime(),
-    );
-    if (!stored) throw new Error("pending_crypto_intent_not_found");
-    const current = normalizeRecord(stored);
-    validateRecord(current);
-    const restore = (record: MatterhornPendingCryptoIntent) => this.stateStore.put({
-      kind: "crypto_pending_intent",
-      key,
-      workspaceId: record.workspaceId,
-      sessionId: record.sessionId,
-      value: record,
-      expiresAtMs: Date.parse(record.createdAt) + RETENTION_AFTER_CREATION_MS,
-      nowMs: now.getTime(),
-    });
-    try {
+    return this.stateStore.transaction(() => {
+      const stored = this.stateStore.take<MatterhornPendingCryptoIntent>(
+        "crypto_pending_intent",
+        key,
+        now.getTime(),
+      );
+      if (!stored) throw new Error("pending_crypto_intent_not_found");
+      const current = normalizeRecord(stored);
+      validateRecord(current);
+      const restore = (record: MatterhornPendingCryptoIntent) => this.stateStore.put({
+        kind: "crypto_pending_intent",
+        key,
+        workspaceId: record.workspaceId,
+        sessionId: record.sessionId,
+        value: record,
+        expiresAtMs: Date.parse(record.createdAt) + RETENTION_AFTER_CREATION_MS,
+        nowMs: now.getTime(),
+      });
       const canonical = current.intent.canonicalArguments;
       const amountSui = typeof canonical.amountSui === "string" ? canonical.amountSui : "";
       const recipient = typeof canonical.recipient === "string" ? canonical.recipient : "";
@@ -570,10 +560,7 @@ export class MatterhornPendingCryptoIntentStore {
       validateRecord(next);
       restore(next);
       return clone(next);
-    } catch (error) {
-      restore(current);
-      throw error;
-    }
+    });
   }
 
   purgeWorkspace(workspaceId: string): number {

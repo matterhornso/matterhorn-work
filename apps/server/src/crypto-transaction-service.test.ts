@@ -35,10 +35,38 @@ afterEach(() => {
 });
 
 function pendingStore(now: () => Date = () => NOW): MatterhornPendingCryptoIntentStore {
+  return pendingStoreWithState(now).pendingIntents;
+}
+
+function pendingStoreWithState(now: () => Date = () => NOW): {
+  pendingIntents: MatterhornPendingCryptoIntentStore;
+  state: MatterhornGuardedRuntimeStateStore;
+} {
   const directory = mkdtempSync(join(tmpdir(), "matterhorn-pending-intent-"));
   const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));
   stateStores.push(state);
-  return new MatterhornPendingCryptoIntentStore(state, now);
+  return {
+    pendingIntents: new MatterhornPendingCryptoIntentStore(state, now),
+    state,
+  };
+}
+
+function failNextPendingIntentPut(state: MatterhornGuardedRuntimeStateStore): () => void {
+  const originalPut = state.put.bind(state);
+  let armed = true;
+  Object.defineProperty(state, "put", {
+    configurable: true,
+    value: (input: Parameters<MatterhornGuardedRuntimeStateStore["put"]>[0]) => {
+      if (armed && input.kind === "crypto_pending_intent") {
+        armed = false;
+        throw new Error("injected_pending_intent_write_failure");
+      }
+      return originalPut(input);
+    },
+  });
+  return () => {
+    Object.defineProperty(state, "put", { configurable: true, value: originalPut });
+  };
 }
 
 function policyLayer(
@@ -802,6 +830,55 @@ describe("guarded crypto transaction service", () => {
     )).toMatchObject({ state: "expired", revision: 2 });
   });
 
+  test("durably expires a stale wallet review before rejecting receipt reconciliation", async () => {
+    let clock = NOW;
+    const { pendingIntents, state } = pendingStoreWithState(() => clock);
+    const input = request();
+    const service = new MatterhornCryptoTransactionService({
+      router: { execute: async () => adapterResult() },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents,
+      recordReviewedAction: async () => undefined,
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 25,
+        dailySpendUsdBefore: 10,
+        weeklySpendUsdBefore: 20,
+        projectedReserveUsd: 75,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 1,
+        regionCode: "ch",
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    const prepared = await service.prepare(input);
+    const id = prepared.pendingIntent?.id ?? "missing";
+    clock = new Date("2026-09-01T12:00:16.000Z");
+    const digest = "3".repeat(44);
+
+    expect(() => pendingIntents.reconcileWalletReceipt({
+      workspaceId: "ws_alpha",
+      ownerId: "account_alpha",
+      coworkerId: "cw_sui",
+      id,
+      expectedRevision: 1,
+      status: "submitted",
+      publicId: digest,
+      transactionHash: digest,
+      blockHash: null,
+      network: "sui:testnet",
+      signer: SENDER,
+      operation: prepared.intent.operation,
+      authorizedArgumentsHash: prepared.intent.authorizedArgumentsHash,
+    })).toThrow("pending_crypto_intent_expired");
+
+    expect(state.list<{ id: string; state: string; revision: number }>(
+      "crypto_pending_intent",
+      { workspaceId: "ws_alpha", nowMs: clock.getTime() },
+    )).toContainEqual(expect.objectContaining({ id, state: "expired", revision: 2 }));
+  });
+
   test("reconciles only exact wallet-reported Sui metadata without claiming chain verification", async () => {
     const input = request();
     const pendingIntents = pendingStore();
@@ -1035,5 +1112,89 @@ describe("guarded crypto transaction service", () => {
     })).toThrow("pending_crypto_receipt_terms_mismatch");
     expect(pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", id))
       .toMatchObject({ state: "wallet_review", revision: 1, receipt: null });
+  });
+
+  test("rolls back wallet-intent transitions and receipt reconciliation when replacement persistence fails", async () => {
+    const input = request();
+    const { pendingIntents, state } = pendingStoreWithState();
+    const service = new MatterhornCryptoTransactionService({
+      router: { execute: async () => adapterResult() },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents,
+      recordReviewedAction: async () => undefined,
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 25,
+        dailySpendUsdBefore: 10,
+        weeklySpendUsdBefore: 20,
+        projectedReserveUsd: 75,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 1,
+        regionCode: "ch",
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    const prepared = await service.prepare(input);
+    const id = prepared.pendingIntent?.id ?? "missing";
+    const original = pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", id);
+    if (!original) throw new Error("expected_pending_intent");
+
+    let restorePut = failNextPendingIntentPut(state);
+    expect(() => pendingIntents.transition({
+      workspaceId: "ws_alpha",
+      ownerId: "account_alpha",
+      coworkerId: "cw_sui",
+      id,
+      expectedRevision: original.revision,
+      nextState: "cancelled",
+    })).toThrow("injected_pending_intent_write_failure");
+    restorePut();
+    expect(pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", id)).toEqual(original);
+
+    const digest = "3".repeat(44);
+    const receiptInput = {
+      workspaceId: "ws_alpha",
+      ownerId: "account_alpha",
+      coworkerId: "cw_sui",
+      id,
+      expectedRevision: original.revision,
+      status: "submitted" as const,
+      publicId: digest,
+      transactionHash: digest,
+      blockHash: null,
+      network: "sui:testnet",
+      signer: SENDER,
+      operation: prepared.intent.operation,
+      authorizedArgumentsHash: prepared.intent.authorizedArgumentsHash,
+    };
+    restorePut = failNextPendingIntentPut(state);
+    expect(() => pendingIntents.reconcileWalletReceipt(receiptInput))
+      .toThrow("injected_pending_intent_write_failure");
+    restorePut();
+    expect(pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", id)).toEqual(original);
+
+    const submitted = pendingIntents.reconcileWalletReceipt(receiptInput);
+    restorePut = failNextPendingIntentPut(state);
+    expect(() => pendingIntents.reconcileVerifiedSuiReceipt({
+      workspaceId: "ws_alpha",
+      ownerId: "account_alpha",
+      coworkerId: "cw_sui",
+      id,
+      expectedRevision: submitted.revision,
+      verification: {
+        network: "sui:testnet",
+        digest,
+        status: "confirmed",
+        signer: SENDER,
+        recipient: RECIPIENT,
+        amountMist: "1250000000",
+        epoch: "912",
+        source: "sui.grpc",
+        observedAt: "2026-09-01T12:00:01.000Z",
+      },
+    })).toThrow("injected_pending_intent_write_failure");
+    restorePut();
+    expect(pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", id)).toEqual(submitted);
   });
 });
