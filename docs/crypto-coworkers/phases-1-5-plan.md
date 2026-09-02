@@ -12,6 +12,7 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 1 tenant-scoped connection grants with opaque vault/wallet references and immediate certification revocation: complete.
 - Phase 1 adapter-router core, closed schema validation, runtime DNS/egress checks, typed output projection, untrusted-data quarantine, timeout handling, usage reservation/reconciliation, and circuit breaking: complete and backend-only.
 - Phase 1 trusted JSON-over-HTTPS transport foundation with DNS address pinning, TLS hostname verification, peer verification, redirect/content/size bounds, and server-side credential resolution: complete and backend-only.
+- Phase 1 pinned JSON method boundary: complete and backend-only. Certified transports may use only bodyless `GET` or JSON `POST`; unsupported methods, GET bodies, missing or invalid POST bodies, credential-bearing or non-HTTPS URLs, fragments, redirects, peer changes, request/response-size violations, and non-JSON or deceptive JSON-prefixed media types fail before or during the pinned request. Existing generic adapter calls remain POST-only.
 - Phase 1 guarded-runtime authorization bridge with explicit certified-action-to-tool bindings, exact hash-bound single-use capabilities, durable reservations, restart-safe receipts, and run-close revocation: complete and backend-only.
 - Phase 1 signed, testnet-only Sui and Hyperliquid manifest contracts, closed projections, guarded-tool bindings, and offline routed fixtures: complete and backend-only.
 - Phase 1 pinned live-source executor: Sui balance/checkpoint reads and exact transfer simulations plus Hyperliquid market/orderbook/account reads and exact short-lived order previews are complete and backend-only. Hyperliquid preparation never calls the exchange endpoint.
@@ -348,7 +349,7 @@ The completed adapter-router core remains backend-only and inert. It now:
 - Enforces timeout, reservation/reconciliation, per-tenant circuit breaking, and immediate registry/connection revocation.
 - Requires exact run/call/action/network/argument authorization through an injected server-only boundary.
 
-The trusted JSON transport additionally pins the HTTPS socket to one router-approved address, preserves TLS verification against the certified hostname, verifies the actual peer address, refuses redirects and non-JSON responses, caps response bytes, and prevents opaque credential references from entering the request body. Upstream adapters cannot declare their own metering cost.
+The trusted JSON transport additionally pins the HTTPS socket to one router-approved address, preserves TLS verification against the certified hostname, verifies the actual peer address, refuses redirects and non-JSON responses, caps response bytes, and prevents opaque credential references from entering the request body. Its lower-level first-party requester supports only bodyless `GET` and JSON `POST`; all other methods and ambiguous URL/body combinations fail before dialing. Generic adapter envelopes remain POST-only. Upstream adapters cannot declare their own metering cost.
 
 The guarded-runtime bridge requires full `enforce` mode and a trusted certification-time binding between each app action and one existing Matterhorn read or prepare tool. It stages and consumes the existing server-only capability, binds the manifest revision, connection, action, access, network, and canonical argument hash, persists only non-content reservation metadata, records the app/action in the run receipt, survives a process restart, and invalidates outstanding reservations when the run closes. Startup and account-safe catalog, connection, coworker, and wallet-intent routes are wired behind fail-closed runtime flags; none can enable signing or submission.
 
@@ -356,6 +357,7 @@ The first-party contracts and backend-only executors cover Sui balance reads and
 
 The next Phase 1 slice must:
 
+- Use the pinned bodyless-GET primitive to add protocol-specific, same-origin request construction for future Bittensor and Polymarket public reads without allowing destination overrides or arbitrary methods. Multi-origin Polymarket preparation still requires a separately certified resolution, compliance, and orderbook boundary.
 - Extend the trusted transport boundary to future MCP/OpenAPI/RPC protocols without allowing redirects, destination overrides, arbitrary methods, or raw upstream cost claims. The first-party JSON and Sui gRPC transports are complete for the current testnet actions.
 - Complete the operator-controlled Sui financial-simulation and Hyperliquid order-preview probes, then promote only their sealed runtime reports.
 - Keep the gateway and coworker modes off outside internal acceptance until those operator probes and hosted two-account acceptance pass.

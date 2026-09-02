@@ -9,6 +9,7 @@ import type { MatterhornCryptoAppAction } from "@matterhorn-work/types/crypto-co
 import {
   createPinnedBytesRequester,
   createPinnedJsonCryptoAppTransport,
+  createPinnedJsonRequester,
 } from "./crypto-app-https-transport.js";
 
 const action: MatterhornCryptoAppAction = {
@@ -109,6 +110,136 @@ function fakeHttps(input: {
 }
 
 describe("pinned JSON crypto app transport", () => {
+  test("supports an exact bodyless GET without weakening DNS or TLS pinning", async () => {
+    const fake = fakeHttps({
+      body: { markets: [{ id: "market-1", question: "Will SUI rise?" }] },
+    });
+    const requester = createPinnedJsonRequester({
+      request: fake.request,
+      tlsConnect: fake.tlsConnect,
+    });
+    const result = await requester({
+      endpoint: new URL("https://adapter.example.test/v1/markets?active=true&limit=10"),
+      approvedAddresses: ["93.184.216.34"],
+      method: "GET",
+      signal: new AbortController().signal,
+    });
+    expect(fake.options()).toMatchObject({
+      method: "GET",
+      path: "/v1/markets?active=true&limit=10",
+      hostname: "adapter.example.test",
+      servername: "adapter.example.test",
+      rejectUnauthorized: true,
+      agent: false,
+    });
+    expect(fake.tlsOptions()).toMatchObject({
+      host: "93.184.216.34",
+      servername: "adapter.example.test",
+      rejectUnauthorized: true,
+      ALPNProtocols: ["http/1.1"],
+    });
+    expect(fake.options().headers).not.toHaveProperty("content-type");
+    expect(fake.options().headers).not.toHaveProperty("content-length");
+    expect(fake.body()).toBe("");
+    expect(result).toMatchObject({
+      value: { markets: [{ id: "market-1", question: "Will SUI rise?" }] },
+      connectedAddress: "93.184.216.34",
+      requestBytes: 0,
+    });
+  });
+
+  test("rejects unsupported methods, GET bodies, missing POST bodies, and ambiguous URLs before dialing", async () => {
+    let connected = false;
+    let requested = false;
+    const requester = createPinnedJsonRequester({
+      request: (() => { requested = true; throw new Error("must not request"); }) as never,
+      tlsConnect: (() => { connected = true; throw new Error("must not connect"); }) as never,
+    });
+    const base = {
+      endpoint: new URL("https://adapter.example.test/v1/markets"),
+      approvedAddresses: ["93.184.216.34"],
+      signal: new AbortController().signal,
+    };
+    await expect(requester({ ...base, method: "PUT" as never, body: {} }))
+      .rejects.toThrow("crypto_app_transport_method_invalid");
+    await expect(requester({ ...base, method: "GET", body: {} }))
+      .rejects.toThrow("crypto_app_transport_body_forbidden");
+    await expect(requester({ ...base, method: "GET", body: null }))
+      .rejects.toThrow("crypto_app_transport_body_forbidden");
+    await expect(requester({ ...base, method: "POST" }))
+      .rejects.toThrow("crypto_app_transport_body_required");
+    await expect(requester({
+      ...base,
+      endpoint: new URL("http://adapter.example.test/v1/markets"),
+      method: "GET",
+    })).rejects.toThrow("crypto_app_transport_endpoint_invalid");
+    await expect(requester({
+      ...base,
+      endpoint: new URL("https://user:pass@adapter.example.test/v1/markets"),
+      method: "GET",
+    })).rejects.toThrow("crypto_app_transport_endpoint_invalid");
+    await expect(requester({
+      ...base,
+      endpoint: new URL("https://adapter.example.test/v1/markets#ignored-control"),
+      method: "GET",
+    })).rejects.toThrow("crypto_app_transport_endpoint_invalid");
+    await expect(requester({
+      ...base,
+      endpoint: new URL(`https://adapter.example.test/${"x".repeat(8_192)}`),
+      method: "GET",
+    })).rejects.toThrow("crypto_app_transport_endpoint_invalid");
+    expect(requested).toBe(false);
+    expect(connected).toBe(false);
+  });
+
+  test("bounds JSON POST requests before dialing", async () => {
+    let connected = false;
+    let requested = false;
+    const requester = createPinnedJsonRequester({
+      maxRequestBytes: 1_024,
+      request: (() => { requested = true; throw new Error("must not request"); }) as never,
+      tlsConnect: (() => { connected = true; throw new Error("must not connect"); }) as never,
+    });
+    await expect(requester({
+      endpoint: new URL("https://adapter.example.test/v1/call"),
+      approvedAddresses: ["93.184.216.34"],
+      method: "POST",
+      body: { value: "x".repeat(2_000) },
+      signal: new AbortController().signal,
+    })).rejects.toThrow("crypto_app_transport_request_too_large");
+    expect(requested).toBe(false);
+    expect(connected).toBe(false);
+  });
+
+  test("accepts JSON media types but rejects deceptive JSON prefixes", async () => {
+    const deceptive = fakeHttps({ contentType: "application/jsonp", body: {} });
+    const deceptiveRequester = createPinnedJsonRequester({
+      request: deceptive.request,
+      tlsConnect: deceptive.tlsConnect,
+    });
+    await expect(deceptiveRequester({
+      endpoint: new URL("https://adapter.example.test/v1/markets"),
+      approvedAddresses: ["93.184.216.34"],
+      method: "GET",
+      signal: new AbortController().signal,
+    })).rejects.toThrow("crypto_app_transport_content_type_invalid");
+
+    const vendor = fakeHttps({
+      contentType: "application/problem+json; charset=utf-8",
+      body: { type: "about:blank", status: 200 },
+    });
+    const vendorRequester = createPinnedJsonRequester({
+      request: vendor.request,
+      tlsConnect: vendor.tlsConnect,
+    });
+    await expect(vendorRequester({
+      endpoint: new URL("https://adapter.example.test/v1/markets"),
+      approvedAddresses: ["93.184.216.34"],
+      method: "GET",
+      signal: new AbortController().signal,
+    })).resolves.toMatchObject({ value: { type: "about:blank", status: 200 } });
+  });
+
   test("pins DNS and TLS hostname while keeping opaque credential references out of the request", async () => {
     const fake = fakeHttps({});
     const executor = createPinnedJsonCryptoAppTransport({

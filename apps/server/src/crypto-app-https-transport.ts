@@ -42,13 +42,17 @@ type TransportOptions = {
   estimateCostMicros?: MatterhornCryptoAppCostEstimator;
   request?: HttpsRequest;
   tlsConnect?: TlsConnector;
+  maxRequestBytes?: number;
   maxResponseBytes?: number;
 };
 
 export type MatterhornPinnedJsonRequest = {
   endpoint: URL;
   approvedAddresses: readonly string[];
-  body: unknown;
+  /** Deliberately closed to the two JSON methods needed by certified adapters. */
+  method?: "GET" | "POST";
+  /** GET requests must omit the body. POST requests must provide JSON. */
+  body?: unknown;
   signal: AbortSignal;
   headers?: Record<string, string>;
 };
@@ -87,6 +91,7 @@ export type MatterhornPinnedBytesRequester = (
 ) => Promise<MatterhornPinnedBytesResponse>;
 
 const DEFAULT_MAX_RESPONSE_BYTES = 512 * 1024;
+const DEFAULT_MAX_REQUEST_BYTES = 64 * 1024;
 const FORBIDDEN_HEADERS = new Set([
   "accept",
   "connection",
@@ -182,6 +187,12 @@ function finiteCost(value: number): number {
   return value;
 }
 
+function isJsonContentType(value: string | string[] | undefined): boolean {
+  const mediaType = String(value ?? "").split(";", 1)[0]!.trim().toLowerCase();
+  return mediaType === "application/json"
+    || /^application\/[a-z0-9!#$&^_.+-]+\+json$/.test(mediaType);
+}
+
 async function securePinnedSocket(input: {
   endpoint: URL;
   pinnedAddress: string;
@@ -230,20 +241,41 @@ async function securePinnedSocket(input: {
 export function createPinnedJsonRequester(options: {
   request?: HttpsRequest;
   tlsConnect?: TlsConnector;
+  maxRequestBytes?: number;
   maxResponseBytes?: number;
 } = {}): MatterhornPinnedJsonRequester {
   const request = options.request ?? requestHttps;
   const tlsConnect = options.tlsConnect ?? connectTls;
+  const maxRequestBytes = Math.max(1_024, options.maxRequestBytes ?? DEFAULT_MAX_REQUEST_BYTES);
   const maxResponseBytes = Math.max(1_024, options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES);
 
   return async (input): Promise<MatterhornPinnedJsonResponse> => {
     if (input.signal.aborted) throw new Error("crypto_app_transport_aborted");
+    if (input.endpoint.protocol !== "https:"
+      || input.endpoint.username
+      || input.endpoint.password
+      || input.endpoint.hash
+      || input.endpoint.href.length > 8_192) {
+      throw new Error("crypto_app_transport_endpoint_invalid");
+    }
     if (input.approvedAddresses.length < 1) throw new Error("crypto_app_transport_address_required");
+    const method = input.method ?? "POST";
+    if (method !== "GET" && method !== "POST") {
+      throw new Error("crypto_app_transport_method_invalid");
+    }
+    if (method === "GET" && input.body !== undefined) {
+      throw new Error("crypto_app_transport_body_forbidden");
+    }
+    if (method === "POST" && input.body === undefined) {
+      throw new Error("crypto_app_transport_body_required");
+    }
     const pinnedAddress = input.approvedAddresses[0]!;
     assertCryptoAdapterConnectedAddress(input.approvedAddresses, pinnedAddress);
     const headers = safeCredentialHeaders(input.headers ?? {});
-    const body = JSON.stringify(input.body);
+    const body = method === "GET" ? "" : JSON.stringify(input.body);
+    if (typeof body !== "string") throw new Error("crypto_app_transport_body_invalid");
     const requestBytes = Buffer.byteLength(body, "utf8");
+    if (requestBytes > maxRequestBytes) throw new Error("crypto_app_transport_request_too_large");
     const socket = await securePinnedSocket({
       endpoint: input.endpoint,
       pinnedAddress,
@@ -271,7 +303,7 @@ export function createPinnedJsonRequester(options: {
           protocol: "https:",
           hostname: input.endpoint.hostname,
           port: input.endpoint.port || 443,
-          method: "POST",
+          method,
           path: `${input.endpoint.pathname}${input.endpoint.search}`,
           servername: input.endpoint.hostname,
           rejectUnauthorized: true,
@@ -279,16 +311,17 @@ export function createPinnedJsonRequester(options: {
           createConnection: () => socket,
           headers: {
             accept: "application/json",
-            "content-type": "application/json",
-            "content-length": String(requestBytes),
             "user-agent": "Matterhorn-Crypto-App-Gateway/1",
+            ...(method === "POST" ? {
+              "content-type": "application/json",
+              "content-length": String(requestBytes),
+            } : {}),
             ...headers,
           },
           signal: input.signal,
         }, (response) => {
           const connectedAddress = socket.remoteAddress ?? "";
-          const contentType = String(response.headers["content-type"] ?? "").toLowerCase();
-          if (!contentType.startsWith("application/json")) {
+          if (!isJsonContentType(response.headers["content-type"])) {
             response.destroy();
             finish(() => reject(new Error("crypto_app_transport_content_type_invalid")));
             return;
@@ -329,7 +362,8 @@ export function createPinnedJsonRequester(options: {
         return;
       }
       input.signal.addEventListener("abort", abort, { once: true });
-      client.end(body);
+      if (method === "GET") client.end();
+      else client.end(body);
     });
   };
 }
@@ -456,6 +490,7 @@ export function createPinnedJsonCryptoAppTransport(
   const requestJson = createPinnedJsonRequester({
     request: options.request,
     tlsConnect: options.tlsConnect,
+    maxRequestBytes: options.maxRequestBytes,
     maxResponseBytes: options.maxResponseBytes,
   });
 
