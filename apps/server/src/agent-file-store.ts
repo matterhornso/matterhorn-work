@@ -61,6 +61,11 @@ export type MatterhornAgentFileRecord = {
   updatedAt: string;
 };
 
+export type MatterhornRecoveredAgentFile = {
+  item: MatterhornStoredAgentFile;
+  bytes: Buffer;
+};
+
 export class MatterhornAgentFileStoreError extends Error {
   constructor(readonly code: string, readonly issues: string[] = []) {
     super(code);
@@ -352,6 +357,52 @@ export class MatterhornAgentFileStore {
       } finally {
         bytes.fill(0);
       }
+    } finally {
+      key.fill(0);
+    }
+  }
+
+  /**
+   * Returns the exact user-owned file bytes for an authenticated recovery
+   * download. This does not project content into a model context and grants no
+   * coworker or wallet authority. Callers must clear `bytes` after handing the
+   * response to the authenticated client.
+   */
+  async recover(input: {
+    workspaceId: string;
+    ownerId: string;
+    fileId: string;
+    expectedRevision: number;
+    now?: Date;
+  }): Promise<MatterhornRecoveredAgentFile> {
+    if (!FILE_ID.test(input.fileId)) throw new MatterhornAgentFileStoreError("agent_file_not_found");
+    const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
+    if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
+    assertTenant(record, input);
+    if (record.revision !== input.expectedRevision) {
+      throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
+    }
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
+    if (record.file.retention.expiresAt
+      && Date.parse(record.file.retention.expiresAt) <= now.getTime()) {
+      throw new MatterhornAgentFileStoreError("agent_file_expired");
+    }
+    const key = await this.keyManager.decryptDataKey({
+      workspaceId: record.workspaceId,
+      runId: record.id,
+      keyReference: record.key.keyReference,
+      wrappedKey: record.key.wrappedKey,
+      keyContext: record.key.keyContext,
+    });
+    try {
+      const bytes = decryptFile(record, key);
+      if (bytes.byteLength !== record.file.sizeBytes
+        || digest(bytes) !== record.file.contentSha256) {
+        bytes.fill(0);
+        throw new MatterhornAgentFileStoreError("agent_file_content_mismatch");
+      }
+      return { item: accountView(record), bytes };
     } finally {
       key.fill(0);
     }

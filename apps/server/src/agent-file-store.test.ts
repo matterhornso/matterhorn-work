@@ -111,6 +111,19 @@ describe("encrypted Agent Files store", () => {
       });
       expect(context.part.text).toContain("Target allocation: 20% TAO");
       expect(context.part.label).toBe("workspace_private");
+      const recovered = await store.recover({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision,
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      });
+      try {
+        expect(recovered.item).toEqual(created);
+        expect(recovered.bytes.toString("utf8")).toBe(secretText);
+      } finally {
+        recovered.bytes.fill(0);
+      }
     });
   });
 
@@ -143,6 +156,25 @@ describe("encrypted Agent Files store", () => {
         ownerId: "owner_beta",
         fileId: created.id,
       })).toThrow("agent_file_not_found");
+      await expect(store.recover({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_beta",
+        fileId: created.id,
+        expectedRevision: created.revision,
+      })).rejects.toMatchObject({ code: "agent_file_not_found" });
+      await expect(store.recover({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision + 1,
+      })).rejects.toMatchObject({ code: "agent_file_revision_conflict" });
+      await expect(store.recover({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision,
+        now: new Date("2026-10-01T00:00:00.000Z"),
+      })).rejects.toMatchObject({ code: "agent_file_expired" });
       expect(store.list({ workspaceId: "ws_beta", ownerId: "owner_alpha" })).toEqual([]);
       await expect(store.readContext({
         workspaceId: "ws_alpha",

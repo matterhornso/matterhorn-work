@@ -47,7 +47,10 @@ describe("coworker files UI", () => {
     expect(panel).toContain("Cloud copy needs renewal soon");
     expect(panel).toContain("Renewal is not automatic.");
     expect(panel).toContain("This cloud copy has expired.");
+    expect(panel).toContain("Download original");
+    expect(panel).toContain("Matterhorn decrypted this copy only for your download.");
     expect(serverClient).toContain("acknowledgePublicCiphertext: true");
+    expect(serverClient).toContain("recoverAgentFile:");
     expect(panel).not.toContain('type="password"');
     expect(panel).not.toContain("privateKey");
     expect(panel).not.toContain("seedPhrase");

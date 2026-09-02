@@ -51,6 +51,7 @@ describe("Agent File server client", () => {
     });
     await client.publishAgentFile("workspace one", "file one", 3);
     await client.verifyAgentFile("workspace one", "file one");
+    await client.recoverAgentFile("workspace one", "file one", 4);
     await client.deleteAgentFile("workspace one", "file one", 4);
 
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
@@ -58,6 +59,7 @@ describe("Agent File server client", () => {
       "POST https://control.example/workspace/workspace%20one/agent-files",
       "POST https://control.example/workspace/workspace%20one/agent-files/file%20one/publish",
       "POST https://control.example/workspace/workspace%20one/agent-files/file%20one/verify",
+      "POST https://control.example/workspace/workspace%20one/agent-files/file%20one/recover",
       "DELETE https://control.example/workspace/workspace%20one/agent-files/file%20one",
     ]);
     expect(requests[1]?.body).toEqual({
@@ -74,6 +76,7 @@ describe("Agent File server client", () => {
     });
     expect(requests[3]?.body).toBeNull();
     expect(requests[4]?.body).toEqual({ expectedRevision: 4 });
+    expect(requests[5]?.body).toEqual({ expectedRevision: 4 });
     expect(requests.every((request) => !request.hasHostToken)).toBe(true);
   });
 

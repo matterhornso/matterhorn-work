@@ -9770,6 +9770,45 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/workspace/:id/agent-files/:fileId/recover", "client", async (ctx) => {
+    requireClientScope(ctx, "collaborator");
+    if (!agentFileStore) {
+      throw new ApiError(503, "agent_files_unavailable", "Agent Files are not enabled for this deployment.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request, 4_096, "Agent file recovery");
+    const expectedRevision = isRecord(body) && typeof body.expectedRevision === "number"
+      && Number.isSafeInteger(body.expectedRevision) && body.expectedRevision > 0
+      ? body.expectedRevision
+      : null;
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => key !== "expectedRevision")
+      || expectedRevision === null) {
+      throw new ApiError(400, "agent_file_input_invalid", "File recovery details are invalid.");
+    }
+    let recovered: Awaited<ReturnType<MatterhornAgentFileStore["recover"]>>;
+    try {
+      recovered = await agentFileStore.recover({
+        workspaceId: workspace.id,
+        ownerId: cryptoAppCreatedBy(ctx),
+        fileId: ctx.params.fileId,
+        expectedRevision,
+      });
+    } catch (error) {
+      throw agentFileApiError(error);
+    }
+    const responseBytes = Uint8Array.from(recovered.bytes);
+    recovered.bytes.fill(0);
+    const headers = new Headers({
+      "Cache-Control": "no-store, max-age=0",
+      "Content-Type": recovered.item.file.mimeType,
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(recovered.item.file.name)}`,
+      "Content-Length": String(responseBytes.byteLength),
+      "X-Content-Type-Options": "nosniff",
+    });
+    return new Response(responseBytes, { status: 200, headers });
+  });
+
   addRoute(routes, "POST", "/workspace/:id/agent-files", "client", async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");

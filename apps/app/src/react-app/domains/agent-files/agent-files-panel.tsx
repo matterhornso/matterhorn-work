@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Cloud,
+  Download,
   FilePlus2,
   FileText,
   RefreshCw,
@@ -147,6 +148,7 @@ function FileRow(props: {
   onCancelBackup: () => void;
   onConfirmBackup: () => void;
   onVerify: () => void;
+  onRecover: () => void;
   onDelete: () => void;
 }) {
   const backupState = props.verification?.lifecycle.status === "renewal_due"
@@ -208,6 +210,10 @@ function FileRow(props: {
               Back up
             </Button>
           ) : null}
+          <Button size="xs" variant="ghost" disabled={props.busy} onClick={props.onRecover}>
+            <Download aria-hidden="true" className="size-3.5" />
+            Download original
+          </Button>
           <Button size="xs" variant="ghost" disabled={props.busy} onClick={props.onDelete}>
             <Trash2 aria-hidden="true" className="size-3.5" />
             Delete
@@ -408,6 +414,32 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
     }
   }, [deleteTarget, props.client, props.onFileDeleted, refresh, showToast, workspaceId]);
 
+  const recover = useCallback(async (item: MatterhornStoredAgentFile) => {
+    if (!props.client || !workspaceId) return;
+    setBusyFileId(item.id);
+    setError(null);
+    try {
+      const result = await props.client.recoverAgentFile(workspaceId, item.id, item.revision);
+      const url = URL.createObjectURL(new Blob([result.data], {
+        type: result.contentType ?? item.file.mimeType,
+      }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = result.filename ?? item.file.name;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      showToast({
+        title: "Original downloaded",
+        description: "Matterhorn decrypted this copy only for your download.",
+        tone: "success",
+      });
+    } catch (cause) {
+      setError(agentFileErrorMessage(cause));
+    } finally {
+      setBusyFileId(null);
+    }
+  }, [props.client, showToast, workspaceId]);
+
   const useInChat = useCallback(() => {
     if (!selectedCoworker || !selectedFiles.length) return;
     props.onUseInChat({
@@ -582,6 +614,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
                     onCancelBackup={() => setConfirmingBackupId(null)}
                     onConfirmBackup={() => void backup(item)}
                     onVerify={() => void verify(item)}
+                    onRecover={() => void recover(item)}
                     onDelete={() => setDeleteTarget(item)}
                   />
                 ))}

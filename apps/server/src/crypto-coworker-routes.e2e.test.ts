@@ -565,6 +565,31 @@ describe("crypto coworker HTTP boundary", () => {
       .toHaveLength(1);
 
     const fileId = String(created.payload.item.id);
+    const recovered = await fetch(`${server.base}/workspace/${workspaceA}/agent-files/${fileId}/recover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookieA },
+      body: JSON.stringify({ expectedRevision: 1 }),
+    });
+    expect(recovered.status).toBe(200);
+    expect(recovered.headers.get("cache-control")).toContain("no-store");
+    expect(recovered.headers.get("content-type")).toContain("text/markdown");
+    expect(recovered.headers.get("content-disposition")).toBe(
+      "attachment; filename*=UTF-8''portfolio-policy.md",
+    );
+    expect(recovered.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(await recovered.text()).toBe(privateText);
+    const crossTenantRecovery = await request(
+      server.base,
+      `/workspace/${workspaceA}/agent-files/${fileId}/recover`,
+      { cookie: cookieB, body: { expectedRevision: 1 } },
+    );
+    expect(crossTenantRecovery.response.status).toBe(404);
+    const staleRecovery = await request(
+      server.base,
+      `/workspace/${workspaceA}/agent-files/${fileId}/recover`,
+      { cookie: cookieA, body: { expectedRevision: 2 } },
+    );
+    expect(staleRecovery.response.status).toBe(409);
     const staleDelete = await request(server.base, `/workspace/${workspaceA}/agent-files/${fileId}`, {
       method: "DELETE",
       cookie: cookieA,

@@ -1631,7 +1631,7 @@ async function requestMultipartRaw(
 async function requestBinary(
   baseUrl: string,
   path: string,
-  options: { method?: string; token?: string; hostToken?: string; timeoutMs?: number } = {},
+  options: { method?: string; token?: string; hostToken?: string; body?: unknown; timeoutMs?: number } = {},
 ): Promise<{ data: ArrayBuffer; contentType: string | null; filename: string | null }>{
   const url = `${baseUrl}${path}`;
   const fetchImpl = resolveFetch(url);
@@ -1640,7 +1640,11 @@ async function requestBinary(
     url,
     {
       method: options.method ?? "GET",
-      headers: buildAuthHeaders(options.token, options.hostToken),
+      headers: options.body === undefined
+        ? buildAuthHeaders(options.token, options.hostToken)
+        : buildHeaders(options.token, options.hostToken),
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      credentials: "same-origin",
     },
     options.timeoutMs ?? DEFAULT_OPENWORK_SERVER_TIMEOUT_MS,
   );
@@ -1929,6 +1933,16 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/verify`,
       { token, method: "POST", timeoutMs: timeouts.binary },
+    ),
+    recoverAgentFile: (workspaceId: string, fileId: string, expectedRevision: number) => requestBinary(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/recover`,
+      {
+        token,
+        method: "POST",
+        body: { expectedRevision },
+        timeoutMs: timeouts.binary,
+      },
     ),
     deleteAgentFile: (workspaceId: string, fileId: string, expectedRevision: number) => requestJson<{ deleted: true }>(
       baseUrl,
