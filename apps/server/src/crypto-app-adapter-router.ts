@@ -73,6 +73,8 @@ export type MatterhornCryptoAppAdapterExecution = {
 export type MatterhornCryptoAppTransportExecutor = (input: {
   endpoint: URL;
   approvedAddresses: string[];
+  workspaceId?: string;
+  connectionId?: string;
   appId: string;
   manifestRevision: string;
   action: MatterhornCryptoAppAction;
@@ -327,6 +329,8 @@ export class MatterhornCryptoAppAdapterRouter {
         executor({
           endpoint: resolved.endpoint,
           approvedAddresses: [...resolved.approvedAddresses],
+          workspaceId: request.workspaceId,
+          connectionId: connection.id,
           appId: connection.appId,
           manifestRevision: connection.manifestRevision,
           action,

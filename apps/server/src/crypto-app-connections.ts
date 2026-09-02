@@ -9,7 +9,11 @@ import {
   type MatterhornCryptoAppConnectionView,
 } from "@matterhorn-work/types/crypto-coworkers";
 
-import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
+import {
+  type MatterhornCryptoAppOAuthFlowRecord,
+  type MatterhornCryptoAppOAuthTokenRecord,
+  MatterhornCryptoAppConnectionStore,
+} from "./crypto-app-connection-store.js";
 import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
 
 export type CreateCryptoAppConnectionInput = {
@@ -157,6 +161,36 @@ export class MatterhornCryptoAppConnections {
       actionIds: input.grantedActionIds,
       scopes: input.grantedScopes,
       networks: input.grantedNetworks,
+      connection,
+      consumedAt: this.#now().toISOString(),
+    });
+    if (!created) throw new MatterhornCryptoAppConnectionError("connection_transition_invalid");
+    return this.#view(connection);
+  }
+
+  createFromOAuth(input: CreateCryptoAppConnectionInput & {
+    flow: MatterhornCryptoAppOAuthFlowRecord;
+    token: Omit<MatterhornCryptoAppOAuthTokenRecord, "connectionId">;
+  }): MatterhornCryptoAppConnectionView {
+    const { registryEntry } = this.#validateGrant(input);
+    if (input.credential.type !== "oauth2"
+      || input.flow.workspaceId !== input.workspaceId
+      || input.flow.accountId !== input.createdBy
+      || input.flow.appId !== input.appId
+      || input.flow.manifestRevision !== registryEntry.manifestRevision
+      || input.token.workspaceId !== input.workspaceId
+      || input.token.accountId !== input.createdBy
+      || input.token.appId !== input.appId
+      || input.token.manifestRevision !== registryEntry.manifestRevision
+      || input.token.bindingId !== input.flow.bindingId
+      || input.credential.secretReference !== `vault://crypto-app-oauth/${input.token.oauthTokenId}`
+      || !credentialValid(input.credential, registryEntry.manifest.authentication)) {
+      throw new MatterhornCryptoAppConnectionError("connection_credential_invalid");
+    }
+    const connection = this.#build(input, registryEntry.manifestRevision);
+    const created = this.#store.finalizeOAuthFlow({
+      flow: input.flow,
+      token: { ...input.token, connectionId: connection.id },
       connection,
       consumedAt: this.#now().toISOString(),
     });

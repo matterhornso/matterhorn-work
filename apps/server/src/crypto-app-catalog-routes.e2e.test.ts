@@ -29,6 +29,8 @@ const ENV_KEYS = [
   "MATTERHORN_CRYPTO_APP_MANAGED_CREDENTIALS_JSON",
   "MATTERHORN_CRYPTO_APP_SECRET_HYPERLIQUID_TEST",
   "MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET",
+  "MATTERHORN_CRYPTO_APP_OAUTH_CLIENTS_JSON",
+  "MATTERHORN_CRYPTO_APP_OAUTH_ENCRYPTION_KEY",
   "MATTERHORN_WORK_DATA_DIR",
 ] as const;
 const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -156,6 +158,32 @@ function configureCatalog(root: string) {
     keys.privateKey,
   ).toString("base64url");
   process.env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET = "wallet-proof-route-secret-with-at-least-32-characters";
+  const oauthManifest = structuredClone(authenticatedManifest);
+  oauthManifest.appId = "matterhorn.oauth-testnet";
+  oauthManifest.displayName = "OAuth Testnet";
+  oauthManifest.authentication = {
+    type: "oauth2",
+    authorizationServer: "https://auth.oauth-testnet.example/",
+    resource: "https://api.oauth-testnet.example/",
+    audience: "matterhorn-testnet",
+    scopes: [],
+  };
+  oauthManifest.publisher.signature = sign(
+    null,
+    Buffer.from(canonicalCryptoAppManifestPayload(oauthManifest)),
+    keys.privateKey,
+  ).toString("base64url");
+  manifests.push(oauthManifest);
+  process.env.MATTERHORN_CRYPTO_APP_OAUTH_ENCRYPTION_KEY = "route-oauth-encryption-secret-with-at-least-32-characters";
+  process.env.MATTERHORN_CRYPTO_APP_OAUTH_CLIENTS_JSON = JSON.stringify([{
+    id: "ROUTE_OAUTH",
+    appId: oauthManifest.appId,
+    manifestRevision: oauthManifest.manifestRevision,
+    clientId: "matterhorn-route-client",
+    redirectUri: "https://matterhorn.example/oauth/crypto-apps/callback",
+    authorizationEndpoint: "https://auth.oauth-testnet.example/authorize",
+    tokenEndpoint: "https://auth.oauth-testnet.example/token",
+  }]);
   return { manifests };
 }
 
@@ -233,7 +261,7 @@ describe("crypto app catalog HTTP boundary", () => {
     const listed = await request(server.base, "/crypto-apps?environment=testnet");
     expect(listed.response.status).toBe(200);
     expect(listed.response.headers.get("cache-control")).toBe("no-store");
-    expect(listed.payload.apps).toHaveLength(2);
+    expect(listed.payload.apps).toHaveLength(3);
     const serialized = JSON.stringify(listed.payload);
     expect(serialized).not.toContain("certification.internal.example");
     expect(serialized).not.toContain("publisher-1");
@@ -295,6 +323,74 @@ describe("crypto app catalog HTTP boundary", () => {
     expect(unavailableManagedConnection.payload.code).toBe("crypto_app_managed_credential_unavailable");
     expect(JSON.stringify(unavailableManagedConnection.payload)).not.toContain("HYPERLIQUID_TEST");
     process.env.MATTERHORN_CRYPTO_APP_SECRET_HYPERLIQUID_TEST = "server-managed-test-secret";
+
+    const oauthApp = listed.payload.apps.find((app: { appId: string }) => (
+      app.appId === "matterhorn.oauth-testnet"
+    ));
+    if (!oauthApp) throw new Error("Expected OAuth test app.");
+    const directOAuthConnection = await request(server.base, "/workspace/ws_catalog/crypto-app-connections", {
+      body: {
+        appId: oauthApp.appId,
+        grantedActionIds: oauthApp.actions.map((action: { id: string }) => action.id),
+        grantedScopes: [],
+        grantedNetworks: ["hyperliquid:testnet"],
+      },
+    });
+    expect(directOAuthConnection.response.status).toBe(409);
+    expect(directOAuthConnection.payload.code).toBe("crypto_app_connection_flow_required");
+    const oauthAuthorization = await request(
+      server.base,
+      "/workspace/ws_catalog/crypto-app-connections/oauth/authorize",
+      {
+        body: {
+          appId: oauthApp.appId,
+          grantedActionIds: oauthApp.actions.map((action: { id: string }) => action.id),
+          grantedScopes: [],
+          grantedNetworks: ["hyperliquid:testnet"],
+        },
+      },
+    );
+    expect(oauthAuthorization.response.status).toBe(201);
+    expect(oauthAuthorization.response.headers.get("cache-control")).toBe("no-store");
+    const oauthUrl = new URL(oauthAuthorization.payload.authorization.authorizationUrl);
+    expect(oauthUrl.origin).toBe("https://auth.oauth-testnet.example");
+    expect(oauthUrl.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(oauthUrl.searchParams.get("resource")).toBe("https://api.oauth-testnet.example/");
+    expect(oauthUrl.searchParams.get("audience")).toBe("matterhorn-testnet");
+    expect(JSON.stringify(oauthAuthorization.payload)).not.toContain("route-oauth-encryption-secret");
+    const oauthFlowId = oauthAuthorization.payload.authorization.flowId as string;
+    const pendingOAuth = await request(
+      server.base,
+      `/workspace/ws_catalog/crypto-app-connections/oauth/${oauthFlowId}`,
+    );
+    expect(pendingOAuth.payload.status).toMatchObject({ status: "pending", connectionId: null });
+    const state = oauthUrl.searchParams.get("state");
+    if (!state) throw new Error("OAuth state missing.");
+    const deniedOAuth = await fetch(
+      `${server.base}/oauth/crypto-apps/callback?${new URLSearchParams({
+        state,
+        iss: "https://auth.oauth-testnet.example/",
+        error: "access_denied",
+        error_description: "sensitive provider detail must not be reflected",
+      })}`,
+    );
+    expect(deniedOAuth.status).toBe(400);
+    expect(deniedOAuth.headers.get("cache-control")).toBe("no-store");
+    expect(deniedOAuth.headers.get("content-security-policy")).toContain("default-src 'none'");
+    const deniedHtml = await deniedOAuth.text();
+    expect(deniedHtml).toContain("App not connected");
+    expect(deniedHtml).not.toContain("sensitive provider detail");
+    expect((await request(
+      server.base,
+      `/workspace/ws_catalog/crypto-app-connections/oauth/${oauthFlowId}`,
+    )).payload.status).toMatchObject({ status: "failed", error: "authorization_denied" });
+    expect((await fetch(
+      `${server.base}/oauth/crypto-apps/callback?${new URLSearchParams({
+        state,
+        iss: "https://auth.oauth-testnet.example/",
+        error: "access_denied",
+      })}`,
+    )).status).toBe(400);
 
     const directWalletConnection = await request(server.base, "/workspace/ws_catalog/crypto-app-connections", {
       body: {
@@ -389,7 +485,7 @@ describe("crypto app catalog HTTP boundary", () => {
     expect(suspended.response.status).toBe(200);
     const afterSuspension = await request(server.base, "/crypto-apps");
     expect(afterSuspension.payload.apps.map((app: any) => app.appId))
-      .toEqual(["matterhorn.hyperliquid-testnet"]);
+      .toEqual(["matterhorn.hyperliquid-testnet", "matterhorn.oauth-testnet"]);
     const connectionsAfterSuspension = await request(
       server.base,
       "/workspace/ws_catalog/crypto-app-connections",

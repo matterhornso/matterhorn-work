@@ -8,6 +8,7 @@ import type { MatterhornCryptoAppAction } from "@matterhorn-work/types/crypto-co
 
 import {
   createPinnedBytesRequester,
+  createPinnedFormRequester,
   createPinnedJsonCryptoAppTransport,
   createPinnedJsonRequester,
 } from "./crypto-app-https-transport.js";
@@ -359,6 +360,100 @@ describe("pinned JSON crypto app transport", () => {
     expect(resolvedCredential).toBe(false);
     expect(requested).toBe(false);
     expect(connected).toBe(false);
+  });
+});
+
+describe("pinned OAuth token transport", () => {
+  test("posts only an encoded form through the pinned TLS peer", async () => {
+    const fake = fakeHttps({
+      body: {
+        access_token: "server-only-access-token",
+        token_type: "Bearer",
+        expires_in: 3_600,
+      },
+    });
+    const requester = createPinnedFormRequester({ request: fake.request, tlsConnect: fake.tlsConnect });
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: "matterhorn-client",
+      code: "one-time-code",
+      code_verifier: "v".repeat(64),
+    });
+    const response = await requester({
+      endpoint: new URL("https://auth.example.test/oauth/token"),
+      approvedAddresses: ["93.184.216.34"],
+      body,
+      signal: new AbortController().signal,
+    });
+    expect(fake.tlsOptions()).toMatchObject({
+      host: "93.184.216.34",
+      servername: "auth.example.test",
+      rejectUnauthorized: true,
+      ALPNProtocols: ["http/1.1"],
+    });
+    expect(fake.options()).toMatchObject({
+      method: "POST",
+      path: "/oauth/token",
+      hostname: "auth.example.test",
+      agent: false,
+      headers: {
+        accept: "application/json",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+    });
+    expect(fake.body()).toBe(body.toString());
+    expect(response.value).toEqual({
+      access_token: "server-only-access-token",
+      token_type: "Bearer",
+      expires_in: 3_600,
+    });
+    expect(response.connectedAddress).toBe("93.184.216.34");
+    expect(fake.socketDestroyed()).toBe(true);
+  });
+
+  test("rejects redirects, non-JSON, oversized requests and responses, peer changes, and aborted calls", async () => {
+    for (const [fake, code] of [
+      [fakeHttps({ statusCode: 302 }), "crypto_app_oauth_status_invalid"],
+      [fakeHttps({ contentType: "text/html" }), "crypto_app_oauth_content_type_invalid"],
+      [fakeHttps({ connectedAddress: "93.184.216.35" }), "crypto_app_connected_address_mismatch"],
+      [fakeHttps({ body: "x".repeat(2_000) }), "crypto_app_oauth_response_too_large"],
+    ] as const) {
+      const requester = createPinnedFormRequester({
+        request: fake.request,
+        tlsConnect: fake.tlsConnect,
+        maxResponseBytes: 1_024,
+      });
+      await expect(requester({
+        endpoint: new URL("https://auth.example.test/token"),
+        approvedAddresses: ["93.184.216.34"],
+        body: new URLSearchParams({ grant_type: "authorization_code" }),
+        signal: new AbortController().signal,
+      })).rejects.toThrow(code);
+    }
+
+    let connected = false;
+    let requested = false;
+    const requester = createPinnedFormRequester({
+      request: (() => { requested = true; throw new Error("must not request"); }) as never,
+      tlsConnect: (() => { connected = true; throw new Error("must not connect"); }) as never,
+      maxRequestBytes: 1_024,
+    });
+    await expect(requester({
+      endpoint: new URL("https://auth.example.test/token"),
+      approvedAddresses: ["93.184.216.34"],
+      body: new URLSearchParams({ code: "x".repeat(2_000) }),
+      signal: new AbortController().signal,
+    })).rejects.toThrow("crypto_app_oauth_request_too_large");
+    const controller = new AbortController();
+    controller.abort();
+    await expect(requester({
+      endpoint: new URL("https://auth.example.test/token"),
+      approvedAddresses: ["93.184.216.34"],
+      body: new URLSearchParams({ code: "one-time-code" }),
+      signal: controller.signal,
+    })).rejects.toThrow("crypto_app_oauth_transport_aborted");
+    expect(connected).toBe(false);
+    expect(requested).toBe(false);
   });
 });
 

@@ -50,7 +50,7 @@ The release has four absolute objectives:
 |---|---|---|
 | Prompt injection in app/tool data | Treat output as `untrusted_external`; typed field projection; quarantine instruction-like text | Malicious metadata cannot cause a second tool call |
 | Manifest advertises submit authority | Strict action allowlist; unknown action fields rejected; no submit class | Contract test and CI registry scan |
-| OAuth token confused across apps | Exact resource and audience binding; PKCE; no token passthrough | Wrong-audience token receives 401/403 |
+| OAuth code/token confused across apps | Exact redirect, issuer, resource, audience, app revision, workspace and connection binding; S256 PKCE; HMAC one-time state; encrypted server-only tokens; no token passthrough | Wrong issuer/resource/audience/tenant and replayed state fail with zero adapter traffic |
 | Managed API credential confused across apps | Deployment secret is bound to one certified app and manifest revision; only closed headers and schemes resolve at the pinned transport boundary | Wrong app, revision, reference, header, missing value, or malformed value produces zero upstream traffic |
 | Model broadens permissions | Policy calculated server-side as an intersection; client/model values can only narrow | Mutation test cannot add app/action/network |
 | Capability replay | 60-second single-use capability with durable atomic `jti` consumption | Second call has zero upstream traffic |
@@ -94,6 +94,8 @@ No participant—including an administrator client—may use the intersection op
 - App returns additional hidden fields not present in its projection schema.
 - App changes manifest after certification.
 - OAuth access token is replayed against another resource.
+- OAuth callback uses a substituted issuer, mutated redirect, reused state, or expired flow.
+- OAuth credential reference is replayed through another workspace or connection.
 - A read capability invokes a prepare action.
 - A prepare capability invokes another action family.
 - Capability is consumed twice concurrently.

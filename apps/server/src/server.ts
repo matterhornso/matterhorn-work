@@ -428,6 +428,7 @@ import {
 } from "./crypto-app-catalog.js";
 import { MatterhornCryptoAppConnectionError } from "./crypto-app-connections.js";
 import { MatterhornCryptoAppConnectionStoreError } from "./crypto-app-connection-store.js";
+import { MatterhornCryptoAppOAuthConnectionError } from "./crypto-app-oauth-connections.js";
 import { MatterhornCryptoAppWalletConnectionError } from "./crypto-app-wallet-connections.js";
 import { MatterhornCryptoDeveloperPortalError } from "./crypto-app-developer-portal.js";
 import type {
@@ -435,6 +436,7 @@ import type {
   MatterhornCryptoAppActionRisk,
   MatterhornCryptoAppConnectionCredential,
   MatterhornCryptoAppConnectionState,
+  MatterhornCryptoAppOAuthAuthorizationRequest,
   MatterhornCryptoAppManifest,
   MatterhornCoworkerProfile,
   MatterhornCoworkerResourceScope,
@@ -2976,6 +2978,24 @@ function noStoreJsonResponse(data: unknown, status = 200) {
   return response;
 }
 
+function cryptoAppOAuthCallbackResponse(success: boolean): Response {
+  const title = success ? "App connected" : "App not connected";
+  const message = success
+    ? "Return to Matterhorn. You can close this window."
+    : "Return to Matterhorn and try connecting again. Nothing was shared with the agent.";
+  return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body><main><h1>${title}</h1><p>${message}</p></main></body></html>`, {
+    status: success ? 200 : 400,
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Security-Policy": "default-src 'none'; style-src 'none'; img-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
 function cryptoAppApiError(error: unknown): ApiError {
   if (error instanceof MatterhornCryptoAppCatalogError) {
     if (error.code === "crypto_app_gateway_disabled") {
@@ -3024,6 +3044,28 @@ function cryptoAppApiError(error: unknown): ApiError {
       return new ApiError(409, error.code, "This wallet does not match the selected network.");
     }
     return new ApiError(400, error.code, "Wallet connection input is invalid.");
+  }
+  if (error instanceof MatterhornCryptoAppOAuthConnectionError) {
+    if (error.code === "oauth_connection_unavailable"
+      || error.code === "oauth_connection_binding_unavailable") {
+      return new ApiError(503, error.code, "Secure app sign-in is not configured for this deployment.");
+    }
+    if (error.code === "oauth_flow_expired") {
+      return new ApiError(409, error.code, "This app sign-in expired. Start again.");
+    }
+    if (error.code === "oauth_flow_invalid") {
+      return new ApiError(409, error.code, "This app sign-in is invalid or has already been used.");
+    }
+    if (error.code === "oauth_connection_authentication_mismatch") {
+      return new ApiError(409, error.code, "This app does not use sign-in.");
+    }
+    if (error.code === "oauth_token_exchange_failed" || error.code === "oauth_token_response_invalid") {
+      return new ApiError(502, error.code, "The app could not complete sign-in. Try again.");
+    }
+    if (error.code === "oauth_token_unavailable") {
+      return new ApiError(409, error.code, "This app connection has expired. Connect it again.");
+    }
+    return new ApiError(400, error.code, "App sign-in input is invalid.");
   }
   return error instanceof ApiError
     ? error
@@ -11234,6 +11276,88 @@ function createRoutes(
       });
     } catch (error) {
       throw cryptoAppApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/crypto-app-connections/oauth/authorize", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!cryptoAppRuntime.oauthConnections) {
+        throw new MatterhornCryptoAppOAuthConnectionError("oauth_connection_unavailable");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request, 32_768, "Crypto app sign-in");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => ![
+          "appId",
+          "grantedActionIds",
+          "grantedScopes",
+          "grantedNetworks",
+        ].includes(key))
+        || typeof body.appId !== "string"
+        || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(body.appId)) {
+        throw new MatterhornCryptoAppOAuthConnectionError("oauth_connection_input_invalid");
+      }
+      const request: MatterhornCryptoAppOAuthAuthorizationRequest = {
+        appId: body.appId,
+        grantedActionIds: cryptoAppStringArray(body.grantedActionIds, "grantedActionIds"),
+        grantedScopes: cryptoAppStringArray(body.grantedScopes, "grantedScopes", { allowEmpty: true }),
+        grantedNetworks: cryptoAppStringArray(body.grantedNetworks, "grantedNetworks"),
+      };
+      const authorization = cryptoAppRuntime.oauthConnections.issue({
+        ...request,
+        workspaceId: workspace.id,
+        accountId: cryptoAppCreatedBy(ctx),
+      });
+      return noStoreJsonResponse({ authorization }, 201);
+    } catch (error) {
+      throw cryptoAppApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/crypto-app-connections/oauth/:flowId", "client", async (ctx) => {
+    try {
+      if (!cryptoAppRuntime.oauthConnections) {
+        throw new MatterhornCryptoAppOAuthConnectionError("oauth_connection_unavailable");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const status = cryptoAppRuntime.oauthConnections.status({
+        workspaceId: workspace.id,
+        accountId: cryptoAppCreatedBy(ctx),
+        flowId: ctx.params.flowId,
+      });
+      return noStoreJsonResponse({ status });
+    } catch (error) {
+      throw cryptoAppApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/oauth/crypto-apps/callback", "none", async (ctx) => {
+    const allowed = new Set(["code", "state", "iss", "error", "error_description", "error_uri"]);
+    if ([...ctx.url.searchParams.keys()].some((key) => !allowed.has(key))
+      || [...allowed].some((key) => ctx.url.searchParams.getAll(key).length > 1)) {
+      return cryptoAppOAuthCallbackResponse(false);
+    }
+    const state = ctx.url.searchParams.get("state") ?? "";
+    const issuer = ctx.url.searchParams.get("iss") ?? "";
+    const errorCode = ctx.url.searchParams.get("error");
+    try {
+      if (!cryptoAppRuntime.oauthConnections) {
+        throw new MatterhornCryptoAppOAuthConnectionError("oauth_connection_unavailable");
+      }
+      if (errorCode !== null) {
+        if (errorCode !== "access_denied") {
+          throw new MatterhornCryptoAppOAuthConnectionError("oauth_callback_invalid");
+        }
+        cryptoAppRuntime.oauthConnections.deny(state, issuer);
+        return cryptoAppOAuthCallbackResponse(false);
+      }
+      const code = ctx.url.searchParams.get("code") ?? "";
+      await cryptoAppRuntime.oauthConnections.complete({ state, code, issuer });
+      return cryptoAppOAuthCallbackResponse(true);
+    } catch {
+      return cryptoAppOAuthCallbackResponse(false);
     }
   });
 

@@ -118,6 +118,9 @@ import type {
   MatterhornCryptoAppCatalogSummary,
   MatterhornCryptoAppConnectionState,
   MatterhornCryptoAppConnectionView,
+  MatterhornCryptoAppOAuthAuthorization,
+  MatterhornCryptoAppOAuthAuthorizationRequest,
+  MatterhornCryptoAppOAuthFlowStatus,
   MatterhornCryptoAppWalletChallenge,
   MatterhornCryptoAppWalletChallengeConfirmation,
   MatterhornCryptoAppWalletChallengeRequest,
@@ -1797,6 +1800,26 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         body: input,
         timeoutMs: timeouts.config,
       },
+    ),
+    startCryptoAppOAuth: (
+      workspaceId: string,
+      input: MatterhornCryptoAppOAuthAuthorizationRequest,
+    ) => requestJson<{ authorization: MatterhornCryptoAppOAuthAuthorization }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/oauth/authorize`,
+      {
+        token,
+        method: "POST",
+        body: input,
+        timeoutMs: timeouts.config,
+      },
+    ),
+    getCryptoAppOAuthStatus: (workspaceId: string, flowId: string) => requestJson<{
+      status: MatterhornCryptoAppOAuthFlowStatus;
+    }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/oauth/${encodeURIComponent(flowId)}`,
+      { token, timeoutMs: timeouts.status },
     ),
     issueCryptoAppWalletChallenge: (
       workspaceId: string,

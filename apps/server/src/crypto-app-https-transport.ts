@@ -17,6 +17,8 @@ import { assertCryptoAdapterConnectedAddress } from "./crypto-app-egress.js";
 type JsonObject = Record<string, unknown>;
 
 export type MatterhornCryptoAppCredentialResolver = (input: {
+  workspaceId?: string;
+  connectionId?: string;
   appId: string;
   manifestRevision: string;
   credential: MatterhornCryptoAppConnectionCredential;
@@ -67,6 +69,24 @@ export type MatterhornPinnedJsonResponse = {
 export type MatterhornPinnedJsonRequester = (
   input: MatterhornPinnedJsonRequest,
 ) => Promise<MatterhornPinnedJsonResponse>;
+
+export type MatterhornPinnedFormRequest = {
+  endpoint: URL;
+  approvedAddresses: readonly string[];
+  body: URLSearchParams;
+  signal: AbortSignal;
+};
+
+export type MatterhornPinnedFormResponse = {
+  value: unknown;
+  connectedAddress: string;
+  requestBytes: number;
+  responseBytes: number;
+};
+
+export type MatterhornPinnedFormRequester = (
+  input: MatterhornPinnedFormRequest,
+) => Promise<MatterhornPinnedFormResponse>;
 
 export type MatterhornPinnedBytesRequest = {
   endpoint: URL;
@@ -369,6 +389,125 @@ export function createPinnedJsonRequester(options: {
 }
 
 /**
+ * Closed OAuth token-endpoint transport. It only sends an encoded POST body,
+ * accepts JSON, pins the TLS peer to the DNS result selected by Matterhorn,
+ * follows no redirects, and never accepts caller-controlled headers.
+ */
+export function createPinnedFormRequester(options: {
+  request?: HttpsRequest;
+  tlsConnect?: TlsConnector;
+  maxRequestBytes?: number;
+  maxResponseBytes?: number;
+} = {}): MatterhornPinnedFormRequester {
+  const request = options.request ?? requestHttps;
+  const tlsConnect = options.tlsConnect ?? connectTls;
+  const maxRequestBytes = Math.max(1_024, options.maxRequestBytes ?? 32 * 1_024);
+  const maxResponseBytes = Math.max(1_024, options.maxResponseBytes ?? 64 * 1_024);
+
+  return async (input): Promise<MatterhornPinnedFormResponse> => {
+    if (input.signal.aborted) throw new Error("crypto_app_oauth_transport_aborted");
+    if (input.endpoint.protocol !== "https:"
+      || input.endpoint.username
+      || input.endpoint.password
+      || input.endpoint.hash
+      || input.endpoint.href.length > 8_192) {
+      throw new Error("crypto_app_oauth_endpoint_invalid");
+    }
+    if (input.approvedAddresses.length < 1) throw new Error("crypto_app_oauth_address_required");
+    const pinnedAddress = input.approvedAddresses[0]!;
+    assertCryptoAdapterConnectedAddress(input.approvedAddresses, pinnedAddress);
+    const body = input.body.toString();
+    const requestBytes = Buffer.byteLength(body, "utf8");
+    if (requestBytes > maxRequestBytes) throw new Error("crypto_app_oauth_request_too_large");
+    const socket = await securePinnedSocket({
+      endpoint: input.endpoint,
+      pinnedAddress,
+      approvedAddresses: input.approvedAddresses,
+      signal: input.signal,
+      tlsConnect,
+    });
+
+    return new Promise<MatterhornPinnedFormResponse>((resolve, reject) => {
+      let settled = false;
+      let client: ClientRequest | null = null;
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        input.signal.removeEventListener("abort", abort);
+        socket.destroy();
+        callback();
+      };
+      const abort = () => {
+        client?.destroy(new Error("crypto_app_oauth_transport_aborted"));
+        finish(() => reject(new Error("crypto_app_oauth_transport_aborted")));
+      };
+      try {
+        client = request({
+          protocol: "https:",
+          hostname: input.endpoint.hostname,
+          port: input.endpoint.port || 443,
+          method: "POST",
+          path: `${input.endpoint.pathname}${input.endpoint.search}`,
+          servername: input.endpoint.hostname,
+          rejectUnauthorized: true,
+          agent: false,
+          createConnection: () => socket,
+          headers: {
+            accept: "application/json",
+            "content-type": "application/x-www-form-urlencoded",
+            "content-length": String(requestBytes),
+            "user-agent": "Matterhorn-Crypto-App-OAuth/1",
+          },
+          signal: input.signal,
+        }, (response) => {
+          const connectedAddress = socket.remoteAddress ?? "";
+          if (!isJsonContentType(response.headers["content-type"])) {
+            response.destroy();
+            finish(() => reject(new Error("crypto_app_oauth_content_type_invalid")));
+            return;
+          }
+          if ((response.statusCode ?? 0) < 200 || (response.statusCode ?? 0) >= 300) {
+            response.resume();
+            finish(() => reject(new Error("crypto_app_oauth_status_invalid")));
+            return;
+          }
+          const chunks: Buffer[] = [];
+          let responseBytes = 0;
+          response.on("data", (chunk: Buffer | string) => {
+            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            responseBytes += bytes.length;
+            if (responseBytes > maxResponseBytes) {
+              response.destroy(new Error("crypto_app_oauth_response_too_large"));
+              return;
+            }
+            chunks.push(bytes);
+          });
+          response.on("error", (error) => finish(() => reject(error)));
+          response.on("end", () => {
+            try {
+              const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+              finish(() => resolve({ value, connectedAddress, requestBytes, responseBytes }));
+            } catch {
+              finish(() => reject(new Error("crypto_app_oauth_response_invalid")));
+            }
+          });
+        });
+      } catch (error) {
+        finish(() => reject(error));
+        return;
+      }
+      client.on("error", (error) => finish(() => reject(error)));
+      if (input.signal.aborted) {
+        abort();
+        return;
+      }
+      input.signal.addEventListener("abort", abort, { once: true });
+      client.end(body);
+    });
+  };
+}
+
+/**
  * Minimal binary HTTPS requester for first-party encrypted evidence transport.
  * It retains the gateway's DNS/TLS peer pinning and deliberately supports only
  * GET and PUT, a closed header set, bounded responses, and no redirect path.
@@ -501,6 +640,8 @@ export function createPinnedJsonCryptoAppTransport(
       ? {}
       : safeCredentialHeaders(await (options.resolveCredentialHeaders
         ? options.resolveCredentialHeaders({
+          workspaceId: input.workspaceId,
+          connectionId: input.connectionId,
           appId: input.appId,
           manifestRevision: input.manifestRevision,
           credential: input.credential,

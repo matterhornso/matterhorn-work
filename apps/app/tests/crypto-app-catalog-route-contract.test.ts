@@ -139,9 +139,36 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).toContain('app.authentication.type === "none"');
     expect(route).toContain('app.authentication.type === "api_key_vault"');
     expect(route).toContain('app.authentication.type === "wallet_connection"');
+    expect(route).toContain('app.authentication.type === "oauth2"');
     expect(route).toContain("issueCryptoAppWalletChallenge");
     expect(route).toContain("confirmCryptoAppWalletChallenge");
     expect(route).toContain("signPersonalMessage");
     expect(route).toContain("signMessageAsync");
+  });
+
+  test("keeps certified OAuth server-owned, exact, and out of browser storage", () => {
+    const route = readAppSource("react-app/domains/crypto-apps/crypto-app-catalog-route.tsx");
+    const client = readAppSource("app/lib/matterhorn-server.ts");
+    const oauthMethods = client.slice(
+      client.indexOf("startCryptoAppOAuth:"),
+      client.indexOf("issueCryptoAppWalletChallenge:"),
+    );
+
+    expect(route).toContain('window.open("about:blank"');
+    expect(route.indexOf('window.open("about:blank"')).toBeLessThan(route.indexOf("client.startCryptoAppOAuth"));
+    expect(route).toContain("client.startCryptoAppOAuth(workspaceId");
+    expect(route).toContain("client.getCryptoAppOAuthStatus(workspaceId, response.authorization.flowId)");
+    expect(route).toContain('authorizationUrl.protocol !== "https:"');
+    expect(route).toContain("Your sign-in tokens stay encrypted on the server and are never shown to the coworker");
+    expect(route).not.toContain("localStorage");
+    expect(route).not.toContain("sessionStorage");
+    expect(route).not.toContain("codeVerifier");
+    expect(route).not.toContain("clientSecret");
+    expect(route).not.toContain("access_token");
+    expect(route).not.toContain("refresh_token");
+    expect(oauthMethods).toContain("/crypto-app-connections/oauth/authorize");
+    expect(oauthMethods).toContain("/crypto-app-connections/oauth/${encodeURIComponent(flowId)}");
+    expect(oauthMethods).not.toContain("codeVerifier");
+    expect(oauthMethods).not.toContain("clientSecret");
   });
 });

@@ -62,6 +62,48 @@ type WalletProofRow = {
   address_digest: string;
 };
 
+type OAuthFlowRow = {
+  workspace_id: string;
+  flow_id: string;
+  account_id: string;
+  app_id: string;
+  manifest_revision: string;
+  binding_id: string;
+  state_digest: string;
+  verifier_envelope: string;
+  action_ids_json: string;
+  scopes_json: string;
+  networks_json: string;
+  issuer: string;
+  resource: string;
+  audience: string;
+  redirect_uri: string;
+  issued_at: string;
+  expires_at: string;
+  state: string;
+  error_code: string | null;
+  connection_id: string | null;
+  consumed_at: string | null;
+};
+
+type OAuthTokenRow = {
+  workspace_id: string;
+  oauth_token_id: string;
+  connection_id: string;
+  account_id: string;
+  app_id: string;
+  manifest_revision: string;
+  binding_id: string;
+  resource: string;
+  audience: string;
+  token_envelope: string;
+  scopes_json: string;
+  expires_at: string;
+  refreshable: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type MatterhornCryptoAppWalletChallengeRecord = {
   workspaceId: string;
   challengeId: string;
@@ -77,6 +119,48 @@ export type MatterhornCryptoAppWalletChallengeRecord = {
   expiresAt: string;
   state: "pending" | "consumed";
   consumedAt: string | null;
+};
+
+export type MatterhornCryptoAppOAuthFlowRecord = {
+  workspaceId: string;
+  flowId: string;
+  accountId: string;
+  appId: string;
+  manifestRevision: string;
+  bindingId: string;
+  stateDigest: string;
+  verifierEnvelope: string;
+  actionIds: string[];
+  scopes: string[];
+  networks: string[];
+  issuer: string;
+  resource: string;
+  audience: string;
+  redirectUri: string;
+  issuedAt: string;
+  expiresAt: string;
+  state: "pending" | "consumed" | "failed";
+  errorCode: "authorization_denied" | "connection_failed" | null;
+  connectionId: string | null;
+  consumedAt: string | null;
+};
+
+export type MatterhornCryptoAppOAuthTokenRecord = {
+  workspaceId: string;
+  oauthTokenId: string;
+  connectionId: string;
+  accountId: string;
+  appId: string;
+  manifestRevision: string;
+  bindingId: string;
+  resource: string;
+  audience: string;
+  tokenEnvelope: string;
+  scopes: string[];
+  expiresAt: string;
+  refreshable: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 const require = createRequire(import.meta.url);
@@ -155,6 +239,63 @@ function toWalletChallenge(row: WalletChallengeRow): MatterhornCryptoAppWalletCh
   };
 }
 
+function toOAuthFlow(row: OAuthFlowRow): MatterhornCryptoAppOAuthFlowRecord {
+  if (row.state !== "pending" && row.state !== "consumed" && row.state !== "failed") {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
+  if (row.error_code !== null
+    && row.error_code !== "authorization_denied"
+    && row.error_code !== "connection_failed") {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
+  return {
+    workspaceId: row.workspace_id,
+    flowId: row.flow_id,
+    accountId: row.account_id,
+    appId: row.app_id,
+    manifestRevision: row.manifest_revision,
+    bindingId: row.binding_id,
+    stateDigest: row.state_digest,
+    verifierEnvelope: row.verifier_envelope,
+    actionIds: parseJson<string[]>(row.action_ids_json),
+    scopes: parseJson<string[]>(row.scopes_json),
+    networks: parseJson<string[]>(row.networks_json),
+    issuer: row.issuer,
+    resource: row.resource,
+    audience: row.audience,
+    redirectUri: row.redirect_uri,
+    issuedAt: row.issued_at,
+    expiresAt: row.expires_at,
+    state: row.state,
+    errorCode: row.error_code,
+    connectionId: row.connection_id,
+    consumedAt: row.consumed_at,
+  };
+}
+
+function toOAuthToken(row: OAuthTokenRow): MatterhornCryptoAppOAuthTokenRecord {
+  if (row.refreshable !== 0 && row.refreshable !== 1) {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
+  return {
+    workspaceId: row.workspace_id,
+    oauthTokenId: row.oauth_token_id,
+    connectionId: row.connection_id,
+    accountId: row.account_id,
+    appId: row.app_id,
+    manifestRevision: row.manifest_revision,
+    bindingId: row.binding_id,
+    resource: row.resource,
+    audience: row.audience,
+    tokenEnvelope: row.token_envelope,
+    scopes: parseJson<string[]>(row.scopes_json),
+    expiresAt: row.expires_at,
+    refreshable: row.refreshable === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export class MatterhornCryptoAppConnectionStoreError extends Error {
   constructor(public readonly code: string) {
     super(code);
@@ -229,6 +370,52 @@ export class MatterhornCryptoAppConnectionStore {
       );
       CREATE INDEX IF NOT EXISTS crypto_app_wallet_proofs_binding_idx
         ON crypto_app_wallet_proofs(workspace_id, app_id, manifest_revision);
+      CREATE TABLE IF NOT EXISTS crypto_app_oauth_flows (
+        workspace_id TEXT NOT NULL,
+        flow_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        app_id TEXT NOT NULL,
+        manifest_revision TEXT NOT NULL,
+        binding_id TEXT NOT NULL,
+        state_digest TEXT NOT NULL UNIQUE,
+        verifier_envelope TEXT NOT NULL,
+        action_ids_json TEXT NOT NULL,
+        scopes_json TEXT NOT NULL,
+        networks_json TEXT NOT NULL,
+        issuer TEXT NOT NULL,
+        resource TEXT NOT NULL,
+        audience TEXT NOT NULL,
+        redirect_uri TEXT NOT NULL,
+        issued_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        state TEXT NOT NULL,
+        error_code TEXT,
+        connection_id TEXT,
+        consumed_at TEXT,
+        PRIMARY KEY (workspace_id, flow_id)
+      );
+      CREATE INDEX IF NOT EXISTS crypto_app_oauth_flows_account_idx
+        ON crypto_app_oauth_flows(workspace_id, account_id, expires_at);
+      CREATE TABLE IF NOT EXISTS crypto_app_oauth_tokens (
+        workspace_id TEXT NOT NULL,
+        oauth_token_id TEXT NOT NULL PRIMARY KEY,
+        connection_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        app_id TEXT NOT NULL,
+        manifest_revision TEXT NOT NULL,
+        binding_id TEXT NOT NULL,
+        resource TEXT NOT NULL,
+        audience TEXT NOT NULL,
+        token_envelope TEXT NOT NULL,
+        scopes_json TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        refreshable INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (workspace_id, connection_id)
+      );
+      CREATE INDEX IF NOT EXISTS crypto_app_oauth_tokens_binding_idx
+        ON crypto_app_oauth_tokens(workspace_id, app_id, manifest_revision);
     `);
     chmodSync(path, 0o600);
   }
@@ -418,6 +605,204 @@ export class MatterhornCryptoAppConnectionStore {
     return row ? { walletFamily: walletFamily(row.wallet_family), addressDigest: row.address_digest } : null;
   }
 
+  createOAuthFlow(flow: MatterhornCryptoAppOAuthFlowRecord): void {
+    try {
+      statement(this.#db, `
+        INSERT INTO crypto_app_oauth_flows(
+          workspace_id, flow_id, account_id, app_id, manifest_revision,
+          binding_id, state_digest, verifier_envelope, action_ids_json,
+          scopes_json, networks_json, issuer, resource, audience, redirect_uri,
+          issued_at, expires_at, state, error_code, connection_id, consumed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        flow.workspaceId,
+        flow.flowId,
+        flow.accountId,
+        flow.appId,
+        flow.manifestRevision,
+        flow.bindingId,
+        flow.stateDigest,
+        flow.verifierEnvelope,
+        JSON.stringify(flow.actionIds),
+        JSON.stringify(flow.scopes),
+        JSON.stringify(flow.networks),
+        flow.issuer,
+        flow.resource,
+        flow.audience,
+        flow.redirectUri,
+        flow.issuedAt,
+        flow.expiresAt,
+        flow.state,
+        flow.errorCode,
+        flow.connectionId,
+        flow.consumedAt,
+      );
+    } catch (error) {
+      const code = typeof error === "object" && error !== null && "code" in error
+        ? String(error.code)
+        : "";
+      if (code.startsWith("SQLITE_CONSTRAINT")) {
+        throw new MatterhornCryptoAppConnectionStoreError("crypto_app_oauth_flow_conflict");
+      }
+      throw error;
+    }
+  }
+
+  getOAuthFlowByStateDigest(stateDigest: string): MatterhornCryptoAppOAuthFlowRecord | null {
+    const row = statement(this.#db, `
+      SELECT * FROM crypto_app_oauth_flows WHERE state_digest = ? LIMIT 1
+    `).get(stateDigest) as OAuthFlowRow | undefined;
+    return row ? toOAuthFlow(row) : null;
+  }
+
+  getOAuthFlow(
+    workspaceId: string,
+    accountId: string,
+    flowId: string,
+  ): MatterhornCryptoAppOAuthFlowRecord | null {
+    const row = statement(this.#db, `
+      SELECT * FROM crypto_app_oauth_flows
+      WHERE workspace_id = ? AND account_id = ? AND flow_id = ? LIMIT 1
+    `).get(workspaceId, accountId, flowId) as OAuthFlowRow | undefined;
+    return row ? toOAuthFlow(row) : null;
+  }
+
+  failOAuthFlow(input: {
+    stateDigest: string;
+    errorCode: "authorization_denied" | "connection_failed";
+    consumedAt: string;
+  }): boolean {
+    return (statement(this.#db, `
+      UPDATE crypto_app_oauth_flows
+      SET state = 'failed', error_code = ?, consumed_at = ?, verifier_envelope = ''
+      WHERE state_digest = ? AND state = 'pending'
+    `).run(input.errorCode, input.consumedAt, input.stateDigest).changes ?? 0) === 1;
+  }
+
+  finalizeOAuthFlow(input: {
+    flow: MatterhornCryptoAppOAuthFlowRecord;
+    token: MatterhornCryptoAppOAuthTokenRecord;
+    connection: MatterhornCryptoAppConnection;
+    consumedAt: string;
+  }): boolean {
+    if (input.connection.workspaceId !== input.flow.workspaceId
+      || input.connection.createdBy !== input.flow.accountId
+      || input.connection.appId !== input.flow.appId
+      || input.connection.manifestRevision !== input.flow.manifestRevision
+      || input.connection.id !== input.token.connectionId
+      || input.connection.credential.type !== "oauth2"
+      || input.connection.credential.secretReference !== `vault://crypto-app-oauth/${input.token.oauthTokenId}`
+      || input.token.workspaceId !== input.flow.workspaceId
+      || input.token.accountId !== input.flow.accountId
+      || input.token.appId !== input.flow.appId
+      || input.token.manifestRevision !== input.flow.manifestRevision
+      || input.token.bindingId !== input.flow.bindingId
+      || input.token.resource !== input.flow.resource
+      || input.token.audience !== input.flow.audience) {
+      throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+    }
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = statement(this.#db, `
+        SELECT * FROM crypto_app_oauth_flows WHERE state_digest = ? LIMIT 1
+      `).get(input.flow.stateDigest) as OAuthFlowRow | undefined;
+      if (!row) {
+        this.#db.exec("ROLLBACK");
+        return false;
+      }
+      const current = toOAuthFlow(row);
+      const exact = current.state === "pending"
+        && current.workspaceId === input.flow.workspaceId
+        && current.flowId === input.flow.flowId
+        && current.accountId === input.flow.accountId
+        && current.appId === input.flow.appId
+        && current.manifestRevision === input.flow.manifestRevision
+        && current.bindingId === input.flow.bindingId
+        && current.verifierEnvelope === input.flow.verifierEnvelope
+        && current.expiresAt === input.flow.expiresAt
+        && current.expiresAt > input.consumedAt
+        && current.issuer === input.flow.issuer
+        && current.resource === input.flow.resource
+        && current.audience === input.flow.audience
+        && current.redirectUri === input.flow.redirectUri
+        && JSON.stringify(current.actionIds) === JSON.stringify(input.flow.actionIds)
+        && JSON.stringify(current.scopes) === JSON.stringify(input.flow.scopes)
+        && JSON.stringify(current.networks) === JSON.stringify(input.flow.networks);
+      if (!exact) {
+        this.#db.exec("ROLLBACK");
+        return false;
+      }
+      const consumed = statement(this.#db, `
+        UPDATE crypto_app_oauth_flows
+        SET state = 'consumed', connection_id = ?, consumed_at = ?, verifier_envelope = ''
+        WHERE state_digest = ? AND state = 'pending'
+      `).run(input.connection.id, input.consumedAt, input.flow.stateDigest).changes ?? 0;
+      if (consumed !== 1) {
+        this.#db.exec("ROLLBACK");
+        return false;
+      }
+      this.#insertOAuthToken(input.token);
+      this.#insertConnection(input.connection);
+      this.#db.exec("COMMIT");
+      return true;
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  resolveOAuthToken(input: {
+    workspaceId: string;
+    connectionId: string;
+    oauthTokenId: string;
+    appId: string;
+    manifestRevision: string;
+  }): MatterhornCryptoAppOAuthTokenRecord | null {
+    const row = statement(this.#db, `
+      SELECT * FROM crypto_app_oauth_tokens
+      WHERE workspace_id = ? AND connection_id = ? AND oauth_token_id = ?
+        AND app_id = ? AND manifest_revision = ? LIMIT 1
+    `).get(
+      input.workspaceId,
+      input.connectionId,
+      input.oauthTokenId,
+      input.appId,
+      input.manifestRevision,
+    ) as OAuthTokenRow | undefined;
+    return row ? toOAuthToken(row) : null;
+  }
+
+  updateOAuthToken(input: {
+    workspaceId: string;
+    connectionId: string;
+    oauthTokenId: string;
+    appId: string;
+    manifestRevision: string;
+    tokenEnvelope: string;
+    scopes: string[];
+    expiresAt: string;
+    refreshable: boolean;
+    updatedAt: string;
+  }): boolean {
+    return (statement(this.#db, `
+      UPDATE crypto_app_oauth_tokens
+      SET token_envelope = ?, scopes_json = ?, expires_at = ?, refreshable = ?, updated_at = ?
+      WHERE workspace_id = ? AND connection_id = ? AND oauth_token_id = ?
+        AND app_id = ? AND manifest_revision = ?
+    `).run(
+      input.tokenEnvelope,
+      JSON.stringify(input.scopes),
+      input.expiresAt,
+      input.refreshable ? 1 : 0,
+      input.updatedAt,
+      input.workspaceId,
+      input.connectionId,
+      input.oauthTokenId,
+      input.appId,
+      input.manifestRevision,
+    ).changes ?? 0) === 1;
+  }
+
   get(workspaceId: string, connectionId: string): MatterhornCryptoAppConnection | null {
     const row = statement(this.#db, `
       SELECT * FROM crypto_app_connections
@@ -440,24 +825,41 @@ export class MatterhornCryptoAppConnectionStore {
     nextState: MatterhornCryptoAppConnectionState;
     updatedAt: string;
   }): MatterhornCryptoAppConnection | null {
-    const row = statement(this.#db, `
-      UPDATE crypto_app_connections
-      SET state = ?, updated_at = ?
-      WHERE workspace_id = ? AND connection_id = ? AND state = ?
-      RETURNING *
-    `).get(
-      input.nextState,
-      input.updatedAt,
-      input.workspaceId,
-      input.connectionId,
-      input.expectedState,
-    ) as ConnectionRow | undefined;
-    return row ? toConnection(row) : null;
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = statement(this.#db, `
+        UPDATE crypto_app_connections
+        SET state = ?, updated_at = ?
+        WHERE workspace_id = ? AND connection_id = ? AND state = ?
+        RETURNING *
+      `).get(
+        input.nextState,
+        input.updatedAt,
+        input.workspaceId,
+        input.connectionId,
+        input.expectedState,
+      ) as ConnectionRow | undefined;
+      if (row && input.nextState === "revoked") {
+        statement(this.#db, `
+          DELETE FROM crypto_app_oauth_tokens WHERE workspace_id = ? AND connection_id = ?
+        `).run(input.workspaceId, input.connectionId);
+        statement(this.#db, `
+          DELETE FROM crypto_app_wallet_proofs WHERE workspace_id = ? AND connection_id = ?
+        `).run(input.workspaceId, input.connectionId);
+      }
+      this.#db.exec("COMMIT");
+      return row ? toConnection(row) : null;
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   purgeWorkspace(workspaceId: string): number {
     this.#db.exec("BEGIN IMMEDIATE");
     try {
+      statement(this.#db, "DELETE FROM crypto_app_oauth_flows WHERE workspace_id = ?").run(workspaceId);
+      statement(this.#db, "DELETE FROM crypto_app_oauth_tokens WHERE workspace_id = ?").run(workspaceId);
       statement(this.#db, "DELETE FROM crypto_app_wallet_challenges WHERE workspace_id = ?").run(workspaceId);
       statement(this.#db, "DELETE FROM crypto_app_wallet_proofs WHERE workspace_id = ?").run(workspaceId);
       const changes = statement(this.#db, "DELETE FROM crypto_app_connections WHERE workspace_id = ?")
@@ -494,6 +896,32 @@ export class MatterhornCryptoAppConnectionStore {
       connection.createdBy,
       connection.createdAt,
       connection.updatedAt,
+    );
+  }
+
+  #insertOAuthToken(token: MatterhornCryptoAppOAuthTokenRecord): void {
+    statement(this.#db, `
+      INSERT INTO crypto_app_oauth_tokens(
+        workspace_id, oauth_token_id, connection_id, account_id, app_id,
+        manifest_revision, binding_id, resource, audience, token_envelope,
+        scopes_json, expires_at, refreshable, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      token.workspaceId,
+      token.oauthTokenId,
+      token.connectionId,
+      token.accountId,
+      token.appId,
+      token.manifestRevision,
+      token.bindingId,
+      token.resource,
+      token.audience,
+      token.tokenEnvelope,
+      JSON.stringify(token.scopes),
+      token.expiresAt,
+      token.refreshable ? 1 : 0,
+      token.createdAt,
+      token.updatedAt,
     );
   }
 }

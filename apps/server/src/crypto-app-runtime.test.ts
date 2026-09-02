@@ -85,6 +85,36 @@ describe("crypto app runtime startup", () => {
     delete missingWalletProofSecret.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET;
     expect(() => createMatterhornCryptoAppRuntime(missingWalletProofSecret))
       .toThrowError(expect.objectContaining({ code: "crypto_app_wallet_proof_secret_required" }));
+
+    const missingOAuthKey = environment("enforce");
+    missingOAuthKey.MATTERHORN_CRYPTO_APP_OAUTH_CLIENTS_JSON = JSON.stringify([{
+      id: "TEST_OAUTH",
+      appId: "certified.exchange",
+      manifestRevision: "1.0.0",
+      clientId: "matterhorn-client",
+      redirectUri: "https://matterhorn.example/oauth/crypto-apps/callback",
+      authorizationEndpoint: "https://auth.exchange.example/authorize",
+      tokenEndpoint: "https://auth.exchange.example/token",
+    }]);
+    expect(() => createMatterhornCryptoAppRuntime(missingOAuthKey))
+      .toThrowError(expect.objectContaining({ code: "crypto_app_oauth_encryption_key_required" }));
+  });
+
+  test("hydrates OAuth only with a dedicated server encryption key", () => {
+    const env = environment("shadow");
+    env.MATTERHORN_CRYPTO_APP_OAUTH_ENCRYPTION_KEY = "dedicated-oauth-encryption-key-with-at-least-32-characters";
+    env.MATTERHORN_CRYPTO_APP_OAUTH_CLIENTS_JSON = JSON.stringify([{
+      id: "TEST_OAUTH",
+      appId: "certified.exchange",
+      manifestRevision: "1.0.0",
+      clientId: "matterhorn-client",
+      redirectUri: "https://matterhorn.example/oauth/crypto-apps/callback",
+      authorizationEndpoint: "https://auth.exchange.example/authorize",
+      tokenEndpoint: "https://auth.exchange.example/token",
+    }]);
+    const runtime = createMatterhornCryptoAppRuntime(env);
+    expect(runtime.oauthConnections?.configuredBindings()).toBe(1);
+    runtime.close();
   });
 
   test("rejects private keys, malformed keyrings and duplicate publisher identities", () => {

@@ -1,6 +1,7 @@
 export const MATTERHORN_CRYPTO_APP_MANIFEST_VERSION = "matterhorn.crypto-app-manifest.v1";
 export const MATTERHORN_CRYPTO_APP_CONNECTION_VERSION = "matterhorn.crypto-app-connection.v1";
 export const MATTERHORN_CRYPTO_APP_WALLET_CHALLENGE_VERSION = "matterhorn.crypto-app-wallet-challenge.v1";
+export const MATTERHORN_CRYPTO_APP_OAUTH_FLOW_VERSION = "matterhorn.crypto-app-oauth-flow.v1";
 export const MATTERHORN_CRYPTO_APP_RESULT_VERSION = "matterhorn.crypto-app-result.v1";
 export const MATTERHORN_CRYPTO_APP_CATALOG_VERSION = "matterhorn.crypto-app-catalog.v1";
 export const MATTERHORN_COWORKER_PROFILE_VERSION = "matterhorn.coworker-profile.v1";
@@ -142,6 +143,30 @@ export type MatterhornCryptoAppWalletChallengeRequest = {
 export type MatterhornCryptoAppWalletChallengeConfirmation = {
   walletAddress: string;
   signature: string;
+};
+
+export type MatterhornCryptoAppOAuthAuthorizationRequest = {
+  appId: string;
+  grantedActionIds: string[];
+  grantedScopes: string[];
+  grantedNetworks: string[];
+};
+
+export type MatterhornCryptoAppOAuthAuthorization = {
+  version: typeof MATTERHORN_CRYPTO_APP_OAUTH_FLOW_VERSION;
+  flowId: string;
+  authorizationUrl: string;
+  expiresAt: string;
+  notice: "connects_selected_app_only";
+};
+
+export type MatterhornCryptoAppOAuthFlowStatus = {
+  version: typeof MATTERHORN_CRYPTO_APP_OAUTH_FLOW_VERSION;
+  flowId: string;
+  status: "pending" | "connected" | "failed" | "expired";
+  connectionId: string | null;
+  error: "authorization_denied" | "connection_failed" | null;
+  expiresAt: string;
 };
 
 export type MatterhornCryptoAppCatalogActionView = {

@@ -44,7 +44,13 @@ function userMessage(error: unknown): string {
     if (error.code === "wallet_challenge_invalid") return "That wallet check was already used or is no longer valid. Try again.";
     if (error.code === "wallet_signature_invalid") return "The wallet could not confirm this address. Check the active account and try again.";
     if (error.code === "wallet_family_mismatch" || error.code === "wallet_family_unsupported") return "This wallet does not match the selected network.";
+    if (error.code === "oauth_connection_unavailable" || error.code === "oauth_connection_binding_unavailable") return "Sign-in for this app is not ready yet.";
+    if (error.code === "oauth_flow_expired") return "The app sign-in expired. Try connecting again.";
+    if (error.code === "oauth_flow_invalid") return "That app sign-in was already used or is no longer valid. Try again.";
+    if (error.code === "oauth_token_exchange_failed" || error.code === "oauth_token_response_invalid") return "The app could not finish signing in. Try again.";
   }
+  if (error instanceof Error && error.message === "popup_blocked") return "Allow the sign-in window, then try again.";
+  if (error instanceof Error && error.message === "oauth_flow_expired") return "The app sign-in expired. Try connecting again.";
   if (error instanceof Error && /reject|cancel|denied/i.test(error.message)) return "The wallet request was cancelled. Nothing was connected.";
   return "Matterhorn could not update this crypto app. Try again.";
 }
@@ -206,7 +212,38 @@ export function CryptoAppCatalogRoute() {
     const grantedNetworks = app.networks
       .filter((network) => network.environment === "testnet")
       .map((network) => network.chainId);
+    const signInWindow = app.authentication.type === "oauth2"
+      ? window.open("about:blank", "matterhorn-crypto-app-sign-in", "popup,width=560,height=720")
+      : null;
     void mutate(app.appId, async (client) => {
+      if (app.authentication.type === "oauth2") {
+        if (!signInWindow) throw new Error("popup_blocked");
+        signInWindow.document.title = "Connecting app…";
+        const response = await client.startCryptoAppOAuth(workspaceId, {
+          appId: app.appId,
+          grantedActionIds,
+          grantedScopes,
+          grantedNetworks,
+        });
+        const authorizationUrl = new URL(response.authorization.authorizationUrl);
+        if (authorizationUrl.protocol !== "https:") throw new Error("authorization_url_invalid");
+        signInWindow.location.replace(authorizationUrl.href);
+        const expiresAt = Date.parse(response.authorization.expiresAt);
+        while (Date.now() < expiresAt) {
+          await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+          const current = await client.getCryptoAppOAuthStatus(workspaceId, response.authorization.flowId);
+          if (current.status.status === "connected") {
+            signInWindow.close();
+            return current.status;
+          }
+          if (current.status.status === "failed" || current.status.status === "expired") {
+            signInWindow.close();
+            throw new Error(current.status.error ?? "oauth_flow_expired");
+          }
+        }
+        signInWindow.close();
+        throw new Error("oauth_flow_expired");
+      }
       if (app.authentication.type !== "wallet_connection") {
         return client.createCryptoAppConnection(workspaceId, {
           appId: app.appId,
@@ -268,7 +305,7 @@ export function CryptoAppCatalogRoute() {
         walletAddress: account.address,
         signature: signed.signature,
       });
-    });
+    }).finally(() => signInWindow?.close());
   }, [
     evmAccount.address,
     evmConnect,
@@ -389,7 +426,8 @@ export function CryptoAppCatalogRoute() {
                 const supportsPreview = app.actions.some((action) => action.access === "prepare" || action.access === "simulate");
                 const managedConnection = app.authentication.type === "api_key_vault";
                 const walletConnection = app.authentication.type === "wallet_connection";
-                const canConnect = (app.authentication.type === "none" || managedConnection || walletConnection)
+                const signInConnection = app.authentication.type === "oauth2";
+                const canConnect = (app.authentication.type === "none" || managedConnection || walletConnection || signInConnection)
                   && (supportsResearch || supportsPreview);
                 return (
                   <article key={app.appId} className="border-b border-border py-5">
@@ -492,6 +530,11 @@ export function CryptoAppCatalogRoute() {
                                   Your wallet confirms this address is yours. It does not give Matterhorn permission to move funds.
                                 </p>
                               ) : null}
+                              {signInConnection ? (
+                                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                                  Matterhorn opens this app’s sign-in page. Your sign-in tokens stay encrypted on the server and are never shown to the coworker.
+                                </p>
+                              ) : null}
                               {supportsResearch ? (
                                 <label className="mt-3 flex min-h-11 cursor-pointer gap-3 rounded-md py-2 text-sm focus-within:ring-2 focus-within:ring-ring">
                                   <input type="radio" name={`scope-${app.appId}`} value="research" checked={scope === "research"} onChange={() => setScopeByApp((current) => ({ ...current, [app.appId]: "research" }))} />
@@ -506,7 +549,7 @@ export function CryptoAppCatalogRoute() {
                               ) : null}
                               <Button className="mt-5" disabled={busyId === app.appId} onClick={() => connectApp(app)}>
                                 <ShieldCheck aria-hidden="true" className="size-4" />
-                                {busyId === app.appId ? "Connecting…" : walletConnection ? "Connect wallet" : "Connect to workspace"}
+                                {busyId === app.appId ? "Connecting…" : walletConnection ? "Connect wallet" : signInConnection ? "Sign in to connect" : "Connect to workspace"}
                               </Button>
                             </div>
                           ) : (
