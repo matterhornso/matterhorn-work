@@ -7,7 +7,10 @@ export type CryptoAppSchemaResult<T = unknown> = {
 };
 
 const MAX_SCHEMA_DEPTH = 8;
+const MAX_SCHEMA_NODES = 1_024;
+const MAX_VALUE_NODES = 10_000;
 const MAX_ARRAY_ITEMS = 1_000;
+const MAX_OBJECT_PROPERTIES = 200;
 const MAX_STRING_CHARS = 100_000;
 const MAX_SCHEMA_DESCRIPTION_CHARS = 500;
 const MAX_SCHEMA_LITERAL_STRING_CHARS = 1_024;
@@ -77,6 +80,11 @@ const SENSITIVE_PROPERTY_TOKENS = new Set([
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 const EMBEDDED_SECRET_LITERAL = /-----BEGIN (?:EC |OPENSSH |RSA )?PRIVATE KEY-----|\bAKIA[A-Z0-9]{16}\b|\bgh[ps]_[A-Za-z0-9]{20,}\b|\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}\b|\bsk-[A-Za-z0-9_-]{20,}\b|\bBearer\s+[A-Za-z0-9._-]{8,}\b/i;
 
+type TraversalBudget = {
+  nodes: number;
+  exceeded: boolean;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -87,6 +95,25 @@ function schemaAt(value: unknown): JsonSchema | null {
 
 function pathIssue(path: string, code: string): string {
   return `${path || "$"}:${code}`;
+}
+
+function consumeTraversalNode(
+  budget: TraversalBudget,
+  maximum: number,
+  issueCode: string,
+  issues: string[],
+): boolean {
+  if (budget.exceeded) {
+    issues.push(pathIssue("$", issueCode));
+    return false;
+  }
+  budget.nodes += 1;
+  if (budget.nodes > maximum) {
+    budget.exceeded = true;
+    issues.push(pathIssue("$", issueCode));
+    return false;
+  }
+  return true;
 }
 
 function hasOwn(value: object, key: PropertyKey): boolean {
@@ -188,16 +215,29 @@ function inspectPropertyKey(key: string, path: string, issues: string[]): void {
 
 export function validateCryptoAppSchemaDefinition(schema: JsonSchema): string[] {
   const issues: string[] = [];
-  inspectSchema(schema, "$", 0, issues);
+  const budget: TraversalBudget = { nodes: 0, exceeded: false };
+  inspectSchema(schema, "$", 0, issues, budget);
   return [...new Set(issues)];
 }
 
-function inspectSchema(schema: JsonSchema, path: string, depth: number, issues: string[]): void {
+function inspectSchema(
+  schema: JsonSchema,
+  path: string,
+  depth: number,
+  issues: string[],
+  budget: TraversalBudget,
+): void {
+  if (!consumeTraversalNode(budget, MAX_SCHEMA_NODES, "schema_node_budget_exceeded", issues)) return;
   if (depth > MAX_SCHEMA_DEPTH) {
     issues.push(pathIssue(path, "schema_depth_exceeded"));
     return;
   }
-  for (const key of Object.keys(schema)) {
+  const schemaKeys = Object.keys(schema);
+  if (schemaKeys.length > SAFE_KEYS.size) {
+    issues.push(pathIssue(path, "schema_keyword_unsupported"));
+    return;
+  }
+  for (const key of schemaKeys) {
     if (!SAFE_KEYS.has(key)) issues.push(pathIssue(path, "schema_keyword_unsupported"));
   }
   if (schema.description !== undefined
@@ -209,13 +249,14 @@ function inspectSchema(schema: JsonSchema, path: string, depth: number, issues: 
   }
   if (Array.isArray(schema.oneOf)) {
     if (schema.oneOf.length < 1 || schema.oneOf.length > 8) issues.push(pathIssue(path, "schema_one_of_invalid"));
-    if (Object.keys(schema).some((key) => key !== "oneOf" && key !== "description")) {
+    if (schemaKeys.some((key) => key !== "oneOf" && key !== "description")) {
       issues.push(pathIssue(path, "schema_one_of_sibling_unsupported"));
     }
     for (const [index, option] of schema.oneOf.entries()) {
       const nested = schemaAt(option);
       if (!nested) issues.push(pathIssue(`${path}.oneOf[${index}]`, "schema_not_object"));
-      else inspectSchema(nested, `${path}.oneOf[${index}]`, depth + 1, issues);
+      else inspectSchema(nested, `${path}.oneOf[${index}]`, depth + 1, issues, budget);
+      if (budget.exceeded) break;
     }
     return;
   }
@@ -224,7 +265,7 @@ function inspectSchema(schema: JsonSchema, path: string, depth: number, issues: 
     return;
   }
   const applicableKeys = KEYS_BY_TYPE[schema.type];
-  if (applicableKeys && Object.keys(schema).some((key) => SAFE_KEYS.has(key) && !applicableKeys.has(key))) {
+  if (applicableKeys && schemaKeys.some((key) => SAFE_KEYS.has(key) && !applicableKeys.has(key))) {
     issues.push(pathIssue(path, "schema_keyword_inapplicable"));
   }
   if (schema.enum !== undefined) {
@@ -248,13 +289,17 @@ function inspectSchema(schema: JsonSchema, path: string, depth: number, issues: 
     }
     const properties = isRecord(schema.properties) ? schema.properties : {};
     const propertyKeys = Object.keys(properties);
-    if (propertyKeys.length > 200) issues.push(pathIssue(path, "schema_properties_exceeded"));
+    if (propertyKeys.length > MAX_OBJECT_PROPERTIES) {
+      issues.push(pathIssue(path, "schema_properties_exceeded"));
+      return;
+    }
     for (const key of propertyKeys) {
       const nestedPath = safeChildPath(path, key);
       inspectPropertyKey(key, nestedPath, issues);
       const nested = schemaAt(properties[key]);
       if (!nested) issues.push(pathIssue(nestedPath, "schema_not_object"));
-      else inspectSchema(nested, nestedPath, depth + 1, issues);
+      else inspectSchema(nested, nestedPath, depth + 1, issues, budget);
+      if (budget.exceeded) break;
     }
     if (schema.required !== undefined
       && (!Array.isArray(schema.required)
@@ -266,7 +311,7 @@ function inspectSchema(schema: JsonSchema, path: string, depth: number, issues: 
   if (schema.type === "array") {
     const items = schemaAt(schema.items);
     if (!items) issues.push(pathIssue(path, "schema_items_required"));
-    else inspectSchema(items, `${path}[]`, depth + 1, issues);
+    else inspectSchema(items, `${path}[]`, depth + 1, issues, budget);
     for (const key of ["minItems", "maxItems"] as const) {
       if (schema[key] !== undefined && (!Number.isInteger(schema[key]) || Number(schema[key]) < 0)) {
         issues.push(pathIssue(path, `schema_${key}_invalid`));
@@ -314,16 +359,20 @@ export function validateCryptoAppInput(schema: JsonSchema, value: unknown): Cryp
   const definitionIssues = validateCryptoAppSchemaDefinition(schema);
   if (definitionIssues.length) return { ok: false, value: null, issues: definitionIssues };
   const issues: string[] = [];
-  const projected = evaluate(schema, value, "$", 0, "input", issues);
-  return { ok: issues.length === 0, value: issues.length === 0 ? projected : null, issues };
+  const budget: TraversalBudget = { nodes: 0, exceeded: false };
+  const projected = evaluate(schema, value, "$", 0, "input", issues, budget);
+  const uniqueIssues = [...new Set(issues)];
+  return { ok: uniqueIssues.length === 0, value: uniqueIssues.length === 0 ? projected : null, issues: uniqueIssues };
 }
 
 export function projectCryptoAppOutput(schema: JsonSchema, value: unknown): CryptoAppSchemaResult {
   const definitionIssues = validateCryptoAppSchemaDefinition(schema);
   if (definitionIssues.length) return { ok: false, value: null, issues: definitionIssues };
   const issues: string[] = [];
-  const projected = evaluate(schema, value, "$", 0, "output", issues);
-  return { ok: issues.length === 0, value: issues.length === 0 ? projected : null, issues };
+  const budget: TraversalBudget = { nodes: 0, exceeded: false };
+  const projected = evaluate(schema, value, "$", 0, "output", issues, budget);
+  const uniqueIssues = [...new Set(issues)];
+  return { ok: uniqueIssues.length === 0, value: uniqueIssues.length === 0 ? projected : null, issues: uniqueIssues };
 }
 
 function evaluate(
@@ -333,17 +382,24 @@ function evaluate(
   depth: number,
   mode: "input" | "output",
   issues: string[],
+  budget: TraversalBudget,
 ): unknown {
+  if (!consumeTraversalNode(budget, MAX_VALUE_NODES, "value_node_budget_exceeded", issues)) return null;
   if (depth > MAX_SCHEMA_DEPTH) {
     issues.push(pathIssue(path, "value_depth_exceeded"));
     return null;
   }
   if (Array.isArray(schema.oneOf)) {
-    const matches = schema.oneOf.map((option) => {
+    const matches: Array<{ projected: unknown; issues: string[] }> = [];
+    for (const option of schema.oneOf) {
       const nestedIssues: string[] = [];
-      const projected = evaluate(option as JsonSchema, value, path, depth + 1, mode, nestedIssues);
-      return { projected, issues: nestedIssues };
-    }).filter((result) => result.issues.length === 0);
+      const projected = evaluate(option as JsonSchema, value, path, depth + 1, mode, nestedIssues, budget);
+      if (budget.exceeded) {
+        issues.push(pathIssue("$", "value_node_budget_exceeded"));
+        return null;
+      }
+      if (nestedIssues.length === 0) matches.push({ projected, issues: nestedIssues });
+    }
     if (matches.length !== 1) {
       issues.push(pathIssue(path, "value_one_of_mismatch"));
       return null;
@@ -395,14 +451,21 @@ function evaluate(
       const maximum = typeof schema.maxItems === "number" ? schema.maxItems : MAX_ARRAY_ITEMS;
       if (value.length < minimum) issues.push(pathIssue(path, "value_array_too_short"));
       if (value.length > maximum) issues.push(pathIssue(path, "value_array_too_long"));
-      return value.slice(0, maximum).map((item, index) => evaluate(
-        schema.items as JsonSchema,
-        item,
-        `${path}[${index}]`,
-        depth + 1,
-        mode,
-        issues,
-      ));
+      const output: unknown[] = [];
+      const projectedItems = value.slice(0, maximum);
+      for (const [index, item] of projectedItems.entries()) {
+        output.push(evaluate(
+          schema.items as JsonSchema,
+          item,
+          `${path}[${index}]`,
+          depth + 1,
+          mode,
+          issues,
+          budget,
+        ));
+        if (budget.exceeded) break;
+      }
+      return output;
     }
     case "object": {
       if (!isRecord(value)) {
@@ -411,18 +474,24 @@ function evaluate(
       }
       const properties = (schema.properties ?? {}) as Record<string, JsonSchema>;
       const required = Array.isArray(schema.required) ? schema.required as string[] : [];
+      const valueKeys = Object.keys(value);
+      if (valueKeys.length > MAX_OBJECT_PROPERTIES) {
+        issues.push(pathIssue(path, "value_object_properties_exceeded"));
+        return null;
+      }
       for (const key of required) {
         if (!hasOwn(value, key)) issues.push(pathIssue(safeChildPath(path, key), "value_required"));
       }
       if (mode === "input") {
-        for (const key of Object.keys(value)) {
+        for (const key of valueKeys) {
           if (!hasOwn(properties, key)) issues.push(pathIssue(safeChildPath(path, key), "value_unknown_property"));
         }
       }
       const output: Record<string, unknown> = {};
       for (const [key, nestedSchema] of Object.entries(properties)) {
         if (!hasOwn(value, key)) continue;
-        output[key] = evaluate(nestedSchema, value[key], `${path}.${key}`, depth + 1, mode, issues);
+        output[key] = evaluate(nestedSchema, value[key], `${path}.${key}`, depth + 1, mode, issues, budget);
+        if (budget.exceeded) break;
       }
       return output;
     }

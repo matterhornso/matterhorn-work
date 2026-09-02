@@ -10,6 +10,7 @@ The SDK is deliberately non-custodial:
 - Local policy results are not certification. Matterhorn revalidates the signature, static policy, live transport, adversarial output, and runtime behavior independently.
 - All financial actions must remain `prepare` or `simulate`; the connected wallet is the only submission surface.
 - Every input and model-facing output property uses a bounded ASCII identifier. Secret, credential, signature, signing-payload, transaction-byte, and sign/submit/relay/broadcast authority names are rejected at every schema depth.
+- Schema admission and runtime projection have global traversal budgets in addition to depth, array, object-property, and string bounds, so wide or nested payloads fail closed before they can exhaust the gateway.
 - Schema descriptions, constants, enums, bounds, and unions are closed and bounded. Embedded credential literals, contradictory bounds, ignored `oneOf` siblings, and attacker-controlled error-path text fail closed.
 - Unsafe schemas fail before the SDK emits signing bytes or the local runner invokes a developer callback.
 

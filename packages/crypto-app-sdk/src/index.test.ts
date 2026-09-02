@@ -180,6 +180,31 @@ describe("Matterhorn crypto app SDK", () => {
     }));
   });
 
+  test("rejects schemas that exceed the global traversal budget before signing", () => {
+    const excessive = draft();
+    const properties: Record<string, unknown> = {};
+    for (let group = 0; group < 200; group += 1) {
+      const nestedProperties: Record<string, unknown> = {};
+      for (let field = 0; field < 6; field += 1) {
+        nestedProperties[`field${field}`] = { type: "integer" };
+      }
+      properties[`group${group}`] = {
+        type: "object",
+        additionalProperties: false,
+        properties: nestedProperties,
+      };
+    }
+    excessive.actions[0]!.outputProjectionSchema = {
+      type: "object",
+      additionalProperties: false,
+      properties,
+    };
+    expect(() => buildCryptoAppSigningRequest(excessive)).toThrowError(expect.objectContaining({
+      code: "manifest_invalid",
+      issues: expect.arrayContaining([expect.stringContaining("schema_node_budget_exceeded")]),
+    }));
+  });
+
   test("validates inert fixtures with the same closed projection used by the server", () => {
     const keys = generateKeyPairSync("ed25519");
     const unsignedManifest = draft();

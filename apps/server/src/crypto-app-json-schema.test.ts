@@ -227,4 +227,57 @@ describe("crypto app closed JSON-schema subset", () => {
     expect(validateCryptoAppInput(union, { address: "0x1" }).ok).toBe(true);
     expect(validateCryptoAppInput(union, { address: "0x1", market: "SUI" }).ok).toBe(false);
   });
+
+  test("fails closed when a schema exceeds the total traversal budget", () => {
+    const properties: Record<string, unknown> = {};
+    for (let group = 0; group < 200; group += 1) {
+      const nestedProperties: Record<string, unknown> = {};
+      for (let field = 0; field < 6; field += 1) {
+        nestedProperties[`field${field}`] = { type: "integer" };
+      }
+      properties[`group${group}`] = {
+        type: "object",
+        additionalProperties: false,
+        properties: nestedProperties,
+      };
+    }
+    expect(validateCryptoAppSchemaDefinition({
+      type: "object",
+      additionalProperties: false,
+      properties,
+    })).toContain("$:schema_node_budget_exceeded");
+  });
+
+  test("fails closed when runtime projection exceeds its total traversal budget", () => {
+    const nestedArraySchema = {
+      type: "array",
+      maxItems: 1_000,
+      items: {
+        type: "array",
+        maxItems: 1_000,
+        items: { type: "integer" },
+      },
+    };
+    const result = projectCryptoAppOutput(
+      nestedArraySchema,
+      Array.from({ length: 101 }, () => Array.from({ length: 101 }, () => 1)),
+    );
+    expect(result).toEqual({
+      ok: false,
+      value: null,
+      issues: ["$:value_node_budget_exceeded"],
+    });
+  });
+
+  test("rejects oversized input objects before scanning attacker-controlled fields", () => {
+    const oversized = Object.fromEntries(
+      Array.from({ length: 201 }, (_, index) => [`unknown${index}`, index]),
+    );
+    const result = validateCryptoAppInput(schema, oversized);
+    expect(result).toEqual({
+      ok: false,
+      value: null,
+      issues: ["$:value_object_properties_exceeded"],
+    });
+  });
 });
