@@ -21,6 +21,7 @@ import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certi
 import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
 import {
   buildMatterhornFirstPartyBittensorTestnetManifest,
+  buildMatterhornFirstPartyPolymarketClobResearchManifest,
   buildMatterhornFirstPartyPolymarketResearchManifest,
   buildMatterhornFirstPartyTestnetManifests,
   firstPartyCryptoAppAdapterArguments,
@@ -48,6 +49,18 @@ function polymarketResearchManifest() {
     publisherKeyId: "first-party-test-key",
     sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
     polymarketGammaEndpoint: "https://gamma-api.polymarket.com",
+    privacyPolicyUrl: "https://matterhorn.so/privacy",
+    statusUrl: "https://matterhorn.so/status",
+    securityContact: "security@matterhorn.so",
+  });
+}
+
+function polymarketClobResearchManifest() {
+  return buildMatterhornFirstPartyPolymarketClobResearchManifest({
+    publisherId: "matterhorn",
+    publisherKeyId: "first-party-test-key",
+    sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
+    polymarketClobEndpoint: "https://clob.polymarket.com",
     privacyPolicyUrl: "https://matterhorn.so/privacy",
     statusUrl: "https://matterhorn.so/status",
     securityContact: "security@matterhorn.so",
@@ -115,9 +128,39 @@ describe("Matterhorn first-party crypto app contracts", () => {
     expect(report.passed).toBe(true);
     expect(firstPartyCryptoAppCapabilityBindings([app])).toEqual([{
       appId: "matterhorn.polymarket-research",
-      manifestRevision: "1.0.0",
+      manifestRevision: "1.1.0",
       actionId: "polymarket_market_search",
       proxyToolName: "matterhorn_polymarket_search_markets",
+    }]);
+  });
+
+  test("keeps the public Polymarket CLOB on a separate token-bound read contract", () => {
+    const app = polymarketClobResearchManifest();
+    expect(app.appId).toBe("matterhorn.polymarket-clob-research");
+    expect(app.transport.endpoint).toBe("https://clob.polymarket.com");
+    expect(app.actions).toHaveLength(1);
+    expect(app.actions[0]).toMatchObject({
+      id: "polymarket_orderbook_read",
+      access: "read",
+      risk: "informational",
+      requiredScopes: [],
+      simulationRequired: false,
+      walletSubmissionOnly: true,
+      agentMaySubmit: false,
+    });
+    expect(JSON.stringify(app)).not.toMatch(/private.?key|api.?key|passphrase|post.?order|cancel|relay|submit.?transaction/i);
+    const report = runCryptoAppManifestConformance(app, {
+      publisherKey: keys.publicKey,
+      policyVersion: "policy-1",
+      targetEnvironment: "mainnet",
+      now: () => new Date("2026-09-01T12:00:00.000Z"),
+    });
+    expect(report.passed).toBe(true);
+    expect(firstPartyCryptoAppCapabilityBindings([app])).toEqual([{
+      appId: "matterhorn.polymarket-clob-research",
+      manifestRevision: "1.0.0",
+      actionId: "polymarket_orderbook_read",
+      proxyToolName: "matterhorn_polymarket_get_orderbook",
     }]);
   });
 
@@ -271,6 +314,16 @@ describe("Matterhorn first-party crypto app contracts", () => {
       },
     })).toEqual({ query: "SUI ETF", limit: 5 });
     expect(firstPartyCryptoAppAdapterArguments({
+      appId: "matterhorn.polymarket-clob-research",
+      actionId: "polymarket_orderbook_read",
+      arguments: {
+        tokenId: "12345678901234567890",
+        endpoint: "https://attacker.invalid",
+        method: "POST",
+        apiKey: "must-not-forward",
+      },
+    })).toEqual({ tokenId: "12345678901234567890" });
+    expect(firstPartyCryptoAppAdapterArguments({
       appId: "matterhorn.bittensor-testnet",
       actionId: "bittensor_subnet_list",
       arguments: {
@@ -330,6 +383,16 @@ describe("Matterhorn first-party crypto app contracts", () => {
       appId: "matterhorn.polymarket-research",
       actionId: "polymarket_market_search",
       arguments: { query: "markets\nX-Injected: true", limit: 11 },
+    })).toThrow("first_party_crypto_app_arguments_invalid");
+    expect(() => firstPartyCryptoAppAdapterArguments({
+      appId: "matterhorn.polymarket-clob-research",
+      actionId: "polymarket_orderbook_read",
+      arguments: { tokenId: "123&redirect=https://attacker.invalid" },
+    })).toThrow("first_party_crypto_app_arguments_invalid");
+    expect(() => firstPartyCryptoAppAdapterArguments({
+      appId: "matterhorn.polymarket-clob-research",
+      actionId: "polymarket_orderbook_read",
+      arguments: { tokenId: String(1n << 256n) },
     })).toThrow("first_party_crypto_app_arguments_invalid");
     expect(() => firstPartyCryptoAppAdapterArguments({
       appId: "matterhorn.hyperliquid-testnet",

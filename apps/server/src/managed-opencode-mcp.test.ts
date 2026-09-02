@@ -126,6 +126,7 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_hyperliquid_get_orderbook");
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_bittensor_prepare_action");
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_prediction_markets_search");
+    expect(managedOpencodeMcpToolNames()).toContain("matterhorn_polymarket_get_orderbook");
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_polymarket_check_compliance");
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_sui_preview_transfer");
   });
@@ -316,6 +317,56 @@ describe("managed OpenCode Matterhorn MCP", () => {
       observation: { freshnessRequired: true },
       result: { success: true, orderbook: { asset: "BTC" } },
     });
+  });
+
+  test("allows only an exact uint256 Polymarket token ID on the legacy read route", async () => {
+    const tokenId = String((1n << 256n) - 1n);
+    let observedUrl = "";
+    const valid = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: "polymarket-book-valid",
+        method: "tools/call",
+        params: { name: "matterhorn_polymarket_get_orderbook", arguments: { tokenId } },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      fetchImpl: Object.assign(async (url: string | URL | Request) => {
+        observedUrl = String(url);
+        return Response.json({ success: true, tokenId, bids: [], asks: [] });
+      }, { preconnect: fetch.preconnect }),
+    });
+    expect(valid.status).toBe(200);
+    expect(observedUrl).toBe(`http://127.0.0.1:4130/api/polymarket/orderbook/${tokenId}`);
+
+    let invalidRequests = 0;
+    for (const invalidTokenId of [
+      "1?redirect=https://attacker.invalid",
+      String(1n << 256n),
+      "01",
+    ]) {
+      const invalid = await handleManagedOpencodeMcp({
+        payload: {
+          jsonrpc: "2.0",
+          id: `polymarket-book-invalid-${invalidRequests}`,
+          method: "tools/call",
+          params: {
+            name: "matterhorn_polymarket_get_orderbook",
+            arguments: { tokenId: invalidTokenId },
+          },
+        },
+        serverUrl: "http://127.0.0.1:4130",
+        clientToken: "test-client-token",
+        fetchImpl: Object.assign(async () => {
+          invalidRequests += 1;
+          throw new Error("invalid_token_must_not_reach_backend");
+        }, { preconnect: fetch.preconnect }),
+      });
+      expect(invalid.body).toMatchObject({
+        error: { code: -32603, message: "polymarket_token_id_invalid" },
+      });
+    }
+    expect(invalidRequests).toBe(0);
   });
 
   test("routes a bound coworker read through the certified executor without touching legacy routes", async () => {

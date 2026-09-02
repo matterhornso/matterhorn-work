@@ -48,6 +48,15 @@ describe("crypto coworker templates", () => {
         "bittensor_subnet_read",
       ]));
       expect(template.profile.allowedNetworks).toContain("bittensor:test");
+      expect(template.profile.allowedAppIds).toEqual(expect.arrayContaining([
+        "matterhorn.polymarket-research",
+        "matterhorn.polymarket-clob-research",
+      ]));
+      expect(template.profile.allowedActionIds).toEqual(expect.arrayContaining([
+        "polymarket_market_search",
+        "polymarket_orderbook_read",
+      ]));
+      expect(template.profile.allowedNetworks).toContain("polymarket:public");
     }
 
     for (const id of ["transaction_coordinator", "treasury_coworker"] as const) {
@@ -60,6 +69,8 @@ describe("crypto coworker templates", () => {
       expect(template.profile.allowedActionIds.some((action) => action.endsWith("_preview"))).toBe(true);
       expect(template.profile.allowedAppIds).toContain("matterhorn.bittensor-testnet");
       expect(template.profile.allowedActionIds).toContain("bittensor_prepare_transfer");
+      expect(template.profile.allowedAppIds).not.toContain("matterhorn.polymarket-clob-research");
+      expect(template.profile.allowedNetworks).not.toContain("polymarket:public");
       expect(template.profile.privacy.allowUnverifiedProviderConsent).toBe(false);
     }
     expect(getMatterhornCoworkerTemplate("transaction_coordinator")?.profile.allowedActionIds).toEqual(

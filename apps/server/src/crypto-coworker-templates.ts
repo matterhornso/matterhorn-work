@@ -30,6 +30,7 @@ const TEMPLATES: readonly MatterhornCoworkerTemplate[] = [
     suggestedPrompts: [
       "Compare current Hyperliquid testnet markets and explain the strongest differences.",
       "Compare Bittensor testnet validators for subnet 14 using fresh public evidence.",
+      "Find a Polymarket market and compare the top public order-book levels for one outcome.",
       "Read this Sui testnet address and summarize the public balance evidence.",
       "Turn today’s approved market evidence into a concise research note.",
     ],
@@ -41,6 +42,8 @@ const TEMPLATES: readonly MatterhornCoworkerTemplate[] = [
         "matterhorn.sui-testnet",
         "matterhorn.hyperliquid-testnet",
         "matterhorn.bittensor-testnet",
+        "matterhorn.polymarket-research",
+        "matterhorn.polymarket-clob-research",
       ],
       allowedActionIds: [
         "sui_account_read",
@@ -49,8 +52,10 @@ const TEMPLATES: readonly MatterhornCoworkerTemplate[] = [
         "hyperliquid_account_exposure",
         "bittensor_subnet_list",
         "bittensor_subnet_read",
+        "polymarket_market_search",
+        "polymarket_orderbook_read",
       ],
-      allowedNetworks: ["sui:testnet", "hyperliquid:testnet", "bittensor:test"],
+      allowedNetworks: ["sui:testnet", "hyperliquid:testnet", "bittensor:test", "polymarket:public"],
       allowedAssets: ["SUI", "USDC", "BTC", "ETH", "TAO"],
       automaticAuthorities: ["read", "write_note"],
       limits: {
@@ -83,6 +88,8 @@ const TEMPLATES: readonly MatterhornCoworkerTemplate[] = [
         "matterhorn.sui-testnet",
         "matterhorn.hyperliquid-testnet",
         "matterhorn.bittensor-testnet",
+        "matterhorn.polymarket-research",
+        "matterhorn.polymarket-clob-research",
       ],
       allowedActionIds: [
         "sui_account_read",
@@ -91,8 +98,10 @@ const TEMPLATES: readonly MatterhornCoworkerTemplate[] = [
         "hyperliquid_account_exposure",
         "bittensor_subnet_list",
         "bittensor_subnet_read",
+        "polymarket_market_search",
+        "polymarket_orderbook_read",
       ],
-      allowedNetworks: ["sui:testnet", "hyperliquid:testnet", "bittensor:test"],
+      allowedNetworks: ["sui:testnet", "hyperliquid:testnet", "bittensor:test", "polymarket:public"],
       allowedAssets: ["SUI", "USDC", "BTC", "ETH", "TAO"],
       automaticAuthorities: ["read", "watch", "write_note"],
       limits: {

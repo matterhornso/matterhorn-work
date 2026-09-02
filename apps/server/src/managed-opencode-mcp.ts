@@ -84,6 +84,15 @@ function stringArg(args: JsonObject, name: string, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback;
 }
 
+function polymarketTokenIdArg(args: JsonObject): string {
+  const tokenId = stringArg(args, "tokenId");
+  if (!/^[1-9][0-9]{0,77}$/.test(tokenId)
+    || BigInt(tokenId) > ((1n << 256n) - 1n)) {
+    throw new Error("polymarket_token_id_invalid");
+  }
+  return tokenId;
+}
+
 function queryPath(path: string, args: JsonObject, keys: string[]): string {
   const query = new URLSearchParams();
   for (const key of keys) {
@@ -259,6 +268,17 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
       limit: { type: "number", minimum: 1, maximum: 50 },
     }),
     request: (args) => ({ path: queryPath("/api/polymarket/markets", args, ["query", "limit"]) }),
+  },
+  {
+    name: "matterhorn_polymarket_get_orderbook",
+    title: "Polymarket public order book",
+    description: "Read one bounded public Polymarket order book by exact outcome token ID. Never accesses an account or places an order.",
+    inputSchema: objectSchema({
+      tokenId: { type: "string", description: "Exact public outcome token ID returned by market discovery." },
+    }, ["tokenId"]),
+    request: (args) => ({
+      path: `/api/polymarket/orderbook/${polymarketTokenIdArg(args)}`,
+    }),
   },
   {
     name: "matterhorn_polymarket_check_compliance",

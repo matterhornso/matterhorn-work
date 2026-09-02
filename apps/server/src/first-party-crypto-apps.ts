@@ -26,6 +26,13 @@ export type MatterhornFirstPartyPolymarketResearchOptions = Omit<
   polymarketGammaEndpoint: string;
 };
 
+export type MatterhornFirstPartyPolymarketClobResearchOptions = Omit<
+  MatterhornFirstPartyCryptoAppOptions,
+  "suiTestnetEndpoint" | "hyperliquidTestnetEndpoint"
+> & {
+  polymarketClobEndpoint: string;
+};
+
 export type MatterhornFirstPartyBittensorTestnetOptions = Omit<
   MatterhornFirstPartyCryptoAppOptions,
   "suiTestnetEndpoint" | "hyperliquidTestnetEndpoint"
@@ -46,6 +53,9 @@ const FIRST_PARTY_ACTION_PROXY_TOOLS: Readonly<Record<string, Readonly<Record<st
   },
   "matterhorn.polymarket-research": {
     polymarket_market_search: "matterhorn_polymarket_search_markets",
+  },
+  "matterhorn.polymarket-clob-research": {
+    polymarket_orderbook_read: "matterhorn_polymarket_get_orderbook",
   },
   "matterhorn.bittensor-testnet": {
     bittensor_subnet_list: "matterhorn_bittensor_chat",
@@ -162,6 +172,15 @@ export function firstPartyCryptoAppAdapterArguments(input: {
       throw new Error("first_party_crypto_app_arguments_invalid");
     }
     return { query, limit };
+  }
+  if (input.appId === "matterhorn.polymarket-clob-research" && input.actionId === "polymarket_orderbook_read") {
+    const tokenId = textArgument(args.tokenId);
+    if (!tokenId
+      || !/^[1-9][0-9]{0,77}$/.test(tokenId)
+      || BigInt(tokenId) > ((1n << 256n) - 1n)) {
+      throw new Error("first_party_crypto_app_arguments_invalid");
+    }
+    return { tokenId };
   }
   if (input.appId === "matterhorn.bittensor-testnet" && input.actionId === "bittensor_subnet_list") {
     const limit = args.limit === undefined ? 12 : Number(args.limit);
@@ -687,7 +706,7 @@ export function buildMatterhornFirstPartyPolymarketResearchManifest(
     appId: "matterhorn.polymarket-research",
     displayName: "Polymarket Public Research",
     description: "Read-only public Polymarket market discovery. No wallet or order authority.",
-    manifestRevision: "1.0.0",
+    manifestRevision: "1.1.0",
     transport: { kind: "matterhorn_sdk", endpoint: options.polymarketGammaEndpoint },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "polymarket", chainId: "polymarket:public", environment: "mainnet" }],
@@ -714,6 +733,14 @@ export function buildMatterhornFirstPartyPolymarketResearchManifest(
             eventTitle: { oneOf: [{ type: "string", minLength: 1, maxLength: 500 }, { type: "null" }] },
             outcomes: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 120 } },
             outcomePrices: { type: "array", maxItems: 20, items: decimalString },
+            outcomeTokens: {
+              type: "array",
+              maxItems: 20,
+              items: objectSchema({
+                outcome: { type: "string", minLength: 1, maxLength: 120 },
+                tokenId: { type: "string", minLength: 1, maxLength: 78 },
+              }, ["outcome", "tokenId"]),
+            },
             liquidity: { oneOf: [decimalString, { type: "null" }] },
             volume: { oneOf: [decimalString, { type: "null" }] },
             active: { type: "boolean" },
@@ -729,6 +756,7 @@ export function buildMatterhornFirstPartyPolymarketResearchManifest(
             "eventTitle",
             "outcomes",
             "outcomePrices",
+            "outcomeTokens",
             "liquidity",
             "volume",
             "active",
@@ -742,6 +770,71 @@ export function buildMatterhornFirstPartyPolymarketResearchManifest(
       requiredScopes: [],
       requiresFreshness: true,
       freshnessMaxAgeMs: 15_000,
+      timeoutMs: 10_000,
+      simulationRequired: false,
+      walletSubmissionOnly: true,
+      agentMaySubmit: false,
+    }],
+  });
+}
+
+/**
+ * Separate, read-only CLOB origin. Keeping this contract distinct from Gamma
+ * prevents a certified discovery action from changing hosts or reaching any
+ * authenticated order, cancellation, relayer, profile, or credential route.
+ */
+export function buildMatterhornFirstPartyPolymarketClobResearchManifest(
+  options: MatterhornFirstPartyPolymarketClobResearchOptions,
+): MatterhornCryptoAppManifest {
+  const levelSchema = objectSchema({
+    price: decimalString,
+    size: decimalString,
+  }, ["price", "size"]);
+  return signedManifest(options, {
+    appId: "matterhorn.polymarket-clob-research",
+    displayName: "Polymarket Public Order Books",
+    description: "Read-only public Polymarket order-book snapshots. No account, wallet, or order authority.",
+    manifestRevision: "1.0.0",
+    transport: { kind: "matterhorn_sdk", endpoint: options.polymarketClobEndpoint },
+    authentication: { type: "none", scopes: [] },
+    networks: [{ protocol: "polymarket", chainId: "polymarket:public", environment: "mainnet" }],
+    actions: [{
+      id: "polymarket_orderbook_read",
+      title: "Read a Polymarket order book",
+      description: "Read one bounded public order book by its exact outcome token ID.",
+      access: "read",
+      risk: "informational",
+      inputSchema: objectSchema({
+        tokenId: { type: "string", minLength: 1, maxLength: 78 },
+      }, ["tokenId"]),
+      outputProjectionSchema: objectSchema({
+        market: identifierString,
+        tokenId: { type: "string", minLength: 1, maxLength: 78 },
+        snapshotTimestamp: { type: "string", minLength: 1, maxLength: 32 },
+        snapshotHash: identifierString,
+        bids: { type: "array", maxItems: 20, items: levelSchema },
+        asks: { type: "array", maxItems: 20, items: levelSchema },
+        minimumOrderSize: decimalString,
+        tickSize: decimalString,
+        negativeRisk: { type: "boolean" },
+        lastTradePrice: decimalString,
+        observedAt: timestampString,
+      }, [
+        "market",
+        "tokenId",
+        "snapshotTimestamp",
+        "snapshotHash",
+        "bids",
+        "asks",
+        "minimumOrderSize",
+        "tickSize",
+        "negativeRisk",
+        "lastTradePrice",
+        "observedAt",
+      ]),
+      requiredScopes: [],
+      requiresFreshness: true,
+      freshnessMaxAgeMs: 10_000,
       timeoutMs: 10_000,
       simulationRequired: false,
       walletSubmissionOnly: true,

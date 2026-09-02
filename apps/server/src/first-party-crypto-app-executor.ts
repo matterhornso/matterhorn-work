@@ -58,6 +58,7 @@ type RequestContext = {
 const HYPERLIQUID_APP_ID = "matterhorn.hyperliquid-testnet";
 const BITTENSOR_APP_ID = "matterhorn.bittensor-testnet";
 const POLYMARKET_RESEARCH_APP_ID = "matterhorn.polymarket-research";
+const POLYMARKET_CLOB_RESEARCH_APP_ID = "matterhorn.polymarket-clob-research";
 const SUI_APP_ID = "matterhorn.sui-testnet";
 const HYPERLIQUID_NETWORK = "hyperliquid:testnet";
 const BITTENSOR_NETWORK = "bittensor:test";
@@ -984,6 +985,20 @@ function polymarketStringArray(value: unknown, field: string): string[] {
   return parsed.map((item) => boundedPublicText(item, field, 120));
 }
 
+function polymarketTokenId(value: unknown): string {
+  const tokenId = nonEmptyString(value);
+  if (!tokenId
+    || !/^[1-9][0-9]{0,77}$/.test(tokenId)
+    || BigInt(tokenId) > ((1n << 256n) - 1n)) {
+    throw new Error("first_party_polymarket_token_id_invalid");
+  }
+  return tokenId;
+}
+
+function polymarketTokenIds(value: unknown): string[] {
+  return polymarketStringArray(value, "token_ids").map(polymarketTokenId);
+}
+
 function polymarketDecimal(value: unknown, field: string): string | null {
   if (value === null || value === undefined || value === "") return null;
   return decimal(value, `polymarket_${field}`);
@@ -1024,6 +1039,7 @@ function polymarketMarket(
   eventTitle: string;
   outcomes: string[];
   outcomePrices: string[];
+  outcomeTokens: Array<{ outcome: string; tokenId: string }>;
   liquidity: string | null;
   volume: string | null;
   active: boolean;
@@ -1038,7 +1054,9 @@ function polymarketMarket(
   const outcomes = polymarketStringArray(market.outcomes, "outcomes");
   const outcomePrices = polymarketStringArray(market.outcomePrices, "outcome_prices")
     .map((price) => decimal(price, "polymarket_outcome_price"));
+  const tokenIds = polymarketTokenIds(market.clobTokenIds);
   if (outcomes.length !== outcomePrices.length
+    || outcomes.length !== tokenIds.length
     || outcomePrices.some((price) => Number(price) < 0 || Number(price) > 1)) {
     throw new Error("first_party_polymarket_outcome_prices_invalid");
   }
@@ -1055,12 +1073,111 @@ function polymarketMarket(
     eventTitle: event.title,
     outcomes,
     outcomePrices,
+    outcomeTokens: outcomes.map((outcome, index) => {
+      const tokenId = tokenIds[index];
+      if (!tokenId) throw new Error("first_party_polymarket_token_ids_invalid");
+      return { outcome, tokenId };
+    }),
     liquidity: polymarketDecimal(market.liquidity, "liquidity"),
     volume: polymarketDecimal(market.volume, "volume"),
     active: market.active,
     closed: market.closed,
     restricted: typeof market.restricted === "boolean" ? market.restricted : event.restricted,
     endDate,
+  };
+}
+
+function polymarketOrderbookEndpoint(base: URL, tokenId: string): URL {
+  if (base.protocol !== "https:"
+    || base.username
+    || base.password
+    || base.pathname !== "/"
+    || base.search
+    || base.hash) {
+    throw new Error("first_party_polymarket_clob_endpoint_invalid");
+  }
+  const endpoint = new URL("/book", base.origin);
+  endpoint.searchParams.set("token_id", polymarketTokenId(tokenId));
+  if (endpoint.origin !== base.origin || endpoint.href.length > 8_192) {
+    throw new Error("first_party_polymarket_clob_endpoint_invalid");
+  }
+  return endpoint;
+}
+
+function polymarketBookLevels(value: unknown, side: "bid" | "ask"): Array<{ price: string; size: string }> {
+  if (!Array.isArray(value) || value.length > 500) {
+    throw new Error(`first_party_polymarket_${side}_levels_invalid`);
+  }
+  const levels = value.map((candidate) => {
+    const level = record(candidate);
+    if (!level) throw new Error(`first_party_polymarket_${side}_level_invalid`);
+    const price = decimal(level.price, `polymarket_${side}_price`, false);
+    const size = decimal(level.size, `polymarket_${side}_size`, false);
+    if (Number(price) > 1) throw new Error(`first_party_polymarket_${side}_price_invalid`);
+    return { price, size };
+  });
+  for (let index = 1; index < levels.length; index += 1) {
+    const prior = Number(levels[index - 1]?.price);
+    const current = Number(levels[index]?.price);
+    // Polymarket returns both sides from the outermost price toward the best
+    // price: bids ascend and asks descend. Validate that contract, then expose
+    // only the 20 best levels in best-price-first order.
+    if ((side === "bid" && current < prior) || (side === "ask" && current > prior)) {
+      throw new Error(`first_party_polymarket_${side}_levels_unsorted`);
+    }
+  }
+  return levels.slice(-20).reverse();
+}
+
+async function executePolymarketClobResearch(
+  context: RequestContext,
+  actionId: string,
+  network: string,
+  args: JsonObject,
+  observedAt: string,
+): Promise<{ data: unknown; source: string; observedAt: string; blockOrVersion: string }> {
+  if (network !== POLYMARKET_RESEARCH_NETWORK) {
+    throw new Error("first_party_polymarket_network_invalid");
+  }
+  if (actionId !== "polymarket_orderbook_read") {
+    throw new Error("first_party_polymarket_action_invalid");
+  }
+  const expectedTokenId = polymarketTokenId(args.tokenId);
+  const payload = record(await getJson(
+    context,
+    polymarketOrderbookEndpoint(context.endpoint, expectedTokenId),
+  ));
+  if (!payload || payload.asset_id !== expectedTokenId || typeof payload.neg_risk !== "boolean") {
+    throw new Error("first_party_polymarket_orderbook_invalid");
+  }
+  const minimumOrderSize = decimal(payload.min_order_size, "polymarket_minimum_order_size", false);
+  const tickSize = decimal(payload.tick_size, "polymarket_tick_size", false);
+  const lastTradePrice = decimal(payload.last_trade_price, "polymarket_last_trade_price");
+  if (Number(tickSize) > 1 || Number(lastTradePrice) > 1) {
+    throw new Error("first_party_polymarket_orderbook_price_invalid");
+  }
+  const snapshotTimestamp = boundedPublicText(payload.timestamp, "snapshot_timestamp", 32);
+  if (!/^[0-9]{1,32}$/.test(snapshotTimestamp)) {
+    throw new Error("first_party_polymarket_snapshot_timestamp_invalid");
+  }
+  const snapshotHash = boundedPublicText(payload.hash, "snapshot_hash", 160);
+  return {
+    data: {
+      market: boundedPublicText(payload.market, "market_id", 160),
+      tokenId: expectedTokenId,
+      snapshotTimestamp,
+      snapshotHash,
+      bids: polymarketBookLevels(payload.bids, "bid"),
+      asks: polymarketBookLevels(payload.asks, "ask"),
+      minimumOrderSize,
+      tickSize,
+      negativeRisk: payload.neg_risk,
+      lastTradePrice,
+      observedAt,
+    },
+    source: "Polymarket CLOB public order-book API",
+    observedAt,
+    blockOrVersion: snapshotHash,
   };
 }
 
@@ -1095,8 +1212,13 @@ async function executePolymarketResearch(
       restricted: event.restricted,
     };
     for (const rawMarket of event.markets.slice(0, 50)) {
+      const candidate = record(rawMarket);
+      if (!candidate || typeof candidate.active !== "boolean" || typeof candidate.closed !== "boolean") {
+        throw new Error("first_party_polymarket_market_invalid");
+      }
+      if (!candidate.active || candidate.closed) continue;
       const market = polymarketMarket(rawMarket, summary);
-      if (market.active && !market.closed) unique.set(market.id, market);
+      unique.set(market.id, market);
       if (unique.size >= limit) break;
     }
     if (unique.size >= limit) break;
@@ -1151,7 +1273,9 @@ export function createFirstPartyCryptoAppExecutor(
           ? await executeBittensor(context, input.action.id, input.network, input.arguments)
           : input.appId === POLYMARKET_RESEARCH_APP_ID
             ? await executePolymarketResearch(context, input.action.id, input.network, input.arguments, observedAt)
-            : Promise.reject(new Error("first_party_app_unsupported"));
+            : input.appId === POLYMARKET_CLOB_RESEARCH_APP_ID
+              ? await executePolymarketClobResearch(context, input.action.id, input.network, input.arguments, observedAt)
+              : Promise.reject(new Error("first_party_app_unsupported"));
     if (!context.connectedAddress) throw new Error("first_party_network_observation_required");
     const costMicros = safeCost(options.estimateCostMicros?.({
       appId: input.appId,
