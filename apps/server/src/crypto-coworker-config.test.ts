@@ -52,7 +52,8 @@ describe("crypto coworker feature configuration", () => {
       "walrus_publisher_https_required",
       "walrus_aggregator_https_required",
       "walrus_publisher_auth_required",
-      "walrus_encryption_key_id_required",
+      "evidence_kms_region_required",
+      "evidence_kms_key_id_required",
       "walrus_mainnet_acknowledgement_required",
     ]));
 
@@ -61,7 +62,8 @@ describe("crypto coworker feature configuration", () => {
       MATTERHORN_WALRUS_PUBLISHER_URL: "https://publisher.example.test",
       MATTERHORN_WALRUS_AGGREGATOR_URL: "https://aggregator.example.test",
       MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN: "server-only-test-token",
-      MATTERHORN_WALRUS_ENCRYPTION_KEY_ID: "kms://matterhorn/testnet-evidence",
+      MATTERHORN_EVIDENCE_KMS_REGION: "us-east-1",
+      MATTERHORN_EVIDENCE_KMS_KEY_ID: "alias/matterhorn-testnet-evidence",
     });
     expect(configured).toMatchObject({ walrusEvidenceMode: "testnet", ready: true, issues: [] });
   });

@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import {
   MATTERHORN_WALRUS_PROOF_VERSION,
   type MatterhornWalrusProof,
+  validateMatterhornWalrusProof,
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import type { MatterhornCryptoEvidenceRecord } from "./crypto-evidence-store.js";
@@ -16,7 +17,10 @@ import {
   type MatterhornPinnedBytesRequester,
 } from "./crypto-app-https-transport.js";
 import { serializeMatterhornWalrusCiphertext } from "./walrus-evidence-envelope.js";
-import { buildMatterhornEvidenceMerkleBatch } from "./walrus-evidence-merkle.js";
+import {
+  buildMatterhornEvidenceMerkleBatch,
+  verifyMatterhornEvidenceMerkleProof,
+} from "./walrus-evidence-merkle.js";
 
 export const MATTERHORN_WALRUS_EVIDENCE_CONTENT_TYPE =
   "application/vnd.matterhorn.walrus-ciphertext.v1+json";
@@ -303,5 +307,64 @@ export class MatterhornTestnetWalrusEvidencePublisher {
       ...input,
       proof,
     });
+  }
+
+  /**
+   * Re-checks an existing publication without mutating tenant state or
+   * contacting the publisher. The exact stored Blob object is authenticated
+   * through pinned Sui gRPC and the encrypted bytes are read back from the
+   * pinned Walrus aggregator before success is returned.
+   */
+  async verify(input: {
+    workspaceId: string;
+    ownerId: string;
+    evidenceId: string;
+    signal: AbortSignal;
+  }): Promise<{ certification: MatterhornWalrusCertification }> {
+    if (input.signal.aborted) throw new Error("crypto_evidence_walrus_aborted");
+    const record = this.store.get(input);
+    if (!record) throw new Error("crypto_evidence_not_found");
+    if (record.state !== "published" || !record.envelope || !record.walrusProof) {
+      throw new Error("crypto_evidence_walrus_verify_state_invalid");
+    }
+    if (validateMatterhornWalrusProof(record.walrusProof).length > 0
+      || record.walrusProof.network !== "testnet") {
+      throw new Error("crypto_evidence_walrus_proof_invalid");
+    }
+    const publicBytes = serializeMatterhornWalrusCiphertext(record.envelope);
+    if (sha256(publicBytes) !== record.index.ciphertextHash) {
+      throw new Error("crypto_evidence_walrus_ciphertext_mismatch");
+    }
+    if (!verifyMatterhornEvidenceMerkleProof({
+      ciphertextHash: record.index.ciphertextHash,
+      leaf: record.index.merkleLeaf,
+      root: record.walrusProof.merkleRoot,
+      proof: record.walrusProof.merkleProof,
+    })) {
+      throw new Error("crypto_evidence_walrus_merkle_proof_mismatch");
+    }
+    const certification = await this.verifyCertification({
+      network: "testnet",
+      blobId: record.walrusProof.blobId,
+      suiObjectId: record.walrusProof.suiObjectId,
+      signal: input.signal,
+    });
+    if (certification.network !== "testnet"
+      || certification.blobId !== record.walrusProof.blobId
+      || certification.suiObjectId !== record.walrusProof.suiObjectId
+      || certification.certifiedEpoch !== record.walrusProof.certifiedEpoch
+      || certification.validUntilEpoch !== record.walrusProof.validUntilEpoch
+      || certification.certifiedEpoch > certification.currentEpoch
+      || certification.currentEpoch >= certification.validUntilEpoch) {
+      throw new Error("crypto_evidence_walrus_certification_invalid");
+    }
+    const readback = await this.transport.readByObjectId({
+      suiObjectId: record.walrusProof.suiObjectId,
+      signal: input.signal,
+    });
+    if (readback.length !== publicBytes.length || !timingSafeEqual(readback, publicBytes)) {
+      throw new Error("crypto_evidence_walrus_readback_mismatch");
+    }
+    return { certification };
   }
 }

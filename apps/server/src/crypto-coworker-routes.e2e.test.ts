@@ -373,9 +373,13 @@ describe("crypto coworker HTTP boundary", () => {
   test("is authenticated and disabled without touching account state", async () => {
     const server = await boot("off");
     expect((await request(server.base, "/workspace/ws_coworker/coworkers")).response.status).toBe(401);
+    expect((await request(server.base, "/workspace/ws_coworker/crypto-evidence")).response.status).toBe(401);
     const disabled = await request(server.base, "/workspace/ws_coworker/coworkers", { bearer: TOKEN });
     expect(disabled.response.status).toBe(503);
     expect(disabled.payload.code).toBe("coworker_runtime_disabled");
+    const evidence = await request(server.base, "/workspace/ws_coworker/crypto-evidence", { bearer: TOKEN });
+    expect(evidence.response.status).toBe(200);
+    expect(evidence.payload).toEqual({ mode: "off", available: false, items: [] });
   });
 
   test("creates, isolates, revisions, pauses and deletes account-owned coworkers", async () => {
@@ -394,6 +398,19 @@ describe("crypto coworker HTTP boundary", () => {
     const workspacesB = await request(server.base, "/workspaces", { cookie: cookieB });
     const workspaceA = String(workspacesA.payload.items[0].id);
     const workspaceB = String(workspacesB.payload.items[0].id);
+
+    const ownEvidence = await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieA });
+    expect(ownEvidence.response.status).toBe(200);
+    expect(ownEvidence.payload).toEqual({ mode: "off", available: false, items: [] });
+    expect((await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieB })).response.status)
+      .toBe(404);
+    const unavailableVerification = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/evidence_valid_test_id/verify`,
+      { method: "POST", cookie: cookieA },
+    );
+    expect(unavailableVerification.response.status).toBe(503);
+    expect(unavailableVerification.payload.code).toBe("crypto_evidence_unavailable");
 
     const templates = await request(server.base, `/workspace/${workspaceA}/coworker-templates`, { cookie: cookieA });
     expect(templates.response.status).toBe(200);

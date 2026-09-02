@@ -32,7 +32,8 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 3 account wallet boundary: complete for owner-scoped list, inspect, cancel, and wallet-reported public metadata. Receipt reconciliation fetches the immutable server-owned intent, verifies the exact authorized arguments, signer, network, operation, guarded run receipt, policy, and simulation, and rejects signatures or credential-shaped content. Transaction preparation is cancelled if the guarded run receipt cannot durably stage the reviewed action.
 - The pinned HTTP/2/gRPC `GetTransaction` read method was explicitly approved on 2026-09-01. A backend-only verifier now binds one exact wallet-reported digest to the expected testnet signer, gas owner, native SUI transfer commands, recipient, amount, and balance changes before it may support a public-chain receipt claim. It has no signing or submission method and is not exposed to models, MCP, CLI, or account callers. Receipt-store promotion remains a separate fail-closed integration slice.
 - Phase 4 local evidence foundation: complete and backend-only. Finalized guarded receipts compile into a closed, identity-hashed evidence schema; AES-256-GCM sealing occurs before any publisher boundary; the transient plaintext data key is zeroed on success and failure; public Walrus bytes exclude the local key reference and plaintext hash; and deterministic Merkle proofs reject duplicate, modified, or mismatched ciphertext. No Walrus relay, Sui anchor, or mainnet write is enabled.
-- Current slice: connect exact wallet-reported Sui digests to the approved pinned public-chain verifier. The wallet remains the sole signer and submitter; only an exact testnet digest, signer, gas owner, native transfer command graph, recipient, amount, and balance reconciliation can promote a receipt to `chainVerified: true`.
+- Phase 4 account verification boundary: complete for existing stored testnet publication records. Authenticated owner-scoped routes expose only redacted proof packets and can independently verify the exact ciphertext hash, Merkle inclusion, pinned Sui Walrus certification, and byte-exact Walrus readback. They expose no tenant identifiers, KMS references, wrapped keys, ciphertext, prompts, signatures, or wallet data and perform no publication, signing, anchoring, or transaction submission.
+- Current slice: automatic finalized-run sealing, user opt-in, publication orchestration, and renewal remain pending. Testnet publication stays server-owned and configuration-gated; mainnet remains disabled.
 - All new production modes remain `off`; the new HTTP routes return a stable disabled response and no upstream adapter traffic is enabled.
 
 ## Goal
@@ -241,10 +242,11 @@ Users may opt to publish an encrypted, minimal evidence bundle whose integrity a
    - Authenticated relay with strict ciphertext-only content type and maximum size.
    - Quilt batching and Merkle proofs for small bundles.
    - Blob certification, epoch/expiry, renewal, and availability verification.
-   - **Testnet transport implemented locally:** public-DNS/TLS peer pinning, a fixed authenticated upload path, exact encrypted-evidence content type, bounded responses, strict object-ID readback, a separate certification-verifier interface, and byte-for-byte ciphertext reconciliation. It remains disconnected from account-facing routes and mainnet.
+   - **Testnet transport implemented locally:** public-DNS/TLS peer pinning, a fixed authenticated upload path, exact encrypted-evidence content type, bounded responses, strict object-ID readback, a separate certification-verifier interface, and byte-for-byte ciphertext reconciliation. Account routes can invoke only the owner-scoped read-only verification path; publishing remains server-owned and configuration-gated, and mainnet remains disabled.
 4. **Sui anchor**
    - Merkle root and non-identifying proof metadata only.
    - Transaction digest reconciliation and explorer/verifier flow.
+   - **Verification surface implemented:** `GET /workspace/:id/crypto-evidence` returns redacted proof packets and `POST /workspace/:id/crypto-evidence/:evidenceId/verify` checks the local ciphertext hash, Merkle inclusion, exact pinned Sui certification, and independent Walrus readback. Automatic anchor creation is not enabled.
 5. **Retention and deletion**
    - User content deletes immediately from Matterhorn.
    - Deletable Walrus lifecycle where supported; key destruction for residual ciphertext.

@@ -451,6 +451,55 @@ export type MatterhornWalrusProof = {
   suiTransactionDigest: string | null;
 };
 
+export const MATTERHORN_EVIDENCE_VERIFICATION_VERSION =
+  "matterhorn.evidence-verification.v1" as const;
+
+/**
+ * Account-facing, shareable verification packet for encrypted coworker
+ * evidence. It intentionally excludes tenant identifiers, prompts, key
+ * references, wrapped keys, signatures, wallet addresses, and ciphertext.
+ */
+export type MatterhornEvidenceVerificationPacket = {
+  version: typeof MATTERHORN_EVIDENCE_VERIFICATION_VERSION;
+  evidenceId: string;
+  state: "sealed" | "published" | "key_destroyed";
+  revision: number;
+  ciphertextSha256: string;
+  merkleLeaf: string;
+  createdAt: string;
+  updatedAt: string;
+  retention: {
+    deletable: boolean;
+    expiresAt: string | null;
+    keyAvailable: boolean;
+  };
+  publication: MatterhornWalrusProof | null;
+};
+
+export type MatterhornEvidenceVerificationResult = {
+  version: typeof MATTERHORN_EVIDENCE_VERIFICATION_VERSION;
+  evidence: MatterhornEvidenceVerificationPacket;
+  verification: {
+    status: "verified" | "sealed_local" | "key_destroyed" | "expired" | "failed";
+    verifiedAt: string;
+    checks: {
+      tenantScope: true;
+      ciphertextHash: boolean;
+      merkleInclusion: boolean;
+      suiCertification: boolean;
+      walrusReadback: boolean;
+    };
+    currentEpoch: number | null;
+    reason: string | null;
+  };
+};
+
+export type MatterhornEvidenceVerificationListResponse = {
+  mode: "off" | "testnet";
+  available: boolean;
+  items: MatterhornEvidenceVerificationPacket[];
+};
+
 export type MatterhornEvidenceBundle = {
   version: typeof MATTERHORN_EVIDENCE_BUNDLE_VERSION;
   id: string;

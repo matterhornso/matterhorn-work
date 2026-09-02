@@ -38,6 +38,9 @@ const CryptoAppDeveloperRoute = lazy(() => import("../domains/developer/crypto-a
 const CryptoAppCatalogRoute = lazy(() => import("../domains/crypto-apps/crypto-app-catalog-route").then((module) => ({
   default: module.CryptoAppCatalogRoute,
 })));
+const CryptoEvidenceRoute = lazy(() => import("../domains/crypto-apps/crypto-evidence-route").then((module) => ({
+  default: module.CryptoEvidenceRoute,
+})));
 type DenSigninGateProps = {
   children: ReactNode;
 };
@@ -293,6 +296,14 @@ export function AppRoot() {
                 element={
                   <Suspense fallback={<RouteFallback />}>
                     <CryptoAppCatalogRoute />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/workspace/:workspaceId/evidence-proofs"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <CryptoEvidenceRoute />
                   </Suspense>
                 }
               />

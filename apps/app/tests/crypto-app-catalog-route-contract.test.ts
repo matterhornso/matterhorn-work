@@ -10,9 +10,34 @@ describe("invite-only crypto app catalog route", () => {
     const appRoot = readAppSource("react-app/shell/app-root.tsx");
 
     expect(appRoot).toContain('path="/workspace/:workspaceId/crypto-apps"');
+    expect(appRoot).toContain('path="/workspace/:workspaceId/evidence-proofs"');
     expect(appRoot).toContain('import("../domains/crypto-apps/crypto-app-catalog-route")');
+    expect(appRoot).toContain('import("../domains/crypto-apps/crypto-evidence-route")');
     expect(appRoot.indexOf("<DenSigninGate>")).toBeLessThan(appRoot.indexOf('path="/workspace/:workspaceId/crypto-apps"'));
+    expect(appRoot.indexOf("<DenSigninGate>")).toBeLessThan(appRoot.indexOf('path="/workspace/:workspaceId/evidence-proofs"'));
     expect(appRoot).not.toContain('pathname === "/workspace/:workspaceId/crypto-apps"');
+    expect(appRoot).not.toContain('pathname === "/workspace/:workspaceId/evidence-proofs"');
+  });
+
+  test("keeps encrypted evidence verification read-only and redacted", () => {
+    const catalog = readAppSource("react-app/domains/crypto-apps/crypto-app-catalog-route.tsx");
+    const route = readAppSource("react-app/domains/crypto-apps/crypto-evidence-route.tsx");
+    const client = readAppSource("app/lib/matterhorn-server.ts");
+
+    expect(catalog).toContain("Evidence proofs");
+    expect(route).toContain("Ciphertext only");
+    expect(route).toContain("Owner-scoped access");
+    expect(route).toContain("Read-only verification");
+    expect(route).toContain("No wallet signature");
+    expect(route).toContain("client.listCryptoEvidence(workspaceId)");
+    expect(route).toContain("client.verifyCryptoEvidence(workspaceId, item.evidenceId)");
+    expect(client).toContain("/crypto-evidence?limit=");
+    expect(client).toContain("/crypto-evidence/${encodeURIComponent(evidenceId)}/verify");
+    expect(route).not.toContain("publishCryptoEvidence");
+    expect(route).not.toContain("privateKey");
+    expect(route).not.toContain("seedPhrase");
+    expect(route).not.toContain("signTransaction");
+    expect(route).not.toContain("executeTransaction");
   });
 
   test("keeps the catalog testnet-only with explicit wallet and credential boundaries", () => {

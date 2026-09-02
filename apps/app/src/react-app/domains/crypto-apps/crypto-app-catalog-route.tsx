@@ -161,15 +161,25 @@ export function CryptoAppCatalogRoute() {
   return (
     <main className="min-h-dvh overflow-y-auto bg-background text-foreground">
       <div className="mx-auto w-full max-w-5xl px-5 py-6 sm:px-8 sm:py-8">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ml-2 mb-6"
-          onClick={() => navigate(`/workspace/${encodeURIComponent(workspaceId)}/session`)}
-        >
-          <ArrowLeft aria-hidden="true" className="size-4" />
-          Back to workspace
-        </Button>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-2"
+            onClick={() => navigate(`/workspace/${encodeURIComponent(workspaceId)}/session`)}
+          >
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            Back to workspace
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/workspace/${encodeURIComponent(workspaceId)}/evidence-proofs`)}
+          >
+            <ShieldCheck aria-hidden="true" className="size-4" />
+            Evidence proofs
+          </Button>
+        </div>
 
         <header className="border-b border-border pb-6">
           <h1 className="text-2xl font-semibold tracking-[-0.02em]">Certified crypto apps</h1>

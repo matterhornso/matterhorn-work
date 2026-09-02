@@ -580,6 +580,10 @@ import {
 } from "./aws-kms-evidence-key-manager.js";
 import type { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import {
+  createMatterhornCryptoEvidenceRuntime,
+  type MatterhornCryptoEvidenceRuntime,
+} from "./crypto-evidence-runtime.js";
+import {
   agentSecurityReceiptDirectory,
   purgeAllExpiredAgentRunReceipts,
 } from "./agent-run-receipts.js";
@@ -1321,6 +1325,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const cryptoEvidenceStore = evidenceKeyManager
     ? guardedRuntime.createCryptoEvidenceStore(evidenceKeyManager)
     : null;
+  const cryptoEvidenceRuntime = createMatterhornCryptoEvidenceRuntime(process.env, cryptoEvidenceStore);
   const cryptoEvidenceRotationDays = cryptoEvidenceStore
     ? evidenceKmsRotationDaysFromEnv(process.env)
     : null;
@@ -1453,6 +1458,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     cryptoAppRuntime,
     coworkerRuntime,
     cryptoEvidenceStore,
+    cryptoEvidenceRuntime,
     drainEmailOutbox,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
@@ -8040,6 +8046,7 @@ function createRoutes(
   cryptoAppRuntime: MatterhornCryptoAppRuntimeServices,
   coworkerRuntime: MatterhornCoworkerRuntimeServices,
   cryptoEvidenceStore: MatterhornCryptoEvidenceStore | null,
+  cryptoEvidenceRuntime: MatterhornCryptoEvidenceRuntime,
   drainEmailOutbox: () => Promise<void>,
 ): Route[] {
   const routes: Route[] = [];
@@ -9290,6 +9297,60 @@ function createRoutes(
         return noStoreJsonResponse({ mode: cryptoAppRuntime.mode, submission });
       } catch (error) {
         throw cryptoDeveloperApiError(error);
+      }
+    },
+  );
+
+  addRoute(routes, "GET", "/workspace/:id/crypto-evidence", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const rawLimit = ctx.url.searchParams.get("limit");
+    const limit = rawLimit === null ? 50 : Number(rawLimit);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw new ApiError(400, "crypto_evidence_query_invalid", "Evidence query limit must be between 1 and 100.");
+    }
+    const items = cryptoEvidenceRuntime.verification
+      ? cryptoEvidenceRuntime.verification.list({
+          workspaceId: workspace.id,
+          ownerId: cryptoAppCreatedBy(ctx),
+        }).slice(0, limit)
+      : [];
+    return noStoreJsonResponse({
+      mode: cryptoEvidenceRuntime.mode,
+      available: cryptoEvidenceRuntime.available,
+      items,
+    });
+  });
+
+  addRoute(
+    routes,
+    "POST",
+    "/workspace/:id/crypto-evidence/:evidenceId/verify",
+    "client",
+    async (ctx) => {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const evidenceId = ctx.params.evidenceId?.trim() ?? "";
+      if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+      }
+      if (!cryptoEvidenceRuntime.verification) {
+        throw new ApiError(
+          503,
+          "crypto_evidence_unavailable",
+          "Encrypted coworker evidence is not enabled for this deployment.",
+        );
+      }
+      try {
+        return noStoreJsonResponse(await cryptoEvidenceRuntime.verification.verify({
+          workspaceId: workspace.id,
+          ownerId: cryptoAppCreatedBy(ctx),
+          evidenceId,
+          signal: ctx.request.signal,
+        }));
+      } catch (error) {
+        if (error instanceof Error && error.message === "crypto_evidence_not_found") {
+          throw new ApiError(404, "crypto_evidence_not_found", "Evidence record not found.");
+        }
+        throw new ApiError(503, "crypto_evidence_verification_unavailable", "Evidence verification is temporarily unavailable.");
       }
     },
   );

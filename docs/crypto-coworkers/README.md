@@ -118,6 +118,8 @@ Future readiness rules are fail-closed:
 
 The evidence-key foundation uses AWS KMS envelope keys when configured. Set `MATTERHORN_EVIDENCE_KMS_REGION` and `MATTERHORN_EVIDENCE_KMS_KEY_ID`; AWS credentials continue through the SDK's server-side credential chain and must never use a browser-visible variable. `MATTERHORN_EVIDENCE_KMS_ROTATION_DAYS` defaults to `90` and controls the daily, serialized rewrap scan. KMS receives only a random-nonce-bound digest as encryption context—not account, workspace, run, coworker, or wallet identifiers. Rotation uses KMS `ReEncrypt`, so the plaintext data key never returns to Matterhorn. The durable tenant index stores the KMS-wrapped data key and ciphertext locally, enforces owner/workspace/coworker isolation, and clears the wrapped key before a secure SQLite/WAL checkpoint during expiry, workspace deletion, or user-requested key destruction. Seal, decrypt, proof, rotation, denial, and destruction events are tenant-scoped, hash-chained, content-free, and expire after 365 days.
 
+Account users can inspect their redacted evidence packets through `GET /workspace/:id/crypto-evidence` and request independent read-only verification through `POST /workspace/:id/crypto-evidence/:evidenceId/verify`. The server derives the owner from the authenticated workspace, never accepts an owner override, and omits tenant identifiers, KMS references, wrapped keys, ciphertext, prompts, signatures, and wallet data from the response. Testnet verification recomputes the ciphertext hash and Merkle proof, reads the exact Walrus certification through the pinned Sui HTTP/2 boundary, and compares an independently retrieved Walrus blob byte-for-byte. It performs no publication, anchoring, signing, or transaction submission. When evidence mode is `off`, the list returns an explicit unavailable state and live verification fails closed.
+
 ## Build sequence
 
 The comprehensive execution plan, delivery cadence, metrics, and stop conditions are maintained in [`phases-1-5-plan.md`](./phases-1-5-plan.md). Monid-derived product patterns and the crypto-specific changes are documented in [`monid-reference-audit.md`](./monid-reference-audit.md).
@@ -160,12 +162,12 @@ Exit: coworkers can prepare exact financial work but no agent-facing path can si
 - Canonical minimal evidence receipt: local compiler complete for finalized guarded runs, with closed fields and per-bundle salted identity hashes.
 - Envelope encryption before publication: AES-256-GCM sealing, exact recipient binding, and plaintext-key zeroization complete.
 - Public ciphertext boundary: Walrus-eligible bytes exclude local KMS references and plaintext hashes; deterministic Merkle batching and proof verification are complete.
-- Authenticated, peer-pinned testnet Walrus publisher and byte-exact readback gate: backend implementation complete and disconnected from account routes.
+- Authenticated, peer-pinned testnet Walrus publisher and byte-exact readback gate: backend implementation complete. Account routes expose only owner-scoped redacted packets and a read-only verification result.
 - Quilt batching for small encrypted bundles.
-- Pinned Sui Walrus certification verification: backend implementation complete. Non-identifying anchor and verification UI remain pending.
+- Pinned Sui Walrus certification verification and the account-facing proof UI: complete for existing stored testnet publication records.
 - Renewal, expiry, user deletion, and encryption-key destruction workflows.
 
-The implemented foundation can perform an authenticated testnet Walrus ciphertext upload and independent pinned Sui certification read, but it remains disconnected from account-facing routes. It performs no Sui anchor or transaction submission, and mainnet remains fail-closed and disabled.
+The implemented foundation can perform an authenticated testnet Walrus ciphertext upload and independent pinned Sui certification read. The account-facing surface is deliberately read-only: it lists redacted records, reports local/key-destroyed states, and verifies an existing testnet publication without disclosing ciphertext or tenant metadata. Automatic finalized-run sealing, user opt-in, publication orchestration, renewal, and production anchor creation remain pending. It performs no Sui transaction submission, and mainnet remains fail-closed and disabled.
 
 Exit: a user can independently verify a financial run without any plaintext prompt, secret, wallet signature, or private attachment appearing in public storage.
 

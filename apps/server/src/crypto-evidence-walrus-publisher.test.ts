@@ -160,6 +160,18 @@ describe("testnet Walrus evidence publisher", () => {
       expect(publicPayload).not.toContain("recipient_private");
       expect(publicPayload).not.toContain("owner_walrus");
       expect(publicPayload).not.toContain("workspace_walrus");
+      await expect(publisher.verify({
+        workspaceId: "workspace_walrus",
+        ownerId: "owner_walrus",
+        evidenceId: value.record.id,
+        signal: new AbortController().signal,
+      })).resolves.toEqual({ certification: certification() });
+      await expect(publisher.verify({
+        workspaceId: "workspace_walrus",
+        ownerId: "attacker_owner",
+        evidenceId: value.record.id,
+        signal: new AbortController().signal,
+      })).rejects.toThrow("crypto_evidence_not_found");
     } finally {
       value.state.close();
       await rm(value.directory, { recursive: true, force: true });
