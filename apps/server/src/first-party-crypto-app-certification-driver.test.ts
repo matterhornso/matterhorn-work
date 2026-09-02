@@ -22,6 +22,9 @@ const PEER = "93.184.216.34";
 const SUI_ADDRESS = `0x${"1".repeat(64)}`;
 const SUI_RECIPIENT = `0x${"2".repeat(64)}`;
 const HYPERLIQUID_ADDRESS = `0x${"a".repeat(40)}`;
+const BITTENSOR_SENDER = `5${"C".repeat(47)}`;
+const BITTENSOR_DESTINATION = `5${"D".repeat(47)}`;
+const BITTENSOR_HOTKEY = `5${"E".repeat(47)}`;
 const keys = generateKeyPairSync("ed25519");
 
 const manifests = [...buildMatterhornFirstPartyTestnetManifests({
@@ -58,6 +61,9 @@ const inputs: MatterhornFirstPartyCertificationInputs = {
   },
   bittensor_subnet_list: { limit: 2 },
   bittensor_subnet_read: { netuid: 14, validatorLimit: 2 },
+  bittensor_prepare_transfer: { sender: BITTENSOR_SENDER, destination: BITTENSOR_DESTINATION, amountTao: "0.1" },
+  bittensor_prepare_stake: { sender: BITTENSOR_SENDER, hotkey: BITTENSOR_HOTKEY, netuid: 14, amountTao: "0.1" },
+  bittensor_prepare_unstake: { sender: BITTENSOR_SENDER, hotkey: BITTENSOR_HOTKEY, netuid: 14, amountTao: "0.1" },
 };
 
 function output(actionId: string): unknown {
@@ -159,6 +165,29 @@ function output(actionId: string): unknown {
     metagraphBlock: 123457,
     observedAt: NOW,
   };
+  if (["bittensor_prepare_transfer", "bittensor_prepare_stake", "bittensor_prepare_unstake"].includes(actionId)) {
+    const action = actionId.replace("bittensor_prepare_", "") as "transfer" | "stake" | "unstake";
+    const transfer = action === "transfer";
+    return {
+      preparedActionId: `bt_${action}_certification`,
+      network: "bittensor:test",
+      action,
+      sender: BITTENSOR_SENDER,
+      destination: transfer ? BITTENSOR_DESTINATION : null,
+      hotkey: transfer ? null : BITTENSOR_HOTKEY,
+      netuid: transfer ? null : 14,
+      amountTao: "0.1",
+      availableTao: "10",
+      currentStakeTao: transfer ? null : "2",
+      expectedAlpha: transfer ? null : "0.19",
+      networkFeeTao: "0.0001",
+      swapFeeTao: transfer ? null : "0.00005",
+      slippageBps: transfer ? null : 25,
+      block: 123456,
+      simulationReference: `sha256:${action === "transfer" ? "3" : action === "stake" ? "4" : "5"}`.padEnd(71, action === "transfer" ? "3" : action === "stake" ? "4" : "5"),
+      expiresAt: "2026-09-01T12:00:15.000Z",
+    };
+  }
   if (actionId === "execute_transaction") {
     throw new Error("first_party_app_action_invalid");
   }
@@ -214,6 +243,7 @@ describe("first-party crypto app certification driver", () => {
       const serialized = JSON.stringify(report);
       expect(serialized).not.toContain(SUI_ADDRESS);
       expect(serialized).not.toContain(HYPERLIQUID_ADDRESS);
+      expect(serialized).not.toContain(BITTENSOR_SENDER);
       expect(serialized).not.toContain("accountValueUsd");
     }
   });

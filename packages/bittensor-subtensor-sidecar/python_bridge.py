@@ -6,9 +6,8 @@ BITTENSOR_SIDECAR_MODE=python only in an environment that has the official
 `bittensor` Python package installed and network access to the target Subtensor.
 
 This bridge intentionally never accepts seed phrases, mnemonics, private keys,
-SURI strings, or keyfiles. It only performs public reads, unsigned preview
-normalization, and optional signed-payload submission when the surrounding
-sidecar enables submission explicitly.
+SURI strings, or keyfiles. It only performs public reads and unsigned preview
+normalization. Submission is not implemented or configurable.
 """
 
 from __future__ import annotations
@@ -77,10 +76,13 @@ def import_bittensor():
 def get_subtensor():
     bt = import_bittensor()
     network = os.environ.get("BITTENSOR_NETWORK", "finney")
+    constructor = getattr(bt, "Subtensor", None) or getattr(bt, "subtensor", None)
+    if not callable(constructor):
+        raise RuntimeError("The installed Bittensor SDK does not expose a Subtensor constructor.")
     try:
-        return bt.subtensor(network=network)
+        return constructor(network=network)
     except TypeError:
-        return bt.subtensor(network)
+        return constructor(network)
 
 
 def to_float(value: Any) -> float | None:
@@ -428,8 +430,13 @@ def wallet(payload: dict[str, Any]) -> dict[str, Any]:
 
 def balance_from_tao(amount_tao: float) -> Any:
     try:
+        from bittensor.utils.balance import Balance  # type: ignore
+
+        balance_cls = Balance
+    except Exception:
         bt = import_bittensor()
         balance_cls = getattr(bt, "Balance", None)
+    try:
         if balance_cls is not None and hasattr(balance_cls, "from_tao"):
             return balance_cls.from_tao(amount_tao)
     except Exception:
@@ -444,6 +451,111 @@ def call_alpha_quote(info: Any, method_name: str, amount_tao: float) -> Any:
     for amount in (balance_from_tao(amount_tao), amount_tao):
         try:
             return method(amount)
+        except Exception:
+            pass
+    return None
+
+
+def public_keypair(ss58_address: str) -> Any:
+    """Build a public-only keypair for fee queries; it cannot sign."""
+    try:
+        from substrateinterface import Keypair  # type: ignore
+
+        return Keypair(ss58_address=ss58_address)
+    except Exception:
+        bt = import_bittensor()
+        keypair_cls = getattr(bt, "Keypair", None)
+        if keypair_cls is None:
+            raise RuntimeError("The installed SDK cannot construct a public-only keypair for fee estimation.")
+        return keypair_cls(ss58_address=ss58_address)
+
+
+def compose_call(subtensor: Any, module: str, function: str, params: dict[str, Any]) -> Any:
+    for target in (subtensor, getattr(subtensor, "substrate", None)):
+        method = getattr(target, "compose_call", None)
+        if not callable(method):
+            continue
+        try:
+            return method(call_module=module, call_function=function, call_params=params)
+        except TypeError:
+            try:
+                return method(module, function, params)
+            except Exception:
+                pass
+        except Exception:
+            pass
+    raise RuntimeError("The installed SDK could not compose this unsigned Bittensor call.")
+
+
+def network_fee_tao(subtensor: Any, payload: dict[str, Any], amount_tao: float) -> float | None:
+    action = str(payload.get("action") or "")
+    sender = str(payload.get("coldkey") or "")
+    amount = balance_from_tao(amount_tao)
+    try:
+        if action == "transfer":
+            rao = getattr(amount, "rao", None)
+            if rao is None:
+                rao = int(amount_tao * 1_000_000_000)
+            call = compose_call(
+                subtensor,
+                "Balances",
+                "transfer_keep_alive",
+                {"dest": str(payload.get("destination") or ""), "value": int(rao)},
+            )
+        else:
+            netuid = int(payload.get("netuid"))
+            hotkey = str(payload.get("hotkey") or "")
+            rao = getattr(amount, "rao", None)
+            if rao is None:
+                rao = int(amount_tao * 1_000_000_000)
+            try:
+                from bittensor.core.extrinsics.params import StakingParams  # type: ignore
+
+                if action == "stake":
+                    params = StakingParams.add_stake(netuid=netuid, hotkey_ss58=hotkey, amount=amount)
+                    call = compose_call(subtensor, "SubtensorModule", "add_stake", params)
+                elif action == "unstake":
+                    params_method = getattr(StakingParams, "unstake", None) or getattr(StakingParams, "remove_stake", None)
+                    if not callable(params_method):
+                        raise AttributeError("No unstake parameter builder is available.")
+                    params = params_method(netuid=netuid, hotkey_ss58=hotkey, amount=amount)
+                    call = compose_call(subtensor, "SubtensorModule", "remove_stake", params)
+                else:
+                    return None
+            except (ImportError, AttributeError):
+                from bittensor.core.extrinsics.pallets import SubtensorModule  # type: ignore
+
+                pallet = SubtensorModule(subtensor)
+                if action == "stake":
+                    call = pallet.add_stake(netuid=netuid, hotkey=hotkey, amount_staked=int(rao))
+                elif action == "unstake":
+                    call = pallet.remove_stake(netuid=netuid, hotkey=hotkey, amount_unstaked=int(rao))
+                else:
+                    return None
+        fee = subtensor.get_extrinsic_fee(call, public_keypair(sender))
+        return to_float(fee)
+    except Exception:
+        return None
+
+
+def swap_fee_tao(subtensor: Any, payload: dict[str, Any], amount_tao: float) -> float | None:
+    action = str(payload.get("action") or "")
+    if action == "transfer":
+        return None
+    amount = balance_from_tao(amount_tao)
+    netuid = int(payload.get("netuid"))
+    method_name = "get_stake_add_fee" if action == "stake" else "get_unstake_fee"
+    method = getattr(subtensor, method_name, None)
+    if not callable(method):
+        return None
+    attempts = (
+        (lambda: method(amount, netuid)) if action == "stake" else (lambda: method(netuid, amount)),
+        (lambda: method(netuid, amount)) if action == "stake" else (lambda: method(amount, netuid)),
+        lambda: method(amount=amount, netuid=netuid),
+    )
+    for attempt in attempts:
+        try:
+            return to_float(attempt())
         except Exception:
             pass
     return None
@@ -484,6 +596,8 @@ def quote(payload: dict[str, Any]) -> dict[str, Any]:
         if price > 0:
             expected_alpha = amount_tao / price
             ideal_alpha = expected_alpha
+    network_fee = network_fee_tao(subtensor, payload, amount_tao) if amount_tao is not None else None
+    swap_fee = swap_fee_tao(subtensor, payload, amount_tao) if amount_tao is not None else None
     return {
         **sdk_meta("bittensor-python-sdk", subtensor),
         "action": payload.get("action", "stake"),
@@ -492,7 +606,8 @@ def quote(payload: dict[str, Any]) -> dict[str, Any]:
         "priceTao": dynamic.get("priceTao") if dynamic else None,
         "idealAlpha": ideal_alpha,
         "expectedAlpha": expected_alpha,
-        "feeTao": None,
+        "networkFeeTao": network_fee,
+        "swapFeeTao": swap_fee,
         "slippageBps": slippage_bps,
         "rateTolerance": payload.get("rateTolerance", 0.005),
         "dynamic": dynamic,
@@ -509,6 +624,8 @@ def quote(payload: dict[str, Any]) -> dict[str, Any]:
 
 def prepare(payload: dict[str, Any]) -> dict[str, Any]:
     quoted = quote(payload)
+    sender = str(payload.get("coldkey") or "")
+    public_wallet = wallet({"ss58Address": sender})
     unsigned = {
         "chain": "bittensor",
         "network": os.environ.get("BITTENSOR_NETWORK", "finney"),
@@ -526,19 +643,14 @@ def prepare(payload: dict[str, Any]) -> dict[str, Any]:
     }
     return {
         **quoted,
+        "availableTao": public_wallet.get("freeTao"),
+        "stakePositions": public_wallet.get("stakePositions", []),
         "unsignedPayload": unsigned,
         "warnings": [
             *quoted["warnings"],
             "Unsigned payload only. This bridge does not sign or receive key material.",
         ],
     }
-
-
-def submit(_: dict[str, Any]) -> dict[str, Any]:
-    raise RuntimeError(
-        "Signed-payload submission through the Python bridge is intentionally not implemented yet. "
-        "Add SDK-version-specific submission only after signed payload verification tests are in place."
-    )
 
 
 def main() -> int:
@@ -556,7 +668,6 @@ def main() -> int:
         "wallet": wallet,
         "quote": quote,
         "prepare": prepare,
-        "submit": submit,
     }
     if action not in handlers:
         raise RuntimeError(f"Unknown bridge action: {action}")

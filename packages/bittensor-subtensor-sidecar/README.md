@@ -20,8 +20,13 @@ Defaults:
 Connect Matterhorn to it:
 
 ```bash
+export BITTENSOR_NETWORK=test
 export BITTENSOR_SUBTENSOR_SIDECAR_URL=http://127.0.0.1:9876
 ```
+
+The certified Crypto App contract is testnet-only and rejects a sidecar that
+reports `finney` or `local`. Keep a separate legacy Finney sidecar if operator
+work still needs mainnet public reads.
 
 ## Modes
 
@@ -58,7 +63,8 @@ The bridge supports public read paths defensively:
 - wallet balance and stake-position reads where the installed SDK exposes them
 - Dynamic TAO quote enrichment where the installed SDK exposes conversion helpers
 
-Signed-payload submission remains disabled until SDK-version-specific signed-payload verification tests are added.
+Signed-payload submission is not part of the bridge. The connected wallet owns
+signing and broadcast after Matterhorn's reviewed-action handoff.
 
 ## Endpoints
 
@@ -136,7 +142,8 @@ Returns quote shape compatible with Matterhorn:
 - `priceTao`
 - `idealAlpha`
 - `expectedAlpha`
-- `feeTao`
+- `networkFeeTao`
+- `swapFeeTao`
 - `slippageBps`
 - `rateTolerance`
 - `source`
@@ -151,9 +158,9 @@ Returns an unsigned payload for external signing. The request and response are r
 
 ### `POST /submit`
 
-Disabled by default. In mock mode this returns `501`.
-
-Future SDK submission must only accept already-signed payloads and must include signed-payload verification tests before being enabled.
+Permanently returns `501 wallet_airlock_required`. There is no Python bridge
+handler, environment switch, or SDK path that can enable submission. Review,
+sign, and broadcast happen only in the connected wallet.
 
 ## Safety Rules
 

@@ -54,10 +54,19 @@ describe("crypto coworker templates", () => {
       const template = getMatterhornCoworkerTemplate(id)!;
       expect(template.profile.automaticAuthorities).toContain("prepare");
       expect(template.profile.limits.maxPrepareCallsPerFamily).toBe(1);
-      expect(template.profile.allowedNetworks.every((network) => network.endsWith(":testnet"))).toBe(true);
+      expect(template.profile.allowedNetworks.every((network) => (
+        network.endsWith(":testnet") || network === "bittensor:test"
+      ))).toBe(true);
       expect(template.profile.allowedActionIds.some((action) => action.endsWith("_preview"))).toBe(true);
+      expect(template.profile.allowedAppIds).toContain("matterhorn.bittensor-testnet");
+      expect(template.profile.allowedActionIds).toContain("bittensor_prepare_transfer");
       expect(template.profile.privacy.allowUnverifiedProviderConsent).toBe(false);
     }
+    expect(getMatterhornCoworkerTemplate("transaction_coordinator")?.profile.allowedActionIds).toEqual(
+      expect.arrayContaining(["bittensor_prepare_stake", "bittensor_prepare_unstake"]),
+    );
+    expect(getMatterhornCoworkerTemplate("treasury_coworker")?.profile.allowedActionIds)
+      .not.toContain("bittensor_prepare_stake");
   });
 
   test("returns defensive copies and no fallback for unknown templates", () => {

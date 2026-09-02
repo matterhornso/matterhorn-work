@@ -189,6 +189,18 @@ async function postJson(context: RequestContext, body: unknown): Promise<unknown
   return response.value;
 }
 
+async function postJsonAt(context: RequestContext, endpoint: URL, body: unknown): Promise<unknown> {
+  const response = await context.requestJson({
+    endpoint,
+    approvedAddresses: context.approvedAddresses,
+    method: "POST",
+    signal: context.signal,
+    body,
+  });
+  newestAddress(context, response);
+  return response.value;
+}
+
 async function getJson(context: RequestContext, endpoint: URL): Promise<unknown> {
   const response = await context.requestJson({
     endpoint,
@@ -701,6 +713,161 @@ function oldestObservation(...values: string[]): string {
   ));
 }
 
+function bittensorSs58(value: unknown, field: string): string {
+  const address = boundedBittensorText(value, field, 64);
+  if (!SS58_PUBLIC_ADDRESS_RE.test(address)) {
+    throw new Error(`first_party_bittensor_${field}_invalid`);
+  }
+  return address;
+}
+
+function bittensorPreparedAction(actionId: string): "transfer" | "stake" | "unstake" | null {
+  if (actionId === "bittensor_prepare_transfer") return "transfer";
+  if (actionId === "bittensor_prepare_stake") return "stake";
+  if (actionId === "bittensor_prepare_unstake") return "unstake";
+  return null;
+}
+
+function bittensorStakeFor(
+  wallet: JsonObject,
+  netuid: number,
+  hotkey: string,
+): string {
+  if (!Array.isArray(wallet.stakePositions) || wallet.stakePositions.length > 512) {
+    throw new Error("first_party_bittensor_wallet_stake_invalid");
+  }
+  const matching = wallet.stakePositions.filter((value) => {
+    const position = record(value);
+    return position
+      && bittensorInteger(position.netuid, "stake_netuid", 65_535) === netuid
+      && bittensorSs58(position.validatorHotkey, "stake_hotkey") === hotkey;
+  });
+  if (matching.length > 1) throw new Error("first_party_bittensor_wallet_stake_ambiguous");
+  return matching.length === 0
+    ? "0"
+    : decimal(record(matching[0])?.taoValue, "bittensor_current_stake");
+}
+
+async function executeBittensorPreview(
+  context: RequestContext,
+  actionId: string,
+  args: JsonObject,
+): Promise<{ data: unknown; source: string; observedAt: string; blockOrVersion: string }> {
+  const action = bittensorPreparedAction(actionId);
+  if (!action) throw new Error("first_party_bittensor_action_invalid");
+  const sender = bittensorSs58(args.sender, "sender");
+  const amountTao = decimal(args.amountTao, "bittensor_amount_tao", false);
+  const destination = action === "transfer" ? bittensorSs58(args.destination, "destination") : null;
+  const hotkey = action === "transfer" ? null : bittensorSs58(args.hotkey, "hotkey");
+  const netuid = action === "transfer" ? null : bittensorInteger(args.netuid, "netuid", 65_535);
+  const requestBody = {
+    action,
+    coldkey: sender,
+    amountTao,
+    ...(destination === null ? {} : { destination }),
+    ...(hotkey === null ? {} : { hotkey }),
+    ...(netuid === null ? {} : { netuid }),
+  };
+  const [preparedValue, walletValue] = await Promise.all([
+    postJsonAt(
+      context,
+      bittensorSidecarEndpoint(context.endpoint, "/extrinsics/prepare"),
+      requestBody,
+    ),
+    getJson(
+      context,
+      bittensorSidecarEndpoint(context.endpoint, `/wallet/${encodeURIComponent(sender)}`),
+    ),
+  ]);
+  const prepared = bittensorSidecarMeta(preparedValue);
+  const wallet = bittensorSidecarMeta(walletValue);
+  const unsigned = record(prepared.payload.unsignedPayload);
+  if (!unsigned
+    || unsigned.chain !== "bittensor"
+    || unsigned.network !== "test"
+    || unsigned.action !== action
+    || bittensorSs58(unsigned.coldkey, "prepared_sender") !== sender
+    || decimal(unsigned.amountTao, "bittensor_prepared_amount", false) !== amountTao
+    || (action === "transfer" && bittensorSs58(unsigned.destination, "prepared_destination") !== destination)
+    || (action !== "transfer" && bittensorSs58(unsigned.hotkey, "prepared_hotkey") !== hotkey)
+    || (action !== "transfer" && bittensorInteger(unsigned.netuid, "prepared_netuid", 65_535) !== netuid)) {
+    throw new Error("first_party_bittensor_prepared_terms_conflict");
+  }
+  if (bittensorSs58(wallet.payload.ss58Address, "wallet_sender") !== sender) {
+    throw new Error("first_party_bittensor_wallet_conflict");
+  }
+  const availableTao = decimal(wallet.payload.freeTao, "bittensor_available_tao");
+  const networkFeeTao = decimal(prepared.payload.networkFeeTao ?? prepared.payload.feeTao, "bittensor_network_fee", false);
+  const swapFeeTao = action === "transfer"
+    ? null
+    : decimal(prepared.payload.swapFeeTao, "bittensor_swap_fee");
+  const expectedAlpha = action === "transfer"
+    ? null
+    : decimal(prepared.payload.expectedAlpha, "bittensor_expected_alpha", false);
+  const slippageValue = action === "transfer"
+    ? null
+    : bittensorInteger(prepared.payload.slippageBps, "slippage_bps", 10_000);
+  const currentStakeTao = action === "transfer"
+    ? null
+    : bittensorStakeFor(wallet.payload, netuid!, hotkey!);
+  const amount = Number(amountTao);
+  const available = Number(availableTao);
+  const networkFee = Number(networkFeeTao);
+  const swapFee = Number(swapFeeTao ?? "0");
+  const currentStake = Number(currentStakeTao ?? "0");
+  if (!Number.isFinite(amount + networkFee + swapFee)
+    || (action !== "unstake" && amount + networkFee + swapFee > available)
+    || (action === "unstake" && (networkFee > available || amount + swapFee > currentStake))) {
+    throw new Error("first_party_bittensor_balance_insufficient");
+  }
+  const observedAt = oldestObservation(prepared.observedAt, wallet.observedAt);
+  const block = Math.min(prepared.block, wallet.block);
+  const exactTerms = {
+    version: "matterhorn.bittensor.testnet-preview.v1",
+    network: BITTENSOR_NETWORK,
+    action,
+    sender,
+    destination,
+    hotkey,
+    netuid,
+    amountTao,
+    availableTao,
+    currentStakeTao,
+    expectedAlpha,
+    networkFeeTao,
+    swapFeeTao,
+    slippageBps: slippageValue,
+    block,
+    observedAt,
+  };
+  const digest = sha256(exactTerms);
+  const simulationReference = `sha256:${digest}`;
+  return {
+    data: {
+      preparedActionId: `bt_preview_${digest.slice(0, 20)}`,
+      network: BITTENSOR_NETWORK,
+      action,
+      sender,
+      destination,
+      hotkey,
+      netuid,
+      amountTao,
+      availableTao,
+      currentStakeTao,
+      expectedAlpha,
+      networkFeeTao,
+      swapFeeTao,
+      slippageBps: slippageValue,
+      block,
+      simulationReference,
+      expiresAt: new Date(new Date(observedAt).getTime() + 15_000).toISOString(),
+    },
+    source: "Bittensor testnet pinned SDK simulation",
+    observedAt,
+    blockOrVersion: String(block),
+  };
+}
+
 async function executeBittensor(
   context: RequestContext,
   actionId: string,
@@ -708,6 +875,9 @@ async function executeBittensor(
   args: JsonObject,
 ): Promise<{ data: unknown; source: string; observedAt: string; blockOrVersion: string }> {
   if (network !== BITTENSOR_NETWORK) throw new Error("first_party_bittensor_network_invalid");
+  if (bittensorPreparedAction(actionId)) {
+    return executeBittensorPreview(context, actionId, args);
+  }
   const source = "Matterhorn Bittensor testnet sidecar";
   if (actionId === "bittensor_subnet_list") {
     const limit = positiveInteger(args.limit, 12, 50);

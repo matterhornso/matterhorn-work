@@ -279,7 +279,8 @@ function quote(input) {
     priceTao,
     idealAlpha,
     expectedAlpha: alphaWithSlippage ?? expectedAlpha,
-    feeTao: 0.0001,
+    networkFeeTao: 0.0001,
+    swapFeeTao: input.action === "transfer" ? null : amountTao === null ? null : amountTao * 0.0005,
     slippageBps,
     rateTolerance: numberOrNull(input.rateTolerance) ?? 0.005,
     dynamic,
@@ -523,15 +524,11 @@ async function dispatch(req, res) {
     const body = await readBody(req);
     const forbidden = forbiddenKeyPath(body);
     if (forbidden) return json(res, 400, { ok: false, error: "forbidden_key_material", message: `Request contains forbidden key material field: ${forbidden}` });
-    if (MODE !== "python" || process.env.BITTENSOR_ENABLE_SUBMIT !== "1") {
-      return json(res, 501, {
-        ok: false,
-        status: "submit_disabled",
-        message: "Broadcast submission is disabled. Use Python SDK mode with BITTENSOR_ENABLE_SUBMIT=1 after external signing is verified.",
-      });
-    }
-    const data = await pythonBridge("submit", body);
-    return json(res, 200, data);
+    return json(res, 501, {
+      ok: false,
+      status: "wallet_airlock_required",
+      message: "This service cannot broadcast transactions. Review, sign, and submit only in the connected wallet.",
+    });
   }
 
   return json(res, 404, { ok: false, error: "not_found", message: "Unknown Bittensor sidecar endpoint." });

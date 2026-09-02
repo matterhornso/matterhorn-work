@@ -93,7 +93,8 @@ try {
 
   const submit = await post("/submit", { signature: "0x1234567890abcdef", preview: preview.json.unsignedPayload });
   assert.equal(submit.res.status, 501);
-  assert.equal(submit.json.status, "submit_disabled");
+  assert.equal(submit.json.status, "wallet_airlock_required");
+  assert.equal(submit.json.message.includes("cannot broadcast"), true);
 
   console.log("Bittensor Subtensor sidecar contract tests passed.");
 } finally {

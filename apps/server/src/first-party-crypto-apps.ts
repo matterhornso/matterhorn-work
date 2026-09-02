@@ -50,6 +50,9 @@ const FIRST_PARTY_ACTION_PROXY_TOOLS: Readonly<Record<string, Readonly<Record<st
   "matterhorn.bittensor-testnet": {
     bittensor_subnet_list: "matterhorn_bittensor_chat",
     bittensor_subnet_read: "matterhorn_bittensor_chat",
+    bittensor_prepare_transfer: "matterhorn_bittensor_prepare_action",
+    bittensor_prepare_stake: "matterhorn_bittensor_prepare_action",
+    bittensor_prepare_unstake: "matterhorn_bittensor_prepare_action",
   },
 };
 
@@ -179,6 +182,25 @@ export function firstPartyCryptoAppAdapterArguments(input: {
       throw new Error("first_party_crypto_app_arguments_invalid");
     }
     return { netuid, validatorLimit };
+  }
+  if (input.appId === "matterhorn.bittensor-testnet"
+    && ["bittensor_prepare_transfer", "bittensor_prepare_stake", "bittensor_prepare_unstake"].includes(input.actionId)) {
+    const sender = textArgument(args.sender);
+    const amountTao = decimalArgument(args.amountTao);
+    if (!sender || !amountTao || Number(amountTao) <= 0) {
+      throw new Error("first_party_crypto_app_arguments_invalid");
+    }
+    if (input.actionId === "bittensor_prepare_transfer") {
+      const destination = textArgument(args.destination);
+      if (!destination) throw new Error("first_party_crypto_app_arguments_invalid");
+      return { sender, destination, amountTao };
+    }
+    const hotkey = textArgument(args.hotkey);
+    const netuid = Number(args.netuid);
+    if (!hotkey || !Number.isSafeInteger(netuid) || netuid < 0 || netuid > 65_535) {
+      throw new Error("first_party_crypto_app_arguments_invalid");
+    }
+    return { sender, hotkey, netuid, amountTao };
   }
   throw new Error("first_party_crypto_app_action_unsupported");
 }
@@ -510,11 +532,81 @@ export function buildMatterhornFirstPartyBittensorTestnetManifest(
     "active",
     "validatorPermit",
   ]);
+  const nullableDecimal = { oneOf: [decimalString, { type: "null" }] };
+  const nullableAddress = { oneOf: [addressString, { type: "null" }] };
+  const nullableNetuid = {
+    oneOf: [{ type: "integer", minimum: 0, maximum: 65_535 }, { type: "null" }],
+  };
+  const bittensorPreviewOutput = (action: "transfer" | "stake" | "unstake") => objectSchema({
+    preparedActionId: identifierString,
+    network: { type: "string", const: "bittensor:test" },
+    action: { type: "string", const: action },
+    sender: addressString,
+    destination: nullableAddress,
+    hotkey: nullableAddress,
+    netuid: nullableNetuid,
+    amountTao: decimalString,
+    availableTao: decimalString,
+    currentStakeTao: nullableDecimal,
+    expectedAlpha: nullableDecimal,
+    networkFeeTao: decimalString,
+    swapFeeTao: nullableDecimal,
+    slippageBps: { oneOf: [{ type: "integer", minimum: 0, maximum: 10_000 }, { type: "null" }] },
+    block: { type: "integer", minimum: 0 },
+    simulationReference: identifierString,
+    expiresAt: timestampString,
+  }, [
+    "preparedActionId",
+    "network",
+    "action",
+    "sender",
+    "destination",
+    "hotkey",
+    "netuid",
+    "amountTao",
+    "availableTao",
+    "currentStakeTao",
+    "expectedAlpha",
+    "networkFeeTao",
+    "swapFeeTao",
+    "slippageBps",
+    "block",
+    "simulationReference",
+    "expiresAt",
+  ]);
+  const financialAction = (
+    id: "bittensor_prepare_transfer" | "bittensor_prepare_stake" | "bittensor_prepare_unstake",
+    action: "transfer" | "stake" | "unstake",
+  ) => ({
+    id,
+    title: action === "transfer"
+      ? "Prepare Bittensor testnet transfer"
+      : `Prepare Bittensor testnet ${action}`,
+    description: `Refresh exact ${action} terms, balances, fees, and testnet state for connected-wallet review.`,
+    access: "prepare" as const,
+    risk: "financial_high" as const,
+    inputSchema: action === "transfer"
+      ? objectSchema({ sender: addressString, destination: addressString, amountTao: decimalString }, ["sender", "destination", "amountTao"])
+      : objectSchema({
+          sender: addressString,
+          hotkey: addressString,
+          netuid: { type: "integer", minimum: 0, maximum: 65_535 },
+          amountTao: decimalString,
+        }, ["sender", "hotkey", "netuid", "amountTao"]),
+    outputProjectionSchema: bittensorPreviewOutput(action),
+    requiredScopes: [],
+    requiresFreshness: true,
+    freshnessMaxAgeMs: 10_000,
+    timeoutMs: 20_000,
+    simulationRequired: true,
+    walletSubmissionOnly: true as const,
+    agentMaySubmit: false as const,
+  });
   return signedManifest(options, {
     appId: "matterhorn.bittensor-testnet",
     displayName: "Bittensor Testnet",
-    description: "Certified read-only Bittensor testnet subnet and validator research.",
-    manifestRevision: "1.0.0",
+    description: "Certified Bittensor testnet research and wallet-reviewed transfer, stake, and unstake preparation.",
+    manifestRevision: "1.1.0",
     transport: { kind: "matterhorn_sdk", endpoint: options.bittensorTestnetSidecarEndpoint },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "bittensor", chainId: "bittensor:test", environment: "testnet" }],
@@ -575,6 +667,9 @@ export function buildMatterhornFirstPartyBittensorTestnetManifest(
         walletSubmissionOnly: true,
         agentMaySubmit: false,
       },
+      financialAction("bittensor_prepare_transfer", "transfer"),
+      financialAction("bittensor_prepare_stake", "stake"),
+      financialAction("bittensor_prepare_unstake", "unstake"),
     ],
   });
 }

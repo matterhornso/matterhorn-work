@@ -27,6 +27,9 @@ export type MatterhornCryptoProtocolFixturePackReport = {
 const SUI_SENDER = `0x${"1".repeat(64)}`;
 const SUI_RECIPIENT = `0x${"2".repeat(64)}`;
 const HYPERLIQUID_ACCOUNT = `0x${"3".repeat(40)}`;
+const BITTENSOR_SENDER = `5${"C".repeat(47)}`;
+const BITTENSOR_DESTINATION = `5${"D".repeat(47)}`;
+const BITTENSOR_HOTKEY = `5${"E".repeat(47)}`;
 const OBSERVED_AT = "2026-09-01T12:00:00.000Z";
 
 function clonePack(pack: MatterhornCryptoProtocolFixturePack): MatterhornCryptoProtocolFixturePack {
@@ -161,7 +164,7 @@ export function createMatterhornHyperliquidTestnetFixturePack(): MatterhornCrypt
   });
 }
 
-/** Public read-only Bittensor testnet fixtures. No wallet or extrinsic material is present. */
+/** Public Bittensor reads plus inert wallet-review previews. No signature or submit material is present. */
 export function createMatterhornBittensorTestnetFixturePack(): MatterhornCryptoProtocolFixturePack {
   return clonePack({
     version: "matterhorn.crypto-protocol-fixture-pack.v1",
@@ -219,6 +222,31 @@ export function createMatterhornBittensorTestnetFixturePack(): MatterhornCryptoP
           observedAt: OBSERVED_AT,
         },
       },
+      ...(["transfer", "stake", "unstake"] as const).map((action) => ({
+        actionId: `bittensor_prepare_${action}`,
+        input: action === "transfer"
+          ? { sender: BITTENSOR_SENDER, destination: BITTENSOR_DESTINATION, amountTao: "0.1" }
+          : { sender: BITTENSOR_SENDER, hotkey: BITTENSOR_HOTKEY, netuid: 14, amountTao: "0.1" },
+        output: {
+          preparedActionId: `fixture-bittensor-${action}-1`,
+          network: "bittensor:test",
+          action,
+          sender: BITTENSOR_SENDER,
+          destination: action === "transfer" ? BITTENSOR_DESTINATION : null,
+          hotkey: action === "transfer" ? null : BITTENSOR_HOTKEY,
+          netuid: action === "transfer" ? null : 14,
+          amountTao: "0.1",
+          availableTao: "10",
+          currentStakeTao: action === "transfer" ? null : "2",
+          expectedAlpha: action === "transfer" ? null : "0.19",
+          networkFeeTao: "0.0001",
+          swapFeeTao: action === "transfer" ? null : "0.00005",
+          slippageBps: action === "transfer" ? null : 25,
+          block: 123456,
+          simulationReference: `sha256:${action === "transfer" ? "3".repeat(64) : action === "stake" ? "4".repeat(64) : "5".repeat(64)}`,
+          expiresAt: "2026-09-01T12:00:15.000Z",
+        },
+      })),
     ],
   });
 }

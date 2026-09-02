@@ -185,6 +185,64 @@ function compileHyperliquid(input: CertifiedCryptoIntentCompileInput, result: Re
   };
 }
 
+function compileBittensor(input: CertifiedCryptoIntentCompileInput, result: Record<string, unknown>): CompiledTerms {
+  const actionById = {
+    bittensor_prepare_transfer: "transfer",
+    bittensor_prepare_stake: "stake",
+    bittensor_prepare_unstake: "unstake",
+  } as const;
+  if (input.result.app.id !== "matterhorn.bittensor-testnet"
+    || input.result.action.access !== "prepare"
+    || input.result.action.network !== "bittensor:test") {
+    throw new Error("crypto_intent_action_unsupported");
+  }
+  const operation = actionById[input.result.action.id as keyof typeof actionById];
+  if (!operation || result.action !== operation || result.network !== "bittensor:test") {
+    throw new Error("crypto_intent_result_invalid");
+  }
+  const sender = text(result.sender);
+  const amountTao = text(result.amountTao);
+  const destination = nullableText(result.destination);
+  const hotkey = nullableText(result.hotkey);
+  const netuid = result.netuid === null ? null : integer(result.netuid, 0, 65_535);
+  const slippageBps = result.slippageBps === null ? null : integer(result.slippageBps, 0, 10_000);
+  const simulationReference = text(result.simulationReference);
+  const expiresAt = text(result.expiresAt);
+  assertRequestField(input.canonicalRequestArguments, "sender", sender);
+  assertRequestDecimal(input.canonicalRequestArguments, "amountTao", amountTao);
+  let canonicalArguments: Record<string, unknown>;
+  let recipient: string;
+  if (operation === "transfer") {
+    if (destination === null || hotkey !== null || netuid !== null || slippageBps !== null) {
+      throw new Error("crypto_intent_result_invalid");
+    }
+    assertRequestField(input.canonicalRequestArguments, "destination", destination);
+    canonicalArguments = { sender, destination, amountTao };
+    recipient = destination;
+  } else {
+    if (destination !== null || hotkey === null || netuid === null || slippageBps === null) {
+      throw new Error("crypto_intent_result_invalid");
+    }
+    assertRequestField(input.canonicalRequestArguments, "hotkey", hotkey);
+    assertRequestField(input.canonicalRequestArguments, "netuid", netuid);
+    canonicalArguments = { sender, hotkey, netuid, amountTao };
+    recipient = hotkey;
+  }
+  return {
+    protocol: "bittensor",
+    network: "bittensor:test",
+    signer: sender,
+    operation,
+    asset: "TAO",
+    amount: amountTao,
+    recipient,
+    slippageBps,
+    canonicalArguments,
+    simulationReference,
+    expiresAt,
+  };
+}
+
 function intentMaterial(intent: Omit<MatterhornCryptoIntent, "id" | "intentHash">): unknown {
   return intent;
 }
@@ -229,6 +287,8 @@ export function compileCertifiedCryptoIntent(input: CertifiedCryptoIntentCompile
     ? compileSui(input, projected)
     : input.result.app.id === "matterhorn.hyperliquid-testnet"
       ? compileHyperliquid(input, projected)
+      : input.result.app.id === "matterhorn.bittensor-testnet"
+        ? compileBittensor(input, projected)
       : (() => { throw new Error("crypto_intent_action_unsupported"); })();
   const expiresAt = new Date(terms.expiresAt);
   if (!Number.isFinite(expiresAt.getTime())
@@ -349,6 +409,40 @@ export function cryptoIntentToReviewedActionHandoffV2(
         reduceOnly: boolean(intent.canonicalArguments.reduceOnly),
       },
     };
+  } else if (intent.protocol === "bittensor"
+    && intent.appId === "matterhorn.bittensor-testnet"
+    && ["bittensor_prepare_transfer", "bittensor_prepare_stake", "bittensor_prepare_unstake"].includes(intent.actionId)) {
+    const operation = text(intent.canonicalArguments.action ?? intent.operation);
+    if (operation !== "transfer" && operation !== "stake" && operation !== "unstake") {
+      throw new Error("crypto_intent_terms_invalid");
+    }
+    handoff = operation === "transfer"
+      ? {
+          version: "matterhorn.reviewed-action-handoff.v1",
+          protocol: "bittensor",
+          source: "agent-card",
+          draft: {
+            operation,
+            sender: intent.signer,
+            destination: text(intent.canonicalArguments.destination),
+            hotkey: null,
+            netuid: null,
+            amountTao: text(intent.canonicalArguments.amountTao),
+          },
+        }
+      : {
+          version: "matterhorn.reviewed-action-handoff.v1",
+          protocol: "bittensor",
+          source: "agent-card",
+          draft: {
+            operation,
+            sender: intent.signer,
+            destination: null,
+            hotkey: text(intent.canonicalArguments.hotkey),
+            netuid: integer(intent.canonicalArguments.netuid, 0, 65_535),
+            amountTao: text(intent.canonicalArguments.amountTao),
+          },
+        };
   } else {
     throw new Error("crypto_intent_action_unsupported");
   }
@@ -356,6 +450,15 @@ export function cryptoIntentToReviewedActionHandoffV2(
     handoff,
     runId: intent.runId,
     signer: intent.signer,
+    exactTerms: {
+      network: intent.network,
+      operation: intent.operation,
+      amount: intent.amount,
+      asset: intent.asset,
+      recipient: intent.recipient,
+      slippage: intent.slippageBps === null ? null : `${intent.slippageBps}bps`,
+      signer: intent.signer,
+    },
     simulation: {
       reference: intent.simulation.reference,
       block: intent.simulation.blockOrVersion,

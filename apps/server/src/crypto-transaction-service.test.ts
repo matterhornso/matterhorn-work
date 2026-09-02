@@ -10,6 +10,7 @@ import type {
 
 import { MatterhornAgentCapabilityBroker } from "./agent-capability.js";
 import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
+import { firstPartyCryptoAppProxyTool } from "./first-party-crypto-apps.js";
 import {
   MatterhornCryptoTransactionError,
   MatterhornCryptoTransactionService,
@@ -25,6 +26,8 @@ import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-stor
 const NOW = new Date("2026-09-01T12:00:01.000Z");
 const SENDER = `0x${"1".repeat(64)}`;
 const RECIPIENT = `0x${"2".repeat(64)}`;
+const BITTENSOR_SENDER = `5${"C".repeat(47)}`;
+const BITTENSOR_HOTKEY = `5${"E".repeat(47)}`;
 const stateStores: MatterhornGuardedRuntimeStateStore[] = [];
 
 afterEach(() => {
@@ -193,16 +196,116 @@ function regeneratedRequest(): MatterhornCryptoTransactionRequest {
   };
 }
 
+function bittensorRequest(): MatterhornCryptoTransactionRequest {
+  const appId = "matterhorn.bittensor-testnet";
+  const actionId = "bittensor_prepare_stake";
+  const network = "bittensor:test";
+  const ownerId = "account_alpha";
+  const runId = "run_bittensor";
+  const callId = "call_bittensor";
+  const layer = (scope: MatterhornTransactionPolicyScope, subjectId: string): MatterhornTransactionPolicyLayer => ({
+    ...policyLayer(scope, subjectId),
+    allowedAppIds: [appId],
+    allowedActionIds: [actionId],
+    allowedNetworks: [network],
+    allowedAssets: ["TAO"],
+    allowedRecipients: [BITTENSOR_HOTKEY],
+  });
+  return {
+    workspaceId: "ws_alpha",
+    organizationId: null,
+    ownerId,
+    sessionId: "ses_bittensor",
+    runId,
+    callId,
+    appId,
+    connectionId: "cxc_bittensor",
+    actionId,
+    network,
+    arguments: {
+      sender: BITTENSOR_SENDER,
+      hotkey: BITTENSOR_HOTKEY,
+      netuid: 14,
+      amountTao: "0.1",
+    },
+    coworker: {
+      ...coworker(),
+      id: "cw_bittensor",
+      name: "Bittensor treasury coworker",
+      role: "Bittensor staking analyst",
+      mission: "Prepare bounded Bittensor testnet actions for wallet review.",
+      allowedAppIds: [appId],
+      allowedActionIds: [actionId],
+      allowedNetworks: [network],
+      allowedAssets: ["TAO"],
+    },
+    policyLayers: {
+      platform: layer("platform", "matterhorn"),
+      organization: null,
+      user: layer("user", ownerId),
+      app: layer("app", appId),
+      run: layer("run", runId),
+      capability: layer("capability", callId),
+    },
+  };
+}
+
+function bittensorAdapterResult(): MatterhornCryptoAppResult {
+  return {
+    ...adapterResult(),
+    app: {
+      id: "matterhorn.bittensor-testnet",
+      manifestRevision: "1.1.0",
+      connectionId: "cxc_bittensor",
+    },
+    action: {
+      id: "bittensor_prepare_stake",
+      access: "prepare",
+      network: "bittensor:test",
+    },
+    observation: {
+      source: "Bittensor testnet pinned SDK simulation",
+      observedAt: "2026-09-01T12:00:00.000Z",
+      blockOrVersion: "123456",
+      ageMs: 20,
+      freshnessMaxAgeMs: 10_000,
+    },
+    result: {
+      preparedActionId: "bt_preview_service",
+      network: "bittensor:test",
+      action: "stake",
+      sender: BITTENSOR_SENDER,
+      destination: null,
+      hotkey: BITTENSOR_HOTKEY,
+      netuid: 14,
+      amountTao: "0.1",
+      availableTao: "10",
+      currentStakeTao: "2",
+      expectedAlpha: "0.19",
+      networkFeeTao: "0.0001",
+      swapFeeTao: "0.00005",
+      slippageBps: 25,
+      block: 123456,
+      simulationReference: `sha256:${"9".repeat(64)}`,
+      expiresAt: "2026-09-01T12:00:15.000Z",
+    },
+  };
+}
+
 function brokerWithConsumedCapability(input: MatterhornCryptoTransactionRequest): MatterhornAgentCapabilityBroker {
+  const proxyToolName = firstPartyCryptoAppProxyTool(input.appId, input.actionId);
+  if (!proxyToolName) throw new Error("missing_test_proxy_tool");
+  const agentId = input.appId === "matterhorn.bittensor-testnet" ? "matterhorn-bittensor" : "matterhorn-sui";
+  const manifestRevision = input.appId === "matterhorn.bittensor-testnet" ? "1.1.0" : "1.0.0";
   const broker = new MatterhornAgentCapabilityBroker("enforce", undefined, () => "s".repeat(64));
   broker.setCoworkerResolver(() => true);
   broker.createRunGrant({
     runId: input.runId,
     workspaceId: input.workspaceId,
     sessionId: input.sessionId,
-    agentId: "matterhorn-sui",
+    agentId,
     executionMode: "work",
-    requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_preview_transfer": true }],
+    requestToolProfiles: [{ "*": false, [`matterhorn-work_${proxyToolName}`]: true }],
     coworker: {
       id: input.coworker.id,
       workspaceId: input.workspaceId,
@@ -216,10 +319,10 @@ function brokerWithConsumedCapability(input: MatterhornCryptoTransactionRequest)
       actionBindings: [{
         connectionId: input.connectionId,
         appId: input.appId,
-        manifestRevision: "1.0.0",
+        manifestRevision,
         actionId: input.actionId,
         network: input.network,
-        proxyToolName: "matterhorn_sui_preview_transfer",
+        proxyToolName,
         access: "prepare",
       }],
       allowedDataLabels: ["public", "wallet_private", "untrusted_external"],
@@ -231,7 +334,7 @@ function brokerWithConsumedCapability(input: MatterhornCryptoTransactionRequest)
   });
   const args = input.consumedCapability?.arguments ?? {
     appId: input.appId,
-    manifestRevision: "1.0.0",
+    manifestRevision,
     connectionId: input.connectionId,
     actionId: input.actionId,
     access: "prepare",
@@ -243,14 +346,14 @@ function brokerWithConsumedCapability(input: MatterhornCryptoTransactionRequest)
     workspaceId: input.workspaceId,
     sessionId: input.sessionId,
     callId: input.callId,
-    agentId: "matterhorn-sui",
-    toolName: "matterhorn_sui_preview_transfer",
+    agentId,
+    toolName: proxyToolName,
     args,
     now: NOW,
   });
   broker.consume({
     token: capability.token,
-    toolName: "matterhorn_sui_preview_transfer",
+    toolName: proxyToolName,
     args,
     now: NOW,
   });
@@ -258,6 +361,67 @@ function brokerWithConsumedCapability(input: MatterhornCryptoTransactionRequest)
 }
 
 describe("guarded crypto transaction service", () => {
+  test("keeps a certified Bittensor stake preview tenant-bound and connected-wallet-only", async () => {
+    const input = bittensorRequest();
+    const pendingIntents = pendingStore();
+    let routerCalls = 0;
+    const service = new MatterhornCryptoTransactionService({
+      router: {
+        execute: async (adapterRequest) => {
+          routerCalls += 1;
+          expect(adapterRequest).toMatchObject({
+            workspaceId: "ws_alpha",
+            sessionId: "ses_bittensor",
+            runId: "run_bittensor",
+            callId: "call_bittensor",
+            actionId: "bittensor_prepare_stake",
+            network: "bittensor:test",
+            arguments: input.arguments,
+          });
+          return bittensorAdapterResult();
+        },
+      },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents,
+      recordReviewedAction: async () => undefined,
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 10,
+        dailySpendUsdBefore: 0,
+        weeklySpendUsdBefore: 0,
+        projectedReserveUsd: 100,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 0,
+        regionCode: "ch",
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    const result = await service.prepare(input);
+    expect(routerCalls).toBe(1);
+    expect(result.reviewedAction).toMatchObject({
+      protocol: "bittensor",
+      network: "bittensor:test",
+      operation: "stake",
+      signer: BITTENSOR_SENDER,
+      recipient: BITTENSOR_HOTKEY,
+      amount: "0.1",
+      asset: "TAO",
+      slippage: "25bps",
+      capabilityClass: "wallet_review_only",
+    });
+    expect(result.pendingIntent).toMatchObject({
+      workspaceId: "ws_alpha",
+      ownerId: "account_alpha",
+      coworkerId: "cw_bittensor",
+      state: "wallet_review",
+    });
+    const pendingId = result.pendingIntent?.id ?? "missing";
+    expect(pendingIntents.get("ws_alpha", "account_other", "cw_bittensor", pendingId)).toBeNull();
+    expect(pendingIntents.get("ws_other", "account_alpha", "cw_bittensor", pendingId)).toBeNull();
+    expect(JSON.stringify(result)).not.toMatch(/signed|signature|submit|broadcast|privateKey/i);
+  });
+
   test("accepts an exact already-consumed interactive capability without issuing hidden authority", async () => {
     const rawArguments = {
       network: "testnet",

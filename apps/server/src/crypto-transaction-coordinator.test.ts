@@ -197,6 +197,128 @@ describe("deterministic crypto transaction coordinator", () => {
     });
   });
 
+  test("compiles exact Bittensor testnet terms into a connected-wallet-only handoff", () => {
+    const sender = `5${"C".repeat(47)}`;
+    const hotkey = `5${"E".repeat(47)}`;
+    const request = { sender, hotkey, netuid: 14, amountTao: "0.1" };
+    const intent = compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_bittensor_prepare",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "f".repeat(64),
+      canonicalRequestArguments: request,
+      now: NOW,
+      result: envelope({
+        appId: "matterhorn.bittensor-testnet",
+        connectionId: "cxc_bittensor",
+        actionId: "bittensor_prepare_stake",
+        network: "bittensor:test",
+        blockOrVersion: "123456",
+        result: {
+          preparedActionId: "bt_preview_1",
+          network: "bittensor:test",
+          action: "stake",
+          sender,
+          destination: null,
+          hotkey,
+          netuid: 14,
+          amountTao: "0.1",
+          availableTao: "10",
+          currentStakeTao: "2",
+          expectedAlpha: "0.19",
+          networkFeeTao: "0.0001",
+          swapFeeTao: "0.00005",
+          slippageBps: 25,
+          block: 123456,
+          simulationReference: `sha256:${"9".repeat(64)}`,
+          expiresAt: "2026-09-01T12:00:15.000Z",
+        },
+      }),
+    });
+    expect(intent).toMatchObject({
+      protocol: "bittensor",
+      network: "bittensor:test",
+      signer: sender,
+      operation: "stake",
+      asset: "TAO",
+      amount: "0.1",
+      recipient: hotkey,
+      slippageBps: 25,
+      canonicalArguments: request,
+      capabilityClass: "wallet_review_only",
+    });
+    expect(validateCryptoIntentIntegrity(intent)).toEqual([]);
+    expect(cryptoIntentToReviewedActionHandoffV2(intent, policyDecision(intent))).toMatchObject({
+      protocol: "bittensor",
+      signer: sender,
+      network: "bittensor:test",
+      operation: "stake",
+      amount: "0.1",
+      asset: "TAO",
+      recipient: hotkey,
+      slippage: "25bps",
+      capabilityClass: "wallet_review_only",
+      draft: {
+        operation: "stake",
+        sender,
+        destination: null,
+        hotkey,
+        netuid: 14,
+        amountTao: "0.1",
+      },
+    });
+  });
+
+  test("rejects Bittensor action, recipient, and amount substitution", () => {
+    const sender = `5${"C".repeat(47)}`;
+    const destination = `5${"D".repeat(47)}`;
+    const result = envelope({
+      appId: "matterhorn.bittensor-testnet",
+      connectionId: "cxc_bittensor",
+      actionId: "bittensor_prepare_transfer",
+      network: "bittensor:test",
+      result: {
+        preparedActionId: "bt_preview_substituted",
+        network: "bittensor:test",
+        action: "transfer",
+        sender,
+        destination,
+        hotkey: null,
+        netuid: null,
+        amountTao: "2",
+        availableTao: "10",
+        currentStakeTao: null,
+        expectedAlpha: null,
+        networkFeeTao: "0.0001",
+        swapFeeTao: null,
+        slippageBps: null,
+        block: 123456,
+        simulationReference: `sha256:${"8".repeat(64)}`,
+        expiresAt: "2026-09-01T12:00:15.000Z",
+      },
+    });
+    expect(() => compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_bittensor_prepare",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "f".repeat(64),
+      canonicalRequestArguments: { sender, destination, amountTao: "1" },
+      result,
+      now: NOW,
+    })).toThrow("crypto_intent_request_result_mismatch");
+    (result.result as Record<string, unknown>).amountTao = "1";
+    (result.result as Record<string, unknown>).destination = `5${"F".repeat(47)}`;
+    expect(() => compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_bittensor_prepare",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "f".repeat(64),
+      canonicalRequestArguments: { sender, destination, amountTao: "1" },
+      result,
+      now: NOW,
+    })).toThrow("crypto_intent_request_result_mismatch");
+  });
+
   test("rejects request/result confusion, stale evidence and intent mutation", () => {
     const request = {
       sender: `0x${"1".repeat(64)}`,
