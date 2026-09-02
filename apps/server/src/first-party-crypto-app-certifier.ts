@@ -7,6 +7,8 @@ import {
 } from "./crypto-app-conformance.js";
 import {
   createFirstPartyCryptoAppCertificationDriver,
+  createFirstPartyPublicReadCryptoAppCertificationDriver,
+  firstPartyPublicReadCertificationScopeValid,
   type MatterhornFirstPartyCertificationInputs,
 } from "./first-party-crypto-app-certification-driver.js";
 import {
@@ -20,10 +22,16 @@ import {
 import type { MatterhornTrustedPublisherKey } from "./crypto-app-signature.js";
 
 export const MATTERHORN_FIRST_PARTY_CERTIFICATION_BUNDLE_VERSION =
-  "matterhorn.first-party-crypto-app-certification-bundle.v1";
+  "matterhorn.first-party-crypto-app-certification-bundle.v2";
 
 export type MatterhornFirstPartyCertificationPromotion = {
   state: "certified_testnet";
+  report: MatterhornCryptoAppConformanceReport;
+  runtimeReport: MatterhornCryptoAppRuntimeCertificationReport;
+};
+
+export type MatterhornFirstPartyPublicReadCertificationPromotion = {
+  state: "certified_mainnet";
   report: MatterhornCryptoAppConformanceReport;
   runtimeReport: MatterhornCryptoAppRuntimeCertificationReport;
 };
@@ -44,6 +52,10 @@ const SUPPORTED_APP_IDS = new Set([
   "matterhorn.bittensor-testnet",
 ]);
 
+function policyVersionValid(value: string): boolean {
+  return Boolean(value.trim()) && value.length <= 160;
+}
+
 /**
  * Produces the exact body accepted by the trusted operator certification route.
  * It never returns action inputs, live observations, wallet identities, or keys.
@@ -54,8 +66,7 @@ export async function certifyMatterhornFirstPartyCryptoApp(
   if (!SUPPORTED_APP_IDS.has(options.manifest.appId)
     || options.manifest.authentication.type !== "none"
     || options.manifest.networks.some((network) => network.environment !== "testnet")
-    || !options.policyVersion.trim()
-    || options.policyVersion.length > 160) {
+    || !policyVersionValid(options.policyVersion)) {
     throw new Error("first_party_certification_scope_invalid");
   }
 
@@ -85,6 +96,51 @@ export async function certifyMatterhornFirstPartyCryptoApp(
 
   return {
     state: "certified_testnet",
+    report,
+    runtimeReport,
+  };
+}
+
+/**
+ * Produces an operator promotion body only for Matterhorn's two fixed,
+ * unauthenticated Polymarket public-read contracts. This path cannot certify
+ * account data, transaction preparation, simulation, signing, or submission.
+ */
+export async function certifyMatterhornFirstPartyPublicReadCryptoApp(
+  options: CertificationOptions,
+): Promise<MatterhornFirstPartyPublicReadCertificationPromotion> {
+  if (!firstPartyPublicReadCertificationScopeValid(options.manifest)
+    || !policyVersionValid(options.policyVersion)) {
+    throw new Error("first_party_public_read_certification_scope_invalid");
+  }
+
+  const report = runCryptoAppManifestConformance(options.manifest, {
+    publisherKey: options.publisherPublicKey,
+    policyVersion: options.policyVersion.trim(),
+    targetEnvironment: "mainnet",
+    now: options.now,
+  });
+  if (!verifyCryptoAppConformanceReport(report) || !report.passed) {
+    throw new Error("first_party_public_read_certification_static_failed");
+  }
+
+  const runtimeReport = await runCryptoAppRuntimeCertificationHarness({
+    manifest: options.manifest,
+    staticReport: report,
+    driver: options.driver ?? createFirstPartyPublicReadCryptoAppCertificationDriver({
+      actionInputs: options.actionInputs,
+      now: options.now,
+    }),
+    probeTimeoutMs: options.probeTimeoutMs,
+    now: options.now,
+  });
+  if (!verifyCryptoAppRuntimeCertificationReport(runtimeReport, options.manifest, report)
+    || !runtimeReport.passed) {
+    throw new Error("first_party_public_read_certification_runtime_failed");
+  }
+
+  return {
+    state: "certified_mainnet",
     report,
     runtimeReport,
   };

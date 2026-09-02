@@ -70,6 +70,7 @@
     "test:release-secret-scan": "node scripts/release-secret-scan.test.mjs",
     "certify:public-beta": "node scripts/public-beta-candidate-certifier.mjs",
     "certify:crypto-app": "bun scripts/certify-first-party-crypto-app.ts",
+    "certify:crypto-app-readonly": "bun scripts/certify-first-party-crypto-app.ts --scope public-readonly",
     "test:crypto-app-certifier": "bun test apps/server/src/first-party-crypto-app-certification-driver.test.ts scripts/certify-first-party-crypto-app.test.ts",
     "test:public-beta-candidate-certifier": "node scripts/public-beta-candidate-certifier.test.mjs",
     "public-beta:owner-acceptance": "node scripts/public-beta-owner-acceptance.mjs",

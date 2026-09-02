@@ -6,11 +6,16 @@ import type { MatterhornCryptoAppTransportExecutor } from "./crypto-app-adapter-
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
 import {
   createFirstPartyCryptoAppCertificationDriver,
+  createFirstPartyPublicReadCryptoAppCertificationDriver,
   type MatterhornFirstPartyCertificationInputs,
 } from "./first-party-crypto-app-certification-driver.js";
-import { certifyMatterhornFirstPartyCryptoApp } from "./first-party-crypto-app-certifier.js";
+import {
+  certifyMatterhornFirstPartyCryptoApp,
+  certifyMatterhornFirstPartyPublicReadCryptoApp,
+} from "./first-party-crypto-app-certifier.js";
 import {
   buildMatterhornFirstPartyBittensorTestnetManifest,
+  buildMatterhornFirstPartyPolymarketClobResearchManifest,
   buildMatterhornFirstPartyPolymarketResearchManifest,
   buildMatterhornFirstPartyTestnetManifests,
 } from "./first-party-crypto-apps.js";
@@ -25,6 +30,7 @@ const HYPERLIQUID_ADDRESS = `0x${"a".repeat(40)}`;
 const BITTENSOR_SENDER = `5${"C".repeat(47)}`;
 const BITTENSOR_DESTINATION = `5${"D".repeat(47)}`;
 const BITTENSOR_HOTKEY = `5${"E".repeat(47)}`;
+const POLYMARKET_TOKEN_ID = "1234567890123456789012345678901234567890";
 const keys = generateKeyPairSync("ed25519");
 
 const manifests = [...buildMatterhornFirstPartyTestnetManifests({
@@ -43,6 +49,25 @@ const manifests = [...buildMatterhornFirstPartyTestnetManifests({
   privacyPolicyUrl: "https://matterhorn.so/privacy",
   securityContact: "security@matterhorn.so",
 })];
+
+const polymarketManifests = [
+  buildMatterhornFirstPartyPolymarketResearchManifest({
+    publisherId: "matterhorn",
+    publisherKeyId: "certification-test",
+    sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
+    polymarketGammaEndpoint: "https://gamma-api.polymarket.com",
+    privacyPolicyUrl: "https://matterhorn.so/privacy",
+    securityContact: "security@matterhorn.so",
+  }),
+  buildMatterhornFirstPartyPolymarketClobResearchManifest({
+    publisherId: "matterhorn",
+    publisherKeyId: "certification-test",
+    sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
+    polymarketClobEndpoint: "https://clob.polymarket.com",
+    privacyPolicyUrl: "https://matterhorn.so/privacy",
+    securityContact: "security@matterhorn.so",
+  }),
+];
 
 const inputs: MatterhornFirstPartyCertificationInputs = {
   sui_account_read: { address: SUI_ADDRESS },
@@ -64,6 +89,8 @@ const inputs: MatterhornFirstPartyCertificationInputs = {
   bittensor_prepare_transfer: { sender: BITTENSOR_SENDER, destination: BITTENSOR_DESTINATION, amountTao: "0.1" },
   bittensor_prepare_stake: { sender: BITTENSOR_SENDER, hotkey: BITTENSOR_HOTKEY, netuid: 14, amountTao: "0.1" },
   bittensor_prepare_unstake: { sender: BITTENSOR_SENDER, hotkey: BITTENSOR_HOTKEY, netuid: 14, amountTao: "0.1" },
+  polymarket_market_search: { query: "SUI", limit: 2 },
+  polymarket_orderbook_read: { tokenId: POLYMARKET_TOKEN_ID },
 };
 
 function output(actionId: string): unknown {
@@ -188,6 +215,42 @@ function output(actionId: string): unknown {
       expiresAt: "2026-09-01T12:00:15.000Z",
     };
   }
+  if (actionId === "polymarket_market_search") return {
+    markets: [{
+      id: "market-certification",
+      question: "Will SUI reach the test threshold?",
+      slug: "sui-test-threshold",
+      conditionId: `0x${"a".repeat(64)}`,
+      eventId: "event-certification",
+      eventTitle: "SUI public market",
+      outcomes: ["Yes", "No"],
+      outcomePrices: ["0.45", "0.55"],
+      outcomeTokens: [
+        { outcome: "Yes", tokenId: POLYMARKET_TOKEN_ID },
+        { outcome: "No", tokenId: "987654321098765432109876543210987654321" },
+      ],
+      liquidity: "10000",
+      volume: "50000",
+      active: true,
+      closed: false,
+      restricted: false,
+      endDate: null,
+    }],
+    observedAt: NOW,
+  };
+  if (actionId === "polymarket_orderbook_read") return {
+    market: `0x${"a".repeat(64)}`,
+    tokenId: POLYMARKET_TOKEN_ID,
+    snapshotTimestamp: "1788264000000",
+    snapshotHash: `0x${"b".repeat(64)}`,
+    bids: [{ price: "0.44", size: "200" }],
+    asks: [{ price: "0.46", size: "150" }],
+    minimumOrderSize: "1",
+    tickSize: "0.01",
+    negativeRisk: false,
+    lastTradePrice: "0.45",
+    observedAt: NOW,
+  };
   if (actionId === "execute_transaction") {
     throw new Error("first_party_app_action_invalid");
   }
@@ -205,7 +268,9 @@ const executor: MatterhornCryptoAppTransportExecutor = async (request) => {
       ? "first_party_sui_action_invalid"
       : request.appId.includes("hyperliquid")
         ? "first_party_hyperliquid_action_invalid"
-        : "first_party_bittensor_action_invalid");
+        : request.appId.includes("polymarket")
+          ? "first_party_polymarket_action_invalid"
+          : "first_party_bittensor_action_invalid");
   }
   return {
     data: output(request.action.id),
@@ -331,5 +396,61 @@ describe("first-party crypto app certification driver", () => {
       }),
       now: () => new Date(NOW),
     })).rejects.toThrow("first_party_certification_scope_invalid");
+  });
+
+  test("certifies only the sealed public Polymarket discovery and order-book reads", async () => {
+    for (const manifest of polymarketManifests) {
+      const promotion = await certifyMatterhornFirstPartyPublicReadCryptoApp({
+        manifest,
+        publisherPublicKey: keys.publicKey,
+        policyVersion: "public-read-policy-1",
+        actionInputs: inputs,
+        driver: createFirstPartyPublicReadCryptoAppCertificationDriver({
+          actionInputs: inputs,
+          executor,
+          resolveDns: async () => [{ address: PEER, family: 4 }],
+          now: () => new Date(NOW),
+        }),
+        now: () => new Date(NOW),
+      });
+      expect(promotion.state).toBe("certified_mainnet");
+      expect(promotion.report.targetEnvironment).toBe("mainnet");
+      expect(promotion.report.passed).toBe(true);
+      expect(promotion.runtimeReport.passed).toBe(true);
+      expect(promotion.runtimeReport.requiredProbeIds).not.toContain("wallet_only_simulation");
+      const serialized = JSON.stringify(promotion);
+      expect(serialized).not.toContain(POLYMARKET_TOKEN_ID);
+      expect(serialized).not.toContain("SUI public market");
+    }
+  });
+
+  test("fails the public-read path closed for testnet or transaction authority", async () => {
+    await expect(certifyMatterhornFirstPartyPublicReadCryptoApp({
+      manifest: manifests[0]!,
+      publisherPublicKey: keys.publicKey,
+      policyVersion: "public-read-policy-1",
+      actionInputs: inputs,
+      driver: createFirstPartyPublicReadCryptoAppCertificationDriver({ actionInputs: inputs, executor }),
+    })).rejects.toThrow("first_party_public_read_certification_scope_invalid");
+
+    const broadened = structuredClone(polymarketManifests[0]!);
+    broadened.actions[0]!.access = "prepare";
+    broadened.actions[0]!.risk = "financial_low";
+    broadened.actions[0]!.simulationRequired = true;
+    const redirected = structuredClone(polymarketManifests[0]!);
+    redirected.transport.endpoint = "https://attacker.invalid";
+    const revisionDrift = structuredClone(polymarketManifests[0]!);
+    revisionDrift.manifestRevision = "999.0.0";
+    const extraAction = structuredClone(polymarketManifests[0]!);
+    extraAction.actions.push({ ...extraAction.actions[0]!, id: "polymarket_account_read" });
+    for (const manifest of [broadened, redirected, revisionDrift, extraAction]) {
+      await expect(certifyMatterhornFirstPartyPublicReadCryptoApp({
+        manifest,
+        publisherPublicKey: keys.publicKey,
+        policyVersion: "public-read-policy-1",
+        actionInputs: inputs,
+        driver: createFirstPartyPublicReadCryptoAppCertificationDriver({ actionInputs: inputs, executor }),
+      })).rejects.toThrow("first_party_public_read_certification_scope_invalid");
+    }
   });
 });

@@ -18,7 +18,33 @@ describe("first-party crypto app certification CLI", () => {
     expect(stdout).toContain("--publisher-public-key");
     expect(stdout).toContain("--inputs");
     expect(stdout).toContain("mode 0600");
+    expect(stdout).toContain("certify:crypto-app-readonly");
+    expect(stdout).toContain("grants no transaction authority");
     expect(stdout).not.toContain("private-key");
+  });
+
+  test("keeps the mainnet public-read scope explicit in the package command", async () => {
+    const packageJson = await Bun.file(resolve("package.json")).json() as {
+      scripts?: Record<string, string>;
+    };
+    expect(packageJson.scripts?.["certify:crypto-app"]).not.toContain("public-readonly");
+    expect(packageJson.scripts?.["certify:crypto-app-readonly"])
+      .toBe("bun scripts/certify-first-party-crypto-app.ts --scope public-readonly");
+  });
+
+  test("rejects unknown certification scopes before reading operator files", () => {
+    const result = Bun.spawnSync([
+      "bun", SCRIPT,
+      "--scope", "mainnet",
+      "--manifest", "/must-not-read/manifest.json",
+      "--publisher-public-key", "/must-not-read/publisher.pem",
+      "--inputs", "/must-not-read/inputs.json",
+      "--policy-version", "policy-1",
+      "--output", "/must-not-write/output.json",
+    ], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain("certification_cli_argument_invalid");
+    expect(result.stderr.toString()).not.toContain("must-not-read");
   });
 
   test("rejects world-readable identity inputs before parsing or network access", () => {
@@ -36,6 +62,7 @@ describe("first-party crypto app certification CLI", () => {
       chmodSync(inputs, 0o644);
       const result = Bun.spawnSync([
         "bun", SCRIPT,
+        "--scope", "public-readonly",
         "--manifest", manifest,
         "--publisher-public-key", publicKey,
         "--inputs", inputs,

@@ -15,7 +15,12 @@ import { dirname, resolve } from "node:path";
 
 import type { MatterhornCryptoAppManifest } from "@matterhorn-work/types/crypto-coworkers";
 import type { MatterhornFirstPartyCertificationInputs } from "../apps/server/src/first-party-crypto-app-certification-driver.js";
-import { certifyMatterhornFirstPartyCryptoApp } from "../apps/server/src/first-party-crypto-app-certifier.js";
+import {
+  certifyMatterhornFirstPartyCryptoApp,
+  certifyMatterhornFirstPartyPublicReadCryptoApp,
+} from "../apps/server/src/first-party-crypto-app-certifier.js";
+
+type CertificationScope = "testnet" | "public-readonly";
 
 type CliConfig = {
   manifestPath: string;
@@ -24,6 +29,7 @@ type CliConfig = {
   outputPath: string;
   policyVersion: string;
   probeTimeoutMs: number;
+  scope: CertificationScope;
 };
 
 const HELP = `Matterhorn first-party crypto app certification
@@ -36,7 +42,13 @@ Usage:
     --policy-version <version> \\
     --output /secure/certification-promotion.json
 
-The input file may contain linked testnet wallet identities and must be owner-only.
+Public Polymarket reads use the separate package command
+\`pnpm certify:crypto-app-readonly\` with the same file arguments.
+
+The default command certifies only the first-party testnet contracts. The
+public-readonly command certifies only Matterhorn's fixed, unauthenticated
+Polymarket discovery or order-book read contract and grants no transaction authority.
+The input file may contain linked identities or exact public queries and must be owner-only.
 No private key, seed phrase, API credential, signature, or wallet export is accepted.
 The output is created with mode 0600 only after every static and runtime probe passes.`;
 
@@ -56,6 +68,7 @@ function parseArgs(argv: string[]): CliConfig | "help" {
     "--output",
     "--policy-version",
     "--probe-timeout-ms",
+    "--scope",
   ]);
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index];
@@ -78,6 +91,10 @@ function parseArgs(argv: string[]): CliConfig | "help" {
     || timeout > 30_000) {
     throw new Error("certification_cli_argument_invalid");
   }
+  const scope = values.get("--scope") ?? "testnet";
+  if (scope !== "testnet" && scope !== "public-readonly") {
+    throw new Error("certification_cli_argument_invalid");
+  }
   return {
     manifestPath: resolve(values.get("--manifest")!),
     publisherPublicKeyPath: resolve(values.get("--publisher-public-key")!),
@@ -85,6 +102,7 @@ function parseArgs(argv: string[]): CliConfig | "help" {
     outputPath: resolve(values.get("--output")!),
     policyVersion: values.get("--policy-version")!,
     probeTimeoutMs: timeout,
+    scope,
   };
 }
 
@@ -152,13 +170,16 @@ export async function runFirstPartyCryptoAppCertificationCli(argv: string[]): Pr
     ]);
     const manifest = parseJsonObject<MatterhornCryptoAppManifest>(manifestBytes);
     const actionInputs = parseJsonObject<MatterhornFirstPartyCertificationInputs>(inputBytes);
-    const promotion = await certifyMatterhornFirstPartyCryptoApp({
+    const certificationOptions = {
       manifest,
       publisherPublicKey: publicKeyBytes,
       policyVersion: config.policyVersion,
       actionInputs,
       probeTimeoutMs: config.probeTimeoutMs,
-    });
+    };
+    const promotion = config.scope === "public-readonly"
+      ? await certifyMatterhornFirstPartyPublicReadCryptoApp(certificationOptions)
+      : await certifyMatterhornFirstPartyCryptoApp(certificationOptions);
 
     tempPath = resolve(dirname(config.outputPath), `.matterhorn-certification-${process.pid}-${Date.now()}.tmp`);
     await writeFile(tempPath, `${JSON.stringify(promotion, null, 2)}\n`, { flag: "wx", mode: 0o600 });
@@ -171,6 +192,7 @@ export async function runFirstPartyCryptoAppCertificationCli(argv: string[]): Pr
     process.stdout.write(JSON.stringify({
       appId: promotion.report.appId,
       manifestRevision: promotion.report.manifestRevision,
+      state: promotion.state,
       passed: true,
       staticReportHash: promotion.report.reportHash,
       runtimeReportHash: promotion.runtimeReport.reportHash,
