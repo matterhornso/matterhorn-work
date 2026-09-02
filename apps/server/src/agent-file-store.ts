@@ -25,6 +25,7 @@ import {
 import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import type { MatterhornRecoveryErasureLedger } from "./recovery-erasure-ledger.js";
 
 const STATE_KIND = "agent_file_record";
 const RENEWAL_STATE_KIND = "agent_file_renewal_intent";
@@ -242,7 +243,23 @@ export class MatterhornAgentFileStore {
   constructor(
     private readonly stateStore: MatterhornGuardedRuntimeStateStore,
     private readonly keyManager: MatterhornEvidenceKeyManager,
+    private readonly erasureLedger: MatterhornRecoveryErasureLedger | null = null,
   ) {}
+
+  private recoveryMaterialErased(record: MatterhornAgentFileRecord): boolean {
+    if (!this.erasureLedger) return false;
+    return this.erasureLedger.eventFor({
+      materialKind: "agent_file",
+      wrappedKey: record.key.wrappedKey,
+      keyContext: record.key.keyContext,
+    }) !== null;
+  }
+
+  private assertRecoveryMaterialActive(record: MatterhornAgentFileRecord): void {
+    if (this.recoveryMaterialErased(record)) {
+      throw new MatterhornAgentFileStoreError("agent_file_not_found");
+    }
+  }
 
   async create(input: {
     workspaceId: string;
@@ -312,6 +329,7 @@ export class MatterhornAgentFileStore {
     if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
     return this.stateStore.list<MatterhornAgentFileRecord>(STATE_KIND, { workspaceId: input.workspaceId })
       .filter((record) => record.ownerId === input.ownerId
+        && !this.recoveryMaterialErased(record)
         && (!record.file.retention.expiresAt || Date.parse(record.file.retention.expiresAt) > now.getTime()))
       .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
       .map(accountView);
@@ -322,6 +340,7 @@ export class MatterhornAgentFileStore {
     const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
     if (!record) return null;
     assertTenant(record, input);
+    if (this.recoveryMaterialErased(record)) return null;
     const expiresAt = record.file.retention.expiresAt;
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
@@ -340,6 +359,7 @@ export class MatterhornAgentFileStore {
     const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
     if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
     assertTenant(record, input);
+    this.assertRecoveryMaterialActive(record);
     const key = await this.keyManager.decryptDataKey({
       workspaceId: record.workspaceId,
       runId: record.id,
@@ -384,6 +404,7 @@ export class MatterhornAgentFileStore {
     const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
     if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
     assertTenant(record, input);
+    this.assertRecoveryMaterialActive(record);
     if (record.revision !== input.expectedRevision) {
       throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
     }
@@ -428,6 +449,7 @@ export class MatterhornAgentFileStore {
     const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
     if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
     assertTenant(record, input);
+    this.assertRecoveryMaterialActive(record);
     if (input.expectedRevision !== undefined && record.revision !== input.expectedRevision) {
       throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
     }
@@ -520,6 +542,7 @@ export class MatterhornAgentFileStore {
     const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
     if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
     assertTenant(record, input);
+    this.assertRecoveryMaterialActive(record);
     const current = record.publication;
     if (record.revision !== input.expectedRevision
       || !current
@@ -563,6 +586,7 @@ export class MatterhornAgentFileStore {
     ownerId: string;
     fileId: string;
     expectedRevision: number;
+    now?: Date;
   }): Promise<void> {
     if (!FILE_ID.test(input.fileId)) throw new MatterhornAgentFileStoreError("agent_file_not_found");
     const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
@@ -574,6 +598,14 @@ export class MatterhornAgentFileStore {
     if (record.revision !== input.expectedRevision) {
       throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
     }
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
+    this.erasureLedger?.record({
+      materialKind: "agent_file",
+      wrappedKey: record.key.wrappedKey,
+      keyContext: record.key.keyContext,
+      now,
+    });
     await this.keyManager.destroyKey({ workspaceId: record.workspaceId, keyReference: record.key.keyReference });
     this.stateStore.delete(RENEWAL_STATE_KIND, record.id);
     this.stateStore.delete(STATE_KIND, record.id);

@@ -57,6 +57,8 @@ const ENV_KEYS = [
   "MATTERHORN_AGENT_FILES_MODE",
   "MATTERHORN_EVIDENCE_KMS_REGION",
   "MATTERHORN_EVIDENCE_KMS_KEY_ID",
+  "MATTERHORN_ERASURE_LEDGER_SIGNING_SECRET",
+  "MATTERHORN_ERASURE_LEDGER_DB",
   "MATTERHORN_WALRUS_EVIDENCE_MODE",
   "MATTERHORN_WALRUS_PUBLISHER_URL",
   "MATTERHORN_WALRUS_AGGREGATOR_URL",
@@ -187,10 +189,14 @@ async function boot(
     process.env.MATTERHORN_AGENT_FILES_MODE = "encrypted";
     process.env.MATTERHORN_EVIDENCE_KMS_REGION = "us-east-1";
     process.env.MATTERHORN_EVIDENCE_KMS_KEY_ID = "alias/route-test-agent-files";
+    process.env.MATTERHORN_ERASURE_LEDGER_SIGNING_SECRET = "route-test-erasure-ledger-secret-32-bytes";
+    process.env.MATTERHORN_ERASURE_LEDGER_DB = join(root, "erasure-ledger.db");
   } else {
     delete process.env.MATTERHORN_AGENT_FILES_MODE;
     delete process.env.MATTERHORN_EVIDENCE_KMS_REGION;
     delete process.env.MATTERHORN_EVIDENCE_KMS_KEY_ID;
+    delete process.env.MATTERHORN_ERASURE_LEDGER_SIGNING_SECRET;
+    delete process.env.MATTERHORN_ERASURE_LEDGER_DB;
   }
   if (options.walrus) {
     process.env.MATTERHORN_WALRUS_EVIDENCE_MODE = "testnet";

@@ -12,6 +12,7 @@ import type {
 } from "./crypto-evidence-sealer.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import type { MatterhornRecoveryErasureLedger } from "./recovery-erasure-ledger.js";
 import {
   decryptMatterhornEvidenceEnvelope,
   serializeMatterhornWalrusCiphertext,
@@ -111,7 +112,17 @@ export class MatterhornCryptoEvidenceStore {
     private readonly stateStore: MatterhornGuardedRuntimeStateStore,
     private readonly keyManager: MatterhornEvidenceKeyManager,
     private readonly options: { allowMainnet?: boolean } = {},
+    private readonly erasureLedger: MatterhornRecoveryErasureLedger | null = null,
   ) {}
+
+  private recoveryMaterialErased(record: MatterhornCryptoEvidenceRecord): boolean {
+    if (!this.erasureLedger || !record.key.wrappedKey || !record.key.keyContext) return false;
+    return this.erasureLedger.eventFor({
+      materialKind: "crypto_evidence",
+      wrappedKey: record.key.wrappedKey,
+      keyContext: record.key.keyContext,
+    }) !== null;
+  }
 
   private identityHash(kind: "workspace" | "owner" | "coworker", workspaceId: string, value: string): string {
     return sha256({ domain: `matterhorn:crypto-evidence-audit:${kind}:v1`, workspaceId, value });
@@ -355,7 +366,9 @@ export class MatterhornCryptoEvidenceStore {
     const current = this.get(input);
     if (!current) throw new Error("crypto_evidence_not_found");
     if (current.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
-    if (current.state === "key_destroyed") throw new Error("crypto_evidence_key_destroyed");
+    if (current.state === "key_destroyed" || this.recoveryMaterialErased(current)) {
+      throw new Error("crypto_evidence_key_destroyed");
+    }
     const issues = validateMatterhornWalrusProof(input.proof);
     if (issues.length > 0) throw new Error(`crypto_evidence_walrus_proof_invalid:${issues.join(",")}`);
     if (input.proof.network === "mainnet" && this.options.allowMainnet !== true) {
@@ -415,7 +428,7 @@ export class MatterhornCryptoEvidenceStore {
         });
         if (!current) throw new Error("crypto_evidence_not_found");
         if (current.revision !== entry.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
-        if (current.state !== "sealed" || !current.envelope) {
+        if (current.state !== "sealed" || !current.envelope || this.recoveryMaterialErased(current)) {
           throw new Error("crypto_evidence_walrus_publish_state_invalid");
         }
         const issues = validateMatterhornWalrusProof(entry.proof);
@@ -487,7 +500,8 @@ export class MatterhornCryptoEvidenceStore {
   }): Promise<MatterhornEvidenceBundle> {
     const record = this.get(input);
     if (!record) throw new Error("crypto_evidence_not_found");
-    if (!record.envelope || !record.key.keyReference || !record.key.wrappedKey || !record.key.keyContext) {
+    if (!record.envelope || !record.key.keyReference || !record.key.wrappedKey || !record.key.keyContext
+      || this.recoveryMaterialErased(record)) {
       this.recordAccess({ record, action: "decrypt", outcome: "denied", reason: "key_destroyed" });
       throw new Error("crypto_evidence_key_destroyed");
     }
@@ -528,7 +542,7 @@ export class MatterhornCryptoEvidenceStore {
     const current = this.get(input);
     if (!current) throw new Error("crypto_evidence_not_found");
     if (current.state === "key_destroyed" || !current.key.keyReference
-      || !current.key.wrappedKey || !current.key.keyContext) {
+      || !current.key.wrappedKey || !current.key.keyContext || this.recoveryMaterialErased(current)) {
       this.recordAccess({ record: current, action: "rotate_key", outcome: "denied", reason: "key_destroyed" });
       throw new Error("crypto_evidence_key_destroyed");
     }
@@ -622,14 +636,23 @@ export class MatterhornCryptoEvidenceStore {
     if (current.state === "key_destroyed") return current;
     if (current.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
     const keyReference = current.key.keyReference;
-    if (!keyReference) throw new Error("crypto_evidence_key_destroyed");
+    const wrappedKey = current.key.wrappedKey;
+    const keyContext = current.key.keyContext;
+    if (!keyReference || !wrappedKey || !keyContext) throw new Error("crypto_evidence_key_destroyed");
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    this.erasureLedger?.record({
+      materialKind: "crypto_evidence",
+      wrappedKey,
+      keyContext,
+      now,
+    });
     try {
       await this.keyManager.destroyKey({ workspaceId: current.workspaceId, keyReference });
     } catch (error) {
       this.recordAccess({ record: current, action: "destroy_key", outcome: "denied", reason: "destruction_failed" });
       throw error;
     }
-    const now = input.now ?? new Date();
     const next: MatterhornCryptoEvidenceRecord = {
       ...current,
       revision: current.revision + 1,

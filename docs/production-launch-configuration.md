@@ -263,10 +263,13 @@ export MATTERHORN_BACKUP_KMS_KEY_ID="<customer-managed-kms-key-arn>"
 export MATTERHORN_BACKUP_AWS_ACCESS_KEY_ID="<backup-only-access-key>"
 export MATTERHORN_BACKUP_AWS_SECRET_ACCESS_KEY="<backup-only-secret-key>"
 export AWS_REGION="<backup-region>"
+export MATTERHORN_ERASURE_LEDGER_SIGNING_SECRET="<dedicated-erasure-ledger-secret>"
+export MATTERHORN_ERASURE_LEDGER_DB="/data/erasure-ledger/ledger.db"
 
 pnpm backup:matterhorn-host -- \
   --data-root "$MATTERHORN_WORK_DATA_DIR" \
   --opencode-db "$OPENCODE_DB" \
+  --erasure-ledger "$MATTERHORN_ERASURE_LEDGER_DB" \
   --output "$MATTERHORN_HOST_BACKUP_SCRATCH" \
   --upload --json
 ```
@@ -279,6 +282,28 @@ backup usable. Set `MATTERHORN_HOST_BACKUP_REQUIRED=1` for launch readiness;
 the backend then fails `/health/ready` when the last verified upload is older
 than 36 hours. The backup job uses its dedicated credential names and never
 falls back to the SES AWS credentials.
+
+The erasure ledger is a separate rollback domain and is never embedded in the
+host archive. Retain its current SQLite file independently of each archive.
+When guarded state contains encrypted Evidence or Agent Files, backup records
+only the authenticated ledger checkpoint. Restore then requires the current
+external ledger and refuses an older, divergent, missing, or modified copy:
+
+```bash
+pnpm backup:matterhorn-host -- \
+  --restore \
+  --archive "$MATTERHORN_HOST_BACKUP_SCRATCH" \
+  --erasure-ledger "$MATTERHORN_ERASURE_LEDGER_DB" \
+  --restore-to "$MATTERHORN_HOST_RESTORE_ROOT" \
+  --confirm-restore-to "$MATTERHORN_HOST_RESTORE_ROOT" \
+  --json
+```
+
+Before the restored databases are accepted, matching stale Evidence keys are
+cleared, matching Agent Files and renewal intents are removed, SQLite is
+checkpointed, and the verified current ledger is copied into the new data
+root. Never restore the ledger from the same point-in-time host archive; doing
+so would defeat deletion-after-backup protection.
 
 Before enabling tenant-scoped Bittensor timelines on a host with legacy global
 timeline data, archive that file with `archive:bittensor-legacy-timeline` and a

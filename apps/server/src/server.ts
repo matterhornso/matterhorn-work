@@ -621,6 +621,10 @@ import {
 } from "./agent-run-receipts.js";
 import { guardedRuntimeSingleInstanceReady } from "./guarded-runtime-state-store.js";
 import {
+  recoveryErasureLedgerFromEnv,
+  type MatterhornRecoveryErasureLedger,
+} from "./recovery-erasure-ledger.js";
+import {
   legacySecurityMigrationCheckpointPath,
   migrateLegacySecurityRecords,
 } from "./legacy-security-migration.js";
@@ -1365,11 +1369,13 @@ export async function startServer(
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
+  const recoveryErasureLedger = recoveryErasureLedgerFromEnv(process.env);
+  if (recoveryErasureLedger) guardedRuntime.reconcileRecoveryErasures(recoveryErasureLedger);
   const evidenceKeyManager = dependencies.evidenceKeyManager === undefined
     ? awsKmsEvidenceKeyManagerFromEnv(process.env)
     : dependencies.evidenceKeyManager;
   const cryptoEvidenceStore = evidenceKeyManager
-    ? guardedRuntime.createCryptoEvidenceStore(evidenceKeyManager)
+    ? guardedRuntime.createCryptoEvidenceStore(evidenceKeyManager, {}, recoveryErasureLedger)
     : null;
   const cryptoEvidenceRuntime = createMatterhornCryptoEvidenceRuntime(process.env, cryptoEvidenceStore);
   const cryptoEvidenceRotationDays = cryptoEvidenceStore
@@ -1385,7 +1391,7 @@ export async function startServer(
   const agentFileStore = cryptoCoworkerConfig.agentFilesMode === "encrypted"
     && coworkerRuntime.mode !== "off"
     && evidenceKeyManager
-    ? guardedRuntime.createAgentFileStore(evidenceKeyManager)
+    ? guardedRuntime.createAgentFileStore(evidenceKeyManager, recoveryErasureLedger)
     : null;
   const agentFileWalrusCertificationVerifier = createMatterhornAgentFileWalrusCertificationVerifier(
     dependencies.agentFileWalrusCertificationVerifier,
@@ -1594,6 +1600,7 @@ export async function startServer(
     agentFileStore,
     agentFileWalrusPublisher,
     agentFileWalrusRenewal,
+    recoveryErasureLedger,
     drainEmailOutbox,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
@@ -1840,6 +1847,7 @@ export async function startServer(
       await coworkerWatchTask;
       await drainEmailOutbox();
       authStore.close();
+      recoveryErasureLedger?.close();
       guardedRuntime.close();
       cryptoAppRuntime.close();
       coworkerRuntime.close();
@@ -1894,6 +1902,7 @@ function operationalReadiness(
   cryptoEvidenceStore?: MatterhornCryptoEvidenceStore | null,
   agentFileStore?: MatterhornAgentFileStore | null,
   agentFileWalrusPublisher?: MatterhornAgentFileWalrusPublisher | null,
+  recoveryErasureLedger?: MatterhornRecoveryErasureLedger | null,
 ) {
   const workspaceConfigured = config.workspaces.length > 0;
   const workspaceStorageAvailable = config.workspaces.every((workspace) =>
@@ -1918,6 +1927,11 @@ function operationalReadiness(
   const agentFileWalrusRequired = agentFilesMode === "encrypted"
     && cryptoCoworkerFeatureConfig(process.env).walrusEvidenceMode === "testnet";
   const agentFileWalrusReady = !agentFileWalrusRequired || Boolean(agentFileWalrusPublisher);
+  const recoveryErasureLedgerRequired = cryptoEvidenceRecordsPresent
+    || agentFileRecordsPresent
+    || cryptoCoworkerFeatureConfig(process.env).walrusEvidenceMode !== "off"
+    || agentFilesMode !== "off";
+  const recoveryErasureLedgerReady = !recoveryErasureLedgerRequired || Boolean(recoveryErasureLedger);
   const hostedBrowserOpencodePolicyReady = HOSTED_BROWSER_OPENCODE_POLICY === "restricted";
   const hostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA === "1";
   const accountMessageGatewayReady = !hostedPublicBeta
@@ -1936,6 +1950,7 @@ function operationalReadiness(
       && agentFileKeyLifecycleReady
       && agentFilesReady
       && agentFileWalrusReady
+      && recoveryErasureLedgerReady
       && hostedBrowserOpencodePolicyReady
       && accountMessageGatewayReady
       && hostBackupFreshCheck,
@@ -1958,6 +1973,8 @@ function operationalReadiness(
       agentFilesReady,
       agentFileWalrusRequired,
       agentFileWalrusReady,
+      recoveryErasureLedgerRequired,
+      recoveryErasureLedgerReady,
       hostedBrowserOpencodePolicy: HOSTED_BROWSER_OPENCODE_POLICY,
       hostedBrowserOpencodePolicyReady,
       accountMessageGatewayReady,
@@ -8402,6 +8419,7 @@ function createRoutes(
   agentFileStore: MatterhornAgentFileStore | null,
   agentFileWalrusPublisher: MatterhornAgentFileWalrusPublisher | null,
   agentFileWalrusRenewal: MatterhornAgentFileWalrusRenewalService | null,
+  recoveryErasureLedger: MatterhornRecoveryErasureLedger | null,
   drainEmailOutbox: () => Promise<void>,
 ): Route[] {
   const routes: Route[] = [];
@@ -9006,6 +9024,7 @@ function createRoutes(
       cryptoEvidenceStore,
       agentFileStore,
       agentFileWalrusPublisher,
+      recoveryErasureLedger,
     );
     const response = jsonResponse({
       ok: readiness.ready,
@@ -9046,6 +9065,7 @@ function createRoutes(
       cryptoEvidenceStore,
       agentFileStore,
       agentFileWalrusPublisher,
+      recoveryErasureLedger,
     );
     const launch = matterhornLaunchReadiness(authStore);
     const ok = infrastructure.ready && launch.ready;
@@ -9070,6 +9090,7 @@ function createRoutes(
       cryptoEvidenceStore,
       agentFileStore,
       agentFileWalrusPublisher,
+      recoveryErasureLedger,
     );
     return new Response(operationalMetrics.renderPrometheus({
       ready: readiness.ready,

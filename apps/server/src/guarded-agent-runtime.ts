@@ -36,6 +36,10 @@ import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-stor
 import type { MatterhornFinalizedCoworkerRun } from "./crypto-evidence-finalizer.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import type {
+  MatterhornRecoveryErasureLedger,
+  MatterhornRecoveryErasureReconciliation,
+} from "./recovery-erasure-ledger.js";
 
 export class GuardedRuntimeError extends Error {
   constructor(
@@ -176,12 +180,22 @@ export class MatterhornGuardedAgentRuntime {
   createCryptoEvidenceStore(
     keyManager: MatterhornEvidenceKeyManager,
     options: { allowMainnet?: boolean } = {},
+    erasureLedger: MatterhornRecoveryErasureLedger | null = null,
   ): MatterhornCryptoEvidenceStore {
-    return new MatterhornCryptoEvidenceStore(this.stateStore, keyManager, options);
+    return new MatterhornCryptoEvidenceStore(this.stateStore, keyManager, options, erasureLedger);
   }
 
-  createAgentFileStore(keyManager: MatterhornEvidenceKeyManager): MatterhornAgentFileStore {
-    return new MatterhornAgentFileStore(this.stateStore, keyManager);
+  createAgentFileStore(
+    keyManager: MatterhornEvidenceKeyManager,
+    erasureLedger: MatterhornRecoveryErasureLedger | null = null,
+  ): MatterhornAgentFileStore {
+    return new MatterhornAgentFileStore(this.stateStore, keyManager, erasureLedger);
+  }
+
+  reconcileRecoveryErasures(
+    erasureLedger: MatterhornRecoveryErasureLedger,
+  ): MatterhornRecoveryErasureReconciliation {
+    return erasureLedger.reconcile(this.stateStore);
   }
 
   createAgentFileWalrusRenewalService(input: {

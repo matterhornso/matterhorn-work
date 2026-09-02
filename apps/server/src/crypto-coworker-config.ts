@@ -88,11 +88,17 @@ export function cryptoCoworkerFeatureConfig(
     if (!env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN?.trim()) issues.push("walrus_publisher_auth_required");
     if (!env.MATTERHORN_EVIDENCE_KMS_REGION?.trim()) issues.push("evidence_kms_region_required");
     if (!env.MATTERHORN_EVIDENCE_KMS_KEY_ID?.trim()) issues.push("evidence_kms_key_id_required");
+    if ((env.MATTERHORN_ERASURE_LEDGER_SIGNING_SECRET?.trim().length ?? 0) < 32) {
+      issues.push("recovery_erasure_ledger_required");
+    }
   }
   if (files === "encrypted") {
     if (workers === "off") issues.push("agent_files_require_coworkers");
     if (!env.MATTERHORN_EVIDENCE_KMS_REGION?.trim()) issues.push("agent_files_kms_region_required");
     if (!env.MATTERHORN_EVIDENCE_KMS_KEY_ID?.trim()) issues.push("agent_files_kms_key_id_required");
+    if ((env.MATTERHORN_ERASURE_LEDGER_SIGNING_SECRET?.trim().length ?? 0) < 32) {
+      issues.push("recovery_erasure_ledger_required");
+    }
     const instanceCount = Number(env.MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT ?? "1");
     if (evidence === "testnet" && (!Number.isSafeInteger(instanceCount) || instanceCount !== 1)) {
       issues.push("agent_file_walrus_requires_single_instance");

@@ -43,6 +43,7 @@ describe("crypto coworker feature configuration", () => {
       "agent_files_require_coworkers",
       "agent_files_kms_region_required",
       "agent_files_kms_key_id_required",
+      "recovery_erasure_ledger_required",
     ]));
 
     const configured = cryptoCoworkerFeatureConfig({
@@ -50,6 +51,7 @@ describe("crypto coworker feature configuration", () => {
       MATTERHORN_COWORKER_MODE: "internal",
       MATTERHORN_EVIDENCE_KMS_REGION: "us-east-1",
       MATTERHORN_EVIDENCE_KMS_KEY_ID: "alias/matterhorn-agent-files",
+      MATTERHORN_ERASURE_LEDGER_SIGNING_SECRET: "test-only-erasure-ledger-secret-32-bytes",
     });
     expect(configured).toMatchObject({ agentFilesMode: "encrypted", ready: true, issues: [] });
   });
@@ -76,6 +78,7 @@ describe("crypto coworker feature configuration", () => {
       "walrus_publisher_auth_required",
       "evidence_kms_region_required",
       "evidence_kms_key_id_required",
+      "recovery_erasure_ledger_required",
       "walrus_mainnet_acknowledgement_required",
     ]));
 
@@ -86,6 +89,7 @@ describe("crypto coworker feature configuration", () => {
       MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN: "server-only-test-token",
       MATTERHORN_EVIDENCE_KMS_REGION: "us-east-1",
       MATTERHORN_EVIDENCE_KMS_KEY_ID: "alias/matterhorn-testnet-evidence",
+      MATTERHORN_ERASURE_LEDGER_SIGNING_SECRET: "test-only-erasure-ledger-secret-32-bytes",
     });
     expect(configured).toMatchObject({ walrusEvidenceMode: "testnet", ready: true, issues: [] });
   });
@@ -101,6 +105,7 @@ describe("crypto coworker feature configuration", () => {
       MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN: "server-only",
       MATTERHORN_EVIDENCE_KMS_REGION: "us-east-1",
       MATTERHORN_EVIDENCE_KMS_KEY_ID: "alias/test",
+      MATTERHORN_ERASURE_LEDGER_SIGNING_SECRET: "test-only-erasure-ledger-secret-32-bytes",
       MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT: "2",
     });
     expect(result.ready).toBe(false);
