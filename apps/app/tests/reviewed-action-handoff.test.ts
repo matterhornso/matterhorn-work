@@ -154,7 +154,7 @@ describe("agent card to wallet review handoff", () => {
     expect(sessionPage).toContain("authorizedArgumentsHash: item.intent.authorizedArgumentsHash");
   });
 
-  it("reconciles Sui and Hyperliquid public results without exposing signing authority", () => {
+  it("reconciles Sui, Hyperliquid, and Bittensor public results without exposing signing authority", () => {
     const suiPanel = readFileSync(
       resolve(import.meta.dir, "../src/react-app/domains/wallet/sui-workflow-panel.tsx"),
       "utf8",
@@ -171,6 +171,8 @@ describe("agent card to wallet review handoff", () => {
       expect(source).not.toContain("MATTERHORN_CAPABILITY_SIGNING_SECRET");
       expect(source).not.toContain("MATTERHORN_AGENT_RUNTIME_SECRET");
     }
+    expect(marketPanel).toContain('coworkerIntentContext?.protocol === "bittensor"');
+    expect(marketPanel).toContain("bittensorWalletNetworkMatches(coworkerIntentContext.network, nextReceipt.network)");
   });
 
   it("makes a disabled Hyperliquid submission route clear before wallet connection", () => {

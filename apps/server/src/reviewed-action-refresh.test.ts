@@ -6,6 +6,7 @@ import {
   validateReviewedActionHandoffV2,
 } from "./reviewed-action-airlock.js";
 import { refreshReviewedActionHandoffV2 } from "./reviewed-action-refresh.js";
+import { bittensorReviewedNetworkMatches } from "./reviewed-action-protocol-refresh.js";
 
 function suiDraft(amount = "1"): ReviewedActionDraftHandoff {
   return {
@@ -40,6 +41,13 @@ function reviewedSuiAction() {
 }
 
 describe("reviewed action protocol refresh", () => {
+  test("keeps Bittensor test and Finney reviews on their exact networks", () => {
+    expect(bittensorReviewedNetworkMatches("bittensor:test", "test")).toBe(true);
+    expect(bittensorReviewedNetworkMatches("bittensor:test", "finney")).toBe(false);
+    expect(bittensorReviewedNetworkMatches("bittensor:finney", "finney")).toBe(true);
+    expect(bittensorReviewedNetworkMatches("finney", "finney")).toBe(true);
+    expect(bittensorReviewedNetworkMatches("mainnet", "finney")).toBe(false);
+  });
   test("returns a newly simulated and hash-bound handoff for wallet signing", async () => {
     const result = await refreshReviewedActionHandoffV2({
       handoff: reviewedSuiAction(),

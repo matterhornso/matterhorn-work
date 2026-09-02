@@ -33,6 +33,7 @@ import {
   canCancelCoworkerWalletIntent,
   canOpenCoworkerWalletIntent,
   coworkerWalletIntentStatus,
+  coworkerWalletReviewUnavailableReason,
   coworkerWalletReceiptStatus,
   isActiveCoworkerWalletIntent,
   sortCoworkerWalletIntents,
@@ -826,6 +827,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                     <ul className="mt-2 divide-y divide-dls-border/70">
                       {visibleWalletIntents.map((item) => {
                         const receiptStatus = coworkerWalletReceiptStatus(item);
+                        const reviewUnavailableReason = coworkerWalletReviewUnavailableReason(item);
                         const canCancel = canCancelCoworkerWalletIntent(item);
                         const amount = item.intent.amount
                           ? `${item.intent.amount}${item.intent.asset ? ` ${item.intent.asset}` : ""}`
@@ -846,6 +848,9 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                               {canCancel ? `Expires ${shortDate(item.expiresAt)}` : `Updated ${shortDate(item.updatedAt)}`}
                             </p>
                             {receiptStatus ? <p className="mt-1 text-dls-secondary">{receiptStatus}</p> : null}
+                            {reviewUnavailableReason ? (
+                              <p className="mt-1 text-amber-12 dark:text-amber-11" role="status">{reviewUnavailableReason}</p>
+                            ) : null}
                             <details className="mt-2">
                               <summary className="min-h-8 cursor-pointer text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Exact review details</summary>
                               <dl className="mt-2 grid gap-1.5 border-y border-dls-border/70 py-2 text-dls-secondary">

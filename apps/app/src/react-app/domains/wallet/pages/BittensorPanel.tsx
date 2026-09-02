@@ -79,6 +79,7 @@ import {
   takePendingReviewedActionHandoff,
   type CoworkerWalletIntentHandoffContext,
 } from "../reviewed-action-handoff";
+import { bittensorWalletNetworkMatches } from "../../coworkers/coworker-wallet-intent-view";
 import {
   createHyperliquidReviewDraft,
   type HyperliquidReviewDraft,
@@ -2269,12 +2270,16 @@ function PolymarketTradeExecution({
 function BittensorConnectedWalletExecution({
   initialDraft,
   guardedHandoff: initialGuardedHandoff,
+  coworkerIntentContext: initialCoworkerIntentContext,
+  matterhornServerClient,
   initialOperation,
   workspaceId,
   sessionId,
 }: {
   initialDraft?: BittensorDraftHandoff | null;
   guardedHandoff?: Extract<ReviewedActionHandoffV2, { protocol: "bittensor" }> | null;
+  coworkerIntentContext?: CoworkerWalletIntentHandoffContext | null;
+  matterhornServerClient?: MatterhornServerClient | null;
   initialOperation?: BittensorWalletAction | null;
   workspaceId?: string | null;
   sessionId?: string | null;
@@ -2295,7 +2300,13 @@ function BittensorConnectedWalletExecution({
   const [evidenceWarning, setEvidenceWarning] = useState<string | null>(null);
   const [evidencePath, setEvidencePath] = useState<string | null>(null);
   const [guardedHandoff, setGuardedHandoff] = useState(initialGuardedHandoff ?? null);
+  const [coworkerIntentContext, setCoworkerIntentContext] = useState(initialCoworkerIntentContext ?? null);
+  const [coworkerReceiptWarning, setCoworkerReceiptWarning] = useState<string | null>(null);
   useEffect(() => setGuardedHandoff(initialGuardedHandoff ?? null), [initialGuardedHandoff]);
+  useEffect(() => {
+    setCoworkerIntentContext(initialCoworkerIntentContext ?? null);
+    setCoworkerReceiptWarning(null);
+  }, [initialCoworkerIntentContext]);
 
   const resetReview = useCallback(() => {
     setBackendPreview(null);
@@ -2304,7 +2315,40 @@ function BittensorConnectedWalletExecution({
     setReceipt(null);
     setEvidenceWarning(null);
     setEvidencePath(null);
+    setCoworkerReceiptWarning(null);
   }, []);
+
+  const reconcileCoworkerReceipt = useCallback(async (nextReceipt: BittensorPublicReceipt) => {
+    if (!matterhornServerClient || !coworkerIntentContext) return;
+    if (!bittensorWalletNetworkMatches(coworkerIntentContext.network, nextReceipt.network)
+      || coworkerIntentContext.signer !== nextReceipt.signerAddress
+      || coworkerIntentContext.operation !== nextReceipt.action) {
+      setCoworkerReceiptWarning("The wallet result does not match the coworker's protected network, signer, or action. Coworker history was not changed.");
+      return;
+    }
+    try {
+      await matterhornServerClient.recordCoworkerWalletReceipt(
+        coworkerIntentContext.workspaceId,
+        coworkerIntentContext.coworkerId,
+        coworkerIntentContext.intentId,
+        {
+          expectedRevision: coworkerIntentContext.expectedRevision,
+          status: "submitted",
+          publicId: nextReceipt.txHash,
+          transactionHash: nextReceipt.txHash,
+          blockHash: nextReceipt.blockHash,
+          network: coworkerIntentContext.network,
+          signer: coworkerIntentContext.signer,
+          operation: coworkerIntentContext.operation,
+          authorizedArgumentsHash: coworkerIntentContext.authorizedArgumentsHash,
+        },
+      );
+      setCoworkerIntentContext(null);
+      setCoworkerReceiptWarning(null);
+    } catch {
+      setCoworkerReceiptWarning("The wallet action completed, but its result could not be linked to coworker history. Do not send it again; check Bittensor first.");
+    }
+  }, [coworkerIntentContext, matterhornServerClient]);
 
   useEffect(() => {
     if (initialDraft || !initialOperation) return;
@@ -2341,6 +2385,7 @@ function BittensorConnectedWalletExecution({
     setBusy("prepare");
     setTransferError(null);
     setEvidenceWarning(null);
+    setCoworkerReceiptWarning(null);
     try {
       if (!sender) throw new Error("Connect and choose the Bittensor account that will send TAO.");
       const parsedNetuid = Number(netuid);
@@ -2493,12 +2538,13 @@ function BittensorConnectedWalletExecution({
           }`,
         );
       }
+      await reconcileCoworkerReceipt(publicReceipt);
     } catch (error) {
       setTransferError(error instanceof Error ? error.message : `The Bittensor wallet did not complete the ${prepared.action}.`);
     } finally {
       setBusy(null);
     }
-  }, [backendPreview, confirmation, guardedHandoff, prepared, sessionId, workspaceId]);
+  }, [backendPreview, confirmation, guardedHandoff, prepared, reconcileCoworkerReceipt, sessionId, workspaceId]);
 
   const shortSender = sender ? shortAddress(sender) : "Not connected";
   const actionCopy = {
@@ -2696,6 +2742,7 @@ function BittensorConnectedWalletExecution({
         </div>
       ) : null}
       {evidenceWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Receipt not saved">{evidenceWarning}</Notice> : null}
+      {coworkerReceiptWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Coworker history not updated">{coworkerReceiptWarning}</Notice> : null}
       {transferError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Bittensor transaction">{transferError}</Notice> : null}
       <p className="text-[11px] leading-5 text-dls-secondary">
         Matterhorn receives only public account, transaction, and block hashes. Seed phrases, private keys, and raw signatures never enter Matterhorn.
@@ -4537,6 +4584,8 @@ export default function BittensorPanel({
               <BittensorConnectedWalletExecution
                 initialDraft={draftHandoff?.protocol === "bittensor" ? draftHandoff.draft : null}
                 guardedHandoff={guardedHandoff?.protocol === "bittensor" ? guardedHandoff : null}
+                coworkerIntentContext={coworkerIntentContext?.protocol === "bittensor" ? coworkerIntentContext : null}
+                matterhornServerClient={matterhornServerClient}
                 initialOperation={initialOperation === "transfer" || initialOperation === "stake" || initialOperation === "unstake" ? initialOperation : null}
                 workspaceId={workspaceId}
                 sessionId={sessionId}

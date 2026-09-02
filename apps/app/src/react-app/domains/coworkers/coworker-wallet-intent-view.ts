@@ -11,6 +11,36 @@ const TERMINAL_STATES = new Set<MatterhornCoworkerWalletIntentView["state"]>([
   "failed",
 ]);
 
+type BittensorWalletNetwork = "finney" | "test" | "local";
+
+function normalizeBittensorNetwork(value: string): BittensorWalletNetwork | null {
+  const normalized = value.trim().toLowerCase().replace(/^bittensor:/, "");
+  if (normalized === "finney" || normalized === "test" || normalized === "local") return normalized;
+  return null;
+}
+
+export function bittensorWalletNetworkMatches(
+  reviewedNetwork: string,
+  walletNetwork: BittensorWalletNetwork,
+): boolean {
+  return normalizeBittensorNetwork(reviewedNetwork) === walletNetwork;
+}
+
+export function coworkerWalletReviewUnavailableReason(
+  item: MatterhornCoworkerWalletIntentView,
+): string | null {
+  const protocol = item.reviewedAction?.protocol ?? item.intent?.protocol;
+  const network = item.reviewedAction?.network ?? item.intent?.network;
+  if (protocol !== "bittensor" || !network || bittensorWalletNetworkMatches(network, "finney")) return null;
+  const requestedNetwork = normalizeBittensorNetwork(network);
+  const requestedLabel = requestedNetwork === "test"
+    ? "Testnet"
+    : requestedNetwork === "local"
+      ? "a local Bittensor network"
+      : "an unsupported Bittensor network";
+  return `This intent targets ${requestedLabel}, but this wallet build can only sign Finney. Matterhorn will not switch networks or send it.`;
+}
+
 export function canCancelCoworkerWalletIntent(
   item: MatterhornCoworkerWalletIntentView,
 ): boolean {
@@ -20,7 +50,8 @@ export function canCancelCoworkerWalletIntent(
 export function canOpenCoworkerWalletIntent(
   item: MatterhornCoworkerWalletIntentView,
 ): boolean {
-  return item.state === "wallet_review" || item.state === "wallet_approved";
+  return (item.state === "wallet_review" || item.state === "wallet_approved")
+    && coworkerWalletReviewUnavailableReason(item) === null;
 }
 
 export function isActiveCoworkerWalletIntent(
@@ -32,6 +63,7 @@ export function isActiveCoworkerWalletIntent(
 export function coworkerWalletIntentStatus(
   item: MatterhornCoworkerWalletIntentView,
 ): string {
+  if (coworkerWalletReviewUnavailableReason(item)) return "Wallet network unavailable";
   if (item.state === "wallet_review") return "Ready for wallet review";
   if (item.state === "refreshing") return "Refreshing terms";
   if (item.state === "regeneration_required") return "Fresh preview required";

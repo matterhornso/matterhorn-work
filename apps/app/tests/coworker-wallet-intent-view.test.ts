@@ -5,6 +5,7 @@ import {
   canCancelCoworkerWalletIntent,
   canOpenCoworkerWalletIntent,
   coworkerWalletIntentStatus,
+  coworkerWalletReviewUnavailableReason,
   coworkerWalletReceiptStatus,
   isActiveCoworkerWalletIntent,
   sortCoworkerWalletIntents,
@@ -69,6 +70,25 @@ describe("coworker wallet intent presentation", () => {
     expect(coworkerWalletReceiptStatus(verified)).toBe(
       "Verified against the public chain",
     );
+  });
+
+  test("never opens a Bittensor test intent in the Finney-only connected wallet", () => {
+    const testnet = intent("wallet_review");
+    testnet.intent = { protocol: "bittensor", network: "bittensor:test" } as MatterhornCoworkerWalletIntentView["intent"];
+    testnet.reviewedAction = { protocol: "bittensor", network: "bittensor:test" } as MatterhornCoworkerWalletIntentView["reviewedAction"];
+    expect(canOpenCoworkerWalletIntent(testnet)).toBe(false);
+    expect(coworkerWalletIntentStatus(testnet)).toBe("Wallet network unavailable");
+    expect(coworkerWalletReviewUnavailableReason(testnet)).toContain("will not switch networks");
+
+    testnet.state = "wallet_approved";
+    expect(canOpenCoworkerWalletIntent(testnet)).toBe(false);
+    expect(coworkerWalletIntentStatus(testnet)).toBe("Wallet network unavailable");
+
+    const finney = structuredClone(testnet);
+    finney.intent.network = "bittensor:finney";
+    finney.reviewedAction.network = "bittensor:finney";
+    expect(canOpenCoworkerWalletIntent(finney)).toBe(true);
+    expect(coworkerWalletReviewUnavailableReason(finney)).toBeNull();
   });
 
   test("sorts wallet activity by latest update without mutating server data", () => {
