@@ -202,11 +202,15 @@ async function boot(
   }
   const keyManager = options.agentFiles ? new RouteTestKeyManager() : null;
   const walrusTransport = options.walrus ? new RouteTestWalrusTransport() : null;
+  let walrusCurrentEpoch = 11;
   const dependencies: MatterhornServerDependencies = {};
   if (keyManager) dependencies.evidenceKeyManager = keyManager;
   if (walrusTransport) {
     dependencies.agentFileWalrusTransport = walrusTransport;
-    dependencies.agentFileWalrusCertificationVerifier = async () => routeTestCertification();
+    dependencies.agentFileWalrusCertificationVerifier = async () => ({
+      ...routeTestCertification(),
+      currentEpoch: walrusCurrentEpoch,
+    });
   }
   const server = await startServer(
     config(await freePort(), root),
@@ -225,6 +229,9 @@ async function boot(
     guardedDb,
     keyManager,
     walrusTransport,
+    setWalrusCurrentEpoch: (value: number) => {
+      walrusCurrentEpoch = value;
+    },
     stop,
   };
 }
@@ -660,7 +667,16 @@ describe("crypto coworker HTTP boundary", () => {
       network: "testnet",
       blobId: "route-agent-file-blob",
       currentEpoch: 11,
+      lifecycle: { status: "healthy", remainingEpochs: 4 },
     });
+    server.setWalrusCurrentEpoch(15);
+    const expired = await request(
+      server.base,
+      `/workspace/${workspaceA}/agent-files/${fileId}/verify`,
+      { cookie: cookieA, method: "POST" },
+    );
+    expect(expired.response.status).toBe(410);
+    expect(expired.payload.code).toBe("agent_file_walrus_certification_expired");
     expect((await request(
       server.base,
       `/workspace/${workspaceA}/agent-files/${fileId}/verify`,

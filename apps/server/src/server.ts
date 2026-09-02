@@ -3297,6 +3297,9 @@ function agentFileWalrusApiError(error: unknown): ApiError {
   if (code === "agent_file_walrus_publication_in_progress") {
     return new ApiError(409, code, "This file is already being backed up.");
   }
+  if (code === "agent_file_walrus_certification_expired") {
+    return new ApiError(410, code, "This encrypted cloud copy has expired.");
+  }
   return new ApiError(
     503,
     "agent_file_walrus_unavailable",

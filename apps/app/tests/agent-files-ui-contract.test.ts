@@ -44,6 +44,9 @@ describe("coworker files UI", () => {
     expect(panel).toContain("Files stay read-only and cannot grant wallet access.");
     expect(panel).toContain("Only encrypted bytes will be copied to the public Walrus test network.");
     expect(panel).toContain("Public encrypted bytes may remain after deletion");
+    expect(panel).toContain("Cloud copy needs renewal soon");
+    expect(panel).toContain("Renewal is not automatic.");
+    expect(panel).toContain("This cloud copy has expired.");
     expect(serverClient).toContain("acknowledgePublicCiphertext: true");
     expect(panel).not.toContain('type="password"');
     expect(panel).not.toContain("privateKey");

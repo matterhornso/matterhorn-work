@@ -134,13 +134,64 @@ describe("Agent File Walrus backup", () => {
         fileId: value.item.id,
         signal: new AbortController().signal,
         now: new Date("2026-09-02T00:02:00.000Z"),
-      })).resolves.toMatchObject({ verified: true, network: "testnet", currentEpoch: 11 });
+      })).resolves.toMatchObject({
+        verified: true,
+        network: "testnet",
+        currentEpoch: 11,
+        lifecycle: { status: "healthy", remainingEpochs: 4 },
+      });
       await expect(publisher.verify({
         workspaceId: "workspace_alpha",
         ownerId: "owner_beta",
         fileId: value.item.id,
         signal: new AbortController().signal,
       })).rejects.toThrow("agent_file_not_found");
+    } finally {
+      value.state.close();
+      rmSync(value.root, { recursive: true, force: true });
+    }
+  });
+
+  test("warns before expiry and fails closed after expiry", async () => {
+    const value = await fixture();
+    try {
+      let uploaded = Buffer.alloc(0);
+      let currentEpoch = 13;
+      const transport: MatterhornWalrusEvidenceTransport = {
+        publish: async ({ bytes }) => {
+          uploaded = Buffer.from(bytes);
+          return { blobId: "blob-agent-file-1", suiObjectId: "0x1234", declaredEndEpoch: 15 };
+        },
+        readByObjectId: async () => Buffer.from(uploaded),
+      };
+      const publisher = new MatterhornAgentFileWalrusPublisher(
+        value.store,
+        transport,
+        async () => certification({ currentEpoch }),
+      );
+      const published = await publisher.publish({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.item.id,
+        expectedRevision: value.item.revision,
+        signal: new AbortController().signal,
+      });
+      await expect(publisher.verify({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.item.id,
+        signal: new AbortController().signal,
+      })).resolves.toMatchObject({
+        lifecycle: { status: "renewal_due", remainingEpochs: 2 },
+      });
+
+      currentEpoch = 15;
+      await expect(publisher.verify({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: published.id,
+        signal: new AbortController().signal,
+      })).rejects.toThrow("agent_file_walrus_certification_expired");
     } finally {
       value.state.close();
       rmSync(value.root, { recursive: true, force: true });

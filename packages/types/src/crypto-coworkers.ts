@@ -560,6 +560,13 @@ export type MatterhornAgentFileWalrusPublication = {
   verifiedAt: string;
 };
 
+export type MatterhornWalrusStorageLifecycle = {
+  status: "healthy" | "renewal_due" | "expired";
+  remainingEpochs: number;
+  renewBeforeEpoch: number;
+  renewalAuthority: "wallet_or_infrastructure_only";
+};
+
 export type MatterhornAgentFileWalrusVerification = {
   verified: true;
   network: "testnet";
@@ -570,6 +577,7 @@ export type MatterhornAgentFileWalrusVerification = {
   currentEpoch: number;
   validUntilEpoch: number;
   verifiedAt: string;
+  lifecycle: MatterhornWalrusStorageLifecycle;
 };
 
 export type MatterhornStoredAgentFile = {

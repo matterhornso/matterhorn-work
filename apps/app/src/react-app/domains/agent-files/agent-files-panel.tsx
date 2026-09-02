@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import type {
+  MatterhornAgentFileWalrusVerification,
   MatterhornStoredAgentFile,
 } from "@matterhorn-work/types/crypto-coworkers";
 
@@ -97,6 +98,9 @@ function agentFileErrorMessage(error: unknown): string {
     if (error.code === "agent_file_already_published") return "This file already has an encrypted cloud copy.";
     if (error.code === "agent_file_walrus_publication_in_progress") return "This file is already being backed up.";
     if (error.code === "agent_file_walrus_unavailable") return "Encrypted cloud backup is temporarily unavailable.";
+    if (error.code === "agent_file_walrus_certification_expired") {
+      return "This cloud copy has expired. The encrypted workspace file is still available, but the public backup cannot be used.";
+    }
     if (error.code === "coworker_execution_not_ready" || error.code === "coworker_runtime_disabled") {
       return "Coworkers are not enabled in this environment yet.";
     }
@@ -136,7 +140,7 @@ function FileRow(props: {
   selected: boolean;
   backupAvailable: boolean;
   busy: boolean;
-  verified: boolean;
+  verification: MatterhornAgentFileWalrusVerification | null;
   confirmingBackup: boolean;
   onSelect: () => void;
   onBackup: () => void;
@@ -145,6 +149,9 @@ function FileRow(props: {
   onVerify: () => void;
   onDelete: () => void;
 }) {
+  const backupState = props.verification?.lifecycle.status === "renewal_due"
+    ? "Cloud copy needs renewal soon"
+    : props.verification ? "Encrypted cloud copy checked" : "Encrypted cloud copy saved";
   return (
     <li className="border-b border-dls-border/70 py-4 last:border-b-0">
       <div className="flex items-start gap-3">
@@ -164,9 +171,15 @@ function FileRow(props: {
           <p className="mt-1 flex items-center gap-1.5 text-xs text-dls-secondary">
             {props.item.publication ? <Cloud aria-hidden="true" className="size-3.5" /> : <ShieldCheck aria-hidden="true" className="size-3.5" />}
             {props.item.publication
-              ? props.verified ? "Encrypted cloud copy checked" : "Encrypted cloud copy saved"
+              ? backupState
               : "Encrypted in this workspace"}
           </p>
+          {props.item.publication ? (
+            <p className="mt-1 text-xs leading-5 text-dls-secondary">
+              Stored through storage period {props.item.publication.validUntilEpoch}
+              {props.verification ? ` · ${props.verification.lifecycle.remainingEpochs} remaining` : ""}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -221,7 +234,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
   const [busyFileId, setBusyFileId] = useState<string | null>(null);
   const [confirmingBackupId, setConfirmingBackupId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MatterhornStoredAgentFile | null>(null);
-  const [verifiedFileIds, setVerifiedFileIds] = useState<string[]>([]);
+  const [fileVerifications, setFileVerifications] = useState<Record<string, MatterhornAgentFileWalrusVerification>>({});
   const [error, setError] = useState<string | null>(null);
 
   const query = useQuery({
@@ -343,10 +356,22 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
     if (!props.client || !workspaceId) return;
     setBusyFileId(item.id);
     setError(null);
+    setFileVerifications((current) => {
+      const next = { ...current };
+      delete next[item.id];
+      return next;
+    });
     try {
-      await props.client.verifyAgentFile(workspaceId, item.id);
-      setVerifiedFileIds((current) => [...new Set([...current, item.id])]);
-      showToast({ title: "Backup checked", description: "The encrypted public copy matches this workspace file.", tone: "success" });
+      const result = await props.client.verifyAgentFile(workspaceId, item.id);
+      setFileVerifications((current) => ({ ...current, [item.id]: result }));
+      const renewalDue = result.lifecycle.status === "renewal_due";
+      showToast({
+        title: renewalDue ? "Backup needs renewal soon" : "Backup checked",
+        description: renewalDue
+          ? `The copy matches, with ${result.lifecycle.remainingEpochs} storage periods remaining. Renewal is not automatic.`
+          : `The encrypted public copy matches, with ${result.lifecycle.remainingEpochs} storage periods remaining.`,
+        tone: renewalDue ? "warning" : "success",
+      });
     } catch (cause) {
       setError(agentFileErrorMessage(cause));
     } finally {
@@ -361,6 +386,11 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
     try {
       await props.client.deleteAgentFile(workspaceId, deleteTarget.id, deleteTarget.revision);
       setSelectedFileIds((current) => current.filter((id) => id !== deleteTarget.id));
+      setFileVerifications((current) => {
+        const next = { ...current };
+        delete next[deleteTarget.id];
+        return next;
+      });
       props.onFileDeleted?.(deleteTarget.id);
       setDeleteTarget(null);
       await refresh();
@@ -538,7 +568,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
                     selected={selectedFileIds.includes(item.id)}
                     backupAvailable={query.data.files.cloudBackup.available}
                     busy={busyFileId === item.id}
-                    verified={verifiedFileIds.includes(item.id)}
+                    verification={fileVerifications[item.id] ?? null}
                     confirmingBackup={confirmingBackupId === item.id}
                     onSelect={() => setSelectedFileIds((current) => (
                       current.includes(item.id)

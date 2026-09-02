@@ -13,6 +13,7 @@ import type {
   MatterhornWalrusCertificationVerifier,
   MatterhornWalrusEvidenceTransport,
 } from "./crypto-evidence-walrus-publisher.js";
+import { assessMatterhornWalrusStorageLifecycle } from "./walrus-storage-lifecycle.js";
 
 const DEFAULT_STORAGE_EPOCHS = 5;
 
@@ -34,10 +35,14 @@ function validateCertification(input: {
     || !validEpochs(value.certifiedEpoch)
     || !validEpochs(value.currentEpoch)
     || !validEpochs(value.validUntilEpoch)
-    || value.certifiedEpoch > value.currentEpoch
-    || value.currentEpoch >= value.validUntilEpoch) {
+    || value.certifiedEpoch > value.currentEpoch) {
     throw new Error("agent_file_walrus_certification_invalid");
   }
+  const lifecycle = assessMatterhornWalrusStorageLifecycle({
+    currentEpoch: value.currentEpoch,
+    validUntilEpoch: value.validUntilEpoch,
+  });
+  if (lifecycle.status === "expired") throw new Error("agent_file_walrus_certification_expired");
 }
 
 function verification(
@@ -55,6 +60,10 @@ function verification(
     currentEpoch: certification.currentEpoch,
     validUntilEpoch: certification.validUntilEpoch,
     verifiedAt: now.toISOString(),
+    lifecycle: assessMatterhornWalrusStorageLifecycle({
+      currentEpoch: certification.currentEpoch,
+      validUntilEpoch: certification.validUntilEpoch,
+    }),
   };
 }
 
