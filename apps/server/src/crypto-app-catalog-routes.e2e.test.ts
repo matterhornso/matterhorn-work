@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 
 import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certification-test-support.js";
 import { buildMatterhornFirstPartyTestnetManifests } from "./first-party-crypto-apps.js";
@@ -27,6 +28,7 @@ const ENV_KEYS = [
   "MATTERHORN_CRYPTO_APP_CONNECTION_DB",
   "MATTERHORN_CRYPTO_APP_MANAGED_CREDENTIALS_JSON",
   "MATTERHORN_CRYPTO_APP_SECRET_HYPERLIQUID_TEST",
+  "MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET",
   "MATTERHORN_WORK_DATA_DIR",
 ] as const;
 const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -145,6 +147,15 @@ function configureCatalog(root: string) {
     scheme: "raw",
   }]);
   process.env.MATTERHORN_CRYPTO_APP_SECRET_HYPERLIQUID_TEST = "server-managed-test-secret";
+  const walletManifest = manifests.find((manifest) => manifest.appId === "matterhorn.sui-testnet");
+  if (!walletManifest) throw new Error("Sui test manifest is required.");
+  walletManifest.authentication = { type: "wallet_connection", scopes: [] };
+  walletManifest.publisher.signature = sign(
+    null,
+    Buffer.from(canonicalCryptoAppManifestPayload(walletManifest)),
+    keys.privateKey,
+  ).toString("base64url");
+  process.env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET = "wallet-proof-route-secret-with-at-least-32-characters";
   return { manifests };
 }
 
@@ -285,7 +296,7 @@ describe("crypto app catalog HTTP boundary", () => {
     expect(JSON.stringify(unavailableManagedConnection.payload)).not.toContain("HYPERLIQUID_TEST");
     process.env.MATTERHORN_CRYPTO_APP_SECRET_HYPERLIQUID_TEST = "server-managed-test-secret";
 
-    const created = await request(server.base, "/workspace/ws_catalog/crypto-app-connections", {
+    const directWalletConnection = await request(server.base, "/workspace/ws_catalog/crypto-app-connections", {
       body: {
         appId: sui.appId,
         grantedActionIds: sui.actions.map((action: any) => action.id),
@@ -293,14 +304,61 @@ describe("crypto app catalog HTTP boundary", () => {
         grantedNetworks: ["sui:testnet"],
       },
     });
+    expect(directWalletConnection.response.status).toBe(409);
+    expect(directWalletConnection.payload.code).toBe("crypto_app_connection_flow_required");
+
+    const suiWallet = Ed25519Keypair.generate();
+    const suiAddress = suiWallet.getPublicKey().toSuiAddress();
+    const challengeResponse = await request(
+      server.base,
+      "/workspace/ws_catalog/crypto-app-connections/wallet/challenges",
+      {
+        body: {
+          appId: sui.appId,
+          grantedActionIds: sui.actions.map((action: any) => action.id),
+          grantedScopes: [],
+          grantedNetworks: ["sui:testnet"],
+          walletFamily: "sui",
+          walletAddress: suiAddress,
+        },
+      },
+    );
+    expect(challengeResponse.response.status).toBe(201);
+    expect(challengeResponse.payload.challenge).toMatchObject({
+      walletFamily: "sui",
+      notice: "proves_wallet_control_only",
+    });
+    expect(challengeResponse.payload.challenge.message).toContain("does not authorize spending");
+    const signedChallenge = await suiWallet.signPersonalMessage(
+      new TextEncoder().encode(challengeResponse.payload.challenge.message),
+    );
+    const created = await request(
+      server.base,
+      `/workspace/ws_catalog/crypto-app-connections/wallet/challenges/${challengeResponse.payload.challenge.challengeId}/confirm`,
+      {
+        body: {
+          walletAddress: suiAddress,
+          signature: signedChallenge.signature,
+        },
+      },
+    );
     expect(created.response.status).toBe(201);
     expect(created.payload.connection).toMatchObject({
       workspaceId: "ws_catalog",
       appId: "matterhorn.sui-testnet",
       state: "active",
-      credential: { type: "none", connected: true },
+      credential: { type: "wallet_connection", connected: true },
     });
     expect(JSON.stringify(created.payload)).not.toContain("createdBy");
+    expect(JSON.stringify(created.payload)).not.toContain(suiAddress);
+    expect(JSON.stringify(created.payload)).not.toContain(signedChallenge.signature);
+    const replay = await request(
+      server.base,
+      `/workspace/ws_catalog/crypto-app-connections/wallet/challenges/${challengeResponse.payload.challenge.challengeId}/confirm`,
+      { body: { walletAddress: suiAddress, signature: signedChallenge.signature } },
+    );
+    expect(replay.response.status).toBe(409);
+    expect(replay.payload.code).toBe("wallet_challenge_invalid");
 
     const connectionId = created.payload.connection.id as string;
     const otherWorkspace = await request(server.base, "/workspace/ws_other/crypto-app-connections");

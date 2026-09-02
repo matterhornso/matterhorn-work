@@ -7,6 +7,7 @@ import {
   type MatterhornCryptoAppConnection,
   type MatterhornCryptoAppConnectionCredential,
   type MatterhornCryptoAppConnectionState,
+  type MatterhornCryptoAppWalletFamily,
 } from "@matterhorn-work/types/crypto-coworkers";
 
 type SqliteRunResult = { changes?: number };
@@ -36,6 +37,46 @@ type ConnectionRow = {
   created_by: string;
   created_at: string;
   updated_at: string;
+};
+
+type WalletChallengeRow = {
+  workspace_id: string;
+  challenge_id: string;
+  account_id: string;
+  app_id: string;
+  manifest_revision: string;
+  wallet_family: string;
+  address_digest: string;
+  action_ids_json: string;
+  scopes_json: string;
+  networks_json: string;
+  issued_at: string;
+  expires_at: string;
+  state: string;
+  consumed_at: string | null;
+};
+
+type WalletProofRow = {
+  wallet_connection_id: string;
+  wallet_family: string;
+  address_digest: string;
+};
+
+export type MatterhornCryptoAppWalletChallengeRecord = {
+  workspaceId: string;
+  challengeId: string;
+  accountId: string;
+  appId: string;
+  manifestRevision: string;
+  walletFamily: MatterhornCryptoAppWalletFamily;
+  addressDigest: string;
+  actionIds: string[];
+  scopes: string[];
+  networks: string[];
+  issuedAt: string;
+  expiresAt: string;
+  state: "pending" | "consumed";
+  consumedAt: string | null;
 };
 
 const require = createRequire(import.meta.url);
@@ -87,6 +128,33 @@ function toConnection(row: ConnectionRow): MatterhornCryptoAppConnection {
   };
 }
 
+function walletFamily(value: string): MatterhornCryptoAppWalletFamily {
+  if (value === "evm" || value === "sui") return value;
+  throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+}
+
+function toWalletChallenge(row: WalletChallengeRow): MatterhornCryptoAppWalletChallengeRecord {
+  if (row.state !== "pending" && row.state !== "consumed") {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
+  return {
+    workspaceId: row.workspace_id,
+    challengeId: row.challenge_id,
+    accountId: row.account_id,
+    appId: row.app_id,
+    manifestRevision: row.manifest_revision,
+    walletFamily: walletFamily(row.wallet_family),
+    addressDigest: row.address_digest,
+    actionIds: parseJson<string[]>(row.action_ids_json),
+    scopes: parseJson<string[]>(row.scopes_json),
+    networks: parseJson<string[]>(row.networks_json),
+    issuedAt: row.issued_at,
+    expiresAt: row.expires_at,
+    state: row.state,
+    consumedAt: row.consumed_at,
+  };
+}
+
 export class MatterhornCryptoAppConnectionStoreError extends Error {
   constructor(public readonly code: string) {
     super(code);
@@ -128,6 +196,39 @@ export class MatterhornCryptoAppConnectionStore {
       );
       CREATE INDEX IF NOT EXISTS crypto_app_connections_workspace_idx
         ON crypto_app_connections(workspace_id, state, app_id, updated_at);
+      CREATE TABLE IF NOT EXISTS crypto_app_wallet_challenges (
+        workspace_id TEXT NOT NULL,
+        challenge_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        app_id TEXT NOT NULL,
+        manifest_revision TEXT NOT NULL,
+        wallet_family TEXT NOT NULL,
+        address_digest TEXT NOT NULL,
+        action_ids_json TEXT NOT NULL,
+        scopes_json TEXT NOT NULL,
+        networks_json TEXT NOT NULL,
+        issued_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        state TEXT NOT NULL,
+        consumed_at TEXT,
+        PRIMARY KEY (workspace_id, challenge_id)
+      );
+      CREATE INDEX IF NOT EXISTS crypto_app_wallet_challenges_expiry_idx
+        ON crypto_app_wallet_challenges(state, expires_at);
+      CREATE TABLE IF NOT EXISTS crypto_app_wallet_proofs (
+        workspace_id TEXT NOT NULL,
+        wallet_connection_id TEXT NOT NULL,
+        connection_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        app_id TEXT NOT NULL,
+        manifest_revision TEXT NOT NULL,
+        wallet_family TEXT NOT NULL,
+        address_digest TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, wallet_connection_id)
+      );
+      CREATE INDEX IF NOT EXISTS crypto_app_wallet_proofs_binding_idx
+        ON crypto_app_wallet_proofs(workspace_id, app_id, manifest_revision);
     `);
     chmodSync(path, 0o600);
   }
@@ -163,6 +264,158 @@ export class MatterhornCryptoAppConnectionStore {
       }
       throw error;
     }
+  }
+
+  createWalletChallenge(challenge: MatterhornCryptoAppWalletChallengeRecord): void {
+    try {
+      statement(this.#db, `
+        INSERT INTO crypto_app_wallet_challenges(
+          workspace_id, challenge_id, account_id, app_id, manifest_revision,
+          wallet_family, address_digest, action_ids_json, scopes_json,
+          networks_json, issued_at, expires_at, state, consumed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        challenge.workspaceId,
+        challenge.challengeId,
+        challenge.accountId,
+        challenge.appId,
+        challenge.manifestRevision,
+        challenge.walletFamily,
+        challenge.addressDigest,
+        JSON.stringify(challenge.actionIds),
+        JSON.stringify(challenge.scopes),
+        JSON.stringify(challenge.networks),
+        challenge.issuedAt,
+        challenge.expiresAt,
+        challenge.state,
+        challenge.consumedAt,
+      );
+    } catch (error) {
+      const code = typeof error === "object" && error !== null && "code" in error
+        ? String(error.code)
+        : "";
+      if (code.startsWith("SQLITE_CONSTRAINT")) {
+        throw new MatterhornCryptoAppConnectionStoreError("crypto_app_wallet_challenge_conflict");
+      }
+      throw error;
+    }
+  }
+
+  getWalletChallenge(
+    workspaceId: string,
+    accountId: string,
+    challengeId: string,
+  ): MatterhornCryptoAppWalletChallengeRecord | null {
+    const row = statement(this.#db, `
+      SELECT * FROM crypto_app_wallet_challenges
+      WHERE workspace_id = ? AND account_id = ? AND challenge_id = ? LIMIT 1
+    `).get(workspaceId, accountId, challengeId) as WalletChallengeRow | undefined;
+    return row ? toWalletChallenge(row) : null;
+  }
+
+  finalizeWalletChallenge(input: {
+    workspaceId: string;
+    challengeId: string;
+    accountId: string;
+    appId: string;
+    manifestRevision: string;
+    walletFamily: MatterhornCryptoAppWalletFamily;
+    addressDigest: string;
+    actionIds: string[];
+    scopes: string[];
+    networks: string[];
+    expiresAt: string;
+    proofId: string;
+    connection: MatterhornCryptoAppConnection;
+    consumedAt: string;
+  }): boolean {
+    if (input.connection.workspaceId !== input.workspaceId
+      || input.connection.createdBy !== input.accountId
+      || input.connection.appId !== input.appId
+      || input.connection.manifestRevision !== input.manifestRevision
+      || input.connection.credential.type !== "wallet_connection"
+      || input.connection.credential.walletConnectionId !== input.proofId) {
+      throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+    }
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = statement(this.#db, `
+        SELECT * FROM crypto_app_wallet_challenges
+        WHERE workspace_id = ? AND account_id = ? AND challenge_id = ? LIMIT 1
+      `).get(input.workspaceId, input.accountId, input.challengeId) as WalletChallengeRow | undefined;
+      if (!row) {
+        this.#db.exec("ROLLBACK");
+        return false;
+      }
+      const challenge = toWalletChallenge(row);
+      const exact = challenge.state === "pending"
+        && challenge.appId === input.appId
+        && challenge.manifestRevision === input.manifestRevision
+        && challenge.walletFamily === input.walletFamily
+        && challenge.addressDigest === input.addressDigest
+        && challenge.expiresAt === input.expiresAt
+        && challenge.expiresAt > input.consumedAt
+        && JSON.stringify(challenge.actionIds) === JSON.stringify(input.actionIds)
+        && JSON.stringify(challenge.scopes) === JSON.stringify(input.scopes)
+        && JSON.stringify(challenge.networks) === JSON.stringify(input.networks);
+      if (!exact) {
+        this.#db.exec("ROLLBACK");
+        return false;
+      }
+      const consumed = statement(this.#db, `
+        UPDATE crypto_app_wallet_challenges
+        SET state = 'consumed', consumed_at = ?
+        WHERE workspace_id = ? AND account_id = ? AND challenge_id = ? AND state = 'pending'
+      `).run(input.consumedAt, input.workspaceId, input.accountId, input.challengeId).changes ?? 0;
+      if (consumed !== 1) {
+        this.#db.exec("ROLLBACK");
+        return false;
+      }
+      statement(this.#db, `
+        INSERT INTO crypto_app_wallet_proofs(
+          workspace_id, wallet_connection_id, connection_id, account_id, app_id,
+          manifest_revision, wallet_family, address_digest, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        input.workspaceId,
+        input.proofId,
+        input.connection.id,
+        input.accountId,
+        input.appId,
+        input.manifestRevision,
+        input.walletFamily,
+        input.addressDigest,
+        input.consumedAt,
+      );
+      this.#insertConnection(input.connection);
+      this.#db.exec("COMMIT");
+      return true;
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  resolveWalletProof(input: {
+    workspaceId: string;
+    walletConnectionId: string;
+    connectionId: string;
+    appId: string;
+    manifestRevision: string;
+  }): { walletFamily: MatterhornCryptoAppWalletFamily; addressDigest: string } | null {
+    const row = statement(this.#db, `
+      SELECT wallet_connection_id, wallet_family, address_digest
+      FROM crypto_app_wallet_proofs
+      WHERE workspace_id = ? AND wallet_connection_id = ?
+        AND connection_id = ? AND app_id = ? AND manifest_revision = ? LIMIT 1
+    `).get(
+      input.workspaceId,
+      input.walletConnectionId,
+      input.connectionId,
+      input.appId,
+      input.manifestRevision,
+    ) as WalletProofRow | undefined;
+    return row ? { walletFamily: walletFamily(row.wallet_family), addressDigest: row.address_digest } : null;
   }
 
   get(workspaceId: string, connectionId: string): MatterhornCryptoAppConnection | null {
@@ -203,11 +456,44 @@ export class MatterhornCryptoAppConnectionStore {
   }
 
   purgeWorkspace(workspaceId: string): number {
-    return statement(this.#db, "DELETE FROM crypto_app_connections WHERE workspace_id = ?")
-      .run(workspaceId).changes ?? 0;
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      statement(this.#db, "DELETE FROM crypto_app_wallet_challenges WHERE workspace_id = ?").run(workspaceId);
+      statement(this.#db, "DELETE FROM crypto_app_wallet_proofs WHERE workspace_id = ?").run(workspaceId);
+      const changes = statement(this.#db, "DELETE FROM crypto_app_connections WHERE workspace_id = ?")
+        .run(workspaceId).changes ?? 0;
+      this.#db.exec("COMMIT");
+      return changes;
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   close(): void {
     this.#db.close();
+  }
+
+  #insertConnection(connection: MatterhornCryptoAppConnection): void {
+    statement(this.#db, `
+      INSERT INTO crypto_app_connections(
+        workspace_id, connection_id, app_id, manifest_revision, state,
+        action_ids_json, scopes_json, networks_json, credential_json,
+        created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      connection.workspaceId,
+      connection.id,
+      connection.appId,
+      connection.manifestRevision,
+      connection.state,
+      JSON.stringify(connection.grantedActionIds),
+      JSON.stringify(connection.grantedScopes),
+      JSON.stringify(connection.grantedNetworks),
+      JSON.stringify(connection.credential),
+      connection.createdBy,
+      connection.createdAt,
+      connection.updatedAt,
+    );
   }
 }

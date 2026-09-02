@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+  type MatterhornCryptoAppConnectionCredential,
   type MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
 
@@ -28,7 +29,9 @@ import { MatterhornCryptoAppRegistry, canonicalCryptoAppManifestPayload } from "
 
 const keys = generateKeyPairSync("ed25519");
 
-function manifest(): MatterhornCryptoAppManifest {
+function manifest(
+  authentication: MatterhornCryptoAppManifest["authentication"] = { type: "none", scopes: [] },
+): MatterhornCryptoAppManifest {
   const value: MatterhornCryptoAppManifest = {
     version: MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
     appId: "matterhorn.market-data",
@@ -37,7 +40,7 @@ function manifest(): MatterhornCryptoAppManifest {
     manifestRevision: "1.0.0",
     publisher: { id: "matterhorn", keyId: "publisher-1", algorithm: "ed25519", signature: "pending" },
     transport: { kind: "matterhorn_sdk", endpoint: "https://gateway.matterhorn.so/apps/market-data" },
-    authentication: { type: "none", scopes: [] },
+    authentication,
     networks: [{ protocol: "sui", chainId: "sui:testnet", environment: "testnet" }],
     actions: [{
       id: "read_market",
@@ -78,12 +81,15 @@ function manifest(): MatterhornCryptoAppManifest {
 function fixture(options: {
   executor?: MatterhornCryptoAppTransportExecutor;
   authorization?: MatterhornCryptoAppAuthorization;
+  authentication?: MatterhornCryptoAppManifest["authentication"];
+  credential?: MatterhornCryptoAppConnectionCredential;
+  validateCredential?: NonNullable<ConstructorParameters<typeof MatterhornCryptoAppAdapterRouter>[0]["validateCredential"]>;
   resolveDns?: () => Promise<Array<{ address: string; family: number }>>;
   timeout?: ConstructorParameters<typeof MatterhornCryptoAppAdapterRouter>[0]["timeout"];
   circuitFailureThreshold?: number;
   operationalPolicy?: MatterhornCryptoAppOperationalPolicy;
 } = {}) {
-  const value = manifest();
+  const value = manifest(options.authentication);
   const registry = new MatterhornCryptoAppRegistry({
     publisherKeys: [{ publisherId: "matterhorn", keyId: "publisher-1", algorithm: "ed25519", publicKey: keys.publicKey }],
     policyVersion: "policy-1",
@@ -120,7 +126,7 @@ function fixture(options: {
     grantedActionIds: ["read_market"],
     grantedScopes: [],
     grantedNetworks: ["sui:testnet"],
-    credential: { type: "none" },
+    credential: options.credential ?? { type: "none" },
   });
   const authorizationCalls: unknown[] = [];
   const reconciliationCalls: unknown[] = [];
@@ -154,6 +160,7 @@ function fixture(options: {
     registry,
     connections,
     authorization,
+    validateCredential: options.validateCredential,
     executors: { matterhorn_sdk: executor },
     resolveDns: options.resolveDns ?? (async () => [{ address: "93.184.216.34", family: 4 }]),
     now: () => new Date("2026-09-01T12:00:00.000Z"),
@@ -219,6 +226,59 @@ describe("certified crypto app adapter router", () => {
     expect(app.authorizationCalls).toHaveLength(0);
     expect(app.executorCalls).toHaveLength(0);
     app.store.close();
+  });
+
+  test("requires an exact wallet proof and removes its opaque reference before transport", async () => {
+    const validationCalls: unknown[] = [];
+    const app = fixture({
+      authentication: { type: "wallet_connection", scopes: [] },
+      credential: { type: "wallet_connection", walletConnectionId: "cwp_exact_wallet_proof" },
+      validateCredential: async (input) => {
+        validationCalls.push(input);
+      },
+    });
+    await app.router.execute(request());
+    expect(validationCalls).toEqual([expect.objectContaining({
+      workspaceId: "ws_a",
+      connectionId: "cxc_market_data",
+      appId: "matterhorn.market-data",
+      manifestRevision: "1.0.0",
+      credential: { type: "wallet_connection", walletConnectionId: "cwp_exact_wallet_proof" },
+    })]);
+    expect(app.executorCalls).toHaveLength(1);
+    expect(app.executorCalls[0]).toEqual(expect.objectContaining({ credential: { type: "none" } }));
+    expect(JSON.stringify(app.executorCalls[0])).not.toContain("cwp_exact_wallet_proof");
+    app.store.close();
+  });
+
+  test("fails an unavailable wallet proof before DNS, authorization or upstream traffic", async () => {
+    let dnsCalls = 0;
+    const app = fixture({
+      authentication: { type: "wallet_connection", scopes: [] },
+      credential: { type: "wallet_connection", walletConnectionId: "cwp_unavailable_wallet_proof" },
+      validateCredential: async () => {
+        throw new Error("wallet proof unavailable");
+      },
+      resolveDns: async () => {
+        dnsCalls += 1;
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+    });
+    await expect(app.router.execute(request())).rejects.toMatchObject({ code: "adapter_connection_unavailable" });
+    expect(dnsCalls).toBe(0);
+    expect(app.authorizationCalls).toHaveLength(0);
+    expect(app.executorCalls).toHaveLength(0);
+    app.store.close();
+
+    const missingValidator = fixture({
+      authentication: { type: "wallet_connection", scopes: [] },
+      credential: { type: "wallet_connection", walletConnectionId: "cwp_no_validator" },
+    });
+    await expect(missingValidator.router.execute(request()))
+      .rejects.toMatchObject({ code: "adapter_connection_unavailable" });
+    expect(missingValidator.authorizationCalls).toHaveLength(0);
+    expect(missingValidator.executorCalls).toHaveLength(0);
+    missingValidator.store.close();
   });
 
   test("blocks private DNS answers before authorization", async () => {

@@ -158,6 +158,14 @@ describe("workspace-scoped crypto app connections", () => {
       ...createInput(),
       credential: { type: "wallet_connection", walletConnectionId: "x", apiKey: "secret" } as never,
     })).toThrowError(expect.objectContaining({ code: "connection_credential_invalid" }));
+    expect(() => service.create({ ...createInput(), workspaceId: "ws_a\nother" }))
+      .toThrowError(expect.objectContaining({ code: "connection_input_invalid" }));
+    expect(() => service.create({ ...createInput(), grantedActionIds: [" read_balance"] }))
+      .toThrowError(expect.objectContaining({ code: "connection_input_invalid" }));
+    expect(() => service.create({
+      ...createInput(),
+      grantedNetworks: Array.from({ length: 65 }, (_, index) => `sui:testnet-${index}`),
+    })).toThrowError(expect.objectContaining({ code: "connection_input_invalid" }));
     store.close();
   });
 

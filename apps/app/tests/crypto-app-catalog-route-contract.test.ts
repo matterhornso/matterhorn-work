@@ -60,6 +60,8 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).toContain("Your connected wallet still signs and submits");
     expect(route).toContain("Matterhorn will never ask you to paste a key into chat");
     expect(route).toContain("You do not enter an API key here");
+    expect(route).toContain("It does not give Matterhorn permission to move funds");
+    expect(route).toContain("Connect wallet");
     expect(route).toContain("crypto_app_managed_credential_unavailable");
     expect(route).toContain("Revocation is permanent");
     expect(route).toContain('role="alert"');
@@ -101,6 +103,8 @@ describe("invite-only crypto app catalog route", () => {
 
     expect(catalogMethods).toContain('`/crypto-apps${suffix}`');
     expect(catalogMethods).toContain("/crypto-app-connections");
+    expect(catalogMethods).toContain("/crypto-app-connections/wallet/challenges");
+    expect(catalogMethods).toContain("/confirm");
     expect(catalogMethods).toContain("method: \"POST\"");
     expect(catalogMethods).toContain("method: \"PATCH\"");
     expect(catalogMethods).toContain("method: \"DELETE\"");
@@ -134,5 +138,10 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).toContain("grantedNetworks");
     expect(route).toContain('app.authentication.type === "none"');
     expect(route).toContain('app.authentication.type === "api_key_vault"');
+    expect(route).toContain('app.authentication.type === "wallet_connection"');
+    expect(route).toContain("issueCryptoAppWalletChallenge");
+    expect(route).toContain("confirmCryptoAppWalletChallenge");
+    expect(route).toContain("signPersonalMessage");
+    expect(route).toContain("signMessageAsync");
   });
 });

@@ -5,6 +5,7 @@ import { MatterhornCryptoAppAdapterRouter } from "./crypto-app-adapter-router.js
 import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
 import { MatterhornManagedCryptoAppCredentials } from "./crypto-app-managed-credentials.js";
+import { MatterhornCryptoAppWalletConnections } from "./crypto-app-wallet-connections.js";
 import { MatterhornCryptoDeveloperPortal } from "./crypto-app-developer-portal.js";
 import { MatterhornCryptoDeveloperPortalStore } from "./crypto-app-developer-portal-store.js";
 import { MatterhornCryptoAppOperator } from "./crypto-app-operator.js";
@@ -29,6 +30,7 @@ export type MatterhornCryptoAppRuntimeServices = {
   operator: MatterhornCryptoAppOperator | null;
   developerPortal: MatterhornCryptoDeveloperPortal | null;
   managedCredentials: MatterhornManagedCryptoAppCredentials | null;
+  walletConnections: MatterhornCryptoAppWalletConnections | null;
   router: MatterhornCryptoAppAdapterRouter | null;
   verifySuiTransaction: MatterhornSuiPublicTransactionVerifier | null;
   ready: boolean;
@@ -43,7 +45,8 @@ export class MatterhornCryptoAppRuntimeConfigurationError extends Error {
     | "crypto_app_publisher_keys_required"
     | "crypto_app_publisher_keys_invalid"
     | "crypto_app_publisher_key_duplicate"
-    | "crypto_app_private_key_forbidden") {
+    | "crypto_app_private_key_forbidden"
+    | "crypto_app_wallet_proof_secret_required") {
     super(code);
     this.name = "MatterhornCryptoAppRuntimeConfigurationError";
   }
@@ -120,6 +123,7 @@ export function createMatterhornCryptoAppRuntime(
       operator: null,
       developerPortal: null,
       managedCredentials: null,
+      walletConnections: null,
       router: null,
       verifySuiTransaction: null,
       ready: true,
@@ -131,6 +135,11 @@ export function createMatterhornCryptoAppRuntime(
   const policyVersion = env.MATTERHORN_CRYPTO_APP_POLICY_VERSION?.trim() ?? "";
   if (!POLICY_VERSION_PATTERN.test(policyVersion)) {
     throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_policy_version_required");
+  }
+  const walletProofSecret = env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET;
+  if (feature.cryptoAppGatewayMode === "enforce"
+    && (!walletProofSecret || Buffer.byteLength(walletProofSecret, "utf8") < 32)) {
+    throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_wallet_proof_secret_required");
   }
   const publisherKeys = parsePublisherKeys(env.MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON);
   const registryPath = env.MATTERHORN_CRYPTO_APP_REGISTRY_DB?.trim();
@@ -145,9 +154,17 @@ export function createMatterhornCryptoAppRuntime(
       policyVersion,
       store: registryStore,
     });
-    connectionStore = new MatterhornCryptoAppConnectionStore(connectionPath || undefined);
-    const connections = new MatterhornCryptoAppConnections({ registry, store: connectionStore });
+    const activeConnectionStore = new MatterhornCryptoAppConnectionStore(connectionPath || undefined);
+    connectionStore = activeConnectionStore;
+    const connections = new MatterhornCryptoAppConnections({ registry, store: activeConnectionStore });
     const managedCredentials = new MatterhornManagedCryptoAppCredentials(env);
+    const walletConnections = walletProofSecret
+      ? new MatterhornCryptoAppWalletConnections({
+        connections,
+        store: activeConnectionStore,
+        secret: walletProofSecret,
+      })
+      : null;
     const catalog = new MatterhornCryptoAppCatalog({
       registry,
       connections,
@@ -183,6 +200,17 @@ export function createMatterhornCryptoAppRuntime(
         connections,
         authorization,
         operationalPolicy,
+        validateCredential: async (input) => {
+          if (input.credential.type !== "wallet_connection") return;
+          const proof = activeConnectionStore.resolveWalletProof({
+            workspaceId: input.workspaceId,
+            walletConnectionId: input.credential.walletConnectionId,
+            connectionId: input.connectionId,
+            appId: input.appId,
+            manifestRevision: input.manifestRevision,
+          });
+          if (!proof) throw new Error("crypto_app_wallet_proof_unavailable");
+        },
         executors: {
           matterhorn_sdk: createFirstPartyCryptoAppExecutor(),
           mcp_http: pinnedJsonTransport,
@@ -200,6 +228,7 @@ export function createMatterhornCryptoAppRuntime(
       operator,
       developerPortal,
       managedCredentials,
+      walletConnections,
       router,
       verifySuiTransaction,
       ready: feature.cryptoAppGatewayMode !== "enforce" || Boolean(router),

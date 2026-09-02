@@ -1,9 +1,11 @@
 /** @jsxImportSource react */
 
 import { useCallback, useMemo, useState } from "react";
+import { useCurrentAccount, useWallets } from "@mysten/dapp-kit-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronDown, ChevronUp, LoaderCircle, Pause, Play, Search, ShieldCheck, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router";
+import { useAccount, useConnect, useSignMessage } from "wagmi";
 
 import type {
   MatterhornCryptoAppActionAccess,
@@ -15,6 +17,7 @@ import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { createMatterhornServerClient, MatterhornServerError } from "../../../app/lib/matterhorn-server";
 import { resolveMatterhornConnection } from "../../shell/matterhorn-connection";
+import { suiDAppKit } from "../../infra/sui-dapp-kit";
 
 type CatalogSnapshot = {
   mode: "shadow" | "enforce";
@@ -25,6 +28,7 @@ type CatalogSnapshot = {
 type ServerClient = ReturnType<typeof createMatterhornServerClient>;
 type ConnectionScope = "research" | "wallet_previews";
 type AccessFilter = "all" | MatterhornCryptoAppActionAccess;
+type WalletFamily = "evm" | "sui";
 
 const QUERY_PREFIX = "crypto-app-catalog";
 
@@ -35,8 +39,31 @@ function userMessage(error: unknown): string {
     if (error.code === "crypto_app_managed_credential_unavailable") return "This app connection is not ready yet. Ask your workspace owner to finish its secure setup.";
     if (error.code === "app_certification_unavailable") return "This certification is no longer available. Refresh before reconnecting.";
     if (error.code === "connection_transition_invalid") return "That connection changed. Refresh and try again.";
+    if (error.code === "wallet_connection_unavailable") return "Secure wallet connections are not available in this environment yet.";
+    if (error.code === "wallet_challenge_expired") return "The wallet check expired. Try connecting again.";
+    if (error.code === "wallet_challenge_invalid") return "That wallet check was already used or is no longer valid. Try again.";
+    if (error.code === "wallet_signature_invalid") return "The wallet could not confirm this address. Check the active account and try again.";
+    if (error.code === "wallet_family_mismatch" || error.code === "wallet_family_unsupported") return "This wallet does not match the selected network.";
   }
+  if (error instanceof Error && /reject|cancel|denied/i.test(error.message)) return "The wallet request was cancelled. Nothing was connected.";
   return "Matterhorn could not update this crypto app. Try again.";
+}
+
+function walletFamily(app: MatterhornCryptoAppCatalogSummary): WalletFamily | null {
+  const protocols = new Set(app.networks.map((network) => network.protocol.toLowerCase()));
+  if ([...protocols].every((protocol) => protocol === "sui")) return "sui";
+  if ([...protocols].every((protocol) => [
+    "evm",
+    "ethereum",
+    "base",
+    "arbitrum",
+    "optimism",
+    "polygon",
+    "hyperliquid",
+    "polymarket",
+    "cow",
+  ].includes(protocol))) return "evm";
+  return null;
 }
 
 function accessLabel(access: MatterhornCryptoAppActionAccess): string {
@@ -111,6 +138,11 @@ export function CryptoAppCatalogRoute() {
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const evmAccount = useAccount();
+  const evmConnect = useConnect();
+  const evmSigner = useSignMessage();
+  const suiAccount = useCurrentAccount();
+  const suiWallets = useWallets();
 
   const queryKey = [QUERY_PREFIX, workspaceId] as const;
   const catalog = useQuery({
@@ -174,13 +206,79 @@ export function CryptoAppCatalogRoute() {
     const grantedNetworks = app.networks
       .filter((network) => network.environment === "testnet")
       .map((network) => network.chainId);
-    void mutate(app.appId, (client) => client.createCryptoAppConnection(workspaceId, {
-      appId: app.appId,
-      grantedActionIds,
-      grantedScopes,
-      grantedNetworks,
-    }));
-  }, [mutate, scopeByApp, workspaceId]);
+    void mutate(app.appId, async (client) => {
+      if (app.authentication.type !== "wallet_connection") {
+        return client.createCryptoAppConnection(workspaceId, {
+          appId: app.appId,
+          grantedActionIds,
+          grantedScopes,
+          grantedNetworks,
+        });
+      }
+      const family = walletFamily(app);
+      if (!family) throw new Error("wallet_network_unsupported");
+      if (family === "evm") {
+        let address = evmAccount.address;
+        if (!address) {
+          const connector = evmConnect.connectors[0];
+          if (!connector) throw new Error("wallet_not_found");
+          const connected = await evmConnect.connectAsync({ connector });
+          address = connected.accounts[0];
+        }
+        if (!address) throw new Error("wallet_not_found");
+        const response = await client.issueCryptoAppWalletChallenge(workspaceId, {
+          appId: app.appId,
+          grantedActionIds,
+          grantedScopes,
+          grantedNetworks,
+          walletFamily: family,
+          walletAddress: address,
+        });
+        const signature = await evmSigner.signMessageAsync({
+          account: address,
+          message: response.challenge.message,
+        });
+        return client.confirmCryptoAppWalletChallenge(workspaceId, response.challenge.challengeId, {
+          walletAddress: address,
+          signature,
+        });
+      }
+      let account = suiAccount;
+      if (!account) {
+        const wallet = suiWallets[0];
+        if (!wallet) throw new Error("wallet_not_found");
+        const connected = await suiDAppKit.connectWallet({ wallet });
+        account = connected.accounts[0] ?? null;
+      }
+      if (!account) throw new Error("wallet_not_found");
+      const response = await client.issueCryptoAppWalletChallenge(workspaceId, {
+        appId: app.appId,
+        grantedActionIds,
+        grantedScopes,
+        grantedNetworks,
+        walletFamily: family,
+        walletAddress: account.address,
+      });
+      const signed = await suiDAppKit.signPersonalMessage({
+        message: new TextEncoder().encode(response.challenge.message),
+        account,
+        network: "testnet",
+      });
+      return client.confirmCryptoAppWalletChallenge(workspaceId, response.challenge.challengeId, {
+        walletAddress: account.address,
+        signature: signed.signature,
+      });
+    });
+  }, [
+    evmAccount.address,
+    evmConnect,
+    evmSigner,
+    mutate,
+    scopeByApp,
+    suiAccount,
+    suiWallets,
+    workspaceId,
+  ]);
 
   return (
     <main className="min-h-dvh overflow-y-auto bg-background text-foreground">
@@ -290,7 +388,8 @@ export function CryptoAppCatalogRoute() {
                 const supportsResearch = app.actions.some((action) => action.access === "read" || action.access === "watch");
                 const supportsPreview = app.actions.some((action) => action.access === "prepare" || action.access === "simulate");
                 const managedConnection = app.authentication.type === "api_key_vault";
-                const canConnect = (app.authentication.type === "none" || managedConnection)
+                const walletConnection = app.authentication.type === "wallet_connection";
+                const canConnect = (app.authentication.type === "none" || managedConnection || walletConnection)
                   && (supportsResearch || supportsPreview);
                 return (
                   <article key={app.appId} className="border-b border-border py-5">
@@ -388,6 +487,11 @@ export function CryptoAppCatalogRoute() {
                                   Matterhorn handles this connection. You do not enter an API key here.
                                 </p>
                               ) : null}
+                              {walletConnection ? (
+                                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                                  Your wallet confirms this address is yours. It does not give Matterhorn permission to move funds.
+                                </p>
+                              ) : null}
                               {supportsResearch ? (
                                 <label className="mt-3 flex min-h-11 cursor-pointer gap-3 rounded-md py-2 text-sm focus-within:ring-2 focus-within:ring-ring">
                                   <input type="radio" name={`scope-${app.appId}`} value="research" checked={scope === "research"} onChange={() => setScopeByApp((current) => ({ ...current, [app.appId]: "research" }))} />
@@ -402,7 +506,7 @@ export function CryptoAppCatalogRoute() {
                               ) : null}
                               <Button className="mt-5" disabled={busyId === app.appId} onClick={() => connectApp(app)}>
                                 <ShieldCheck aria-hidden="true" className="size-4" />
-                                {busyId === app.appId ? "Connecting…" : "Connect to workspace"}
+                                {busyId === app.appId ? "Connecting…" : walletConnection ? "Connect wallet" : "Connect to workspace"}
                               </Button>
                             </div>
                           ) : (

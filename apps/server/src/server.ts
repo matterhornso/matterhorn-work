@@ -428,6 +428,7 @@ import {
 } from "./crypto-app-catalog.js";
 import { MatterhornCryptoAppConnectionError } from "./crypto-app-connections.js";
 import { MatterhornCryptoAppConnectionStoreError } from "./crypto-app-connection-store.js";
+import { MatterhornCryptoAppWalletConnectionError } from "./crypto-app-wallet-connections.js";
 import { MatterhornCryptoDeveloperPortalError } from "./crypto-app-developer-portal.js";
 import type {
   MatterhornCryptoAppActionAccess,
@@ -3002,6 +3003,27 @@ function cryptoAppApiError(error: unknown): ApiError {
       return new ApiError(409, error.code, "Crypto app connection already exists.");
     }
     return new ApiError(500, "crypto_app_connection_integrity_error", "Crypto app connection state is unavailable.");
+  }
+  if (error instanceof MatterhornCryptoAppWalletConnectionError) {
+    if (error.code === "wallet_connection_unavailable") {
+      return new ApiError(503, error.code, "Secure wallet connection is not configured for this deployment.");
+    }
+    if (error.code === "wallet_challenge_expired") {
+      return new ApiError(409, error.code, "This wallet check expired. Start a new connection.");
+    }
+    if (error.code === "wallet_challenge_invalid") {
+      return new ApiError(409, error.code, "This wallet check is invalid or has already been used.");
+    }
+    if (error.code === "wallet_signature_invalid") {
+      return new ApiError(400, error.code, "The wallet could not prove control of this address.");
+    }
+    if (error.code === "wallet_connection_authentication_mismatch") {
+      return new ApiError(409, error.code, "This app does not use a wallet connection.");
+    }
+    if (error.code === "wallet_family_unsupported" || error.code === "wallet_family_mismatch") {
+      return new ApiError(409, error.code, "This wallet does not match the selected network.");
+    }
+    return new ApiError(400, error.code, "Wallet connection input is invalid.");
   }
   return error instanceof ApiError
     ? error
@@ -11214,6 +11236,81 @@ function createRoutes(
       throw cryptoAppApiError(error);
     }
   });
+
+  addRoute(routes, "POST", "/workspace/:id/crypto-app-connections/wallet/challenges", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (!cryptoAppRuntime.walletConnections) {
+        throw new MatterhornCryptoAppWalletConnectionError("wallet_connection_unavailable");
+      }
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request, 32_768, "Wallet connection challenge");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => ![
+          "appId",
+          "grantedActionIds",
+          "grantedScopes",
+          "grantedNetworks",
+          "walletFamily",
+          "walletAddress",
+        ].includes(key))
+        || typeof body.appId !== "string"
+        || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(body.appId)
+        || (body.walletFamily !== "evm" && body.walletFamily !== "sui")
+        || typeof body.walletAddress !== "string") {
+        throw new MatterhornCryptoAppWalletConnectionError("wallet_connection_input_invalid");
+      }
+      const challenge = cryptoAppRuntime.walletConnections.issue({
+        workspaceId: workspace.id,
+        accountId: cryptoAppCreatedBy(ctx),
+        appId: body.appId,
+        grantedActionIds: cryptoAppStringArray(body.grantedActionIds, "grantedActionIds"),
+        grantedScopes: cryptoAppStringArray(body.grantedScopes, "grantedScopes", { allowEmpty: true }),
+        grantedNetworks: cryptoAppStringArray(body.grantedNetworks, "grantedNetworks"),
+        walletFamily: body.walletFamily,
+        walletAddress: body.walletAddress,
+      });
+      return noStoreJsonResponse({ challenge }, 201);
+    } catch (error) {
+      throw cryptoAppApiError(error);
+    }
+  });
+
+  addRoute(
+    routes,
+    "POST",
+    "/workspace/:id/crypto-app-connections/wallet/challenges/:challengeId/confirm",
+    "client",
+    async (ctx) => {
+      ensureWritable(config);
+      requireClientScope(ctx, "collaborator");
+      try {
+        if (!cryptoAppRuntime.walletConnections) {
+          throw new MatterhornCryptoAppWalletConnectionError("wallet_connection_unavailable");
+        }
+        const workspace = await resolveWorkspace(config, ctx.params.id);
+        const body = await readJsonBody(ctx.request, 8_192, "Wallet connection proof");
+        if (!isRecord(body)
+          || Object.keys(body).some((key) => key !== "walletAddress" && key !== "signature")
+          || typeof body.walletAddress !== "string"
+          || typeof body.signature !== "string"
+          || !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,255}$/.test(ctx.params.challengeId)) {
+          throw new MatterhornCryptoAppWalletConnectionError("wallet_connection_input_invalid");
+        }
+        const connection = await cryptoAppRuntime.walletConnections.confirm({
+          workspaceId: workspace.id,
+          accountId: cryptoAppCreatedBy(ctx),
+          challengeId: ctx.params.challengeId,
+          walletAddress: body.walletAddress,
+          signature: body.signature,
+        });
+        return noStoreJsonResponse({ connection }, 201);
+      } catch (error) {
+        throw cryptoAppApiError(error);
+      }
+    },
+  );
 
   addRoute(routes, "POST", "/workspace/:id/crypto-app-connections", "client", async (ctx) => {
     ensureWritable(config);

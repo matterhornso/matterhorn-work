@@ -22,6 +22,16 @@ export type CreateCryptoAppConnectionInput = {
   credential: MatterhornCryptoAppConnectionCredential;
 };
 
+export type CryptoAppConnectionGrantInput = Omit<CreateCryptoAppConnectionInput, "credential">;
+
+export type ValidatedCryptoAppConnectionGrant = {
+  appId: string;
+  displayName: string;
+  manifestRevision: string;
+  authentication: MatterhornCryptoAppAuthentication;
+  networks: Array<{ protocol: string; chainId: string }>;
+};
+
 export class MatterhornCryptoAppConnectionError extends Error {
   constructor(public readonly code:
     | "connection_input_invalid"
@@ -50,9 +60,18 @@ const TRANSITIONS: Record<MatterhornCryptoAppConnectionState, ReadonlySet<Matter
   revoked: new Set(),
 };
 
+function safeIdentifier(value: string, maxLength = 160): boolean {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= maxLength
+    && value === value.trim()
+    && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
 function uniqueNonEmpty(values: string[]): boolean {
   return values.length > 0
-    && values.every((value) => typeof value === "string" && value.trim().length > 0)
+    && values.length <= 64
+    && values.every((value) => safeIdentifier(value))
     && new Set(values).size === values.length;
 }
 
@@ -89,12 +108,74 @@ export class MatterhornCryptoAppConnections {
   }
 
   create(input: CreateCryptoAppConnectionInput): MatterhornCryptoAppConnectionView {
-    if (![input.workspaceId, input.createdBy, input.appId].every((value) => typeof value === "string" && value.trim())) {
+    const { registryEntry } = this.#validateGrant(input);
+    if (!credentialValid(input.credential, registryEntry.manifest.authentication)) {
+      throw new MatterhornCryptoAppConnectionError("connection_credential_invalid");
+    }
+
+    const connection = this.#build(input, registryEntry.manifestRevision);
+    this.#store.create(connection);
+    return this.#view(connection);
+  }
+
+  validateGrant(input: CryptoAppConnectionGrantInput): ValidatedCryptoAppConnectionGrant {
+    const { registryEntry } = this.#validateGrant(input);
+    const grantedNetworks = new Set(input.grantedNetworks);
+    return {
+      appId: registryEntry.appId,
+      displayName: registryEntry.manifest.displayName,
+      manifestRevision: registryEntry.manifestRevision,
+      authentication: structuredClone(registryEntry.manifest.authentication),
+      networks: registryEntry.manifest.networks
+        .filter((network) => grantedNetworks.has(network.chainId))
+        .map((network) => ({ protocol: network.protocol, chainId: network.chainId })),
+    };
+  }
+
+  createFromVerifiedWallet(input: CreateCryptoAppConnectionInput & {
+    challenge: {
+      challengeId: string;
+      accountId: string;
+      walletFamily: "evm" | "sui";
+      addressDigest: string;
+      expiresAt: string;
+      proofId: string;
+    };
+  }): MatterhornCryptoAppConnectionView {
+    const { registryEntry } = this.#validateGrant(input);
+    if (input.credential.type !== "wallet_connection"
+      || input.credential.walletConnectionId !== input.challenge.proofId
+      || !credentialValid(input.credential, registryEntry.manifest.authentication)) {
+      throw new MatterhornCryptoAppConnectionError("connection_credential_invalid");
+    }
+    const connection = this.#build(input, registryEntry.manifestRevision);
+    const created = this.#store.finalizeWalletChallenge({
+      ...input.challenge,
+      workspaceId: input.workspaceId,
+      appId: input.appId,
+      manifestRevision: registryEntry.manifestRevision,
+      actionIds: input.grantedActionIds,
+      scopes: input.grantedScopes,
+      networks: input.grantedNetworks,
+      connection,
+      consumedAt: this.#now().toISOString(),
+    });
+    if (!created) throw new MatterhornCryptoAppConnectionError("connection_transition_invalid");
+    return this.#view(connection);
+  }
+
+  #validateGrant(input: CryptoAppConnectionGrantInput): {
+    registryEntry: NonNullable<ReturnType<MatterhornCryptoAppRegistry["resolve"]>>;
+  } {
+    if (!safeIdentifier(input.workspaceId, 256)
+      || !safeIdentifier(input.createdBy, 256)
+      || !safeIdentifier(input.appId, 128)) {
       throw new MatterhornCryptoAppConnectionError("connection_input_invalid");
     }
     if (!uniqueNonEmpty(input.grantedActionIds)
       || !uniqueNonEmpty(input.grantedNetworks)
-      || input.grantedScopes.some((scope) => !scope.trim())
+      || input.grantedScopes.length > 64
+      || input.grantedScopes.some((scope) => !safeIdentifier(scope))
       || new Set(input.grantedScopes).size !== input.grantedScopes.length) {
       throw new MatterhornCryptoAppConnectionError("connection_input_invalid");
     }
@@ -118,17 +199,17 @@ export class MatterhornCryptoAppConnections {
       && registryEntry.certification.state !== "certified_mainnet") {
       throw new MatterhornCryptoAppConnectionError("connection_network_not_allowed");
     }
-    if (!credentialValid(input.credential, registryEntry.manifest.authentication)) {
-      throw new MatterhornCryptoAppConnectionError("connection_credential_invalid");
-    }
+    return { registryEntry };
+  }
 
+  #build(input: CreateCryptoAppConnectionInput, manifestRevision: string): MatterhornCryptoAppConnection {
     const now = this.#now().toISOString();
-    const connection: MatterhornCryptoAppConnection = {
+    return {
       version: MATTERHORN_CRYPTO_APP_CONNECTION_VERSION,
       id: this.#id(),
       workspaceId: input.workspaceId,
       appId: input.appId,
-      manifestRevision: registryEntry.manifestRevision,
+      manifestRevision,
       state: "active",
       grantedActionIds: [...input.grantedActionIds],
       grantedScopes: [...input.grantedScopes],
@@ -138,8 +219,6 @@ export class MatterhornCryptoAppConnections {
       createdAt: now,
       updatedAt: now,
     };
-    this.#store.create(connection);
-    return this.#view(connection);
   }
 
   get(workspaceId: string, connectionId: string): MatterhornCryptoAppConnectionView | null {

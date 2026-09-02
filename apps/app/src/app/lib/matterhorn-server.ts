@@ -118,6 +118,9 @@ import type {
   MatterhornCryptoAppCatalogSummary,
   MatterhornCryptoAppConnectionState,
   MatterhornCryptoAppConnectionView,
+  MatterhornCryptoAppWalletChallenge,
+  MatterhornCryptoAppWalletChallengeConfirmation,
+  MatterhornCryptoAppWalletChallengeRequest,
   MatterhornCryptoIntent,
   MatterhornCryptoPublicReceipt,
   MatterhornAgentFileListResponse,
@@ -1788,6 +1791,33 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     }) => requestJson<{ connection: MatterhornCryptoAppConnectionView }>(
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections`,
+      {
+        token,
+        method: "POST",
+        body: input,
+        timeoutMs: timeouts.config,
+      },
+    ),
+    issueCryptoAppWalletChallenge: (
+      workspaceId: string,
+      input: MatterhornCryptoAppWalletChallengeRequest,
+    ) => requestJson<{ challenge: MatterhornCryptoAppWalletChallenge }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/wallet/challenges`,
+      {
+        token,
+        method: "POST",
+        body: input,
+        timeoutMs: timeouts.config,
+      },
+    ),
+    confirmCryptoAppWalletChallenge: (
+      workspaceId: string,
+      challengeId: string,
+      input: MatterhornCryptoAppWalletChallengeConfirmation,
+    ) => requestJson<{ connection: MatterhornCryptoAppConnectionView }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/wallet/challenges/${encodeURIComponent(challengeId)}/confirm`,
       {
         token,
         method: "POST",

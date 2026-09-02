@@ -117,6 +117,13 @@ type RouterOptions = {
   authorization: MatterhornCryptoAppAuthorization;
   executors: Partial<Record<MatterhornCryptoAppTransportKind, MatterhornCryptoAppTransportExecutor>>;
   operationalPolicy?: MatterhornCryptoAppOperationalPolicy;
+  validateCredential?: (input: {
+    workspaceId: string;
+    connectionId: string;
+    appId: string;
+    manifestRevision: string;
+    credential: MatterhornCryptoAppConnectionCredential;
+  }) => Promise<void>;
   resolveDns?: MatterhornAdapterDnsResolver;
   now?: () => Date;
   circuitFailureThreshold?: number;
@@ -175,6 +182,7 @@ export class MatterhornCryptoAppAdapterRouter {
   readonly #executors: Partial<Record<MatterhornCryptoAppTransportKind, MatterhornCryptoAppTransportExecutor>>;
   readonly #resolveDns: MatterhornAdapterDnsResolver | undefined;
   readonly #operationalPolicy: MatterhornCryptoAppOperationalPolicy | undefined;
+  readonly #validateCredential: RouterOptions["validateCredential"];
   readonly #now: () => Date;
   readonly #circuitFailureThreshold: number;
   readonly #circuitCooldownMs: number;
@@ -187,6 +195,7 @@ export class MatterhornCryptoAppAdapterRouter {
     this.#authorization = options.authorization;
     this.#executors = options.executors;
     this.#operationalPolicy = options.operationalPolicy;
+    this.#validateCredential = options.validateCredential;
     this.#resolveDns = options.resolveDns;
     this.#now = options.now ?? (() => new Date());
     this.#circuitFailureThreshold = Math.max(1, options.circuitFailureThreshold ?? 3);
@@ -221,6 +230,23 @@ export class MatterhornCryptoAppAdapterRouter {
     if (action.requiredScopes.some((scope) => !connection.grantedScopes.includes(scope))) {
       throw new MatterhornCryptoAppAdapterError("adapter_action_not_allowed");
     }
+    if (connection.credential.type === "wallet_connection" && !this.#validateCredential) {
+      throw new MatterhornCryptoAppAdapterError("adapter_connection_unavailable");
+    }
+    try {
+      await this.#validateCredential?.({
+        workspaceId: request.workspaceId,
+        connectionId: connection.id,
+        appId: connection.appId,
+        manifestRevision: connection.manifestRevision,
+        credential: structuredClone(connection.credential),
+      });
+    } catch {
+      throw new MatterhornCryptoAppAdapterError("adapter_connection_unavailable");
+    }
+    const transportCredential: MatterhornCryptoAppConnectionCredential = connection.credential.type === "wallet_connection"
+      ? { type: "none" }
+      : structuredClone(connection.credential);
 
     const validated = validateCryptoAppInput(action.inputSchema, request.arguments);
     if (!validated.ok || !validated.value || typeof validated.value !== "object" || Array.isArray(validated.value)) {
@@ -306,7 +332,7 @@ export class MatterhornCryptoAppAdapterRouter {
           action,
           network: request.network,
           arguments: canonicalArguments,
-          credential: structuredClone(connection.credential),
+          credential: transportCredential,
           signal: controller.signal,
         }),
         timeout.promise,

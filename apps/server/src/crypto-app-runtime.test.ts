@@ -26,6 +26,9 @@ function environment(mode: "off" | "shadow" | "enforce" = "shadow") {
     MATTERHORN_CRYPTO_APP_REGISTRY_DB: join(root, "registry.db"),
     MATTERHORN_CRYPTO_APP_CONNECTION_DB: join(root, "connections.db"),
     MATTERHORN_CRYPTO_APP_DEVELOPER_DB: join(root, "developer.db"),
+    ...(mode === "enforce" ? {
+      MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET: "wallet-proof-runtime-secret-with-at-least-32-characters",
+    } : {}),
     ...(mode === "enforce" ? { MATTERHORN_GUARDED_RUNTIME_MODE: "enforce" } : {}),
   } as NodeJS.ProcessEnv;
 }
@@ -77,6 +80,11 @@ describe("crypto app runtime startup", () => {
     delete missingKeys.MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON;
     expect(() => createMatterhornCryptoAppRuntime(missingKeys))
       .toThrowError(expect.objectContaining({ code: "crypto_app_publisher_keys_required" }));
+
+    const missingWalletProofSecret = environment("enforce");
+    delete missingWalletProofSecret.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET;
+    expect(() => createMatterhornCryptoAppRuntime(missingWalletProofSecret))
+      .toThrowError(expect.objectContaining({ code: "crypto_app_wallet_proof_secret_required" }));
   });
 
   test("rejects private keys, malformed keyrings and duplicate publisher identities", () => {

@@ -60,6 +60,7 @@ describe("wallet runtime connector contract", () => {
     expect(providersSource).toContain('path === "/onboarding"');
     expect(providersSource).toContain("WALLET_RUNTIME_PANELS");
     expect(providersSource).toContain("settings\\/wallet");
+    expect(providersSource).toContain("crypto-apps");
     expect(providersSource).toContain(
       'new URLSearchParams(search).get("panel")',
     );

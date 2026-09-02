@@ -1,5 +1,6 @@
 export const MATTERHORN_CRYPTO_APP_MANIFEST_VERSION = "matterhorn.crypto-app-manifest.v1";
 export const MATTERHORN_CRYPTO_APP_CONNECTION_VERSION = "matterhorn.crypto-app-connection.v1";
+export const MATTERHORN_CRYPTO_APP_WALLET_CHALLENGE_VERSION = "matterhorn.crypto-app-wallet-challenge.v1";
 export const MATTERHORN_CRYPTO_APP_RESULT_VERSION = "matterhorn.crypto-app-result.v1";
 export const MATTERHORN_CRYPTO_APP_CATALOG_VERSION = "matterhorn.crypto-app-catalog.v1";
 export const MATTERHORN_COWORKER_PROFILE_VERSION = "matterhorn.coworker-profile.v1";
@@ -112,6 +113,35 @@ export type MatterhornCryptoAppConnectionView = Omit<MatterhornCryptoAppConnecti
     connected: boolean;
   };
   availability: "available" | "certification_unavailable";
+};
+
+export type MatterhornCryptoAppWalletFamily = "evm" | "sui";
+
+/**
+ * A short-lived message that proves control of one connected wallet. Signing
+ * this message never authorizes a transaction, token approval, or submission.
+ */
+export type MatterhornCryptoAppWalletChallenge = {
+  version: typeof MATTERHORN_CRYPTO_APP_WALLET_CHALLENGE_VERSION;
+  challengeId: string;
+  walletFamily: MatterhornCryptoAppWalletFamily;
+  message: string;
+  expiresAt: string;
+  notice: "proves_wallet_control_only";
+};
+
+export type MatterhornCryptoAppWalletChallengeRequest = {
+  appId: string;
+  grantedActionIds: string[];
+  grantedScopes: string[];
+  grantedNetworks: string[];
+  walletFamily: MatterhornCryptoAppWalletFamily;
+  walletAddress: string;
+};
+
+export type MatterhornCryptoAppWalletChallengeConfirmation = {
+  walletAddress: string;
+  signature: string;
 };
 
 export type MatterhornCryptoAppCatalogActionView = {
