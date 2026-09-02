@@ -29,6 +29,14 @@ import { ConfirmModal } from "../../design-system/modals/confirm-modal";
 import { useMatterhornSessionAgentFileContextStore } from "../session/surface/agent-file-context-store";
 import { useMatterhornSessionCoworkerContextStore } from "../session/surface/coworker-context-store";
 import { useStatusToasts } from "../shell-feedback/status-toasts";
+import {
+  canCancelCoworkerWalletIntent,
+  canOpenCoworkerWalletIntent,
+  coworkerWalletIntentStatus,
+  coworkerWalletReceiptStatus,
+  isActiveCoworkerWalletIntent,
+  sortCoworkerWalletIntents,
+} from "./coworker-wallet-intent-view";
 
 const QUERY_PREFIX = "coworker-control";
 
@@ -76,6 +84,10 @@ function coworkerErrorMessage(error: unknown): string {
     if (error.code === "coworker_revision_conflict") return "This coworker changed. Refresh and try again.";
     if (error.code === "coworker_transition_invalid") return "That change is no longer available for this coworker.";
     if (error.code === "coworker_inbox_state_conflict") return "This alert changed. Refresh and try again.";
+    if (error.code === "pending_crypto_intent_revision_conflict") return "This wallet review changed. Refresh and try again.";
+    if (error.code === "pending_crypto_intent_expired" || error.code === "pending_crypto_intent_transition_invalid") {
+      return "This wallet review can no longer be cancelled.";
+    }
   }
   return "Matterhorn could not load your coworkers. Try again.";
 }
@@ -92,18 +104,6 @@ function authorityLabel(value: MatterhornCoworkerAccountProfile["automaticAuthor
   if (value === "watch") return "Run your approved checks";
   if (value === "write_note") return "Save notes";
   return "Prepare a wallet review";
-}
-
-function intentStatus(value: MatterhornCoworkerWalletIntentView["state"]): string {
-  if (value === "wallet_review") return "Ready for wallet review";
-  if (value === "refreshing") return "Refreshing prices and terms";
-  if (value === "regeneration_required") return "Needs a fresh preview";
-  if (value === "wallet_approved") return "Approved in wallet";
-  if (value === "submitted") return "Sent by wallet";
-  if (value === "confirmed") return "Confirmed";
-  if (value === "failed") return "Failed";
-  if (value === "expired") return "Expired";
-  return "Cancelled";
 }
 
 function shortDate(value: string): string {
@@ -195,6 +195,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [showCreateChoices, setShowCreateChoices] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+  const [cancelIntent, setCancelIntent] = useState<MatterhornCoworkerWalletIntentView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const boundCoworkerId = useMatterhornSessionCoworkerContextStore((state) => (
     selectedSessionId ? state.contexts[selectedSessionId]?.id ?? "" : ""
@@ -228,12 +229,16 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     },
   });
 
-  const activeIntents = useMemo(
-    () => (detailQuery.data?.walletIntents ?? []).filter((item) => (
-      !["cancelled", "expired", "confirmed", "failed"].includes(item.state)
-    )),
+  const walletIntents = useMemo(
+    () => sortCoworkerWalletIntents(detailQuery.data?.walletIntents ?? []),
     [detailQuery.data?.walletIntents],
   );
+  const activeIntents = useMemo(() => walletIntents.filter(isActiveCoworkerWalletIntent), [walletIntents]);
+  const visibleWalletIntents = useMemo(() => [
+    ...activeIntents,
+    ...walletIntents.filter((item) => !isActiveCoworkerWalletIntent(item)),
+  ].slice(0, 4), [activeIntents, walletIntents]);
+  const hasWalletReview = useMemo(() => walletIntents.some(canOpenCoworkerWalletIntent), [walletIntents]);
 
   const refresh = useCallback(async () => {
     await Promise.all([
@@ -368,6 +373,27 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       setBusyAction(null);
     }
   }, [props.client, refresh, selectedCoworker, workspaceId]);
+
+  const cancelWalletReview = useCallback(async (item: MatterhornCoworkerWalletIntentView) => {
+    if (!props.client || !workspaceId) return;
+    setBusyAction(`intent:${item.id}`);
+    setError(null);
+    try {
+      await props.client.cancelCoworkerWalletIntent(workspaceId, item.coworkerId, item.id, item.revision);
+      setCancelIntent(null);
+      await refresh();
+      showToast({
+        title: "Wallet review cancelled",
+        description: "The old intent cannot be approved or sent.",
+        tone: "success",
+      });
+    } catch (cause) {
+      setCancelIntent(null);
+      setError(coworkerErrorMessage(cause));
+    } finally {
+      setBusyAction(null);
+    }
+  }, [props.client, refresh, showToast, workspaceId]);
 
   if (!props.client || !workspaceId) {
     return (
@@ -525,28 +551,59 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                 <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-wallet-title">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h3 id="coworker-wallet-title" className="text-sm font-semibold text-dls-text">Wallet reviews</h3>
-                      <p className="mt-1 text-xs text-dls-secondary">Only you can approve and send.</p>
+                      <h3 id="coworker-wallet-title" className="text-sm font-semibold text-dls-text">Wallet activity</h3>
+                      <p className="mt-1 text-xs text-dls-secondary">Only your connected wallet can approve and send.</p>
                     </div>
-                    {activeIntents.length ? (
+                    {hasWalletReview ? (
                       <Button size="xs" variant="ghost" onClick={props.onOpenWallet}><WalletCards aria-hidden="true" /> Open wallet</Button>
                     ) : null}
                   </div>
-                  {activeIntents.length ? (
+                  {walletIntents.length ? (
                     <ul className="mt-2 divide-y divide-dls-border/70">
-                      {activeIntents.slice(0, 4).map((item) => (
-                        <li key={item.id} className="py-2.5 text-xs leading-5">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="font-medium text-dls-text">{humanizeId(item.intent.operation)}</p>
-                              <p className="text-dls-secondary">{item.intent.amount ?? "Exact amount in review"} {item.intent.asset ?? ""} · {humanizeId(item.intent.protocol)}</p>
+                      {visibleWalletIntents.map((item) => {
+                        const receiptStatus = coworkerWalletReceiptStatus(item);
+                        const canCancel = canCancelCoworkerWalletIntent(item);
+                        const amount = item.intent.amount
+                          ? `${item.intent.amount}${item.intent.asset ? ` ${item.intent.asset}` : ""}`
+                          : "Amount shown in wallet review";
+                        return (
+                          <li key={item.id} className="py-3 text-xs leading-5">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="font-medium text-dls-text">{humanizeId(item.intent.operation)}</p>
+                                <p className="text-dls-secondary">{amount} · {humanizeId(item.intent.network)}</p>
+                              </div>
+                              <span className={cn(
+                                "max-w-28 shrink-0 text-right",
+                                item.state === "confirmed" ? "text-status-success" : item.state === "failed" ? "text-destructive" : "text-dls-secondary",
+                              )}>{coworkerWalletIntentStatus(item)}</span>
                             </div>
-                            <span className="text-right text-dls-secondary">{intentStatus(item.state)}</span>
-                          </div>
-                        </li>
-                      ))}
+                            <p className="mt-1 text-dls-secondary">
+                              {canCancel ? `Expires ${shortDate(item.expiresAt)}` : `Updated ${shortDate(item.updatedAt)}`}
+                            </p>
+                            {receiptStatus ? <p className="mt-1 text-dls-secondary">{receiptStatus}</p> : null}
+                            <details className="mt-2">
+                              <summary className="min-h-8 cursor-pointer text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Exact review details</summary>
+                              <dl className="mt-2 grid gap-1.5 border-y border-dls-border/70 py-2 text-dls-secondary">
+                                <div><dt className="inline font-medium text-dls-text">Signer: </dt><dd className="inline break-all">{item.reviewedAction.signer ?? "Chosen in wallet"}</dd></div>
+                                <div><dt className="inline font-medium text-dls-text">Recipient: </dt><dd className="inline break-all">{item.reviewedAction.recipient ?? "Protocol-managed destination"}</dd></div>
+                                <div><dt className="inline font-medium text-dls-text">Simulation: </dt><dd className="inline break-all">{item.reviewedAction.simulation.reference}</dd></div>
+                                <div><dt className="inline font-medium text-dls-text">Simulated: </dt><dd className="inline">{shortDate(item.reviewedAction.simulation.simulatedAt)}</dd></div>
+                                <div><dt className="inline font-medium text-dls-text">Policy checks: </dt><dd className="inline">{item.policy.limits.length ? `${item.policy.limits.filter((limit) => limit.passed).length} of ${item.policy.limits.length} passed` : "No numeric limits applied"}</dd></div>
+                                {item.receipt ? <div><dt className="inline font-medium text-dls-text">Public receipt: </dt><dd className="inline break-all">{item.receipt.publicId}</dd></div> : null}
+                              </dl>
+                            </details>
+                            {canCancel ? (
+                              <Button className="mt-2" size="xs" variant="ghost" disabled={busyAction !== null} onClick={() => setCancelIntent(item)}>
+                                Cancel review
+                              </Button>
+                            ) : null}
+                          </li>
+                        );
+                      })}
                     </ul>
-                  ) : <p className="mt-3 text-xs leading-5 text-dls-secondary">Nothing is waiting for wallet review.</p>}
+                  ) : <p className="mt-3 text-xs leading-5 text-dls-secondary">No wallet actions yet. Ask this coworker to prepare one when you are ready.</p>}
+                  {activeIntents.length > 4 ? <p className="mt-2 text-xs text-dls-secondary">{activeIntents.length - 4} more pending in wallet history.</p> : null}
                 </section>
 
                 <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-watches-title">
@@ -614,6 +671,21 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
         }}
         onCancel={() => {
           if (!busyAction) setConfirmAction(null);
+        }}
+      />
+      <ConfirmModal
+        open={Boolean(cancelIntent)}
+        title="Cancel this wallet review?"
+        message="This invalidates the current intent. Your wallet will not be able to approve or send it afterward."
+        confirmLabel={busyAction ? "Cancelling…" : "Cancel review"}
+        cancelLabel="Keep review"
+        variant="warning"
+        confirmButtonVariant="outline"
+        onConfirm={() => {
+          if (cancelIntent) void cancelWalletReview(cancelIntent);
+        }}
+        onCancel={() => {
+          if (!busyAction) setCancelIntent(null);
         }}
       />
     </div>

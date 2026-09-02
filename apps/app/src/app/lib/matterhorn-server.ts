@@ -1877,6 +1877,20 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       token,
       timeoutMs: timeouts.status,
     }),
+    cancelCoworkerWalletIntent: (
+      workspaceId: string,
+      coworkerId: string,
+      intentId: string,
+      expectedRevision: number,
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      item: MatterhornCoworkerWalletIntentView;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/wallet-intents/${encodeURIComponent(intentId)}/cancel`, {
+      token,
+      method: "POST",
+      body: { expectedRevision },
+      timeoutMs: timeouts.config,
+    }),
     transitionCoworker: (
       workspaceId: string,
       coworkerId: string,

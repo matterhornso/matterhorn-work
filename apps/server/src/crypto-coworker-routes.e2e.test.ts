@@ -1188,6 +1188,11 @@ describe("crypto coworker HTTP boundary", () => {
       coworkerId,
       runId: "run_route_cancel",
     });
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/wallet-intents/${cancellable.id}/cancel`,
+      { cookie: cookieB, body: { expectedRevision: 1 } },
+    )).response.status).toBe(404);
     const cancelled = await request(
       server.base,
       `/workspace/${workspaceA}/coworkers/${coworkerId}/wallet-intents/${cancellable.id}/cancel`,
