@@ -15,6 +15,50 @@ const SAFE_KEYS = new Set([
   "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems", "oneOf",
 ]);
 const UNSAFE_PROPERTY_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+const SAFE_PROPERTY_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+const SENSITIVE_PROPERTY_KEYS = new Set([
+  "accesstoken",
+  "apikey",
+  "apisecret",
+  "authorization",
+  "bearer",
+  "capability",
+  "capabilitytoken",
+  "clientsecret",
+  "credential",
+  "credentials",
+  "jwt",
+  "mnemonic",
+  "passphrase",
+  "password",
+  "privatekey",
+  "rawsignature",
+  "recoveryphrase",
+  "refreshtoken",
+  "secret",
+  "secretkey",
+  "seed",
+  "seedphrase",
+  "signature",
+  "signedpayload",
+  "signedtransaction",
+  "signingpayload",
+  "transactionbytes",
+  "txbytes",
+  "walletexport",
+  "walletsignature",
+]);
+const EXECUTION_AUTHORITY_PROPERTY_KEYS = new Set([
+  "broadcast",
+  "broadcasttransaction",
+  "relay",
+  "relaytransaction",
+  "sendtransaction",
+  "sign",
+  "signtransaction",
+  "submit",
+  "submittransaction",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -26,6 +70,28 @@ function schemaAt(value: unknown): JsonSchema | null {
 
 function pathIssue(path: string, code: string): string {
   return `${path || "$"}:${code}`;
+}
+
+function normalizedPropertyKey(key: string): string {
+  return key.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+}
+
+function inspectPropertyKey(key: string, path: string, issues: string[]): void {
+  if (UNSAFE_PROPERTY_KEYS.has(key)) {
+    issues.push(pathIssue(path, "schema_property_forbidden"));
+    return;
+  }
+  if (!SAFE_PROPERTY_KEY.test(key)) {
+    issues.push(pathIssue(path, "schema_property_name_invalid"));
+    return;
+  }
+  const normalized = normalizedPropertyKey(key);
+  if (SENSITIVE_PROPERTY_KEYS.has(normalized)) {
+    issues.push(pathIssue(path, "schema_property_sensitive_forbidden"));
+  }
+  if (EXECUTION_AUTHORITY_PROPERTY_KEYS.has(normalized)) {
+    issues.push(pathIssue(path, "schema_property_execution_authority_forbidden"));
+  }
 }
 
 export function validateCryptoAppSchemaDefinition(schema: JsonSchema): string[] {
@@ -71,10 +137,11 @@ function inspectSchema(schema: JsonSchema, path: string, depth: number, issues: 
     const propertyKeys = Object.keys(properties);
     if (propertyKeys.length > 200) issues.push(pathIssue(path, "schema_properties_exceeded"));
     for (const key of propertyKeys) {
-      if (UNSAFE_PROPERTY_KEYS.has(key)) issues.push(pathIssue(`${path}.${key}`, "schema_property_forbidden"));
+      const nestedPath = SAFE_PROPERTY_KEY.test(key) ? `${path}.${key}` : `${path}.*`;
+      inspectPropertyKey(key, nestedPath, issues);
       const nested = schemaAt(properties[key]);
-      if (!nested) issues.push(pathIssue(`${path}.${key}`, "schema_not_object"));
-      else inspectSchema(nested, `${path}.${key}`, depth + 1, issues);
+      if (!nested) issues.push(pathIssue(nestedPath, "schema_not_object"));
+      else inspectSchema(nested, nestedPath, depth + 1, issues);
     }
     if (schema.required !== undefined
       && (!Array.isArray(schema.required)

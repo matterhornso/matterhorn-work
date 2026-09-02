@@ -116,6 +116,35 @@ describe("crypto app manifest conformance", () => {
     ]));
   });
 
+  test("rejects nested secret and execution-authority schema properties", () => {
+    const value = manifest();
+    value.actions[0]!.outputProjectionSchema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        result: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            wallet_signature: { type: "string" },
+            broadcastTransaction: { type: "boolean" },
+          },
+        },
+      },
+    };
+    value.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(value), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    const report = conformance(value);
+    expect(report.passed).toBe(false);
+    expect(report.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "schema", code: expect.stringContaining("schema_property_sensitive_forbidden") }),
+      expect.objectContaining({ category: "schema", code: expect.stringContaining("schema_property_execution_authority_forbidden") }),
+    ]));
+  });
+
   test("fails closed on hidden manifest controls and OAuth binding confusion", () => {
     const hidden = structuredClone(manifest()) as unknown as Record<string, unknown>;
     hidden.runtime = { allowSubmission: true };

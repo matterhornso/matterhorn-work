@@ -127,6 +127,31 @@ describe("Matterhorn crypto app SDK", () => {
       .toThrowError(expect.objectContaining({ code: "manifest_invalid" }));
   });
 
+  test("rejects secret and signing-authority schemas before producing signing bytes", () => {
+    const unsafe = draft();
+    unsafe.actions[0]!.outputProjectionSchema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        result: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            privateKey: { type: "string" },
+            submit: { type: "boolean" },
+          },
+        },
+      },
+    };
+    expect(() => buildCryptoAppSigningRequest(unsafe)).toThrowError(expect.objectContaining({
+      code: "manifest_invalid",
+      issues: expect.arrayContaining([
+        expect.stringContaining("schema_property_sensitive_forbidden"),
+        expect.stringContaining("schema_property_execution_authority_forbidden"),
+      ]),
+    }));
+  });
+
   test("validates inert fixtures with the same closed projection used by the server", () => {
     const keys = generateKeyPairSync("ed25519");
     const unsignedManifest = draft();

@@ -9,6 +9,8 @@ The SDK is deliberately non-custodial:
 - It accepts only the detached 64-byte signature in base64url form.
 - Local policy results are not certification. Matterhorn revalidates the signature, static policy, live transport, adversarial output, and runtime behavior independently.
 - All financial actions must remain `prepare` or `simulate`; the connected wallet is the only submission surface.
+- Every input and model-facing output property uses a bounded ASCII identifier. Secret, credential, signature, signing-payload, transaction-byte, and sign/submit/relay/broadcast authority names are rejected at every schema depth.
+- Unsafe schemas fail before the SDK emits signing bytes or the local runner invokes a developer callback.
 
 ## Minimal flow
 

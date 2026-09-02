@@ -3,7 +3,11 @@ import {
   type MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
 
-import { projectCryptoAppOutput, validateCryptoAppInput } from "./json-schema.js";
+import {
+  projectCryptoAppOutput,
+  validateCryptoAppInput,
+  validateCryptoAppSchemaDefinition,
+} from "./json-schema.js";
 
 const CALL_VERSION = "matterhorn.crypto-app-call.v1";
 const REPORT_VERSION = "matterhorn.crypto-app-local-run.v1";
@@ -165,6 +169,21 @@ export async function runMatterhornCryptoAppLocalAdapter(input: {
   const manifestIssues = validateMatterhornCryptoAppManifest(input.manifest);
   if (manifestIssues.length) {
     throw new MatterhornCryptoAppLocalRunnerError("local_runner_manifest_invalid", manifestIssues);
+  }
+  const schemaIssues: string[] = [];
+  for (const action of input.manifest.actions) {
+    for (const issue of validateCryptoAppSchemaDefinition(action.inputSchema)) {
+      schemaIssues.push(`action:${action.id}:input:${issue}`);
+    }
+    for (const issue of validateCryptoAppSchemaDefinition(action.outputProjectionSchema)) {
+      schemaIssues.push(`action:${action.id}:output:${issue}`);
+    }
+  }
+  if (schemaIssues.length) {
+    throw new MatterhornCryptoAppLocalRunnerError(
+      "local_runner_manifest_invalid",
+      [...new Set(schemaIssues)],
+    );
   }
   if (!input.manifest.networks.some((network) => (
     network.chainId === input.network && network.environment === "testnet"

@@ -69,6 +69,64 @@ describe("crypto app closed JSON-schema subset", () => {
     ]));
   });
 
+  test("rejects secret and execution-authority properties at every schema depth", () => {
+    const unsafe = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        publicEvidence: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            private_key: { type: "string" },
+            actions: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  submitTransaction: { type: "boolean" },
+                  rawSignature: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    expect(validateCryptoAppSchemaDefinition(unsafe)).toEqual(expect.arrayContaining([
+      expect.stringContaining("$.publicEvidence.private_key:schema_property_sensitive_forbidden"),
+      expect.stringContaining("$.publicEvidence.actions[].submitTransaction:schema_property_execution_authority_forbidden"),
+      expect.stringContaining("$.publicEvidence.actions[].rawSignature:schema_property_sensitive_forbidden"),
+    ]));
+    const projected = projectCryptoAppOutput(unsafe, {
+      publicEvidence: {
+        private_key: "must-not-project",
+        actions: [{ submitTransaction: true, rawSignature: "must-not-project" }],
+      },
+    });
+    expect(projected.ok).toBe(false);
+    expect(projected.value).toBeNull();
+    expect(JSON.stringify(projected)).not.toContain("must-not-project");
+  });
+
+  test("rejects non-ASCII, confusable, and unbounded property names without echoing them", () => {
+    const unsafe = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        "privаteKey": { type: "string" },
+        "destination.address": { type: "string" },
+        ["a".repeat(65)]: { type: "string" },
+      },
+    };
+    const issues = validateCryptoAppSchemaDefinition(unsafe);
+    expect(issues).toContain("$.*:schema_property_name_invalid");
+    expect(JSON.stringify(issues)).not.toContain("privаteKey");
+    expect(JSON.stringify(issues)).not.toContain("destination.address");
+    expect(JSON.stringify(issues)).not.toContain("a".repeat(65));
+  });
+
   test("requires exactly one matching oneOf branch", () => {
     const union = {
       oneOf: [

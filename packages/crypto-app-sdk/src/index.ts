@@ -170,6 +170,19 @@ function materializedManifest(
   };
 }
 
+function validateManifestActionSchemas(manifest: MatterhornCryptoAppManifest): string[] {
+  const issues: string[] = [];
+  for (const action of manifest.actions) {
+    for (const issue of validateCryptoAppSchemaDefinition(action.inputSchema)) {
+      issues.push(`action:${action.id}:input:${issue}`);
+    }
+    for (const issue of validateCryptoAppSchemaDefinition(action.outputProjectionSchema)) {
+      issues.push(`action:${action.id}:output:${issue}`);
+    }
+  }
+  return [...new Set(issues)];
+}
+
 /**
  * Builds and validates an unsigned manifest. No key material crosses this API;
  * the caller signs the returned canonical payload in its own key boundary.
@@ -180,6 +193,8 @@ export function defineCryptoAppManifest(
   const candidate = materializedManifest(draft, "pending-detached-signature");
   const issues = validateMatterhornCryptoAppManifest(candidate);
   if (issues.length > 0) throw new MatterhornCryptoAppSdkError("manifest_invalid", issues);
+  const schemaIssues = validateManifestActionSchemas(candidate);
+  if (schemaIssues.length > 0) throw new MatterhornCryptoAppSdkError("manifest_invalid", schemaIssues);
   return deepClone(draft);
 }
 

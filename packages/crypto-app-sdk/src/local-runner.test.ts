@@ -135,6 +135,55 @@ describe("Matterhorn local crypto adapter runner", () => {
     expect(calls).toBe(0);
   });
 
+  test("rejects an unsafe manifest schema before invoking the adapter", async () => {
+    let calls = 0;
+    const unsafe = manifest();
+    unsafe.actions[0]!.outputProjectionSchema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        nested: {
+          type: "object",
+          additionalProperties: false,
+          properties: { rawSignature: { type: "string" } },
+        },
+      },
+    };
+    await expect(runMatterhornCryptoAppLocalAdapter({
+      manifest: unsafe,
+      actionId: "sui_balance_read",
+      network: "sui:testnet",
+      arguments: { address: "0x123" },
+    }, {
+      invoke: async () => {
+        calls += 1;
+        return { data: {}, source: "test", observedAt, blockOrVersion: null };
+      },
+    })).rejects.toMatchObject({
+      code: "local_runner_manifest_invalid",
+      issues: expect.arrayContaining([expect.stringContaining("schema_property_sensitive_forbidden")]),
+    });
+    expect(calls).toBe(0);
+  });
+
+  test("normalizes a structurally malformed manifest without invoking the adapter", async () => {
+    let calls = 0;
+    const malformed = structuredClone(manifest()) as unknown as Record<string, unknown>;
+    malformed.actions = null;
+    await expect(runMatterhornCryptoAppLocalAdapter({
+      manifest: malformed as never,
+      actionId: "sui_balance_read",
+      network: "sui:testnet",
+      arguments: { address: "0x123" },
+    }, {
+      invoke: async () => {
+        calls += 1;
+        return { data: {}, source: "test", observedAt, blockOrVersion: null };
+      },
+    })).rejects.toMatchObject({ code: "local_runner_manifest_invalid" });
+    expect(calls).toBe(0);
+  });
+
   test("does not accept mainnet or credential-bearing adapter runs", async () => {
     const invoke = async () => ({ data: {}, source: "test", observedAt, blockOrVersion: null });
     await expect(runMatterhornCryptoAppLocalAdapter({
