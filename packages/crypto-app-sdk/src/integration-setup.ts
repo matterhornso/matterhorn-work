@@ -34,6 +34,12 @@ export type MatterhornCryptoIntegrationSetupStep = {
   artifactId: string | null;
 };
 
+export type MatterhornCryptoIntegrationVerificationCheck = {
+  id: "connection" | "workspace_scope" | "wallet_boundary";
+  title: string;
+  expected: string;
+};
+
 export type MatterhornCryptoIntegrationSetup = {
   version: typeof MATTERHORN_CRYPTO_APP_INTEGRATION_SETUP_VERSION;
   target: MatterhornCryptoIntegrationTarget;
@@ -56,6 +62,7 @@ export type MatterhornCryptoIntegrationSetup = {
   verification: {
     firstAction: string;
     expectedBoundary: string;
+    checks: readonly MatterhornCryptoIntegrationVerificationCheck[];
   };
   safety: readonly string[];
 };
@@ -382,6 +389,12 @@ export function createMatterhornCryptoIntegrationSetup(
     });
   }
 
+  const firstAction = options.target === "cli"
+    ? "matterhorn-work doctor"
+    : options.target === "http_api"
+      ? "GET /status"
+      : "matterhorn_status";
+
   return {
     version: MATTERHORN_CRYPTO_APP_INTEGRATION_SETUP_VERSION,
     target: options.target,
@@ -406,14 +419,26 @@ export function createMatterhornCryptoIntegrationSetup(
     steps,
     artifacts,
     verification: {
-      firstAction:
-        options.target === "cli"
-          ? "matterhorn-work doctor"
-          : options.target === "http_api"
-            ? "GET /status"
-            : "matterhorn_status",
+      firstAction,
       expectedBoundary:
         "Client-scoped workspace access only; wallet approval remains separate.",
+      checks: [
+        {
+          id: "connection",
+          title: "Matterhorn responds",
+          expected: `Run ${firstAction}. It should return status without asking for a host token.`,
+        },
+        {
+          id: "workspace_scope",
+          title: "Access stays limited",
+          expected: "Only workspaces available to the client token should appear.",
+        },
+        {
+          id: "wallet_boundary",
+          title: "Wallet control stays separate",
+          expected: "No signing, submission, relay, or broadcast authority should be available.",
+        },
+      ],
     },
     safety: sharedSafety(),
   };

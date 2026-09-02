@@ -62,6 +62,7 @@ export {
   type MatterhornCryptoIntegrationSetupOptions,
   type MatterhornCryptoIntegrationSetupStep,
   type MatterhornCryptoIntegrationTarget,
+  type MatterhornCryptoIntegrationVerificationCheck,
 } from "./integration-setup.js";
 
 type CanonicalValue = null | boolean | number | string | CanonicalValue[] | { [key: string]: CanonicalValue };

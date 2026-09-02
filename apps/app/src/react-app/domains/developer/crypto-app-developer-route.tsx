@@ -181,7 +181,7 @@ export function CryptoAppDeveloperRoute() {
   return (
     <main className="min-h-dvh overflow-y-auto bg-background text-foreground">
       <div className="mx-auto w-full max-w-5xl px-5 py-6 sm:px-8 sm:py-8">
-        <Button variant="ghost" size="sm" className="-ml-2 mb-6" onClick={() => navigate("/session")}>
+        <Button variant="ghost" size="sm" className="-ml-2 mb-6 min-h-11" onClick={() => navigate("/session")}>
           <ArrowLeft aria-hidden="true" className="size-4" />
           Back to Matterhorn
         </Button>
@@ -208,7 +208,7 @@ export function CryptoAppDeveloperRoute() {
           <section className="py-10" aria-live="polite">
             <h2 className="text-base font-semibold">Developer portal unavailable</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">{messageFor(portal.error)}</p>
-            <Button className="mt-5" onClick={() => void portal.refetch()}>Try again</Button>
+            <Button className="mt-5 min-h-11" onClick={() => void portal.refetch()}>Try again</Button>
           </section>
         ) : (
           <>
@@ -238,7 +238,7 @@ export function CryptoAppDeveloperRoute() {
                     <div><Label htmlFor="developer-invite">Invite token</Label><Input id="developer-invite" className="mt-2" value={inviteToken} onChange={(event) => setInviteToken(event.target.value)} autoComplete="off" required /></div>
                     <div><Label htmlFor="publisher-id">Publisher ID</Label><Input id="publisher-id" className="mt-2" value={publisherId} onChange={(event) => setPublisherId(event.target.value)} placeholder="company.protocol" required /></div>
                     <div><Label htmlFor="publisher-name">Display name</Label><Input id="publisher-name" className="mt-2" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></div>
-                    <Button type="submit" disabled={busy}>{busy ? "Enrolling…" : "Accept invite"}</Button>
+                    <Button type="submit" className="min-h-11" disabled={busy}>{busy ? "Enrolling…" : "Accept invite"}</Button>
                   </form>
                 ) : snapshot.status.nextStep === "register_public_key" ? (
                   <form className="space-y-4" onSubmit={(event) => {
@@ -248,14 +248,14 @@ export function CryptoAppDeveloperRoute() {
                     <div><Label htmlFor="publisher-key-id">Key ID</Label><Input id="publisher-key-id" className="mt-2" value={keyId} onChange={(event) => setKeyId(event.target.value)} placeholder="release-key-1" required /></div>
                     <div><Label htmlFor="publisher-public-key">Ed25519 public key (PEM)</Label><Textarea id="publisher-public-key" className="mt-2 min-h-36 font-mono text-xs" value={publicKeyPem} onChange={(event) => setPublicKeyPem(event.target.value)} spellCheck={false} required /></div>
                     <p className="text-xs leading-5 text-muted-foreground">Do not paste a private key. Matterhorn stores only the public SPKI key and its fingerprint.</p>
-                    <Button type="submit" disabled={busy}>{busy ? "Registering…" : "Register public key"}</Button>
+                    <Button type="submit" className="min-h-11" disabled={busy}>{busy ? "Registering…" : "Register public key"}</Button>
                   </form>
                 ) : snapshot.status.nextStep === "submit_testnet_manifest"
                   || snapshot.status.nextStep === "fix_static_conformance"
                   || snapshot.status.nextStep === "fix_runtime_certification" ? (
                   <div className="space-y-4">
                     <div><Label htmlFor="developer-manifest">Signed manifest JSON</Label><Textarea id="developer-manifest" className="mt-2 min-h-56 font-mono text-xs" value={manifestJson} onChange={(event) => setManifestJson(event.target.value)} spellCheck={false} /></div>
-                    <Button disabled={busy || !manifestJson.trim()} onClick={() => void submitManifest()}>{busy ? "Checking…" : "Run static checks"}</Button>
+                    <Button className="min-h-11" disabled={busy || !manifestJson.trim()} onClick={() => void submitManifest()}>{busy ? "Checking…" : "Run static checks"}</Button>
                     {snapshot.status.nextStep === "fix_static_conformance" && latestFailed ? (
                       <div className="border-t border-border pt-4">
                         <p className="text-sm font-medium">Latest revision findings</p>
@@ -287,7 +287,7 @@ export function CryptoAppDeveloperRoute() {
                       <div key={`${item.appId}:${item.manifestRevision}`} className="border-b border-border pb-3 last:border-0">
                         <p className="text-sm font-medium">{item.manifest.displayName}</p>
                         <p className="mt-1 text-xs text-muted-foreground">Revision {item.manifestRevision}</p>
-                        <Button size="sm" className="mt-3" disabled={busy} onClick={() => void run((client) => client.requestTestnetCertification(item.appId, item.manifestRevision))}>Request certification</Button>
+                        <Button size="sm" className="mt-3 min-h-11" disabled={busy} onClick={() => void run((client) => client.requestTestnetCertification(item.appId, item.manifestRevision))}>Request certification</Button>
                       </div>
                     ))}
                   </div>

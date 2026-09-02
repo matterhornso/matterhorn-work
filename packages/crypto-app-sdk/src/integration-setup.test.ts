@@ -34,12 +34,44 @@ describe("Matterhorn crypto integration setup", () => {
       expect(setup.authority.privateKeyAccepted).toBe(false);
       expect(setup.artifacts.length).toBeGreaterThan(0);
       expect(setup.steps.length).toBeGreaterThan(0);
+      expect(setup.verification.checks.map((check) => check.id)).toEqual([
+        "connection",
+        "workspace_scope",
+        "wallet_boundary",
+      ]);
+      expect(setup.verification.checks[0]?.expected).toContain(
+        setup.verification.firstAction,
+      );
 
       const serialized = JSON.stringify(setup);
       expect(serialized).not.toContain("MATTERHORN_WORK_HOST_TOKEN");
       expect(serialized).not.toContain("OPENWORK_HOST_TOKEN");
       expect(serialized).not.toContain("npx");
       expect(serialized).not.toContain("submit capability");
+    }
+  });
+
+  test("describes a deterministic verification boundary for each client", () => {
+    const codex = createMatterhornCryptoIntegrationSetup({
+      target: "codex",
+      repositoryPath,
+    });
+    const cli = createMatterhornCryptoIntegrationSetup({ target: "cli" });
+    const http = createMatterhornCryptoIntegrationSetup({ target: "http_api" });
+
+    expect(codex.verification.firstAction).toBe("matterhorn_status");
+    expect(cli.verification.firstAction).toBe("matterhorn-work doctor");
+    expect(http.verification.firstAction).toBe("GET /status");
+    for (const setup of [codex, cli, http]) {
+      expect(setup.verification.expectedBoundary).toBe(
+        "Client-scoped workspace access only; wallet approval remains separate.",
+      );
+      expect(setup.verification.checks[2]).toEqual({
+        id: "wallet_boundary",
+        title: "Wallet control stays separate",
+        expected:
+          "No signing, submission, relay, or broadcast authority should be available.",
+      });
     }
   });
 

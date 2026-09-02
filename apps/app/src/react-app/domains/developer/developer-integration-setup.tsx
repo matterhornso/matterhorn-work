@@ -98,6 +98,7 @@ export function DeveloperIntegrationSetup(props: { serverOrigin: string }) {
             type="button"
             size="sm"
             variant={target === option.id ? "secondary" : "outline"}
+            className="min-h-11"
             aria-pressed={target === option.id}
             onClick={() => {
               setTarget(option.id);
@@ -149,9 +150,24 @@ export function DeveloperIntegrationSetup(props: { serverOrigin: string }) {
                 </li>
               ))}
             </ol>
-            <div className="mt-6 border-t border-border pt-4 text-xs leading-5 text-muted-foreground">
-              <p><span className="font-medium text-foreground">First check:</span> {result.setup.verification.firstAction}</p>
-              <p className="mt-1">{result.setup.verification.expectedBoundary}</p>
+            <div className="mt-6 border-t border-border pt-5">
+              <h3 className="text-sm font-semibold">Check the connection</h3>
+              <ol className="mt-3 space-y-3">
+                {result.setup.verification.checks.map((check, index) => (
+                  <li key={check.id} className="flex gap-3 text-sm">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border text-xs" aria-hidden="true">
+                      {index + 1}
+                    </span>
+                    <span>
+                      <span className="block font-medium">{check.title}</span>
+                      <span className="mt-1 block leading-5 text-muted-foreground">{check.expected}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                This confirms the connection boundary. Testnet certification is a separate review.
+              </p>
             </div>
           </div>
 
@@ -169,6 +185,7 @@ export function DeveloperIntegrationSetup(props: { serverOrigin: string }) {
                       type="button"
                       size="sm"
                       variant="outline"
+                      className="min-h-11"
                       onClick={() => void copyArtifact(artifact.id, artifact.content)}
                     >
                       {copied ? <Check aria-hidden="true" className="size-4" /> : <Clipboard aria-hidden="true" className="size-4" />}

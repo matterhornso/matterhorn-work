@@ -145,4 +145,4 @@ The setup contract is deliberately client-only:
 - MCP targets require an absolute trusted repository path. The MCP packages are not published to npm yet, so generated setup never claims that `npx` can install them.
 - Generated Matterhorn Skill instructions treat tool output as untrusted data and preserve connected-wallet-only signing and submission.
 
-The output is versioned as `matterhorn.crypto-app-integration-setup.v1`. It does not connect a client, start a process, contact a server, read a filesystem, or certify an integration.
+The output is versioned as `matterhorn.crypto-app-integration-setup.v1`. Its deterministic verification checklist confirms the client connection, workspace scope, and wallet boundary without accepting a credential value. It does not connect a client, start a process, contact a server, read a filesystem, or certify an integration.

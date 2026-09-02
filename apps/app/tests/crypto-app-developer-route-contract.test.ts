@@ -86,6 +86,10 @@ describe("invite-only crypto app developer route", () => {
     expect(route).toContain("<DeveloperIntegrationSetup");
     expect(setup).toContain("createMatterhornCryptoIntegrationSetup");
     expect(setup).toContain("Connect your development tool");
+    expect(setup).toContain("Check the connection");
+    expect(setup).toContain("verification.checks.map");
+    expect(setup).toContain("Testnet certification is a separate review");
+    expect(setup).toContain('className="min-h-11"');
     expect(setup).toContain("Codex");
     expect(setup).toContain("Claude Code");
     expect(setup).toContain("Agent skill");
@@ -98,5 +102,8 @@ describe("invite-only crypto app developer route", () => {
     expect(setup).not.toContain("signTransaction");
     expect(setup).not.toContain("executeTransaction");
     expect(setup).not.toContain("fetch(");
+    expect(route.match(/<h1/g)).toHaveLength(1);
+    expect(route).toContain('className="-ml-2 mb-6 min-h-11"');
+    expect(route).toContain('className="min-h-11" disabled={busy}');
   });
 });
