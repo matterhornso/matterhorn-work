@@ -234,6 +234,91 @@ describe("durable crypto evidence store", () => {
     }
   });
 
+  test("serializes publication across SQLite connections and protects a replacement claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "matterhorn-evidence-publication-claim-"));
+    const databasePath = join(directory, "state.db");
+    const stateA = new MatterhornGuardedRuntimeStateStore(databasePath);
+    const stateB = new MatterhornGuardedRuntimeStateStore(databasePath);
+    const keyManager: MatterhornEvidenceKeyManager = {
+      createDataKey: async ({ recipientKeyIds }) => ({
+        plaintextKey: Buffer.alloc(32, 4),
+        keyReference: "arn:aws:kms:test:key/publication-claim",
+        wrappedKey: Buffer.from("publication-claim-wrapped-key").toString("base64"),
+        keyContext: "d".repeat(64),
+        recipientKeyIds,
+      }),
+      decryptDataKey: async () => Buffer.alloc(32, 4),
+      destroyKey: async () => {},
+    };
+    try {
+      const sealed = await sealMatterhornRunEvidence({
+        receipt: receipt({ id: "receipt_claim", runId: "run_claim", workspaceId: "workspace_claim" }),
+        coworkerId: "coworker_claim",
+        recipientKeyIds: ["recipient-claim"],
+        keyManager,
+        now: new Date("2026-09-01T00:02:00.000Z"),
+        correlationSalt: Buffer.alloc(32, 4),
+        idEntropy: Buffer.alloc(24, 5),
+      });
+      const storeA = new MatterhornCryptoEvidenceStore(stateA, keyManager);
+      const storeB = new MatterhornCryptoEvidenceStore(stateB, keyManager);
+      const created = storeA.create({
+        workspaceId: "workspace_claim",
+        ownerId: "owner_claim",
+        runId: "run_claim",
+        coworkerId: "coworker_claim",
+        sealed,
+      });
+      const firstNow = new Date("2026-09-01T00:03:00.000Z");
+      const first = storeA.beginWalrusPublication({
+        workspaceId: "workspace_claim",
+        ownerId: "owner_claim",
+        evidenceId: created.id,
+        expectedRevision: created.revision,
+        now: firstNow,
+      });
+      expect(() => storeB.beginWalrusPublication({
+        workspaceId: "workspace_claim",
+        ownerId: "owner_claim",
+        evidenceId: created.id,
+        expectedRevision: created.revision,
+        now: firstNow,
+      })).toThrow("crypto_evidence_walrus_publication_in_progress");
+
+      const replacementNow = new Date("2026-09-01T00:08:01.000Z");
+      const replacement = storeB.beginWalrusPublication({
+        workspaceId: "workspace_claim",
+        ownerId: "owner_claim",
+        evidenceId: created.id,
+        expectedRevision: created.revision,
+        now: replacementNow,
+      });
+      expect(storeA.endWalrusPublication({
+        workspaceId: "workspace_claim",
+        evidenceId: created.id,
+        claimId: first.claimId,
+        now: replacementNow,
+      })).toBe(false);
+      expect(() => storeA.beginWalrusPublication({
+        workspaceId: "workspace_claim",
+        ownerId: "owner_claim",
+        evidenceId: created.id,
+        expectedRevision: created.revision,
+        now: replacementNow,
+      })).toThrow("crypto_evidence_walrus_publication_in_progress");
+      expect(storeB.endWalrusPublication({
+        workspaceId: "workspace_claim",
+        evidenceId: created.id,
+        claimId: replacement.claimId,
+        now: replacementNow,
+      })).toBe(true);
+    } finally {
+      stateB.close();
+      stateA.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   test("destroys every owner key during workspace deletion and expires remaining records", async () => {
     const directory = await mkdtemp(join(tmpdir(), "matterhorn-evidence-lifecycle-"));
     const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));

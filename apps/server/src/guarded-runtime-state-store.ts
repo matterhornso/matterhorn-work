@@ -32,6 +32,7 @@ export type GuardedRuntimeStateKind =
   | "crypto_pending_intent"
   | "crypto_evidence_record"
   | "crypto_evidence_run_index"
+  | "crypto_evidence_publication_claim"
   | "crypto_evidence_finalization"
   | "crypto_evidence_audit"
   | "agent_file_record"

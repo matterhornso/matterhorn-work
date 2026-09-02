@@ -22,9 +22,25 @@ import { verifyMatterhornEvidenceMerkleProof } from "./walrus-evidence-merkle.js
 const RECORD_VERSION = "matterhorn.crypto-evidence-record.v1" as const;
 const STATE_KIND = "crypto_evidence_record" as const;
 const RUN_INDEX_KIND = "crypto_evidence_run_index" as const;
+const PUBLICATION_CLAIM_KIND = "crypto_evidence_publication_claim" as const;
 const AUDIT_VERSION = "matterhorn.crypto-evidence-access.v1" as const;
 const AUDIT_KIND = "crypto_evidence_audit" as const;
 const SECURITY_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
+const PUBLICATION_CLAIM_TTL_MS = 5 * 60 * 1_000;
+
+type MatterhornCryptoEvidencePublicationClaim = {
+  version: "matterhorn.crypto-evidence-publication-claim.v1";
+  claimId: string;
+  evidenceId: string;
+  expectedRevision: number;
+  createdAt: string;
+  expiresAt: string;
+};
+
+type MatterhornCryptoEvidencePublicationCandidate = MatterhornCryptoEvidenceRecord & {
+  state: "sealed";
+  envelope: MatterhornEncryptedEvidenceEnvelope;
+};
 
 export type MatterhornCryptoEvidenceAccessEvent = {
   version: typeof AUDIT_VERSION;
@@ -140,6 +156,14 @@ export class MatterhornCryptoEvidenceStore {
       ownerId: input.ownerId,
       coworkerId: input.coworkerId,
       runId: input.runId,
+    });
+  }
+
+  private publicationClaimKey(input: { workspaceId: string; evidenceId: string }): string {
+    return sha256({
+      domain: "matterhorn:crypto-evidence-publication-claim:v1",
+      workspaceId: input.workspaceId,
+      evidenceId: input.evidenceId,
     });
   }
 
@@ -352,6 +376,82 @@ export class MatterhornCryptoEvidenceStore {
         && (input.coworkerId === undefined || record.coworkerId === input.coworkerId))
       .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
       .map(clone);
+  }
+
+  /**
+   * Atomically claims one exact encrypted evidence revision for publication.
+   * The expiring claim is durable across processes sharing the runtime SQLite
+   * database, so only one publisher can spend network resources for it.
+   */
+  beginWalrusPublication(input: {
+    workspaceId: string;
+    ownerId: string;
+    coworkerId?: string;
+    evidenceId: string;
+    expectedRevision: number;
+    now?: Date;
+  }): { record: MatterhornCryptoEvidencePublicationCandidate; claimId: string } {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    return this.stateStore.transaction(() => {
+      this.stateStore.deleteExpired(now.getTime());
+      const record = this.stateStore.get<MatterhornCryptoEvidenceRecord>(
+        STATE_KIND,
+        input.evidenceId,
+        now.getTime(),
+      );
+      if (!record) throw new Error("crypto_evidence_not_found");
+      assertTenant(record, input);
+      if (record.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
+      if (record.state !== "sealed" || !record.envelope || this.recoveryMaterialErased(record)) {
+        throw new Error("crypto_evidence_walrus_publish_state_invalid");
+      }
+
+      const claimId = `crypto_evidence_publication_${randomUUID().replaceAll("-", "")}`;
+      const expiresAtMs = now.getTime() + PUBLICATION_CLAIM_TTL_MS;
+      const claim: MatterhornCryptoEvidencePublicationClaim = {
+        version: "matterhorn.crypto-evidence-publication-claim.v1",
+        claimId,
+        evidenceId: record.id,
+        expectedRevision: record.revision,
+        createdAt: now.toISOString(),
+        expiresAt: new Date(expiresAtMs).toISOString(),
+      };
+      const claimed = this.stateStore.putIfAbsent({
+        kind: PUBLICATION_CLAIM_KIND,
+        key: this.publicationClaimKey(input),
+        workspaceId: input.workspaceId,
+        value: claim,
+        expiresAtMs,
+        nowMs: now.getTime(),
+      });
+      if (!claimed) throw new Error("crypto_evidence_walrus_publication_in_progress");
+      return {
+        record: clone(record) as MatterhornCryptoEvidencePublicationCandidate,
+        claimId,
+      };
+    });
+  }
+
+  /** Release only the caller's claim; an expired worker cannot clear a newer claim. */
+  endWalrusPublication(input: {
+    workspaceId: string;
+    evidenceId: string;
+    claimId: string;
+    now?: Date;
+  }): boolean {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    return this.stateStore.transaction(() => {
+      const key = this.publicationClaimKey(input);
+      const claim = this.stateStore.get<MatterhornCryptoEvidencePublicationClaim>(
+        PUBLICATION_CLAIM_KIND,
+        key,
+        now.getTime(),
+      );
+      if (!claim || claim.claimId !== input.claimId || claim.evidenceId !== input.evidenceId) return false;
+      return this.stateStore.delete(PUBLICATION_CLAIM_KIND, key);
+    });
   }
 
   attachVerifiedWalrusProof(input: {

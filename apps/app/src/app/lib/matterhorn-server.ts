@@ -131,6 +131,7 @@ import type {
   MatterhornCoworkerWatch,
   MatterhornCoworkerWorkingState,
   MatterhornEvidenceVerificationListResponse,
+  MatterhornEvidencePublicationResponse,
   MatterhornEvidenceVerificationResult,
   MatterhornStoredAgentFile,
 } from "@matterhorn-work/types/crypto-coworkers";
@@ -2239,6 +2240,25 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence?limit=${encodeURIComponent(String(limit))}`,
       { token, hostToken, timeoutMs: timeouts.sessionRead },
+    ),
+    publishCryptoEvidence: (
+      workspaceId: string,
+      evidenceId: string,
+      expectedRevision: number,
+    ) => requestJson<MatterhornEvidencePublicationResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/publish`,
+      {
+        token,
+        hostToken,
+        method: "POST",
+        body: {
+          expectedRevision,
+          network: "testnet",
+          acknowledgePublicCiphertext: true,
+        },
+        timeoutMs: timeouts.status,
+      },
     ),
     verifyCryptoEvidence: (workspaceId: string, evidenceId: string) => requestJson<MatterhornEvidenceVerificationResult>(
       baseUrl,

@@ -502,7 +502,18 @@ export type MatterhornEvidenceVerificationResult = {
 export type MatterhornEvidenceVerificationListResponse = {
   mode: "off" | "testnet";
   available: boolean;
+  publicationAvailable: boolean;
   items: MatterhornEvidenceVerificationPacket[];
+};
+
+export type MatterhornEvidencePublicationResponse = {
+  item: MatterhornEvidenceVerificationPacket;
+  disclosure: {
+    network: "testnet";
+    stored: "encrypted_bytes_only";
+    publicBytesMayRemainAfterDeletion: true;
+    deletionDestroysRecoveryKey: true;
+  };
 };
 
 export const MATTERHORN_AGENT_FILE_VERSION = "matterhorn.agent-file.v1";

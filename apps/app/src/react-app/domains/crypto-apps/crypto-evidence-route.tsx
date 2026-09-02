@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clipboard,
+  CloudUpload,
   LoaderCircle,
   RefreshCw,
   ShieldCheck,
@@ -48,6 +49,11 @@ function userMessage(error: unknown): string {
     if (error.code === "crypto_evidence_unavailable") return "Encrypted coworker evidence is not enabled for this deployment.";
     if (error.code === "crypto_evidence_not_found") return "This evidence record no longer exists or belongs to another workspace.";
     if (error.code === "crypto_evidence_verification_unavailable") return "Live verification is temporarily unavailable. No proof state was changed.";
+    if (error.code === "crypto_evidence_walrus_confirmation_required") return "Confirm the public encrypted-copy notice before continuing.";
+    if (error.code === "crypto_evidence_revision_conflict") return "This evidence record changed. Refresh and try again.";
+    if (error.code === "crypto_evidence_walrus_publication_in_progress") return "This encrypted copy is already being stored.";
+    if (error.code === "crypto_evidence_walrus_publish_state_invalid") return "This evidence record cannot be stored again.";
+    if (error.code === "crypto_evidence_publication_unavailable") return "Encrypted testnet storage is temporarily unavailable. Your local encrypted evidence is unchanged.";
   }
   return "Matterhorn could not load the evidence proof. Try again.";
 }
@@ -84,6 +90,9 @@ export function CryptoEvidenceRoute() {
   const { workspaceId = "" } = useParams<{ workspaceId: string }>();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [publishCandidateId, setPublishCandidateId] = useState<string | null>(null);
+  const [publishAcknowledged, setPublishAcknowledged] = useState(false);
   const [verificationById, setVerificationById] = useState<Record<string, MatterhornEvidenceVerificationResult>>({});
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -109,6 +118,28 @@ export function CryptoEvidenceRoute() {
       setVerifyingId(null);
     }
   }, [query.data, queryClient, queryKey, workspaceId]);
+
+  const publish = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
+    if (!publishAcknowledged) return;
+    setPublishingId(item.evidenceId);
+    setError(null);
+    try {
+      const active = query.data ?? await loadEvidence(workspaceId);
+      await active.client.publishCryptoEvidence(workspaceId, item.evidenceId, item.revision);
+      setPublishCandidateId(null);
+      setPublishAcknowledged(false);
+      setVerificationById((current) => {
+        const next = { ...current };
+        delete next[item.evidenceId];
+        return next;
+      });
+      await queryClient.invalidateQueries({ queryKey });
+    } catch (cause) {
+      setError(userMessage(cause));
+    } finally {
+      setPublishingId(null);
+    }
+  }, [publishAcknowledged, query.data, queryClient, queryKey, workspaceId]);
 
   const copyPacket = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
     setError(null);
@@ -138,12 +169,12 @@ export function CryptoEvidenceRoute() {
         <header className="border-b border-border pb-6">
           <h1 className="text-2xl font-semibold tracking-[-0.02em]">Encrypted evidence</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Check that a coworker receipt is still encrypted, bound to its Walrus blob, and certified on Sui testnet. Matterhorn never puts prompts or recovery keys in this packet.
+            Keep a completed coworker receipt encrypted, then choose whether to store an encrypted copy on Walrus testnet. Prompts and recovery keys never enter the public copy.
           </p>
           <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground" aria-label="Evidence safety boundary">
             <span>Ciphertext only</span>
             <span>Owner-scoped access</span>
-            <span>Read-only verification</span>
+            <span>Nothing stored automatically</span>
             <span>No wallet signature</span>
           </div>
         </header>
@@ -180,6 +211,8 @@ export function CryptoEvidenceRoute() {
               const expanded = expandedId === item.evidenceId;
               const result = verificationById[item.evidenceId];
               const canVerify = item.state === "published" && snapshot.mode === "testnet";
+              const canPublish = item.state === "sealed" && snapshot.publicationAvailable;
+              const confirmingPublish = publishCandidateId === item.evidenceId;
               return (
                 <article key={item.evidenceId} className="border-b border-border py-5">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -210,7 +243,7 @@ export function CryptoEvidenceRoute() {
                   {expanded ? (
                     <div className="mt-5 grid gap-6 border-t border-border pt-5 md:grid-cols-[minmax(0,1fr)_18rem]">
                       <div className="min-w-0">
-                        <h3 className="text-sm font-medium">Public verification packet</h3>
+                        <h3 className="text-sm font-medium">Evidence proof</h3>
                         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-[9rem_minmax(0,1fr)]">
                           <dt className="text-muted-foreground">Ciphertext SHA-256</dt>
                           <dd className="break-all font-mono text-xs">{item.ciphertextSha256}</dd>
@@ -245,17 +278,75 @@ export function CryptoEvidenceRoute() {
                           <CheckLine ok={result?.verification.checks.suiCertification ?? false}>Sui certification is current</CheckLine>
                           <CheckLine ok={result?.verification.checks.walrusReadback ?? false}>Walrus bytes match</CheckLine>
                         </ul>
-                        <Button
-                          className="mt-5 w-full"
-                          disabled={!canVerify || verifyingId === item.evidenceId}
-                          onClick={() => void verify(item)}
-                        >
-                          {verifyingId === item.evidenceId ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : <RefreshCw aria-hidden="true" className="size-4" />}
-                          {verifyingId === item.evidenceId ? "Verifying…" : "Verify live"}
-                        </Button>
+                        {canVerify ? (
+                          <Button
+                            className="mt-5 w-full"
+                            disabled={verifyingId === item.evidenceId}
+                            onClick={() => void verify(item)}
+                          >
+                            {verifyingId === item.evidenceId ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : <RefreshCw aria-hidden="true" className="size-4" />}
+                            {verifyingId === item.evidenceId ? "Verifying…" : "Verify live"}
+                          </Button>
+                        ) : null}
+                        {canPublish && !confirmingPublish ? (
+                          <Button
+                            className="mt-5 w-full"
+                            onClick={() => {
+                              setPublishCandidateId(item.evidenceId);
+                              setPublishAcknowledged(false);
+                              setError(null);
+                            }}
+                          >
+                            <CloudUpload aria-hidden="true" className="size-4" />
+                            Store encrypted copy
+                          </Button>
+                        ) : null}
+                        {canPublish && confirmingPublish ? (
+                          <div className="mt-5 border-t border-border pt-4">
+                            <p className="text-xs leading-5 text-muted-foreground">
+                              Only encrypted bytes go to the public Walrus test network. Those bytes may remain after deletion, but deleting the recovery key makes them unreadable.
+                            </p>
+                            <label className="mt-3 flex cursor-pointer items-start gap-3 text-xs leading-5">
+                              <input
+                                type="checkbox"
+                                checked={publishAcknowledged}
+                                onChange={(event) => setPublishAcknowledged(event.target.checked)}
+                                className="mt-0.5 size-4 shrink-0 accent-primary"
+                              />
+                              <span>I understand that the encrypted public bytes may remain.</span>
+                            </label>
+                            <div className="mt-4 flex gap-2">
+                              <Button
+                                size="sm"
+                                disabled={!publishAcknowledged || publishingId === item.evidenceId}
+                                onClick={() => void publish(item)}
+                              >
+                                {publishingId === item.evidenceId ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : null}
+                                {publishingId === item.evidenceId ? "Storing…" : "Confirm storage"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={publishingId === item.evidenceId}
+                                onClick={() => {
+                                  setPublishCandidateId(null);
+                                  setPublishAcknowledged(false);
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
                         {!canVerify ? (
                           <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                            Live verification is available only for published testnet evidence.
+                            {item.state === "sealed"
+                              ? snapshot.publicationAvailable
+                                ? "This encrypted record stays private until you choose to store a testnet copy."
+                                : "Encrypted testnet storage is not configured. This record stays in Matterhorn."
+                              : item.state === "key_destroyed"
+                                ? "The recovery key has been deleted, so this record can no longer be opened."
+                                : "Live verification is available only for published testnet evidence."}
                           </p>
                         ) : null}
                         {result?.verification.reason ? (

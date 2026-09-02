@@ -163,7 +163,6 @@ describe("testnet Walrus evidence publisher", () => {
       const published = await publisher.publish({
         workspaceId: "workspace_walrus",
         ownerId: "owner_walrus",
-        coworkerId: "coworker_walrus",
         evidenceId: value.record.id,
         expectedRevision: value.record.revision,
         signal: new AbortController().signal,
@@ -201,6 +200,47 @@ describe("testnet Walrus evidence publisher", () => {
     }
   });
 
+  test("serializes one record publication so concurrent confirmation cannot upload twice", async () => {
+    const value = await fixture();
+    try {
+      let releaseUpload!: () => void;
+      const uploadGate = new Promise<void>((resolve) => {
+        releaseUpload = resolve;
+      });
+      let publishedBytes = Buffer.alloc(0);
+      let publishCalls = 0;
+      const transport: MatterhornWalrusEvidenceTransport = {
+        publish: async ({ bytes }) => {
+          publishCalls += 1;
+          publishedBytes = Buffer.from(bytes);
+          await uploadGate;
+          return { blobId: "blob-testnet-1", suiObjectId: "0x1234", declaredEndEpoch: 110 };
+        },
+        readByObjectId: async () => Buffer.from(publishedBytes),
+      };
+      const publisher = new MatterhornTestnetWalrusEvidencePublisher(
+        value.store,
+        transport,
+        async () => certification(),
+      );
+      const input = {
+        workspaceId: "workspace_walrus",
+        ownerId: "owner_walrus",
+        evidenceId: value.record.id,
+        expectedRevision: value.record.revision,
+        signal: new AbortController().signal,
+      };
+      const first = publisher.publish(input);
+      await expect(publisher.publish(input)).rejects.toThrow("crypto_evidence_walrus_publication_in_progress");
+      expect(publishCalls).toBe(1);
+      releaseUpload();
+      await expect(first).resolves.toMatchObject({ state: "published", revision: 2 });
+    } finally {
+      value.state.close();
+      await rm(value.directory, { recursive: true, force: true });
+    }
+  });
+
   test("fails closed before proof attachment for wrong certification or readback bytes", async () => {
     for (const mode of ["wrong_certification", "wrong_readback"] as const) {
       const value = await fixture();
@@ -221,7 +261,6 @@ describe("testnet Walrus evidence publisher", () => {
         await expect(publisher.publish({
           workspaceId: "workspace_walrus",
           ownerId: "owner_walrus",
-          coworkerId: "coworker_walrus",
           evidenceId: value.record.id,
           expectedRevision: value.record.revision,
           signal: new AbortController().signal,

@@ -10,6 +10,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import type {
   MatterhornAgentPrivacyPreflightResponse,
+  MatterhornAgentRunReceipt,
 } from "@matterhorn-work/types/guarded-agent-runtime";
 import type {
   MatterhornCryptoAppResult,
@@ -30,6 +31,8 @@ import type {
   MatterhornEvidenceDataKeyLease,
   MatterhornEvidenceKeyManager,
 } from "./crypto-evidence-sealer.js";
+import { sealMatterhornRunEvidence } from "./crypto-evidence-sealer.js";
+import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import type {
   MatterhornWalrusCertification,
   MatterhornWalrusEvidenceTransport,
@@ -217,6 +220,12 @@ async function boot(
   const dependencies: MatterhornServerDependencies = {};
   if (keyManager) dependencies.evidenceKeyManager = keyManager;
   if (walrusTransport) {
+    dependencies.cryptoEvidenceWalrusTransport = walrusTransport;
+    dependencies.cryptoEvidenceWalrusCertificationVerifier = async () => ({
+      ...routeTestCertification(),
+      currentEpoch: walrusCurrentEpoch,
+      validUntilEpoch: walrusValidUntilEpoch,
+    });
     dependencies.agentFileWalrusTransport = walrusTransport;
     dependencies.agentFileWalrusCertificationVerifier = async () => ({
       ...routeTestCertification(),
@@ -512,6 +521,88 @@ async function seedPendingSuiIntent(input: {
     });
     return pending;
   } finally {
+    state.close();
+  }
+}
+
+function completedEvidenceReceipt(input: {
+  workspaceId: string;
+  sessionId: string;
+  runId: string;
+}): MatterhornAgentRunReceipt {
+  return {
+    version: "matterhorn.agent-run-receipt.v1",
+    id: `receipt_${input.runId}`,
+    runId: input.runId,
+    workspaceId: input.workspaceId,
+    sessionId: input.sessionId,
+    status: "success",
+    startedAt: "2026-09-01T00:00:00.000Z",
+    completedAt: "2026-09-01T00:00:00.500Z",
+    responseDurationMs: 500,
+    provider: {
+      id: "local",
+      name: "Local",
+      modelId: "none",
+      privacyStatus: "local_processing",
+      trainingUse: "none",
+      retentionDays: 0,
+      policyUrl: null,
+    },
+    privacy: {
+      mode: "private_workspace",
+      dataCategories: ["workspace_content"],
+      redactionCount: 0,
+      consent: "not_required",
+      dataLeavesMatterhorn: false,
+    },
+    usage: {
+      inputTokens: 12,
+      outputTokens: 8,
+      reasoningTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      estimatedCostUsd: 0,
+      toolCallBudget: { reads: 12, preparesPerFamily: 1, submits: 0 },
+    },
+    tools: [],
+    memory: { readIds: [], writtenIds: [] },
+    capabilities: [],
+    reviewedActions: [],
+    integrity: { previousHash: null, recordHash: "route-test-record-hash" },
+  };
+}
+
+async function seedCryptoEvidence(input: {
+  guardedDb: string;
+  keyManager: MatterhornEvidenceKeyManager;
+  workspaceId: string;
+  ownerId: string;
+  coworkerId: string;
+  runId: string;
+}) {
+  const state = new MatterhornGuardedRuntimeStateStore(input.guardedDb);
+  const store = new MatterhornCryptoEvidenceStore(state, input.keyManager);
+  const sealed = await sealMatterhornRunEvidence({
+    receipt: completedEvidenceReceipt({
+      workspaceId: input.workspaceId,
+      sessionId: `ses_${input.runId}`,
+      runId: input.runId,
+    }),
+    coworkerId: input.coworkerId,
+    recipientKeyIds: ["recipient_route_test"],
+    keyManager: input.keyManager,
+  });
+  try {
+    return store.create({
+      workspaceId: input.workspaceId,
+      ownerId: input.ownerId,
+      runId: input.runId,
+      coworkerId: input.coworkerId,
+      sealed,
+    });
+  } finally {
+    sealed.walrusCiphertext.fill(0);
     state.close();
   }
 }
@@ -951,7 +1042,124 @@ describe("crypto coworker HTTP boundary", () => {
     expect(disabled.payload.code).toBe("coworker_runtime_disabled");
     const evidence = await request(server.base, "/workspace/ws_coworker/crypto-evidence", { bearer: TOKEN });
     expect(evidence.response.status).toBe(200);
-    expect(evidence.payload).toEqual({ mode: "off", available: false, items: [] });
+    expect(evidence.payload).toEqual({
+      mode: "off",
+      available: false,
+      publicationAvailable: false,
+      items: [],
+    });
+  });
+
+  test("publishes completed coworker evidence only after exact owner confirmation", async () => {
+    const server = await boot("internal", { agentFiles: true, walrus: true });
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "evidence-publish-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "evidence-publish-b@example.com", password: PASSWORD },
+    });
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
+    const coworker = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: coworkerInput(),
+    });
+    const coworkerId = String(coworker.payload.coworker.id);
+    const ownerId = String(signupA.payload.user.id);
+    const runId = "run_route_private_evidence";
+    if (!server.keyManager) throw new Error("route_test_key_manager_missing");
+    const record = await seedCryptoEvidence({
+      guardedDb: server.guardedDb,
+      keyManager: server.keyManager,
+      workspaceId: workspaceA,
+      ownerId,
+      coworkerId,
+      runId,
+    });
+
+    const before = await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieA });
+    expect(before.payload).toMatchObject({
+      mode: "testnet",
+      available: true,
+      publicationAvailable: true,
+      items: [{ evidenceId: record.id, revision: 1, state: "sealed", publication: null }],
+    });
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
+      { cookie: cookieA, body: { expectedRevision: 1, network: "testnet" } },
+    )).payload.code).toBe("crypto_evidence_walrus_confirmation_required");
+    expect(server.walrusTransport?.publishCalls).toBe(0);
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
+      {
+        cookie: cookieB,
+        body: { expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true },
+      },
+    )).response.status).toBe(404);
+    expect(server.walrusTransport?.publishCalls).toBe(0);
+
+    const published = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
+      {
+        cookie: cookieA,
+        body: { expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true },
+      },
+    );
+    expect(published.response.status).toBe(200);
+    expect(published.payload).toMatchObject({
+      item: {
+        evidenceId: record.id,
+        revision: 2,
+        state: "published",
+        publication: { network: "testnet", blobId: "route-agent-file-blob" },
+      },
+      disclosure: {
+        network: "testnet",
+        stored: "encrypted_bytes_only",
+        publicBytesMayRemainAfterDeletion: true,
+        deletionDestroysRecoveryKey: true,
+      },
+    });
+    expect(server.walrusTransport?.publishCalls).toBe(1);
+    const publicPayload = server.walrusTransport?.publishedBytes.toString("utf8") ?? "";
+    expect(publicPayload).toContain("matterhorn.walrus-ciphertext.v1");
+    for (const privateValue of [workspaceA, ownerId, coworkerId, runId, `route-test-${runId}`]) {
+      expect(publicPayload).not.toContain(privateValue);
+      expect(JSON.stringify(published.payload)).not.toContain(privateValue);
+    }
+    expect(JSON.stringify(published.payload)).not.toContain('"ciphertext"');
+
+    const staleReplay = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
+      {
+        cookie: cookieA,
+        body: { expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true },
+      },
+    );
+    expect(staleReplay.response.status).toBe(409);
+    expect(staleReplay.payload.code).toBe("crypto_evidence_revision_conflict");
+    expect(server.walrusTransport?.publishCalls).toBe(1);
+
+    const verified = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/verify`,
+      { cookie: cookieA, method: "POST" },
+    );
+    expect(verified.payload.verification).toMatchObject({
+      status: "verified",
+      checks: {
+        tenantScope: true,
+        ciphertextHash: true,
+        merkleInclusion: true,
+        suiCertification: true,
+        walrusReadback: true,
+      },
+    });
   });
 
   test("creates, isolates, revisions, pauses and deletes account-owned coworkers", async () => {
@@ -973,7 +1181,12 @@ describe("crypto coworker HTTP boundary", () => {
 
     const ownEvidence = await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieA });
     expect(ownEvidence.response.status).toBe(200);
-    expect(ownEvidence.payload).toEqual({ mode: "off", available: false, items: [] });
+    expect(ownEvidence.payload).toEqual({
+      mode: "off",
+      available: false,
+      publicationAvailable: false,
+      items: [],
+    });
     expect((await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieB })).response.status)
       .toBe(404);
     const unavailableVerification = await request(

@@ -391,68 +391,81 @@ export class MatterhornTestnetWalrusEvidencePublisher {
   async publish(input: {
     workspaceId: string;
     ownerId: string;
-    coworkerId: string;
     evidenceId: string;
     expectedRevision: number;
     signal: AbortSignal;
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceRecord> {
     if (input.signal.aborted) throw new Error("crypto_evidence_walrus_aborted");
-    const record = this.store.get(input);
-    if (!record) throw new Error("crypto_evidence_not_found");
-    if (record.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
-    if (record.state !== "sealed" || !record.envelope) {
-      throw new Error("crypto_evidence_walrus_publish_state_invalid");
-    }
+    const { record, claimId } = this.store.beginWalrusPublication(input);
     const publicBytes = serializeMatterhornWalrusCiphertext(record.envelope);
-    if (sha256(publicBytes) !== record.index.ciphertextHash) {
-      throw new Error("crypto_evidence_walrus_ciphertext_mismatch");
+    try {
+      if (sha256(publicBytes) !== record.index.ciphertextHash) {
+        throw new Error("crypto_evidence_walrus_ciphertext_mismatch");
+      }
+      const merkle = buildMatterhornEvidenceMerkleBatch([record.envelope])[0];
+      if (!merkle) throw new Error("crypto_evidence_walrus_merkle_missing");
+      const upload = await this.transport.publish({
+        bytes: publicBytes,
+        ciphertextHash: record.index.ciphertextHash,
+        storageEpochs: this.storageEpochs,
+        signal: input.signal,
+      });
+      const certification = await this.verifyCertification({
+        network: "testnet",
+        blobId: upload.blobId,
+        suiObjectId: upload.suiObjectId,
+        signal: input.signal,
+      });
+      if (certification.network !== "testnet"
+        || certification.blobId !== upload.blobId
+        || certification.suiObjectId !== upload.suiObjectId
+        || certification.validUntilEpoch !== upload.declaredEndEpoch
+        || certification.certifiedEpoch > certification.currentEpoch
+        || certification.currentEpoch >= certification.validUntilEpoch) {
+        throw new Error("crypto_evidence_walrus_certification_invalid");
+      }
+      const readback = await this.transport.readByObjectId({
+        suiObjectId: upload.suiObjectId,
+        signal: input.signal,
+      });
+      try {
+        if (readback.length !== publicBytes.length || !timingSafeEqual(readback, publicBytes)) {
+          throw new Error("crypto_evidence_walrus_readback_mismatch");
+        }
+      } finally {
+        readback.fill(0);
+      }
+      const proof: MatterhornWalrusProof = {
+        version: MATTERHORN_WALRUS_PROOF_VERSION,
+        network: "testnet",
+        blobId: upload.blobId,
+        suiObjectId: upload.suiObjectId,
+        certifiedEpoch: certification.certifiedEpoch,
+        validUntilEpoch: certification.validUntilEpoch,
+        quiltPatchId: null,
+        merkleRoot: merkle.root,
+        merkleProof: merkle.proof,
+        suiTransactionDigest: certification.suiTransactionDigest,
+      };
+      return this.store.attachVerifiedWalrusProof({
+        workspaceId: input.workspaceId,
+        ownerId: input.ownerId,
+        coworkerId: record.coworkerId,
+        evidenceId: input.evidenceId,
+        expectedRevision: input.expectedRevision,
+        proof,
+        ...(input.now ? { now: input.now } : {}),
+      });
+    } finally {
+      publicBytes.fill(0);
+      this.store.endWalrusPublication({
+        workspaceId: input.workspaceId,
+        evidenceId: input.evidenceId,
+        claimId,
+        ...(input.now ? { now: input.now } : {}),
+      });
     }
-    const merkle = buildMatterhornEvidenceMerkleBatch([record.envelope])[0];
-    if (!merkle) throw new Error("crypto_evidence_walrus_merkle_missing");
-    const upload = await this.transport.publish({
-      bytes: publicBytes,
-      ciphertextHash: record.index.ciphertextHash,
-      storageEpochs: this.storageEpochs,
-      signal: input.signal,
-    });
-    const certification = await this.verifyCertification({
-      network: "testnet",
-      blobId: upload.blobId,
-      suiObjectId: upload.suiObjectId,
-      signal: input.signal,
-    });
-    if (certification.network !== "testnet"
-      || certification.blobId !== upload.blobId
-      || certification.suiObjectId !== upload.suiObjectId
-      || certification.validUntilEpoch !== upload.declaredEndEpoch
-      || certification.certifiedEpoch > certification.currentEpoch
-      || certification.currentEpoch >= certification.validUntilEpoch) {
-      throw new Error("crypto_evidence_walrus_certification_invalid");
-    }
-    const readback = await this.transport.readByObjectId({
-      suiObjectId: upload.suiObjectId,
-      signal: input.signal,
-    });
-    if (readback.length !== publicBytes.length || !timingSafeEqual(readback, publicBytes)) {
-      throw new Error("crypto_evidence_walrus_readback_mismatch");
-    }
-    const proof: MatterhornWalrusProof = {
-      version: MATTERHORN_WALRUS_PROOF_VERSION,
-      network: "testnet",
-      blobId: upload.blobId,
-      suiObjectId: upload.suiObjectId,
-      certifiedEpoch: certification.certifiedEpoch,
-      validUntilEpoch: certification.validUntilEpoch,
-      quiltPatchId: null,
-      merkleRoot: merkle.root,
-      merkleProof: merkle.proof,
-      suiTransactionDigest: certification.suiTransactionDigest,
-    };
-    return this.store.attachVerifiedWalrusProof({
-      ...input,
-      proof,
-    });
   }
 
   async publishBatch(input: {
@@ -473,85 +486,105 @@ export class MatterhornTestnetWalrusEvidencePublisher {
     if (new Set(input.evidence.map((item) => item.evidenceId)).size !== input.evidence.length) {
       throw new Error("crypto_evidence_walrus_batch_duplicate");
     }
-    const records = input.evidence.map((item) => {
-      const record = this.store.get({
+    const publications: Array<{
+      record: MatterhornCryptoEvidenceRecord & { envelope: NonNullable<MatterhornCryptoEvidenceRecord["envelope"]> };
+      claimId: string;
+      bytes: Buffer;
+    }> = [];
+    try {
+      for (const item of input.evidence) {
+        const claimed = this.store.beginWalrusPublication({
+          workspaceId: input.workspaceId,
+          ownerId: input.ownerId,
+          coworkerId: input.coworkerId,
+          evidenceId: item.evidenceId,
+          expectedRevision: item.expectedRevision,
+          ...(input.now ? { now: input.now } : {}),
+        });
+        const bytes = serializeMatterhornWalrusCiphertext(claimed.record.envelope);
+        publications.push({ record: claimed.record, claimId: claimed.claimId, bytes });
+        if (sha256(bytes) !== claimed.record.index.ciphertextHash) {
+          throw new Error("crypto_evidence_walrus_ciphertext_mismatch");
+        }
+      }
+      const merkle = buildMatterhornEvidenceMerkleBatch(publications.map(({ record }) => record.envelope));
+      const merkleByHash = new Map(merkle.map((proof) => [proof.ciphertextHash, proof]));
+      const upload = await this.transport.publishQuilt({
+        patches: publications.map(({ record, bytes }) => ({
+          bytes,
+          ciphertextHash: record.index.ciphertextHash,
+        })),
+        storageEpochs: this.storageEpochs,
+        signal: input.signal,
+      });
+      const certification = await this.verifyCertification({
+        network: "testnet",
+        blobId: upload.blobId,
+        suiObjectId: upload.suiObjectId,
+        signal: input.signal,
+      });
+      if (certification.network !== "testnet"
+        || certification.blobId !== upload.blobId
+        || certification.suiObjectId !== upload.suiObjectId
+        || certification.validUntilEpoch !== upload.declaredEndEpoch
+        || certification.certifiedEpoch > certification.currentEpoch
+        || certification.currentEpoch >= certification.validUntilEpoch) {
+        throw new Error("crypto_evidence_walrus_certification_invalid");
+      }
+      const patchByHash = new Map(upload.patches.map((patch) => [patch.ciphertextHash, patch.quiltPatchId]));
+      if (patchByHash.size !== publications.length) {
+        throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
+      }
+      for (const { record, bytes } of publications) {
+        const patchId = patchByHash.get(record.index.ciphertextHash);
+        if (!patchId) throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
+        const readback = await this.transport.readByQuiltPatchId({ quiltPatchId: patchId, signal: input.signal });
+        try {
+          if (readback.length !== bytes.length || !timingSafeEqual(readback, bytes)) {
+            throw new Error("crypto_evidence_walrus_readback_mismatch");
+          }
+        } finally {
+          readback.fill(0);
+        }
+      }
+      return this.store.attachVerifiedWalrusProofBatch({
         workspaceId: input.workspaceId,
         ownerId: input.ownerId,
         coworkerId: input.coworkerId,
-        evidenceId: item.evidenceId,
+        entries: publications.map(({ record }) => {
+          const patchId = patchByHash.get(record.index.ciphertextHash);
+          const inclusion = merkleByHash.get(record.index.ciphertextHash);
+          if (!patchId || !inclusion) throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
+          return {
+            evidenceId: record.id,
+            expectedRevision: record.revision,
+            proof: {
+              version: MATTERHORN_WALRUS_PROOF_VERSION,
+              network: "testnet",
+              blobId: upload.blobId,
+              suiObjectId: upload.suiObjectId,
+              certifiedEpoch: certification.certifiedEpoch,
+              validUntilEpoch: certification.validUntilEpoch,
+              quiltPatchId: patchId,
+              merkleRoot: inclusion.root,
+              merkleProof: inclusion.proof,
+              suiTransactionDigest: certification.suiTransactionDigest,
+            },
+          };
+        }),
+        ...(input.now ? { now: input.now } : {}),
       });
-      if (!record) throw new Error("crypto_evidence_not_found");
-      if (record.revision !== item.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
-      if (record.state !== "sealed" || !record.envelope) {
-        throw new Error("crypto_evidence_walrus_publish_state_invalid");
-      }
-      const bytes = serializeMatterhornWalrusCiphertext(record.envelope);
-      if (sha256(bytes) !== record.index.ciphertextHash) {
-        throw new Error("crypto_evidence_walrus_ciphertext_mismatch");
-      }
-      return { record, bytes };
-    });
-    const merkle = buildMatterhornEvidenceMerkleBatch(records.map(({ record }) => record.envelope!));
-    const merkleByHash = new Map(merkle.map((proof) => [proof.ciphertextHash, proof]));
-    const upload = await this.transport.publishQuilt({
-      patches: records.map(({ record, bytes }) => ({
-        bytes,
-        ciphertextHash: record.index.ciphertextHash,
-      })),
-      storageEpochs: this.storageEpochs,
-      signal: input.signal,
-    });
-    const certification = await this.verifyCertification({
-      network: "testnet",
-      blobId: upload.blobId,
-      suiObjectId: upload.suiObjectId,
-      signal: input.signal,
-    });
-    if (certification.network !== "testnet"
-      || certification.blobId !== upload.blobId
-      || certification.suiObjectId !== upload.suiObjectId
-      || certification.validUntilEpoch !== upload.declaredEndEpoch
-      || certification.certifiedEpoch > certification.currentEpoch
-      || certification.currentEpoch >= certification.validUntilEpoch) {
-      throw new Error("crypto_evidence_walrus_certification_invalid");
-    }
-    const patchByHash = new Map(upload.patches.map((patch) => [patch.ciphertextHash, patch.quiltPatchId]));
-    if (patchByHash.size !== records.length) throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
-    for (const { record, bytes } of records) {
-      const patchId = patchByHash.get(record.index.ciphertextHash);
-      if (!patchId) throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
-      const readback = await this.transport.readByQuiltPatchId({ quiltPatchId: patchId, signal: input.signal });
-      if (readback.length !== bytes.length || !timingSafeEqual(readback, bytes)) {
-        throw new Error("crypto_evidence_walrus_readback_mismatch");
+    } finally {
+      for (const publication of publications) {
+        publication.bytes.fill(0);
+        this.store.endWalrusPublication({
+          workspaceId: input.workspaceId,
+          evidenceId: publication.record.id,
+          claimId: publication.claimId,
+          ...(input.now ? { now: input.now } : {}),
+        });
       }
     }
-    return this.store.attachVerifiedWalrusProofBatch({
-      workspaceId: input.workspaceId,
-      ownerId: input.ownerId,
-      coworkerId: input.coworkerId,
-      entries: records.map(({ record }) => {
-        const patchId = patchByHash.get(record.index.ciphertextHash);
-        const inclusion = merkleByHash.get(record.index.ciphertextHash);
-        if (!patchId || !inclusion) throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
-        return {
-          evidenceId: record.id,
-          expectedRevision: record.revision,
-          proof: {
-            version: MATTERHORN_WALRUS_PROOF_VERSION,
-            network: "testnet",
-            blobId: upload.blobId,
-            suiObjectId: upload.suiObjectId,
-            certifiedEpoch: certification.certifiedEpoch,
-            validUntilEpoch: certification.validUntilEpoch,
-            quiltPatchId: patchId,
-            merkleRoot: inclusion.root,
-            merkleProof: inclusion.proof,
-            suiTransactionDigest: certification.suiTransactionDigest,
-          },
-        };
-      }),
-      ...(input.now ? { now: input.now } : {}),
-    });
   }
 
   /**

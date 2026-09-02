@@ -615,6 +615,7 @@ import {
   createMatterhornCryptoEvidenceRuntime,
   type MatterhornCryptoEvidenceRuntime,
 } from "./crypto-evidence-runtime.js";
+import { cryptoEvidenceAccountPacket } from "./crypto-evidence-verification.js";
 import {
   agentSecurityReceiptDirectory,
   purgeAllExpiredAgentRunReceipts,
@@ -1336,6 +1337,8 @@ type ClientAccess = {
 
 export type MatterhornServerDependencies = {
   evidenceKeyManager?: MatterhornEvidenceKeyManager | null;
+  cryptoEvidenceWalrusTransport?: MatterhornWalrusEvidenceTransport;
+  cryptoEvidenceWalrusCertificationVerifier?: MatterhornWalrusCertificationVerifier;
   agentFileWalrusTransport?: MatterhornWalrusEvidenceTransport;
   agentFileWalrusCertificationVerifier?: MatterhornWalrusCertificationVerifier;
   agentFileWalrusRenewalTransactionBuilder?: MatterhornWalrusRenewalTransactionBuilder;
@@ -1377,7 +1380,14 @@ export async function startServer(
   const cryptoEvidenceStore = evidenceKeyManager
     ? guardedRuntime.createCryptoEvidenceStore(evidenceKeyManager, {}, recoveryErasureLedger)
     : null;
-  const cryptoEvidenceRuntime = createMatterhornCryptoEvidenceRuntime(process.env, cryptoEvidenceStore);
+  const cryptoEvidenceRuntime = createMatterhornCryptoEvidenceRuntime(
+    process.env,
+    cryptoEvidenceStore,
+    {
+      transport: dependencies.cryptoEvidenceWalrusTransport,
+      certificationVerifier: dependencies.cryptoEvidenceWalrusCertificationVerifier,
+    },
+  );
   const cryptoEvidenceRotationDays = cryptoEvidenceStore
     ? evidenceKmsRotationDaysFromEnv(process.env)
     : null;
@@ -3376,6 +3386,33 @@ function coworkerApiError(error: unknown): ApiError {
   return error instanceof ApiError
     ? error
     : new ApiError(500, "coworker_internal_error", "Coworker service is unavailable.");
+}
+
+function cryptoEvidencePublicationApiError(error: unknown): ApiError {
+  const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
+  if (code === "crypto_evidence_not_found") {
+    return new ApiError(404, code, "Evidence record not found.");
+  }
+  if (code === "crypto_evidence_revision_conflict") {
+    return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
+  }
+  if (code === "crypto_evidence_walrus_publication_in_progress") {
+    return new ApiError(409, code, "This encrypted copy is already being stored.");
+  }
+  if (code === "crypto_evidence_walrus_publish_state_invalid") {
+    return new ApiError(409, code, "This evidence record cannot be stored again.");
+  }
+  if (code === "crypto_evidence_key_destroyed") {
+    return new ApiError(410, code, "The recovery key for this evidence was deleted.");
+  }
+  if (code === "crypto_evidence_walrus_aborted") {
+    return new ApiError(408, code, "Storing the encrypted copy was cancelled. Nothing was attached.");
+  }
+  return new ApiError(
+    503,
+    "crypto_evidence_publication_unavailable",
+    "The encrypted copy could not be verified, so Matterhorn did not attach it.",
+  );
 }
 
 function agentFileApiError(error: unknown): ApiError {
@@ -9758,9 +9795,73 @@ function createRoutes(
     return noStoreJsonResponse({
       mode: cryptoEvidenceRuntime.mode,
       available: cryptoEvidenceRuntime.available,
+      publicationAvailable: cryptoEvidenceRuntime.publicationAvailable,
       items,
     });
   });
+
+  addRoute(
+    routes,
+    "POST",
+    "/workspace/:id/crypto-evidence/:evidenceId/publish",
+    "client",
+    async (ctx) => {
+      ensureWritable(config);
+      requireClientScope(ctx, "collaborator");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const evidenceId = ctx.params.evidenceId?.trim() ?? "";
+      if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+      }
+      if (!cryptoEvidenceRuntime.publisher) {
+        throw new ApiError(
+          503,
+          "crypto_evidence_publication_unavailable",
+          "Encrypted testnet storage is not enabled for this deployment.",
+        );
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Encrypted evidence storage");
+      const expectedRevision = isRecord(body)
+        && typeof body.expectedRevision === "number"
+        && Number.isSafeInteger(body.expectedRevision)
+        && body.expectedRevision > 0
+        ? body.expectedRevision
+        : null;
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => ![
+          "expectedRevision", "network", "acknowledgePublicCiphertext",
+        ].includes(key))
+        || expectedRevision === null
+        || body.network !== "testnet"
+        || body.acknowledgePublicCiphertext !== true) {
+        throw new ApiError(
+          400,
+          "crypto_evidence_walrus_confirmation_required",
+          "Confirm that encrypted bytes will be stored on the public Walrus test network.",
+        );
+      }
+      try {
+        const record = await cryptoEvidenceRuntime.publisher.publish({
+          workspaceId: workspace.id,
+          ownerId: cryptoAppCreatedBy(ctx),
+          evidenceId,
+          expectedRevision,
+          signal: ctx.request.signal,
+        });
+        return noStoreJsonResponse({
+          item: cryptoEvidenceAccountPacket(record),
+          disclosure: {
+            network: "testnet",
+            stored: "encrypted_bytes_only",
+            publicBytesMayRemainAfterDeletion: true,
+            deletionDestroysRecoveryKey: true,
+          },
+        });
+      } catch (error) {
+        throw cryptoEvidencePublicationApiError(error);
+      }
+    },
+  );
 
   addRoute(
     routes,

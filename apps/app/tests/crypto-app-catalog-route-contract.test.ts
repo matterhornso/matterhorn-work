@@ -19,7 +19,7 @@ describe("invite-only crypto app catalog route", () => {
     expect(appRoot).not.toContain('pathname === "/workspace/:workspaceId/evidence-proofs"');
   });
 
-  test("keeps encrypted evidence verification read-only and redacted", () => {
+  test("keeps encrypted evidence publication explicit, testnet-only and redacted", () => {
     const catalog = readAppSource("react-app/domains/crypto-apps/crypto-app-catalog-route.tsx");
     const route = readAppSource("react-app/domains/crypto-apps/crypto-evidence-route.tsx");
     const client = readAppSource("app/lib/matterhorn-server.ts");
@@ -27,13 +27,18 @@ describe("invite-only crypto app catalog route", () => {
     expect(catalog).toContain("Evidence proofs");
     expect(route).toContain("Ciphertext only");
     expect(route).toContain("Owner-scoped access");
-    expect(route).toContain("Read-only verification");
+    expect(route).toContain("Nothing stored automatically");
     expect(route).toContain("No wallet signature");
     expect(route).toContain("client.listCryptoEvidence(workspaceId)");
+    expect(route).toContain("client.publishCryptoEvidence(workspaceId, item.evidenceId, item.revision)");
     expect(route).toContain("client.verifyCryptoEvidence(workspaceId, item.evidenceId)");
+    expect(route).toContain("Only encrypted bytes go to the public Walrus test network");
+    expect(route).toContain("I understand that the encrypted public bytes may remain.");
     expect(client).toContain("/crypto-evidence?limit=");
+    expect(client).toContain("/crypto-evidence/${encodeURIComponent(evidenceId)}/publish");
     expect(client).toContain("/crypto-evidence/${encodeURIComponent(evidenceId)}/verify");
-    expect(route).not.toContain("publishCryptoEvidence");
+    expect(client).toContain('network: "testnet"');
+    expect(client).toContain("acknowledgePublicCiphertext: true");
     expect(route).not.toContain("privateKey");
     expect(route).not.toContain("seedPhrase");
     expect(route).not.toContain("signTransaction");
