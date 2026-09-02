@@ -18,7 +18,7 @@ describe("public Beta desk surfaces", () => {
   test("uses wallet-reviewed capability copy when the transactional launch flag is enabled", () => {
     const expectedStatus = new Map<CustomerProtocolDeskId, string>([
       ["bittensor", "Review in wallet"],
-      ["hyperliquid", "Review & submit"],
+      ["hyperliquid", "Review in wallet"],
       ["polymarket", "Review in wallet"],
       ["sui", "Review in wallet"],
     ]);

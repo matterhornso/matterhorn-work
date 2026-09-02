@@ -98,7 +98,7 @@ export default {
   "composer.loading_commands": "Loading commands...",
   "composer.mcps_label": "MCPs",
   "composer.no_commands": "No commands found.",
-  "composer.placeholder": "Ask Matterhorn about Bittensor, markets, longevity, files, or workflows...",
+  "composer.placeholder": "Ask about a market, wallet, transaction, or risk...",
   "composer.remote_worker_paste_warning": "This is a remote worker. Sandboxes are remote too. To share files with it, upload them to the Shared folder in the sidebar.",
   "composer.run_task": "Ask",
   "composer.skill_source": "Skill",

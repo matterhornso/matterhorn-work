@@ -3402,8 +3402,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   <div className="w-full max-w-[880px]">
                     <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                       <div>
-                        <p className="text-base font-semibold tracking-[-0.01em] text-dls-text">Start with a Matterhorn workflow</p>
-                        <p className="text-xs leading-5 text-dls-secondary">Choose a desk task. Matterhorn starts it in a new chat.</p>
+                        <p className="text-base font-semibold tracking-[-0.01em] text-dls-text">Choose a desk to begin</p>
+                        <p className="text-xs leading-5 text-dls-secondary">
+                          Start with research or prepare an action. Nothing moves without your wallet approval.
+                        </p>
                       </div>
                     </div>
                     <div className="matterhorn-session-start-list grid grid-cols-1 gap-1.5 lg:grid-cols-2">

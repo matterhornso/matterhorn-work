@@ -59,7 +59,7 @@ describe("customer workflow template launch cards", () => {
     expect(hyperliquid?.prompt).toContain("never claim the Agent placed it");
     expect(hyperliquid?.prompt).toContain("separate trade ticket");
     expect(hyperliquid?.prompt).toContain("Never request keys, raw signatures, or API secrets");
-    expect(hyperliquid?.statusLabel).toBe("Review & submit");
+    expect(hyperliquid?.statusLabel).toBe("Review in wallet");
     expect(hyperliquid?.description).not.toContain("place orders");
     expect(hyperliquid?.safetySummary).toContain("trade ticket");
     expect(hyperliquid?.safetySummary).toContain("wallet approval");

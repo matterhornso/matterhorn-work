@@ -323,7 +323,7 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       },
       ...NEVER_AGENT_SUBMITS,
       evidence: "tool_and_receipt",
-      statusLabel: "Review & submit",
+      statusLabel: "Review in wallet",
       summary: "Chat prepares the order; the trade ticket requires your wallet approval before one-time submission.",
     },
     contextPolicy: {

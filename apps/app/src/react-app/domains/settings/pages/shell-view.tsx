@@ -101,7 +101,7 @@ function ShellWireframe({ config }: { config: ShellConfig }) {
 
         {/* Composer */}
         <rect x={cx + 10} y="196" width={cw - 20} height="22" rx="11" fill="none" stroke="var(--dls-border)" strokeWidth="0.75" />
-        <text x={cx + 24} y="210" fontSize="5.5" fill="var(--dls-text-secondary)" opacity="0.3">Ask Matterhorn about Bittensor, markets, longevity...</text>
+        <text x={cx + 24} y="210" fontSize="5.5" fill="var(--dls-text-secondary)" opacity="0.3">Ask about a market, wallet, transaction, or risk...</text>
         {/* Send button */}
         <rect x={cx + cw - 42} y="200" width="24" height="14" rx="7" fill="var(--dls-accent)" opacity="0.2" />
         <text x={cx + cw - 30} y="210" textAnchor="middle" fontSize="4.5" fontWeight="500" fill="var(--dls-accent)" opacity="0.5">Ask</text>
