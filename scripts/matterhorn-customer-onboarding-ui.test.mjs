@@ -84,7 +84,7 @@ assert.equal(
 
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
-  "Ask Matterhorn about Bittensor, markets, longevity, files, or workflows...",
+  "Ask about a market, wallet, transaction, or risk...",
   "Matterhorn saves chats, artifacts, receipts, QA evidence, and workflow files.",
   "Matterhorn never holds your keys.",
   '"composer.assistant_identity": "Matterhorn"',
@@ -241,7 +241,7 @@ for (const phrase of [
   "Check Polymarket compliance",
   "Build the full 7-stage Longevity workflow for my clients",
   "MCPs & Connectors",
-  "Start with a Matterhorn workflow",
+  "Choose a desk to begin",
   "Longevity: standalone service workflows, program packets, progress check-ins, and client handoffs",
   "Intake, goals, training, nutrition education, schedule, handouts, and service packaging.",
   "The Agent draft cannot submit.",

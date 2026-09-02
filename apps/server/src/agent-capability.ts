@@ -648,6 +648,11 @@ export class MatterhornAgentCapabilityBroker {
     return grant ? { workspaceId: grant.workspaceId, sessionId: grant.sessionId } : null;
   }
 
+  coworkerForRun(runId: string): MatterhornCoworkerRunBinding | null {
+    const coworker = this.grants.get(runId)?.coworker;
+    return coworker ? structuredClone(coworker) : null;
+  }
+
   runIdsForCoworker(input: { workspaceId: string; ownerId: string; coworkerId: string }): string[] {
     return [...this.grants.values()]
       .filter((grant) => grant.workspaceId === input.workspaceId

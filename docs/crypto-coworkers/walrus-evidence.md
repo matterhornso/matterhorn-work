@@ -86,6 +86,7 @@ The first testnet prototype must use synthetic data and demonstrate:
 - Scheduled rotation uses KMS `ReEncrypt` with the exact source and destination encryption context; plaintext key material never leaves KMS during rewrapping.
 - The tenant-scoped SQLite index contains ciphertext and wrapped key material only. Key destruction clears the wrapped key and local envelope with `secure_delete`, then truncates the WAL before reporting success.
 - Evidence-key access receipts are content-free, tenant-scoped, hash-chained, and expire with the minimal 365-day security window.
+- Finalized coworker-bound runs are automatically sealed once into tenant-local encrypted evidence. This does not publish, anchor, sign, or submit anything; Walrus publication remains a separate explicit flow.
 - Public serialization excludes the key reference and plaintext hash.
 - Deterministic, order-independent Merkle batches verify ciphertext modification and reject duplicate or mismatched leaves.
 - No publisher, Walrus network call, Sui anchor, or mainnet write is enabled by this foundation.

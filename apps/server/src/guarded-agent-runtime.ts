@@ -26,6 +26,7 @@ import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import { MatterhornAgentFileStore } from "./agent-file-store.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
+import type { MatterhornFinalizedCoworkerRun } from "./crypto-evidence-finalizer.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
@@ -105,6 +106,7 @@ const GUARDED_OBSERVATION_REASONS = new Set([
   "rollout_not_enforced",
   "unknown_or_replayed_call_id",
 ]);
+const EVIDENCE_FINALIZATION_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
 
 function coworkerDisallowedDataLabels(
   input: Pick<GuardedPromptInput, "coworker">,
@@ -136,6 +138,7 @@ export class MatterhornGuardedAgentRuntime {
   private readonly observations = new Map<string, GuardedRuntimeObservationMetric>();
   private readonly userMessageRunIds = new Map<string, { runId: string; sessionId: string }>();
   private readonly assistantMessageRunIds = new Map<string, { runId: string; sessionId: string }>();
+  private finalizedRunHandler: ((input: MatterhornFinalizedCoworkerRun) => Promise<void>) | null = null;
 
   constructor(private readonly stateStore = new MatterhornGuardedRuntimeStateStore()) {
     this.privacy = new MatterhornPrivacyFirewall(stateStore);
@@ -709,6 +712,30 @@ export class MatterhornGuardedAgentRuntime {
     this.capabilities.setCoworkerResolver(resolver);
   }
 
+  setFinalizedRunHandler(
+    handler: ((input: MatterhornFinalizedCoworkerRun) => Promise<void>) | null,
+  ): void {
+    this.finalizedRunHandler = handler;
+  }
+
+  async retryPendingFinalizedRuns(limit = 50): Promise<{ checked: number; sealed: number; failed: number }> {
+    if (!this.finalizedRunHandler) return { checked: 0, sealed: 0, failed: 0 };
+    const pending = this.stateStore.list<MatterhornFinalizedCoworkerRun>("crypto_evidence_finalization")
+      .slice(0, Math.max(1, Math.min(limit, 200)));
+    let sealed = 0;
+    let failed = 0;
+    for (const finalizedRun of pending) {
+      try {
+        await this.finalizedRunHandler(finalizedRun);
+        this.stateStore.delete("crypto_evidence_finalization", finalizedRun.receipt.runId);
+        sealed += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    return { checked: pending.length, sealed, failed };
+  }
+
   invalidateCoworker(input: { workspaceId: string; ownerId: string; coworkerId: string }): number {
     const runIds = this.capabilities.runIdsForCoworker(input);
     for (const runId of runIds) this.revokeRun(runId);
@@ -732,7 +759,7 @@ export class MatterhornGuardedAgentRuntime {
     }
     this.stateStore.purgeWorkspace(
       workspaceId,
-      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation", "crypto_pending_intent"],
+      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation", "crypto_pending_intent", "crypto_evidence_finalization"],
       { includeConsumedCapabilities: false },
     );
     return {
@@ -841,10 +868,33 @@ export class MatterhornGuardedAgentRuntime {
     usage?: Partial<Omit<MatterhornAgentRunReceipt["usage"], "toolCallBudget">>,
   ): Promise<void> {
     const scope = this.runScope(runId);
+    const coworker = this.capabilities.coworkerForRun(runId);
     if (scope) await this.receipts.get(scope.workspaceId, runId);
     const capabilityDecisions = this.capabilities.decisionsForRun(runId);
     try {
       await this.receipts.complete({ runId, status, usage, capabilityDecisions });
+      if (scope && coworker) {
+        const receipt = await this.receipts.get(scope.workspaceId, runId);
+        if (receipt) {
+          const finalizedRun = { receipt, coworker };
+          this.stateStore.put({
+            kind: "crypto_evidence_finalization",
+            key: runId,
+            workspaceId: scope.workspaceId,
+            sessionId: scope.sessionId,
+            value: finalizedRun,
+            expiresAtMs: Date.now() + EVIDENCE_FINALIZATION_RETENTION_MS,
+          });
+          if (this.finalizedRunHandler) {
+            try {
+              await this.finalizedRunHandler(finalizedRun);
+              this.stateStore.delete("crypto_evidence_finalization", runId);
+            } catch {
+              // The content-free finalized receipt remains queued for retry.
+            }
+          }
+        }
+      }
     } finally {
       this.revokeRun(runId);
     }

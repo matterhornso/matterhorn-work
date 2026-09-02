@@ -50,7 +50,7 @@ for (const signal of [
   "waitForChatComposer",
   "chatSurfaceMarkers",
   '"Cautious"',
-  "Start with a Matterhorn workflow",
+  "Choose a desk to begin",
   "document.getAnimations()",
   "Number.isFinite(endTime)",
   "consoleErrors",

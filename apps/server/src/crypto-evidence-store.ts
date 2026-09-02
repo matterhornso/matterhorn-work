@@ -20,6 +20,7 @@ import { verifyMatterhornEvidenceMerkleProof } from "./walrus-evidence-merkle.js
 
 const RECORD_VERSION = "matterhorn.crypto-evidence-record.v1" as const;
 const STATE_KIND = "crypto_evidence_record" as const;
+const RUN_INDEX_KIND = "crypto_evidence_run_index" as const;
 const AUDIT_VERSION = "matterhorn.crypto-evidence-access.v1" as const;
 const AUDIT_KIND = "crypto_evidence_audit" as const;
 const SECURITY_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
@@ -74,6 +75,12 @@ function clone(record: MatterhornCryptoEvidenceRecord): MatterhornCryptoEvidence
   return structuredClone(record);
 }
 
+function runIndexExpiry(record: MatterhornCryptoEvidenceRecord): number | null {
+  if (record.state !== "key_destroyed") return null;
+  const updatedAt = Date.parse(record.updatedAt);
+  return Number.isFinite(updatedAt) ? updatedAt + SECURITY_RETENTION_MS : null;
+}
+
 function assertTenant(record: MatterhornCryptoEvidenceRecord, input: {
   workspaceId: string;
   ownerId: string;
@@ -108,6 +115,57 @@ export class MatterhornCryptoEvidenceStore {
 
   private identityHash(kind: "workspace" | "owner" | "coworker", workspaceId: string, value: string): string {
     return sha256({ domain: `matterhorn:crypto-evidence-audit:${kind}:v1`, workspaceId, value });
+  }
+
+  private runIndexKey(input: {
+    workspaceId: string;
+    ownerId: string;
+    coworkerId: string;
+    runId: string;
+  }): string {
+    return sha256({
+      domain: "matterhorn:crypto-evidence-run-index:v1",
+      workspaceId: input.workspaceId,
+      ownerId: input.ownerId,
+      coworkerId: input.coworkerId,
+      runId: input.runId,
+    });
+  }
+
+  findByRun(input: {
+    workspaceId: string;
+    ownerId: string;
+    coworkerId: string;
+    runId: string;
+  }): MatterhornCryptoEvidenceRecord | null {
+    const indexKey = this.runIndexKey(input);
+    const indexed = this.stateStore.get<{ evidenceId: string }>(RUN_INDEX_KIND, indexKey);
+    if (indexed) {
+      const record = this.stateStore.get<MatterhornCryptoEvidenceRecord>(STATE_KIND, indexed.evidenceId);
+      if (!record
+        || record.workspaceId !== input.workspaceId
+        || record.ownerId !== input.ownerId
+        || record.coworkerId !== input.coworkerId
+        || record.runId !== input.runId) {
+        throw new Error("crypto_evidence_run_index_corrupt");
+      }
+      return clone(record);
+    }
+
+    const legacy = this.stateStore.list<MatterhornCryptoEvidenceRecord>(STATE_KIND, {
+      workspaceId: input.workspaceId,
+    }).find((record) => record.ownerId === input.ownerId
+      && record.coworkerId === input.coworkerId
+      && record.runId === input.runId);
+    if (!legacy) return null;
+    this.stateStore.put({
+      kind: RUN_INDEX_KIND,
+      key: indexKey,
+      workspaceId: input.workspaceId,
+      value: { evidenceId: legacy.id },
+      expiresAtMs: runIndexExpiry(legacy),
+    });
+    return clone(legacy);
   }
 
   private recordAccess(input: {
@@ -201,6 +259,7 @@ export class MatterhornCryptoEvidenceStore {
       || input.sealed.binding.coworkerId !== input.coworkerId) {
       throw new Error("crypto_evidence_tenant_binding_mismatch");
     }
+    if (this.findByRun(input)) throw new Error("crypto_evidence_already_exists");
     if (this.stateStore.get<MatterhornCryptoEvidenceRecord>(STATE_KIND, input.sealed.localIndex.evidenceId)) {
       throw new Error("crypto_evidence_already_exists");
     }
@@ -246,6 +305,14 @@ export class MatterhornCryptoEvidenceStore {
       value: record,
       // Do not use generic state expiry: key destruction must run first.
       expiresAtMs: null,
+      nowMs: now.getTime(),
+    });
+    this.stateStore.put({
+      kind: RUN_INDEX_KIND,
+      key: this.runIndexKey(input),
+      workspaceId: record.workspaceId,
+      value: { evidenceId: record.id },
+      expiresAtMs: runIndexExpiry(record),
       nowMs: now.getTime(),
     });
     this.recordAccess({ record, action: "seal", outcome: "allowed", reason: "sealed", now });
@@ -483,6 +550,14 @@ export class MatterhornCryptoEvidenceStore {
       key: next.id,
       workspaceId: next.workspaceId,
       value: next,
+      expiresAtMs: now.getTime() + SECURITY_RETENTION_MS,
+      nowMs: now.getTime(),
+    });
+    this.stateStore.put({
+      kind: RUN_INDEX_KIND,
+      key: this.runIndexKey(next),
+      workspaceId: next.workspaceId,
+      value: { evidenceId: next.id },
       expiresAtMs: now.getTime() + SECURITY_RETENTION_MS,
       nowMs: now.getTime(),
     });

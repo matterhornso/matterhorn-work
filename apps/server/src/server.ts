@@ -596,6 +596,7 @@ import {
 } from "./aws-kms-evidence-key-manager.js";
 import type { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
+import { sealFinalizedCoworkerRunEvidence } from "./crypto-evidence-finalizer.js";
 import {
   createMatterhornCryptoEvidenceRuntime,
   type MatterhornCryptoEvidenceRuntime,
@@ -1379,6 +1380,40 @@ export async function startServer(
     },
   );
   guardedRuntime.setCoworkerResolver((binding) => coworkerBindingIsActive(coworkerRuntime, binding));
+  if (cryptoEvidenceStore && evidenceKeyManager) {
+    guardedRuntime.setFinalizedRunHandler(async (finalizedRun) => {
+      try {
+        await sealFinalizedCoworkerRunEvidence({
+          finalizedRun,
+          store: cryptoEvidenceStore,
+          keyManager: evidenceKeyManager,
+        });
+      } catch (error) {
+        logger.log("error", "Finalized coworker evidence sealing failed", {
+          code: "coworker_evidence_seal_failed",
+        });
+        throw error;
+      }
+    });
+  }
+  const retryCoworkerEvidence = () => guardedRuntime.retryPendingFinalizedRuns().then((result) => {
+    if (result.failed > 0) {
+      logger.log("error", "Coworker evidence sealing retry was incomplete", {
+        checked: result.checked,
+        sealed: result.sealed,
+        failed: result.failed,
+      });
+    }
+    return result;
+  }).catch((error) => {
+    logger.log("error", "Coworker evidence sealing retry failed", unhandledErrorAttributes(error));
+    return { checked: 0, sealed: 0, failed: 1 };
+  });
+  let coworkerEvidenceRetryTask = retryCoworkerEvidence();
+  const coworkerEvidenceRetryTimer = cryptoEvidenceStore ? setInterval(() => {
+    coworkerEvidenceRetryTask = coworkerEvidenceRetryTask.then(retryCoworkerEvidence, retryCoworkerEvidence);
+  }, 60_000) : null;
+  coworkerEvidenceRetryTimer?.unref?.();
   const coworkerWatchRunner = coworkerRuntime.coworkers
     && cryptoAppRuntime.mode === "enforce"
     && cryptoAppRuntime.ready
@@ -1758,6 +1793,7 @@ export async function startServer(
       clearInterval(accountDeletionRetryTimer);
       clearInterval(emailOutboxTimer);
       if (coworkerWatchTimer) clearInterval(coworkerWatchTimer);
+      if (coworkerEvidenceRetryTimer) clearInterval(coworkerEvidenceRetryTimer);
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
       modelUsageStore.close();

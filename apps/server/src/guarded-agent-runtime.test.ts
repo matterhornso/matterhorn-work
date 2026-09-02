@@ -209,6 +209,159 @@ describe("guarded agent runtime transport", () => {
     })).toThrow("unknown, expired, or replayed");
   });
 
+  test("finalizes a coworker receipt exactly before revoking its tenant binding", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    runtime.setCoworkerResolver(() => true);
+    const finalized: Array<{ status: string; coworkerId: string; bindingStillActive: boolean }> = [];
+    runtime.setFinalizedRunHandler(async ({ receipt, coworker }) => {
+      finalized.push({
+        status: receipt.status,
+        coworkerId: coworker.id,
+        bindingStillActive: runtime.capabilities.coworkerForRun(receipt.runId)?.id === coworker.id,
+      });
+    });
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_coworker_finalized",
+      sessionId: "ses_coworker_finalized",
+      parts: [{ type: "text", text: "Read the public Sui balance" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker: {
+        id: "cw_finalized",
+        workspaceId: "ws_coworker_finalized",
+        ownerId: "account_finalized",
+        revision: 1,
+        policyVersion: "coworker-policy-1",
+        allowedAppIds: ["matterhorn.sui-testnet"],
+        allowedActionIds: ["sui_account_read"],
+        allowedNetworks: ["sui:testnet"],
+        automaticAuthorities: ["read"],
+        actionBindings: [{
+          appId: "matterhorn.sui-testnet",
+          actionId: "sui_account_read",
+          proxyToolName: "matterhorn_sui_get_balance",
+          access: "read",
+        }],
+        allowedDataLabels: ["public", "untrusted_external"],
+        allowUnverifiedProviderConsent: false,
+        maxReadCallsPerRun: 4,
+        maxPrepareCallsPerFamily: 0,
+      },
+    });
+
+    await runtime.completeRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      status: "success",
+      usage: { inputTokens: 21, outputTokens: 8 },
+    });
+
+    expect(finalized).toEqual([{
+      status: "success",
+      coworkerId: "cw_finalized",
+      bindingStillActive: true,
+    }]);
+    expect(runtime.capabilities.coworkerForRun(accepted.runId)).toBeNull();
+    expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+  });
+
+  test("retries a failed coworker evidence seal without retaining agent authority", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    runtime.setCoworkerResolver(() => true);
+    const coworker = {
+      id: "cw_retry",
+      workspaceId: "ws_coworker_retry",
+      ownerId: "account_retry",
+      revision: 1,
+      policyVersion: "coworker-policy-1",
+      allowedAppIds: ["matterhorn.sui-testnet"],
+      allowedActionIds: ["sui_account_read"],
+      allowedNetworks: ["sui:testnet"],
+      automaticAuthorities: ["read" as const],
+      actionBindings: [{
+        appId: "matterhorn.sui-testnet",
+        actionId: "sui_account_read",
+        proxyToolName: "matterhorn_sui_get_balance",
+        access: "read" as const,
+      }],
+      allowedDataLabels: ["public" as const, "untrusted_external" as const],
+      allowUnverifiedProviderConsent: false,
+      maxReadCallsPerRun: 4,
+      maxPrepareCallsPerFamily: 0,
+    };
+    let attempts = 0;
+    runtime.setFinalizedRunHandler(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("kms_temporarily_unavailable");
+    });
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_coworker_retry",
+      sessionId: "ses_coworker_retry",
+      parts: [{ type: "text", text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker,
+    });
+
+    await runtime.completeRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      status: "success",
+    });
+    expect(runtime.capabilities.coworkerForRun(accepted.runId)).toBeNull();
+    expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 1, failed: 0 });
+    expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+    expect(attempts).toBe(2);
+
+    runtime.setFinalizedRunHandler(async () => { throw new Error("kms_still_unavailable"); });
+    const deletionRun = await runtime.acceptPrompt({
+      workspaceId: "ws_coworker_retry",
+      sessionId: "ses_coworker_deletion",
+      parts: [{ type: "text", text: "Read public Sui state again" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker,
+    });
+    await runtime.completeRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: deletionRun.runId,
+      status: "success",
+    });
+    expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 0, failed: 1 });
+    runtime.purgeWorkspace("ws_coworker_retry");
+    expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+  });
+
+  test("does not run the coworker evidence finalizer for an unbound chat", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    let calls = 0;
+    runtime.setFinalizedRunHandler(async () => { calls += 1; });
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_plain_finalized",
+      sessionId: "ses_plain_finalized",
+      parts: [{ type: "text", text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+    });
+    await runtime.completeRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      status: "success",
+    });
+    expect(calls).toBe(0);
+  });
+
   test("does not issue one-request consent when the coworker forbids unverified providers", async () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     const coworker = {

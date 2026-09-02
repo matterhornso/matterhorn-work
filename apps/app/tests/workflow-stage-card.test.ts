@@ -334,7 +334,7 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(surfaceSrc).toContain("Choose a starter below to run");
     expect(surfaceSrc).toContain("DeskSafetyInfoButton");
     expect(surfaceSrc).toContain('.filter((card) => card.id !== "blank_chat_workflow")');
-    expect(surfaceSrc).toContain("Choose a desk task. Matterhorn starts it in a new chat.");
+    expect(surfaceSrc).toContain("Start with research or prepare an action. Nothing moves without your wallet approval.");
     expect(surfaceSrc).not.toContain("Every prompt stays editable before sending.");
     expect(surfaceSrc).not.toContain("Choose a desk or start a blank chat.");
     expect(surfaceSrc).not.toContain("Ready in composer");

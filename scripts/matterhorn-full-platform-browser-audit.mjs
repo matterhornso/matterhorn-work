@@ -72,7 +72,7 @@ const chatSurfaceMarkers = [
   "Cautious",
   "Perspective",
   "Start work",
-  "Start with a Matterhorn workflow",
+  "Choose a desk to begin",
 ];
 
 function workspaceId() {
