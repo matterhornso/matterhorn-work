@@ -1160,6 +1160,91 @@ describe("crypto coworker HTTP boundary", () => {
         walrusReadback: true,
       },
     });
+
+    const missingDeletionConfirmation = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/recovery-key`,
+      { cookie: cookieA, method: "DELETE", body: { expectedRevision: 2 } },
+    );
+    expect(missingDeletionConfirmation.response.status).toBe(400);
+    expect(missingDeletionConfirmation.payload.code).toBe("crypto_evidence_key_destruction_confirmation_required");
+    expect(server.keyManager.keys.size).toBe(1);
+
+    const crossTenantDeletion = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/recovery-key`,
+      {
+        cookie: cookieB,
+        method: "DELETE",
+        body: { expectedRevision: 2, confirm: `destroy-recovery-key:${record.id}` },
+      },
+    );
+    expect(crossTenantDeletion.response.status).toBe(404);
+    expect(server.keyManager.keys.size).toBe(1);
+
+    const staleDeletion = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/recovery-key`,
+      {
+        cookie: cookieA,
+        method: "DELETE",
+        body: { expectedRevision: 1, confirm: `destroy-recovery-key:${record.id}` },
+      },
+    );
+    expect(staleDeletion.response.status).toBe(409);
+    expect(staleDeletion.payload.code).toBe("crypto_evidence_revision_conflict");
+    expect(server.keyManager.keys.size).toBe(1);
+
+    const deleted = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/recovery-key`,
+      {
+        cookie: cookieA,
+        method: "DELETE",
+        body: { expectedRevision: 2, confirm: `destroy-recovery-key:${record.id}` },
+      },
+    );
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload).toMatchObject({
+      item: {
+        evidenceId: record.id,
+        revision: 3,
+        state: "key_destroyed",
+        retention: { keyAvailable: false },
+      },
+      deletion: {
+        recoveryKeyDestroyed: true,
+        contentRecoverable: false,
+        publicCiphertextMayRemain: true,
+      },
+    });
+    expect(server.keyManager.keys.size).toBe(0);
+    expect(JSON.stringify(deleted.payload)).not.toContain(workspaceA);
+    expect(JSON.stringify(deleted.payload)).not.toContain(ownerId);
+    expect(JSON.stringify(deleted.payload)).not.toContain(coworkerId);
+    expect(JSON.stringify(deleted.payload)).not.toContain(runId);
+    expect(JSON.stringify(deleted.payload)).not.toContain('"ciphertext"');
+
+    const verifiedAfterDeletion = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/verify`,
+      { cookie: cookieA, method: "POST" },
+    );
+    expect(verifiedAfterDeletion.payload.verification).toMatchObject({
+      status: "key_destroyed",
+      reason: "recovery_material_deleted",
+    });
+
+    const publishAfterDeletion = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
+      {
+        cookie: cookieA,
+        body: { expectedRevision: 3, network: "testnet", acknowledgePublicCiphertext: true },
+      },
+    );
+    expect(publishAfterDeletion.response.status).toBe(409);
+    expect(publishAfterDeletion.payload.code).toBe("crypto_evidence_walrus_publish_state_invalid");
   });
 
   test("creates, isolates, revisions, pauses and deletes account-owned coworkers", async () => {

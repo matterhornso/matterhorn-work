@@ -234,11 +234,12 @@ describe("durable crypto evidence store", () => {
     }
   });
 
-  test("serializes publication across SQLite connections and protects a replacement claim", async () => {
+  test("serializes publication and key deletion across SQLite connections and protects a replacement claim", async () => {
     const directory = await mkdtemp(join(tmpdir(), "matterhorn-evidence-publication-claim-"));
     const databasePath = join(directory, "state.db");
     const stateA = new MatterhornGuardedRuntimeStateStore(databasePath);
     const stateB = new MatterhornGuardedRuntimeStateStore(databasePath);
+    let destroyed = 0;
     const keyManager: MatterhornEvidenceKeyManager = {
       createDataKey: async ({ recipientKeyIds }) => ({
         plaintextKey: Buffer.alloc(32, 4),
@@ -248,7 +249,7 @@ describe("durable crypto evidence store", () => {
         recipientKeyIds,
       }),
       decryptDataKey: async () => Buffer.alloc(32, 4),
-      destroyKey: async () => {},
+      destroyKey: async () => { destroyed += 1; },
     };
     try {
       const sealed = await sealMatterhornRunEvidence({
@@ -284,6 +285,14 @@ describe("durable crypto evidence store", () => {
         expectedRevision: created.revision,
         now: firstNow,
       })).toThrow("crypto_evidence_walrus_publication_in_progress");
+      await expect(storeB.destroyKey({
+        workspaceId: "workspace_claim",
+        ownerId: "owner_claim",
+        evidenceId: created.id,
+        expectedRevision: created.revision,
+        now: firstNow,
+      })).rejects.toThrow("crypto_evidence_operation_in_progress");
+      expect(destroyed).toBe(0);
 
       const replacementNow = new Date("2026-09-01T00:08:01.000Z");
       const replacement = storeB.beginWalrusPublication({
@@ -312,6 +321,15 @@ describe("durable crypto evidence store", () => {
         claimId: replacement.claimId,
         now: replacementNow,
       })).toBe(true);
+      const deleted = await storeA.destroyKey({
+        workspaceId: "workspace_claim",
+        ownerId: "owner_claim",
+        evidenceId: created.id,
+        expectedRevision: created.revision,
+        now: replacementNow,
+      });
+      expect(deleted.state).toBe("key_destroyed");
+      expect(destroyed).toBe(1);
     } finally {
       stateB.close();
       stateA.close();

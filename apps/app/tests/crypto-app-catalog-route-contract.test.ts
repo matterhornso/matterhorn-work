@@ -32,11 +32,14 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).toContain("client.listCryptoEvidence(workspaceId)");
     expect(route).toContain("client.publishCryptoEvidence(workspaceId, item.evidenceId, item.revision)");
     expect(route).toContain("client.verifyCryptoEvidence(workspaceId, item.evidenceId)");
+    expect(route).toContain("client.destroyCryptoEvidenceRecoveryKey(workspaceId, item.evidenceId, item.revision)");
     expect(route).toContain("Only encrypted bytes go to the public Walrus test network");
     expect(route).toContain("I understand that the encrypted public bytes may remain.");
+    expect(route).toContain("I understand this evidence cannot be recovered.");
     expect(client).toContain("/crypto-evidence?limit=");
     expect(client).toContain("/crypto-evidence/${encodeURIComponent(evidenceId)}/publish");
     expect(client).toContain("/crypto-evidence/${encodeURIComponent(evidenceId)}/verify");
+    expect(client).toContain("/crypto-evidence/${encodeURIComponent(evidenceId)}/recovery-key");
     expect(client).toContain('network: "testnet"');
     expect(client).toContain("acknowledgePublicCiphertext: true");
     expect(route).not.toContain("privateKey");

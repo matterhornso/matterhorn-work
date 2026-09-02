@@ -3399,6 +3399,9 @@ function cryptoEvidencePublicationApiError(error: unknown): ApiError {
   if (code === "crypto_evidence_walrus_publication_in_progress") {
     return new ApiError(409, code, "This encrypted copy is already being stored.");
   }
+  if (code === "crypto_evidence_operation_in_progress") {
+    return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
+  }
   if (code === "crypto_evidence_walrus_publish_state_invalid") {
     return new ApiError(409, code, "This evidence record cannot be stored again.");
   }
@@ -3412,6 +3415,28 @@ function cryptoEvidencePublicationApiError(error: unknown): ApiError {
     503,
     "crypto_evidence_publication_unavailable",
     "The encrypted copy could not be verified, so Matterhorn did not attach it.",
+  );
+}
+
+function cryptoEvidenceKeyDestructionApiError(error: unknown): ApiError {
+  const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
+  if (code === "crypto_evidence_not_found") {
+    return new ApiError(404, code, "Evidence record not found.");
+  }
+  if (code === "crypto_evidence_revision_conflict") {
+    return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
+  }
+  if (code === "crypto_evidence_operation_in_progress"
+    || code === "crypto_evidence_walrus_publication_in_progress") {
+    return new ApiError(409, "crypto_evidence_operation_in_progress", "This evidence record is being updated. Try again shortly.");
+  }
+  if (code === "crypto_evidence_key_destroyed") {
+    return new ApiError(410, code, "The recovery key for this evidence was already deleted.");
+  }
+  return new ApiError(
+    503,
+    "crypto_evidence_key_destruction_unavailable",
+    "The recovery key could not be deleted. The evidence record is unchanged.",
   );
 }
 
@@ -9859,6 +9884,64 @@ function createRoutes(
         });
       } catch (error) {
         throw cryptoEvidencePublicationApiError(error);
+      }
+    },
+  );
+
+  addRoute(
+    routes,
+    "DELETE",
+    "/workspace/:id/crypto-evidence/:evidenceId/recovery-key",
+    "client",
+    async (ctx) => {
+      ensureWritable(config);
+      requireClientScope(ctx, "collaborator");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const evidenceId = ctx.params.evidenceId?.trim() ?? "";
+      if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+      }
+      if (!cryptoEvidenceStore) {
+        throw new ApiError(
+          503,
+          "crypto_evidence_unavailable",
+          "Encrypted coworker evidence is not enabled for this deployment.",
+        );
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Evidence recovery-key deletion");
+      const expectedRevision = isRecord(body)
+        && typeof body.expectedRevision === "number"
+        && Number.isSafeInteger(body.expectedRevision)
+        && body.expectedRevision > 0
+        ? body.expectedRevision
+        : null;
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => !["expectedRevision", "confirm"].includes(key))
+        || expectedRevision === null
+        || body.confirm !== `destroy-recovery-key:${evidenceId}`) {
+        throw new ApiError(
+          400,
+          "crypto_evidence_key_destruction_confirmation_required",
+          "Confirm deletion of this evidence recovery key.",
+        );
+      }
+      try {
+        const record = await cryptoEvidenceStore.destroyKey({
+          workspaceId: workspace.id,
+          ownerId: cryptoAppCreatedBy(ctx),
+          evidenceId,
+          expectedRevision,
+        });
+        return noStoreJsonResponse({
+          item: cryptoEvidenceAccountPacket(record),
+          deletion: {
+            recoveryKeyDestroyed: true,
+            contentRecoverable: false,
+            publicCiphertextMayRemain: Boolean(record.walrusProof),
+          },
+        });
+      } catch (error) {
+        throw cryptoEvidenceKeyDestructionApiError(error);
       }
     },
   );

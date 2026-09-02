@@ -90,4 +90,4 @@ The first testnet prototype must use synthetic data and demonstrate:
 - Public serialization excludes the key reference and plaintext hash.
 - Deterministic, order-independent Merkle batches verify ciphertext modification and reject duplicate or mismatched leaves.
 - No publisher, Walrus network call, Sui anchor, or mainnet write is enabled by this foundation.
-- The authenticated testnet publisher client and ciphertext readback gate are implemented but remain disconnected from account-facing routes. The certification verifier is injected as a distinct Sui boundary, so an upload relay can never certify its own response.
+- The authenticated account boundary exposes redacted proof listing, exact-revision testnet publication, live verification, and exact-revision recovery-key deletion. Publication and deletion share one durable operation claim, so they cannot race across server workers. The certification verifier remains an independent Sui boundary, so an upload relay can never certify its own response.

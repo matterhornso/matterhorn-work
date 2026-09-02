@@ -516,6 +516,15 @@ export type MatterhornEvidencePublicationResponse = {
   };
 };
 
+export type MatterhornEvidenceRecoveryKeyDeletionResponse = {
+  item: MatterhornEvidenceVerificationPacket;
+  deletion: {
+    recoveryKeyDestroyed: true;
+    contentRecoverable: false;
+    publicCiphertextMayRemain: boolean;
+  };
+};
+
 export const MATTERHORN_AGENT_FILE_VERSION = "matterhorn.agent-file.v1";
 
 /**

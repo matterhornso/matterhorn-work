@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   RefreshCw,
   ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router";
 
@@ -54,6 +55,9 @@ function userMessage(error: unknown): string {
     if (error.code === "crypto_evidence_walrus_publication_in_progress") return "This encrypted copy is already being stored.";
     if (error.code === "crypto_evidence_walrus_publish_state_invalid") return "This evidence record cannot be stored again.";
     if (error.code === "crypto_evidence_publication_unavailable") return "Encrypted testnet storage is temporarily unavailable. Your local encrypted evidence is unchanged.";
+    if (error.code === "crypto_evidence_key_destruction_confirmation_required") return "Confirm that you understand this evidence cannot be recovered after its key is deleted.";
+    if (error.code === "crypto_evidence_operation_in_progress") return "This evidence record is being updated. Try again shortly.";
+    if (error.code === "crypto_evidence_key_destruction_unavailable") return "The recovery key could not be deleted. The evidence record is unchanged.";
   }
   return "Matterhorn could not load the evidence proof. Try again.";
 }
@@ -93,6 +97,9 @@ export function CryptoEvidenceRoute() {
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [publishCandidateId, setPublishCandidateId] = useState<string | null>(null);
   const [publishAcknowledged, setPublishAcknowledged] = useState(false);
+  const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
+  const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [verificationById, setVerificationById] = useState<Record<string, MatterhornEvidenceVerificationResult>>({});
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -140,6 +147,28 @@ export function CryptoEvidenceRoute() {
       setPublishingId(null);
     }
   }, [publishAcknowledged, query.data, queryClient, queryKey, workspaceId]);
+
+  const destroyRecoveryKey = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
+    if (!deleteAcknowledged) return;
+    setDeletingId(item.evidenceId);
+    setError(null);
+    try {
+      const active = query.data ?? await loadEvidence(workspaceId);
+      await active.client.destroyCryptoEvidenceRecoveryKey(workspaceId, item.evidenceId, item.revision);
+      setDeleteCandidateId(null);
+      setDeleteAcknowledged(false);
+      setVerificationById((current) => {
+        const next = { ...current };
+        delete next[item.evidenceId];
+        return next;
+      });
+      await queryClient.invalidateQueries({ queryKey });
+    } catch (cause) {
+      setError(userMessage(cause));
+    } finally {
+      setDeletingId(null);
+    }
+  }, [deleteAcknowledged, query.data, queryClient, queryKey, workspaceId]);
 
   const copyPacket = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
     setError(null);
@@ -213,6 +242,8 @@ export function CryptoEvidenceRoute() {
               const canVerify = item.state === "published" && snapshot.mode === "testnet";
               const canPublish = item.state === "sealed" && snapshot.publicationAvailable;
               const confirmingPublish = publishCandidateId === item.evidenceId;
+              const canDeleteRecoveryKey = item.retention.keyAvailable;
+              const confirmingDelete = deleteCandidateId === item.evidenceId;
               return (
                 <article key={item.evidenceId} className="border-b border-border py-5">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -294,6 +325,8 @@ export function CryptoEvidenceRoute() {
                             onClick={() => {
                               setPublishCandidateId(item.evidenceId);
                               setPublishAcknowledged(false);
+                              setDeleteCandidateId(null);
+                              setDeleteAcknowledged(false);
                               setError(null);
                             }}
                           >
@@ -331,6 +364,66 @@ export function CryptoEvidenceRoute() {
                                 onClick={() => {
                                   setPublishCandidateId(null);
                                   setPublishAcknowledged(false);
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {canDeleteRecoveryKey && !confirmingDelete ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-5 w-full justify-start text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setDeleteCandidateId(item.evidenceId);
+                              setDeleteAcknowledged(false);
+                              setPublishCandidateId(null);
+                              setPublishAcknowledged(false);
+                              setError(null);
+                            }}
+                          >
+                            <Trash2 aria-hidden="true" className="size-4" />
+                            Delete recovery key
+                          </Button>
+                        ) : null}
+                        {canDeleteRecoveryKey && confirmingDelete ? (
+                          <div className="mt-5 border-t border-border pt-4">
+                            <p className="text-xs leading-5 text-foreground">
+                              This cannot be undone. Matterhorn will no longer be able to open this evidence.
+                            </p>
+                            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                              {item.publication
+                                ? "The encrypted public copy may remain on Walrus, but Matterhorn will delete the recovery key."
+                                : "The encrypted local content and its recovery key will be removed."}
+                            </p>
+                            <label className="mt-3 flex cursor-pointer items-start gap-3 text-xs leading-5">
+                              <input
+                                type="checkbox"
+                                checked={deleteAcknowledged}
+                                onChange={(event) => setDeleteAcknowledged(event.target.checked)}
+                                className="mt-0.5 size-4 shrink-0 accent-destructive"
+                              />
+                              <span>I understand this evidence cannot be recovered.</span>
+                            </label>
+                            <div className="mt-4 flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={!deleteAcknowledged || deletingId === item.evidenceId}
+                                onClick={() => void destroyRecoveryKey(item)}
+                              >
+                                {deletingId === item.evidenceId ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : null}
+                                {deletingId === item.evidenceId ? "Deleting…" : "Delete key"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={deletingId === item.evidenceId}
+                                onClick={() => {
+                                  setDeleteCandidateId(null);
+                                  setDeleteAcknowledged(false);
                                 }}
                               >
                                 Cancel

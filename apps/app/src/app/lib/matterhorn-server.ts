@@ -132,6 +132,7 @@ import type {
   MatterhornCoworkerWorkingState,
   MatterhornEvidenceVerificationListResponse,
   MatterhornEvidencePublicationResponse,
+  MatterhornEvidenceRecoveryKeyDeletionResponse,
   MatterhornEvidenceVerificationResult,
   MatterhornStoredAgentFile,
 } from "@matterhorn-work/types/crypto-coworkers";
@@ -2256,6 +2257,24 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           expectedRevision,
           network: "testnet",
           acknowledgePublicCiphertext: true,
+        },
+        timeoutMs: timeouts.status,
+      },
+    ),
+    destroyCryptoEvidenceRecoveryKey: (
+      workspaceId: string,
+      evidenceId: string,
+      expectedRevision: number,
+    ) => requestJson<MatterhornEvidenceRecoveryKeyDeletionResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/recovery-key`,
+      {
+        token,
+        hostToken,
+        method: "DELETE",
+        body: {
+          expectedRevision,
+          confirm: `destroy-recovery-key:${evidenceId}`,
         },
         timeoutMs: timeouts.status,
       },
