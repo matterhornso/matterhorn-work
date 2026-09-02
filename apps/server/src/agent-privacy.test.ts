@@ -317,6 +317,70 @@ describe("agent privacy firewall", () => {
     competingStore.close();
   });
 
+  test("restores a privacy challenge when consent persistence fails", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-privacy-confirm-rollback-"));
+    const path = join(root, "state.db");
+    const request = { ...baseInput(), memoryIds: ["memory_private"] };
+    const firstStore = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornPrivacyFirewall(firstStore);
+    const preflight = first.preflight(request).response;
+    const originalPutIfAbsent = firstStore.putIfAbsent.bind(firstStore);
+    let failNextConsentWrite = true;
+    Object.defineProperty(firstStore, "putIfAbsent", {
+      configurable: true,
+      value: (putInput: Parameters<MatterhornGuardedRuntimeStateStore["putIfAbsent"]>[0]) => {
+        if (failNextConsentWrite && putInput.kind === "privacy_consent") {
+          failNextConsentWrite = false;
+          throw new Error("injected_privacy_consent_write_failure");
+        }
+        return originalPutIfAbsent(putInput);
+      },
+    });
+    try {
+      expect(() => first.confirm({
+        challengeId: preflight.challenge?.id ?? "",
+        requestHash: preflight.requestHash,
+        workspaceId: "ws_other",
+        sessionId: request.sessionId,
+      })).toThrow("privacy_consent_challenge_invalid");
+      expect(() => first.confirm({
+        challengeId: preflight.challenge?.id ?? "",
+        requestHash: preflight.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+      })).toThrow("injected_privacy_consent_write_failure");
+    } finally {
+      Object.defineProperty(firstStore, "putIfAbsent", { configurable: true, value: originalPutIfAbsent });
+      firstStore.close();
+    }
+
+    const retryStore = new MatterhornGuardedRuntimeStateStore(path);
+    try {
+      const retry = new MatterhornPrivacyFirewall(retryStore);
+      const consent = retry.confirm({
+        challengeId: preflight.challenge?.id ?? "",
+        requestHash: preflight.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+      });
+      expect(retry.consumeConsent({
+        token: consent.consentToken,
+        requestHash: consent.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+      })).toBe(true);
+      expect(() => retry.confirm({
+        challengeId: preflight.challenge?.id ?? "",
+        requestHash: preflight.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+      })).toThrow("privacy_consent_challenge_invalid");
+    } finally {
+      retryStore.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("does not consume exact-request consent when a mutated request is rejected", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-agent-privacy-mutation-"));
     const store = new MatterhornGuardedRuntimeStateStore(join(root, "guarded.db"));

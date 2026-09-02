@@ -74,6 +74,25 @@ type ConsentRecord = {
   consumed: boolean;
 };
 
+function challengeMatches(
+  challenge: ChallengeRecord | null | undefined,
+  input: {
+    requestHash: string;
+    workspaceId: string;
+    sessionId: string;
+    nowMs: number;
+  },
+): challenge is ChallengeRecord {
+  return Boolean(
+    challenge
+    && !challenge.confirmed
+    && challenge.expiresAtMs > input.nowMs
+    && challenge.workspaceId === input.workspaceId
+    && challenge.sessionId === input.sessionId
+    && equalDigest(challenge.requestHash, input.requestHash),
+  );
+}
+
 export type MatterhornPrivacyEvaluation = {
   response: MatterhornAgentPrivacyPreflightResponse;
   consentUsed: boolean;
@@ -314,53 +333,49 @@ export class MatterhornPrivacyFirewall {
   }): MatterhornAgentPrivacyConsentResponse {
     const nowMs = (input.now ?? new Date()).getTime();
     this.cleanup(nowMs);
-    const candidate = this.stateStore
-      ? this.stateStore.get<ChallengeRecord>("privacy_challenge", input.challengeId, nowMs)
-      : this.challenges.get(input.challengeId);
-    if (
-      !candidate
-      || candidate.confirmed
-      || candidate.expiresAtMs <= nowMs
-      || candidate.workspaceId !== input.workspaceId
-      || candidate.sessionId !== input.sessionId
-      || !equalDigest(candidate.requestHash, input.requestHash)
-    ) {
-      throw new Error("privacy_consent_challenge_invalid");
-    }
-    const challenge = this.stateStore
-      ? this.stateStore.take<ChallengeRecord>("privacy_challenge", input.challengeId, nowMs)
-      : candidate;
-    this.challenges.delete(input.challengeId);
-    if (
-      !challenge
-      || challenge.confirmed
-      || challenge.expiresAtMs <= nowMs
-      || challenge.workspaceId !== input.workspaceId
-      || challenge.sessionId !== input.sessionId
-      || !equalDigest(challenge.requestHash, input.requestHash)
-    ) throw new Error("privacy_consent_challenge_invalid");
-    challenge.confirmed = true;
-    const token = randomBytes(32).toString("base64url");
-    const tokenHash = sha256(token);
-    const consent: ConsentRecord = {
-      tokenHash,
-      workspaceId: challenge.workspaceId,
-      sessionId: challenge.sessionId,
-      requestHash: challenge.requestHash,
-      categories: challenge.categories,
-      expiresAtMs: challenge.expiresAtMs,
-      consumed: false,
+    const convertChallenge = (challenge: ChallengeRecord | null | undefined) => {
+      if (!challengeMatches(challenge, {
+        requestHash: input.requestHash,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        nowMs,
+      })) throw new Error("privacy_consent_challenge_invalid");
+      challenge.confirmed = true;
+      const token = randomBytes(32).toString("base64url");
+      const tokenHash = sha256(token);
+      const consent: ConsentRecord = {
+        tokenHash,
+        workspaceId: challenge.workspaceId,
+        sessionId: challenge.sessionId,
+        requestHash: challenge.requestHash,
+        categories: challenge.categories,
+        expiresAtMs: challenge.expiresAtMs,
+        consumed: false,
+      };
+      return { challenge, consent, token };
     };
+    const stateStore = this.stateStore;
+    const converted = stateStore
+      ? stateStore.transaction(() => {
+          const challenge = stateStore.take<ChallengeRecord>("privacy_challenge", input.challengeId, nowMs);
+          const result = convertChallenge(challenge);
+          const stored = stateStore.putIfAbsent({
+            kind: "privacy_consent",
+            key: result.consent.tokenHash,
+            workspaceId: result.challenge.workspaceId,
+            sessionId: result.challenge.sessionId,
+            value: result.consent,
+            expiresAtMs: result.challenge.expiresAtMs,
+            nowMs,
+          });
+          if (!stored) throw new Error("privacy_consent_token_collision");
+          return result;
+        })
+      : convertChallenge(this.challenges.get(input.challengeId));
+    this.challenges.delete(input.challengeId);
+    const { challenge, consent, token } = converted;
+    const tokenHash = consent.tokenHash;
     this.consents.set(tokenHash, consent);
-    this.stateStore?.put({
-      kind: "privacy_consent",
-      key: tokenHash,
-      workspaceId: challenge.workspaceId,
-      sessionId: challenge.sessionId,
-      value: consent,
-      expiresAtMs: challenge.expiresAtMs,
-      nowMs,
-    });
     return {
       version: "matterhorn.agent-privacy-preflight.v1",
       consentToken: token,

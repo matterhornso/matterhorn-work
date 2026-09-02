@@ -110,6 +110,101 @@ describe("guarded agent runtime transport", () => {
     second.close();
   });
 
+  test("restores a user-message binding when assistant binding persistence fails", async () => {
+    const path = join(dataDir, "message-binding-rollback.db");
+    const firstStore = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornGuardedAgentRuntime(firstStore);
+    const accepted = await first.acceptPrompt({
+      workspaceId: "ws_binding_rollback",
+      sessionId: "ses_binding_rollback",
+      parts: [{ type: "text", text: "Read public Bittensor validator state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-bittensor",
+      executionMode: "work",
+    });
+    first.bindUserMessage({
+      runId: accepted.runId,
+      sessionId: "ses_binding_rollback",
+      messageId: "msg_binding_user",
+    });
+    expect(() => first.bindUserMessage({
+      runId: accepted.runId,
+      sessionId: "ses_binding_rollback",
+      messageId: "msg_binding_user",
+    })).toThrow("user message is already bound");
+    expect(() => first.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_other",
+      userMessageId: "msg_binding_user",
+      assistantMessageId: "msg_binding_assistant_wrong_scope",
+    })).toThrow("assistant message is not bound");
+    const originalPutIfAbsent = firstStore.putIfAbsent.bind(firstStore);
+    let failNextAssistantWrite = true;
+    Object.defineProperty(firstStore, "putIfAbsent", {
+      configurable: true,
+      value: (putInput: Parameters<MatterhornGuardedRuntimeStateStore["putIfAbsent"]>[0]) => {
+        if (failNextAssistantWrite && putInput.kind === "assistant_message_binding") {
+          failNextAssistantWrite = false;
+          throw new Error("injected_assistant_binding_write_failure");
+        }
+        return originalPutIfAbsent(putInput);
+      },
+    });
+    try {
+      expect(() => first.bindRuntimeMessage({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        sessionId: "ses_binding_rollback",
+        userMessageId: "msg_binding_user",
+        assistantMessageId: "msg_binding_assistant_failed",
+      })).toThrow("injected_assistant_binding_write_failure");
+    } finally {
+      Object.defineProperty(firstStore, "putIfAbsent", { configurable: true, value: originalPutIfAbsent });
+      first.close();
+    }
+
+    const second = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    expect(second.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_binding_rollback",
+      userMessageId: "msg_binding_user",
+      assistantMessageId: "msg_binding_assistant_retry",
+    })).toEqual({ runId: accepted.runId });
+    expect(() => second.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_binding_rollback",
+      userMessageId: "msg_binding_user",
+      assistantMessageId: "msg_binding_assistant_replay",
+    })).toThrow("assistant message is not bound");
+    const other = await second.acceptPrompt({
+      workspaceId: "ws_binding_other",
+      sessionId: "ses_binding_other",
+      parts: [{ type: "text", text: "Read public Sui network state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+    });
+    second.bindUserMessage({
+      runId: other.runId,
+      sessionId: "ses_binding_other",
+      messageId: "msg_binding_other_user",
+    });
+    expect(() => second.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_binding_other",
+      userMessageId: "msg_binding_other_user",
+      assistantMessageId: "msg_binding_assistant_retry",
+    })).toThrow("assistant message is already bound");
+    expect(second.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_binding_other",
+      userMessageId: "msg_binding_other_user",
+      assistantMessageId: "msg_binding_other_assistant",
+    })).toEqual({ runId: other.runId });
+    second.close();
+  });
+
   test("revokes the active grant and staged calls when a run completes", async () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     const accepted = await runtime.acceptPrompt({

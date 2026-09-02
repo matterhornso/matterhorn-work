@@ -13402,12 +13402,6 @@ function createRoutes(
       throw guardedRuntimeApiError(error);
     }
     const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
-    guardedRuntime.bindUserMessage({
-      runId: guardedAcceptance.runId,
-      sessionId,
-      messageId: userMessageId,
-    });
-
     const promptBody = {
       sessionID: sessionId,
       ...(directory ? { directory } : {}),
@@ -13421,6 +13415,11 @@ function createRoutes(
       parts: resolved.upstreamParts,
     };
     try {
+      guardedRuntime.bindUserMessage({
+        runId: guardedAcceptance.runId,
+        sessionId,
+        messageId: userMessageId,
+      });
       await ensureMatterhornSessionPermissionProfile({
         config,
         workspace,

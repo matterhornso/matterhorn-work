@@ -149,8 +149,6 @@ export class MatterhornGuardedAgentRuntime {
     argsHash: string;
   }>();
   private readonly observations = new Map<string, GuardedRuntimeObservationMetric>();
-  private readonly userMessageRunIds = new Map<string, { runId: string; sessionId: string }>();
-  private readonly assistantMessageRunIds = new Map<string, { runId: string; sessionId: string }>();
   private finalizedRunHandler: ((input: MatterhornFinalizedCoworkerRun) => Promise<void>) | null = null;
 
   constructor(private readonly stateStore = new MatterhornGuardedRuntimeStateStore()) {
@@ -506,9 +504,11 @@ export class MatterhornGuardedAgentRuntime {
       throw new GuardedRuntimeError(409, "agent_run_not_active", "The message no longer belongs to the active guarded run.");
     }
     const bound = { runId: input.runId, sessionId: input.sessionId };
-    this.userMessageRunIds.set(input.messageId, bound);
     const scope = this.runScope(input.runId);
-    if (scope) this.stateStore.put({
+    if (!scope || scope.sessionId !== input.sessionId) {
+      throw new GuardedRuntimeError(409, "agent_run_not_active", "The message no longer belongs to the active guarded run.");
+    }
+    const stored = this.stateStore.putIfAbsent({
       kind: "user_message_binding",
       key: input.messageId,
       workspaceId: scope.workspaceId,
@@ -516,6 +516,9 @@ export class MatterhornGuardedAgentRuntime {
       value: { ...bound, messageId: input.messageId },
       expiresAtMs: Date.now() + 6 * 60 * 60 * 1_000,
     });
+    if (!stored) {
+      throw new GuardedRuntimeError(409, "agent_run_message_already_bound", "The user message is already bound to another Matterhorn run.");
+    }
   }
 
   bindRuntimeMessage(input: {
@@ -525,21 +528,34 @@ export class MatterhornGuardedAgentRuntime {
     assistantMessageId: string;
   }): { runId: string } {
     this.assertRuntimeSecret(input.runtimeSecret);
-    const bound = this.stateStore.take<{ runId: string; sessionId: string }>("user_message_binding", input.userMessageId)
-      ?? this.userMessageRunIds.get(input.userMessageId);
-    this.userMessageRunIds.delete(input.userMessageId);
-    if (!bound || bound.sessionId !== input.sessionId) {
-      throw new GuardedRuntimeError(409, "agent_run_message_not_bound", "The assistant message is not bound to an accepted Matterhorn run.");
-    }
-    this.assistantMessageRunIds.set(input.assistantMessageId, bound);
-    const scope = this.runScope(bound.runId);
-    if (scope) this.stateStore.put({
-      kind: "assistant_message_binding",
-      key: input.assistantMessageId,
-      workspaceId: scope.workspaceId,
-      sessionId: input.sessionId,
-      value: { ...bound, messageId: input.assistantMessageId },
-      expiresAtMs: Date.now() + 6 * 60 * 60 * 1_000,
+    const nowMs = Date.now();
+    const bound = this.stateStore.transaction(() => {
+      const candidate = this.stateStore.take<{ runId: string; sessionId: string }>(
+        "user_message_binding",
+        input.userMessageId,
+        nowMs,
+      );
+      if (!candidate || candidate.sessionId !== input.sessionId) {
+        throw new GuardedRuntimeError(409, "agent_run_message_not_bound", "The assistant message is not bound to an accepted Matterhorn run.");
+      }
+      const active = this.stateStore.get<{ runId: string }>("active_agent_run", input.sessionId, nowMs);
+      const scope = this.runScope(candidate.runId);
+      if (!active || active.runId !== candidate.runId || !scope || scope.sessionId !== input.sessionId) {
+        throw new GuardedRuntimeError(409, "agent_run_not_active", "The message no longer belongs to an active guarded run.");
+      }
+      const stored = this.stateStore.putIfAbsent({
+        kind: "assistant_message_binding",
+        key: input.assistantMessageId,
+        workspaceId: scope.workspaceId,
+        sessionId: input.sessionId,
+        value: { ...candidate, messageId: input.assistantMessageId },
+        expiresAtMs: nowMs + 6 * 60 * 60 * 1_000,
+        nowMs,
+      });
+      if (!stored) {
+        throw new GuardedRuntimeError(409, "agent_run_message_already_bound", "The assistant message is already bound to another Matterhorn run.");
+      }
+      return candidate;
     });
     return { runId: bound.runId };
   }
@@ -807,12 +823,6 @@ export class MatterhornGuardedAgentRuntime {
     const privacy = this.privacy.purgeWorkspace(workspaceId);
     const capabilities = this.capabilities.purgeWorkspace(workspaceId);
     for (const callId of capabilities.callIds) this.stagedCapabilities.delete(callId);
-    for (const [messageId, bound] of this.userMessageRunIds) {
-      if (bound.runId && capabilities.runIds.includes(bound.runId)) this.userMessageRunIds.delete(messageId);
-    }
-    for (const [messageId, bound] of this.assistantMessageRunIds) {
-      if (bound.runId && capabilities.runIds.includes(bound.runId)) this.assistantMessageRunIds.delete(messageId);
-    }
     this.stateStore.purgeWorkspace(
       workspaceId,
       ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_publication_claim", "crypto_evidence_operation_claim", "crypto_evidence_finalization"],
@@ -856,12 +866,6 @@ export class MatterhornGuardedAgentRuntime {
     }
     for (const [callId, bypass] of this.rolloutBypassCallIds) {
       if (bypass.runId === runId) this.rolloutBypassCallIds.delete(callId);
-    }
-    for (const [messageId, bound] of this.userMessageRunIds) {
-      if (bound.runId === runId) this.userMessageRunIds.delete(messageId);
-    }
-    for (const [messageId, bound] of this.assistantMessageRunIds) {
-      if (bound.runId === runId) this.assistantMessageRunIds.delete(messageId);
     }
     this.deletePersistedRunState(runId);
     this.stateStore.delete("agent_run_scope", runId);
