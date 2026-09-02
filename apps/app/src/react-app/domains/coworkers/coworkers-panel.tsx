@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MatterhornCoworkerTemplateId } from "@matterhorn-work/types/crypto-coworkers";
 import {
@@ -53,6 +53,8 @@ type StartCoworkerTask = (
 
 export type SessionCoworkersPanelProps = {
   client: MatterhornServerClient | null;
+  initialTemplateId?: MatterhornCoworkerTemplateId | null;
+  onInitialTemplateHandled?: () => void;
   workspaceId: string | null;
   selectedSessionId: string | null;
   selectedWorkspaceId: string;
@@ -216,6 +218,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [cancelIntent, setCancelIntent] = useState<MatterhornCoworkerWalletIntentView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const handledInitialTemplateRef = useRef<MatterhornCoworkerTemplateId | null>(null);
   const boundCoworkerId = useMatterhornSessionCoworkerContextStore((state) => (
     selectedSessionId ? state.contexts[selectedSessionId]?.id ?? "" : ""
   ));
@@ -397,6 +400,24 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       setCreating(null);
     }
   }, [props.client, refresh, showToast, workspaceId]);
+
+  useEffect(() => {
+    const templateId = props.initialTemplateId ?? null;
+    if (!templateId) {
+      handledInitialTemplateRef.current = null;
+      return;
+    }
+    if (!listQuery.data || handledInitialTemplateRef.current === templateId) return;
+
+    handledInitialTemplateRef.current = templateId;
+    props.onInitialTemplateHandled?.();
+    const existingCoworker = coworkers.find((coworker) => coworker.role === templateId);
+    if (existingCoworker) {
+      setCoworkerChoice(existingCoworker.id);
+      return;
+    }
+    void createCoworker(templateId);
+  }, [coworkers, createCoworker, listQuery.data, props.initialTemplateId, props.onInitialTemplateHandled]);
 
   const startChat = useCallback((coworker: MatterhornCoworkerAccountProfile) => {
     const context = {

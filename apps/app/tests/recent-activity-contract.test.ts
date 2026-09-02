@@ -153,14 +153,17 @@ describe("Project Activity contract tests", () => {
   });
 
   describe("Home wiring", () => {
-    test("workspace home names the current location and separates next steps from creation", () => {
+    test("workspace home names the current location and leads with coworkers", () => {
       const source = readAppSource("domains/session/chat/session-page.tsx");
+      const coworkerStart = readAppSource("domains/session/chat/workspace-coworker-start.tsx");
 
       expect(source).toContain("const homeSurfaceTitle = activeWorkflowDeskId");
       expect(source).toContain(': "Home";');
       expect(source).toContain('aria-label="Recommended next action"');
       expect(source).toContain('aria-label="Secondary creation actions"');
-      expect(source).toContain("Continue active work, start a focused desk task, or create something new.");
+      expect(source).toContain("Choose a coworker, continue your work, or open a protocol desk.");
+      expect(coworkerStart).toContain("Start with a coworker");
+      expect(source).toContain("Browse protocol desks");
       expect(source).toContain("Project folder");
       expect(source).toContain("Saved outputs");
       expect(source).toContain("grid-cols-[auto_minmax(0,1fr)_auto]");
@@ -179,20 +182,23 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("{canExposeLocalPaths ? (");
     });
 
-    test("Home chooses exactly one adaptive primary action", () => {
+    test("Home chooses one adaptive setup, resume, or coworker action", () => {
       const source = readAppSource("domains/session/chat/session-page.tsx");
 
       expect(source).toContain("const homePrimaryAction = props.modelUnavailable");
       expect(source).toContain('eyebrow: "Setup required"');
       expect(source).toContain('eyebrow: activeHomeSession ? "Active task" : "Continue where you left off"');
-      expect(source).toContain('eyebrow: "Recommended safe start"');
-      expect(source).toContain("<WorkspaceHomePrimaryAction {...homePrimaryAction} />");
+      expect(source).toContain("homePrimaryAction ? <WorkspaceHomePrimaryAction");
+      expect(source).toContain("<WorkspaceCoworkerStart");
+      expect(source).toContain('import("./workspace-coworker-start")');
+      expect(source).not.toContain('eyebrow: "Recommended safe start"');
     });
 
-    test("Home recommendations open a desk for review without auto-sending", () => {
+    test("Home keeps protocol desks available without auto-sending", () => {
       const source = readAppSource("domains/session/chat/session-page.tsx");
 
-      expect(source).toContain('onAction: () => openVenueRailPane("bittensor"),');
+      expect(source).toContain("<HomeCapabilityOverview");
+      expect(source).toContain("openVenueRailPane(id);");
       expect(source).not.toContain('source: "home-primary-action"');
     });
 

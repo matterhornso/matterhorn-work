@@ -47,6 +47,7 @@ import type {
   BittensorSubtensorSidecarHealth,
   MatterhornBackendCapabilitiesResponse,
   MatterhornCapabilityStatus,
+  MatterhornCoworkerTemplateId,
   MatterhornMemoryRecord,
   MatterhornWalletRuntime,
   MatterhornWalletRuntimeSupport,
@@ -215,6 +216,9 @@ const SessionCoworkersPanel = lazy(() => import("../../coworkers/coworkers-panel
 })));
 const WorkspaceMissionOverview = lazy(() => import("./workspace-mission-overview").then((module) => ({
   default: module.WorkspaceMissionOverview,
+})));
+const WorkspaceCoworkerStart = lazy(() => import("./workspace-coworker-start").then((module) => ({
+  default: module.WorkspaceCoworkerStart,
 })));
 const STARTUP_SKELETON_ROWS = [
   { id: "intro", titleWidth: "42%", bodyWidth: "88%" },
@@ -547,13 +551,20 @@ function HomeCapabilityOverview({
   onOpenCapability?: (id: CustomerWorkflowIconHint) => void;
 }) {
   return (
-    <section
-      className="matterhorn-capability-overview space-y-2"
+    <details
+      className="matterhorn-capability-overview group border-y border-dls-border/55 py-3"
       style={{ contentVisibility: "auto", containIntrinsicSize: "360px" } as CSSProperties}
-      aria-label="Desk capability overview"
     >
-      <div className="flex items-center gap-2">
-        <h3 className="text-sm font-semibold text-dls-text">Open a desk</h3>
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1 text-left marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/35">
+        <span>
+          <span className="block text-sm font-semibold text-dls-text">Browse protocol desks</span>
+          <span className="mt-0.5 block text-xs text-dls-secondary">Open Bittensor, Hyperliquid, Polymarket, or Sui directly.</span>
+        </span>
+        <ChevronRight className="size-4 shrink-0 text-dls-secondary" aria-hidden="true" />
+      </summary>
+      <section className="mt-3 space-y-2" aria-label="Desk capability overview">
+        <div className="flex items-center gap-2">
+          <h3 className="text-xs font-medium text-dls-secondary">Available desks</h3>
         <Popover>
           <PopoverTrigger
             render={
@@ -576,8 +587,8 @@ function HomeCapabilityOverview({
             <span>Outputs and receipts stay with this project.</span>
           </PopoverContent>
         </Popover>
-      </div>
-      <div className="overflow-hidden rounded-lg bg-dls-canvas/35 ring-1 ring-inset ring-dls-border/45">
+        </div>
+        <div className="overflow-hidden rounded-lg bg-dls-canvas/35 ring-1 ring-inset ring-dls-border/45">
         {homeCapabilityStatusItems().map((item) => {
           return (
             <article
@@ -588,7 +599,7 @@ function HomeCapabilityOverview({
               <button
                 type="button"
                 data-testid={`open-${item.id}-desk`}
-                className="grid min-h-16 w-full min-w-0 grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-l-2 border-l-[rgb(var(--matterhorn-desk-rgb)/0.72)] bg-transparent px-3 py-2.5 pr-10 text-left transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--matterhorn-desk-color)]"
+                className="grid min-h-16 w-full min-w-0 grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 bg-transparent px-3 py-2.5 pr-10 text-left transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--matterhorn-desk-color)]"
                 onClick={() => onOpenCapability?.(item.id)}
               >
                 <span className="flex size-8 items-center justify-center rounded-md bg-[rgb(var(--matterhorn-desk-rgb)/0.10)] text-[var(--matterhorn-desk-color)]">
@@ -600,7 +611,7 @@ function HomeCapabilityOverview({
                 </div>
                 <span className="hidden items-center gap-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:inline-flex">
                   {item.id === "wellness" ? "Start workflow" : "Open desk"}
-                  <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                  <ChevronRight className="size-3.5" aria-hidden="true" />
                 </span>
               </button>
               <Popover>
@@ -627,8 +638,9 @@ function HomeCapabilityOverview({
             </article>
           );
         })}
-      </div>
-    </section>
+        </div>
+      </section>
+    </details>
   );
 }
 
@@ -1764,6 +1776,7 @@ export function SessionPage(props: SessionPageProps) {
   const [sessionActionId, setSessionActionId] = useState<string | null>(null);
   const [homePathCopyLabel, setHomePathCopyLabel] = useState<string | null>(null);
   const [mobileWorkspaceMenuOpen, setMobileWorkspaceMenuOpen] = useState(false);
+  const [homeCoworkerTemplateId, setHomeCoworkerTemplateId] = useState<MatterhornCoworkerTemplateId | null>(null);
   const activeWorkflowDeskId: WorkflowDeskId | null = routeWorkflowDesk;
   const [workflowLaunchState, setWorkflowLaunchState] = useState<WorkflowDeskLaunchState | null>(null);
   const homeSurfaceTitle = activeWorkflowDeskId
@@ -2297,6 +2310,13 @@ export function SessionPage(props: SessionPageProps) {
   const openCoworkersRailPane = useCallback(() => {
     toggleCurrentSidePanel("coworkers");
   }, [toggleCurrentSidePanel]);
+  const startCoworkerFromHome = useCallback((templateId: MatterhornCoworkerTemplateId) => {
+    setHomeCoworkerTemplateId(templateId);
+    setCurrentSidePanel("coworkers");
+  }, [setCurrentSidePanel]);
+  const clearHomeCoworkerTemplate = useCallback(() => {
+    setHomeCoworkerTemplateId(null);
+  }, []);
   const openAgentFilesRailPane = useCallback(() => {
     toggleCurrentSidePanel("files");
   }, [toggleCurrentSidePanel]);
@@ -2429,6 +2449,8 @@ export function SessionPage(props: SessionPageProps) {
   ) : visibleSidePanel === "coworkers" ? (
     <SessionCoworkersPanel
       client={props.matterhornServerClient}
+      initialTemplateId={homeCoworkerTemplateId}
+      onInitialTemplateHandled={clearHomeCoworkerTemplate}
       workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
       selectedSessionId={props.selectedSessionId}
       selectedWorkspaceId={props.selectedWorkspaceId}
@@ -2719,9 +2741,6 @@ export function SessionPage(props: SessionPageProps) {
   const homeResumeStatus = homeResumeSession
     ? props.sidebar.sessionStatusById[homeResumeSession.id]
     : null;
-  const recommendedHomeStarter = MATTERHORN_DESK_TASK_STARTERS.bittensor.find(
-    (starter) => starter.id === "discover-subnets",
-  ) ?? MATTERHORN_DESK_TASK_STARTERS.bittensor[0];
   const homePrimaryAction = props.modelUnavailable
     ? {
         eyebrow: "Setup required",
@@ -2752,15 +2771,7 @@ export function SessionPage(props: SessionPageProps) {
           disabled: false,
           onAction: () => props.sidebar.onOpenSession(props.selectedWorkspaceId, homeResumeSession.id),
         }
-      : {
-          eyebrow: "Recommended safe start",
-          title: recommendedHomeStarter.title,
-          description: recommendedHomeStarter.detail,
-          meta: "Read-only research · public evidence · no wallet action",
-          actionLabel: "Open Bittensor desk",
-          disabled: props.sidebar.newTaskDisabled,
-          onAction: () => openVenueRailPane("bittensor"),
-        };
+      : null;
 
   return (
     <div className="fixed inset-0 flex min-h-0 w-full flex-col overflow-hidden bg-dls-background text-dls-text mac:bg-transparent">
@@ -3270,11 +3281,18 @@ export function SessionPage(props: SessionPageProps) {
                               {homeProjectName}
                             </h2>
                             <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-                              Continue active work, start a focused desk task, or create something new.
+                              Choose a coworker, continue your work, or open a protocol desk.
                             </p>
                           </div>
 
-                          <WorkspaceHomePrimaryAction {...homePrimaryAction} />
+                          {homePrimaryAction ? <WorkspaceHomePrimaryAction {...homePrimaryAction} /> : (
+                            <Suspense fallback={<div className="h-48 border-y border-dls-border/55" aria-hidden="true" />}>
+                              <WorkspaceCoworkerStart
+                                disabled={props.sidebar.newTaskDisabled || !props.matterhornServerClient || !props.runtimeWorkspaceId}
+                                onChoose={startCoworkerFromHome}
+                              />
+                            </Suspense>
+                          )}
 
                           <div
                             className="flex flex-wrap items-center gap-1.5 border-t border-dls-border/40 pt-3"

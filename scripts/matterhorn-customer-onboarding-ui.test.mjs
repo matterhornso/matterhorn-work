@@ -15,6 +15,7 @@ const welcome = read("apps/app/src/react-app/domains/onboarding/welcome-page.tsx
 const english = read("apps/app/src/i18n/locales/en.ts");
 const appCss = read("apps/app/src/app/index.css");
 const sessionPage = read("apps/app/src/react-app/domains/session/chat/session-page.tsx");
+const workspaceCoworkerStart = read("apps/app/src/react-app/domains/session/chat/workspace-coworker-start.tsx");
 const sessionSurface = read("apps/app/src/react-app/domains/session/surface/session-surface.tsx");
 const composer = read("apps/app/src/react-app/domains/session/surface/composer/composer.tsx");
 const statusBar = read("apps/app/src/react-app/domains/session/chat/status-bar.tsx");
@@ -167,7 +168,7 @@ assert.equal(
 );
 
 for (const phrase of [
-  "Continue active work, start a focused desk task, or create something new.",
+  "Choose a coworker, continue your work, or open a protocol desk.",
   "New project",
   "New chat",
   "Open Bittensor desk",
@@ -269,7 +270,7 @@ for (const phrase of [
   "CUSTOMER_VISIBLE_DEMO_TEMPLATE_IDS",
 ]) {
   assert.ok(
-    `${sessionPage}\n${sessionSurface}\n${workflowTemplates}\n${deskTaskStarters}\n${protocolDeskUi}`.includes(phrase),
+    `${sessionPage}\n${workspaceCoworkerStart}\n${sessionSurface}\n${workflowTemplates}\n${deskTaskStarters}\n${protocolDeskUi}`.includes(phrase),
     `starter UI should expose Matterhorn task: ${phrase}`,
   );
 }

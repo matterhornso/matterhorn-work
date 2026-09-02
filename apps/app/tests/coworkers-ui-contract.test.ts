@@ -17,6 +17,23 @@ describe("chat-operated coworker UI", () => {
     expect(resolveSessionPanelNavigation("?panel=coworkers", null)).toEqual({ search: "", replace: true });
   });
 
+  test("lets a first-time user choose one plain-language coworker job from Home", () => {
+    const home = appSource("react-app/domains/session/chat/session-page.tsx");
+    const start = appSource("react-app/domains/session/chat/workspace-coworker-start.tsx");
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    expect(start).toContain("Start with a coworker");
+    expect(start).toContain("Choose one job. Your coworker will ask what it needs before starting work.");
+    expect(start).toContain("Research markets");
+    expect(start).toContain("Watch risk");
+    expect(start).toContain("Prepare a wallet review");
+    expect(start).toContain("Track balances");
+    expect(start).toContain("They cannot see private keys or send funds on their own.");
+    expect(home).toContain("setHomeCoworkerTemplateId(templateId)");
+    expect(home).toContain('setCurrentSidePanel("coworkers")');
+    expect(panel).toContain("coworker.role === templateId");
+    expect(panel).toContain("void createCoworker(templateId)");
+  });
+
   test("explains automatic, approval-required, and impossible actions in plain language", () => {
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
     expect(panel).toContain("Can do automatically");
