@@ -168,7 +168,7 @@ assert.equal(
 );
 
 for (const phrase of [
-  "Choose a coworker, continue your work, or open a protocol desk.",
+  "Describe an outcome, continue your work, or open a protocol desk.",
   "New project",
   "New chat",
   "Open Bittensor desk",

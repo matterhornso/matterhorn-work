@@ -54,6 +54,7 @@ type StartCoworkerTask = (
 export type SessionCoworkersPanelProps = {
   client: MatterhornServerClient | null;
   initialTemplateId?: MatterhornCoworkerTemplateId | null;
+  initialOutcome?: string | null;
   onInitialTemplateHandled?: () => void;
   workspaceId: string | null;
   selectedSessionId: string | null;
@@ -209,6 +210,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const workspaceId = props.workspaceId?.trim() ?? "";
   const listKey = useMemo(() => [QUERY_PREFIX, workspaceId, "list"], [workspaceId]);
   const [coworkerChoice, setCoworkerChoice] = useState("");
+  const [pendingOutcome, setPendingOutcome] = useState("");
   const [creating, setCreating] = useState<MatterhornCoworkerTemplateId | null>(null);
   const [showCreateChoices, setShowCreateChoices] = useState(false);
   const [resourcesOpen, setResourcesOpen] = useState(false);
@@ -410,6 +412,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     if (!listQuery.data || handledInitialTemplateRef.current === templateId) return;
 
     handledInitialTemplateRef.current = templateId;
+    setPendingOutcome(props.initialOutcome?.trim() ?? "");
     props.onInitialTemplateHandled?.();
     const existingCoworker = coworkers.find((coworker) => coworker.role === templateId);
     if (existingCoworker) {
@@ -417,7 +420,14 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       return;
     }
     void createCoworker(templateId);
-  }, [coworkers, createCoworker, listQuery.data, props.initialTemplateId, props.onInitialTemplateHandled]);
+  }, [coworkers, createCoworker, listQuery.data, props.initialOutcome, props.initialTemplateId, props.onInitialTemplateHandled]);
+
+  useEffect(() => {
+    if (!pendingOutcome || !selectedCoworker || !resourceQuery.data) return;
+    const scope = resourceQuery.data.scope;
+    if (scope.active && (scope.resources?.connections.length ?? 0) > 0) return;
+    setResourcesOpen(true);
+  }, [pendingOutcome, resourceQuery.data, selectedCoworker]);
 
   const startChat = useCallback((coworker: MatterhornCoworkerAccountProfile) => {
     const context = {
@@ -445,7 +455,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     void (async () => {
       const started = await onStartTask(
         selectedWorkspaceId,
-        "Ask what outcome I want, then help me take the safest next step.",
+        pendingOutcome || "Ask what outcome I want, then help me take the safest next step.",
         {
           title: `${coworker.name} chat`,
           sendImmediately: false,
@@ -454,9 +464,13 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
           },
         },
       );
-      if (started === false) setError("The chat did not start. Try again.");
+      if (started === false) {
+        setError("The chat did not start. Try again.");
+        return;
+      }
+      setPendingOutcome("");
     })();
-  }, [onClose, onStartTask, selectedSessionId, selectedWorkspaceId, showToast]);
+  }, [onClose, onStartTask, pendingOutcome, selectedSessionId, selectedWorkspaceId, showToast]);
 
   const transitionCoworker = useCallback(async (coworker: MatterhornCoworkerAccountProfile, state: "active" | "paused" | "revoked") => {
     if (!props.client || !workspaceId) return;
@@ -665,6 +679,12 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   </div>
                   <p className="mt-1 text-xs text-dls-secondary">{humanizeId(selectedCoworker.role)}</p>
                   <p className="mt-2 text-sm leading-6 text-dls-text">{selectedCoworker.mission}</p>
+                  {pendingOutcome ? (
+                    <div className="mt-4 border-y border-dls-border/70 py-3">
+                      <p className="text-xs font-medium text-dls-text">Your outcome</p>
+                      <p className="mt-1 line-clamp-3 text-xs leading-5 text-dls-secondary">{pendingOutcome}</p>
+                    </div>
+                  ) : null}
                 </div>
                 <ShieldCheck aria-hidden="true" className="size-5 shrink-0 text-dls-secondary" />
               </div>

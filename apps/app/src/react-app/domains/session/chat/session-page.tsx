@@ -1776,7 +1776,10 @@ export function SessionPage(props: SessionPageProps) {
   const [sessionActionId, setSessionActionId] = useState<string | null>(null);
   const [homePathCopyLabel, setHomePathCopyLabel] = useState<string | null>(null);
   const [mobileWorkspaceMenuOpen, setMobileWorkspaceMenuOpen] = useState(false);
-  const [homeCoworkerTemplateId, setHomeCoworkerTemplateId] = useState<MatterhornCoworkerTemplateId | null>(null);
+  const [homeCoworkerStart, setHomeCoworkerStart] = useState<{
+    templateId: MatterhornCoworkerTemplateId;
+    outcome: string;
+  } | null>(null);
   const activeWorkflowDeskId: WorkflowDeskId | null = routeWorkflowDesk;
   const [workflowLaunchState, setWorkflowLaunchState] = useState<WorkflowDeskLaunchState | null>(null);
   const homeSurfaceTitle = activeWorkflowDeskId
@@ -2310,12 +2313,15 @@ export function SessionPage(props: SessionPageProps) {
   const openCoworkersRailPane = useCallback(() => {
     toggleCurrentSidePanel("coworkers");
   }, [toggleCurrentSidePanel]);
-  const startCoworkerFromHome = useCallback((templateId: MatterhornCoworkerTemplateId) => {
-    setHomeCoworkerTemplateId(templateId);
+  const startCoworkerFromHome = useCallback((request: {
+    templateId: MatterhornCoworkerTemplateId;
+    outcome: string;
+  }) => {
+    setHomeCoworkerStart(request);
     setCurrentSidePanel("coworkers");
   }, [setCurrentSidePanel]);
   const clearHomeCoworkerTemplate = useCallback(() => {
-    setHomeCoworkerTemplateId(null);
+    setHomeCoworkerStart(null);
   }, []);
   const openAgentFilesRailPane = useCallback(() => {
     toggleCurrentSidePanel("files");
@@ -2449,7 +2455,8 @@ export function SessionPage(props: SessionPageProps) {
   ) : visibleSidePanel === "coworkers" ? (
     <SessionCoworkersPanel
       client={props.matterhornServerClient}
-      initialTemplateId={homeCoworkerTemplateId}
+      initialTemplateId={homeCoworkerStart?.templateId}
+      initialOutcome={homeCoworkerStart?.outcome}
       onInitialTemplateHandled={clearHomeCoworkerTemplate}
       workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
       selectedSessionId={props.selectedSessionId}
@@ -3281,7 +3288,7 @@ export function SessionPage(props: SessionPageProps) {
                               {homeProjectName}
                             </h2>
                             <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-                              Choose a coworker, continue your work, or open a protocol desk.
+                              Describe an outcome, continue your work, or open a protocol desk.
                             </p>
                           </div>
 

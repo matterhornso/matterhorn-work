@@ -5,6 +5,7 @@ import {
   readSessionPanelFromSearch,
   resolveSessionPanelNavigation,
 } from "../src/react-app/shell/session-panel-route";
+import { suggestCoworkerTemplate } from "../src/react-app/domains/session/chat/workspace-coworker-start";
 
 function appSource(path: string): string {
   return readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
@@ -17,21 +18,36 @@ describe("chat-operated coworker UI", () => {
     expect(resolveSessionPanelNavigation("?panel=coworkers", null)).toEqual({ search: "", replace: true });
   });
 
-  test("lets a first-time user choose one plain-language coworker job from Home", () => {
+  test("lets a first-time user describe one outcome and confirm a suggested coworker from Home", () => {
     const home = appSource("react-app/domains/session/chat/session-page.tsx");
     const start = appSource("react-app/domains/session/chat/workspace-coworker-start.tsx");
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
-    expect(start).toContain("Start with a coworker");
-    expect(start).toContain("Choose one job. Your coworker will ask what it needs before starting work.");
+    expect(start).toContain("What should Matterhorn help you do?");
+    expect(start).toContain("Describe the outcome in one sentence.");
+    expect(start).toContain('role="group" aria-label="Coworker role"');
+    expect(start).toContain("aria-pressed={selected}");
+    expect(start).toContain("Suggested");
+    expect(start).toContain('type="submit"');
+    expect(start).toContain("Continue");
     expect(start).toContain("Research markets");
     expect(start).toContain("Watch risk");
     expect(start).toContain("Prepare a wallet review");
     expect(start).toContain("Track balances");
-    expect(start).toContain("They cannot see private keys or send funds on their own.");
-    expect(home).toContain("setHomeCoworkerTemplateId(templateId)");
+    expect(start).toContain("It cannot see private keys or send funds on its own.");
+    expect(home).toContain("setHomeCoworkerStart(request)");
     expect(home).toContain('setCurrentSidePanel("coworkers")');
     expect(panel).toContain("coworker.role === templateId");
     expect(panel).toContain("void createCoworker(templateId)");
+    expect(panel).toContain("setPendingOutcome(props.initialOutcome?.trim() ?? \"\")");
+    expect(panel).toContain('pendingOutcome || "Ask what outcome I want, then help me take the safest next step."');
+    expect(panel).toContain("Your outcome");
+  });
+
+  test("suggests a coworker deterministically without sending the outcome anywhere", () => {
+    expect(suggestCoworkerTemplate("Compare validators and cite current public evidence")).toBe("market_analyst");
+    expect(suggestCoworkerTemplate("Alert me when liquidation risk rises")).toBe("risk_monitor");
+    expect(suggestCoworkerTemplate("Prepare a Sui transfer for wallet review")).toBe("transaction_coordinator");
+    expect(suggestCoworkerTemplate("Track my balances and holdings")).toBe("treasury_coworker");
   });
 
   test("explains automatic, approval-required, and impossible actions in plain language", () => {
