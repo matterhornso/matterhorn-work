@@ -26,13 +26,22 @@ export const MATTERHORN_WALRUS_EVIDENCE_CONTENT_TYPE =
   "application/vnd.matterhorn.walrus-ciphertext.v1+json";
 
 const JSON_CONTENT_TYPE = "application/json";
+const OCTET_STREAM_CONTENT_TYPE = "application/octet-stream";
 const DEFAULT_MAX_EVIDENCE_BYTES = 384 * 1024;
 const DEFAULT_STORAGE_EPOCHS = 5;
+const MAX_QUILT_PATCHES = 64;
 
 export type MatterhornWalrusUpload = {
   blobId: string;
   suiObjectId: string;
   declaredEndEpoch: number;
+};
+
+export type MatterhornWalrusQuiltUpload = MatterhornWalrusUpload & {
+  patches: Array<{
+    ciphertextHash: string;
+    quiltPatchId: string;
+  }>;
 };
 
 export type MatterhornWalrusCertification = {
@@ -62,6 +71,18 @@ export interface MatterhornWalrusEvidenceTransport {
   }): Promise<MatterhornWalrusUpload>;
   readByObjectId(input: {
     suiObjectId: string;
+    signal: AbortSignal;
+  }): Promise<Buffer>;
+  publishQuilt?(input: {
+    patches: Array<{
+      bytes: Uint8Array;
+      ciphertextHash: string;
+    }>;
+    storageEpochs: number;
+    signal: AbortSignal;
+  }): Promise<MatterhornWalrusQuiltUpload>;
+  readByQuiltPatchId?(input: {
+    quiltPatchId: string;
     signal: AbortSignal;
   }): Promise<Buffer>;
 }
@@ -121,7 +142,7 @@ function epochField(value: unknown): number | null {
   return Number.isSafeInteger(number) && Number(number) >= 0 ? Number(number) : null;
 }
 
-function parsePublisherResponse(bytes: Buffer): MatterhornWalrusUpload {
+function parseJsonObject(bytes: Buffer): Record<string, unknown> {
   let payload: unknown;
   try {
     payload = JSON.parse(bytes.toString("utf8"));
@@ -131,7 +152,10 @@ function parsePublisherResponse(bytes: Buffer): MatterhornWalrusUpload {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("crypto_evidence_walrus_response_invalid");
   }
-  const response = payload as Record<string, unknown>;
+  return payload as Record<string, unknown>;
+}
+
+function parseNewlyCreatedUpload(response: Record<string, unknown>): MatterhornWalrusUpload {
   if (response.newlyCreated && typeof response.newlyCreated === "object" && !Array.isArray(response.newlyCreated)) {
     const created = response.newlyCreated as Record<string, unknown>;
     if (created.blobObject && typeof created.blobObject === "object" && !Array.isArray(created.blobObject)) {
@@ -151,6 +175,83 @@ function parsePublisherResponse(bytes: Buffer): MatterhornWalrusUpload {
   // Evidence publication fails closed instead of guessing an object or reading
   // by a caller-controlled destination.
   throw new Error("crypto_evidence_walrus_object_binding_missing");
+}
+
+function parsePublisherResponse(bytes: Buffer): MatterhornWalrusUpload {
+  return parseNewlyCreatedUpload(parseJsonObject(bytes));
+}
+
+function quiltIdentifier(ciphertextHash: string): string {
+  if (!/^[a-f0-9]{64}$/.test(ciphertextHash)) throw new Error("crypto_evidence_walrus_ciphertext_mismatch");
+  return `e-${ciphertextHash}`;
+}
+
+function serializeQuiltMultipart(patches: Array<{
+  bytes: Uint8Array;
+  ciphertextHash: string;
+}>): { body: Buffer; boundary: string } {
+  if (patches.length < 2 || patches.length > MAX_QUILT_PATCHES) {
+    throw new Error("crypto_evidence_walrus_batch_size_invalid");
+  }
+  const identifiers = patches.map((patch) => quiltIdentifier(patch.ciphertextHash));
+  if (new Set(identifiers).size !== identifiers.length) {
+    throw new Error("crypto_evidence_walrus_batch_duplicate");
+  }
+  const boundary = `matterhorn-${sha256(Buffer.from(identifiers.join(":"))).slice(0, 40)}`;
+  const chunks: Buffer[] = [];
+  for (let index = 0; index < patches.length; index += 1) {
+    const patch = patches[index]!;
+    const identifier = identifiers[index]!;
+    if (patch.bytes.byteLength < 1 || sha256(patch.bytes) !== patch.ciphertextHash) {
+      throw new Error("crypto_evidence_walrus_ciphertext_mismatch");
+    }
+    chunks.push(Buffer.from(
+      `--${boundary}\r\n`
+      + `Content-Disposition: form-data; name="${identifier}"; filename="${identifier}"\r\n`
+      + `Content-Type: ${MATTERHORN_WALRUS_EVIDENCE_CONTENT_TYPE}\r\n\r\n`,
+      "utf8",
+    ));
+    chunks.push(Buffer.from(patch.bytes));
+    chunks.push(Buffer.from("\r\n", "utf8"));
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`, "utf8"));
+  return { body: Buffer.concat(chunks), boundary };
+}
+
+function parseQuiltPublisherResponse(
+  bytes: Buffer,
+  ciphertextHashes: string[],
+): MatterhornWalrusQuiltUpload {
+  const response = parseJsonObject(bytes);
+  if (!response.blobStoreResult
+    || typeof response.blobStoreResult !== "object"
+    || Array.isArray(response.blobStoreResult)) {
+    throw new Error("crypto_evidence_walrus_object_binding_missing");
+  }
+  const upload = parseNewlyCreatedUpload(response.blobStoreResult as Record<string, unknown>);
+  if (!Array.isArray(response.storedQuiltBlobs)
+    || response.storedQuiltBlobs.length !== ciphertextHashes.length) {
+    throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
+  }
+  const expected = new Map(ciphertextHashes.map((ciphertextHash) => [quiltIdentifier(ciphertextHash), ciphertextHash]));
+  const patches = response.storedQuiltBlobs.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
+    }
+    const patch = value as Record<string, unknown>;
+    const identifier = stringField(patch.identifier, 512);
+    const quiltPatchId = stringField(patch.quiltPatchId, 512);
+    const ciphertextHash = identifier ? expected.get(identifier) : null;
+    if (!ciphertextHash || !quiltPatchId) {
+      throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
+    }
+    expected.delete(identifier!);
+    return { ciphertextHash, quiltPatchId };
+  });
+  if (expected.size > 0 || new Set(patches.map((patch) => patch.quiltPatchId)).size !== patches.length) {
+    throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
+  }
+  return { ...upload, patches };
 }
 
 export function createPinnedWalrusEvidenceTransport(
@@ -223,6 +324,51 @@ export function createPinnedWalrusEvidenceTransport(
         signal: input.signal,
         headers: { accept: MATTERHORN_WALRUS_EVIDENCE_CONTENT_TYPE },
         acceptedResponseTypes: [MATTERHORN_WALRUS_EVIDENCE_CONTENT_TYPE],
+      });
+      if (response.bytes.length < 1 || response.bytes.length > maxEvidenceBytes) {
+        throw new Error("crypto_evidence_walrus_readback_size_invalid");
+      }
+      return response.bytes;
+    },
+
+    async publishQuilt(input): Promise<MatterhornWalrusQuiltUpload> {
+      if (input.signal.aborted) throw new Error("crypto_evidence_walrus_aborted");
+      if (input.storageEpochs !== storageEpochs) throw new Error("crypto_evidence_walrus_epochs_override_forbidden");
+      const serialized = serializeQuiltMultipart(input.patches);
+      if (serialized.body.length > maxEvidenceBytes) throw new Error("crypto_evidence_walrus_size_invalid");
+      const endpoint = endpointPath(publisher, "/v1/quilts");
+      endpoint.searchParams.set("epochs", String(storageEpochs));
+      const resolved = await resolvePublicCryptoAdapterEndpoint(endpoint.href, resolver);
+      const response = await requestBytes({
+        endpoint: resolved.endpoint,
+        approvedAddresses: resolved.approvedAddresses,
+        method: "PUT",
+        body: serialized.body,
+        signal: input.signal,
+        headers: {
+          accept: JSON_CONTENT_TYPE,
+          authorization: `Bearer ${bearerToken}`,
+          "content-type": `multipart/form-data; boundary=${serialized.boundary}`,
+        },
+        acceptedResponseTypes: [JSON_CONTENT_TYPE],
+      });
+      return parseQuiltPublisherResponse(response.bytes, input.patches.map((patch) => patch.ciphertextHash));
+    },
+
+    async readByQuiltPatchId(input): Promise<Buffer> {
+      if (input.signal.aborted) throw new Error("crypto_evidence_walrus_aborted");
+      const patchId = stringField(input.quiltPatchId, 512);
+      if (!patchId) throw new Error("crypto_evidence_walrus_quilt_patch_id_invalid");
+      const endpoint = endpointPath(aggregator, `/v1/blobs/by-quilt-patch-id/${encodeURIComponent(patchId)}`);
+      const resolved = await resolvePublicCryptoAdapterEndpoint(endpoint.href, resolver);
+      const response = await requestBytes({
+        endpoint: resolved.endpoint,
+        approvedAddresses: resolved.approvedAddresses,
+        method: "GET",
+        body: null,
+        signal: input.signal,
+        headers: { accept: MATTERHORN_WALRUS_EVIDENCE_CONTENT_TYPE },
+        acceptedResponseTypes: [MATTERHORN_WALRUS_EVIDENCE_CONTENT_TYPE, OCTET_STREAM_CONTENT_TYPE],
       });
       if (response.bytes.length < 1 || response.bytes.length > maxEvidenceBytes) {
         throw new Error("crypto_evidence_walrus_readback_size_invalid");
@@ -309,6 +455,105 @@ export class MatterhornTestnetWalrusEvidencePublisher {
     });
   }
 
+  async publishBatch(input: {
+    workspaceId: string;
+    ownerId: string;
+    coworkerId: string;
+    evidence: Array<{ evidenceId: string; expectedRevision: number }>;
+    signal: AbortSignal;
+    now?: Date;
+  }): Promise<MatterhornCryptoEvidenceRecord[]> {
+    if (input.signal.aborted) throw new Error("crypto_evidence_walrus_aborted");
+    if (input.evidence.length < 2 || input.evidence.length > MAX_QUILT_PATCHES) {
+      throw new Error("crypto_evidence_walrus_batch_size_invalid");
+    }
+    if (!this.transport.publishQuilt || !this.transport.readByQuiltPatchId) {
+      throw new Error("crypto_evidence_walrus_quilt_unavailable");
+    }
+    if (new Set(input.evidence.map((item) => item.evidenceId)).size !== input.evidence.length) {
+      throw new Error("crypto_evidence_walrus_batch_duplicate");
+    }
+    const records = input.evidence.map((item) => {
+      const record = this.store.get({
+        workspaceId: input.workspaceId,
+        ownerId: input.ownerId,
+        coworkerId: input.coworkerId,
+        evidenceId: item.evidenceId,
+      });
+      if (!record) throw new Error("crypto_evidence_not_found");
+      if (record.revision !== item.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
+      if (record.state !== "sealed" || !record.envelope) {
+        throw new Error("crypto_evidence_walrus_publish_state_invalid");
+      }
+      const bytes = serializeMatterhornWalrusCiphertext(record.envelope);
+      if (sha256(bytes) !== record.index.ciphertextHash) {
+        throw new Error("crypto_evidence_walrus_ciphertext_mismatch");
+      }
+      return { record, bytes };
+    });
+    const merkle = buildMatterhornEvidenceMerkleBatch(records.map(({ record }) => record.envelope!));
+    const merkleByHash = new Map(merkle.map((proof) => [proof.ciphertextHash, proof]));
+    const upload = await this.transport.publishQuilt({
+      patches: records.map(({ record, bytes }) => ({
+        bytes,
+        ciphertextHash: record.index.ciphertextHash,
+      })),
+      storageEpochs: this.storageEpochs,
+      signal: input.signal,
+    });
+    const certification = await this.verifyCertification({
+      network: "testnet",
+      blobId: upload.blobId,
+      suiObjectId: upload.suiObjectId,
+      signal: input.signal,
+    });
+    if (certification.network !== "testnet"
+      || certification.blobId !== upload.blobId
+      || certification.suiObjectId !== upload.suiObjectId
+      || certification.validUntilEpoch !== upload.declaredEndEpoch
+      || certification.certifiedEpoch > certification.currentEpoch
+      || certification.currentEpoch >= certification.validUntilEpoch) {
+      throw new Error("crypto_evidence_walrus_certification_invalid");
+    }
+    const patchByHash = new Map(upload.patches.map((patch) => [patch.ciphertextHash, patch.quiltPatchId]));
+    if (patchByHash.size !== records.length) throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
+    for (const { record, bytes } of records) {
+      const patchId = patchByHash.get(record.index.ciphertextHash);
+      if (!patchId) throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
+      const readback = await this.transport.readByQuiltPatchId({ quiltPatchId: patchId, signal: input.signal });
+      if (readback.length !== bytes.length || !timingSafeEqual(readback, bytes)) {
+        throw new Error("crypto_evidence_walrus_readback_mismatch");
+      }
+    }
+    return this.store.attachVerifiedWalrusProofBatch({
+      workspaceId: input.workspaceId,
+      ownerId: input.ownerId,
+      coworkerId: input.coworkerId,
+      entries: records.map(({ record }) => {
+        const patchId = patchByHash.get(record.index.ciphertextHash);
+        const inclusion = merkleByHash.get(record.index.ciphertextHash);
+        if (!patchId || !inclusion) throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
+        return {
+          evidenceId: record.id,
+          expectedRevision: record.revision,
+          proof: {
+            version: MATTERHORN_WALRUS_PROOF_VERSION,
+            network: "testnet",
+            blobId: upload.blobId,
+            suiObjectId: upload.suiObjectId,
+            certifiedEpoch: certification.certifiedEpoch,
+            validUntilEpoch: certification.validUntilEpoch,
+            quiltPatchId: patchId,
+            merkleRoot: inclusion.root,
+            merkleProof: inclusion.proof,
+            suiTransactionDigest: certification.suiTransactionDigest,
+          },
+        };
+      }),
+      ...(input.now ? { now: input.now } : {}),
+    });
+  }
+
   /**
    * Re-checks an existing publication without mutating tenant state or
    * contacting the publisher. The exact stored Blob object is authenticated
@@ -358,10 +603,21 @@ export class MatterhornTestnetWalrusEvidencePublisher {
       || certification.currentEpoch >= certification.validUntilEpoch) {
       throw new Error("crypto_evidence_walrus_certification_invalid");
     }
-    const readback = await this.transport.readByObjectId({
-      suiObjectId: record.walrusProof.suiObjectId,
-      signal: input.signal,
-    });
+    let readback: Buffer;
+    if (record.walrusProof.quiltPatchId) {
+      if (!this.transport.readByQuiltPatchId) {
+        throw new Error("crypto_evidence_walrus_quilt_unavailable");
+      }
+      readback = await this.transport.readByQuiltPatchId({
+        quiltPatchId: record.walrusProof.quiltPatchId,
+        signal: input.signal,
+      });
+    } else {
+      readback = await this.transport.readByObjectId({
+        suiObjectId: record.walrusProof.suiObjectId,
+        signal: input.signal,
+      });
+    }
     if (readback.length !== publicBytes.length || !timingSafeEqual(readback, publicBytes)) {
       throw new Error("crypto_evidence_walrus_readback_mismatch");
     }

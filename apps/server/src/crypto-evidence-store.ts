@@ -380,6 +380,105 @@ export class MatterhornCryptoEvidenceStore {
     return clone(next);
   }
 
+  /**
+   * Atomically attaches every proof from one ciphertext-only Walrus Quilt.
+   * All records and proofs are validated before the first durable mutation, so
+   * a conflict or malformed patch cannot leave a partially published batch.
+   */
+  attachVerifiedWalrusProofBatch(input: {
+    workspaceId: string;
+    ownerId: string;
+    coworkerId: string;
+    entries: Array<{
+      evidenceId: string;
+      expectedRevision: number;
+      proof: MatterhornWalrusProof;
+    }>;
+    now?: Date;
+  }): MatterhornCryptoEvidenceRecord[] {
+    if (input.entries.length < 2 || input.entries.length > 64) {
+      throw new Error("crypto_evidence_walrus_batch_size_invalid");
+    }
+    if (new Set(input.entries.map((entry) => entry.evidenceId)).size !== input.entries.length) {
+      throw new Error("crypto_evidence_walrus_batch_duplicate");
+    }
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+
+    return this.stateStore.transaction(() => {
+      const nextRecords = input.entries.map((entry) => {
+        const current = this.get({
+          workspaceId: input.workspaceId,
+          ownerId: input.ownerId,
+          coworkerId: input.coworkerId,
+          evidenceId: entry.evidenceId,
+        });
+        if (!current) throw new Error("crypto_evidence_not_found");
+        if (current.revision !== entry.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
+        if (current.state !== "sealed" || !current.envelope) {
+          throw new Error("crypto_evidence_walrus_publish_state_invalid");
+        }
+        const issues = validateMatterhornWalrusProof(entry.proof);
+        if (issues.length > 0) throw new Error(`crypto_evidence_walrus_proof_invalid:${issues.join(",")}`);
+        if (entry.proof.network === "mainnet" && this.options.allowMainnet !== true) {
+          throw new Error("crypto_evidence_mainnet_disabled");
+        }
+        if (!entry.proof.quiltPatchId) throw new Error("crypto_evidence_walrus_quilt_patch_required");
+        if (!verifyMatterhornEvidenceMerkleProof({
+          ciphertextHash: current.index.ciphertextHash,
+          leaf: current.index.merkleLeaf,
+          root: entry.proof.merkleRoot,
+          proof: entry.proof.merkleProof,
+        })) throw new Error("crypto_evidence_merkle_proof_mismatch");
+        return {
+          ...current,
+          revision: current.revision + 1,
+          state: "published" as const,
+          walrusProof: structuredClone(entry.proof),
+          updatedAt: now.toISOString(),
+        };
+      });
+
+      const first = nextRecords[0]?.walrusProof;
+      if (!first) throw new Error("crypto_evidence_walrus_batch_missing");
+      const batchBinding = (proof: MatterhornWalrusProof) => JSON.stringify({
+        network: proof.network,
+        blobId: proof.blobId,
+        suiObjectId: proof.suiObjectId,
+        certifiedEpoch: proof.certifiedEpoch,
+        validUntilEpoch: proof.validUntilEpoch,
+        merkleRoot: proof.merkleRoot,
+        suiTransactionDigest: proof.suiTransactionDigest,
+      });
+      if (nextRecords.some((record) => !record.walrusProof
+        || batchBinding(record.walrusProof) !== batchBinding(first))) {
+        throw new Error("crypto_evidence_walrus_batch_binding_mismatch");
+      }
+      const patchIds = nextRecords.map((record) => record.walrusProof?.quiltPatchId ?? "");
+      if (new Set(patchIds).size !== patchIds.length) {
+        throw new Error("crypto_evidence_walrus_batch_patch_duplicate");
+      }
+
+      for (const record of nextRecords) {
+        this.stateStore.put({
+          kind: STATE_KIND,
+          key: record.id,
+          workspaceId: record.workspaceId,
+          value: record,
+          nowMs: now.getTime(),
+        });
+        this.recordAccess({
+          record,
+          action: "attach_proof",
+          outcome: "allowed",
+          reason: "quilt_proof_verified",
+          now,
+        });
+      }
+      return nextRecords.map(clone);
+    });
+  }
+
   async decrypt(input: {
     workspaceId: string;
     ownerId: string;

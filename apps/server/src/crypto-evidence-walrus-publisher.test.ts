@@ -19,11 +19,11 @@ import {
 } from "./crypto-evidence-walrus-publisher.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
-function receipt(): MatterhornAgentRunReceipt {
+function receipt(input: { id?: string; runId?: string } = {}): MatterhornAgentRunReceipt {
   return {
     version: "matterhorn.agent-run-receipt.v1",
-    id: "receipt_walrus",
-    runId: "run_walrus",
+    id: input.id ?? "receipt_walrus",
+    runId: input.runId ?? "run_walrus",
     workspaceId: "workspace_walrus",
     sessionId: "session_walrus",
     status: "success",
@@ -95,7 +95,30 @@ async function fixture() {
     coworkerId: "coworker_walrus",
     sealed,
   });
-  return { directory, state, store, record };
+  return { directory, state, store, record, keyManager };
+}
+
+async function addEvidence(
+  value: Awaited<ReturnType<typeof fixture>>,
+  suffix: string,
+) {
+  const runId = `run_walrus_${suffix}`;
+  const sealed = await sealMatterhornRunEvidence({
+    receipt: receipt({ id: `receipt_walrus_${suffix}`, runId }),
+    coworkerId: "coworker_walrus",
+    recipientKeyIds: ["recipient_private"],
+    keyManager: value.keyManager,
+    now: new Date("2026-09-01T00:02:00.000Z"),
+    correlationSalt: Buffer.alloc(32, 28),
+    idEntropy: Buffer.alloc(24, suffix.charCodeAt(0)),
+  });
+  return value.store.create({
+    workspaceId: "workspace_walrus",
+    ownerId: "owner_walrus",
+    runId,
+    coworkerId: "coworker_walrus",
+    sealed,
+  });
 }
 
 function certification(overrides: Partial<MatterhornWalrusCertification> = {}): MatterhornWalrusCertification {
@@ -217,6 +240,201 @@ describe("testnet Walrus evidence publisher", () => {
     }
   });
 
+  test("publishes a ciphertext-only Quilt and verifies every exact patch before atomic proof attachment", async () => {
+    const value = await fixture();
+    try {
+      const second = await addEvidence(value, "second");
+      const patchBytes = new Map<string, Buffer>();
+      const transport: MatterhornWalrusEvidenceTransport = {
+        publish: async () => { throw new Error("single_publish_not_expected"); },
+        readByObjectId: async () => { throw new Error("object_read_not_expected"); },
+        publishQuilt: async ({ patches, storageEpochs }) => {
+          expect(storageEpochs).toBe(5);
+          expect(patches).toHaveLength(2);
+          return {
+            blobId: "blob-testnet-1",
+            suiObjectId: "0x1234",
+            declaredEndEpoch: 110,
+            patches: patches.map((patch, index) => {
+              const quiltPatchId = `patch-${index + 1}`;
+              patchBytes.set(quiltPatchId, Buffer.from(patch.bytes));
+              return { ciphertextHash: patch.ciphertextHash, quiltPatchId };
+            }),
+          };
+        },
+        readByQuiltPatchId: async ({ quiltPatchId }) => {
+          const bytes = patchBytes.get(quiltPatchId);
+          if (!bytes) throw new Error("unexpected_patch");
+          return Buffer.from(bytes);
+        },
+      };
+      const publisher = new MatterhornTestnetWalrusEvidencePublisher(
+        value.store,
+        transport,
+        async () => certification(),
+      );
+      const published = await publisher.publishBatch({
+        workspaceId: "workspace_walrus",
+        ownerId: "owner_walrus",
+        coworkerId: "coworker_walrus",
+        evidence: [
+          { evidenceId: value.record.id, expectedRevision: value.record.revision },
+          { evidenceId: second.id, expectedRevision: second.revision },
+        ],
+        signal: new AbortController().signal,
+      });
+      expect(published).toHaveLength(2);
+      expect(published.every((record) => record.state === "published")).toBe(true);
+      expect(published[0]?.walrusProof?.merkleRoot).toBe(published[1]?.walrusProof?.merkleRoot);
+      expect(published[0]?.walrusProof?.quiltPatchId).not.toBe(published[1]?.walrusProof?.quiltPatchId);
+      expect(published.every((record) => record.walrusProof?.merkleProof.length === 1)).toBe(true);
+      for (const record of published) {
+        await expect(publisher.verify({
+          workspaceId: "workspace_walrus",
+          ownerId: "owner_walrus",
+          evidenceId: record.id,
+          signal: new AbortController().signal,
+        })).resolves.toEqual({ certification: certification() });
+      }
+      const publicPayload = JSON.stringify([...patchBytes.values()].map((bytes) => bytes.toString("utf8")));
+      for (const privateValue of [
+        "workspace_walrus",
+        "owner_walrus",
+        "coworker_walrus",
+        "kms://private-key-reference",
+        "wrapped-private-key",
+        "recipient_private",
+      ]) expect(publicPayload).not.toContain(privateValue);
+      expect(value.store.listAccessAudit({ workspaceId: "workspace_walrus", ownerId: "owner_walrus" })
+        .filter((event) => event.action === "attach_proof")
+        .every((event) => event.reason === "quilt_proof_verified")).toBe(true);
+    } finally {
+      value.state.close();
+      await rm(value.directory, { recursive: true, force: true });
+    }
+  });
+
+  test("leaves every batch record sealed when a patch readback or final revision check fails", async () => {
+    for (const mode of ["readback", "revision"] as const) {
+      const value = await fixture();
+      try {
+        const second = await addEvidence(value, `${mode}x`);
+        const patchBytes = new Map<string, Buffer>();
+        const transport: MatterhornWalrusEvidenceTransport = {
+          publish: async () => { throw new Error("single_publish_not_expected"); },
+          readByObjectId: async () => { throw new Error("object_read_not_expected"); },
+          publishQuilt: async ({ patches }) => {
+            const result = patches.map((patch, index) => {
+              const quiltPatchId = `patch-${index + 1}`;
+              patchBytes.set(quiltPatchId, Buffer.from(patch.bytes));
+              return { ciphertextHash: patch.ciphertextHash, quiltPatchId };
+            });
+            if (mode === "revision") {
+              const current = value.store.get({
+                workspaceId: "workspace_walrus",
+                ownerId: "owner_walrus",
+                coworkerId: "coworker_walrus",
+                evidenceId: second.id,
+              })!;
+              value.store.attachVerifiedWalrusProof({
+                workspaceId: "workspace_walrus",
+                ownerId: "owner_walrus",
+                coworkerId: "coworker_walrus",
+                evidenceId: second.id,
+                expectedRevision: current.revision,
+                proof: {
+                  version: "matterhorn.walrus-proof.v1",
+                  network: "testnet",
+                  blobId: "race-blob",
+                  suiObjectId: "0x9999",
+                  certifiedEpoch: 100,
+                  validUntilEpoch: 110,
+                  quiltPatchId: null,
+                  merkleRoot: current.index.merkleLeaf,
+                  merkleProof: [],
+                  suiTransactionDigest: null,
+                },
+              });
+            }
+            return {
+              blobId: "blob-testnet-1",
+              suiObjectId: "0x1234",
+              declaredEndEpoch: 110,
+              patches: result,
+            };
+          },
+          readByQuiltPatchId: async ({ quiltPatchId }) => mode === "readback" && quiltPatchId === "patch-2"
+            ? Buffer.from("tampered")
+            : Buffer.from(patchBytes.get(quiltPatchId)!),
+        };
+        const publisher = new MatterhornTestnetWalrusEvidencePublisher(value.store, transport, async () => certification());
+        await expect(publisher.publishBatch({
+          workspaceId: "workspace_walrus",
+          ownerId: "owner_walrus",
+          coworkerId: "coworker_walrus",
+          evidence: [
+            { evidenceId: value.record.id, expectedRevision: value.record.revision },
+            { evidenceId: second.id, expectedRevision: second.revision },
+          ],
+          signal: new AbortController().signal,
+        })).rejects.toThrow(mode === "readback"
+          ? "crypto_evidence_walrus_readback_mismatch"
+          : "crypto_evidence_revision_conflict");
+        expect(value.store.get({
+          workspaceId: "workspace_walrus",
+          ownerId: "owner_walrus",
+          evidenceId: value.record.id,
+        })?.state).toBe("sealed");
+        expect(value.store.get({
+          workspaceId: "workspace_walrus",
+          ownerId: "owner_walrus",
+          evidenceId: second.id,
+        })?.state).toBe(mode === "revision" ? "published" : "sealed");
+      } finally {
+        value.state.close();
+        await rm(value.directory, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("rejects cross-tenant Quilt publication before transport access", async () => {
+    const value = await fixture();
+    try {
+      const second = await addEvidence(value, "tenantx");
+      let transportAccessed = false;
+      const transport: MatterhornWalrusEvidenceTransport = {
+        publish: async () => { throw new Error("single_publish_not_expected"); },
+        readByObjectId: async () => { throw new Error("object_read_not_expected"); },
+        publishQuilt: async () => {
+          transportAccessed = true;
+          throw new Error("transport_must_not_run");
+        },
+        readByQuiltPatchId: async () => {
+          transportAccessed = true;
+          throw new Error("transport_must_not_run");
+        },
+      };
+      const publisher = new MatterhornTestnetWalrusEvidencePublisher(value.store, transport, async () => {
+        transportAccessed = true;
+        return certification();
+      });
+      await expect(publisher.publishBatch({
+        workspaceId: "workspace_walrus",
+        ownerId: "attacker_owner",
+        coworkerId: "coworker_walrus",
+        evidence: [
+          { evidenceId: value.record.id, expectedRevision: value.record.revision },
+          { evidenceId: second.id, expectedRevision: second.revision },
+        ],
+        signal: new AbortController().signal,
+      })).rejects.toThrow("crypto_evidence_not_found");
+      expect(transportAccessed).toBe(false);
+    } finally {
+      value.state.close();
+      await rm(value.directory, { recursive: true, force: true });
+    }
+  });
+
   test("requires authenticated HTTPS endpoints and fixes method, path, headers and epochs", async () => {
     expect(() => createPinnedWalrusEvidenceTransport({
       publisherUrl: "http://publisher.example.test",
@@ -290,6 +508,136 @@ describe("testnet Walrus evidence publisher", () => {
     expect((requests[1]?.endpoint as URL).href).toBe(
       "https://aggregator.example.test/root/v1/blobs/by-object-id/0x1234?strict_consistency_check=true",
     );
+  });
+
+  test("uses opaque Quilt identifiers and exact patch read routes", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const first = Buffer.from("encrypted-one");
+    const second = Buffer.from("encrypted-two");
+    const firstHash = hash(first);
+    const secondHash = hash(second);
+    const transport = createPinnedWalrusEvidenceTransport({
+      publisherUrl: "https://publisher.example.test/base",
+      aggregatorUrl: "https://aggregator.example.test/root",
+      bearerToken: "server-only-token",
+      resolver: async () => [{ address: "93.184.216.34", family: 4 }],
+      requestBytes: async (input) => {
+        requests.push(input as unknown as Record<string, unknown>);
+        if (input.method === "PUT") {
+          return {
+            bytes: Buffer.from(JSON.stringify({
+              blobStoreResult: {
+                newlyCreated: {
+                  blobObject: { id: "0x1234", blobId: "quilt-blob", storage: { endEpoch: 110 } },
+                },
+              },
+              storedQuiltBlobs: [
+                { identifier: `e-${firstHash}`, quiltPatchId: "patch-one" },
+                { identifier: `e-${secondHash}`, quiltPatchId: "patch-two" },
+              ],
+            })),
+            connectedAddress: "93.184.216.34",
+            requestBytes: input.body?.byteLength ?? 0,
+            responseBytes: 1,
+            headers: new Headers({ "content-type": "application/json" }),
+          };
+        }
+        const patchId = (input.endpoint.pathname.split("/").at(-1) ?? "");
+        const bytes = patchId === "patch-one" ? first : second;
+        return {
+          bytes,
+          connectedAddress: "93.184.216.34",
+          requestBytes: 0,
+          responseBytes: bytes.length,
+          headers: new Headers({ "content-type": "application/octet-stream" }),
+        };
+      },
+    });
+    const upload = await transport.publishQuilt!({
+      patches: [
+        { bytes: first, ciphertextHash: firstHash },
+        { bytes: second, ciphertextHash: secondHash },
+      ],
+      storageEpochs: 5,
+      signal: new AbortController().signal,
+    });
+    expect(upload).toEqual({
+      blobId: "quilt-blob",
+      suiObjectId: "0x1234",
+      declaredEndEpoch: 110,
+      patches: [
+        { ciphertextHash: firstHash, quiltPatchId: "patch-one" },
+        { ciphertextHash: secondHash, quiltPatchId: "patch-two" },
+      ],
+    });
+    expect(await transport.readByQuiltPatchId!({
+      quiltPatchId: "patch-one",
+      signal: new AbortController().signal,
+    })).toEqual(first);
+    expect((requests[0]?.endpoint as URL).href).toBe(
+      "https://publisher.example.test/base/v1/quilts?epochs=5",
+    );
+    expect(requests[0]).toMatchObject({
+      method: "PUT",
+      headers: {
+        accept: "application/json",
+        authorization: "Bearer server-only-token",
+      },
+    });
+    const multipart = Buffer.from(requests[0]?.body as Uint8Array).toString("utf8");
+    expect(multipart).toContain(`name="e-${firstHash}"`);
+    expect(multipart).toContain(`name="e-${secondHash}"`);
+    expect(multipart).not.toContain("workspace_private");
+    expect(multipart).not.toContain("owner_private");
+    expect((requests[1]?.endpoint as URL).href).toBe(
+      "https://aggregator.example.test/root/v1/blobs/by-quilt-patch-id/patch-one",
+    );
+  });
+
+  test("rejects missing, extra, or duplicate Quilt patch bindings", async () => {
+    const first = Buffer.from("encrypted-one");
+    const second = Buffer.from("encrypted-two");
+    const cases = [
+      [{ identifier: `e-${hash(first)}`, quiltPatchId: "patch-one" }],
+      [
+        { identifier: `e-${hash(first)}`, quiltPatchId: "same" },
+        { identifier: `e-${hash(second)}`, quiltPatchId: "same" },
+      ],
+      [
+        { identifier: `e-${hash(first)}`, quiltPatchId: "patch-one" },
+        { identifier: "e-" + "f".repeat(64), quiltPatchId: "patch-extra" },
+      ],
+    ];
+    for (const storedQuiltBlobs of cases) {
+      const transport = createPinnedWalrusEvidenceTransport({
+        publisherUrl: "https://publisher.example.test",
+        aggregatorUrl: "https://aggregator.example.test",
+        bearerToken: "secret",
+        resolver: async () => [{ address: "93.184.216.34", family: 4 }],
+        requestBytes: async () => ({
+          bytes: Buffer.from(JSON.stringify({
+            blobStoreResult: {
+              newlyCreated: {
+                blobObject: { id: "0x1234", blobId: "quilt-blob", storage: { endEpoch: 110 } },
+              },
+            },
+            storedQuiltBlobs,
+          })),
+          connectedAddress: "93.184.216.34",
+          requestBytes: 1,
+          responseBytes: 1,
+          headers: new Headers({ "content-type": "application/json" }),
+        }),
+      });
+      await expect(transport.publishQuilt!({
+        patches: [
+          { bytes: first, ciphertextHash: hash(first) },
+          { bytes: second, ciphertextHash: hash(second) },
+        ],
+        storageEpochs: 5,
+        signal: new AbortController().signal,
+      })).rejects.toThrow("crypto_evidence_walrus_quilt_patch_binding_invalid");
+    }
   });
 
   test("rejects duplicate responses that omit the exact Sui object binding", async () => {

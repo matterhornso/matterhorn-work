@@ -116,6 +116,34 @@ export class MatterhornGuardedRuntimeStateStore {
     chmodSync(path, 0o600);
   }
 
+  /**
+   * Runs a synchronous group of state mutations under one immediate SQLite
+   * transaction. Callers use this for security records that must never become
+   * partially visible (for example, one Walrus Quilt proof attached to several
+   * encrypted evidence records).
+   */
+  transaction<T>(callback: () => T): T {
+    this.db.exec("BEGIN IMMEDIATE;");
+    try {
+      const result = callback();
+      if (result !== null
+        && typeof result === "object"
+        && typeof (result as { then?: unknown }).then === "function") {
+        throw new Error("guarded_runtime_async_transaction_forbidden");
+      }
+      this.db.exec("COMMIT;");
+      return result;
+    } catch (error) {
+      try {
+        this.db.exec("ROLLBACK;");
+      } catch {
+        // Preserve the original failure. A failed rollback leaves this store
+        // unusable, and the next database operation will fail closed.
+      }
+      throw error;
+    }
+  }
+
   put(input: {
     kind: GuardedRuntimeStateKind;
     key: string;
