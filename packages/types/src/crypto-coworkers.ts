@@ -500,6 +500,49 @@ export type MatterhornEvidenceVerificationListResponse = {
   items: MatterhornEvidenceVerificationPacket[];
 };
 
+export const MATTERHORN_AGENT_FILE_VERSION = "matterhorn.agent-file.v1";
+
+/**
+ * Provider-neutral, pre-storage description of one user-selected file. Files
+ * remain data only: they cannot declare tools, connectors, permissions, wallet
+ * authority, or executable behavior.
+ */
+export type MatterhornAgentFileDescriptor = {
+  version: typeof MATTERHORN_AGENT_FILE_VERSION;
+  name: string;
+  kind: "text" | "table" | "json";
+  mimeType: "text/plain" | "text/markdown" | "text/csv" | "application/json";
+  sizeBytes: number;
+  contentSha256: string;
+  dataLabel: "workspace_private";
+  access: {
+    coworkerIds: string[];
+    readOnly: true;
+  };
+  retention: {
+    expiresAt: string | null;
+    deletable: true;
+  };
+  security: {
+    scan: "passed";
+    executable: false;
+    walletAuthority: "none";
+  };
+};
+
+export type MatterhornAgentFileScanResult = {
+  decision: "allow" | "blocked";
+  descriptor: MatterhornAgentFileDescriptor | null;
+  issues: string[];
+};
+
+export type MatterhornAgentFileContextProjection = {
+  file: MatterhornAgentFileDescriptor;
+  text: string;
+  truncated: boolean;
+  originalCharacters: number;
+};
+
 export type MatterhornEvidenceBundle = {
   version: typeof MATTERHORN_EVIDENCE_BUNDLE_VERSION;
   id: string;
