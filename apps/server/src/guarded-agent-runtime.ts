@@ -24,7 +24,13 @@ import {
   type MatterhornCryptoAppCapabilityBinding,
 } from "./crypto-app-guarded-authorization.js";
 import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
+import type { MatterhornWalrusCertificationVerifier } from "./crypto-evidence-walrus-publisher.js";
 import { MatterhornAgentFileStore } from "./agent-file-store.js";
+import {
+  MatterhornAgentFileWalrusRenewalService,
+  type MatterhornSuiTransactionStatusVerifier,
+  type MatterhornWalrusRenewalTransactionBuilder,
+} from "./agent-file-walrus-renewal.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
 import type { MatterhornFinalizedCoworkerRun } from "./crypto-evidence-finalizer.js";
@@ -176,6 +182,23 @@ export class MatterhornGuardedAgentRuntime {
 
   createAgentFileStore(keyManager: MatterhornEvidenceKeyManager): MatterhornAgentFileStore {
     return new MatterhornAgentFileStore(this.stateStore, keyManager);
+  }
+
+  createAgentFileWalrusRenewalService(input: {
+    store: MatterhornAgentFileStore;
+    buildTransaction: MatterhornWalrusRenewalTransactionBuilder;
+    verifyTransaction: MatterhornSuiTransactionStatusVerifier;
+    verifyCertification: MatterhornWalrusCertificationVerifier;
+    extensionEpochs: number;
+  }): MatterhornAgentFileWalrusRenewalService {
+    return new MatterhornAgentFileWalrusRenewalService(
+      input.store,
+      this.stateStore,
+      input.buildTransaction,
+      input.verifyTransaction,
+      input.verifyCertification,
+      input.extensionEpochs,
+    );
   }
 
   hasCryptoEvidence(workspaceId?: string): boolean {

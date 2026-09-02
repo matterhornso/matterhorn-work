@@ -561,6 +561,8 @@ export type MatterhornAgentFileWalrusPublication = {
   certifiedEpoch: number;
   validUntilEpoch: number;
   suiTransactionDigest: string | null;
+  renewalTransactionDigest?: string;
+  renewedAt?: string;
   publishedAt: string;
   verifiedAt: string;
 };
@@ -585,6 +587,46 @@ export type MatterhornAgentFileWalrusVerification = {
   lifecycle: MatterhornWalrusStorageLifecycle;
 };
 
+export const MATTERHORN_AGENT_FILE_WALRUS_RENEWAL_VERSION =
+  "matterhorn.agent-file-walrus-renewal.v1";
+
+export type MatterhornAgentFileWalrusRenewalPreview = {
+  version: typeof MATTERHORN_AGENT_FILE_WALRUS_RENEWAL_VERSION;
+  intentId: string;
+  intentHash: string;
+  fileId: string;
+  fileRevision: number;
+  network: "testnet";
+  signer: string;
+  blobId: string;
+  suiObjectId: string;
+  currentEpoch: number;
+  previousValidUntilEpoch: number;
+  extensionEpochs: number;
+  targetValidUntilEpoch: number;
+  transactionBytesBase64: string;
+  transactionDigest: string;
+  simulationReference: string;
+  simulatedAt: string;
+  expiresAt: string;
+  walletAuthority: "connected_wallet_only";
+};
+
+export type MatterhornAgentFileWalrusRenewalPrepareResponse = {
+  preview: MatterhornAgentFileWalrusRenewalPreview;
+  disclosure: {
+    network: "testnet";
+    paymentAsset: "WAL";
+    signingAndSubmission: "connected_wallet_only";
+    agentAuthority: "none";
+  };
+};
+
+export type MatterhornAgentFileWalrusRenewalConfirmResponse = {
+  item: MatterhornStoredAgentFile;
+  verification: MatterhornAgentFileWalrusVerification;
+};
+
 export type MatterhornStoredAgentFile = {
   version: typeof MATTERHORN_STORED_AGENT_FILE_VERSION;
   id: string;
@@ -601,6 +643,7 @@ export type MatterhornAgentFileListResponse = {
   cloudBackup: {
     available: boolean;
     network: "testnet" | null;
+    renewalAvailable: boolean;
   };
   items: MatterhornStoredAgentFile[];
 };

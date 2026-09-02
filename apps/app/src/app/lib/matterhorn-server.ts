@@ -121,6 +121,8 @@ import type {
   MatterhornCryptoIntent,
   MatterhornCryptoPublicReceipt,
   MatterhornAgentFileListResponse,
+  MatterhornAgentFileWalrusRenewalConfirmResponse,
+  MatterhornAgentFileWalrusRenewalPrepareResponse,
   MatterhornAgentFileWalrusVerification,
   MatterhornCoworkerInboxItem,
   MatterhornCoworkerProfile,
@@ -1973,6 +1975,34 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/verify`,
       { token, method: "POST", timeoutMs: timeouts.binary },
+    ),
+    renewAgentFile: (
+      workspaceId: string,
+      fileId: string,
+      input: { expectedRevision: number; signer: string },
+    ) => requestJson<MatterhornAgentFileWalrusRenewalPrepareResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/renew`,
+      {
+        token,
+        method: "POST",
+        body: {
+          expectedRevision: input.expectedRevision,
+          network: "testnet",
+          signer: input.signer,
+          acknowledgeWalletPayment: true,
+        },
+        timeoutMs: timeouts.binary,
+      },
+    ),
+    confirmAgentFileRenewal: (
+      workspaceId: string,
+      fileId: string,
+      input: { intentId: string; intentHash: string; transactionDigest: string },
+    ) => requestJson<MatterhornAgentFileWalrusRenewalConfirmResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/renew/confirm`,
+      { token, method: "POST", body: input, timeoutMs: timeouts.binary },
     ),
     recoverAgentFile: (workspaceId: string, fileId: string, expectedRevision: number) => requestBinary(
       baseUrl,

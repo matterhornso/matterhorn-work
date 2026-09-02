@@ -13,7 +13,7 @@ import { SUI_GRPC_URLS } from "./tools/sui.js";
 
 const PUBLIC_ENVELOPE_MAX_BYTES = Math.ceil(MATTERHORN_AGENT_FILE_MAX_BYTES * 4 / 3) + 4_096;
 
-function storageEpochs(env: NodeJS.ProcessEnv): number {
+export function matterhornAgentFileWalrusStorageEpochs(env: NodeJS.ProcessEnv): number {
   const value = env.MATTERHORN_WALRUS_STORAGE_EPOCHS?.trim();
   if (!value) return 5;
   const parsed = Number(value);
@@ -21,6 +21,19 @@ function storageEpochs(env: NodeJS.ProcessEnv): number {
     throw new Error("agent_file_walrus_epochs_invalid");
   }
   return parsed;
+}
+
+export function createMatterhornAgentFileWalrusCertificationVerifier(
+  dependency?: MatterhornWalrusCertificationVerifier,
+): MatterhornWalrusCertificationVerifier {
+  if (dependency) return dependency;
+  return async (input) => {
+    const sui = await resolvePublicCryptoAdapterEndpoint(SUI_GRPC_URLS.testnet);
+    return createPinnedSuiWalrusCertificationVerifier({
+      endpoint: sui.endpoint,
+      approvedAddresses: sui.approvedAddresses,
+    })(input);
+  };
 }
 
 export function createMatterhornAgentFileWalrusPublisher(
@@ -39,20 +52,16 @@ export function createMatterhornAgentFileWalrusPublisher(
     publisherUrl: env.MATTERHORN_WALRUS_PUBLISHER_URL ?? "",
     aggregatorUrl: env.MATTERHORN_WALRUS_AGGREGATOR_URL ?? "",
     bearerToken: env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN ?? "",
-    storageEpochs: storageEpochs(env),
+    storageEpochs: matterhornAgentFileWalrusStorageEpochs(env),
     maxEvidenceBytes: PUBLIC_ENVELOPE_MAX_BYTES,
   });
-  const certificationVerifier = dependencies.certificationVerifier ?? (async (input) => {
-    const sui = await resolvePublicCryptoAdapterEndpoint(SUI_GRPC_URLS.testnet);
-    return createPinnedSuiWalrusCertificationVerifier({
-      endpoint: sui.endpoint,
-      approvedAddresses: sui.approvedAddresses,
-    })(input);
-  });
+  const certificationVerifier = createMatterhornAgentFileWalrusCertificationVerifier(
+    dependencies.certificationVerifier,
+  );
   return new MatterhornAgentFileWalrusPublisher(
     store,
     transport,
     certificationVerifier,
-    storageEpochs(env),
+    matterhornAgentFileWalrusStorageEpochs(env),
   );
 }

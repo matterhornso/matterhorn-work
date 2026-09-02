@@ -4,6 +4,8 @@ import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Transaction, TransactionDataBuilder } from "@mysten/sui/transactions";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import type {
@@ -32,6 +34,7 @@ import type {
   MatterhornWalrusCertification,
   MatterhornWalrusEvidenceTransport,
 } from "./crypto-evidence-walrus-publisher.js";
+import { sha256 } from "./guarded-runtime-crypto.js";
 import type { ServerConfig } from "./types.js";
 
 type Served = { port: number; stop: (closeActiveConnections?: boolean) => void | Promise<void> };
@@ -203,6 +206,8 @@ async function boot(
   const keyManager = options.agentFiles ? new RouteTestKeyManager() : null;
   const walrusTransport = options.walrus ? new RouteTestWalrusTransport() : null;
   let walrusCurrentEpoch = 11;
+  let walrusValidUntilEpoch = 15;
+  let walrusRenewalTransactionStatus: "confirmed" | "failed" = "confirmed";
   const dependencies: MatterhornServerDependencies = {};
   if (keyManager) dependencies.evidenceKeyManager = keyManager;
   if (walrusTransport) {
@@ -210,6 +215,35 @@ async function boot(
     dependencies.agentFileWalrusCertificationVerifier = async () => ({
       ...routeTestCertification(),
       currentEpoch: walrusCurrentEpoch,
+      validUntilEpoch: walrusValidUntilEpoch,
+    });
+    const signer = normalizeSuiAddress("0x1");
+    const renewalTransaction = new Transaction();
+    renewalTransaction.setSender(signer);
+    renewalTransaction.setGasOwner(signer);
+    renewalTransaction.setGasPrice(1);
+    renewalTransaction.setGasBudget(1);
+    renewalTransaction.setGasPayment([]);
+    renewalTransaction.setExpiration({ Epoch: 20 });
+    const renewalBytes = await renewalTransaction.build();
+    const renewalDigest = TransactionDataBuilder.getDigestFromBytes(renewalBytes);
+    dependencies.agentFileWalrusRenewalTransactionBuilder = async (input) => {
+      expect(input.network).toBe("sui:testnet");
+      expect(input.signer).toBe(signer);
+      expect(input.blobObjectId).toBe("0x1234");
+      expect(input.extensionEpochs).toBe(5);
+      return {
+        transactionBytesBase64: Buffer.from(renewalBytes).toString("base64"),
+        transactionDigest: renewalDigest,
+        simulationReference: sha256({ test: "route-walrus-renewal" }),
+        simulatedAt: new Date().toISOString(),
+      };
+    };
+    dependencies.agentFileWalrusTransactionStatusVerifier = async (input) => ({
+      digest: input.digest,
+      signer: input.signer,
+      status: walrusRenewalTransactionStatus,
+      observedAt: new Date().toISOString(),
     });
   }
   const server = await startServer(
@@ -231,6 +265,12 @@ async function boot(
     walrusTransport,
     setWalrusCurrentEpoch: (value: number) => {
       walrusCurrentEpoch = value;
+    },
+    setWalrusValidUntilEpoch: (value: number) => {
+      walrusValidUntilEpoch = value;
+    },
+    setWalrusRenewalTransactionStatus: (value: "confirmed" | "failed") => {
+      walrusRenewalTransactionStatus = value;
     },
     stop,
   };
@@ -727,6 +767,133 @@ describe("crypto coworker HTTP boundary", () => {
     expect(server.keyManager?.keys.size).toBe(0);
   });
 
+  test("renews Walrus backup through a tenant-bound connected-wallet airlock", async () => {
+    const server = await boot("internal", { agentFiles: true, walrus: true });
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "agent-file-renewal-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "agent-file-renewal-b@example.com", password: PASSWORD },
+    });
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
+    const coworker = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: coworkerInput(),
+    });
+    const created = await request(server.base, `/workspace/${workspaceA}/agent-files`, {
+      cookie: cookieA,
+      body: {
+        name: "renewal-policy.md",
+        mimeType: "text/markdown",
+        coworkerIds: [String(coworker.payload.coworker.id)],
+        expiresAt: null,
+        contentBase64: Buffer.from("Private renewal policy.").toString("base64"),
+      },
+    });
+    const fileId = String(created.payload.item.id);
+    const published = await request(server.base, `/workspace/${workspaceA}/agent-files/${fileId}/publish`, {
+      cookie: cookieA,
+      body: { expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true },
+    });
+    expect(published.response.status).toBe(200);
+    server.setWalrusCurrentEpoch(13);
+    const list = await request(server.base, `/workspace/${workspaceA}/agent-files`, { cookie: cookieA });
+    expect(list.payload.cloudBackup).toMatchObject({ network: "testnet", renewalAvailable: true });
+
+    const missingWalletConsent = await request(
+      server.base,
+      `/workspace/${workspaceA}/agent-files/${fileId}/renew`,
+      {
+        cookie: cookieA,
+        body: { expectedRevision: 2, network: "testnet", signer: "0x1" },
+      },
+    );
+    expect(missingWalletConsent.response.status).toBe(400);
+    expect(missingWalletConsent.payload.code).toBe("agent_file_walrus_renewal_confirmation_required");
+    expect((await request(server.base, `/workspace/${workspaceA}/agent-files/${fileId}/renew`, {
+      cookie: cookieB,
+      body: {
+        expectedRevision: 2,
+        network: "testnet",
+        signer: "0x1",
+        acknowledgeWalletPayment: true,
+      },
+    })).response.status).toBe(404);
+
+    const prepared = await request(server.base, `/workspace/${workspaceA}/agent-files/${fileId}/renew`, {
+      cookie: cookieA,
+      body: {
+        expectedRevision: 2,
+        network: "testnet",
+        signer: "0x1",
+        acknowledgeWalletPayment: true,
+      },
+    });
+    expect(prepared.response.status).toBe(200);
+    expect(prepared.payload).toMatchObject({
+      preview: {
+        fileId,
+        fileRevision: 2,
+        network: "testnet",
+        signer: normalizeSuiAddress("0x1"),
+        previousValidUntilEpoch: 15,
+        targetValidUntilEpoch: 20,
+        walletAuthority: "connected_wallet_only",
+      },
+      disclosure: {
+        paymentAsset: "WAL",
+        signingAndSubmission: "connected_wallet_only",
+        agentAuthority: "none",
+      },
+    });
+    expect(prepared.payload.preview.intentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(prepared.payload.preview.transactionBytesBase64).toBeString();
+
+    const tampered = await request(server.base, `/workspace/${workspaceA}/agent-files/${fileId}/renew/confirm`, {
+      cookie: cookieA,
+      body: {
+        intentId: prepared.payload.preview.intentId,
+        intentHash: "0".repeat(64),
+        transactionDigest: prepared.payload.preview.transactionDigest,
+      },
+    });
+    expect(tampered.response.status).toBe(409);
+    expect(tampered.payload.code).toBe("agent_file_walrus_renewal_intent_mismatch");
+
+    server.setWalrusValidUntilEpoch(20);
+    const confirmed = await request(server.base, `/workspace/${workspaceA}/agent-files/${fileId}/renew/confirm`, {
+      cookie: cookieA,
+      body: {
+        intentId: prepared.payload.preview.intentId,
+        intentHash: prepared.payload.preview.intentHash,
+        transactionDigest: prepared.payload.preview.transactionDigest,
+      },
+    });
+    expect(confirmed.response.status).toBe(200);
+    expect(confirmed.payload).toMatchObject({
+      item: {
+        revision: 3,
+        publication: {
+          validUntilEpoch: 20,
+          renewalTransactionDigest: prepared.payload.preview.transactionDigest,
+        },
+      },
+      verification: { verified: true, validUntilEpoch: 20 },
+    });
+    const replay = await request(server.base, `/workspace/${workspaceA}/agent-files/${fileId}/renew/confirm`, {
+      cookie: cookieA,
+      body: {
+        intentId: prepared.payload.preview.intentId,
+        intentHash: prepared.payload.preview.intentHash,
+        transactionDigest: prepared.payload.preview.transactionDigest,
+      },
+    });
+    expect(replay.response.status).toBe(410);
+    expect(replay.payload.code).toBe("agent_file_walrus_renewal_expired_or_replayed");
+  });
+
   test("destroys Agent File recovery keys before account deletion completes", async () => {
     const server = await boot("internal", { agentFiles: true });
     const email = "agent-files-delete@example.com";
@@ -846,6 +1013,7 @@ describe("crypto coworker HTTP boundary", () => {
     expect(transactionTemplate.payload.coworker.allowedNetworks).toEqual([
       "sui:testnet",
       "hyperliquid:testnet",
+      "bittensor:test",
     ]);
 
     const created = await request(server.base, `/workspace/${workspaceA}/coworkers`, {

@@ -184,6 +184,7 @@ import {
   buildSuiTransactionPreview,
   buildSuiTransactionPreviewCard,
   SuiInputError,
+  SUI_GRPC_URLS,
   type SuiTransactionReceiptInput,
   type SuiTransactionPreviewInput,
   suiProvider,
@@ -387,9 +388,19 @@ import {
   type MatterhornAgentFileStore,
 } from "./agent-file-store.js";
 import {
+  createMatterhornAgentFileWalrusCertificationVerifier,
   createMatterhornAgentFileWalrusPublisher,
+  matterhornAgentFileWalrusStorageEpochs,
 } from "./agent-file-walrus-runtime.js";
 import type { MatterhornAgentFileWalrusPublisher } from "./agent-file-walrus-publisher.js";
+import {
+  createPinnedSuiTransactionStatusVerifier,
+  createPinnedWalrusRenewalTransactionBuilder,
+  MatterhornAgentFileWalrusRenewalError,
+  type MatterhornAgentFileWalrusRenewalService,
+  type MatterhornSuiTransactionStatusVerifier,
+  type MatterhornWalrusRenewalTransactionBuilder,
+} from "./agent-file-walrus-renewal.js";
 import type {
   MatterhornWalrusCertificationVerifier,
   MatterhornWalrusEvidenceTransport,
@@ -1323,6 +1334,8 @@ export type MatterhornServerDependencies = {
   evidenceKeyManager?: MatterhornEvidenceKeyManager | null;
   agentFileWalrusTransport?: MatterhornWalrusEvidenceTransport;
   agentFileWalrusCertificationVerifier?: MatterhornWalrusCertificationVerifier;
+  agentFileWalrusRenewalTransactionBuilder?: MatterhornWalrusRenewalTransactionBuilder;
+  agentFileWalrusTransactionStatusVerifier?: MatterhornSuiTransactionStatusVerifier;
 };
 
 export async function startServer(
@@ -1374,14 +1387,29 @@ export async function startServer(
     && evidenceKeyManager
     ? guardedRuntime.createAgentFileStore(evidenceKeyManager)
     : null;
+  const agentFileWalrusCertificationVerifier = createMatterhornAgentFileWalrusCertificationVerifier(
+    dependencies.agentFileWalrusCertificationVerifier,
+  );
   const agentFileWalrusPublisher = createMatterhornAgentFileWalrusPublisher(
     process.env,
     agentFileStore,
     {
       transport: dependencies.agentFileWalrusTransport,
-      certificationVerifier: dependencies.agentFileWalrusCertificationVerifier,
+      certificationVerifier: agentFileWalrusCertificationVerifier,
     },
   );
+  const agentFileWalrusRenewal: MatterhornAgentFileWalrusRenewalService | null = agentFileStore
+    && agentFileWalrusPublisher
+    ? guardedRuntime.createAgentFileWalrusRenewalService({
+      store: agentFileStore,
+      buildTransaction: dependencies.agentFileWalrusRenewalTransactionBuilder
+        ?? createPinnedWalrusRenewalTransactionBuilder({ endpoint: SUI_GRPC_URLS.testnet }),
+      verifyTransaction: dependencies.agentFileWalrusTransactionStatusVerifier
+        ?? createPinnedSuiTransactionStatusVerifier({ endpoint: SUI_GRPC_URLS.testnet }),
+      verifyCertification: agentFileWalrusCertificationVerifier,
+      extensionEpochs: matterhornAgentFileWalrusStorageEpochs(process.env),
+    })
+    : null;
   guardedRuntime.setCoworkerResolver((binding) => (
     coworkerBindingIsActive(coworkerRuntime, binding)
     && coworkerAppBindingsAreActive(cryptoAppRuntime, binding)
@@ -1565,6 +1593,7 @@ export async function startServer(
     cryptoEvidenceRuntime,
     agentFileStore,
     agentFileWalrusPublisher,
+    agentFileWalrusRenewal,
     drainEmailOutbox,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
@@ -3373,6 +3402,31 @@ function agentFileApiError(error: unknown): ApiError {
 
 function agentFileWalrusApiError(error: unknown): ApiError {
   if (error instanceof MatterhornAgentFileStoreError) return agentFileApiError(error);
+  if (error instanceof MatterhornAgentFileWalrusRenewalError) {
+    if (error.code === "agent_file_not_found") {
+      return new ApiError(404, error.code, "Agent file not found.");
+    }
+    if (error.code === "agent_file_walrus_renewal_signer_invalid"
+      || error.code === "agent_file_walrus_renewal_input_invalid") {
+      return new ApiError(400, error.code, "Renewal details are invalid.");
+    }
+    if (error.code === "agent_file_walrus_certification_expired"
+      || error.code === "agent_file_walrus_renewal_expired_or_replayed") {
+      return new ApiError(410, error.code, "This renewal expired or was already used. Prepare a new renewal.");
+    }
+    if (error.code === "agent_file_walrus_renewal_not_due") {
+      return new ApiError(409, error.code, "This backup does not need renewal yet.");
+    }
+    if (error.code === "agent_file_walrus_renewal_in_progress") {
+      return new ApiError(409, error.code, "A wallet renewal is already waiting for this file.");
+    }
+    if (error.code === "agent_file_walrus_renewal_transaction_failed") {
+      return new ApiError(409, error.code, "The wallet transaction failed. Prepare a new renewal.");
+    }
+    if (error.code.includes("mismatch") || error.code.endsWith("_invalid")) {
+      return new ApiError(409, error.code, "The renewal changed or could not be verified. Prepare it again.");
+    }
+  }
   const code = error instanceof Error ? error.message : "";
   if (code === "agent_file_already_published") {
     return new ApiError(409, code, "This file is already backed up.");
@@ -8347,6 +8401,7 @@ function createRoutes(
   cryptoEvidenceRuntime: MatterhornCryptoEvidenceRuntime,
   agentFileStore: MatterhornAgentFileStore | null,
   agentFileWalrusPublisher: MatterhornAgentFileWalrusPublisher | null,
+  agentFileWalrusRenewal: MatterhornAgentFileWalrusRenewalService | null,
   drainEmailOutbox: () => Promise<void>,
 ): Route[] {
   const routes: Route[] = [];
@@ -9698,6 +9753,7 @@ function createRoutes(
       cloudBackup: {
         available: Boolean(agentFileWalrusPublisher),
         network: agentFileWalrusPublisher ? "testnet" : null,
+        renewalAvailable: Boolean(agentFileWalrusRenewal),
       },
       items: agentFileStore?.list({
         workspaceId: workspace.id,
@@ -9763,6 +9819,78 @@ function createRoutes(
         workspaceId: workspace.id,
         ownerId: cryptoAppCreatedBy(ctx),
         fileId: ctx.params.fileId,
+        signal: ctx.request.signal,
+      }));
+    } catch (error) {
+      throw agentFileWalrusApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/agent-files/:fileId/renew", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!agentFileWalrusRenewal) {
+      throw new ApiError(503, "agent_file_walrus_unavailable", "Secure cloud backup renewal is not enabled.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request, 4_096, "Agent file cloud backup renewal");
+    const expectedRevision = isRecord(body) && typeof body.expectedRevision === "number"
+      && Number.isSafeInteger(body.expectedRevision) && body.expectedRevision > 0
+      ? body.expectedRevision
+      : null;
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => ![
+        "expectedRevision", "network", "signer", "acknowledgeWalletPayment",
+      ].includes(key))
+      || expectedRevision === null
+      || body.network !== "testnet"
+      || typeof body.signer !== "string"
+      || body.acknowledgeWalletPayment !== true) {
+      throw new ApiError(
+        400,
+        "agent_file_walrus_renewal_confirmation_required",
+        "Confirm the connected Sui testnet wallet will review and pay the WAL renewal cost.",
+      );
+    }
+    try {
+      return noStoreJsonResponse(await agentFileWalrusRenewal.prepare({
+        workspaceId: workspace.id,
+        ownerId: cryptoAppCreatedBy(ctx),
+        fileId: ctx.params.fileId,
+        expectedRevision,
+        signer: body.signer,
+        signal: ctx.request.signal,
+      }));
+    } catch (error) {
+      throw agentFileWalrusApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/agent-files/:fileId/renew/confirm", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!agentFileWalrusRenewal) {
+      throw new ApiError(503, "agent_file_walrus_unavailable", "Secure cloud backup renewal is not enabled.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request, 4_096, "Agent file cloud backup renewal confirmation");
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => ![
+        "intentId", "intentHash", "transactionDigest",
+      ].includes(key))
+      || typeof body.intentId !== "string"
+      || typeof body.intentHash !== "string"
+      || typeof body.transactionDigest !== "string") {
+      throw new ApiError(400, "agent_file_walrus_renewal_input_invalid", "Renewal confirmation is invalid.");
+    }
+    try {
+      return noStoreJsonResponse(await agentFileWalrusRenewal.confirm({
+        workspaceId: workspace.id,
+        ownerId: cryptoAppCreatedBy(ctx),
+        fileId: ctx.params.fileId,
+        intentId: body.intentId,
+        intentHash: body.intentHash,
+        transactionDigest: body.transactionDigest,
         signal: ctx.request.signal,
       }));
     } catch (error) {

@@ -1,6 +1,13 @@
 /** @jsxImportSource react */
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  useCurrentAccount,
+  useWalletConnection,
+  useWallets,
+  type UiWallet,
+} from "@mysten/dapp-kit-react";
+import { Transaction } from "@mysten/sui/transactions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Cloud,
@@ -11,6 +18,7 @@ import {
   ShieldCheck,
   Trash2,
   Users,
+  Wallet,
 } from "lucide-react";
 
 import type {
@@ -23,6 +31,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { ConfirmModal } from "../../design-system/modals/confirm-modal";
+import { suiDAppKit } from "../../infra/sui-dapp-kit";
 import { useStatusToasts } from "../shell-feedback/status-toasts";
 import {
   useMatterhornSessionAgentFileContextStore,
@@ -102,6 +111,20 @@ function agentFileErrorMessage(error: unknown): string {
     if (error.code === "agent_file_walrus_certification_expired") {
       return "This cloud copy has expired. The encrypted workspace file is still available, but the public backup cannot be used.";
     }
+    if (error.code === "agent_file_walrus_renewal_not_due") return "This cloud copy does not need renewal yet.";
+    if (error.code === "agent_file_walrus_renewal_in_progress") return "A renewal is already waiting for wallet review.";
+    if (error.code === "agent_file_walrus_renewal_expired_or_replayed") {
+      return "This renewal expired or was already used. Check the backup and prepare it again.";
+    }
+    if (error.code === "agent_file_walrus_renewal_intent_mismatch") {
+      return "The renewal changed after review. Nothing was recorded; prepare it again.";
+    }
+    if (error.code === "agent_file_walrus_renewal_transaction_failed") {
+      return "The Sui wallet transaction failed. The cloud copy was not renewed.";
+    }
+    if (error.code === "agent_file_walrus_renewal_certification_mismatch") {
+      return "Sui has not confirmed the renewed storage period yet. Check again shortly.";
+    }
     if (error.code === "coworker_execution_not_ready" || error.code === "coworker_runtime_disabled") {
       return "Coworkers are not enabled in this environment yet.";
     }
@@ -140,14 +163,22 @@ function FileRow(props: {
   item: MatterhornStoredAgentFile;
   selected: boolean;
   backupAvailable: boolean;
+  renewalAvailable: boolean;
   busy: boolean;
   verification: MatterhornAgentFileWalrusVerification | null;
   confirmingBackup: boolean;
+  renewingBackup: boolean;
+  connectedWalletAddress: string | null;
+  wallets: UiWallet[];
   onSelect: () => void;
   onBackup: () => void;
   onCancelBackup: () => void;
   onConfirmBackup: () => void;
   onVerify: () => void;
+  onRenew: () => void;
+  onCancelRenewal: () => void;
+  onConnectWallet: (wallet: UiWallet) => void;
+  onConfirmRenewal: () => void;
   onRecover: () => void;
   onDelete: () => void;
 }) {
@@ -197,13 +228,56 @@ function FileRow(props: {
             <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancelBackup}>Cancel</Button>
           </div>
         </div>
+      ) : props.renewingBackup ? (
+        <div className="mt-3 border-t border-dls-border/70 pt-3 text-xs leading-5 text-dls-secondary">
+          <p>
+            Renewal uses WAL on Sui testnet. Matterhorn checks the exact transaction; your connected wallet is the only signer and submitter.
+          </p>
+          {props.connectedWalletAddress ? (
+            <p className="mt-2 font-mono text-[11px] text-dls-text">
+              {props.connectedWalletAddress.slice(0, 10)}…{props.connectedWalletAddress.slice(-6)}
+            </p>
+          ) : props.wallets.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2" aria-label="Available Sui wallets">
+              {props.wallets.slice(0, 3).map((wallet) => (
+                <Button
+                  key={`${wallet.name}-${wallet.version}`}
+                  size="sm"
+                  variant="outline"
+                  disabled={props.busy}
+                  onClick={() => props.onConnectWallet(wallet)}
+                >
+                  <Wallet aria-hidden="true" />
+                  Connect {wallet.name}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-dls-text">Install a Sui-compatible wallet to renew this copy.</p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {props.connectedWalletAddress ? (
+              <Button size="sm" disabled={props.busy} onClick={props.onConfirmRenewal}>
+                {props.busy ? "Opening wallet…" : "Review renewal in wallet"}
+              </Button>
+            ) : null}
+            <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancelRenewal}>Cancel</Button>
+          </div>
+        </div>
       ) : (
         <div className="mt-3 flex flex-wrap gap-1 pl-7">
           {props.item.publication ? (
-            <Button size="xs" variant="ghost" disabled={props.busy} onClick={props.onVerify}>
-              <RefreshCw aria-hidden="true" className={cn("size-3.5", props.busy && "animate-spin motion-reduce:animate-none")} />
-              Check backup
-            </Button>
+            <>
+              <Button size="xs" variant="ghost" disabled={props.busy} onClick={props.onVerify}>
+                <RefreshCw aria-hidden="true" className={cn("size-3.5", props.busy && "animate-spin motion-reduce:animate-none")} />
+                Check backup
+              </Button>
+              {props.renewalAvailable && props.verification?.lifecycle.status === "renewal_due" ? (
+                <Button size="xs" variant="outline" disabled={props.busy} onClick={props.onRenew}>
+                  Renew backup
+                </Button>
+              ) : null}
+            </>
           ) : props.backupAvailable ? (
             <Button size="xs" variant="ghost" disabled={props.busy} onClick={props.onBackup}>
               <Cloud aria-hidden="true" className="size-3.5" />
@@ -227,6 +301,9 @@ function FileRow(props: {
 export function AgentFilesPanel(props: AgentFilesPanelProps) {
   const queryClient = useQueryClient();
   const { showToast } = useStatusToasts();
+  const walletConnection = useWalletConnection();
+  const wallets = useWallets();
+  const account = useCurrentAccount();
   const inputRef = useRef<HTMLInputElement>(null);
   const workspaceId = props.workspaceId?.trim() ?? "";
   const queryKey = [QUERY_PREFIX, workspaceId];
@@ -239,6 +316,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
   const [creatingCoworker, setCreatingCoworker] = useState<"market_analyst" | "risk_monitor" | null>(null);
   const [busyFileId, setBusyFileId] = useState<string | null>(null);
   const [confirmingBackupId, setConfirmingBackupId] = useState<string | null>(null);
+  const [renewingBackupId, setRenewingBackupId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MatterhornStoredAgentFile | null>(null);
   const [fileVerifications, setFileVerifications] = useState<Record<string, MatterhornAgentFileWalrusVerification>>({});
   const [error, setError] = useState<string | null>(null);
@@ -374,7 +452,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
       showToast({
         title: renewalDue ? "Backup needs renewal soon" : "Backup checked",
         description: renewalDue
-          ? `The copy matches, with ${result.lifecycle.remainingEpochs} storage periods remaining. Renewal is not automatic.`
+          ? `The copy matches, with ${result.lifecycle.remainingEpochs} storage periods remaining. Renew it with your Sui wallet.`
           : `The encrypted public copy matches, with ${result.lifecycle.remainingEpochs} storage periods remaining.`,
         tone: renewalDue ? "warning" : "success",
       });
@@ -384,6 +462,75 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
       setBusyFileId(null);
     }
   }, [props.client, showToast, workspaceId]);
+
+  const connectRenewalWallet = useCallback(async (fileId: string, wallet: UiWallet) => {
+    setBusyFileId(fileId);
+    setError(null);
+    try {
+      await suiDAppKit.connectWallet({ wallet });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not connect the Sui wallet.");
+    } finally {
+      setBusyFileId(null);
+    }
+  }, []);
+
+  const renew = useCallback(async (item: MatterhornStoredAgentFile) => {
+    if (!props.client || !workspaceId) return;
+    if (!account?.address) {
+      setError("Connect the Sui wallet that will review and pay for this renewal.");
+      return;
+    }
+    setBusyFileId(item.id);
+    setError(null);
+    try {
+      const prepared = await props.client.renewAgentFile(workspaceId, item.id, {
+        expectedRevision: item.revision,
+        signer: account.address,
+      });
+      if (prepared.preview.signer.toLowerCase() !== account.address.toLowerCase()) {
+        throw new Error("The connected Sui wallet does not match the renewal signer.");
+      }
+      const transaction = Transaction.from(prepared.preview.transactionBytesBase64);
+      const localDigest = await transaction.getDigest();
+      if (localDigest !== prepared.preview.transactionDigest) {
+        throw new Error("The renewal transaction changed before wallet review.");
+      }
+      const result = await suiDAppKit.signAndExecuteTransaction({
+        transaction,
+        account,
+        network: "testnet",
+      });
+      const executed = "Transaction" in result ? result.Transaction : result.FailedTransaction;
+      if (!executed?.digest || executed.digest !== prepared.preview.transactionDigest) {
+        throw new Error("The wallet returned a different transaction. The renewal was not recorded.");
+      }
+      if (!("Transaction" in result)) {
+        throw new Error(executed.status?.error?.message ?? "The Sui wallet returned a failed renewal transaction.");
+      }
+      const confirmed = await props.client.confirmAgentFileRenewal(workspaceId, item.id, {
+        intentId: prepared.preview.intentId,
+        intentHash: prepared.preview.intentHash,
+        transactionDigest: executed.digest,
+      });
+      setFileVerifications((current) => ({ ...current, [item.id]: confirmed.verification }));
+      setRenewingBackupId(null);
+      await refresh();
+      showToast({
+        title: "Cloud copy renewed",
+        description: `Sui confirmed storage through period ${confirmed.verification.validUntilEpoch}.`,
+        tone: "success",
+      });
+    } catch (cause) {
+      const message = agentFileErrorMessage(cause);
+      setError(message === "Matterhorn could not complete this file action. Try again."
+        && cause instanceof Error
+        ? cause.message
+        : message);
+    } finally {
+      setBusyFileId(null);
+    }
+  }, [account, props.client, refresh, showToast, workspaceId]);
 
   const remove = useCallback(async () => {
     if (!props.client || !workspaceId || !deleteTarget) return;
@@ -599,9 +746,13 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
                     item={item}
                     selected={selectedFileIds.includes(item.id)}
                     backupAvailable={query.data.files.cloudBackup.available}
-                    busy={busyFileId === item.id}
+                    renewalAvailable={query.data.files.cloudBackup.renewalAvailable}
+                    busy={busyFileId === item.id || walletConnection.isConnecting}
                     verification={fileVerifications[item.id] ?? null}
                     confirmingBackup={confirmingBackupId === item.id}
+                    renewingBackup={renewingBackupId === item.id}
+                    connectedWalletAddress={account?.address ?? null}
+                    wallets={wallets}
                     onSelect={() => setSelectedFileIds((current) => (
                       current.includes(item.id)
                         ? current.filter((id) => id !== item.id)
@@ -614,6 +765,13 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
                     onCancelBackup={() => setConfirmingBackupId(null)}
                     onConfirmBackup={() => void backup(item)}
                     onVerify={() => void verify(item)}
+                    onRenew={() => {
+                      setError(null);
+                      setRenewingBackupId(item.id);
+                    }}
+                    onCancelRenewal={() => setRenewingBackupId(null)}
+                    onConnectWallet={(wallet) => void connectRenewalWallet(item.id, wallet)}
+                    onConfirmRenewal={() => void renew(item)}
                     onRecover={() => void recover(item)}
                     onDelete={() => setDeleteTarget(item)}
                   />

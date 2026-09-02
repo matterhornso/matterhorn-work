@@ -27,6 +27,7 @@ import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 const STATE_KIND = "agent_file_record";
+const RENEWAL_STATE_KIND = "agent_file_renewal_intent";
 const ENVELOPE_VERSION = "matterhorn.agent-file-envelope.v1";
 const ALGORITHM = "aes-256-gcm";
 const IV_BYTES = 12;
@@ -207,6 +208,7 @@ function validPublicReference(value: string, maximum: number): boolean {
 function validatePublication(value: MatterhornAgentFileWalrusPublication): void {
   const publishedAt = Date.parse(value.publishedAt);
   const verifiedAt = Date.parse(value.verifiedAt);
+  const renewedAt = value.renewedAt === undefined ? null : Date.parse(value.renewedAt);
   if (value.version !== MATTERHORN_AGENT_FILE_WALRUS_PUBLICATION_VERSION
     || value.network !== "testnet"
     || !validPublicReference(value.blobId, 256)
@@ -218,6 +220,9 @@ function validatePublication(value: MatterhornAgentFileWalrusPublication): void 
     || value.validUntilEpoch <= value.certifiedEpoch
     || (value.suiTransactionDigest !== null
       && !validPublicReference(value.suiTransactionDigest, 256))
+    || (value.renewalTransactionDigest !== undefined
+      && !validPublicReference(value.renewalTransactionDigest, 256))
+    || (renewedAt !== null && (!Number.isFinite(renewedAt) || renewedAt < publishedAt))
     || !Number.isFinite(publishedAt)
     || !Number.isFinite(verifiedAt)
     || verifiedAt < publishedAt) {
@@ -499,6 +504,60 @@ export class MatterhornAgentFileStore {
     return accountView(next);
   }
 
+  renewWalrusPublication(input: {
+    workspaceId: string;
+    ownerId: string;
+    fileId: string;
+    expectedRevision: number;
+    expectedBlobId: string;
+    expectedSuiObjectId: string;
+    expectedCiphertextSha256: string;
+    expectedPreviousValidUntilEpoch: number;
+    publication: MatterhornAgentFileWalrusPublication;
+    now?: Date;
+  }): MatterhornStoredAgentFile {
+    validatePublication(input.publication);
+    const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
+    if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
+    assertTenant(record, input);
+    const current = record.publication;
+    if (record.revision !== input.expectedRevision
+      || !current
+      || current.blobId !== input.expectedBlobId
+      || current.suiObjectId !== input.expectedSuiObjectId
+      || current.ciphertextSha256 !== input.expectedCiphertextSha256
+      || current.validUntilEpoch !== input.expectedPreviousValidUntilEpoch) {
+      throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
+    }
+    if (input.publication.blobId !== current.blobId
+      || input.publication.suiObjectId !== current.suiObjectId
+      || input.publication.ciphertextSha256 !== current.ciphertextSha256
+      || input.publication.certifiedEpoch !== current.certifiedEpoch
+      || input.publication.suiTransactionDigest !== current.suiTransactionDigest
+      || input.publication.publishedAt !== current.publishedAt
+      || input.publication.validUntilEpoch <= current.validUntilEpoch
+      || !input.publication.renewalTransactionDigest
+      || !input.publication.renewedAt) {
+      throw new MatterhornAgentFileStoreError("agent_file_walrus_renewal_invalid");
+    }
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
+    const next: MatterhornAgentFileRecord = {
+      ...record,
+      revision: record.revision + 1,
+      publication: structuredClone(input.publication),
+      updatedAt: now.toISOString(),
+    };
+    this.stateStore.put({
+      kind: STATE_KIND,
+      key: next.id,
+      workspaceId: next.workspaceId,
+      value: next,
+      nowMs: now.getTime(),
+    });
+    return accountView(next);
+  }
+
   async delete(input: {
     workspaceId: string;
     ownerId: string;
@@ -516,6 +575,7 @@ export class MatterhornAgentFileStore {
       throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
     }
     await this.keyManager.destroyKey({ workspaceId: record.workspaceId, keyReference: record.key.keyReference });
+    this.stateStore.delete(RENEWAL_STATE_KIND, record.id);
     this.stateStore.delete(STATE_KIND, record.id);
     this.stateStore.secureCheckpoint();
   }
