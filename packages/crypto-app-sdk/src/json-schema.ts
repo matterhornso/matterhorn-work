@@ -9,11 +9,22 @@ export type CryptoAppSchemaResult<T = unknown> = {
 const MAX_SCHEMA_DEPTH = 8;
 const MAX_ARRAY_ITEMS = 1_000;
 const MAX_STRING_CHARS = 100_000;
+const MAX_SCHEMA_DESCRIPTION_CHARS = 500;
+const MAX_SCHEMA_LITERAL_STRING_CHARS = 1_024;
 const SAFE_TYPES = new Set(["object", "array", "string", "number", "integer", "boolean", "null"]);
 const SAFE_KEYS = new Set([
   "type", "description", "properties", "required", "additionalProperties", "items", "enum", "const",
   "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems", "oneOf",
 ]);
+const KEYS_BY_TYPE: Readonly<Record<string, ReadonlySet<string>>> = {
+  object: new Set(["type", "description", "properties", "required", "additionalProperties"]),
+  array: new Set(["type", "description", "items", "minItems", "maxItems"]),
+  string: new Set(["type", "description", "enum", "const", "minLength", "maxLength"]),
+  number: new Set(["type", "description", "enum", "const", "minimum", "maximum"]),
+  integer: new Set(["type", "description", "enum", "const", "minimum", "maximum"]),
+  boolean: new Set(["type", "description", "enum", "const"]),
+  null: new Set(["type", "description", "enum", "const"]),
+};
 const UNSAFE_PROPERTY_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const SAFE_PROPERTY_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const SENSITIVE_PROPERTY_KEYS = new Set([
@@ -59,6 +70,12 @@ const EXECUTION_AUTHORITY_PROPERTY_KEYS = new Set([
   "submit",
   "submittransaction",
 ]);
+const SENSITIVE_PROPERTY_TOKENS = new Set([
+  "authorization", "bearer", "capability", "credential", "credentials", "jwt", "mnemonic",
+  "passphrase", "password", "secret", "signature", "suri",
+]);
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
+const EMBEDDED_SECRET_LITERAL = /-----BEGIN (?:EC |OPENSSH |RSA )?PRIVATE KEY-----|\bAKIA[A-Z0-9]{16}\b|\bgh[ps]_[A-Za-z0-9]{20,}\b|\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}\b|\bsk-[A-Za-z0-9_-]{20,}\b|\bBearer\s+[A-Za-z0-9._-]{8,}\b/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -72,8 +89,83 @@ function pathIssue(path: string, code: string): string {
   return `${path || "$"}:${code}`;
 }
 
+function hasOwn(value: object, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function safeChildPath(path: string, key: string): string {
+  return SAFE_PROPERTY_KEY.test(key) ? `${path}.${key}` : `${path}.*`;
+}
+
+function validSchemaLiteral(value: unknown): boolean {
+  if (value === null || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  return typeof value === "string"
+    && value.length <= MAX_SCHEMA_LITERAL_STRING_CHARS
+    && !CONTROL_CHARACTER.test(value)
+    && !EMBEDDED_SECRET_LITERAL.test(value);
+}
+
+function literalMatchesType(type: unknown, value: unknown): boolean {
+  if (type === "null") return value === null;
+  if (type === "boolean") return typeof value === "boolean";
+  if (type === "string") return typeof value === "string";
+  if (type === "number") return typeof value === "number" && Number.isFinite(value);
+  if (type === "integer") return typeof value === "number" && Number.isInteger(value);
+  return false;
+}
+
 function normalizedPropertyKey(key: string): string {
   return key.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+}
+
+function propertyKeyTokens(key: string): string[] {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .split(/[_-]+/)
+    .map((part) => part.toLowerCase())
+    .filter(Boolean);
+}
+
+function hasTokenPair(tokens: readonly string[], first: string, second: string): boolean {
+  return tokens.some((token, index) => token === first && tokens[index + 1] === second);
+}
+
+function hasSensitivePropertySemantics(key: string): boolean {
+  const tokens = propertyKeyTokens(key);
+  if (tokens.some((token) => SENSITIVE_PROPERTY_TOKENS.has(token))) return true;
+  return hasTokenPair(tokens, "api", "key")
+    || hasTokenPair(tokens, "api", "secret")
+    || hasTokenPair(tokens, "access", "token")
+    || hasTokenPair(tokens, "refresh", "token")
+    || hasTokenPair(tokens, "session", "token")
+    || hasTokenPair(tokens, "client", "secret")
+    || hasTokenPair(tokens, "private", "key")
+    || hasTokenPair(tokens, "secret", "key")
+    || hasTokenPair(tokens, "seed", "phrase")
+    || hasTokenPair(tokens, "seed", "words")
+    || hasTokenPair(tokens, "recovery", "phrase")
+    || hasTokenPair(tokens, "wallet", "export")
+    || hasTokenPair(tokens, "wallet", "signature")
+    || hasTokenPair(tokens, "wallet", "credential")
+    || hasTokenPair(tokens, "raw", "signature")
+    || hasTokenPair(tokens, "signed", "payload")
+    || hasTokenPair(tokens, "signed", "transaction")
+    || hasTokenPair(tokens, "signed", "order")
+    || hasTokenPair(tokens, "signed", "message")
+    || hasTokenPair(tokens, "signing", "payload")
+    || hasTokenPair(tokens, "transaction", "bytes")
+    || hasTokenPair(tokens, "tx", "bytes");
+}
+
+function hasExecutionAuthoritySemantics(key: string): boolean {
+  const tokens = propertyKeyTokens(key);
+  if (tokens.some((token) => ["sign", "submit", "relay", "broadcast"].includes(token))) return true;
+  return hasTokenPair(tokens, "send", "transaction")
+    || hasTokenPair(tokens, "execute", "transaction")
+    || hasTokenPair(tokens, "execute", "order")
+    || hasTokenPair(tokens, "place", "order")
+    || hasTokenPair(tokens, "cancel", "order");
 }
 
 function inspectPropertyKey(key: string, path: string, issues: string[]): void {
@@ -86,10 +178,10 @@ function inspectPropertyKey(key: string, path: string, issues: string[]): void {
     return;
   }
   const normalized = normalizedPropertyKey(key);
-  if (SENSITIVE_PROPERTY_KEYS.has(normalized)) {
+  if (SENSITIVE_PROPERTY_KEYS.has(normalized) || hasSensitivePropertySemantics(key)) {
     issues.push(pathIssue(path, "schema_property_sensitive_forbidden"));
   }
-  if (EXECUTION_AUTHORITY_PROPERTY_KEYS.has(normalized)) {
+  if (EXECUTION_AUTHORITY_PROPERTY_KEYS.has(normalized) || hasExecutionAuthoritySemantics(key)) {
     issues.push(pathIssue(path, "schema_property_execution_authority_forbidden"));
   }
 }
@@ -106,10 +198,20 @@ function inspectSchema(schema: JsonSchema, path: string, depth: number, issues: 
     return;
   }
   for (const key of Object.keys(schema)) {
-    if (!SAFE_KEYS.has(key)) issues.push(pathIssue(path, `schema_keyword_unsupported_${key}`));
+    if (!SAFE_KEYS.has(key)) issues.push(pathIssue(path, "schema_keyword_unsupported"));
+  }
+  if (schema.description !== undefined
+    && (typeof schema.description !== "string"
+      || schema.description.length > MAX_SCHEMA_DESCRIPTION_CHARS
+      || CONTROL_CHARACTER.test(schema.description)
+      || EMBEDDED_SECRET_LITERAL.test(schema.description))) {
+    issues.push(pathIssue(path, "schema_description_invalid"));
   }
   if (Array.isArray(schema.oneOf)) {
     if (schema.oneOf.length < 1 || schema.oneOf.length > 8) issues.push(pathIssue(path, "schema_one_of_invalid"));
+    if (Object.keys(schema).some((key) => key !== "oneOf" && key !== "description")) {
+      issues.push(pathIssue(path, "schema_one_of_sibling_unsupported"));
+    }
     for (const [index, option] of schema.oneOf.entries()) {
       const nested = schemaAt(option);
       if (!nested) issues.push(pathIssue(`${path}.oneOf[${index}]`, "schema_not_object"));
@@ -121,11 +223,22 @@ function inspectSchema(schema: JsonSchema, path: string, depth: number, issues: 
     issues.push(pathIssue(path, "schema_type_invalid"));
     return;
   }
-  if (schema.description !== undefined && typeof schema.description !== "string") {
-    issues.push(pathIssue(path, "schema_description_invalid"));
+  const applicableKeys = KEYS_BY_TYPE[schema.type];
+  if (applicableKeys && Object.keys(schema).some((key) => SAFE_KEYS.has(key) && !applicableKeys.has(key))) {
+    issues.push(pathIssue(path, "schema_keyword_inapplicable"));
   }
-  if (schema.enum !== undefined && (!Array.isArray(schema.enum) || schema.enum.length < 1 || schema.enum.length > 100)) {
-    issues.push(pathIssue(path, "schema_enum_invalid"));
+  if (schema.enum !== undefined) {
+    if (!Array.isArray(schema.enum)
+      || schema.enum.length < 1
+      || schema.enum.length > 100
+      || schema.enum.some((value) => !validSchemaLiteral(value) || !literalMatchesType(schema.type, value))
+      || new Set(schema.enum.map((value) => `${typeof value}:${String(value)}`)).size !== schema.enum.length) {
+      issues.push(pathIssue(path, "schema_enum_invalid"));
+    }
+  }
+  if (schema.const !== undefined
+    && (!validSchemaLiteral(schema.const) || !literalMatchesType(schema.type, schema.const))) {
+    issues.push(pathIssue(path, "schema_const_invalid"));
   }
   if (schema.type === "object") {
     if (schema.additionalProperties !== false) issues.push(pathIssue(path, "schema_object_must_be_closed"));
@@ -137,7 +250,7 @@ function inspectSchema(schema: JsonSchema, path: string, depth: number, issues: 
     const propertyKeys = Object.keys(properties);
     if (propertyKeys.length > 200) issues.push(pathIssue(path, "schema_properties_exceeded"));
     for (const key of propertyKeys) {
-      const nestedPath = SAFE_PROPERTY_KEY.test(key) ? `${path}.${key}` : `${path}.*`;
+      const nestedPath = safeChildPath(path, key);
       inspectPropertyKey(key, nestedPath, issues);
       const nested = schemaAt(properties[key]);
       if (!nested) issues.push(pathIssue(nestedPath, "schema_not_object"));
@@ -162,6 +275,11 @@ function inspectSchema(schema: JsonSchema, path: string, depth: number, issues: 
     if (typeof schema.maxItems === "number" && schema.maxItems > MAX_ARRAY_ITEMS) {
       issues.push(pathIssue(path, "schema_max_items_exceeded"));
     }
+    if (typeof schema.minItems === "number"
+      && typeof schema.maxItems === "number"
+      && schema.minItems > schema.maxItems) {
+      issues.push(pathIssue(path, "schema_item_bounds_invalid"));
+    }
   }
   if (schema.type === "string") {
     for (const key of ["minLength", "maxLength"] as const) {
@@ -172,12 +290,22 @@ function inspectSchema(schema: JsonSchema, path: string, depth: number, issues: 
     if (typeof schema.maxLength === "number" && schema.maxLength > MAX_STRING_CHARS) {
       issues.push(pathIssue(path, "schema_max_length_exceeded"));
     }
+    if (typeof schema.minLength === "number"
+      && typeof schema.maxLength === "number"
+      && schema.minLength > schema.maxLength) {
+      issues.push(pathIssue(path, "schema_string_bounds_invalid"));
+    }
   }
   if (schema.type === "number" || schema.type === "integer") {
     for (const key of ["minimum", "maximum"] as const) {
       if (schema[key] !== undefined && (typeof schema[key] !== "number" || !Number.isFinite(schema[key]))) {
         issues.push(pathIssue(path, `schema_${key}_invalid`));
       }
+    }
+    if (typeof schema.minimum === "number"
+      && typeof schema.maximum === "number"
+      && schema.minimum > schema.maximum) {
+      issues.push(pathIssue(path, "schema_numeric_bounds_invalid"));
     }
   }
 }
@@ -284,16 +412,16 @@ function evaluate(
       const properties = (schema.properties ?? {}) as Record<string, JsonSchema>;
       const required = Array.isArray(schema.required) ? schema.required as string[] : [];
       for (const key of required) {
-        if (!(key in value)) issues.push(pathIssue(`${path}.${key}`, "value_required"));
+        if (!hasOwn(value, key)) issues.push(pathIssue(safeChildPath(path, key), "value_required"));
       }
       if (mode === "input") {
         for (const key of Object.keys(value)) {
-          if (!(key in properties)) issues.push(pathIssue(`${path}.${key}`, "value_unknown_property"));
+          if (!hasOwn(properties, key)) issues.push(pathIssue(safeChildPath(path, key), "value_unknown_property"));
         }
       }
       const output: Record<string, unknown> = {};
       for (const [key, nestedSchema] of Object.entries(properties)) {
-        if (!(key in value)) continue;
+        if (!hasOwn(value, key)) continue;
         output[key] = evaluate(nestedSchema, value[key], `${path}.${key}`, depth + 1, mode, issues);
       }
       return output;

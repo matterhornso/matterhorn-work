@@ -152,6 +152,34 @@ describe("Matterhorn crypto app SDK", () => {
     }));
   });
 
+  test("rejects unsafe schema literals and ambiguous unions before producing signing bytes", () => {
+    const unsafeLiteral = draft();
+    unsafeLiteral.actions[0]!.inputSchema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        address: {
+          type: "string",
+          enum: ["0x123", "sk-this-is-a-fake-token-1234567890"],
+        },
+      },
+    };
+    expect(() => buildCryptoAppSigningRequest(unsafeLiteral)).toThrowError(expect.objectContaining({
+      code: "manifest_invalid",
+      issues: expect.arrayContaining([expect.stringContaining("schema_enum_invalid")]),
+    }));
+
+    const ambiguousUnion = draft();
+    ambiguousUnion.actions[0]!.outputProjectionSchema = {
+      oneOf: [{ type: "string" }, { type: "null" }],
+      type: "string",
+    };
+    expect(() => buildCryptoAppSigningRequest(ambiguousUnion)).toThrowError(expect.objectContaining({
+      code: "manifest_invalid",
+      issues: expect.arrayContaining([expect.stringContaining("schema_one_of_sibling_unsupported")]),
+    }));
+  });
+
   test("validates inert fixtures with the same closed projection used by the server", () => {
     const keys = generateKeyPairSync("ed25519");
     const unsignedManifest = draft();

@@ -128,6 +128,8 @@ describe("crypto app manifest conformance", () => {
           properties: {
             wallet_signature: { type: "string" },
             broadcastTransaction: { type: "boolean" },
+            status: { type: "string", enum: ["ok", "sk-this-is-a-fake-token-1234567890"] },
+            ambiguous: { oneOf: [{ type: "string" }, { type: "null" }], type: "string" },
           },
         },
       },
@@ -142,7 +144,10 @@ describe("crypto app manifest conformance", () => {
     expect(report.findings).toEqual(expect.arrayContaining([
       expect.objectContaining({ category: "schema", code: expect.stringContaining("schema_property_sensitive_forbidden") }),
       expect.objectContaining({ category: "schema", code: expect.stringContaining("schema_property_execution_authority_forbidden") }),
+      expect.objectContaining({ category: "schema", code: expect.stringContaining("schema_enum_invalid") }),
+      expect.objectContaining({ category: "schema", code: expect.stringContaining("schema_one_of_sibling_unsupported") }),
     ]));
+    expect(JSON.stringify(report)).not.toContain("sk-this-is-a-fake-token-1234567890");
   });
 
   test("fails closed on hidden manifest controls and OAuth binding confusion", () => {
