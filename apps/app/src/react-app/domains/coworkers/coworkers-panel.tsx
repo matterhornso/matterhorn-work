@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { MatterhornCoworkerTemplateId } from "@matterhorn-work/types/crypto-coworkers";
+import type {
+  MatterhornCoworkerTemplateId,
+  MatterhornCryptoAppCatalogSummary,
+  MatterhornCryptoAppConnectionView,
+} from "@matterhorn-work/types/crypto-coworkers";
 import {
   Bell,
   Pause,
@@ -38,6 +42,7 @@ import {
   isActiveCoworkerWalletIntent,
   sortCoworkerWalletIntents,
 } from "./coworker-wallet-intent-view";
+import { buildCoworkerAppConnectionDraft } from "./coworker-app-connection";
 
 const QUERY_PREFIX = "coworker-control";
 
@@ -60,6 +65,7 @@ export type SessionCoworkersPanelProps = {
   selectedSessionId: string | null;
   selectedWorkspaceId: string;
   onClose: () => void;
+  onBrowseApps: () => void;
   onOpenWallet: (item: MatterhornCoworkerWalletIntentView) => boolean;
   onStartTask?: StartCoworkerTask;
 };
@@ -103,6 +109,16 @@ function coworkerErrorMessage(error: unknown): string {
     if (error.code === "coworker_resources_stale") return "This access list changed. Review it again before starting work.";
     if (error.code === "coworker_transition_invalid") return "That change is no longer available for this coworker.";
     if (error.code === "coworker_inbox_state_conflict") return "This alert changed. Refresh and try again.";
+    if (error.code === "crypto_app_gateway_disabled") return "Certified apps are not enabled for this invite yet.";
+    if (error.code === "app_certification_unavailable") return "This app is no longer approved. Refresh before connecting it.";
+    if (error.code === "crypto_app_connection_conflict" || error.code === "connection_transition_invalid") {
+      return "This app connection changed. Refresh and try again.";
+    }
+    if (error.code === "connection_action_not_allowed"
+      || error.code === "connection_scope_not_allowed"
+      || error.code === "connection_network_not_allowed") {
+      return "This app's approved access changed. Refresh and review it again.";
+    }
     if (error.code === "pending_crypto_intent_revision_conflict") return "This wallet review changed. Refresh and try again.";
     if (error.code === "pending_crypto_intent_expired" || error.code === "pending_crypto_intent_transition_invalid") {
       return "This wallet review can no longer be cancelled.";
@@ -221,6 +237,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [cancelIntent, setCancelIntent] = useState<MatterhornCoworkerWalletIntentView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const handledInitialTemplateRef = useRef<MatterhornCoworkerTemplateId | null>(null);
+  const newlyConnectedAppRef = useRef<string | null>(null);
   const boundCoworkerId = useMatterhornSessionCoworkerContextStore((state) => (
     selectedSessionId ? state.contexts[selectedSessionId]?.id ?? "" : ""
   ));
@@ -262,20 +279,35 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     retry: false,
     queryFn: async () => {
       if (!props.client || !selectedCoworker) throw new Error("coworker_unavailable");
-      const connectionsRequest = props.client.listCryptoAppConnections(workspaceId)
-        .then((response) => ({ available: true, connections: response.connections }))
+      const cryptoAppsRequest = Promise.all([
+        props.client.listCryptoApps(),
+        props.client.listCryptoAppConnections(workspaceId),
+      ])
+        .then(([catalog, connections]) => {
+          if (catalog.mode !== connections.mode) throw new Error("crypto_app_mode_mismatch");
+          return { available: true, apps: catalog.apps, connections: connections.connections };
+        })
         .catch((cause: unknown) => {
           if (cause instanceof MatterhornServerError && cause.code === "crypto_app_gateway_disabled") {
-            return { available: false, connections: [] };
+            const unavailable: {
+              available: false;
+              apps: MatterhornCryptoAppCatalogSummary[];
+              connections: MatterhornCryptoAppConnectionView[];
+            } = {
+              available: false,
+              apps: [],
+              connections: [],
+            };
+            return unavailable;
           }
           throw cause;
         });
-      const [scope, recommendation, files, memories, connections] = await Promise.all([
+      const [scope, recommendation, files, memories, cryptoApps] = await Promise.all([
         props.client.getCoworkerResources(workspaceId, selectedCoworker.id),
         props.client.getCoworkerResourceRecommendation(workspaceId, selectedCoworker.id),
         props.client.listAgentFiles(workspaceId),
         props.client.listWorkspaceMemory(workspaceId, { limit: 80 }),
-        connectionsRequest,
+        cryptoAppsRequest,
       ]);
       return {
         scope,
@@ -283,14 +315,16 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
         filesAvailable: files.available,
         files: files.items.filter((item) => item.file.access.coworkerIds.includes(selectedCoworker.id)),
         memories: memories.records.filter((record) => record.canUseInChat && record.sensitivity !== "forbidden_secret"),
-        connectionsAvailable: connections.available,
-        connections: connections.connections.filter((connection) => (
+        connectionsAvailable: cryptoApps.available,
+        allConnections: cryptoApps.connections,
+        connections: cryptoApps.connections.filter((connection) => (
           connection.state === "active"
           && connection.availability === "available"
           && selectedCoworker.allowedAppIds.includes(connection.appId)
           && connection.grantedActionIds.some((actionId) => selectedCoworker.allowedActionIds.includes(actionId))
           && connection.grantedNetworks.some((network) => selectedCoworker.allowedNetworks.includes(network))
         )),
+        apps: cryptoApps.apps.filter((app) => buildCoworkerAppConnectionDraft(selectedCoworker, app) !== null),
       };
     },
   });
@@ -304,6 +338,20 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     } : EMPTY_RESOURCE_DRAFT);
     setResourceRecommendationHash(null);
   }, [resourceQuery.data?.scope.resources?.scopeHash, selectedCoworker?.id]);
+
+  useEffect(() => {
+    const connectionId = newlyConnectedAppRef.current;
+    if (!connectionId || !resourceQuery.data?.connections.some((connection) => connection.id === connectionId)) return;
+    setResourceDraft((current) => ({
+      ...current,
+      connectionIds: current.connectionIds.includes(connectionId)
+        ? current.connectionIds
+        : [...current.connectionIds, connectionId],
+    }));
+    setResourceRecommendationHash(null);
+    setResourcesOpen(true);
+    newlyConnectedAppRef.current = null;
+  }, [resourceQuery.data?.connections]);
 
   const walletIntents = useMemo(
     () => sortCoworkerWalletIntents(detailQuery.data?.walletIntents ?? []),
@@ -325,6 +373,12 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       + resourceQuery.data.recommendation.memories.length
       + resourceQuery.data.recommendation.connections.length
     ) > 0,
+  );
+  const appsNeedingConnection = useMemo(
+    () => (resourceQuery.data?.apps ?? []).filter((app) => (
+      !resourceQuery.data?.connections.some((connection) => connection.appId === app.appId)
+    )),
+    [resourceQuery.data?.apps, resourceQuery.data?.connections],
   );
 
   const refresh = useCallback(async () => {
@@ -385,6 +439,54 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       setBusyAction(null);
     }
   }, [props.client, queryClient, resourceDraft, resourceKey, resourceQuery.data?.scope.resources?.revision, resourceRecommendationHash, selectedCoworker, showToast, workspaceId]);
+
+  const connectApp = useCallback(async (app: MatterhornCryptoAppCatalogSummary) => {
+    if (!props.client || !workspaceId || !selectedCoworker) return;
+    const draft = buildCoworkerAppConnectionDraft(selectedCoworker, app);
+    if (!draft) {
+      setError("This app needs a different connection flow. Open the full app catalog to continue.");
+      return;
+    }
+    setBusyAction(`connect-app:${app.appId}`);
+    setError(null);
+    try {
+      const response = await props.client.createCryptoAppConnection(workspaceId, draft);
+      newlyConnectedAppRef.current = response.connection.id;
+      await queryClient.invalidateQueries({ queryKey: resourceKey });
+      showToast({
+        title: `${app.displayName} connected`,
+        description: "Review the selected access, then save it for this coworker.",
+        tone: "success",
+      });
+    } catch (cause) {
+      setError(coworkerErrorMessage(cause));
+    } finally {
+      setBusyAction(null);
+    }
+  }, [props.client, queryClient, resourceKey, selectedCoworker, showToast, workspaceId]);
+
+  const resumeApp = useCallback(async (
+    app: MatterhornCryptoAppCatalogSummary,
+    connection: MatterhornCryptoAppConnectionView,
+  ) => {
+    if (!props.client || !workspaceId) return;
+    setBusyAction(`connect-app:${app.appId}`);
+    setError(null);
+    try {
+      const response = await props.client.transitionCryptoAppConnection(workspaceId, connection.id, "active");
+      newlyConnectedAppRef.current = response.connection.id;
+      await queryClient.invalidateQueries({ queryKey: resourceKey });
+      showToast({
+        title: `${app.displayName} resumed`,
+        description: "Review the selected access, then save it for this coworker.",
+        tone: "success",
+      });
+    } catch (cause) {
+      setError(coworkerErrorMessage(cause));
+    } finally {
+      setBusyAction(null);
+    }
+  }, [props.client, queryClient, resourceKey, showToast, workspaceId]);
 
   const createCoworker = useCallback(async (templateId: MatterhornCoworkerTemplateId) => {
     if (!props.client || !workspaceId) return;
@@ -776,6 +878,78 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                         ))}
                       </div>
                     ) : <p className="mt-2 text-xs leading-5 text-dls-secondary">No approved apps are connected for this coworker.</p>}
+
+                    {resourceQuery.data.connectionsAvailable && appsNeedingConnection.length ? (
+                      <div className="mt-3 border-t border-dls-border/70 pt-3">
+                        <p className="text-xs font-medium text-dls-text">Connect an app</p>
+                        <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                          Choose only what this coworker needs. Nothing is shared until you save access.
+                        </p>
+                        <ul className="mt-2 divide-y divide-dls-border/60">
+                          {appsNeedingConnection.map((app) => {
+                            const priorConnection = resourceQuery.data.allConnections.find((connection) => (
+                              connection.appId === app.appId && connection.state !== "revoked"
+                            ));
+                            const draft = buildCoworkerAppConnectionDraft(selectedCoworker, app);
+                            if (!draft) return null;
+                            const actionIds = new Set(draft.grantedActionIds);
+                            const includesPrepare = app.actions.some((action) => (
+                              actionIds.has(action.id) && action.access === "prepare"
+                            ));
+                            const includesWatch = app.actions.some((action) => (
+                              actionIds.has(action.id) && action.access === "watch"
+                            ));
+                            const unavailable = priorConnection?.availability === "certification_unavailable";
+                            const needsAccessReview = priorConnection?.state === "active";
+                            const busy = busyAction === `connect-app:${app.appId}`;
+                            return (
+                              <li key={app.appId} className="flex items-center justify-between gap-3 py-2.5">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-dls-text">{app.displayName}</p>
+                                  <p className="mt-0.5 text-xs leading-5 text-dls-secondary">
+                                    {includesPrepare
+                                      ? "Research and wallet previews"
+                                      : includesWatch
+                                        ? "Research and monitoring"
+                                        : "Research only"}
+                                  </p>
+                                </div>
+                                {unavailable ? (
+                                  <span className="shrink-0 text-xs text-dls-secondary">Unavailable</span>
+                                ) : needsAccessReview ? (
+                                  <Button
+                                    size="xs"
+                                    variant="outline"
+                                    disabled={busyAction !== null}
+                                    onClick={props.onBrowseApps}
+                                  >
+                                    Review
+                                  </Button>
+                                ) : priorConnection?.state === "paused" ? (
+                                  <Button
+                                    size="xs"
+                                    variant="outline"
+                                    disabled={busyAction !== null}
+                                    onClick={() => void resumeApp(app, priorConnection)}
+                                  >
+                                    {busy ? "Resuming…" : "Resume"}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="xs"
+                                    variant="outline"
+                                    disabled={busyAction !== null}
+                                    onClick={() => void connectApp(app)}
+                                  >
+                                    {busy ? "Connecting…" : "Connect"}
+                                  </Button>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ) : null}
                   </fieldset>
 
                   <fieldset>

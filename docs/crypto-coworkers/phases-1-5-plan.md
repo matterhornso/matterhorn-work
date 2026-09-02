@@ -181,6 +181,7 @@ Users create, configure, run, pause, and revoke durable coworkers through chat. 
    - Start with one outcome, suggest an appropriate role, disclose limits, then confirm.
    - Default templates for Market Analyst and Risk Monitor.
    - Advanced settings stay collapsed until requested.
+   - **Implemented locally:** Home accepts one outcome, suggests one of four deterministic coworker roles without provider contact, and carries that outcome into an unsent chat draft. The coworker access review can create or resume compatible no-credential certified app connections using only the exact app, action, scope, and network intersection allowed by the selected role. Connection never grants the coworker access automatically: the user must separately review and save the resource sandbox.
 3. **Structured working state**
    - Decisions, positions, unresolved risks, pending actions, evidence references, and user-approved memories.
    - No transcript replay as the primary memory mechanism.

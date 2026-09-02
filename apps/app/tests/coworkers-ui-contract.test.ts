@@ -5,6 +5,7 @@ import {
   readSessionPanelFromSearch,
   resolveSessionPanelNavigation,
 } from "../src/react-app/shell/session-panel-route";
+import { buildCoworkerAppConnectionDraft } from "../src/react-app/domains/coworkers/coworker-app-connection";
 import { suggestCoworkerTemplate } from "../src/react-app/domains/session/chat/workspace-coworker-suggestion";
 
 function appSource(path: string): string {
@@ -106,12 +107,94 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("App connections are not enabled in this environment.");
     expect(panel).toContain("Private files are not enabled in this environment.");
     expect(panel).toContain('cause.code === "crypto_app_gateway_disabled"');
+    expect(panel).toContain("Connect an app");
+    expect(panel).toContain("Nothing is shared until you save access.");
+    expect(panel).toContain("createCryptoAppConnection");
+    expect(panel).toContain("transitionCryptoAppConnection");
+    expect(panel).toContain("Review the selected access, then save it for this coworker.");
+    expect(panel).toContain("onClick={props.onBrowseApps}");
     expect(panel).toContain("setCoworkerResources");
     expect(client).toContain("getCoworkerResources:");
     expect(client).toContain("getCoworkerResourceRecommendation:");
     expect(client).toContain("setCoworkerResources:");
     expect(panel).toContain("recommendationHash: resourceRecommendationHash");
     expect(panel).not.toContain("unverifiedProviderConsent: true");
+  });
+
+  test("connects only the no-credential actions and networks allowed by the coworker", () => {
+    const draft = buildCoworkerAppConnectionDraft({
+      allowedAppIds: ["matterhorn.sui-testnet"],
+      allowedActionIds: ["sui_account_read", "sui_transfer_preview"],
+      allowedNetworks: ["sui:testnet"],
+    }, {
+      appId: "matterhorn.sui-testnet",
+      authentication: { type: "none" },
+      actions: [
+        {
+          id: "sui_transfer_preview",
+          access: "prepare",
+          requiredScopes: ["wallet:preview", "wallet:preview"],
+          walletSubmissionOnly: true,
+          agentMaySubmit: false,
+        },
+        {
+          id: "sui_account_read",
+          access: "read",
+          requiredScopes: ["account:read"],
+          walletSubmissionOnly: true,
+          agentMaySubmit: false,
+        },
+        {
+          id: "sui_admin",
+          access: "read",
+          requiredScopes: ["admin"],
+          walletSubmissionOnly: true,
+          agentMaySubmit: false,
+        },
+      ],
+      networks: [{ chainId: "sui:mainnet" }, { chainId: "sui:testnet" }],
+    });
+
+    expect(draft).toEqual({
+      appId: "matterhorn.sui-testnet",
+      grantedActionIds: ["sui_account_read", "sui_transfer_preview"],
+      grantedScopes: ["account:read", "wallet:preview"],
+      grantedNetworks: ["sui:testnet"],
+    });
+  });
+
+  test("refuses inline connections that need credentials or have no permitted authority", () => {
+    const coworker = {
+      allowedAppIds: ["matterhorn.sui-testnet"],
+      allowedActionIds: ["sui_account_read"],
+      allowedNetworks: ["sui:testnet"],
+    };
+    const publicRead = {
+      appId: "matterhorn.sui-testnet",
+      actions: [{
+        id: "sui_account_read",
+        access: "read" as const,
+        requiredScopes: [],
+        walletSubmissionOnly: true as const,
+        agentMaySubmit: false as const,
+      }],
+      networks: [{ chainId: "sui:testnet" }],
+    };
+
+    expect(buildCoworkerAppConnectionDraft(coworker, {
+      ...publicRead,
+      authentication: { type: "wallet_connection" },
+    })).toBeNull();
+    expect(buildCoworkerAppConnectionDraft(coworker, {
+      ...publicRead,
+      appId: "unapproved.app",
+      authentication: { type: "none" },
+    })).toBeNull();
+    expect(buildCoworkerAppConnectionDraft(coworker, {
+      ...publicRead,
+      authentication: { type: "none" },
+      networks: [{ chainId: "sui:mainnet" }],
+    })).toBeNull();
   });
 
   test("binds the selected coworker through the authoritative privacy gateway", () => {
