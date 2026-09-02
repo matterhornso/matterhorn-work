@@ -289,6 +289,67 @@ describe("managed OpenCode Matterhorn MCP", () => {
     });
   });
 
+  test("routes a bound coworker read through the certified executor without touching legacy routes", async () => {
+    let legacyCalls = 0;
+    const certifiedCalls: unknown[] = [];
+    const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: "certified-coworker-read",
+        method: "tools/call",
+        params: { name: "matterhorn_sui_get_balance", arguments: args },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      authorizeToolCall: () => ({
+        args,
+        runId: "run_coworker",
+        callId: "call_coworker",
+        workspaceId: "ws_coworker",
+        sessionId: "ses_coworker",
+        coworker: {
+          id: "cw_sui",
+          ownerId: "account_sui",
+          revision: 1,
+          policyVersion: "coworker-policy-1",
+          connectionId: "cxc_sui",
+          appId: "matterhorn.sui-testnet",
+          manifestRevision: "1.0.0",
+          actionId: "sui_account_read",
+          network: "sui:testnet",
+        },
+      }),
+      executeCertifiedTool: async (input) => {
+        certifiedCalls.push(input);
+        return {
+          version: "matterhorn.crypto-app-result.v1",
+          data: { balanceAtomic: "1000000000", symbol: "SUI" },
+          source: "crypto_app:matterhorn.sui-testnet",
+          observedAt: "2026-08-20T00:00:00.000Z",
+        };
+      },
+      fetchImpl: Object.assign(async () => {
+        legacyCalls += 1;
+        throw new Error("legacy_route_must_not_run");
+      }, { preconnect: fetch.preconnect }),
+    });
+    expect(legacyCalls).toBe(0);
+    expect(certifiedCalls).toHaveLength(1);
+    expect(certifiedCalls[0]).toMatchObject({
+      toolName: "matterhorn_sui_get_balance",
+      args,
+      authorization: {
+        runId: "run_coworker",
+        coworker: { connectionId: "cxc_sui", actionId: "sui_account_read" },
+      },
+    });
+    expect(result).toMatchObject({
+      status: 200,
+      body: { result: { structuredContent: { status: "success" } } },
+    });
+  });
+
   test("records terminal failures and preserves structured error evidence", async () => {
     const metrics: ManagedMcpToolCallMetric[] = [];
     const failingFetch = Object.assign(

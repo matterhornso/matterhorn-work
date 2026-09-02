@@ -149,8 +149,11 @@ describe("agent capability broker", () => {
         allowedNetworks: ["sui:testnet"],
         automaticAuthorities: ["read"],
         actionBindings: [{
+          connectionId: "cxc_sui",
           appId: "matterhorn.sui-testnet",
+          manifestRevision: "1.0.0",
           actionId: "sui_account_read",
+          network: "sui:testnet",
           proxyToolName: "matterhorn_sui_get_balance",
           access: "read",
         }],
@@ -160,13 +163,7 @@ describe("agent capability broker", () => {
         maxPrepareCallsPerFamily: 0,
       },
     });
-    const args = {
-      appId: "matterhorn.sui-testnet",
-      actionId: "sui_account_read",
-      access: "read",
-      network: "sui:testnet",
-      canonicalArgumentsHash: "a".repeat(64),
-    };
+    const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
     const capability = broker.issue({
       runId: "run_coworker",
       workspaceId: "ws_1",
@@ -180,6 +177,11 @@ describe("agent capability broker", () => {
       ownerId: "account_1",
       revision: 4,
       policyVersion: "coworker-policy-2",
+      connectionId: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
     });
     expect(broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args }).runId)
       .toBe("run_coworker");
@@ -189,6 +191,11 @@ describe("agent capability broker", () => {
       sessionId: "ses_coworker",
       callId: "call_coworker",
       coworkerId: "cw_sui",
+      connectionId: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
       toolName: "matterhorn_sui_get_balance",
       args,
     })).toMatchObject({ access: "read" });
@@ -198,8 +205,27 @@ describe("agent capability broker", () => {
       sessionId: "ses_coworker",
       callId: "call_coworker",
       coworkerId: "cw_sui",
+      connectionId: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
       toolName: "matterhorn_sui_get_balance",
       args: { ...args, network: "sui:mainnet" },
+    })).toBeNull();
+    expect(broker.consumedCapabilityProof({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_coworker",
+      coworkerId: "cw_sui",
+      connectionId: "cxc_other",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+      toolName: "matterhorn_sui_get_balance",
+      args,
     })).toBeNull();
     expect(() => broker.issue({
       runId: "run_coworker",
@@ -244,8 +270,11 @@ describe("agent capability broker", () => {
         allowedNetworks: ["sui:testnet"],
         automaticAuthorities: ["read"],
         actionBindings: [{
+          connectionId: "cxc_sui",
           appId: "matterhorn.sui-testnet",
+          manifestRevision: "1.0.0",
           actionId: "sui_account_read",
+          network: "sui:testnet",
           proxyToolName: "matterhorn_sui_get_balance",
           access: "read",
         }],
@@ -255,14 +284,15 @@ describe("agent capability broker", () => {
         maxPrepareCallsPerFamily: 0,
       },
     });
-    expect(() => broker.issue({
+    const derived = broker.issue({
       runId: "run_coworker_scope",
       workspaceId: "ws_1",
       sessionId: "ses_coworker_scope",
       callId: "call_legacy",
       toolName: "matterhorn_sui_get_balance",
-      args: { address: `0x${"1".repeat(64)}` },
-    })).toThrow("capability_coworker_app_binding_required");
+      args: { address: `0x${"1".repeat(64)}`, network: "testnet" },
+    });
+    expect(derived.claims.coworker?.connectionId).toBe("cxc_sui");
     expect(() => broker.issue({
       runId: "run_coworker_scope",
       workspaceId: "ws_1",
@@ -275,7 +305,7 @@ describe("agent capability broker", () => {
         access: "read",
         network: "sui:testnet",
       },
-    })).toThrow("capability_coworker_scope_mismatch");
+    })).toThrow("capability_coworker_connection_resolution_required");
   });
 
   test("workspace purge revokes grants and already-issued capabilities", () => {

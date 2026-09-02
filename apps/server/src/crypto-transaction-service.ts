@@ -190,6 +190,11 @@ export class MatterhornCryptoTransactionService {
       sessionId: request.sessionId,
       callId: request.callId,
       coworkerId: request.coworker.id,
+      connectionId: adapterResult.app.connectionId,
+      appId: adapterResult.app.id,
+      manifestRevision: adapterResult.app.manifestRevision,
+      actionId: adapterResult.action.id,
+      network: adapterResult.action.network,
       toolName: proxyToolName,
       args: capabilityArgs,
     });

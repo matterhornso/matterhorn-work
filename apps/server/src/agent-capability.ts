@@ -56,8 +56,11 @@ export type MatterhornCoworkerRunBinding = Pick<
   | "automaticAuthorities"
 > & Pick<MatterhornCoworkerProfile["limits"], "maxReadCallsPerRun" | "maxPrepareCallsPerFamily"> & {
   actionBindings: Array<{
+    connectionId: string;
     appId: string;
+    manifestRevision: string;
     actionId: string;
+    network: string;
     proxyToolName: string;
     access: "read" | "prepare";
   }>;
@@ -263,16 +266,28 @@ function validCoworkerBinding(binding: MatterhornCoworkerRunBinding, workspaceId
     && binding.actionBindings.every((item) => item
       && typeof item === "object"
       && !Array.isArray(item)
-      && Object.keys(item).length === 4
-      && Object.keys(item).every((key) => ["appId", "actionId", "proxyToolName", "access"].includes(key))
+      && Object.keys(item).length === 7
+      && Object.keys(item).every((key) => [
+        "connectionId", "appId", "manifestRevision", "actionId", "network", "proxyToolName", "access",
+      ].includes(key))
+      && typeof item.connectionId === "string"
+      && item.connectionId.trim().length > 0
+      && item.connectionId.length <= 256
       && typeof item.appId === "string"
       && binding.allowedAppIds.includes(item.appId)
+      && typeof item.manifestRevision === "string"
+      && item.manifestRevision.trim().length > 0
+      && item.manifestRevision.length <= 128
       && typeof item.actionId === "string"
       && binding.allowedActionIds.includes(item.actionId)
+      && typeof item.network === "string"
+      && binding.allowedNetworks.includes(item.network)
       && typeof item.proxyToolName === "string"
       && getMatterhornCryptoTool(item.proxyToolName)?.access === item.access
       && (item.access === "read" || item.access === "prepare"))
-    && new Set(binding.actionBindings.map((item) => `${item.appId}\u0000${item.actionId}\u0000${normalizedToolName(item.proxyToolName)}`)).size
+    && new Set(binding.actionBindings.map((item) => (
+      `${item.connectionId}\u0000${item.appId}\u0000${item.manifestRevision}\u0000${item.actionId}\u0000${item.network}\u0000${normalizedToolName(item.proxyToolName)}`
+    ))).size
       === binding.actionBindings.length
     && typeof binding.allowUnverifiedProviderConsent === "boolean"
     && binding.allowedDataLabels.every((label) => ["public", "workspace_private", "wallet_private", "untrusted_external"].includes(label))
@@ -326,12 +341,19 @@ function decodeClaims(token: string, secret: string): MatterhornAgentCapabilityC
     if (claims.coworker !== undefined) {
       if (!claims.coworker || typeof claims.coworker !== "object" || Array.isArray(claims.coworker)) return null;
       const coworker = claims.coworker as Record<string, unknown>;
-      if (Object.keys(coworker).some((key) => !["id", "ownerId", "revision", "policyVersion"].includes(key))
+      if (Object.keys(coworker).some((key) => ![
+        "id", "ownerId", "revision", "policyVersion", "connectionId", "appId", "manifestRevision", "actionId", "network",
+      ].includes(key))
         || typeof coworker.id !== "string"
         || typeof coworker.ownerId !== "string"
         || !Number.isSafeInteger(coworker.revision)
         || (coworker.revision as number) < 1
-        || typeof coworker.policyVersion !== "string") return null;
+        || typeof coworker.policyVersion !== "string"
+        || typeof coworker.connectionId !== "string"
+        || typeof coworker.appId !== "string"
+        || typeof coworker.manifestRevision !== "string"
+        || typeof coworker.actionId !== "string"
+        || typeof coworker.network !== "string") return null;
     }
     return decoded as MatterhornAgentCapabilityClaims;
   } catch {
@@ -462,7 +484,7 @@ export class MatterhornAgentCapabilityBroker {
     if ((input.agentId?.trim() || grant.agentId) !== grant.agentId) deny("capability_agent_mismatch");
     if (grant.issuedCallIds.has(input.callId)) deny("capability_call_reissued");
     if (!grant.allowedTools.has(toolName)) deny("capability_tool_not_in_run_grant");
-    this.assertCoworkerGrant(grant, toolName, definition.access, input.args, deny);
+    const coworkerActionBinding = this.assertCoworkerGrant(grant, toolName, definition.access, input.args, deny);
     if (definition.deskIds.length && grant.deskId !== "blank" && grant.agentId !== "matterhorn" && !definition.deskIds.some((deskId) => deskId === grant.deskId)) {
       deny("capability_wrong_desk");
     }
@@ -508,6 +530,11 @@ export class MatterhornAgentCapabilityBroker {
           ownerId: grant.coworker.ownerId,
           revision: grant.coworker.revision,
           policyVersion: grant.coworker.policyVersion,
+          connectionId: coworkerActionBinding!.connectionId,
+          appId: coworkerActionBinding!.appId,
+          manifestRevision: coworkerActionBinding!.manifestRevision,
+          actionId: coworkerActionBinding!.actionId,
+          network: coworkerActionBinding!.network,
         },
       } : {}),
     };
@@ -562,6 +589,16 @@ export class MatterhornAgentCapabilityBroker {
         || claims.coworker.ownerId !== grant.coworker.ownerId
         || claims.coworker.revision !== grant.coworker.revision
         || claims.coworker.policyVersion !== grant.coworker.policyVersion) deny("capability_coworker_mismatch");
+      const currentBinding = grant.coworker.actionBindings.find((binding) => (
+        binding.connectionId === claims.coworker?.connectionId
+        && binding.appId === claims.coworker?.appId
+        && binding.manifestRevision === claims.coworker?.manifestRevision
+        && binding.actionId === claims.coworker?.actionId
+        && binding.network === claims.coworker?.network
+        && normalizedToolName(binding.proxyToolName) === claims.toolName
+        && binding.access === claims.access
+      ));
+      if (!currentBinding) deny("capability_coworker_mismatch");
       if (!this.coworkerResolver?.(grant.coworker)) deny("capability_coworker_inactive");
     } else if (claims.coworker) deny("capability_coworker_mismatch");
     if (this.stateStore && !this.stateStore.consumeCapability({
@@ -624,6 +661,11 @@ export class MatterhornAgentCapabilityBroker {
     sessionId: string;
     callId: string;
     coworkerId: string;
+    connectionId: string;
+    appId: string;
+    manifestRevision: string;
+    actionId: string;
+    network: string;
     toolName: string;
     args: Record<string, unknown>;
   }): { access: "read" | "prepare"; expiresAt: string } | null {
@@ -634,6 +676,11 @@ export class MatterhornAgentCapabilityBroker {
       || claims.sessionId !== input.sessionId
       || claims.callId !== input.callId
       || claims.coworker?.id !== input.coworkerId
+      || claims.coworker.connectionId !== input.connectionId
+      || claims.coworker.appId !== input.appId
+      || claims.coworker.manifestRevision !== input.manifestRevision
+      || claims.coworker.actionId !== input.actionId
+      || claims.coworker.network !== input.network
       || claims.toolName !== normalizedToolName(input.toolName)
       || !equalDigest(claims.argsHash, capabilityArgsHash(input.args))) return null;
     return { access: claims.access, expiresAt: claims.expiresAt };
@@ -717,28 +764,42 @@ export class MatterhornAgentCapabilityBroker {
     access: "read" | "prepare",
     args: Record<string, unknown>,
     deny: (reason: string) => never,
-  ): void {
+  ): MatterhornCoworkerRunBinding["actionBindings"][number] | null {
     const coworker = grant.coworker;
-    if (!coworker) return;
+    if (!coworker) return null;
     if (!this.coworkerResolver?.(coworker)) deny("capability_coworker_inactive");
-    const appId = typeof args.appId === "string" ? args.appId.trim() : "";
-    const actionId = typeof args.actionId === "string" ? args.actionId.trim() : "";
-    const network = typeof args.network === "string" ? args.network.trim() : "";
-    const requestedAccess = typeof args.access === "string" ? args.access.trim() : "";
-    if (!appId || !actionId || !network || !requestedAccess) deny("capability_coworker_app_binding_required");
-    const toolBinding = coworker.actionBindings.find((binding) => binding.appId === appId
-      && binding.actionId === actionId
-      && normalizedToolName(binding.proxyToolName) === toolName);
+    const hasInternalBindingEnvelope = [
+      "appId", "actionId", "access", "connectionId", "manifestRevision", "canonicalArgumentsHash",
+    ].some((field) => Object.prototype.hasOwnProperty.call(args, field));
+    const requestedNetwork = typeof args.network === "string" ? args.network.trim().toLowerCase() : "";
+    const candidates = coworker.actionBindings.filter((binding) => (
+      normalizedToolName(binding.proxyToolName) === toolName
+      && binding.access === access
+      && (!requestedNetwork
+        || binding.network.toLowerCase() === requestedNetwork
+        || binding.network.toLowerCase().endsWith(`:${requestedNetwork}`))
+      && (!hasInternalBindingEnvelope || (
+        args.connectionId === binding.connectionId
+        && args.appId === binding.appId
+        && args.manifestRevision === binding.manifestRevision
+        && args.actionId === binding.actionId
+        && (args.access === "read" || args.access === "watch" ? access === "read" : args.access === "prepare" || args.access === "simulate" ? access === "prepare" : false)
+        && typeof args.canonicalArgumentsHash === "string"
+        && /^[a-f0-9]{64}$/.test(args.canonicalArgumentsHash)
+      ))
+    ));
+    if (candidates.length !== 1) deny("capability_coworker_connection_resolution_required");
+    const [toolBinding] = candidates;
     if (!toolBinding
-      || toolBinding.access !== access
-      || !coworker.allowedNetworks.includes(network)) deny("capability_coworker_scope_mismatch");
-    const authority = requestedAccess === "watch"
-      ? "watch"
-      : requestedAccess === "prepare" || requestedAccess === "simulate"
-        ? "prepare"
-        : requestedAccess === "read" ? "read" : "";
-    if (!authority || (access === "prepare") !== (authority === "prepare")
-      || !coworker.automaticAuthorities.includes(authority)) deny("capability_coworker_authority_denied");
+      || !coworker.allowedAppIds.includes(toolBinding.appId)
+      || !coworker.allowedActionIds.includes(toolBinding.actionId)
+      || !coworker.allowedNetworks.includes(toolBinding.network)) deny("capability_coworker_scope_mismatch");
+    const authority = access === "prepare" ? "prepare" : "read";
+    if (!coworker.automaticAuthorities.includes(authority)
+      && !(authority === "read" && coworker.automaticAuthorities.includes("watch"))) {
+      deny("capability_coworker_authority_denied");
+    }
+    return toolBinding;
   }
 
   private persistGrant(grant: RunGrant): void {

@@ -1379,7 +1379,10 @@ export async function startServer(
       certificationVerifier: dependencies.agentFileWalrusCertificationVerifier,
     },
   );
-  guardedRuntime.setCoworkerResolver((binding) => coworkerBindingIsActive(coworkerRuntime, binding));
+  guardedRuntime.setCoworkerResolver((binding) => (
+    coworkerBindingIsActive(coworkerRuntime, binding)
+    && coworkerAppBindingsAreActive(cryptoAppRuntime, binding)
+  ));
   if (cryptoEvidenceStore && evidenceKeyManager) {
     guardedRuntime.setFinalizedRunHandler(async (finalizedRun) => {
       try {
@@ -3098,7 +3101,10 @@ function pendingCryptoIntentAccountView(item: MatterhornPendingCryptoIntent) {
   };
 }
 
-function coworkerRunBinding(profile: MatterhornCoworkerProfile): MatterhornCoworkerRunBinding {
+export function buildCoworkerRunBinding(
+  profile: MatterhornCoworkerProfile,
+  cryptoAppRuntime: MatterhornCryptoAppRuntimeServices,
+): MatterhornCoworkerRunBinding {
   return {
     id: profile.id,
     workspaceId: profile.workspaceId,
@@ -3109,7 +3115,7 @@ function coworkerRunBinding(profile: MatterhornCoworkerProfile): MatterhornCowor
     allowedActionIds: [...profile.allowedActionIds],
     allowedNetworks: [...profile.allowedNetworks],
     automaticAuthorities: [...profile.automaticAuthorities],
-    actionBindings: coworkerActionBindings(profile),
+    actionBindings: coworkerActionBindings(profile, cryptoAppRuntime),
     allowedDataLabels: [...profile.privacy.allowedDataLabels],
     allowUnverifiedProviderConsent: profile.privacy.allowUnverifiedProviderConsent,
     maxReadCallsPerRun: profile.limits.maxReadCallsPerRun,
@@ -3117,33 +3123,100 @@ function coworkerRunBinding(profile: MatterhornCoworkerProfile): MatterhornCowor
   };
 }
 
-function coworkerActionBindings(profile: MatterhornCoworkerProfile): MatterhornCoworkerRunBinding["actionBindings"] {
+function coworkerActionBindings(
+  profile: MatterhornCoworkerProfile,
+  cryptoAppRuntime: MatterhornCryptoAppRuntimeServices,
+): MatterhornCoworkerRunBinding["actionBindings"] {
   const bindings = new Map<string, MatterhornCoworkerRunBinding["actionBindings"][number]>();
-  for (const appId of profile.allowedAppIds) {
-    for (const actionId of profile.allowedActionIds) {
-      const toolName = firstPartyCryptoAppProxyTool(appId, actionId);
+  if (!cryptoAppRuntime.catalog) return [];
+  for (const connection of cryptoAppRuntime.catalog.listConnections(profile.workspaceId)) {
+    if (connection.state !== "active"
+      || connection.availability !== "available"
+      || !profile.allowedAppIds.includes(connection.appId)) continue;
+    const app = cryptoAppRuntime.catalog.get(connection.appId);
+    if (!app || app.manifestRevision !== connection.manifestRevision) continue;
+    for (const action of app.actions) {
+      const actionId = action.id;
+      if (!profile.allowedActionIds.includes(actionId)
+        || !connection.grantedActionIds.includes(actionId)) continue;
+      const toolName = firstPartyCryptoAppProxyTool(connection.appId, actionId);
       const tool = toolName ? getMatterhornCryptoTool(toolName) : undefined;
       if (!tool) continue;
       const authorityAllowed = tool.access === "prepare"
         ? profile.automaticAuthorities.includes("prepare")
         : profile.automaticAuthorities.includes("read") || profile.automaticAuthorities.includes("watch");
-      if (authorityAllowed) {
-        const binding = { appId, actionId, proxyToolName: tool.name, access: tool.access };
-        bindings.set(`${appId}\u0000${actionId}\u0000${tool.name}`, binding);
+      if (!authorityAllowed) continue;
+      for (const network of connection.grantedNetworks) {
+        if (!profile.allowedNetworks.includes(network)
+          || !app.networks.some((candidate) => candidate.chainId === network)) continue;
+        const binding = {
+          connectionId: connection.id,
+          appId: connection.appId,
+          manifestRevision: connection.manifestRevision,
+          actionId,
+          network,
+          proxyToolName: tool.name,
+          access: tool.access,
+        };
+        bindings.set(
+          `${connection.id}\u0000${connection.appId}\u0000${connection.manifestRevision}\u0000${actionId}\u0000${network}\u0000${tool.name}`,
+          binding,
+        );
       }
     }
   }
   return [...bindings.values()].sort((left, right) => (
-    `${left.appId}:${left.actionId}:${left.proxyToolName}`.localeCompare(`${right.appId}:${right.actionId}:${right.proxyToolName}`)
+    `${left.appId}:${left.actionId}:${left.network}:${left.connectionId}:${left.proxyToolName}`
+      .localeCompare(`${right.appId}:${right.actionId}:${right.network}:${right.connectionId}:${right.proxyToolName}`)
   ));
 }
 
-function coworkerToolProfile(profile: MatterhornCoworkerProfile): Record<string, boolean> {
+function coworkerToolProfile(binding: MatterhornCoworkerRunBinding): Record<string, boolean> {
   const toolProfile: Record<string, boolean> = { "*": false };
-  for (const binding of coworkerActionBindings(profile)) {
-    toolProfile[`matterhorn-work_${binding.proxyToolName}`] = true;
+  for (const action of binding.actionBindings) {
+    toolProfile[`matterhorn-work_${action.proxyToolName}`] = true;
   }
   return toolProfile;
+}
+
+export function coworkerAppBindingsAreActive(
+  cryptoAppRuntime: MatterhornCryptoAppRuntimeServices,
+  binding: MatterhornCoworkerRunBinding,
+): boolean {
+  if (!cryptoAppRuntime.catalog || binding.actionBindings.length === 0) return false;
+  const connections = new Map(
+    cryptoAppRuntime.catalog.listConnections(binding.workspaceId).map((connection) => [connection.id, connection]),
+  );
+  return binding.actionBindings.every((action) => {
+    const connection = connections.get(action.connectionId);
+    if (!connection
+      || connection.state !== "active"
+      || connection.availability !== "available"
+      || connection.appId !== action.appId
+      || connection.manifestRevision !== action.manifestRevision
+      || !connection.grantedActionIds.includes(action.actionId)
+      || !connection.grantedNetworks.includes(action.network)) return false;
+    const app = cryptoAppRuntime.catalog?.get(action.appId);
+    return Boolean(app
+      && app.manifestRevision === action.manifestRevision
+      && app.actions.some((candidate) => candidate.id === action.actionId)
+      && app.networks.some((candidate) => candidate.chainId === action.network));
+  });
+}
+
+function coworkerAuthorizationContextHash(input: {
+  executionMode: MatterhornExecutionMode;
+  requestToolProfiles: readonly Record<string, boolean>[];
+  coworker: MatterhornCoworkerRunBinding | undefined;
+}): string {
+  const normalizedProfiles = input.requestToolProfiles.map((profile) => (
+    Object.fromEntries(Object.entries(profile).sort(([left], [right]) => left.localeCompare(right)))
+  ));
+  return sha256Bytes(JSON.stringify({
+    executionMode: input.executionMode,
+    requestToolProfiles: normalizedProfiles,
+    coworker: input.coworker ?? null,
+  }));
 }
 
 function activeCoworkerWorkingState(
@@ -3155,6 +3228,11 @@ function activeCoworkerWorkingState(
   return state?.profileRevision === profile.revision ? state : undefined;
 }
 
+type ResolvedMessageCoworker = {
+  profile: MatterhornCoworkerProfile;
+  binding: MatterhornCoworkerRunBinding;
+};
+
 function resolveMessageCoworker(input: {
   body: Record<string, unknown>;
   workspace: WorkspaceInfo;
@@ -3162,7 +3240,7 @@ function resolveMessageCoworker(input: {
   coworkerRuntime: MatterhornCoworkerRuntimeServices;
   cryptoAppRuntime: MatterhornCryptoAppRuntimeServices;
   guardedRuntime: MatterhornGuardedAgentRuntime;
-}): MatterhornCoworkerProfile | undefined {
+}): ResolvedMessageCoworker | undefined {
   if (input.body.coworkerId == null) return undefined;
   const coworkerId = typeof input.body.coworkerId === "string" ? input.body.coworkerId.trim() : "";
   if (!coworkerId || coworkerId.length > 256) {
@@ -3184,7 +3262,15 @@ function resolveMessageCoworker(input: {
     coworkerId,
   );
   if (!profile) throw new ApiError(404, "coworker_not_found", "Coworker not found.");
-  return profile;
+  const binding = buildCoworkerRunBinding(profile, input.cryptoAppRuntime);
+  if (binding.actionBindings.length === 0) {
+    throw new ApiError(
+      409,
+      "coworker_connection_required",
+      "Connect an approved crypto app for this coworker before starting chat.",
+    );
+  }
+  return { profile, binding };
 }
 
 function coworkerApiError(error: unknown): ApiError {
@@ -8951,8 +9037,41 @@ function createRoutes(
       serverUrl: ctx.url.origin,
       clientToken: config.token,
       authorizeToolCall: ({ toolName, args }) => guardedRuntime.authorizeMcpTool({ toolName, args }),
+      executeCertifiedTool: async ({ toolName, args, authorization }) => {
+        const coworker = authorization.coworker;
+        if (!coworker) return null;
+        if (!cryptoAppRuntime.router
+          || !authorization.workspaceId
+          || !authorization.sessionId
+          || !authorization.runId
+          || !authorization.callId) {
+          throw new Error("coworker_certified_gateway_unavailable");
+        }
+        const tool = getMatterhornCryptoTool(toolName);
+        if (!tool || tool.access !== "read") {
+          throw new Error("coworker_transaction_airlock_required");
+        }
+        const adapterArguments = { ...args };
+        delete adapterArguments.network;
+        return cryptoAppRuntime.router.execute({
+          workspaceId: authorization.workspaceId,
+          sessionId: authorization.sessionId,
+          runId: authorization.runId,
+          callId: authorization.callId,
+          connectionId: coworker.connectionId,
+          actionId: coworker.actionId,
+          network: coworker.network,
+          arguments: adapterArguments,
+          consumedCapability: {
+            coworkerId: coworker.id,
+            toolName,
+            arguments: args,
+          },
+        });
+      },
       onToolCall: (metric, authorization) => {
         operationalMetrics.recordAgentTool(metric);
+        if (authorization?.coworker) return;
         void guardedRuntime.recordMcpTool({
           runId: authorization?.runId ?? null,
           callId: authorization?.callId ?? null,
@@ -11845,7 +11964,7 @@ function createRoutes(
       cryptoAppRuntime,
       guardedRuntime,
     });
-    const coworkerState = activeCoworkerWorkingState(coworkerRuntime, coworker);
+    const coworkerState = activeCoworkerWorkingState(coworkerRuntime, coworker?.profile);
     const rawParts = parseSessionPromptParts(body);
     const modeTools = buildMatterhornExecutionModeTools(executionMode, agentId);
     const routedTools = modeTools ?? (executionMode === "work"
@@ -11857,7 +11976,7 @@ function createRoutes(
       : undefined);
     const requestToolProfiles = [
       routedTools,
-      ...(coworker ? [coworkerToolProfile(coworker)] : []),
+      ...(coworker ? [coworkerToolProfile(coworker.binding)] : []),
       ...parseAgentRequestToolProfiles(body),
     ]
       .filter((profile): profile is Record<string, boolean> => Boolean(profile));
@@ -11875,8 +11994,13 @@ function createRoutes(
       ownerId: cryptoAppCreatedBy(ctx),
       sessionId,
       privacyMode,
-      coworker,
+      coworker: coworker?.profile,
       coworkerState,
+    });
+    const authorizationContextHash = coworkerAuthorizationContextHash({
+      executionMode,
+      requestToolProfiles,
+      coworker: coworker?.binding,
     });
     const response = guardedRuntime.preflight({
       workspaceId: workspace.id,
@@ -11888,7 +12012,8 @@ function createRoutes(
       attachmentIds: [...resolved.attachmentIds, ...resolved.agentFileIds],
       memoryIds: resolved.memoryIds,
       privacyMode,
-      coworker: coworker ? coworkerRunBinding(coworker) : undefined,
+      coworker: coworker?.binding,
+      authorizationContextHash,
     });
     const result = jsonResponse(response);
     result.headers.set("Cache-Control", "no-store");
@@ -12109,7 +12234,7 @@ function createRoutes(
       cryptoAppRuntime,
       guardedRuntime,
     });
-    const coworkerState = activeCoworkerWorkingState(coworkerRuntime, coworker);
+    const coworkerState = activeCoworkerWorkingState(coworkerRuntime, coworker?.profile);
     const modeTools = buildMatterhornExecutionModeTools(executionMode, agent);
     const routedTools = modeTools ?? (executionMode === "work"
       ? buildMatterhornGeneralCryptoToolProfile({
@@ -12123,7 +12248,7 @@ function createRoutes(
       : undefined;
     const requestToolProfiles = [
       routedTools,
-      ...(coworker ? [coworkerToolProfile(coworker)] : []),
+      ...(coworker ? [coworkerToolProfile(coworker.binding)] : []),
       legacyClientRestrictions,
       ...parseAgentRequestToolProfiles(body),
     ]
@@ -12141,8 +12266,13 @@ function createRoutes(
       ownerId: cryptoAppCreatedBy(ctx),
       sessionId,
       privacyMode,
-      coworker,
+      coworker: coworker?.profile,
       coworkerState,
+    });
+    const authorizationContextHash = coworkerAuthorizationContextHash({
+      executionMode,
+      requestToolProfiles,
+      coworker: coworker?.binding,
     });
     const guardedInput = {
       workspaceId: workspace.id,
@@ -12157,7 +12287,8 @@ function createRoutes(
       privacyConsentToken: typeof body.privacyConsentToken === "string" ? body.privacyConsentToken.trim() : undefined,
       executionMode,
       requestToolProfiles,
-      coworker: coworker ? coworkerRunBinding(coworker) : undefined,
+      coworker: coworker?.binding,
+      authorizationContextHash,
     };
     let guardedAuthorization: ReturnType<typeof guardedRuntime.authorizePrompt>;
     try {
@@ -12283,10 +12414,10 @@ function createRoutes(
       },
       ...(coworker ? {
         coworker: {
-          id: coworker.id,
-          name: coworker.name,
-          revision: coworker.revision,
-          policyVersion: coworker.policyVersion,
+          id: coworker.profile.id,
+          name: coworker.profile.name,
+          revision: coworker.profile.revision,
+          policyVersion: coworker.profile.policyVersion,
         },
       } : {}),
     }, 202);

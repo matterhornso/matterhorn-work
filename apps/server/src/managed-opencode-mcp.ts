@@ -11,6 +11,7 @@ import type {
   ReviewedActionDraftHandoff,
   ReviewedActionHandoffV2,
 } from "@matterhorn-work/types/reviewed-actions";
+import type { MatterhornAgentCapabilityClaims } from "@matterhorn-work/types/guarded-agent-runtime";
 import { sha256 } from "./guarded-runtime-crypto.js";
 import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
 import {
@@ -56,7 +57,15 @@ export type ManagedMcpToolAuthorization = {
   runId: string | null;
   callId: string | null;
   workspaceId: string | null;
+  sessionId?: string | null;
+  coworker?: MatterhornAgentCapabilityClaims["coworker"] | null;
 };
+
+export type ManagedMcpCertifiedToolExecutor = (input: {
+  toolName: string;
+  args: JsonObject;
+  authorization: ManagedMcpToolAuthorization;
+}) => Promise<unknown | null>;
 
 const objectSchema = (properties: JsonObject, required: string[] = []): JsonObject => ({
   type: "object",
@@ -691,6 +700,7 @@ async function callBackendTool(input: {
   clientToken: string;
   fetchImpl: typeof fetch;
   authorization?: ManagedMcpToolAuthorization;
+  executeCertifiedTool?: ManagedMcpCertifiedToolExecutor;
   onToolCall?: (metric: ManagedMcpToolCallMetric, authorization?: ManagedMcpToolAuthorization) => void;
 }) {
   const startedAtMs = Date.now();
@@ -700,8 +710,28 @@ async function callBackendTool(input: {
   let source: string | undefined;
   let freshness: string | undefined;
   assertReadToolArguments(input.tool, input.args);
-  const request = input.tool.request(input.args);
   try {
+    if (input.authorization?.coworker && input.executeCertifiedTool) {
+      const certified = await input.executeCertifiedTool({
+        toolName: input.tool.name,
+        args: input.args,
+        authorization: input.authorization,
+      });
+      if (certified !== null) {
+        outcome = "success";
+        const completedAtMs = Date.now();
+        source = findEvidenceString(certified, ["source", "provider", "venue"]);
+        freshness = findEvidenceString(certified, ["freshness", "freshnessStatus", "dataStatus", "observedAt", "asOf"]);
+        return toolCallResult({
+          tool: input.tool,
+          text: JSON.stringify(certified),
+          ok: true,
+          startedAtMs,
+          completedAtMs,
+        });
+      }
+    }
+    const request = input.tool.request(input.args);
     const response = await input.fetchImpl(`${input.serverUrl.replace(/\/+$/, "")}${request.path}`, {
       method: request.method ?? "GET",
       headers: {
@@ -765,6 +795,7 @@ async function mcpResult(message: JsonRpcRequest, options: {
   clientToken: string;
   fetchImpl: typeof fetch;
   authorizeToolCall?: (input: { toolName: string; args: JsonObject }) => ManagedMcpToolAuthorization;
+  executeCertifiedTool?: ManagedMcpCertifiedToolExecutor;
   onToolCall?: (metric: ManagedMcpToolCallMetric, authorization?: ManagedMcpToolAuthorization) => void;
 }) {
   if (message.method === "initialize") {
@@ -796,6 +827,7 @@ async function mcpResult(message: JsonRpcRequest, options: {
       serverUrl: options.serverUrl,
       clientToken: options.clientToken,
       fetchImpl: options.fetchImpl,
+      executeCertifiedTool: options.executeCertifiedTool,
       onToolCall: options.onToolCall,
     });
   }
@@ -808,6 +840,7 @@ export async function handleManagedOpencodeMcp(input: {
   clientToken: string;
   fetchImpl?: typeof fetch;
   authorizeToolCall?: (input: { toolName: string; args: JsonObject }) => ManagedMcpToolAuthorization;
+  executeCertifiedTool?: ManagedMcpCertifiedToolExecutor;
   onToolCall?: (metric: ManagedMcpToolCallMetric, authorization?: ManagedMcpToolAuthorization) => void;
 }): Promise<{ status: number; body: unknown | null }> {
   const messages = Array.isArray(input.payload) ? input.payload : [input.payload];
@@ -829,6 +862,7 @@ export async function handleManagedOpencodeMcp(input: {
           clientToken: input.clientToken,
           fetchImpl: input.fetchImpl ?? fetch,
           authorizeToolCall: input.authorizeToolCall,
+          executeCertifiedTool: input.executeCertifiedTool,
           onToolCall: input.onToolCall,
         }),
       });

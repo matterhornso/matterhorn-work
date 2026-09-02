@@ -103,23 +103,65 @@ export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCrypto
       network: input.network,
       canonicalArgumentsHash: input.canonicalArgumentsHash,
     };
-    this.#runtime.stageRuntimeTool({
-      runtimeSecret: this.#runtimeSecret(),
-      runId: input.runId,
-      workspaceId: input.workspaceId,
-      sessionId: input.sessionId,
-      callId: input.callId,
-      toolName: tool.name,
-      args,
-    });
-    const authorized = this.#runtime.authorizeMcpTool({
-      toolName: tool.name,
-      args: { ...args, [MATTERHORN_CAPABILITY_CALL_ARGUMENT]: input.callId },
-    });
-    if (authorized.runId !== input.runId
-      || authorized.callId !== input.callId
-      || authorized.workspaceId !== input.workspaceId) {
-      throw new Error("crypto_app_capability_scope_mismatch");
+    if (input.consumedCapability) {
+      if (input.consumedCapability.toolName.replace(/^matterhorn-work_/, "") !== tool.name) {
+        throw new Error("crypto_app_capability_binding_mismatch");
+      }
+      const proof = this.#runtime.capabilities.consumedCapabilityProof({
+        runId: input.runId,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        callId: input.callId,
+        coworkerId: input.consumedCapability.coworkerId,
+        connectionId: input.connectionId,
+        appId: input.appId,
+        manifestRevision: input.manifestRevision,
+        actionId: input.actionId,
+        network: input.network,
+        toolName: tool.name,
+        args: input.consumedCapability.arguments,
+      });
+      if (!proof || proof.access !== tool.access) {
+        throw new Error("crypto_app_capability_scope_mismatch");
+      }
+      if (!this.#stateStore.putIfAbsent({
+        kind: "crypto_app_consumed_dispatch",
+        key: input.callId,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        value: {
+          runId: input.runId,
+          callId: input.callId,
+          connectionId: input.connectionId,
+          appId: input.appId,
+          manifestRevision: input.manifestRevision,
+          actionId: input.actionId,
+          network: input.network,
+        },
+        expiresAtMs: Date.parse(proof.expiresAt) + RESERVATION_TTL_MS,
+        nowMs: this.#now().getTime(),
+      })) {
+        throw new Error("crypto_app_capability_already_dispatched");
+      }
+    } else {
+      this.#runtime.stageRuntimeTool({
+        runtimeSecret: this.#runtimeSecret(),
+        runId: input.runId,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        callId: input.callId,
+        toolName: tool.name,
+        args,
+      });
+      const authorized = this.#runtime.authorizeMcpTool({
+        toolName: tool.name,
+        args: { ...args, [MATTERHORN_CAPABILITY_CALL_ARGUMENT]: input.callId },
+      });
+      if (authorized.runId !== input.runId
+        || authorized.callId !== input.callId
+        || authorized.workspaceId !== input.workspaceId) {
+        throw new Error("crypto_app_capability_scope_mismatch");
+      }
     }
     const reservationId = `crypto_app_reservation_${randomUUID()}`;
     const reservation: StoredReservation = {

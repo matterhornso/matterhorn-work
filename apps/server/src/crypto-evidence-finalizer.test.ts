@@ -67,8 +67,11 @@ function coworker(workspaceId = "workspace_finalizer"): MatterhornCoworkerRunBin
     allowedNetworks: ["sui:testnet"],
     automaticAuthorities: ["read"],
     actionBindings: [{
+      connectionId: "cxc_sui",
       appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
       actionId: "sui_account_read",
+      network: "sui:testnet",
       proxyToolName: "matterhorn_sui_get_balance",
       access: "read",
     }],

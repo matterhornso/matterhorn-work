@@ -27,6 +27,7 @@ type Options = {
 function runBinding(
   profile: MatterhornCoworkerProfile,
   watch: MatterhornCoworkerWatch,
+  connection: MatterhornCryptoAppConnectionView,
   proxyToolName: string,
 ): MatterhornCoworkerRunBinding {
   const tool = getMatterhornCryptoTool(proxyToolName);
@@ -44,8 +45,11 @@ function runBinding(
     // that schedule; it never grants an interactive or prepare capability.
     automaticAuthorities: ["read"],
     actionBindings: [{
+      connectionId: connection.id,
       appId: watch.appId,
+      manifestRevision: connection.manifestRevision,
       actionId: watch.actionId,
+      network: watch.network,
       proxyToolName: tool.name,
       access: "read",
     }],
@@ -91,7 +95,7 @@ export function createGuardedCoworkerWatchExecutor(options: Options): Matterhorn
     const nonce = id().replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 120);
     const sessionId = `cw_watch_${watch.id}_${nonce}`.slice(0, 256);
     const callId = `cw_call_${nonce}`.slice(0, 256);
-    const binding = runBinding(profile, watch, proxyToolName);
+    const binding = runBinding(profile, watch, connection, proxyToolName);
     const accepted = await options.guardedRuntime.startDeterministicCoworkerRun({
       workspaceId: watch.workspaceId,
       sessionId,

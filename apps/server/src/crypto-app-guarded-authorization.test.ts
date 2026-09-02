@@ -81,6 +81,89 @@ function request(runId: string, sessionId: string, overrides: Record<string, unk
 }
 
 describe("guarded crypto app authorization bridge", () => {
+  test("accepts one already-consumed interactive coworker capability without issuing a second token", async () => {
+    const path = join(root, "interactive-consumed.db");
+    const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    runtime.setCoworkerResolver(() => true);
+    const sessionId = "ses_interactive_consumed";
+    const binding = {
+      id: "cw_interactive",
+      workspaceId: "ws_sui",
+      ownerId: "account_alpha",
+      revision: 1,
+      policyVersion: "coworker-policy-1",
+      allowedAppIds: ["matterhorn.sui-testnet"],
+      allowedActionIds: ["sui_account_read"],
+      allowedNetworks: ["sui:testnet"],
+      automaticAuthorities: ["read" as const],
+      actionBindings: [{
+        connectionId: "cxc_sui",
+        appId: "matterhorn.sui-testnet",
+        manifestRevision: "1.0.0",
+        actionId: "sui_account_read",
+        network: "sui:testnet",
+        proxyToolName: "matterhorn_sui_get_balance",
+        access: "read" as const,
+      }],
+      allowedDataLabels: ["public" as const, "untrusted_external" as const],
+      allowUnverifiedProviderConsent: false,
+      maxReadCallsPerRun: 1,
+      maxPrepareCallsPerFamily: 0,
+    };
+    const accepted = await runtime.startDeterministicCoworkerRun({
+      workspaceId: "ws_sui",
+      sessionId,
+      coworker: binding,
+      requestToolProfiles: [{ "*": false, matterhorn_sui_get_balance: true }],
+      maxReadCalls: 1,
+    });
+    const rawArgs = { address: `0x${"1".repeat(64)}`, network: "testnet" };
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: "ws_sui",
+      sessionId,
+      runId: accepted.runId,
+      callId: "call_interactive",
+      toolName: "matterhorn_sui_get_balance",
+      args: rawArgs,
+    });
+    const consumed = runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { ...rawArgs, _matterhornCallId: "call_interactive" },
+    });
+    expect(consumed.coworker).toMatchObject({ connectionId: "cxc_sui", actionId: "sui_account_read" });
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const authorization = runtime.createCryptoAppAuthorization({
+      bindings: [{
+        appId: "matterhorn.sui-testnet",
+        manifestRevision: "1.0.0",
+        actionId: "sui_account_read",
+        proxyToolName: "matterhorn_sui_get_balance",
+      }],
+    });
+    const reserved = await authorization.authorize({
+      workspaceId: "ws_sui",
+      sessionId,
+      runId: accepted.runId,
+      callId: "call_interactive",
+      connectionId: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      access: "read",
+      network: "sui:testnet",
+      canonicalArgumentsHash: "a".repeat(64),
+      consumedCapability: {
+        coworkerId: "cw_interactive",
+        toolName: "matterhorn_sui_get_balance",
+        arguments: rawArgs,
+      },
+    });
+    expect(reserved.reservationId).toStartWith("crypto_app_reservation_");
+    store.close();
+    runtime.close();
+  });
+
   test("starts a model-free coworker watch run with one exact dynamic read binding", async () => {
     const path = join(root, "deterministic-watch.db");
     const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
@@ -96,8 +179,11 @@ describe("guarded crypto app authorization bridge", () => {
       allowedNetworks: ["sui:testnet"],
       automaticAuthorities: ["read", "watch"] as Array<"read" | "watch">,
       actionBindings: [{
+        connectionId: "cxc_sui",
         appId: "matterhorn.sui-testnet",
+        manifestRevision: "1.0.0",
         actionId: "sui_account_read",
+        network: "sui:testnet",
         proxyToolName: "matterhorn_sui_get_balance",
         access: "read" as const,
       }],

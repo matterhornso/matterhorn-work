@@ -28,6 +28,7 @@ export type GuardedRuntimeStateKind =
   | "user_message_binding"
   | "assistant_message_binding"
   | "crypto_app_reservation"
+  | "crypto_app_consumed_dispatch"
   | "crypto_pending_intent"
   | "crypto_evidence_record"
   | "crypto_evidence_run_index"
@@ -171,6 +172,32 @@ export class MatterhornGuardedRuntimeStateStore {
       input.expiresAtMs ?? null,
       input.nowMs ?? Date.now(),
     );
+  }
+
+  /** Insert one immutable, expiring state marker and fail if it already exists. */
+  putIfAbsent(input: {
+    kind: GuardedRuntimeStateKind;
+    key: string;
+    workspaceId: string;
+    sessionId?: string | null;
+    value: unknown;
+    expiresAtMs?: number | null;
+    nowMs?: number;
+  }): boolean {
+    const result = statement(this.db, `
+      INSERT OR IGNORE INTO guarded_state(
+        kind, state_key, workspace_id, session_id, payload_json, expires_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      input.kind,
+      input.key,
+      input.workspaceId,
+      input.sessionId ?? null,
+      JSON.stringify(input.value),
+      input.expiresAtMs ?? null,
+      input.nowMs ?? Date.now(),
+    );
+    return (result.changes ?? 0) === 1;
   }
 
   get<T>(kind: GuardedRuntimeStateKind, key: string, nowMs = Date.now()): T | null {

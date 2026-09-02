@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  MatterhornAgentCapabilityClaims,
   MatterhornAgentPrivacyMode,
   MatterhornAgentPrivacyPart,
   MatterhornAgentPrivacyPreflightResponse,
@@ -56,6 +57,7 @@ export type GuardedPromptInput = {
   executionMode: MatterhornExecutionMode;
   requestToolProfiles?: readonly Record<string, boolean>[];
   coworker?: MatterhornCoworkerRunBinding;
+  authorizationContextHash?: string;
 };
 
 export type GuardedPromptAcceptance = {
@@ -84,6 +86,7 @@ const GUARDED_OBSERVATION_REASONS = new Set([
   "capability_call_reissued",
   "capability_coworker_app_binding_required",
   "capability_coworker_authority_denied",
+  "capability_coworker_connection_resolution_required",
   "capability_coworker_inactive",
   "capability_coworker_mismatch",
   "capability_coworker_scope_mismatch",
@@ -569,12 +572,21 @@ export class MatterhornGuardedAgentRuntime {
   authorizeMcpTool(input: {
     toolName: string;
     args: Record<string, unknown>;
-  }): { args: Record<string, unknown>; runId: string | null; callId: string | null; workspaceId: string | null } {
+  }): {
+    args: Record<string, unknown>;
+    runId: string | null;
+    callId: string | null;
+    workspaceId: string | null;
+    sessionId: string | null;
+    coworker: MatterhornAgentCapabilityClaims["coworker"] | null;
+  } {
     this.cleanupStagedCapabilities();
     const callIdValue = input.args[MATTERHORN_CAPABILITY_CALL_ARGUMENT];
     const callId = typeof callIdValue === "string" ? callIdValue.trim() : "";
     const args = stripCapabilityArgument(input.args);
-    if (this.capabilities.mode === "off") return { args, runId: null, callId: null, workspaceId: null };
+    if (this.capabilities.mode === "off") {
+      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
+    }
     const bypass = callId
       ? this.stateStore.take<{
           expiresAtMs: number;
@@ -597,20 +609,20 @@ export class MatterhornGuardedAgentRuntime {
             "Matterhorn rejected a staged rollout call that no longer matches its exact tool and arguments.",
           );
         }
-        return { args, runId: null, callId: null, workspaceId: null };
+        return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
       }
       this.observe("consume", "bypassed", bypass.reason);
-      return { args, runId: null, callId: null, workspaceId: null };
+      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
     }
     if (this.capabilities.mode === "enforce" && !callId && !guardedCapabilityEnforcementActive({
       toolName: input.toolName,
     })) {
       this.observe("consume", "bypassed", "rollout_not_enforced");
-      return { args, runId: null, callId: null, workspaceId: null };
+      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
     }
     if (!callId && this.capabilities.mode === "shadow") {
       this.observe("consume", "would_deny", "missing_call_id");
-      return { args, runId: null, callId: null, workspaceId: null };
+      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
     }
     if (!callId) {
       this.observe("consume", "denied", "missing_call_id");
@@ -622,7 +634,7 @@ export class MatterhornGuardedAgentRuntime {
     if (!staged) {
       if (this.capabilities.mode === "shadow") {
         this.observe("consume", "would_deny", "unknown_or_replayed_call_id");
-        return { args, runId: null, callId: null, workspaceId: null };
+        return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
       }
       this.observe("consume", "denied", "unknown_or_replayed_call_id");
       throw new GuardedRuntimeError(403, "agent_capability_denied", "Matterhorn rejected an unknown, expired, or replayed tool call.");
@@ -630,12 +642,19 @@ export class MatterhornGuardedAgentRuntime {
     try {
       const claims = this.capabilities.consume({ token: staged.token, toolName: input.toolName, args });
       this.observe("consume", this.capabilities.mode === "shadow" ? "would_allow" : "allowed", "policy_allowed");
-      return { args, runId: claims.runId, callId: claims.callId, workspaceId: claims.workspaceId };
+      return {
+        args,
+        runId: claims.runId,
+        callId: claims.callId,
+        workspaceId: claims.workspaceId,
+        sessionId: claims.sessionId,
+        coworker: claims.coworker ?? null,
+      };
     } catch (error) {
       const reason = guardedObservationReason(error);
       if (this.capabilities.mode === "shadow") {
         this.observe("consume", "would_deny", reason);
-        return { args, runId: null, callId: null, workspaceId: null };
+        return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
       }
       this.observe("consume", "denied", reason);
       throw new GuardedRuntimeError(
@@ -759,7 +778,7 @@ export class MatterhornGuardedAgentRuntime {
     }
     this.stateStore.purgeWorkspace(
       workspaceId,
-      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation", "crypto_pending_intent", "crypto_evidence_finalization"],
+      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_finalization"],
       { includeConsumedCapabilities: false },
     );
     return {
@@ -848,6 +867,7 @@ export class MatterhornGuardedAgentRuntime {
       "user_message_binding",
       "assistant_message_binding",
       "crypto_app_reservation",
+      "crypto_app_consumed_dispatch",
     ] as const) {
       for (const entry of this.stateStore.list<{
         runId: string;

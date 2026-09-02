@@ -41,6 +41,13 @@ export type PrivacyInput = {
   attachmentIds?: string[];
   memoryIds?: string[];
   privacyMode?: MatterhornAgentPrivacyMode;
+  /**
+   * Server-computed hash of the exact tool, coworker, and connected-app
+   * authority that will accompany this request. Clients cannot provide this
+   * value directly; it makes one-request consent invalid when authority
+   * changes without putting the authority document in provider context.
+   */
+  authorizationContextHash?: string;
 };
 
 type ChallengeRecord = {
@@ -183,6 +190,7 @@ export function agentPrivacyRequestHash(input: PrivacyInput): string {
     attachmentIds: normalizedIds(input.attachmentIds),
     memoryIds: normalizedIds(input.memoryIds),
     privacyMode: requestedMode(input.privacyMode),
+    authorizationContextHash: input.authorizationContextHash?.trim() || null,
     parts: input.parts.map((part) => ({
       type: part.type,
       text: part.contentHash ? null : part.text ?? null,

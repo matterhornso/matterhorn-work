@@ -115,6 +115,7 @@ describe("agent privacy firewall", () => {
       agentId: "matterhorn-bittensor",
       attachmentIds: ["attachment_1"],
       memoryIds: ["memory_1"],
+      authorizationContextHash: "f".repeat(64),
       parts: [
         { type: "text", text: "Compare validators", source: "composer" as const },
         {
@@ -153,6 +154,7 @@ describe("agent privacy firewall", () => {
       { ...request, agentId: "matterhorn-sui" },
       { ...request, attachmentIds: ["attachment_2"] },
       { ...request, memoryIds: ["memory_2"] },
+      { ...request, authorizationContextHash: "0".repeat(64) },
       { ...request, parts: request.parts.map((part, index) => index === 1 ? { ...part, text: "Changed server policy" } : part) },
       { ...request, parts: request.parts.map((part, index) => index === 2 ? { ...part, contentHash: "d".repeat(64) } : part) },
       { ...request, parts: request.parts.map((part, index) => index === 3 ? { ...part, version: "2026-08-20T00:01:00.000Z" } : part) },

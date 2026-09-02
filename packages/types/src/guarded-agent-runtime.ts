@@ -155,6 +155,11 @@ export type MatterhornAgentCapabilityClaims = {
     ownerId: string;
     revision: number;
     policyVersion: string;
+    connectionId: string;
+    appId: string;
+    manifestRevision: string;
+    actionId: string;
+    network: string;
   };
 };
 

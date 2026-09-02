@@ -214,8 +214,11 @@ function brokerWithConsumedCapability(input: MatterhornCryptoTransactionRequest)
       allowedNetworks: [input.network],
       automaticAuthorities: ["prepare"],
       actionBindings: [{
+        connectionId: input.connectionId,
         appId: input.appId,
+        manifestRevision: "1.0.0",
         actionId: input.actionId,
+        network: input.network,
         proxyToolName: "matterhorn_sui_preview_transfer",
         access: "prepare",
       }],

@@ -31,6 +31,11 @@ export type MatterhornCryptoAppAdapterRequest = {
   actionId: string;
   network: string;
   arguments: Record<string, unknown>;
+  consumedCapability?: {
+    coworkerId: string;
+    toolName: string;
+    arguments: Record<string, unknown>;
+  };
 };
 
 export type MatterhornCryptoAppAuthorization = {
@@ -46,6 +51,7 @@ export type MatterhornCryptoAppAuthorization = {
     access: MatterhornCryptoAppAction["access"];
     network: string;
     canonicalArgumentsHash: string;
+    consumedCapability?: MatterhornCryptoAppAdapterRequest["consumedCapability"];
   }): Promise<{ reservationId: string }>;
   reconcile(input: {
     reservationId: string;
@@ -275,6 +281,7 @@ export class MatterhornCryptoAppAdapterRouter {
         access: action.access,
         network: request.network,
         canonicalArgumentsHash: argumentsHash,
+        consumedCapability: request.consumedCapability,
       });
       if (!nonEmpty(authorization.reservationId)) throw new Error("reservation_required");
       reservationId = authorization.reservationId;
