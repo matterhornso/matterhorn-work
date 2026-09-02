@@ -57,8 +57,8 @@ describe("coworker files UI", () => {
 
     expect(route.match(/agentFileIds: draft\.privacy\.agentFileIds/g)).toHaveLength(2);
     expect(route.match(/coworkerId: draft\.privacy\.coworkerId/g)).toHaveLength(2);
-    expect(surface).toContain("agentFileIds,");
-    expect(surface).toContain("coworkerId: agentFileContext.coworker.id");
+    expect(surface).toContain("...(agentFileIds.length > 0 ? { agentFileIds } : {})");
+    expect(surface).toContain("const coworkerId = agentFileContext?.coworker.id ?? coworkerContext?.id");
     expect(contextStore).not.toContain("contentBase64");
     expect(contextStore).not.toContain("contentSha256:");
   });

@@ -21,6 +21,7 @@ export const SIDE_PANEL_ITEMS = [
   "extensions",
   "voice",
   "profile",
+  "coworkers",
   "files",
   "memory",
   "notes",

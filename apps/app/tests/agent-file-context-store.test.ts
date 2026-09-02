@@ -36,7 +36,7 @@ function file(index: number) {
 describe("coworker file chat context", () => {
   test("keeps only bounded identifiers and display names in tab storage", () => {
     const context = sanitizeMatterhornAgentFileContext("ses_1", {
-      coworker: { id: "coworker_1", name: "Research coworker", ownerId: "hidden" },
+      coworker: { id: "coworker_1", name: "Research coworker", role: "Market analyst", revision: 2, ownerId: "hidden" },
       files: Array.from({ length: 10 }, (_, index) => file(index)),
       updatedAt: "2026-09-02T10:00:00.000Z",
       rawFile: "must not persist",
@@ -51,11 +51,11 @@ describe("coworker file chat context", () => {
   test("rejects missing coworkers, unsafe ids, and empty file lists", () => {
     expect(sanitizeMatterhornAgentFileContext("ses_1", { coworker: null, files: [file(0)] })).toBeNull();
     expect(sanitizeMatterhornAgentFileContext("ses_1", {
-      coworker: { id: "bad/id", name: "Research coworker" },
+      coworker: { id: "bad/id", name: "Research coworker", role: "Market analyst", revision: 2 },
       files: [file(0)],
     })).toBeNull();
     expect(sanitizeMatterhornAgentFileContext("ses_1", {
-      coworker: { id: "coworker_1", name: "Research coworker" },
+      coworker: { id: "coworker_1", name: "Research coworker", role: "Market analyst", revision: 2 },
       files: [],
     })).toBeNull();
   });
@@ -63,7 +63,7 @@ describe("coworker file chat context", () => {
   test("round-trips only session-scoped selection metadata", () => {
     const storage = new MemoryStorage();
     const context = sanitizeMatterhornAgentFileContext("ses_1", {
-      coworker: { id: "coworker_1", name: "Research coworker" },
+      coworker: { id: "coworker_1", name: "Research coworker", role: "Market analyst", revision: 2 },
       files: [file(0), file(0), file(1)],
       updatedAt: "2026-09-02T10:00:00.000Z",
     });

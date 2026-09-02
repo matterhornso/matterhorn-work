@@ -26,6 +26,7 @@ import {
   useMatterhornSessionAgentFileContextStore,
   type MatterhornSessionAgentFileContext,
 } from "../session/surface/agent-file-context-store";
+import { useMatterhornSessionCoworkerContextStore } from "../session/surface/coworker-context-store";
 
 const MAX_FILE_BYTES = 10 * 1_024 * 1_024;
 const ACCEPTED_FILE_TYPES = ".txt,.md,.markdown,.csv,.json,text/plain,text/markdown,text/csv,application/json";
@@ -38,6 +39,7 @@ type Coworker = Awaited<ReturnType<NonNullable<MatterhornServerClient>["listCowo
 export type AgentFilesPanelProps = {
   client: MatterhornServerClient | null;
   workspaceId: string | null;
+  preferredCoworkerId?: string;
   onUseInChat: (context: MatterhornSessionAgentFileContext) => void;
   onFileDeleted?: (fileId: string) => void;
 };
@@ -237,7 +239,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
   });
 
   const coworkers = query.data?.coworkers.coworkers.filter((coworker) => coworker.state === "active") ?? [];
-  const selectedCoworker = coworkers.find((coworker) => coworker.id === coworkerChoice) ?? coworkers[0] ?? null;
+  const selectedCoworker = coworkers.find((coworker) => coworker.id === (coworkerChoice || props.preferredCoworkerId)) ?? coworkers[0] ?? null;
   const files = useMemo(
     () => (query.data?.files.items ?? []).filter((item) => (
       selectedCoworker ? item.file.access.coworkerIds.includes(selectedCoworker.id) : false
@@ -379,7 +381,12 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
   const useInChat = useCallback(() => {
     if (!selectedCoworker || !selectedFiles.length) return;
     props.onUseInChat({
-      coworker: { id: selectedCoworker.id, name: selectedCoworker.name },
+      coworker: {
+        id: selectedCoworker.id,
+        name: selectedCoworker.name,
+        role: selectedCoworker.role,
+        revision: selectedCoworker.revision,
+      },
       files: selectedFiles.map((item) => ({ id: item.id, name: item.file.name, revision: item.revision })),
       updatedAt: new Date().toISOString(),
     });
@@ -575,11 +582,18 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
 export function SessionAgentFilesPanel(props: SessionAgentFilesPanelProps) {
   const { showToast } = useStatusToasts();
   const { onClose, onStartTask, selectedSessionId, selectedWorkspaceId } = props;
+  const boundCoworkerId = useMatterhornSessionCoworkerContextStore((state) => (
+    selectedSessionId ? state.contexts[selectedSessionId]?.id ?? "" : ""
+  ));
 
   const useInChat = useCallback((context: MatterhornSessionAgentFileContext) => {
     const sessionId = selectedSessionId?.trim() ?? "";
     if (sessionId) {
       useMatterhornSessionAgentFileContextStore.getState().setContext(sessionId, context);
+      useMatterhornSessionCoworkerContextStore.getState().setContext(sessionId, {
+        ...context.coworker,
+        updatedAt: context.updatedAt,
+      });
       onClose();
       showToast({
         title: "Files ready",
@@ -607,6 +621,10 @@ export function SessionAgentFilesPanel(props: SessionAgentFilesPanelProps) {
           sendImmediately: false,
           onSessionCreated: (createdSessionId) => {
             useMatterhornSessionAgentFileContextStore.getState().setContext(createdSessionId, context);
+            useMatterhornSessionCoworkerContextStore.getState().setContext(createdSessionId, {
+              ...context.coworker,
+              updatedAt: context.updatedAt,
+            });
           },
         },
       );
@@ -629,6 +647,7 @@ export function SessionAgentFilesPanel(props: SessionAgentFilesPanelProps) {
     <AgentFilesPanel
       client={props.client}
       workspaceId={props.workspaceId}
+      preferredCoworkerId={boundCoworkerId}
       onUseInChat={useInChat}
       onFileDeleted={removeFromChat}
     />

@@ -10,6 +10,8 @@ export type MatterhornSessionAgentFileContext = {
   coworker: {
     id: string;
     name: string;
+    role: string;
+    revision: number;
   };
   files: MatterhornSessionAgentFile[];
   updatedAt: string;
@@ -73,7 +75,15 @@ export function sanitizeMatterhornAgentFileContext(
   }
   const coworkerId = typeof value.coworker.id === "string" ? value.coworker.id.trim() : "";
   const coworkerName = typeof value.coworker.name === "string" ? value.coworker.name.trim() : "";
-  if (!SAFE_ID.test(coworkerId) || !coworkerName || coworkerName.length > 80) return null;
+  const coworkerRole = typeof value.coworker.role === "string" ? value.coworker.role.trim() : "";
+  const coworkerRevision = typeof value.coworker.revision === "number" ? value.coworker.revision : 0;
+  if (!SAFE_ID.test(coworkerId)
+    || !coworkerName
+    || coworkerName.length > 80
+    || !coworkerRole
+    || coworkerRole.length > 80
+    || !Number.isSafeInteger(coworkerRevision)
+    || coworkerRevision < 1) return null;
   const seen = new Set<string>();
   const files = value.files.flatMap((candidate) => {
     const file = sanitizeFile(candidate);
@@ -86,7 +96,12 @@ export function sanitizeMatterhornAgentFileContext(
     ? new Date(value.updatedAt).toISOString()
     : new Date().toISOString();
   return {
-    coworker: { id: coworkerId, name: coworkerName },
+    coworker: {
+      id: coworkerId,
+      name: coworkerName,
+      role: coworkerRole,
+      revision: coworkerRevision,
+    },
     files,
     updatedAt,
   };

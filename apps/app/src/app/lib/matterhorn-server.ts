@@ -118,9 +118,15 @@ import type {
   MatterhornCryptoAppCatalogSummary,
   MatterhornCryptoAppConnectionState,
   MatterhornCryptoAppConnectionView,
+  MatterhornCryptoIntent,
+  MatterhornCryptoPublicReceipt,
   MatterhornAgentFileListResponse,
   MatterhornAgentFileWalrusVerification,
+  MatterhornCoworkerInboxItem,
   MatterhornCoworkerProfile,
+  MatterhornCoworkerState,
+  MatterhornCoworkerWatch,
+  MatterhornCoworkerWorkingState,
   MatterhornEvidenceVerificationListResponse,
   MatterhornEvidenceVerificationResult,
   MatterhornStoredAgentFile,
@@ -134,6 +140,48 @@ import { desktopFetch } from "./desktop";
 import { isPublicBetaWebDeployment } from "./matterhorn-deployment";
 import { isDesktopRuntime } from "../utils";
 import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } from "./desktop";
+
+export type MatterhornCoworkerAccountProfile = Omit<MatterhornCoworkerProfile, "ownerId">;
+export type MatterhornCoworkerAccountState = Omit<MatterhornCoworkerWorkingState, "ownerId">;
+export type MatterhornCoworkerAccountWatch = Omit<MatterhornCoworkerWatch, "ownerId">;
+export type MatterhornCoworkerAccountInboxItem = Omit<MatterhornCoworkerInboxItem, "ownerId">;
+
+export type MatterhornCoworkerWalletIntentView = {
+  version: "matterhorn.pending-crypto-intent.v1";
+  id: string;
+  workspaceId: string;
+  sessionId: string;
+  coworkerId: string;
+  revision: number;
+  state:
+    | "wallet_review"
+    | "refreshing"
+    | "regeneration_required"
+    | "cancelled"
+    | "expired"
+    | "wallet_approved"
+    | "submitted"
+    | "confirmed"
+    | "failed";
+  intent: MatterhornCryptoIntent;
+  reviewedAction: ReviewedActionHandoffV2;
+  receipt: MatterhornCryptoPublicReceipt | null;
+  previousIntentHash: string | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+  policy: {
+    decision: "allow_prepare" | "wallet_review_required" | "deny";
+    reasonCodes: string[];
+    limits: Array<{
+      name: string;
+      configured: string;
+      observed: string;
+      passed: boolean;
+    }>;
+    evaluatedAt: string;
+  };
+};
 
 export type MatterhornServerCapabilities = {
   skills: {
@@ -1747,7 +1795,7 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     ),
     listCoworkers: (workspaceId: string) => requestJson<{
       mode: "off" | "internal" | "invite" | "public";
-      coworkers: Array<Omit<MatterhornCoworkerProfile, "ownerId">>;
+      coworkers: MatterhornCoworkerAccountProfile[];
     }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers`, {
       token,
       timeoutMs: timeouts.status,
@@ -1758,13 +1806,90 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     ) => requestJson<{
       mode: "off" | "internal" | "invite" | "public";
       templateId: "market_analyst" | "risk_monitor";
-      coworker: Omit<MatterhornCoworkerProfile, "ownerId">;
+      coworker: MatterhornCoworkerAccountProfile;
     }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/from-template`, {
       token,
       method: "POST",
       body: input,
       timeoutMs: timeouts.config,
     }),
+    getCoworkerState: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      state: MatterhornCoworkerAccountState | null;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/state`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    listCoworkerWatches: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      watches: MatterhornCoworkerAccountWatch[];
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/watches`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    transitionCoworkerWatch: (
+      workspaceId: string,
+      coworkerId: string,
+      watchId: string,
+      input: { state: "active" | "paused"; expectedRevision: number },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      watch: MatterhornCoworkerAccountWatch;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/watches/${encodeURIComponent(watchId)}`, {
+      token,
+      method: "PATCH",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    listCoworkerInbox: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      items: MatterhornCoworkerAccountInboxItem[];
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/inbox?limit=50`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    transitionCoworkerInboxItem: (
+      workspaceId: string,
+      coworkerId: string,
+      itemId: string,
+      input: {
+        state: "read" | "dismissed";
+        expectedState: "unread" | "read" | "dismissed";
+      },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      item: MatterhornCoworkerAccountInboxItem;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/inbox/${encodeURIComponent(itemId)}`, {
+      token,
+      method: "PATCH",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    listCoworkerWalletIntents: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      items: MatterhornCoworkerWalletIntentView[];
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/wallet-intents`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    transitionCoworker: (
+      workspaceId: string,
+      coworkerId: string,
+      input: { state: MatterhornCoworkerState; expectedRevision: number },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      coworker: MatterhornCoworkerAccountProfile;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}`, {
+      token,
+      method: "PATCH",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    deleteCoworker: (workspaceId: string, coworkerId: string, expectedRevision: number) => requestJson<{ deleted: true }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}`,
+      { token, method: "DELETE", body: { expectedRevision }, timeoutMs: timeouts.config },
+    ),
     listAgentFiles: (workspaceId: string) => requestJson<MatterhornAgentFileListResponse>(
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/agent-files`,

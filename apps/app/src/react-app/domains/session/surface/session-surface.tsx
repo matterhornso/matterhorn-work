@@ -24,6 +24,7 @@ import {
   Info,
   Minimize2,
   ShieldCheck,
+  UserRound,
   Wallet as WalletIcon,
 } from "lucide-react";
 
@@ -83,15 +84,12 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { ReactComposerNotice } from "./composer/notice";
-import { SessionDebugPanel } from "./debug-panel";
 import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from "./session-render-state";
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
 import { resolveAssistantResponseRetryTurn, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
 import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionActivityStatus } from "../status/session-activity-store";
-import { PermissionApprovalPanel } from "../chat/permission-approval-modal";
-import { QuestionPanel } from "../modals/question-modal";
 import { deriveOpenTargets, selectAutoOpenTarget, type OpenTarget } from "../artifacts/open-target";
 import {
   seedSessionState,
@@ -112,6 +110,11 @@ import {
   useMatterhornSessionAgentFileContextStore,
   type MatterhornSessionAgentFileContext,
 } from "./agent-file-context-store";
+import {
+  getMatterhornSessionCoworkerContext,
+  useMatterhornSessionCoworkerContextStore,
+  type MatterhornSessionCoworkerContext,
+} from "./coworker-context-store";
 
 // These project-local tools are maintained for the Matterhorn Desks team, not
 // workspace users. The server marks them as non-invocable; this list protects
@@ -157,6 +160,21 @@ const SessionTranscript = lazy(() => import("./message-list").then((module) => (
 const SessionImageGenerationPanel = lazy(() =>
   import("../media/session-image-generation-panel").then((module) => ({
     default: module.SessionImageGenerationPanel,
+  })),
+);
+const PermissionApprovalPanel = lazy(() =>
+  import("../chat/permission-approval-modal").then((module) => ({
+    default: module.PermissionApprovalPanel,
+  })),
+);
+const QuestionPanel = lazy(() =>
+  import("../modals/question-modal").then((module) => ({
+    default: module.QuestionPanel,
+  })),
+);
+const SessionDebugPanel = lazy(() =>
+  import("./debug-panel").then((module) => ({
+    default: module.SessionDebugPanel,
   })),
 );
 import {
@@ -1503,6 +1521,31 @@ function AgentFileContextStrip(props: { context: MatterhornSessionAgentFileConte
   );
 }
 
+function CoworkerContextStrip(props: { context: MatterhornSessionCoworkerContext; onClear: () => void }) {
+  return (
+    <div className="border-b border-dls-border bg-dls-surface/70 px-4 py-2">
+      <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 font-medium text-dls-text">
+            <UserRound aria-hidden="true" size={13} />
+            <span>Working with {props.context.name}</span>
+          </div>
+          <div className="truncate text-dls-secondary">
+            <span className="capitalize">{props.context.role.replaceAll("_", " ")}</span> · requests follow this coworker&apos;s limits
+          </div>
+        </div>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-dls-border px-2 py-1 font-medium text-dls-secondary transition-colors hover:border-primary/35 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+          onClick={props.onClear}
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function revokeAttachmentPreview(attachment: { previewUrl?: string | undefined }) {
   if (!attachment.previewUrl) return;
   URL.revokeObjectURL(attachment.previewUrl);
@@ -1538,6 +1581,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const clearMemoryContext = useMatterhornSessionMemoryContextStore((state) => state.clearContext);
   const agentFileContext = useMatterhornSessionAgentFileContextStore((state) => getMatterhornSessionAgentFileContext(state, props.sessionId));
   const clearAgentFileContext = useMatterhornSessionAgentFileContextStore((state) => state.clearContext);
+  const coworkerContext = useMatterhornSessionCoworkerContextStore((state) => getMatterhornSessionCoworkerContext(state, props.sessionId));
+  const clearCoworkerContext = useMatterhornSessionCoworkerContextStore((state) => state.clearContext);
   const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [error, setError] = useState<SessionError | null>(null);
   const [sending, setSending] = useState(false);
@@ -2077,6 +2122,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     const attachmentIds = nextAttachments.map((attachment) => attachment.id).filter(Boolean).sort();
     const memoryIds = (memoryContext?.records ?? []).map((record) => record.id).filter(Boolean).sort();
     const agentFileIds = (agentFileContext?.files ?? []).map((file) => file.id).filter(Boolean).sort();
+    const coworkerId = agentFileContext?.coworker.id ?? coworkerContext?.id;
     return {
       mode: "prompt",
       parts,
@@ -2085,22 +2131,20 @@ export function SessionSurface(props: SessionSurfaceProps) {
       resolvedText: resolved,
       command: resolvedSlashMatch ? { name: resolvedSlashMatch[1] ?? "", arguments: resolvedSlashMatch[2] ?? "" } : undefined,
       ...(
-        options?.privacyConsentToken || attachmentIds.length > 0 || memoryIds.length > 0 || agentFileIds.length > 0
+        options?.privacyConsentToken || attachmentIds.length > 0 || memoryIds.length > 0 || agentFileIds.length > 0 || coworkerId
           ? {
               privacy: {
                 ...(options?.privacyConsentToken ? { consentToken: options.privacyConsentToken } : {}),
                 ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
-                ...(agentFileIds.length > 0 && agentFileContext ? {
-                  agentFileIds,
-                  coworkerId: agentFileContext.coworker.id,
-                } : {}),
+                ...(coworkerId ? { coworkerId } : {}),
+                ...(agentFileIds.length > 0 ? { agentFileIds } : {}),
                 ...(memoryIds.length > 0 ? { memoryIds } : {}),
               },
             }
           : {}
       ),
     };
-  }, [agentFileContext, memoryContext?.records, mentions, pasteParts]);
+  }, [agentFileContext, coworkerContext?.id, memoryContext?.records, mentions, pasteParts]);
 
   const handleComposerDraftChange = useCallback((value: string) => {
     setComposerDraft(props.sessionId, value);
@@ -3229,6 +3273,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       activeDeskMode ||
       bittensorContext ||
       agentFileContext ||
+      coworkerContext ||
       memoryContext,
   );
 
@@ -3589,25 +3634,29 @@ export function SessionSurface(props: SessionSurfaceProps) {
             hasComposerTopAccessory ? (
               <div className="space-y-2">
                 {props.activeQuestion ? (
-                  <QuestionPanel
-                    questions={props.activeQuestion.questions}
-                    busy={props.questionReplyBusy ?? false}
-                    onReply={(answers) => {
-                      if (props.activeQuestion) {
-                        props.respondQuestion?.(props.activeQuestion.id, answers);
-                      }
-                    }}
-                  />
+                  <Suspense fallback={<div className="px-4 py-3 text-xs text-dls-secondary" role="status">Loading question…</div>}>
+                    <QuestionPanel
+                      questions={props.activeQuestion.questions}
+                      busy={props.questionReplyBusy ?? false}
+                      onReply={(answers) => {
+                        if (props.activeQuestion) {
+                          props.respondQuestion?.(props.activeQuestion.id, answers);
+                        }
+                      }}
+                    />
+                  </Suspense>
                 ) : (
                   <TodoPanel todos={props.todos ?? []} />
                 )}
                 {props.activePermission ? (
-                  <PermissionApprovalPanel
-                    permission={props.activePermission}
-                    busy={props.permissionReplyBusy}
-                    respondPermission={props.respondPermission}
-                    safeStringify={props.safeStringify}
-                  />
+                  <Suspense fallback={<div className="px-4 py-3 text-xs text-dls-secondary" role="status">Loading review…</div>}>
+                    <PermissionApprovalPanel
+                      permission={props.activePermission}
+                      busy={props.permissionReplyBusy}
+                      respondPermission={props.respondPermission}
+                      safeStringify={props.safeStringify}
+                    />
+                  </Suspense>
                 ) : null}
                 {activeDeskMode ? (
                   <MatterhornDeskSessionStrip mode={activeDeskMode} />
@@ -3642,6 +3691,16 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     }}
                   />
                 ) : null}
+                {coworkerContext ? (
+                  <CoworkerContextStrip
+                    context={coworkerContext}
+                    onClear={() => {
+                      clearCoworkerContext(props.sessionId);
+                      clearAgentFileContext(props.sessionId);
+                      setNotice({ title: "Coworker cleared", tone: "info" });
+                    }}
+                  />
+                ) : null}
                 {agentFileContext ? (
                   <AgentFileContextStrip
                     context={agentFileContext}
@@ -3667,7 +3726,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
         </DevProfiler>
       </div>
       {/* Error display moved inline into the session conversation area */}
-      {props.developerMode ? <SessionDebugPanel model={model} snapshot={snapshot} /> : null}
+      {props.developerMode ? (
+        <Suspense fallback={null}>
+          <SessionDebugPanel model={model} snapshot={snapshot} />
+        </Suspense>
+      ) : null}
     </div>
     </DevProfiler>
   );

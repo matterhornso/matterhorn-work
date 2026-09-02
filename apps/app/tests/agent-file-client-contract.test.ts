@@ -89,4 +89,36 @@ describe("Agent File server client", () => {
       { templateId: "risk_monitor" },
     ]);
   });
+
+  test("keeps coworker lifecycle, alerts, checks, and wallet review account-scoped", async () => {
+    const requests = captureRequests();
+    const client = createMatterhornServerClient({
+      baseUrl: "https://control.example",
+      token: "account-token",
+      hostToken: "operator-token",
+    });
+
+    await client.listCoworkers("workspace one");
+    await client.getCoworkerState("workspace one", "coworker one");
+    await client.listCoworkerWatches("workspace one", "coworker one");
+    await client.transitionCoworkerWatch("workspace one", "coworker one", "watch one", { state: "paused", expectedRevision: 2 });
+    await client.listCoworkerInbox("workspace one", "coworker one");
+    await client.transitionCoworkerInboxItem("workspace one", "coworker one", "item one", { state: "read", expectedState: "unread" });
+    await client.listCoworkerWalletIntents("workspace one", "coworker one");
+    await client.transitionCoworker("workspace one", "coworker one", { state: "paused", expectedRevision: 3 });
+    await client.deleteCoworker("workspace one", "coworker one", 4);
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://control.example/workspace/workspace%20one/coworkers",
+      "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/state",
+      "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/watches",
+      "PATCH https://control.example/workspace/workspace%20one/coworkers/coworker%20one/watches/watch%20one",
+      "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/inbox?limit=50",
+      "PATCH https://control.example/workspace/workspace%20one/coworkers/coworker%20one/inbox/item%20one",
+      "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/wallet-intents",
+      "PATCH https://control.example/workspace/workspace%20one/coworkers/coworker%20one",
+      "DELETE https://control.example/workspace/workspace%20one/coworkers/coworker%20one",
+    ]);
+    expect(requests.every((request) => !request.hasHostToken)).toBe(true);
+  });
 });

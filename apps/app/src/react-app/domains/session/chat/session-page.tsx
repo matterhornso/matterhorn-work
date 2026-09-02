@@ -25,6 +25,7 @@ import {
   Settings2,
   ShieldCheck,
   CircleUserRound,
+  UsersRound,
   Wallet as WalletIcon,
 } from "lucide-react";
 
@@ -203,6 +204,9 @@ const NotesPanel = lazy(() => import("../../notes/notes-page").then((module) => 
 })));
 const SessionAgentFilesPanel = lazy(() => import("../../agent-files/agent-files-panel").then((module) => ({
   default: module.SessionAgentFilesPanel,
+})));
+const SessionCoworkersPanel = lazy(() => import("../../coworkers/coworkers-panel").then((module) => ({
+  default: module.SessionCoworkersPanel,
 })));
 const WorkspaceMissionOverview = lazy(() => import("./workspace-mission-overview").then((module) => ({
   default: module.WorkspaceMissionOverview,
@@ -1580,6 +1584,7 @@ export function SessionPage(props: SessionPageProps) {
   const extensionsRailActive = activeSidePanel === "extensions";
   const voiceRailActive = activeSidePanel === "voice";
   const profileRailActive = activeSidePanel === "profile";
+  const coworkersRailActive = activeSidePanel === "coworkers";
   const filesRailActive = activeSidePanel === "files";
   const memoryRailActive = activeSidePanel === "memory";
   const notesRailActive = activeSidePanel === "notes";
@@ -1606,6 +1611,8 @@ export function SessionPage(props: SessionPageProps) {
           : "MCPs & Tools"
         : visibleSidePanel === "memory"
           ? "Memory"
+          : visibleSidePanel === "coworkers"
+            ? "Coworkers"
           : visibleSidePanel === "files"
             ? "Coworker files"
           : visibleSidePanel === "notes"
@@ -2230,6 +2237,9 @@ export function SessionPage(props: SessionPageProps) {
   const openMemoryRailPane = useCallback(() => {
     toggleCurrentSidePanel("memory");
   }, [toggleCurrentSidePanel]);
+  const openCoworkersRailPane = useCallback(() => {
+    toggleCurrentSidePanel("coworkers");
+  }, [toggleCurrentSidePanel]);
   const openAgentFilesRailPane = useCallback(() => {
     toggleCurrentSidePanel("files");
   }, [toggleCurrentSidePanel]);
@@ -2354,6 +2364,16 @@ export function SessionPage(props: SessionPageProps) {
       workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
       onClose={closeRightPane}
       onUseInChat={props.selectedSessionId && props.surface ? undefined : startMemoryChatFromHome}
+    />
+  ) : visibleSidePanel === "coworkers" ? (
+    <SessionCoworkersPanel
+      client={props.matterhornServerClient}
+      workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+      selectedSessionId={props.selectedSessionId}
+      selectedWorkspaceId={props.selectedWorkspaceId}
+      onClose={closeRightPane}
+      onOpenWallet={() => setCurrentSidePanel("wallet")}
+      onStartTask={props.sidebar.onCreateTaskWithPrompt}
     />
   ) : visibleSidePanel === "files" ? (
     <SessionAgentFilesPanel
@@ -3433,9 +3453,9 @@ export function SessionPage(props: SessionPageProps) {
                 />
                 <ResizablePanel
                   panelRef={browserPanelRef}
-                  defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
-                  minSize={visibleSidePanel === "extensions" || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
-                  maxSize={protocolSidePanelOpen || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" || visibleSidePanel === "extensions" ? "500px" : "70%"}
+                  defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "coworkers" || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
+                  minSize={visibleSidePanel === "extensions" || visibleSidePanel === "coworkers" || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
+                  maxSize={protocolSidePanelOpen || visibleSidePanel === "coworkers" || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" || visibleSidePanel === "extensions" ? "500px" : "70%"}
                   className="matterhorn-side-panel hidden h-full min-h-0 overflow-hidden bg-dls-background lg:flex lg:flex-col"
                 >
                   <Suspense fallback={<LazyPanelFallback />}>
@@ -3543,6 +3563,21 @@ export function SessionPage(props: SessionPageProps) {
                 <span className={RAIL_LABEL_CLASS}>Outputs</span>
               </Button>
             ) : null}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(
+                RAIL_BUTTON_CLASS,
+                coworkersRailActive && RAIL_ACTIVE_CLASS,
+              )}
+              onClick={openCoworkersRailPane}
+              title="Coworkers"
+              aria-label="Coworkers"
+              aria-pressed={coworkersRailActive}
+            >
+              <UsersRound size={17} />
+              <span className={RAIL_LABEL_CLASS}>Coworkers</span>
+            </Button>
             <Button
               variant="ghost"
               size="icon-sm"
