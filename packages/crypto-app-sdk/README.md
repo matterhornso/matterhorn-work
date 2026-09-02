@@ -9,6 +9,7 @@ The SDK is deliberately non-custodial:
 - It accepts only the detached 64-byte signature in base64url form.
 - Local policy results are not certification. Matterhorn revalidates the signature, static policy, live transport, adversarial output, and runtime behavior independently.
 - All financial actions must remain `prepare` or `simulate`; the connected wallet is the only submission surface.
+- Action identifiers use canonical lowercase snake case. Names that claim signing, submission, relay, broadcast, or unqualified execution authority are rejected before signing. Timing and freshness contracts must be finite, integral, and internally consistent.
 - Every input and model-facing output property uses a bounded ASCII identifier. Secret, credential, signature, signing-payload, transaction-byte, and sign/submit/relay/broadcast authority names are rejected at every schema depth.
 - Schema admission and runtime projection have global traversal budgets in addition to depth, array, object-property, and string bounds, so wide or nested payloads fail closed before they can exhaust the gateway.
 - Schema descriptions, constants, enums, bounds, and unions are closed and bounded. Embedded credential literals, contradictory bounds, ignored `oneOf` siblings, and attacker-controlled error-path text fail closed.

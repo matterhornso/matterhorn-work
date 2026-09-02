@@ -150,6 +150,54 @@ describe("crypto app manifest conformance", () => {
     expect(JSON.stringify(report)).not.toContain("sk-this-is-a-fake-token-1234567890");
   });
 
+  test("rejects composite action authority and non-finite timing contracts", () => {
+    for (const actionId of [
+      "submittransaction",
+      "app_relaytransaction",
+      "execute_transaction",
+      "place_order",
+    ]) {
+      const candidate = manifest();
+      candidate.actions[0]!.id = actionId;
+      candidate.publisher.signature = sign(
+        null,
+        Buffer.from(canonicalCryptoAppManifestPayload(candidate), "utf8"),
+        keys.privateKey,
+      ).toString("base64url");
+      const report = conformance(candidate);
+      expect(report.passed).toBe(false);
+      expect(report.findings.map((item) => item.code)).toContain("action_submit_authority_forbidden");
+    }
+
+    for (const actionId of ["submit-transaction", "SubmitTransaction", "evmSubmitTransaction"]) {
+      const candidate = manifest();
+      candidate.actions[0]!.id = actionId;
+      candidate.publisher.signature = sign(
+        null,
+        Buffer.from(canonicalCryptoAppManifestPayload(candidate), "utf8"),
+        keys.privateKey,
+      ).toString("base64url");
+      const report = conformance(candidate);
+      expect(report.passed).toBe(false);
+      expect(report.findings.map((item) => item.code)).toContain("action_id_invalid");
+    }
+
+    const candidate = manifest();
+    candidate.actions[0]!.freshnessMaxAgeMs = Number.POSITIVE_INFINITY;
+    candidate.actions[0]!.timeoutMs = Number.NaN;
+    candidate.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(candidate), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    const report = conformance(candidate);
+    expect(report.passed).toBe(false);
+    expect(report.findings.map((item) => item.code)).toEqual(expect.arrayContaining([
+      "action_freshness_age_invalid",
+      "action_timeout_invalid",
+    ]));
+  });
+
   test("fails closed on hidden manifest controls and OAuth binding confusion", () => {
     const hidden = structuredClone(manifest()) as unknown as Record<string, unknown>;
     hidden.runtime = { allowSubmission: true };

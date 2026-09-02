@@ -127,6 +127,48 @@ describe("Matterhorn crypto app SDK", () => {
       .toThrowError(expect.objectContaining({ code: "manifest_invalid" }));
   });
 
+  test("rejects composite live authority and ambiguous timing metadata before signing", () => {
+    for (const actionId of [
+      "submittransaction",
+      "evm_submittransaction",
+      "wallet_sign_order",
+      "place_order",
+      "execute_transaction",
+    ]) {
+      const unsafeAuthority = draft();
+      unsafeAuthority.actions[0]!.id = actionId;
+      expect(() => buildCryptoAppSigningRequest(unsafeAuthority)).toThrowError(expect.objectContaining({
+        code: "manifest_invalid",
+        issues: expect.arrayContaining(["action_submit_authority_forbidden"]),
+      }));
+    }
+
+    for (const actionId of ["submit-transaction", "SubmitTransaction", "evmSubmitTransaction"]) {
+      const ambiguousIdentifier = draft();
+      ambiguousIdentifier.actions[0]!.id = actionId;
+      expect(() => buildCryptoAppSigningRequest(ambiguousIdentifier)).toThrowError(expect.objectContaining({
+        code: "manifest_invalid",
+        issues: expect.arrayContaining(["action_id_invalid"]),
+      }));
+    }
+
+    const nonFinite = draft();
+    nonFinite.actions[0]!.freshnessMaxAgeMs = Number.NaN;
+    nonFinite.actions[0]!.timeoutMs = Number.NaN;
+    expect(() => buildCryptoAppSigningRequest(nonFinite)).toThrowError(expect.objectContaining({
+      code: "manifest_invalid",
+      issues: expect.arrayContaining(["action_freshness_age_invalid", "action_timeout_invalid"]),
+    }));
+
+    const contradictory = draft();
+    contradictory.actions[0]!.requiresFreshness = false;
+    contradictory.actions[0]!.freshnessMaxAgeMs = 30_000;
+    expect(() => buildCryptoAppSigningRequest(contradictory)).toThrowError(expect.objectContaining({
+      code: "manifest_invalid",
+      issues: expect.arrayContaining(["action_freshness_age_invalid"]),
+    }));
+  });
+
   test("rejects secret and signing-authority schemas before producing signing bytes", () => {
     const unsafe = draft();
     unsafe.actions[0]!.outputProjectionSchema = {

@@ -960,7 +960,19 @@ const ACTION_KEYS: readonly string[] = [
   "walletSubmissionOnly",
   "agentMaySubmit",
 ];
-const FORBIDDEN_ACTION_AUTHORITY = /(^|_)(sign|submit|relay|broadcast)(_|$)/i;
+const FORBIDDEN_ACTION_AUTHORITY_TOKENS = new Set([
+  "sign",
+  "signed",
+  "signing",
+  "submit",
+  "submitted",
+  "submission",
+  "relay",
+  "relayed",
+  "broadcast",
+  "broadcasted",
+]);
+const PREPARATION_ACTION_TOKENS = new Set(["draft", "prepare", "preview", "quote", "simulate", "simulation"]);
 const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:@+/-]{0,159}$/;
 const SAFE_SCOPE = /^[A-Za-z0-9][A-Za-z0-9._:@+/-]{0,159}$/;
 const SAFE_AUDIENCE = /^[A-Za-z0-9][A-Za-z0-9._:@+/-]{0,511}$/;
@@ -990,6 +1002,21 @@ const FORBIDDEN_EVIDENCE_KEYS = new Set([
   "capabilitytoken",
   "rawtooloutput",
 ]);
+
+function hasForbiddenActionAuthority(actionId: string): boolean {
+  const tokens = actionId.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  if (tokens.some((token) => FORBIDDEN_ACTION_AUTHORITY_TOKENS.has(token)
+    || /^(?:submit|relay|broadcast)(?:transaction|order|message|payload|tx|call)$/.test(token)
+    || /^(?:sign|signed|signing)(?:transaction|order|message|payload|typeddata|bytes|tx)$/.test(token))) {
+    return true;
+  }
+  const hasPreparationBoundary = tokens.some((token) => PREPARATION_ACTION_TOKENS.has(token));
+  if (hasPreparationBoundary) return false;
+  return tokens.some((token, index) => (
+    ["send", "execute", "place", "cancel"].includes(token)
+    && ["transaction", "order"].includes(tokens[index + 1] ?? "")
+  ));
+}
 
 export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
   const issues: string[] = [];
@@ -1068,7 +1095,7 @@ export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
       else {
         if (actionIds.has(action.id)) issues.push("action_id_duplicate");
         actionIds.add(action.id);
-        if (FORBIDDEN_ACTION_AUTHORITY.test(action.id)) issues.push("action_submit_authority_forbidden");
+        if (hasForbiddenActionAuthority(action.id)) issues.push("action_submit_authority_forbidden");
       }
       if (!isNonEmptyString(action.title) || action.title.length > 160 || CONTROL_CHARACTER.test(action.title)) issues.push("action_title_required");
       if (!isNonEmptyString(action.description) || action.description.length > 2_000 || CONTROL_CHARACTER.test(action.description)) issues.push("action_description_required");
@@ -1081,8 +1108,14 @@ export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
         || new Set(action.requiredScopes).size !== action.requiredScopes.length
         || action.requiredScopes.some((scope) => scope !== scope.trim() || !SAFE_SCOPE.test(scope))) issues.push("action_scopes_invalid");
       if (typeof action.requiresFreshness !== "boolean") issues.push("action_freshness_invalid");
-      if (action.freshnessMaxAgeMs !== null && (typeof action.freshnessMaxAgeMs !== "number" || action.freshnessMaxAgeMs <= 0)) issues.push("action_freshness_age_invalid");
-      if (typeof action.timeoutMs !== "number" || action.timeoutMs < 1_000 || action.timeoutMs > 60_000) issues.push("action_timeout_invalid");
+      if ((action.requiresFreshness === true
+        && (!Number.isSafeInteger(action.freshnessMaxAgeMs) || Number(action.freshnessMaxAgeMs) <= 0))
+        || (action.requiresFreshness === false && action.freshnessMaxAgeMs !== null)) {
+        issues.push("action_freshness_age_invalid");
+      }
+      if (!Number.isSafeInteger(action.timeoutMs) || Number(action.timeoutMs) < 1_000 || Number(action.timeoutMs) > 60_000) {
+        issues.push("action_timeout_invalid");
+      }
       if (typeof action.simulationRequired !== "boolean") issues.push("action_simulation_flag_invalid");
       if ((action.access === "prepare" || action.access === "simulate") && action.simulationRequired !== true) issues.push("financial_simulation_required");
       if (action.walletSubmissionOnly !== true) issues.push("wallet_submission_only_required");
