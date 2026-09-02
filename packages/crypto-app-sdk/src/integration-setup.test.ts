@@ -37,6 +37,7 @@ describe("Matterhorn crypto integration setup", () => {
       expect(setup.verification.checks.map((check) => check.id)).toEqual([
         "connection",
         "workspace_scope",
+        "tool_scope",
         "wallet_boundary",
       ]);
       expect(setup.verification.checks[0]?.expected).toContain(
@@ -44,6 +45,10 @@ describe("Matterhorn crypto integration setup", () => {
       );
 
       const serialized = JSON.stringify(setup);
+      if (target !== "cli" && target !== "http_api") {
+        expect(serialized).toContain("MATTERHORN_WORK_MCP_PROFILE");
+        expect(serialized).toContain("guarded_client");
+      }
       expect(serialized).not.toContain("MATTERHORN_WORK_HOST_TOKEN");
       expect(serialized).not.toContain("OPENWORK_HOST_TOKEN");
       expect(serialized).not.toContain("npx");
@@ -66,7 +71,7 @@ describe("Matterhorn crypto integration setup", () => {
       expect(setup.verification.expectedBoundary).toBe(
         "Client-scoped workspace access only; wallet approval remains separate.",
       );
-      expect(setup.verification.checks[2]).toEqual({
+      expect(setup.verification.checks[3]).toEqual({
         id: "wallet_boundary",
         title: "Wallet control stays separate",
         expected:
@@ -89,6 +94,9 @@ describe("Matterhorn crypto integration setup", () => {
       "[mcp_servers.matterhorn-work]",
     );
     expect(codex.artifacts[0]?.content).toContain("MATTERHORN_WORK_TOKEN");
+    expect(codex.artifacts[0]?.content).toContain(
+      'MATTERHORN_WORK_MCP_PROFILE = "guarded_client"',
+    );
 
     const claude = createMatterhornCryptoIntegrationSetup({
       target: "claude_code",
@@ -101,7 +109,18 @@ describe("Matterhorn crypto integration setup", () => {
     expect(claude.artifacts[0]?.content).toContain(
       "'/Users/o'\"'\"'hara/Matterhorn Work/packages/matterhorn-work-mcp/index.mjs'",
     );
+    expect(claude.artifacts[0]?.content).toContain(
+      "MATTERHORN_WORK_MCP_PROFILE='guarded_client'",
+    );
     expect(claude.serverOrigin).toBe("https://control.example");
+
+    const generic = createMatterhornCryptoIntegrationSetup({
+      target: "generic_mcp",
+      repositoryPath,
+    });
+    expect(generic.artifacts[0]?.content).toContain(
+      '"MATTERHORN_WORK_MCP_PROFILE": "guarded_client"',
+    );
   });
 
   test("does not serialize unknown credential values supplied by JavaScript callers", () => {

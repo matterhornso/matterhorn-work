@@ -32,6 +32,29 @@ const HOST_TOKEN =
   process.env.MATTERHORN_HOST_TOKEN ||
   "";
 
+const MCP_PROFILE = String(process.env.MATTERHORN_WORK_MCP_PROFILE || "full")
+  .trim()
+  .toLowerCase();
+const SUPPORTED_MCP_PROFILES = new Set(["full", "guarded_client"]);
+const GUARDED_CLIENT_TOOL_NAMES = new Set([
+  "matterhorn_status",
+  "matterhorn_list_workspaces",
+  "matterhorn_create_session",
+  "matterhorn_list_sessions",
+  "matterhorn_get_session",
+  "matterhorn_get_session_messages",
+  "matterhorn_submit_session_prompt",
+  "matterhorn_get_session_status",
+  "matterhorn_watch_session_events",
+  "matterhorn_get_session_snapshot",
+  "matterhorn_delete_session",
+]);
+
+if (!SUPPORTED_MCP_PROFILES.has(MCP_PROFILE)) {
+  process.stderr.write("Matterhorn MCP profile is not supported.\n");
+  process.exit(64);
+}
+
 const REQUEST_TIMEOUT_MS = Number(process.env.MATTERHORN_WORK_MCP_TIMEOUT_MS || 15_000);
 const MAX_TEXT_BYTES = Number(process.env.MATTERHORN_WORK_MCP_MAX_TEXT_BYTES || 512_000);
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -1312,6 +1335,11 @@ const tools = [
     },
   },
 ];
+
+const exposedTools = MCP_PROFILE === "guarded_client"
+  ? tools.filter((tool) => GUARDED_CLIENT_TOOL_NAMES.has(tool.name))
+  : tools;
+const exposedToolNames = new Set(exposedTools.map((tool) => tool.name));
 
 function jsonRpc(id, result) {
   return `${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`;
@@ -3757,9 +3785,16 @@ async function handleMessage(msg) {
     case "notifications/initialized":
       return;
     case "tools/list":
-      return process.stdout.write(jsonRpc(id, { tools }));
+      return process.stdout.write(jsonRpc(id, { tools: exposedTools }));
     case "tools/call": {
       const { name, arguments: args } = msg.params ?? {};
+      if (MCP_PROFILE === "guarded_client" && !exposedToolNames.has(name)) {
+        return process.stdout.write(jsonRpcError(
+          id,
+          -32601,
+          "Tool is not available in the configured Matterhorn MCP profile.",
+        ));
+      }
       try {
         const result = await handleTool(name, args ?? {});
         return process.stdout.write(jsonRpc(id, textResult(result)));
@@ -3772,4 +3807,4 @@ async function handleMessage(msg) {
   }
 }
 
-process.stderr.write("Matterhorn Desks MCP Server v0.1.0 ready\n");
+process.stderr.write(`Matterhorn Desks MCP Server v0.1.0 ready (${MCP_PROFILE})\n`);

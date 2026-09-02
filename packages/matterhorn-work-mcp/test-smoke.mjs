@@ -8,6 +8,10 @@ import path from "node:path";
 const CLIENT_TOKEN = "mwt_client_test";
 const HOST_TOKEN = "mwh_host_test";
 const requests = [];
+const MCP_ENTRYPOINT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "index.mjs",
+);
 
 function readJson(req) {
   return new Promise((resolve) => {
@@ -1060,15 +1064,17 @@ function listen(server) {
   });
 }
 
-function createMcp(baseUrl) {
-  const mcpPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "index.mjs");
-  const child = spawn("node", [mcpPath], {
+function createMcp(baseUrl, { profile, includeHostToken = true } = {}) {
+  const child = spawn("node", [MCP_ENTRYPOINT], {
     stdio: ["pipe", "pipe", "pipe"],
     env: {
       ...process.env,
       MATTERHORN_WORK_SERVER_URL: baseUrl,
       MATTERHORN_WORK_TOKEN: CLIENT_TOKEN,
-      MATTERHORN_WORK_HOST_TOKEN: HOST_TOKEN,
+      ...(includeHostToken
+        ? { MATTERHORN_WORK_HOST_TOKEN: HOST_TOKEN }
+        : { MATTERHORN_WORK_HOST_TOKEN: "" }),
+      MATTERHORN_WORK_MCP_PROFILE: profile || "full",
     },
   });
 
@@ -1207,6 +1213,73 @@ try {
 
   const schemaText = JSON.stringify(listed.result.tools);
   assert.equal(/seed|mnemonic|privateKey|private_key|wallet export/i.test(schemaText), false);
+
+  const invalidProfile = spawn("node", [MCP_ENTRYPOINT], {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      MATTERHORN_WORK_MCP_PROFILE: "unsupported_profile",
+    },
+  });
+  let invalidProfileError = "";
+  invalidProfile.stderr.setEncoding("utf8");
+  invalidProfile.stderr.on("data", (chunk) => {
+    invalidProfileError += chunk;
+  });
+  const invalidProfileExitCode = await new Promise((resolve) => {
+    invalidProfile.once("exit", resolve);
+  });
+  assert.equal(invalidProfileExitCode, 64);
+  assert.equal(
+    invalidProfileError,
+    "Matterhorn MCP profile is not supported.\n",
+  );
+
+  const guardedMcp = createMcp(`http://127.0.0.1:${port}`, {
+    profile: "guarded_client",
+    includeHostToken: false,
+  });
+  try {
+    await guardedMcp.ask("initialize");
+    const guardedList = await guardedMcp.ask("tools/list");
+    assert.deepEqual(guardedList.result.tools.map((tool) => tool.name), [
+      "matterhorn_status",
+      "matterhorn_list_workspaces",
+      "matterhorn_create_session",
+      "matterhorn_list_sessions",
+      "matterhorn_get_session",
+      "matterhorn_get_session_messages",
+      "matterhorn_submit_session_prompt",
+      "matterhorn_get_session_status",
+      "matterhorn_watch_session_events",
+      "matterhorn_get_session_snapshot",
+      "matterhorn_delete_session",
+    ]);
+    assert.ok(
+      JSON.stringify(guardedList.result.tools).length < schemaText.length * 0.2,
+      "guarded client profile should remove at least 80% of model-facing tool schema bytes",
+    );
+    const requestsBeforeHiddenCall = requests.length;
+    const hiddenCall = await guardedMcp.ask("tools/call", {
+      name: "matterhorn_reply_approval",
+      arguments: { approvalId: "approval-hidden", reply: "allow" },
+    });
+    assert.equal(hiddenCall.error?.code, -32601);
+    assert.equal(
+      hiddenCall.error?.message,
+      "Tool is not available in the configured Matterhorn MCP profile.",
+    );
+    assert.equal(requests.length, requestsBeforeHiddenCall);
+
+    const guardedWorkspaces = parseToolResult(await guardedMcp.ask("tools/call", {
+      name: "matterhorn_list_workspaces",
+      arguments: {},
+    }));
+    assert.equal(guardedWorkspaces.items[0].id, "ws_1");
+  } finally {
+    guardedMcp.child.kill();
+  }
+
   const descriptionFor = (name) => listed.result.tools.find((tool) => tool.name === name)?.description || "";
   const cryptoChatTool = listed.result.tools.find((tool) => tool.name === "matterhorn_crypto_chat");
   assert.ok(cryptoChatTool?.inputSchema?.properties?.destination, "crypto chat must accept a public Bittensor destination");

@@ -35,7 +35,7 @@ export type MatterhornCryptoIntegrationSetupStep = {
 };
 
 export type MatterhornCryptoIntegrationVerificationCheck = {
-  id: "connection" | "workspace_scope" | "wallet_boundary";
+  id: "connection" | "workspace_scope" | "tool_scope" | "wallet_boundary";
   title: string;
   expected: string;
 };
@@ -98,6 +98,7 @@ const MCP_TARGETS = new Set<MatterhornCryptoIntegrationTarget>([
 
 const CLIENT_TOKEN_PLACEHOLDER =
   "<set MATTERHORN_WORK_TOKEN in the client environment>";
+const GUARDED_CLIENT_MCP_PROFILE = "guarded_client";
 
 function normalizedServerOrigin(value: string | undefined): string {
   const candidate = value?.trim() || "http://127.0.0.1:8787";
@@ -168,6 +169,7 @@ function jsonArtifact(serverOrigin: string, entrypoint: string): string {
           env: {
             MATTERHORN_WORK_SERVER_URL: serverOrigin,
             MATTERHORN_WORK_TOKEN: CLIENT_TOKEN_PLACEHOLDER,
+            MATTERHORN_WORK_MCP_PROFILE: GUARDED_CLIENT_MCP_PROFILE,
           },
         },
       },
@@ -190,6 +192,7 @@ function codexArtifact(serverOrigin: string, entrypoint: string): string {
     "[mcp_servers.matterhorn-work.env]",
     `MATTERHORN_WORK_SERVER_URL = ${tomlString(serverOrigin)}`,
     `MATTERHORN_WORK_TOKEN = ${tomlString(CLIENT_TOKEN_PLACEHOLDER)}`,
+    `MATTERHORN_WORK_MCP_PROFILE = ${tomlString(GUARDED_CLIENT_MCP_PROFILE)}`,
   ].join("\n");
 }
 
@@ -202,6 +205,7 @@ function claudeCodeArtifact(serverOrigin: string, entrypoint: string): string {
     "claude mcp add --transport stdio \\",
     `  --env MATTERHORN_WORK_SERVER_URL=${shellSingleQuote(serverOrigin)} \\`,
     `  --env MATTERHORN_WORK_TOKEN=${shellSingleQuote(CLIENT_TOKEN_PLACEHOLDER)} \\`,
+    `  --env MATTERHORN_WORK_MCP_PROFILE=${shellSingleQuote(GUARDED_CLIENT_MCP_PROFILE)} \\`,
     "  matterhorn-work \\",
     `  -- node ${shellSingleQuote(entrypoint)}`,
   ].join("\n");
@@ -248,6 +252,7 @@ function httpArtifact(serverOrigin: string): string {
 function sharedSafety(): readonly string[] {
   return [
     "Use a client-scoped token from the environment; this setup never includes host approval authority.",
+    "When MCP is used, the guarded client profile exposes only the authoritative session workflow.",
     "Do not paste credentials, private keys, seed phrases, wallet exports, or raw signatures into configuration or chat.",
     "Matterhorn coworkers may research, prepare, and simulate; only the connected wallet may sign and submit.",
     "The MCP packages are not published to npm yet, so MCP targets use a trusted local checkout.",
@@ -432,6 +437,11 @@ export function createMatterhornCryptoIntegrationSetup(
           id: "workspace_scope",
           title: "Access stays limited",
           expected: "Only workspaces available to the client token should appear.",
+        },
+        {
+          id: "tool_scope",
+          title: "Tools stay focused",
+          expected: "Only the session workflow should appear; host approval, local-file, and direct protocol tools stay hidden.",
         },
         {
           id: "wallet_boundary",

@@ -27,6 +27,7 @@ Point the MCP server at a running Matterhorn Desks server:
 ```bash
 export MATTERHORN_WORK_SERVER_URL="http://127.0.0.1:8787"
 export MATTERHORN_WORK_TOKEN="<client-token>"
+export MATTERHORN_WORK_MCP_PROFILE="guarded_client" # recommended for external agents
 export MATTERHORN_WORK_HOST_TOKEN="<host-token>" # only needed for approval tools
 ```
 
@@ -48,7 +49,8 @@ For app-specific setup in Codex, Claude Code, Claude Desktop, Cursor, and generi
       "args": ["/absolute/path/to/matterhorn-work/packages/matterhorn-work-mcp/index.mjs"],
       "env": {
         "MATTERHORN_WORK_SERVER_URL": "http://127.0.0.1:8787",
-        "MATTERHORN_WORK_TOKEN": "<client-token>"
+        "MATTERHORN_WORK_TOKEN": "<client-token>",
+        "MATTERHORN_WORK_MCP_PROFILE": "guarded_client"
       }
     }
   }
@@ -58,6 +60,19 @@ For app-specific setup in Codex, Claude Code, Claude Desktop, Cursor, and generi
 This default is client-scoped and cannot answer host approval requests. Add
 `MATTERHORN_WORK_HOST_TOKEN` only to a trusted local operator client that is
 intentionally allowed to review approvals.
+
+### Tool profiles
+
+Set `MATTERHORN_WORK_MCP_PROFILE=guarded_client` for Codex, Claude Code,
+Claude Desktop, Cursor, and other external agents. This profile exposes only
+the authoritative workspace session workflow: status, visible workspaces,
+session lifecycle, message submission, progress, snapshots, and deletion. It
+hides host approval, local-file, Memory-write, direct protocol, operator, and
+QA tools from the model and rejects hidden calls before any server request.
+
+The legacy `full` profile remains the default for trusted operator setups while
+existing installations migrate. Generated Matterhorn client setup always
+chooses `guarded_client`. Unknown profiles fail closed during process startup.
 
 ## Tools
 
