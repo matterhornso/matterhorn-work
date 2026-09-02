@@ -244,7 +244,8 @@ export class MatterhornGuardedAgentRuntime {
       automaticAuthorities: input.coworker.automaticAuthorities.filter((authority) => authority !== "prepare"),
       actionBindings: input.coworker.actionBindings.filter((binding) => binding.access === "read"),
     };
-    this.capabilities.createRunGrant({
+    const expiresAtMs = Date.now() + 10 * 60_000;
+    this.establishRunSecurityState({
       runId,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -252,63 +253,57 @@ export class MatterhornGuardedAgentRuntime {
       executionMode: "work",
       requestToolProfiles: input.requestToolProfiles,
       coworker,
-    });
-    const expiresAtMs = Date.now() + 10 * 60_000;
-    this.stateStore.put({
-      kind: "active_agent_run",
-      key: input.sessionId,
-      workspaceId: input.workspaceId,
-      sessionId: input.sessionId,
-      value: { runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
       expiresAtMs,
     });
-    this.stateStore.put({
-      kind: "agent_run_scope",
-      key: runId,
-      workspaceId: input.workspaceId,
-      sessionId: input.sessionId,
-      value: { runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
-      expiresAtMs,
-    });
-    await this.receipts.start({
-      runId,
-      workspaceId: input.workspaceId,
-      sessionId: input.sessionId,
-      preflight: {
-        version: "matterhorn.agent-privacy-preflight.v1",
-        requestHash: sha256({
-          kind: "deterministic_coworker_check",
-          workspaceId: input.workspaceId,
-          sessionId: input.sessionId,
-          coworkerId: coworker.id,
-          coworkerRevision: coworker.revision,
-          toolProfiles: input.requestToolProfiles,
-        }),
+    try {
+      await this.receipts.start({
+        runId,
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
-        requestedMode: "public_research",
-        effectiveMode: "public_research",
-        decision: "allow",
-        provider: {
-          id: "matterhorn-deterministic-runtime",
-          name: "Matterhorn deterministic runtime",
-          modelId: "none",
-          privacyStatus: "local_processing",
-          trainingUse: "none",
-          retentionDays: 0,
-          policyUrl: null,
-          dataLeavesMatterhorn: false,
+        preflight: {
+          version: "matterhorn.agent-privacy-preflight.v1",
+          requestHash: sha256({
+            kind: "deterministic_coworker_check",
+            workspaceId: input.workspaceId,
+            sessionId: input.sessionId,
+            coworkerId: coworker.id,
+            coworkerRevision: coworker.revision,
+            toolProfiles: input.requestToolProfiles,
+          }),
+          workspaceId: input.workspaceId,
+          sessionId: input.sessionId,
+          requestedMode: "public_research",
+          effectiveMode: "public_research",
+          decision: "allow",
+          provider: {
+            id: "matterhorn-deterministic-runtime",
+            name: "Matterhorn deterministic runtime",
+            modelId: "none",
+            privacyStatus: "local_processing",
+            trainingUse: "none",
+            retentionDays: 0,
+            policyUrl: null,
+            dataLeavesMatterhorn: false,
+          },
+          detectedData: {
+            labels: ["public", "untrusted_external"],
+            categories: ["scheduled_crypto_watch"],
+            redactionCount: 0,
+          },
+          reason: "This bounded watch is evaluated deterministically without a model provider.",
         },
-        detectedData: {
-          labels: ["public", "untrusted_external"],
-          categories: ["scheduled_crypto_watch"],
-          redactionCount: 0,
-        },
-        reason: "This bounded watch is evaluated deterministically without a model provider.",
-      },
-      consentUsed: false,
-      toolCallBudget: { reads: coworker.maxReadCallsPerRun, preparesPerFamily: 0, submits: 0 },
-    });
+        consentUsed: false,
+        toolCallBudget: { reads: coworker.maxReadCallsPerRun, preparesPerFamily: 0, submits: 0 },
+      });
+    } catch (error) {
+      this.revokeRun(runId);
+      try {
+        await this.receipts.complete({ runId, status: "error" });
+      } catch {
+        // Preserve the receipt startup failure after revoking all authority.
+      }
+      throw error;
+    }
     return { runId, sessionId: input.sessionId };
   }
 
@@ -459,42 +454,35 @@ export class MatterhornGuardedAgentRuntime {
     const previousRunId = this.activeRun(input.sessionId);
     if (previousRunId) await this.finishRun(previousRunId, "cancelled");
     const runId = `${this.capabilities.mode === "off" ? "agent_run_off" : "agent_run"}_${randomUUID()}`;
-    if (this.capabilities.mode !== "off") {
-      this.capabilities.createRunGrant({
-        runId,
-        workspaceId: input.workspaceId,
-        sessionId: input.sessionId,
-        agentId: input.agentId,
-        executionMode: input.executionMode,
-        requestToolProfiles: input.requestToolProfiles,
-        coworker: input.coworker,
-      });
-    }
     const expiresAtMs = Date.now() + 6 * 60 * 60 * 1_000;
-    this.stateStore.put({
-      kind: "active_agent_run",
-      key: input.sessionId,
-      workspaceId: input.workspaceId,
-      sessionId: input.sessionId,
-      value: { runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
-      expiresAtMs,
-    });
-    this.stateStore.put({
-      kind: "agent_run_scope",
-      key: runId,
-      workspaceId: input.workspaceId,
-      sessionId: input.sessionId,
-      value: { runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
-      expiresAtMs,
-    });
-    await this.receipts.start({
+    this.establishRunSecurityState({
       runId,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
-      preflight: current,
-      consentUsed,
-      memoryReadIds: input.memoryIds,
+      agentId: input.agentId,
+      executionMode: input.executionMode,
+      requestToolProfiles: input.requestToolProfiles,
+      coworker: input.coworker,
+      expiresAtMs,
     });
+    try {
+      await this.receipts.start({
+        runId,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        preflight: current,
+        consentUsed,
+        memoryReadIds: input.memoryIds,
+      });
+    } catch (error) {
+      this.revokeRun(runId);
+      try {
+        await this.receipts.complete({ runId, status: "error" });
+      } catch {
+        // Preserve the receipt startup failure after revoking all authority.
+      }
+      throw error;
+    }
     return { runId, preflight: current, consentUsed };
   }
 
@@ -873,6 +861,58 @@ export class MatterhornGuardedAgentRuntime {
 
   close(): void {
     this.stateStore.close();
+  }
+
+  private establishRunSecurityState(input: {
+    runId: string;
+    workspaceId: string;
+    sessionId: string;
+    agentId?: string;
+    executionMode: MatterhornExecutionMode;
+    requestToolProfiles?: readonly Record<string, boolean>[];
+    coworker?: MatterhornCoworkerRunBinding;
+    expiresAtMs: number;
+  }): void {
+    this.stateStore.deleteExpired();
+    try {
+      this.stateStore.transaction(() => {
+        const activeStored = this.stateStore.putIfAbsent({
+          kind: "active_agent_run",
+          key: input.sessionId,
+          workspaceId: input.workspaceId,
+          sessionId: input.sessionId,
+          value: { runId: input.runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
+          expiresAtMs: input.expiresAtMs,
+        });
+        if (!activeStored) throw new Error("agent_run_active_state_conflict");
+        const scopeStored = this.stateStore.putIfAbsent({
+          kind: "agent_run_scope",
+          key: input.runId,
+          workspaceId: input.workspaceId,
+          sessionId: input.sessionId,
+          value: { runId: input.runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
+          expiresAtMs: input.expiresAtMs,
+        });
+        if (!scopeStored) throw new Error("agent_run_scope_state_conflict");
+        if (this.capabilities.mode !== "off") {
+          this.capabilities.createRunGrant({
+            runId: input.runId,
+            workspaceId: input.workspaceId,
+            sessionId: input.sessionId,
+            agentId: input.agentId,
+            executionMode: input.executionMode,
+            requestToolProfiles: input.requestToolProfiles,
+            coworker: input.coworker,
+          });
+        }
+      });
+    } catch (error) {
+      this.capabilities.closeRun(input.runId);
+      const active = this.stateStore.get<{ runId: string }>("active_agent_run", input.sessionId);
+      if (active?.runId === input.runId) this.stateStore.delete("active_agent_run", input.sessionId);
+      this.stateStore.delete("agent_run_scope", input.runId);
+      throw error;
+    }
   }
 
   private persistStagedCapability(callId: string, workspaceId: string, sessionId: string): void {

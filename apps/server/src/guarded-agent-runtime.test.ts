@@ -39,6 +39,125 @@ afterAll(async () => {
 });
 
 describe("guarded agent runtime transport", () => {
+  test("rolls back every run record when scope persistence fails", async () => {
+    const path = join(dataDir, "run-scope-startup-rollback.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const originalPutIfAbsent = store.putIfAbsent.bind(store);
+    let failScopeWrite = true;
+    Object.defineProperty(store, "putIfAbsent", {
+      configurable: true,
+      value: (input: Parameters<MatterhornGuardedRuntimeStateStore["putIfAbsent"]>[0]) => {
+        if (failScopeWrite && input.kind === "agent_run_scope") {
+          failScopeWrite = false;
+          throw new Error("injected_agent_run_scope_write_failure");
+        }
+        return originalPutIfAbsent(input);
+      },
+    });
+    const prompt = {
+      workspaceId: "ws_scope_startup_rollback",
+      sessionId: "ses_scope_startup_rollback",
+      parts: [{ type: "text" as const, text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work" as const,
+    };
+
+    await expect(runtime.acceptPrompt(prompt)).rejects.toThrow("injected_agent_run_scope_write_failure");
+    expect(runtime.capabilities.activeRun(prompt.sessionId)).toBeNull();
+    expect(store.list("active_agent_run", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    expect(store.list("agent_run_scope", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    expect(store.list("run_grant", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    expect(await runtime.receipts.list(prompt.workspaceId)).toHaveLength(0);
+
+    Object.defineProperty(store, "putIfAbsent", { configurable: true, value: originalPutIfAbsent });
+    const retried = await runtime.acceptPrompt(prompt);
+    expect(runtime.capabilities.activeRun(prompt.sessionId)).toBe(retried.runId);
+    runtime.close();
+  });
+
+  test("does not retain memory-only authority when grant persistence fails", async () => {
+    const path = join(dataDir, "run-grant-startup-rollback.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const originalPut = store.put.bind(store);
+    let failGrantWrite = true;
+    Object.defineProperty(store, "put", {
+      configurable: true,
+      value: (input: Parameters<MatterhornGuardedRuntimeStateStore["put"]>[0]) => {
+        if (failGrantWrite && input.kind === "run_grant") {
+          failGrantWrite = false;
+          throw new Error("injected_run_grant_write_failure");
+        }
+        return originalPut(input);
+      },
+    });
+    const prompt = {
+      workspaceId: "ws_grant_startup_rollback",
+      sessionId: "ses_grant_startup_rollback",
+      parts: [{ type: "text" as const, text: "Compare public Bittensor validators" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-bittensor",
+      executionMode: "work" as const,
+    };
+
+    await expect(runtime.acceptPrompt(prompt)).rejects.toThrow("injected_run_grant_write_failure");
+    expect(runtime.capabilities.activeRun(prompt.sessionId)).toBeNull();
+    expect(store.list("active_agent_run", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    expect(store.list("agent_run_scope", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    expect(store.list("run_grant", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    expect(await runtime.receipts.list(prompt.workspaceId)).toHaveLength(0);
+
+    Object.defineProperty(store, "put", { configurable: true, value: originalPut });
+    const retried = await runtime.acceptPrompt(prompt);
+    expect(runtime.capabilities.activeRun(prompt.sessionId)).toBe(retried.runId);
+    runtime.close();
+  });
+
+  test("revokes all authority when receipt startup cannot be indexed", async () => {
+    const path = join(dataDir, "receipt-startup-rollback.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const originalPut = store.put.bind(store);
+    let failReceiptIndexWrite = true;
+    Object.defineProperty(store, "put", {
+      configurable: true,
+      value: (input: Parameters<MatterhornGuardedRuntimeStateStore["put"]>[0]) => {
+        if (failReceiptIndexWrite && input.kind === "receipt_index") {
+          failReceiptIndexWrite = false;
+          throw new Error("injected_receipt_index_write_failure");
+        }
+        return originalPut(input);
+      },
+    });
+    const prompt = {
+      workspaceId: "ws_receipt_startup_rollback",
+      sessionId: "ses_receipt_startup_rollback",
+      parts: [{ type: "text" as const, text: "Read public Hyperliquid markets" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-hyperliquid",
+      executionMode: "work" as const,
+    };
+
+    await expect(runtime.acceptPrompt(prompt)).rejects.toThrow("injected_receipt_index_write_failure");
+    expect(runtime.capabilities.activeRun(prompt.sessionId)).toBeNull();
+    expect(store.list("active_agent_run", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    expect(store.list("agent_run_scope", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    expect(store.list("run_grant", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    expect(await runtime.receipts.list(prompt.workspaceId)).toEqual([
+      expect.objectContaining({ status: "error", workspaceId: prompt.workspaceId }),
+    ]);
+
+    Object.defineProperty(store, "put", { configurable: true, value: originalPut });
+    const retried = await runtime.acceptPrompt(prompt);
+    expect(runtime.capabilities.activeRun(prompt.sessionId)).toBe(retried.runId);
+    runtime.close();
+  });
+
   test("keeps the signed capability server-side and atomically redeems a non-secret call id", async () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     const accepted = await runtime.acceptPrompt({

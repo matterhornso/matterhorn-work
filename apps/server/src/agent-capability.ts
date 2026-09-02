@@ -444,9 +444,9 @@ export class MatterhornAgentCapabilityBroker {
       issuedCallIds: new Set(),
       expiresAtMs: nowMs + 6 * 60 * 60 * 1_000,
     };
+    this.persistGrant(grant);
     this.grants.set(input.runId, grant);
     this.activeRunBySession.set(input.sessionId, input.runId);
-    this.persistGrant(grant);
   }
 
   issue(input: {
