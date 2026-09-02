@@ -10,6 +10,7 @@ import {
 } from "./first-party-crypto-app-certification-driver.js";
 import { certifyMatterhornFirstPartyCryptoApp } from "./first-party-crypto-app-certifier.js";
 import {
+  buildMatterhornFirstPartyBittensorTestnetManifest,
   buildMatterhornFirstPartyPolymarketResearchManifest,
   buildMatterhornFirstPartyTestnetManifests,
 } from "./first-party-crypto-apps.js";
@@ -23,7 +24,7 @@ const SUI_RECIPIENT = `0x${"2".repeat(64)}`;
 const HYPERLIQUID_ADDRESS = `0x${"a".repeat(40)}`;
 const keys = generateKeyPairSync("ed25519");
 
-const manifests = buildMatterhornFirstPartyTestnetManifests({
+const manifests = [...buildMatterhornFirstPartyTestnetManifests({
   publisherId: "matterhorn",
   publisherKeyId: "certification-test",
   sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
@@ -31,7 +32,14 @@ const manifests = buildMatterhornFirstPartyTestnetManifests({
   hyperliquidTestnetEndpoint: "https://api.hyperliquid-testnet.xyz/info",
   privacyPolicyUrl: "https://matterhorn.so/privacy",
   securityContact: "security@matterhorn.so",
-});
+}), buildMatterhornFirstPartyBittensorTestnetManifest({
+  publisherId: "matterhorn",
+  publisherKeyId: "certification-test",
+  sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
+  bittensorTestnetSidecarEndpoint: "https://bittensor-testnet.gateway.matterhorn.so",
+  privacyPolicyUrl: "https://matterhorn.so/privacy",
+  securityContact: "security@matterhorn.so",
+})];
 
 const inputs: MatterhornFirstPartyCertificationInputs = {
   sui_account_read: { address: SUI_ADDRESS },
@@ -48,6 +56,8 @@ const inputs: MatterhornFirstPartyCertificationInputs = {
     reduceOnly: false,
     maxSlippageBps: 50,
   },
+  bittensor_subnet_list: { limit: 2 },
+  bittensor_subnet_read: { netuid: 14, validatorLimit: 2 },
 };
 
 function output(actionId: string): unknown {
@@ -106,9 +116,57 @@ function output(actionId: string): unknown {
     simulationReference: `sha256:${"2".repeat(64)}`,
     expiresAt: "2026-09-01T12:00:30.000Z",
   };
-  throw new Error(actionId.startsWith("sui_") || actionId === "execute_transaction"
+  if (actionId === "bittensor_subnet_list") return {
+    network: "bittensor:test",
+    subnets: [{
+      netuid: 14,
+      name: "TAOHash",
+      symbol: "SN14",
+      category: "Compute",
+      description: "Testnet subnet",
+      priceTao: 0.5,
+      emission: 0.15,
+      tempo: 360,
+    }],
+    block: 123456,
+    observedAt: NOW,
+  };
+  if (actionId === "bittensor_subnet_read") return {
+    network: "bittensor:test",
+    subnet: {
+      netuid: 14,
+      name: "TAOHash",
+      symbol: "SN14",
+      category: "Compute",
+      description: "Testnet subnet",
+      priceTao: 0.5,
+      emission: 0.15,
+      tempo: 360,
+    },
+    validators: [{
+      uid: 1,
+      hotkey: `5${"A".repeat(47)}`,
+      stake: 1_000,
+      trust: 0.9,
+      validatorTrust: 0.8,
+      dividends: 0.2,
+      emission: 0.1,
+      active: true,
+      validatorPermit: true,
+    }],
+    totalStake: 1_000,
+    dynamicBlock: 123456,
+    metagraphBlock: 123457,
+    observedAt: NOW,
+  };
+  if (actionId === "execute_transaction") {
+    throw new Error("first_party_app_action_invalid");
+  }
+  throw new Error(actionId.startsWith("sui_")
     ? "first_party_sui_action_invalid"
-    : "first_party_hyperliquid_action_invalid");
+    : actionId.startsWith("hyperliquid_")
+      ? "first_party_hyperliquid_action_invalid"
+      : "first_party_bittensor_action_invalid");
 }
 
 const executor: MatterhornCryptoAppTransportExecutor = async (request) => {
@@ -116,7 +174,9 @@ const executor: MatterhornCryptoAppTransportExecutor = async (request) => {
   if (request.action.id === "execute_transaction") {
     throw new Error(request.appId.includes("sui")
       ? "first_party_sui_action_invalid"
-      : "first_party_hyperliquid_action_invalid");
+      : request.appId.includes("hyperliquid")
+        ? "first_party_hyperliquid_action_invalid"
+        : "first_party_bittensor_action_invalid");
   }
   return {
     data: output(request.action.id),
@@ -129,7 +189,7 @@ const executor: MatterhornCryptoAppTransportExecutor = async (request) => {
 };
 
 describe("first-party crypto app certification driver", () => {
-  test("executes every adversarial probe for Sui and Hyperliquid without retaining identities", async () => {
+  test("executes every adversarial probe for Sui, Hyperliquid, and Bittensor without retaining identities", async () => {
     for (const manifest of manifests) {
       const staticReport = runCryptoAppManifestConformance(manifest, {
         publisherKey: keys.publicKey,
@@ -194,28 +254,29 @@ describe("first-party crypto app certification driver", () => {
     }
   });
 
-  test("builds the exact operator promotion body without retaining private inputs", async () => {
-    const manifest = manifests.find((item) => item.appId === "matterhorn.sui-testnet")!;
-    const promotion = await certifyMatterhornFirstPartyCryptoApp({
-      manifest,
-      publisherPublicKey: keys.publicKey,
-      policyVersion: "policy-certification-1",
-      actionInputs: inputs,
-      driver: createFirstPartyCryptoAppCertificationDriver({
+  test("builds exact operator promotion bodies without retaining private inputs", async () => {
+    for (const manifest of manifests) {
+      const promotion = await certifyMatterhornFirstPartyCryptoApp({
+        manifest,
+        publisherPublicKey: keys.publicKey,
+        policyVersion: "policy-certification-1",
         actionInputs: inputs,
-        executor,
-        resolveDns: async () => [{ address: PEER, family: 4 }],
+        driver: createFirstPartyCryptoAppCertificationDriver({
+          actionInputs: inputs,
+          executor,
+          resolveDns: async () => [{ address: PEER, family: 4 }],
+          now: () => new Date(NOW),
+        }),
         now: () => new Date(NOW),
-      }),
-      now: () => new Date(NOW),
-    });
-    expect(Object.keys(promotion).sort()).toEqual(["report", "runtimeReport", "state"]);
-    expect(promotion.state).toBe("certified_testnet");
-    expect(promotion.report.passed).toBe(true);
-    expect(promotion.runtimeReport.passed).toBe(true);
-    const serialized = JSON.stringify(promotion);
-    expect(serialized).not.toContain(SUI_ADDRESS);
-    expect(serialized).not.toContain(SUI_RECIPIENT);
+      });
+      expect(Object.keys(promotion).sort()).toEqual(["report", "runtimeReport", "state"]);
+      expect(promotion.state).toBe("certified_testnet");
+      expect(promotion.report.passed).toBe(true);
+      expect(promotion.runtimeReport.passed).toBe(true);
+      const serialized = JSON.stringify(promotion);
+      expect(serialized).not.toContain(SUI_ADDRESS);
+      expect(serialized).not.toContain(SUI_RECIPIENT);
+    }
   });
 
   test("does not promote the mainnet Polymarket research contract through the testnet certifier", async () => {

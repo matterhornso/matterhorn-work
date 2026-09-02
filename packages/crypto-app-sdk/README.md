@@ -54,16 +54,20 @@ const fixtureReport = validateCryptoAppFixture(manifest, {
 });
 ```
 
-Reference Sui and Hyperliquid testnet fixture packs are also available for inert schema checks:
+Reference Sui, Hyperliquid, and read-only Bittensor testnet fixture packs are also available for inert schema checks:
 
 ```ts
 import {
+  createMatterhornBittensorTestnetFixturePack,
   createMatterhornSuiTestnetFixturePack,
   validateMatterhornCryptoProtocolFixturePack,
 } from "@matterhorn-work/crypto-app-sdk";
 
 const pack = createMatterhornSuiTestnetFixturePack();
 const report = validateMatterhornCryptoProtocolFixturePack(manifest, pack);
+
+// The Bittensor pack contains only subnet and validator public-read examples.
+const bittensorPack = createMatterhornBittensorTestnetFixturePack();
 ```
 
 Fixture packs contain no credentials or signing material and perform no I/O. They do not replace Matterhorn's live adversarial probes or testnet certification.

@@ -14,7 +14,7 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 1 trusted JSON-over-HTTPS transport foundation with DNS address pinning, TLS hostname verification, peer verification, redirect/content/size bounds, and server-side credential resolution: complete and backend-only.
 - Phase 1 pinned JSON method boundary: complete and backend-only. Certified transports may use only bodyless `GET` or JSON `POST`; unsupported methods, GET bodies, missing or invalid POST bodies, credential-bearing or non-HTTPS URLs, fragments, redirects, peer changes, request/response-size violations, and non-JSON or deceptive JSON-prefixed media types fail before or during the pinned request. Existing generic adapter calls remain POST-only.
 - Phase 1 guarded-runtime authorization bridge with explicit certified-action-to-tool bindings, exact hash-bound single-use capabilities, durable reservations, restart-safe receipts, and run-close revocation: complete and backend-only.
-- Phase 1 signed, testnet-only Sui and Hyperliquid manifest contracts, closed projections, guarded-tool bindings, and offline routed fixtures: complete and backend-only.
+- Phase 1 signed, testnet-only Sui and Hyperliquid transaction-capable manifest contracts plus a read-only Bittensor testnet contract, closed projections, guarded-tool bindings, and offline routed fixtures: complete and backend-only.
 - Phase 1 pinned live-source executor: Sui balance/checkpoint reads and exact transfer simulations plus Hyperliquid market/orderbook/account reads and exact short-lived order previews are complete and backend-only. Hyperliquid preparation never calls the exchange endpoint.
 - Phase 1 Sui SDK boundary: complete and backend-only. Matterhorn injects an explicit binary gRPC-web transport over a TLS-verified, IPv4-pinned HTTP/2 socket. The exact allowlist contains only `StateService/GetBalance`, `StateService/GetCoinInfo`, `LedgerService/GetServiceInfo`, `LedgerService/BatchGetObjects`, `LedgerService/GetTransaction`, and `TransactionExecutionService/SimulateTransaction` for typed balance, coin-metadata, checkpoint-freshness, Walrus object certification, exact wallet-receipt verification, and simulation work. `BatchGetObjects` is reached only by the official Walrus object parser. `GetTransaction` is reached only by the independent public-receipt verifier and accepts one exact digest. Both remain read surfaces. `ExecuteTransaction`, batch transaction lookup, and every other method fail before dialing.
 - Phase 1 durable operational policy: complete and backend-only. Workspace/day quota reservations, per-call cost ceilings, replay-safe reconciliation, abandoned-reservation expiry, tenant purge, and circuit state persist atomically in SQLite across process restarts.
@@ -22,7 +22,7 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md)
 - Phase 1 account-safe catalog and connection service: complete. Authenticated discovery includes only the current certified revision, exposes signed/report hashes and closed action schemas without adapter endpoints or publisher/credential/creator internals, removes suspended apps immediately, and delegates connection lifecycle through tenant-scoped redacted views. Browser JSON cannot supply vault references or wallet IDs. Every surface fails closed while gateway mode is `off`.
 - Phase 5 workspace app catalog: complete for the invite testnet slice. Users can search by app or task, filter by task type, protocol, and exact network, inspect plain-language authority/risk/freshness/privacy/health/version/cost status, see prior revocations, and connect, pause, resume, or permanently remove tenant-scoped access. The browser receives no adapter endpoint, publisher key, signature, security contact, credential reference, owner identifier, or wallet identifier.
 - Phase 1 trusted operator promotion boundary: complete. Manifest registration returns a server-generated static report; promotion accepts only matching static plus sealed runtime reports. Certification, suspension, revocation, inspection, and history are host-token-only, and client bearer tokens fail before the handler.
-- Phase 1 first-party certification driver and operator command: complete. The driver executes every required adversarial probe against the pinned Sui and Hyperliquid adapters, retains hashes only, refuses secret-bearing inputs, and writes a promotion artifact only after full verification. Public Sui and Hyperliquid testnet reads have passed live transport probes.
+- Phase 1 first-party certification driver and operator command: complete for Sui, Hyperliquid, and read-only Bittensor. The driver executes every required adversarial probe, retains hashes only, refuses secret-bearing inputs, and writes a promotion artifact only after full verification. Public Sui and Hyperliquid testnet reads have passed live transport probes; Bittensor live certification still requires an operator-hosted Python-SDK `test` sidecar.
 - Remaining Phase 1 operator acceptance: supply operator-controlled testnet identities to complete the financial Sui simulation and Hyperliquid order-preview probes, then promote the resulting sealed reports. Publisher signing keys and testnet accounts remain outside source and server configuration.
 - Phase 2 durable profile and ownership foundation: complete. Coworkers persist in an owner/workspace-scoped SQLite store with closed policy fields, bounded limits, optimistic revisions, explicit policy versioning, terminal revocation, immediate pause/delete, account-safe authenticated routes, and disabled-mode no-I/O behavior. Existing profiles fail active resolution after a policy-version change until an explicit revisioned update rebinds them.
 - Phase 2 chat and authority binding: complete for all four initial roles. Market Analyst and Risk Monitor remain read/watch only; Transaction Coordinator and Treasury Coworker may prepare one exact testnet wallet review per action family but receive no signing or submission authority. Selected profiles become versioned private system context. A separate server-owned, versioned master prompt constrains each role, while guarded run grants and hidden capabilities bind the exact coworker revision/policy, certified app/action/proxy mapping, networks, data labels, authorities, and per-run budgets. Legacy direct tools, broadened scopes, disallowed private context, stale profiles, and disallowed provider consent fail closed, while lifecycle changes revoke staged authority immediately.
@@ -108,7 +108,7 @@ The Web2 simplicity comes from one setup flow, one searchable catalog, one budge
 
 ### Outcome
 
-A signed, version-pinned, revocable registry projects multiple crypto protocols through one safe read/watch/prepare/simulate interface. Sui and Hyperliquid become the first certified first-party adapters.
+A signed, version-pinned, revocable registry projects multiple crypto protocols through one safe read/watch/prepare/simulate interface. Sui and Hyperliquid are the first transaction-capable testnet adapters; Bittensor adds a separately certified read-only testnet boundary without expanding wallet authority.
 
 ### Build slices
 
@@ -132,7 +132,7 @@ A signed, version-pinned, revocable registry projects multiple crypto protocols 
    - Static checks for forbidden authority and unknown fields.
    - Adversarial output/prompt-injection tests.
    - Auth confusion, tenant isolation, timeout, schema drift, replay, and egress tests.
-   - Testnet fixtures for Sui and Hyperliquid.
+   - Testnet fixtures for Sui, Hyperliquid, and read-only Bittensor research.
    - Promotion requires both the passing static report and a complete passing runtime report cryptographically bound to the manifest, policy, environment, and redacted probe-evidence hashes.
 5. **Catalog API**
    - Search and category filters.
@@ -151,7 +151,7 @@ A signed, version-pinned, revocable registry projects multiple crypto protocols 
 
 - Tampered, unsigned, revoked, schema-drifted, or submit-capable manifests never resolve.
 - Cross-workspace connections and wrong-audience credentials fail with zero upstream traffic.
-- Sui and Hyperliquid pass the conformance suite on testnet.
+- Sui, Hyperliquid, and read-only Bittensor pass the conformance suite on testnet.
 - No production behavior changes while gateway mode is `off`.
 
 ## Phase 2 — Persistent Chat-Operated Coworkers

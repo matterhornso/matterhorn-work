@@ -8,8 +8,8 @@ import {
 
 export type MatterhornCryptoProtocolFixturePack = {
   version: "matterhorn.crypto-protocol-fixture-pack.v1";
-  protocol: "sui" | "hyperliquid";
-  network: "sui:testnet" | "hyperliquid:testnet";
+  protocol: "sui" | "hyperliquid" | "bittensor";
+  network: "sui:testnet" | "hyperliquid:testnet" | "bittensor:test";
   fixtures: MatterhornCryptoAppFixture[];
 };
 
@@ -155,6 +155,68 @@ export function createMatterhornHyperliquidTestnetFixturePack(): MatterhornCrypt
           effectiveLeverage: "2",
           simulationReference: "testnet-market-version-100:fixture-preview-1",
           expiresAt: "2026-09-01T12:00:05.000Z",
+        },
+      },
+    ],
+  });
+}
+
+/** Public read-only Bittensor testnet fixtures. No wallet or extrinsic material is present. */
+export function createMatterhornBittensorTestnetFixturePack(): MatterhornCryptoProtocolFixturePack {
+  return clonePack({
+    version: "matterhorn.crypto-protocol-fixture-pack.v1",
+    protocol: "bittensor",
+    network: "bittensor:test",
+    fixtures: [
+      {
+        actionId: "bittensor_subnet_list",
+        input: { limit: 2 },
+        output: {
+          network: "bittensor:test",
+          subnets: [{
+            netuid: 14,
+            name: "TAOHash",
+            symbol: "SN14",
+            category: "Compute and infrastructure",
+            description: "Inert public testnet subnet fixture.",
+            priceTao: 0.5,
+            emission: 0.15,
+            tempo: 360,
+          }],
+          block: 123456,
+          observedAt: OBSERVED_AT,
+        },
+      },
+      {
+        actionId: "bittensor_subnet_read",
+        input: { netuid: 14, validatorLimit: 2 },
+        output: {
+          network: "bittensor:test",
+          subnet: {
+            netuid: 14,
+            name: "TAOHash",
+            symbol: "SN14",
+            category: "Compute and infrastructure",
+            description: "Inert public testnet subnet fixture.",
+            priceTao: 0.5,
+            emission: 0.15,
+            tempo: 360,
+          },
+          validators: [{
+            uid: 1,
+            hotkey: `5${"A".repeat(47)}`,
+            stake: 1000,
+            trust: 0.9,
+            validatorTrust: 0.8,
+            dividends: 0.2,
+            emission: 0.1,
+            active: true,
+            validatorPermit: true,
+          }],
+          totalStake: 1000,
+          dynamicBlock: 123456,
+          metagraphBlock: 123457,
+          observedAt: OBSERVED_AT,
         },
       },
     ],

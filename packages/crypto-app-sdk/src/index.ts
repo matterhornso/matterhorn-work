@@ -36,6 +36,7 @@ export {
 } from "./developer-client.js";
 
 export {
+  createMatterhornBittensorTestnetFixturePack,
   createMatterhornHyperliquidTestnetFixturePack,
   createMatterhornSuiTestnetFixturePack,
   validateMatterhornCryptoProtocolFixturePack,

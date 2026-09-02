@@ -26,6 +26,13 @@ export type MatterhornFirstPartyPolymarketResearchOptions = Omit<
   polymarketGammaEndpoint: string;
 };
 
+export type MatterhornFirstPartyBittensorTestnetOptions = Omit<
+  MatterhornFirstPartyCryptoAppOptions,
+  "suiTestnetEndpoint" | "hyperliquidTestnetEndpoint"
+> & {
+  bittensorTestnetSidecarEndpoint: string;
+};
+
 const FIRST_PARTY_ACTION_PROXY_TOOLS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "matterhorn.sui-testnet": {
     sui_account_read: "matterhorn_sui_get_balance",
@@ -39,6 +46,10 @@ const FIRST_PARTY_ACTION_PROXY_TOOLS: Readonly<Record<string, Readonly<Record<st
   },
   "matterhorn.polymarket-research": {
     polymarket_market_search: "matterhorn_polymarket_search_markets",
+  },
+  "matterhorn.bittensor-testnet": {
+    bittensor_subnet_list: "matterhorn_bittensor_chat",
+    bittensor_subnet_read: "matterhorn_bittensor_chat",
   },
 };
 
@@ -149,6 +160,26 @@ export function firstPartyCryptoAppAdapterArguments(input: {
     }
     return { query, limit };
   }
+  if (input.appId === "matterhorn.bittensor-testnet" && input.actionId === "bittensor_subnet_list") {
+    const limit = args.limit === undefined ? 12 : Number(args.limit);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+      throw new Error("first_party_crypto_app_arguments_invalid");
+    }
+    return { limit };
+  }
+  if (input.appId === "matterhorn.bittensor-testnet" && input.actionId === "bittensor_subnet_read") {
+    const netuid = Number(args.netuid);
+    const validatorLimit = args.limit === undefined ? 10 : Number(args.limit);
+    if (!Number.isSafeInteger(netuid)
+      || netuid < 0
+      || netuid > 65_535
+      || !Number.isSafeInteger(validatorLimit)
+      || validatorLimit < 1
+      || validatorLimit > 20) {
+      throw new Error("first_party_crypto_app_arguments_invalid");
+    }
+    return { netuid, validatorLimit };
+  }
   throw new Error("first_party_crypto_app_action_unsupported");
 }
 
@@ -166,6 +197,7 @@ const decimalString = { type: "string", minLength: 1, maxLength: 96 };
 const addressString = { type: "string", minLength: 3, maxLength: 128 };
 const identifierString = { type: "string", minLength: 1, maxLength: 160 };
 const timestampString = { type: "string", minLength: 20, maxLength: 40 };
+const nullableMetric = { oneOf: [{ type: "number" }, { type: "null" }] };
 
 type FirstPartyManifestIdentity = Pick<
   MatterhornFirstPartyCryptoAppOptions,
@@ -429,6 +461,117 @@ function hyperliquidManifest(options: MatterhornFirstPartyCryptoAppOptions): Mat
         freshnessMaxAgeMs: 5_000,
         timeoutMs: 15_000,
         simulationRequired: true,
+        walletSubmissionOnly: true,
+        agentMaySubmit: false,
+      },
+    ],
+  });
+}
+
+function bittensorSubnetSchema(): Record<string, unknown> {
+  return objectSchema({
+    netuid: { type: "integer", minimum: 0, maximum: 65_535 },
+    name: { type: "string", minLength: 1, maxLength: 120 },
+    symbol: { type: "string", minLength: 1, maxLength: 32 },
+    category: { type: "string", minLength: 1, maxLength: 160 },
+    description: { type: "string", maxLength: 1_000 },
+    priceTao: nullableMetric,
+    emission: nullableMetric,
+    tempo: nullableMetric,
+  }, ["netuid", "name", "symbol", "category", "description", "priceTao", "emission", "tempo"]);
+}
+
+/**
+ * Testnet-only public Subtensor reads through Matterhorn's owned sidecar. The
+ * manifest intentionally excludes wallet, quote, prepare, sign, relay, submit,
+ * and arbitrary-path actions even though the legacy sidecar has other routes.
+ */
+export function buildMatterhornFirstPartyBittensorTestnetManifest(
+  options: MatterhornFirstPartyBittensorTestnetOptions,
+): MatterhornCryptoAppManifest {
+  const validatorSchema = objectSchema({
+    uid: { type: "integer", minimum: 0 },
+    hotkey: { type: "string", minLength: 32, maxLength: 64 },
+    stake: nullableMetric,
+    trust: nullableMetric,
+    validatorTrust: nullableMetric,
+    dividends: nullableMetric,
+    emission: nullableMetric,
+    active: { type: "boolean" },
+    validatorPermit: { oneOf: [{ type: "boolean" }, { type: "null" }] },
+  }, [
+    "uid",
+    "hotkey",
+    "stake",
+    "trust",
+    "validatorTrust",
+    "dividends",
+    "emission",
+    "active",
+    "validatorPermit",
+  ]);
+  return signedManifest(options, {
+    appId: "matterhorn.bittensor-testnet",
+    displayName: "Bittensor Testnet",
+    description: "Certified read-only Bittensor testnet subnet and validator research.",
+    manifestRevision: "1.0.0",
+    transport: { kind: "matterhorn_sdk", endpoint: options.bittensorTestnetSidecarEndpoint },
+    authentication: { type: "none", scopes: [] },
+    networks: [{ protocol: "bittensor", chainId: "bittensor:test", environment: "testnet" }],
+    actions: [
+      {
+        id: "bittensor_subnet_list",
+        title: "List Bittensor testnet subnets",
+        description: "Read bounded public subnet metadata with block and observation freshness.",
+        access: "read",
+        risk: "informational",
+        inputSchema: objectSchema({ limit: { type: "integer", minimum: 1, maximum: 50 } }),
+        outputProjectionSchema: objectSchema({
+          network: { type: "string", const: "bittensor:test" },
+          subnets: { type: "array", maxItems: 50, items: bittensorSubnetSchema() },
+          block: { type: "integer", minimum: 0 },
+          observedAt: timestampString,
+        }, ["network", "subnets", "block", "observedAt"]),
+        requiredScopes: [],
+        requiresFreshness: true,
+        freshnessMaxAgeMs: 90_000,
+        timeoutMs: 12_000,
+        simulationRequired: false,
+        walletSubmissionOnly: true,
+        agentMaySubmit: false,
+      },
+      {
+        id: "bittensor_subnet_read",
+        title: "Read Bittensor testnet subnet",
+        description: "Read one subnet and a bounded validator comparison from public testnet state.",
+        access: "read",
+        risk: "informational",
+        inputSchema: objectSchema({
+          netuid: { type: "integer", minimum: 0, maximum: 65_535 },
+          validatorLimit: { type: "integer", minimum: 1, maximum: 20 },
+        }, ["netuid"]),
+        outputProjectionSchema: objectSchema({
+          network: { type: "string", const: "bittensor:test" },
+          subnet: bittensorSubnetSchema(),
+          validators: { type: "array", maxItems: 20, items: validatorSchema },
+          totalStake: nullableMetric,
+          dynamicBlock: { type: "integer", minimum: 0 },
+          metagraphBlock: { type: "integer", minimum: 0 },
+          observedAt: timestampString,
+        }, [
+          "network",
+          "subnet",
+          "validators",
+          "totalStake",
+          "dynamicBlock",
+          "metagraphBlock",
+          "observedAt",
+        ]),
+        requiredScopes: [],
+        requiresFreshness: true,
+        freshnessMaxAgeMs: 30_000,
+        timeoutMs: 15_000,
+        simulationRequired: false,
         walletSubmissionOnly: true,
         agentMaySubmit: false,
       },

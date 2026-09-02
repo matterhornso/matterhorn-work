@@ -56,13 +56,16 @@ type RequestContext = {
 };
 
 const HYPERLIQUID_APP_ID = "matterhorn.hyperliquid-testnet";
+const BITTENSOR_APP_ID = "matterhorn.bittensor-testnet";
 const POLYMARKET_RESEARCH_APP_ID = "matterhorn.polymarket-research";
 const SUI_APP_ID = "matterhorn.sui-testnet";
 const HYPERLIQUID_NETWORK = "hyperliquid:testnet";
+const BITTENSOR_NETWORK = "bittensor:test";
 const POLYMARKET_RESEARCH_NETWORK = "polymarket:public";
 const SUI_NETWORK = "sui:testnet";
 const DECIMAL_RE = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
 const SIGNED_DECIMAL_RE = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
+const SS58_PUBLIC_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,64}$/;
 
 function record(value: unknown): JsonObject | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : null;
@@ -600,6 +603,188 @@ async function executeHyperliquid(
   };
 }
 
+function boundedBittensorText(value: unknown, field: string, maximum: number, allowEmpty = false): string {
+  if (typeof value !== "string") throw new Error(`first_party_bittensor_${field}_invalid`);
+  const text = value.trim();
+  if ((!allowEmpty && !text) || text.length > maximum || /[\u0000-\u001F\u007F]/.test(text)) {
+    throw new Error(`first_party_bittensor_${field}_invalid`);
+  }
+  return text;
+}
+
+function bittensorMetric(value: unknown, field: string): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const metric = finiteNumber(value);
+  if (metric === null || metric < 0) throw new Error(`first_party_bittensor_${field}_invalid`);
+  return metric;
+}
+
+function bittensorInteger(value: unknown, field: string, maximum = Number.MAX_SAFE_INTEGER): number {
+  const integer = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(integer) || integer < 0 || integer > maximum) {
+    throw new Error(`first_party_bittensor_${field}_invalid`);
+  }
+  return integer;
+}
+
+function bittensorSidecarMeta(value: unknown): {
+  payload: JsonObject;
+  observedAt: string;
+  block: number;
+} {
+  const payload = record(value);
+  if (!payload
+    || payload.network !== "test"
+    || payload.source !== "bittensor-python-sdk"
+    || payload.freshness !== "live") {
+    throw new Error("first_party_bittensor_source_identity_invalid");
+  }
+  const observedAt = nonEmptyString(payload.fetchedAt);
+  if (!observedAt || !Number.isFinite(Date.parse(observedAt))) {
+    throw new Error("first_party_bittensor_observed_at_invalid");
+  }
+  return {
+    payload,
+    observedAt,
+    block: bittensorInteger(payload.block, "block"),
+  };
+}
+
+function bittensorSubnet(value: unknown, expectedNetuid?: number): {
+  netuid: number;
+  name: string;
+  symbol: string;
+  category: string;
+  description: string;
+  priceTao: number | null;
+  emission: number | null;
+  tempo: number | null;
+} {
+  const subnet = record(value);
+  if (!subnet) throw new Error("first_party_bittensor_subnet_invalid");
+  const netuid = bittensorInteger(subnet.netuid, "netuid", 65_535);
+  if (expectedNetuid !== undefined && netuid !== expectedNetuid) {
+    throw new Error("first_party_bittensor_subnet_conflict");
+  }
+  return {
+    netuid,
+    name: boundedBittensorText(subnet.name, "subnet_name", 120),
+    symbol: boundedBittensorText(subnet.symbol, "subnet_symbol", 32),
+    category: boundedBittensorText(subnet.category, "subnet_category", 160),
+    description: boundedBittensorText(subnet.description, "subnet_description", 1_000, true),
+    priceTao: bittensorMetric(subnet.priceTao, "price_tao"),
+    emission: bittensorMetric(subnet.emission, "emission"),
+    tempo: bittensorMetric(subnet.tempo, "tempo"),
+  };
+}
+
+function bittensorSidecarEndpoint(base: URL, path: string): URL {
+  if (base.protocol !== "https:"
+    || base.username
+    || base.password
+    || base.pathname !== "/"
+    || base.search
+    || base.hash
+    || !path.startsWith("/")) {
+    throw new Error("first_party_bittensor_endpoint_invalid");
+  }
+  const endpoint = new URL(path, base.origin);
+  if (endpoint.origin !== base.origin || endpoint.username || endpoint.password || endpoint.hash) {
+    throw new Error("first_party_bittensor_endpoint_invalid");
+  }
+  return endpoint;
+}
+
+function oldestObservation(...values: string[]): string {
+  return values.reduce((oldest, value) => (
+    Date.parse(value) < Date.parse(oldest) ? value : oldest
+  ));
+}
+
+async function executeBittensor(
+  context: RequestContext,
+  actionId: string,
+  network: string,
+  args: JsonObject,
+): Promise<{ data: unknown; source: string; observedAt: string; blockOrVersion: string }> {
+  if (network !== BITTENSOR_NETWORK) throw new Error("first_party_bittensor_network_invalid");
+  const source = "Matterhorn Bittensor testnet sidecar";
+  if (actionId === "bittensor_subnet_list") {
+    const limit = positiveInteger(args.limit, 12, 50);
+    const endpoint = bittensorSidecarEndpoint(context.endpoint, "/subnets");
+    endpoint.searchParams.set("limit", String(limit));
+    const meta = bittensorSidecarMeta(await getJson(context, endpoint));
+    if (!Array.isArray(meta.payload.subnets) || meta.payload.subnets.length < 1 || meta.payload.subnets.length > 512) {
+      throw new Error("first_party_bittensor_subnet_list_invalid");
+    }
+    const subnets = meta.payload.subnets.slice(0, limit).map((item) => bittensorSubnet(item));
+    return {
+      data: {
+        network: BITTENSOR_NETWORK,
+        subnets,
+        block: meta.block,
+        observedAt: meta.observedAt,
+      },
+      source,
+      observedAt: meta.observedAt,
+      blockOrVersion: String(meta.block),
+    };
+  }
+  if (actionId !== "bittensor_subnet_read") throw new Error("first_party_bittensor_action_invalid");
+  const netuid = bittensorInteger(args.netuid, "netuid", 65_535);
+  const validatorLimit = positiveInteger(args.validatorLimit, 10, 20);
+  const [dynamicValue, metagraphValue] = await Promise.all([
+    getJson(context, bittensorSidecarEndpoint(context.endpoint, `/subnets/${netuid}/dynamic`)),
+    getJson(context, bittensorSidecarEndpoint(context.endpoint, `/subnets/${netuid}/metagraph`)),
+  ]);
+  const dynamic = bittensorSidecarMeta(dynamicValue);
+  const metagraph = bittensorSidecarMeta(metagraphValue);
+  const subnet = bittensorSubnet(dynamic.payload, netuid);
+  if (bittensorInteger(metagraph.payload.netuid, "netuid", 65_535) !== netuid) {
+    throw new Error("first_party_bittensor_metagraph_conflict");
+  }
+  if (!Array.isArray(metagraph.payload.neurons) || metagraph.payload.neurons.length > 512) {
+    throw new Error("first_party_bittensor_metagraph_invalid");
+  }
+  const validators = metagraph.payload.neurons.flatMap((value) => {
+    const neuron = record(value);
+    if (!neuron || (neuron.validator_permit !== null && typeof neuron.validator_permit !== "boolean")) {
+      throw new Error("first_party_bittensor_validator_invalid");
+    }
+    if (neuron.validator_permit !== true) return [];
+    const hotkey = boundedBittensorText(neuron.hotkey, "validator_hotkey", 64);
+    if (!SS58_PUBLIC_ADDRESS_RE.test(hotkey) || typeof neuron.active !== "boolean") {
+      throw new Error("first_party_bittensor_validator_invalid");
+    }
+    return [{
+      uid: bittensorInteger(neuron.uid, "validator_uid"),
+      hotkey,
+      stake: bittensorMetric(neuron.stake, "validator_stake"),
+      trust: bittensorMetric(neuron.trust, "validator_trust"),
+      validatorTrust: bittensorMetric(neuron.validator_trust, "validator_validator_trust"),
+      dividends: bittensorMetric(neuron.dividends, "validator_dividends"),
+      emission: bittensorMetric(neuron.emission, "validator_emission"),
+      active: neuron.active,
+      validatorPermit: true,
+    }];
+  }).sort((left, right) => (right.stake ?? -1) - (left.stake ?? -1)).slice(0, validatorLimit);
+  const observedAt = oldestObservation(dynamic.observedAt, metagraph.observedAt);
+  return {
+    data: {
+      network: BITTENSOR_NETWORK,
+      subnet,
+      validators,
+      totalStake: bittensorMetric(metagraph.payload.totalStake, "total_stake"),
+      dynamicBlock: dynamic.block,
+      metagraphBlock: metagraph.block,
+      observedAt,
+    },
+    source,
+    observedAt,
+    blockOrVersion: `${dynamic.block}:${metagraph.block}`,
+  };
+}
+
 function boundedPublicText(value: unknown, field: string, maximum: number): string {
   const text = nonEmptyString(value);
   if (!text || text.length > maximum || /[\u0000-\u001F\u007F]/.test(text)) {
@@ -792,9 +977,11 @@ export function createFirstPartyCryptoAppExecutor(
       ? await executeSui(context, input.action.id, input.network, input.arguments, observedAt)
       : input.appId === HYPERLIQUID_APP_ID
         ? await executeHyperliquid(context, input.action.id, input.network, input.arguments, observedAt)
-        : input.appId === POLYMARKET_RESEARCH_APP_ID
-          ? await executePolymarketResearch(context, input.action.id, input.network, input.arguments, observedAt)
-          : Promise.reject(new Error("first_party_app_unsupported"));
+        : input.appId === BITTENSOR_APP_ID
+          ? await executeBittensor(context, input.action.id, input.network, input.arguments)
+          : input.appId === POLYMARKET_RESEARCH_APP_ID
+            ? await executePolymarketResearch(context, input.action.id, input.network, input.arguments, observedAt)
+            : Promise.reject(new Error("first_party_app_unsupported"));
     if (!context.connectedAddress) throw new Error("first_party_network_observation_required");
     const costMicros = safeCost(options.estimateCostMicros?.({
       appId: input.appId,

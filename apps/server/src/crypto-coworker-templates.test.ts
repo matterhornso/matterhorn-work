@@ -42,6 +42,12 @@ describe("crypto coworker templates", () => {
       const template = getMatterhornCoworkerTemplate(id)!;
       expect(template.profile.automaticAuthorities).not.toContain("prepare");
       expect(template.profile.limits.maxPrepareCallsPerFamily).toBe(0);
+      expect(template.profile.allowedAppIds).toContain("matterhorn.bittensor-testnet");
+      expect(template.profile.allowedActionIds).toEqual(expect.arrayContaining([
+        "bittensor_subnet_list",
+        "bittensor_subnet_read",
+      ]));
+      expect(template.profile.allowedNetworks).toContain("bittensor:test");
     }
 
     for (const id of ["transaction_coordinator", "treasury_coworker"] as const) {

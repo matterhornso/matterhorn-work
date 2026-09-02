@@ -41,6 +41,7 @@ type CertificationOptions = {
 const SUPPORTED_APP_IDS = new Set([
   "matterhorn.sui-testnet",
   "matterhorn.hyperliquid-testnet",
+  "matterhorn.bittensor-testnet",
 ]);
 
 /**

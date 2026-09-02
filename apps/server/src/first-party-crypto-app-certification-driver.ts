@@ -58,6 +58,7 @@ type LiveActionResult = {
 const SUPPORTED_APP_IDS = new Set([
   "matterhorn.sui-testnet",
   "matterhorn.hyperliquid-testnet",
+  "matterhorn.bittensor-testnet",
 ]);
 const FORBIDDEN_INPUT_KEY = /(?:^|_)(?:api_?key|authorization|credential|mnemonic|password|passphrase|private_?key|raw_?signature|secret|seed(?:_?phrase)?|signed_?payload|token|wallet_?export)(?:$|_)/i;
 const FORBIDDEN_INPUT_VALUE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|\b(?:seed phrase|private key|wallet export|raw signature)\s*[:=]/i;
@@ -127,6 +128,7 @@ function isExpectedUnsupportedActionError(error: unknown): boolean {
   return error instanceof Error && (
     error.message === "first_party_sui_action_invalid"
     || error.message === "first_party_hyperliquid_action_invalid"
+    || error.message === "first_party_bittensor_action_invalid"
   );
 }
 

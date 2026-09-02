@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -206,7 +207,7 @@ def sdk_meta(source: str, subtensor: Any | None = None) -> dict[str, Any]:
     return {
         "network": os.environ.get("BITTENSOR_NETWORK", "finney"),
         "source": source,
-        "fetchedAt": None,
+        "fetchedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "block": current_block(subtensor) if subtensor is not None else None,
         "freshness": "live",
     }

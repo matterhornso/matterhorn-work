@@ -3,6 +3,7 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 
 import {
+  createMatterhornBittensorTestnetFixturePack,
   createMatterhornHyperliquidTestnetFixturePack,
   createMatterhornSuiTestnetFixturePack,
   validateMatterhornCryptoProtocolFixturePack,
@@ -73,8 +74,16 @@ function signManifest(draft: MatterhornUnsignedCryptoAppManifest) {
 
 describe("Matterhorn protocol fixture packs", () => {
   test("are deterministic, testnet-only, and never contain signing material", () => {
-    const packs = [createMatterhornSuiTestnetFixturePack(), createMatterhornHyperliquidTestnetFixturePack()];
-    expect(packs.map((pack) => pack.network)).toEqual(["sui:testnet", "hyperliquid:testnet"]);
+    const packs = [
+      createMatterhornSuiTestnetFixturePack(),
+      createMatterhornHyperliquidTestnetFixturePack(),
+      createMatterhornBittensorTestnetFixturePack(),
+    ];
+    expect(packs.map((pack) => pack.network)).toEqual([
+      "sui:testnet",
+      "hyperliquid:testnet",
+      "bittensor:test",
+    ]);
     expect(createMatterhornSuiTestnetFixturePack()).toEqual(createMatterhornSuiTestnetFixturePack());
     expect(JSON.stringify(packs)).not.toMatch(/private.?key|seed.?phrase|signature/i);
   });
