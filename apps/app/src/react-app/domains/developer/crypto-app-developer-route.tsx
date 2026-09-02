@@ -56,6 +56,14 @@ const stepCopy: Record<MatterhornCryptoDeveloperStatus["nextStep"], { title: str
     title: "Certification review is queued",
     body: "Matterhorn is running independent testnet probes. Passing local or static checks never promotes an app automatically.",
   },
+  fix_runtime_certification: {
+    title: "Runtime review needs a new revision",
+    body: "One or more independent testnet checks failed. Fix the adapter, sign a new immutable manifest revision, and submit it below.",
+  },
+  certification_complete: {
+    title: "Testnet review passed",
+    body: "Independent checks passed. This does not list or promote the app; Matterhorn completes that separate host review with you.",
+  },
 };
 
 function messageFor(error: unknown): string {
@@ -92,7 +100,7 @@ async function connect(): Promise<{ client: DeveloperClient; snapshot: PortalSna
 function StateMark({ step }: { step: MatterhornCryptoDeveloperStatus["nextStep"] }) {
   const Icon = step === "register_public_key" ? KeyRound
     : step === "await_certification_review" ? Clock3
-      : step === "request_testnet_certification" ? ShieldCheck
+      : step === "request_testnet_certification" || step === "certification_complete" ? ShieldCheck
         : Check;
   return <Icon aria-hidden="true" className="size-5 shrink-0 text-foreground" />;
 }
@@ -158,6 +166,10 @@ export function CryptoAppDeveloperRoute() {
   );
   const latestFailed = useMemo(
     () => snapshot?.submissions.find((item) => item.state === "static_failed") ?? null,
+    [snapshot],
+  );
+  const latestRuntimeFailed = useMemo(
+    () => snapshot?.submissions.find((item) => item.state === "certification_failed") ?? null,
     [snapshot],
   );
 
@@ -233,7 +245,9 @@ export function CryptoAppDeveloperRoute() {
                     <p className="text-xs leading-5 text-muted-foreground">Do not paste a private key. Matterhorn stores only the public SPKI key and its fingerprint.</p>
                     <Button type="submit" disabled={busy}>{busy ? "Registering…" : "Register public key"}</Button>
                   </form>
-                ) : snapshot.status.nextStep === "submit_testnet_manifest" || snapshot.status.nextStep === "fix_static_conformance" ? (
+                ) : snapshot.status.nextStep === "submit_testnet_manifest"
+                  || snapshot.status.nextStep === "fix_static_conformance"
+                  || snapshot.status.nextStep === "fix_runtime_certification" ? (
                   <div className="space-y-4">
                     <div><Label htmlFor="developer-manifest">Signed manifest JSON</Label><Textarea id="developer-manifest" className="mt-2 min-h-56 font-mono text-xs" value={manifestJson} onChange={(event) => setManifestJson(event.target.value)} spellCheck={false} /></div>
                     <Button disabled={busy || !manifestJson.trim()} onClick={() => void submitManifest()}>{busy ? "Checking…" : "Run static checks"}</Button>
@@ -250,6 +264,16 @@ export function CryptoAppDeveloperRoute() {
                         </ul>
                         <p className="mt-3 text-xs leading-5 text-muted-foreground">Submit a new immutable revision after correcting these issues. The failed revision is retained for audit history.</p>
                       </div>
+                    ) : snapshot.status.nextStep === "fix_runtime_certification" && latestRuntimeFailed?.runtimeReview ? (
+                      <div className="border-t border-border pt-4">
+                        <p className="text-sm font-medium">Checks to address</p>
+                        <ul className="mt-2 space-y-2 text-xs leading-5 text-muted-foreground">
+                          {latestRuntimeFailed.runtimeReview.probes.filter((probe) => !probe.passed).map((probe) => (
+                            <li key={probe.id} className="capitalize text-foreground">{readableFinding(probe.id)}</li>
+                          ))}
+                        </ul>
+                        <p className="mt-3 text-xs leading-5 text-muted-foreground">Submit a newly signed revision. The failed result remains in the audit history and cannot be overwritten.</p>
+                      </div>
                     ) : null}
                   </div>
                 ) : snapshot.status.nextStep === "request_testnet_certification" ? (
@@ -262,10 +286,15 @@ export function CryptoAppDeveloperRoute() {
                       </div>
                     ))}
                   </div>
-                ) : (
+                ) : snapshot.status.nextStep === "await_certification_review" ? (
                   <div className="flex items-start gap-3 text-sm">
                     <Clock3 aria-hidden="true" className="mt-0.5 size-4" />
                     <p className="leading-6 text-muted-foreground">{requested.length} revision{requested.length === 1 ? " is" : "s are"} awaiting independent review.</p>
+                  </div>
+                ) : (
+                  <div className="text-sm">
+                    <p className="font-medium">Independent testnet review complete</p>
+                    <p className="mt-2 leading-6 text-muted-foreground">Matterhorn will contact you about the separate listing review. No mainnet or wallet authority has been granted.</p>
                   </div>
                 )}
                 {error ? <p className="mt-4 text-sm text-destructive" role="alert">{error}</p> : null}
@@ -288,7 +317,13 @@ export function CryptoAppDeveloperRoute() {
                         <td className="py-4 pr-4"><span className="font-medium">{item.manifest.displayName}</span><span className="mt-1 block text-xs text-muted-foreground">{item.appId}</span></td>
                         <td className="px-4 py-4 font-mono text-xs">{item.manifestRevision}</td>
                         <td className="px-4 py-4">{item.staticReport.passed ? "Passed" : `${item.staticReport.findings.filter((finding) => finding.severity === "error").length} issues`}</td>
-                        <td className="px-4 py-4">{item.state === "certification_requested" ? "Queued" : item.state === "static_passed" ? "Ready to request" : "Fix and resubmit"}</td>
+                        <td className="px-4 py-4">{
+                          item.state === "certification_requested" ? "Queued"
+                            : item.state === "certification_passed" ? "Passed"
+                              : item.state === "certification_failed" ? "Needs new revision"
+                                : item.state === "static_passed" ? "Ready to request"
+                                  : "Fix and resubmit"
+                        }</td>
                       </tr>
                     ))}</tbody>
                   </table>

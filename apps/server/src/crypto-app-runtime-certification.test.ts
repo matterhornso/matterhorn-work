@@ -12,6 +12,7 @@ import {
   buildCryptoAppRuntimeCertificationReport,
   expectedCryptoAppRuntimeProbeActionIds,
   requiredCryptoAppRuntimeCertificationProbes,
+  verifyCryptoAppRuntimeCertificationOutcome,
   verifyCryptoAppRuntimeCertificationReport,
 } from "./crypto-app-runtime-certification.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
@@ -117,6 +118,28 @@ describe("crypto app runtime certification", () => {
       probes: validProbes.map((probe) => probe.id === "egress_boundary" ? { ...probe, passed: false } : probe),
     });
     expect(failed.passed).toBe(false);
+    expect(verifyCryptoAppRuntimeCertificationOutcome(failed, value, staticReport)).toBe(true);
+    expect(verifyCryptoAppRuntimeCertificationReport(failed, value, staticReport)).toBe(false);
+    expect(verifyCryptoAppRuntimeCertificationOutcome(
+      { ...failed, probes: failed.probes.map((probe) => probe.id === "egress_boundary" ? { ...probe, passed: true } : probe) },
+      value,
+      staticReport,
+    )).toBe(false);
+    expect(verifyCryptoAppRuntimeCertificationOutcome(
+      { ...failed, rawEvidence: "must-never-be-stored" } as never,
+      value,
+      staticReport,
+    )).toBe(false);
+    expect(verifyCryptoAppRuntimeCertificationOutcome(
+      {
+        ...failed,
+        probes: failed.probes.map((probe, index) => index === 0
+          ? { ...probe, rawEvidence: "must-never-be-stored" }
+          : probe),
+      } as never,
+      value,
+      staticReport,
+    )).toBe(false);
 
     const malformed = buildCryptoAppRuntimeCertificationReport(value, staticReport, {
       probes: validProbes.map((probe) => probe.id === "schema_drift" ? { ...probe, evidenceHash: "raw evidence" } : probe),

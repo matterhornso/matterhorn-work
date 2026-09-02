@@ -19,6 +19,10 @@ import {
   type MatterhornCryptoDeveloperPublisherKey,
   type MatterhornCryptoDeveloperSubmission,
 } from "./crypto-app-developer-portal-store.js";
+import {
+  type MatterhornCryptoAppRuntimeCertificationReport,
+  verifyCryptoAppRuntimeCertificationOutcome,
+} from "./crypto-app-runtime-certification.js";
 
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const DISPLAY_NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} ._&'()-]{0,79}$/u;
@@ -31,9 +35,16 @@ export type MatterhornCryptoDeveloperProfileView = Omit<MatterhornCryptoDevelope
 
 export type MatterhornCryptoDeveloperSubmissionView = Omit<
   MatterhornCryptoDeveloperSubmission,
-  "developerId" | "manifest"
+  "developerId" | "manifest" | "runtimeReport"
 > & {
   manifest: Pick<MatterhornCryptoAppManifest, "appId" | "displayName" | "description" | "manifestRevision">;
+  runtimeReview: null | {
+    version: "matterhorn.crypto-developer-runtime-review.v1";
+    passed: boolean;
+    generatedAt: string;
+    reportHash: string;
+    probes: Array<{ id: string; passed: boolean; actionIds: string[] }>;
+  };
 };
 
 export type MatterhornCryptoDeveloperHostSubmission = MatterhornCryptoDeveloperSubmission & {
@@ -52,6 +63,8 @@ export type MatterhornCryptoDeveloperStatus = {
     staticFailed: number;
     staticPassed: number;
     certificationRequested: number;
+    certificationPassed: number;
+    certificationFailed: number;
   };
   nextStep:
     | "enroll"
@@ -59,7 +72,9 @@ export type MatterhornCryptoDeveloperStatus = {
     | "submit_testnet_manifest"
     | "fix_static_conformance"
     | "request_testnet_certification"
-    | "await_certification_review";
+    | "await_certification_review"
+    | "fix_runtime_certification"
+    | "certification_complete";
 };
 
 export class MatterhornCryptoDeveloperPortalError extends Error {
@@ -81,6 +96,7 @@ export class MatterhornCryptoDeveloperPortalError extends Error {
       | "developer_submission_not_certifiable"
       | "developer_submission_policy_stale"
       | "developer_submission_state_conflict"
+      | "developer_runtime_report_invalid"
       | "developer_mainnet_unavailable"
       | "developer_store_unavailable",
     public readonly issues: string[] = [],
@@ -112,6 +128,7 @@ function mapStoreError(error: unknown): never {
     "developer_submission_not_found",
     "developer_submission_not_certifiable",
     "developer_submission_state_conflict",
+    "developer_runtime_report_invalid",
   ]);
   if (known.has(error.code as MatterhornCryptoDeveloperPortalError["code"])) {
     throw new MatterhornCryptoDeveloperPortalError(error.code as MatterhornCryptoDeveloperPortalError["code"]);
@@ -140,6 +157,18 @@ function submissionView(item: MatterhornCryptoDeveloperSubmission): MatterhornCr
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     certificationRequestedAt: item.certificationRequestedAt,
+    certificationDecidedAt: item.certificationDecidedAt,
+    runtimeReview: item.runtimeReport ? {
+      version: "matterhorn.crypto-developer-runtime-review.v1",
+      passed: item.runtimeReport.passed,
+      generatedAt: item.runtimeReport.generatedAt,
+      reportHash: item.runtimeReport.reportHash,
+      probes: item.runtimeReport.probes.map((probe) => ({
+        id: probe.id,
+        passed: probe.passed,
+        actionIds: [...probe.actionIds],
+      })),
+    } : null,
   };
 }
 
@@ -220,6 +249,8 @@ export class MatterhornCryptoDeveloperPortal {
       staticFailed: submissions.filter((item) => item.state === "static_failed").length,
       staticPassed: submissions.filter((item) => item.state === "static_passed").length,
       certificationRequested: submissions.filter((item) => item.state === "certification_requested").length,
+      certificationPassed: submissions.filter((item) => item.state === "certification_passed").length,
+      certificationFailed: submissions.filter((item) => item.state === "certification_failed").length,
     };
     const nextStep: MatterhornCryptoDeveloperStatus["nextStep"] = !profile
       ? "enroll"
@@ -231,7 +262,11 @@ export class MatterhornCryptoDeveloperPortal {
             ? "await_certification_review"
             : submissionCounts.staticPassed > 0
               ? "request_testnet_certification"
-              : "fix_static_conformance";
+              : submissionCounts.certificationPassed > 0
+                ? "certification_complete"
+                : submissionCounts.certificationFailed > 0
+                  ? "fix_runtime_certification"
+                  : "fix_static_conformance";
     return {
       version: "matterhorn.crypto-developer-status.v1",
       policyVersion: this.#policyVersion,
@@ -320,6 +355,8 @@ export class MatterhornCryptoDeveloperPortal {
         createdAt: now,
         updatedAt: now,
         certificationRequestedAt: null,
+        runtimeReport: null,
+        certificationDecidedAt: null,
       }));
     } catch (error) {
       mapStoreError(error);
@@ -357,6 +394,34 @@ export class MatterhornCryptoDeveloperPortal {
 
   listCertificationRequests(): MatterhornCryptoDeveloperHostSubmission[] {
     return this.#store.listCertificationRequests().map((item) => this.#hostSubmission(item));
+  }
+
+  recordCertificationOutcome(
+    appId: string,
+    manifestRevision: string,
+    runtimeReport: MatterhornCryptoAppRuntimeCertificationReport,
+  ): MatterhornCryptoDeveloperHostSubmission {
+    if (!IDENTIFIER_PATTERN.test(appId) || !IDENTIFIER_PATTERN.test(manifestRevision)) {
+      throw new MatterhornCryptoDeveloperPortalError("developer_input_invalid");
+    }
+    const current = this.#store.getSubmission(appId, manifestRevision);
+    if (!current) throw new MatterhornCryptoDeveloperPortalError("developer_submission_not_found");
+    if (current.staticReport.policyVersion !== this.#policyVersion) {
+      throw new MatterhornCryptoDeveloperPortalError("developer_submission_policy_stale");
+    }
+    if (!verifyCryptoAppRuntimeCertificationOutcome(runtimeReport, current.manifest, current.staticReport)) {
+      throw new MatterhornCryptoDeveloperPortalError("developer_runtime_report_invalid");
+    }
+    try {
+      return this.#hostSubmission(this.#store.recordCertificationOutcome(
+        appId,
+        manifestRevision,
+        runtimeReport,
+        this.#now().toISOString(),
+      ));
+    } catch (error) {
+      mapStoreError(error);
+    }
   }
 
   inspectSubmission(appId: string, manifestRevision: string): MatterhornCryptoDeveloperHostSubmission | null {

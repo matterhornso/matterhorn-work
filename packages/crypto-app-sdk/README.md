@@ -111,9 +111,10 @@ const staged = await developer.submitTestnetManifest(manifest);
 if (staged.staticReport.passed) {
   await developer.requestTestnetCertification(staged.appId, staged.manifestRevision);
 }
+// Poll getStatus() or listSubmissions() for a redacted passed/failed runtime review.
 ```
 
-The account client has no operator, registry-promotion, execution, wallet, credential, or mainnet methods. Keep the private signing key in your own HSM/KMS or offline signer.
+The account client has no operator, registry-promotion, execution, wallet, credential, or mainnet methods. Runtime evidence hashes remain host-only; the developer sees the failed probe names and affected action IDs needed for a new immutable revision. A passed review still does not list or promote the app. Keep the private signing key in your own HSM/KMS or offline signer.
 
 ## Safe agent setup
 

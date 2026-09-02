@@ -7,6 +7,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { buildMatterhornFirstPartyTestnetManifests } from "./first-party-crypto-apps.js";
+import {
+  buildCryptoAppRuntimeCertificationReport,
+  expectedCryptoAppRuntimeProbeActionIds,
+  requiredCryptoAppRuntimeCertificationProbes,
+} from "./crypto-app-runtime-certification.js";
+import { sha256 } from "./guarded-runtime-crypto.js";
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
 
@@ -269,6 +275,50 @@ describe("crypto developer HTTP boundary", () => {
     expect(hostQueue.payload.requests).toHaveLength(1);
     expect(hostQueue.payload.requests[0].publisherKey.publicKeyPem).toBe(publicKeyPem.trim());
     expect(hostQueue.payload.requests[0].state).toBe("certification_requested");
+
+    const runtimeReport = buildCryptoAppRuntimeCertificationReport(
+      hostQueue.payload.requests[0].manifest,
+      hostQueue.payload.requests[0].staticReport,
+      {
+        probes: requiredCryptoAppRuntimeCertificationProbes(manifest).map((id) => ({
+          id,
+          passed: true,
+          evidenceHash: sha256({ id, evidence: "host-only-redacted" }),
+          actionIds: expectedCryptoAppRuntimeProbeActionIds(manifest, id),
+        })),
+        now: () => new Date("2026-09-01T00:01:00.000Z"),
+      },
+    );
+    const accountOutcome = await request(
+      server.base,
+      `/operator/crypto-developers/submissions/${manifest.appId}/${manifest.manifestRevision}/certification-result`,
+      { cookie: cookieA, body: { runtimeReport } },
+    );
+    expect(accountOutcome.response.status).toBe(401);
+    const rawEvidenceRejected = await request(
+      server.base,
+      `/operator/crypto-developers/submissions/${manifest.appId}/${manifest.manifestRevision}/certification-result`,
+      { host: true, body: { runtimeReport: { ...runtimeReport, rawEvidence: "must-never-be-stored" } } },
+    );
+    expect(rawEvidenceRejected.response.status).toBe(400);
+    expect(rawEvidenceRejected.payload.code).toBe("developer_runtime_report_invalid");
+    expect((await request(server.base, "/operator/crypto-developers/certification-requests", { host: true })).payload.requests)
+      .toHaveLength(1);
+    const recorded = await request(
+      server.base,
+      `/operator/crypto-developers/submissions/${manifest.appId}/${manifest.manifestRevision}/certification-result`,
+      { host: true, body: { runtimeReport } },
+    );
+    expect(recorded.response.status).toBe(200);
+    expect(recorded.payload.submission.state).toBe("certification_passed");
+    const accountAfterReview = await request(server.base, "/developer/crypto-apps/submissions", { cookie: cookieA });
+    expect(accountAfterReview.payload.submissions[0]).toMatchObject({
+      state: "certification_passed",
+      runtimeReview: { passed: true, reportHash: runtimeReport.reportHash },
+    });
+    expect(JSON.stringify(accountAfterReview.payload)).not.toContain(runtimeReport.probes[0]!.evidenceHash);
+    expect((await request(server.base, "/operator/crypto-developers/certification-requests", { host: true })).payload.requests)
+      .toEqual([]);
 
     const registry = await request(server.base, "/operator/crypto-apps", { host: true });
     expect(registry.payload.entries).toEqual([]);

@@ -4,11 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 
 import { MatterhornCryptoDeveloperPortal } from "./crypto-app-developer-portal.js";
 import { MatterhornCryptoDeveloperPortalStore } from "./crypto-app-developer-portal-store.js";
 import { canonicalCryptoAppManifestPayload } from "./crypto-app-signature.js";
 import { buildMatterhornFirstPartyTestnetManifests } from "./first-party-crypto-apps.js";
+import {
+  buildCryptoAppRuntimeCertificationReport,
+  expectedCryptoAppRuntimeProbeActionIds,
+  requiredCryptoAppRuntimeCertificationProbes,
+} from "./crypto-app-runtime-certification.js";
+import { sha256 } from "./guarded-runtime-crypto.js";
 
 const roots: string[] = [];
 
@@ -38,11 +45,61 @@ function signedManifest(publisherId: string, keyId: string, privateKey: ReturnTy
   })[0]!;
 }
 
+function runtimeReport(
+  manifest: ReturnType<typeof signedManifest>,
+  staticReport: ReturnType<MatterhornCryptoDeveloperPortal["submitManifest"]>["staticReport"],
+  failedProbe?: string,
+) {
+  return buildCryptoAppRuntimeCertificationReport(manifest, staticReport, {
+    probes: requiredCryptoAppRuntimeCertificationProbes(manifest).map((id) => ({
+      id,
+      passed: id !== failedProbe,
+      evidenceHash: sha256({ id, evidence: "redacted" }),
+      actionIds: expectedCryptoAppRuntimeProbeActionIds(manifest, id),
+    })),
+    now: () => new Date("2026-09-01T00:01:00.000Z"),
+  });
+}
+
 afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
 });
 
 describe("invite-only crypto developer portal", () => {
+  test("migrates an existing staging database without dropping submissions", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-crypto-developer-legacy-"));
+    roots.push(root);
+    const path = join(root, "developer.db");
+    const legacy = new Database(path);
+    legacy.exec(`
+      CREATE TABLE crypto_developer_submissions (
+        developer_id TEXT NOT NULL,
+        app_id TEXT NOT NULL,
+        manifest_revision TEXT NOT NULL,
+        manifest_hash TEXT NOT NULL,
+        manifest_json TEXT NOT NULL,
+        publisher_key_fingerprint TEXT NOT NULL,
+        target_environment TEXT NOT NULL,
+        static_report_json TEXT NOT NULL,
+        state TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        certification_requested_at TEXT,
+        PRIMARY KEY (app_id, manifest_revision)
+      );
+    `);
+    legacy.close();
+
+    const store = new MatterhornCryptoDeveloperPortalStore(path);
+    store.close();
+    const migrated = new Database(path, { readonly: true });
+    const columns = (migrated.query("PRAGMA table_info(crypto_developer_submissions)").all() as Array<{ name: string }>)
+      .map((column) => column.name);
+    migrated.close();
+    expect(columns).toContain("runtime_report_json");
+    expect(columns).toContain("certification_decided_at");
+  });
+
   test("stores only a one-way invite hash and consumes the invite once", () => {
     const { path, store, portal } = harness();
     const invite = portal.issueInvite(60_000);
@@ -142,6 +199,59 @@ describe("invite-only crypto developer portal", () => {
     store.close();
   });
 
+  test("records immutable failed and passed runtime outcomes without promoting an app", () => {
+    const { store, portal } = harness();
+    const invite = portal.issueInvite();
+    portal.enroll("account-a", { inviteToken: invite.token, publisherId: "acme.crypto", displayName: "Acme" });
+    const keys = generateKeyPairSync("ed25519");
+    portal.registerPublisherKey("account-a", {
+      keyId: "key-1",
+      algorithm: "ed25519",
+      publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    });
+
+    const first = signedManifest("acme.crypto", "key-1", keys.privateKey);
+    const firstSubmitted = portal.submitManifest("account-a", first, "testnet");
+    portal.requestCertification("account-a", first.appId, first.manifestRevision);
+    const failed = runtimeReport(first, firstSubmitted.staticReport, "egress_boundary");
+    const failedOutcome = portal.recordCertificationOutcome(first.appId, first.manifestRevision, failed);
+    expect(failedOutcome.state).toBe("certification_failed");
+    expect(portal.listCertificationRequests()).toEqual([]);
+    const failedView = portal.listMySubmissions("account-a")[0]!;
+    expect(failedView.runtimeReview?.probes.find((probe) => probe.id === "egress_boundary")?.passed).toBe(false);
+    expect(JSON.stringify(failedView)).not.toContain(failed.probes[0]!.evidenceHash);
+    expect(portal.getStatus("account-a")).toMatchObject({
+      nextStep: "fix_runtime_certification",
+      submissionCounts: { certificationFailed: 1, certificationPassed: 0 },
+    });
+    expect(portal.recordCertificationOutcome(first.appId, first.manifestRevision, failed).runtimeReport?.reportHash)
+      .toBe(failed.reportHash);
+    expect(() => portal.recordCertificationOutcome(first.appId, first.manifestRevision, {
+      ...failed,
+      reportHash: "0".repeat(64),
+    })).toThrowError(expect.objectContaining({ code: "developer_runtime_report_invalid" }));
+
+    const second = structuredClone(first);
+    second.manifestRevision = "revision-2";
+    second.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(second)),
+      keys.privateKey,
+    ).toString("base64url");
+    const secondSubmitted = portal.submitManifest("account-a", second, "testnet");
+    portal.requestCertification("account-a", second.appId, second.manifestRevision);
+    const passed = runtimeReport(second, secondSubmitted.staticReport);
+    expect(portal.recordCertificationOutcome(second.appId, second.manifestRevision, passed).state)
+      .toBe("certification_passed");
+    expect(portal.getStatus("account-a")).toMatchObject({
+      nextStep: "certification_complete",
+      submissionCounts: { certificationFailed: 1, certificationPassed: 1 },
+    });
+    expect("updateCertification" in portal).toBe(false);
+    expect("register" in portal).toBe(false);
+    store.close();
+  });
+
   test("fails closed for bad signatures, publisher substitution, mainnet and failed conformance", () => {
     const { store, portal } = harness();
     const invite = portal.issueInvite();
@@ -231,7 +341,9 @@ describe("invite-only crypto developer portal", () => {
       publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
     });
     const manifest = signedManifest("acme.crypto", "key-1", keys.privateKey);
-    portal.submitManifest("account-a", manifest, "testnet");
+    const submitted = portal.submitManifest("account-a", manifest, "testnet");
+    portal.requestCertification("account-a", manifest.appId, manifest.manifestRevision);
+    const report = runtimeReport(manifest, submitted.staticReport);
     store.close();
 
     const reopenedStore = new MatterhornCryptoDeveloperPortalStore(path);
@@ -241,6 +353,8 @@ describe("invite-only crypto developer portal", () => {
       now: () => new Date("2026-09-02T00:00:00.000Z"),
     });
     expect(() => newPolicy.requestCertification("account-a", manifest.appId, manifest.manifestRevision))
+      .toThrowError(expect.objectContaining({ code: "developer_submission_policy_stale" }));
+    expect(() => newPolicy.recordCertificationOutcome(manifest.appId, manifest.manifestRevision, report))
       .toThrowError(expect.objectContaining({ code: "developer_submission_policy_stale" }));
     reopenedStore.close();
   });

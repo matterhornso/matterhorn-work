@@ -34,6 +34,10 @@ describe("invite-only crypto app developer route", () => {
     expect(route).toContain("Private keys and recovery phrases are never accepted");
     expect(route).toContain("Latest revision findings");
     expect(route).toContain("Submit a new immutable revision");
+    expect(route).toContain("Runtime review needs a new revision");
+    expect(route).toContain("Testnet review passed");
+    expect(route).toContain("This does not list or promote the app");
+    expect(route).toContain("No mainnet or wallet authority has been granted");
     expect(route).toContain('role="alert"');
     expect(route).toContain('role="status"');
     expect(route).toContain("motion-reduce:animate-none");

@@ -43,6 +43,8 @@ const submission = {
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-01T00:00:00.000Z",
   certificationRequestedAt: null,
+  certificationDecidedAt: null,
+  runtimeReview: null,
 };
 
 function json(payload: unknown, status = 200): Response {
@@ -70,7 +72,13 @@ describe("Matterhorn crypto developer client", () => {
             supportedEnvironments: ["testnet"],
             mainnetAvailable: false,
             runtimeCertificationRequired: true,
-            submissionCounts: { staticFailed: 0, staticPassed: 1, certificationRequested: 0 },
+            submissionCounts: {
+              staticFailed: 0,
+              staticPassed: 1,
+              certificationRequested: 0,
+              certificationPassed: 0,
+              certificationFailed: 0,
+            },
             nextStep: "request_testnet_certification",
           },
         });
@@ -80,7 +88,14 @@ describe("Matterhorn crypto developer client", () => {
         if (url.endsWith("/enroll")) return json({ mode: "shadow", profile }, 201);
         if (url.endsWith("/publisher-keys")) return json({ mode: "shadow", profile }, 201);
         if (url.endsWith("/certification-request")) {
-          return json({ mode: "shadow", submission: { ...submission, state: "certification_requested" } });
+          return json({
+            mode: "shadow",
+            submission: {
+              ...submission,
+              state: "certification_requested",
+              certificationRequestedAt: "2026-09-01T00:00:30.000Z",
+            },
+          });
         }
         if ((init?.method ?? "GET") === "POST") return json({ mode: "shadow", submission }, 201);
         return json({ mode: "shadow", submissions: [submission] });
@@ -108,6 +123,36 @@ describe("Matterhorn crypto developer client", () => {
     const submissionBody = JSON.parse(String(calls[5]?.init.body));
     expect(submissionBody.targetEnvironment).toBe("testnet");
     expect(JSON.stringify(calls)).not.toContain("privateKey");
+  });
+
+  test("parses a bounded terminal review without retaining host evidence", async () => {
+    const reviewed = {
+      ...submission,
+      state: "certification_failed",
+      certificationRequestedAt: "2026-09-01T00:00:30.000Z",
+      certificationDecidedAt: "2026-09-01T00:01:00.000Z",
+      runtimeReview: {
+        version: "matterhorn.crypto-developer-runtime-review.v1",
+        passed: false,
+        generatedAt: "2026-09-01T00:01:00.000Z",
+        reportHash: "d".repeat(64),
+        probes: [{
+          id: "egress_boundary",
+          passed: false,
+          actionIds: ["read_markets"],
+          evidenceHash: "must-not-survive-client-projection",
+        }],
+      },
+    };
+    const client = createMatterhornCryptoDeveloperClient({
+      fetch: async () => json({ mode: "shadow", submissions: [reviewed] }),
+    });
+    const parsed = await client.listSubmissions();
+    expect(parsed[0]).toMatchObject({
+      state: "certification_failed",
+      runtimeReview: { passed: false, reportHash: "d".repeat(64) },
+    });
+    expect(JSON.stringify(parsed)).not.toContain("must-not-survive-client-projection");
   });
 
   test("rejects unsafe origins, oversized responses, and unbounded server errors", async () => {

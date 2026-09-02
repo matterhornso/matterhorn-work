@@ -17,6 +17,10 @@ import {
   cryptoAppPublisherKeyFingerprint,
   verifyCryptoAppManifestSignature,
 } from "./crypto-app-signature.js";
+import {
+  type MatterhornCryptoAppRuntimeCertificationReport,
+  verifyCryptoAppRuntimeCertificationOutcome,
+} from "./crypto-app-runtime-certification.js";
 
 type SqliteRunResult = { changes?: number };
 type SqliteStatement = {
@@ -52,7 +56,9 @@ export type MatterhornCryptoDeveloperPublisherKey = {
 export type MatterhornCryptoDeveloperSubmissionState =
   | "static_failed"
   | "static_passed"
-  | "certification_requested";
+  | "certification_requested"
+  | "certification_passed"
+  | "certification_failed";
 
 export type MatterhornCryptoDeveloperSubmission = {
   developerId: string;
@@ -67,6 +73,8 @@ export type MatterhornCryptoDeveloperSubmission = {
   createdAt: string;
   updatedAt: string;
   certificationRequestedAt: string | null;
+  runtimeReport: MatterhornCryptoAppRuntimeCertificationReport | null;
+  certificationDecidedAt: string | null;
 };
 
 type DeveloperRow = {
@@ -99,6 +107,8 @@ type SubmissionRow = {
   created_at: string;
   updated_at: string;
   certification_requested_at: string | null;
+  runtime_report_json: string | null;
+  certification_decided_at: string | null;
 };
 
 const require = createRequire(import.meta.url);
@@ -152,8 +162,8 @@ function publisherKey(row: PublisherKeyRow): MatterhornCryptoDeveloperPublisherK
 }
 
 function submissionState(value: string): MatterhornCryptoDeveloperSubmissionState {
-  if (value === "static_failed" || value === "static_passed" || value === "certification_requested") {
-    return value;
+  if (["static_failed", "static_passed", "certification_requested", "certification_passed", "certification_failed"].includes(value)) {
+    return value as MatterhornCryptoDeveloperSubmissionState;
   }
   throw new MatterhornCryptoDeveloperStoreError("developer_store_corrupt");
 }
@@ -165,16 +175,26 @@ function submission(row: SubmissionRow): MatterhornCryptoDeveloperSubmission {
   const manifest = parseJson<MatterhornCryptoAppManifest>(row.manifest_json);
   const staticReport = parseJson<MatterhornCryptoAppConformanceReport>(row.static_report_json);
   const state = submissionState(row.state);
+  const runtimeReport = row.runtime_report_json
+    ? parseJson<MatterhornCryptoAppRuntimeCertificationReport>(row.runtime_report_json)
+    : null;
   const stateConsistent = state === "static_failed"
-    ? !staticReport.passed && row.certification_requested_at === null
+    ? !staticReport.passed && row.certification_requested_at === null && runtimeReport === null && row.certification_decided_at === null
     : state === "static_passed"
-      ? staticReport.passed && row.certification_requested_at === null
-      : staticReport.passed && row.certification_requested_at !== null;
+      ? staticReport.passed && row.certification_requested_at === null && runtimeReport === null && row.certification_decided_at === null
+      : state === "certification_requested"
+        ? staticReport.passed && row.certification_requested_at !== null && runtimeReport === null && row.certification_decided_at === null
+        : staticReport.passed
+          && row.certification_requested_at !== null
+          && runtimeReport !== null
+          && row.certification_decided_at !== null
+          && runtimeReport.passed === (state === "certification_passed");
   if (validateMatterhornCryptoAppManifest(manifest).length > 0
     || cryptoAppManifestHash(manifest) !== row.manifest_hash
     || manifest.appId !== row.app_id
     || manifest.manifestRevision !== row.manifest_revision
     || !verifyCryptoAppConformanceReport(staticReport)
+    || (runtimeReport !== null && !verifyCryptoAppRuntimeCertificationOutcome(runtimeReport, manifest, staticReport))
     || staticReport.appId !== row.app_id
     || staticReport.manifestRevision !== row.manifest_revision
     || staticReport.manifestHash !== row.manifest_hash
@@ -184,7 +204,9 @@ function submission(row: SubmissionRow): MatterhornCryptoDeveloperSubmission {
     || !/^[0-9a-f]{64}$/.test(row.publisher_key_fingerprint)
     || !stateConsistent
     || !Number.isFinite(Date.parse(row.created_at))
-    || !Number.isFinite(Date.parse(row.updated_at))) {
+    || !Number.isFinite(Date.parse(row.updated_at))
+    || (row.certification_requested_at !== null && !Number.isFinite(Date.parse(row.certification_requested_at)))
+    || (row.certification_decided_at !== null && !Number.isFinite(Date.parse(row.certification_decided_at)))) {
     throw new MatterhornCryptoDeveloperStoreError("developer_store_corrupt");
   }
   return {
@@ -200,6 +222,8 @@ function submission(row: SubmissionRow): MatterhornCryptoDeveloperSubmission {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     certificationRequestedAt: row.certification_requested_at,
+    runtimeReport,
+    certificationDecidedAt: row.certification_decided_at,
   };
 }
 
@@ -219,7 +243,7 @@ export function cryptoAppDeveloperPortalPath(): string {
   return join(root, "crypto-apps", "developer-portal.db");
 }
 
-/** Durable staging state. It stores invite hashes and public keys only. */
+/** Durable staging state. It stores no invite tokens, private keys, or wallet authority. */
 export class MatterhornCryptoDeveloperPortalStore {
   readonly #db: SqliteDatabase;
 
@@ -265,6 +289,8 @@ export class MatterhornCryptoDeveloperPortalStore {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         certification_requested_at TEXT,
+        runtime_report_json TEXT,
+        certification_decided_at TEXT,
         PRIMARY KEY (app_id, manifest_revision),
         FOREIGN KEY (developer_id) REFERENCES crypto_developers(developer_id) ON DELETE CASCADE
       );
@@ -273,6 +299,16 @@ export class MatterhornCryptoDeveloperPortalStore {
       CREATE INDEX IF NOT EXISTS crypto_developer_certification_queue_idx
         ON crypto_developer_submissions(state, updated_at);
     `);
+    const submissionColumns = new Set(
+      (statement(this.#db, "PRAGMA table_info(crypto_developer_submissions)").all() as Array<{ name: string }>)
+        .map((column) => column.name),
+    );
+    if (!submissionColumns.has("runtime_report_json")) {
+      this.#db.exec("ALTER TABLE crypto_developer_submissions ADD COLUMN runtime_report_json TEXT;");
+    }
+    if (!submissionColumns.has("certification_decided_at")) {
+      this.#db.exec("ALTER TABLE crypto_developer_submissions ADD COLUMN certification_decided_at TEXT;");
+    }
     chmodSync(path, 0o600);
   }
 
@@ -410,8 +446,9 @@ export class MatterhornCryptoDeveloperPortalStore {
         INSERT INTO crypto_developer_submissions(
           developer_id, app_id, manifest_revision, manifest_hash, manifest_json,
           publisher_key_fingerprint, target_environment, static_report_json, state,
-          created_at, updated_at, certification_requested_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          created_at, updated_at, certification_requested_at, runtime_report_json,
+          certification_decided_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         input.developerId,
         input.appId,
@@ -425,6 +462,8 @@ export class MatterhornCryptoDeveloperPortalStore {
         input.createdAt,
         input.updatedAt,
         input.certificationRequestedAt,
+        input.runtimeReport ? JSON.stringify(input.runtimeReport) : null,
+        input.certificationDecidedAt,
       );
     } catch (error) {
       if (String(error).includes("UNIQUE constraint failed")) {
@@ -454,6 +493,54 @@ export class MatterhornCryptoDeveloperPortalStore {
         SET state = 'certification_requested', updated_at = ?, certification_requested_at = ?
         WHERE app_id = ? AND manifest_revision = ? AND developer_id = ? AND state = 'static_passed'
       `).run(now, now, appId, manifestRevision, developerId);
+      if (updated.changes !== 1) {
+        throw new MatterhornCryptoDeveloperStoreError("developer_submission_state_conflict");
+      }
+      const result = this.getSubmission(appId, manifestRevision);
+      if (!result) throw new MatterhornCryptoDeveloperStoreError("developer_store_corrupt");
+      this.#db.exec("COMMIT;");
+      return result;
+    } catch (error) {
+      this.#db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  recordCertificationOutcome(
+    appId: string,
+    manifestRevision: string,
+    runtimeReport: MatterhornCryptoAppRuntimeCertificationReport,
+    now: string,
+  ): MatterhornCryptoDeveloperSubmission {
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      const current = this.getSubmission(appId, manifestRevision);
+      if (!current) throw new MatterhornCryptoDeveloperStoreError("developer_submission_not_found");
+      if (current.state === "certification_passed" || current.state === "certification_failed") {
+        if (current.runtimeReport?.reportHash === runtimeReport.reportHash) {
+          this.#db.exec("COMMIT;");
+          return current;
+        }
+        throw new MatterhornCryptoDeveloperStoreError("developer_submission_state_conflict");
+      }
+      if (current.state !== "certification_requested") {
+        throw new MatterhornCryptoDeveloperStoreError("developer_submission_not_certifiable");
+      }
+      if (!verifyCryptoAppRuntimeCertificationOutcome(runtimeReport, current.manifest, current.staticReport)) {
+        throw new MatterhornCryptoDeveloperStoreError("developer_runtime_report_invalid");
+      }
+      const updated = statement(this.#db, `
+        UPDATE crypto_developer_submissions
+        SET state = ?, updated_at = ?, runtime_report_json = ?, certification_decided_at = ?
+        WHERE app_id = ? AND manifest_revision = ? AND state = 'certification_requested'
+      `).run(
+        runtimeReport.passed ? "certification_passed" : "certification_failed",
+        now,
+        JSON.stringify(runtimeReport),
+        now,
+        appId,
+        manifestRevision,
+      );
       if (updated.changes !== 1) {
         throw new MatterhornCryptoDeveloperStoreError("developer_submission_state_conflict");
       }

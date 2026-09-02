@@ -9567,6 +9567,37 @@ function createRoutes(
     },
   );
 
+  addRoute(
+    routes,
+    "POST",
+    "/operator/crypto-developers/submissions/:appId/:manifestRevision/certification-result",
+    "host-token",
+    async (ctx) => {
+      ensureWritable(config);
+      try {
+        if (!cryptoAppRuntime.developerPortal) {
+          throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+        }
+        const body = await readJsonBody(ctx.request, 128 * 1_024, "Crypto developer certification result");
+        if (!isRecord(body)
+          || Object.keys(body).some((key) => key !== "runtimeReport")
+          || !isRecord(body.runtimeReport)
+          || !Array.isArray(body.runtimeReport.requiredProbeIds)
+          || !Array.isArray(body.runtimeReport.probes)) {
+          throw new ApiError(400, "developer_runtime_report_invalid", "Runtime certification report is invalid.");
+        }
+        const submission = cryptoAppRuntime.developerPortal.recordCertificationOutcome(
+          ctx.params.appId,
+          ctx.params.manifestRevision,
+          body.runtimeReport as MatterhornCryptoAppRuntimeCertificationReport,
+        );
+        return noStoreJsonResponse({ submission });
+      } catch (error) {
+        throw cryptoDeveloperApiError(error);
+      }
+    },
+  );
+
   addRoute(routes, "GET", "/developer/crypto-apps/profile", "client", async (ctx) => {
     try {
       if (!cryptoAppRuntime.developerPortal) {

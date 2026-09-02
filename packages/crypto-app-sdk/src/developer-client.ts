@@ -51,10 +51,18 @@ export type MatterhornCryptoDeveloperSubmissionView = {
   publisherKeyFingerprint: string;
   targetEnvironment: "testnet";
   staticReport: MatterhornCryptoAppConformanceReportView;
-  state: "static_failed" | "static_passed" | "certification_requested";
+  state: "static_failed" | "static_passed" | "certification_requested" | "certification_passed" | "certification_failed";
   createdAt: string;
   updatedAt: string;
   certificationRequestedAt: string | null;
+  certificationDecidedAt: string | null;
+  runtimeReview: null | {
+    version: "matterhorn.crypto-developer-runtime-review.v1";
+    passed: boolean;
+    generatedAt: string;
+    reportHash: string;
+    probes: Array<{ id: string; passed: boolean; actionIds: string[] }>;
+  };
 };
 
 export type MatterhornCryptoDeveloperStatus = {
@@ -69,6 +77,8 @@ export type MatterhornCryptoDeveloperStatus = {
     staticFailed: number;
     staticPassed: number;
     certificationRequested: number;
+    certificationPassed: number;
+    certificationFailed: number;
   };
   nextStep:
     | "enroll"
@@ -76,7 +86,9 @@ export type MatterhornCryptoDeveloperStatus = {
     | "submit_testnet_manifest"
     | "fix_static_conformance"
     | "request_testnet_certification"
-    | "await_certification_review";
+    | "await_certification_review"
+    | "fix_runtime_certification"
+    | "certification_complete";
 };
 
 export type MatterhornCryptoDeveloperClientOptions = {
@@ -204,13 +216,29 @@ function submissionFrom(value: unknown): MatterhornCryptoDeveloperSubmissionView
     || typeof value.manifest.displayName !== "string"
     || typeof value.manifest.description !== "string"
     || typeof value.manifest.manifestRevision !== "string"
-    || !["static_failed", "static_passed", "certification_requested"].includes(String(value.state))
+    || !["static_failed", "static_passed", "certification_requested", "certification_passed", "certification_failed"].includes(String(value.state))
     || typeof value.createdAt !== "string"
     || typeof value.updatedAt !== "string"
-    || (value.certificationRequestedAt !== null && typeof value.certificationRequestedAt !== "string")) {
+    || (value.certificationRequestedAt !== null && typeof value.certificationRequestedAt !== "string")
+    || (value.certificationDecidedAt !== null && typeof value.certificationDecidedAt !== "string")) {
     throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
   }
   const report = conformanceReportFrom(value.staticReport);
+  const runtimeReview = runtimeReviewFrom(value.runtimeReview);
+  const terminal = value.state === "certification_passed" || value.state === "certification_failed";
+  const submissionStateConsistent = terminal
+    ? runtimeReview !== null
+      && runtimeReview.passed === (value.state === "certification_passed")
+      && typeof value.certificationRequestedAt === "string"
+      && typeof value.certificationDecidedAt === "string"
+    : runtimeReview === null
+      && value.certificationDecidedAt === null
+      && (value.state === "certification_requested"
+        ? typeof value.certificationRequestedAt === "string"
+        : value.certificationRequestedAt === null);
+  if (!submissionStateConsistent) {
+    throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+  }
   return {
     appId: value.appId,
     manifestRevision: value.manifestRevision,
@@ -228,6 +256,43 @@ function submissionFrom(value: unknown): MatterhornCryptoDeveloperSubmissionView
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     certificationRequestedAt: value.certificationRequestedAt,
+    certificationDecidedAt: value.certificationDecidedAt,
+    runtimeReview,
+  };
+}
+
+function runtimeReviewFrom(value: unknown): MatterhornCryptoDeveloperSubmissionView["runtimeReview"] {
+  if (value === null) return null;
+  if (!isRecord(value)
+    || value.version !== "matterhorn.crypto-developer-runtime-review.v1"
+    || typeof value.passed !== "boolean"
+    || typeof value.generatedAt !== "string"
+    || typeof value.reportHash !== "string"
+    || !/^[a-f0-9]{64}$/.test(value.reportHash)
+    || !Number.isFinite(Date.parse(value.generatedAt))
+    || !Array.isArray(value.probes)
+    || value.probes.length < 1
+    || value.probes.length > 10) {
+    throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+  }
+  const probes = value.probes.map((probe) => {
+    if (!isRecord(probe)
+      || typeof probe.id !== "string"
+      || probe.id.length > 80
+      || typeof probe.passed !== "boolean"
+      || !Array.isArray(probe.actionIds)
+      || probe.actionIds.length > 64
+      || probe.actionIds.some((actionId) => typeof actionId !== "string" || actionId.length > 160)) {
+      throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+    }
+    return { id: probe.id, passed: probe.passed, actionIds: [...probe.actionIds] as string[] };
+  });
+  return {
+    version: "matterhorn.crypto-developer-runtime-review.v1",
+    passed: value.passed,
+    generatedAt: value.generatedAt,
+    reportHash: value.reportHash,
+    probes,
   };
 }
 
@@ -292,6 +357,8 @@ function developerStatusFrom(value: unknown): MatterhornCryptoDeveloperStatus {
     "fix_static_conformance",
     "request_testnet_certification",
     "await_certification_review",
+    "fix_runtime_certification",
+    "certification_complete",
   ];
   if (!isRecord(value)
     || value.version !== "matterhorn.crypto-developer-status.v1"
@@ -308,7 +375,7 @@ function developerStatusFrom(value: unknown): MatterhornCryptoDeveloperStatus {
     throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
   }
   const submissionCounts = value.submissionCounts;
-  if (!["staticFailed", "staticPassed", "certificationRequested"].every((key) => (
+  if (!["staticFailed", "staticPassed", "certificationRequested", "certificationPassed", "certificationFailed"].every((key) => (
     Number.isSafeInteger(submissionCounts[key]) && Number(submissionCounts[key]) >= 0
   ))) {
     throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
@@ -325,6 +392,8 @@ function developerStatusFrom(value: unknown): MatterhornCryptoDeveloperStatus {
       staticFailed: Number(submissionCounts.staticFailed),
       staticPassed: Number(submissionCounts.staticPassed),
       certificationRequested: Number(submissionCounts.certificationRequested),
+      certificationPassed: Number(submissionCounts.certificationPassed),
+      certificationFailed: Number(submissionCounts.certificationFailed),
     },
     nextStep: value.nextStep as MatterhornCryptoDeveloperStatus["nextStep"],
   };

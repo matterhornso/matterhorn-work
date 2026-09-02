@@ -53,6 +53,21 @@ type RuntimeCertificationOptions = {
 };
 
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
+const REPORT_KEYS = new Set([
+  "version",
+  "appId",
+  "manifestRevision",
+  "manifestHash",
+  "staticReportHash",
+  "policyVersion",
+  "targetEnvironment",
+  "generatedAt",
+  "requiredProbeIds",
+  "probes",
+  "passed",
+  "reportHash",
+]);
+const PROBE_KEYS = new Set(["id", "passed", "evidenceHash", "actionIds"]);
 
 function sortedUnique(values: string[]): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
@@ -153,9 +168,24 @@ export function verifyCryptoAppRuntimeCertificationReport(
   manifest: MatterhornCryptoAppManifest,
   staticReport: MatterhornCryptoAppConformanceReport,
 ): boolean {
+  return verifyCryptoAppRuntimeCertificationOutcome(report, manifest, staticReport) && report.passed;
+}
+
+/** Verify a complete testnet outcome, including a fail-closed report. */
+export function verifyCryptoAppRuntimeCertificationOutcome(
+  report: MatterhornCryptoAppRuntimeCertificationReport,
+  manifest: MatterhornCryptoAppManifest,
+  staticReport: MatterhornCryptoAppConformanceReport,
+): boolean {
+  if (!report
+    || typeof report !== "object"
+    || Array.isArray(report)
+    || Object.keys(report).some((key) => !REPORT_KEYS.has(key))
+    || !Array.isArray(report.requiredProbeIds)
+    || !Array.isArray(report.probes)
+    || typeof report.passed !== "boolean") return false;
   const { reportHash, ...payload } = report;
   if (report.version !== MATTERHORN_CRYPTO_APP_RUNTIME_CERTIFICATION_VERSION
-    || !report.passed
     || !HASH_PATTERN.test(reportHash)
     || !Number.isFinite(Date.parse(report.generatedAt))
     || sha256(payload) !== reportHash
@@ -173,15 +203,22 @@ export function verifyCryptoAppRuntimeCertificationReport(
   if (canonicalJson(report.requiredProbeIds) !== canonicalJson(requiredProbeIds)
     || report.probes.length !== requiredProbeIds.length) return false;
   const seen = new Set<MatterhornCryptoAppRuntimeProbeId>();
+  let allPassed = true;
   for (const probe of report.probes) {
-    if (!requiredProbeIds.includes(probe.id)
+    if (!probe
+      || typeof probe !== "object"
+      || Array.isArray(probe)
+      || Object.keys(probe).some((key) => !PROBE_KEYS.has(key))
+      || !Array.isArray(probe.actionIds)
+      || !requiredProbeIds.includes(probe.id)
       || seen.has(probe.id)
-      || !probe.passed
+      || typeof probe.passed !== "boolean"
       || !HASH_PATTERN.test(probe.evidenceHash)
       || canonicalJson(probe.actionIds) !== canonicalJson(expectedCryptoAppRuntimeProbeActionIds(manifest, probe.id))) {
       return false;
     }
+    allPassed = allPassed && probe.passed;
     seen.add(probe.id);
   }
-  return requiredProbeIds.every((id) => seen.has(id));
+  return requiredProbeIds.every((id) => seen.has(id)) && report.passed === allPassed;
 }
