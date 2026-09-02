@@ -5,7 +5,7 @@ import {
   readSessionPanelFromSearch,
   resolveSessionPanelNavigation,
 } from "../src/react-app/shell/session-panel-route";
-import { suggestCoworkerTemplate } from "../src/react-app/domains/session/chat/workspace-coworker-start";
+import { suggestCoworkerTemplate } from "../src/react-app/domains/session/chat/workspace-coworker-suggestion";
 
 function appSource(path: string): string {
   return readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
