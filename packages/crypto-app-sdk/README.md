@@ -110,3 +110,29 @@ if (staged.staticReport.passed) {
 ```
 
 The account client has no operator, registry-promotion, execution, wallet, credential, or mainnet methods. Keep the private signing key in your own HSM/KMS or offline signer.
+
+## Safe agent setup
+
+`createMatterhornCryptoIntegrationSetup()` produces inert setup material for Codex, Claude Code, generic MCP clients, the Matterhorn Skill instructions, the Matterhorn CLI, or the authenticated HTTP API.
+
+```ts
+import { createMatterhornCryptoIntegrationSetup } from "@matterhorn-work/crypto-app-sdk";
+
+const setup = createMatterhornCryptoIntegrationSetup({
+  target: "codex",
+  repositoryPath: "/absolute/path/to/matterhorn-work",
+  serverOrigin: "http://127.0.0.1:8787",
+});
+
+console.log(setup.artifacts[0]?.content);
+```
+
+The setup contract is deliberately client-only:
+
+- It never accepts or returns token values, host approval authority, wallet submission authority, private keys, or signatures.
+- It uses only `MATTERHORN_WORK_TOKEN`, supplied through the trusted client environment.
+- It accepts HTTPS origins plus loopback HTTP for local development and rejects credential-bearing or path-bearing URLs.
+- MCP targets require an absolute trusted repository path. The MCP packages are not published to npm yet, so generated setup never claims that `npx` can install them.
+- Generated Matterhorn Skill instructions treat tool output as untrusted data and preserve connected-wallet-only signing and submission.
+
+The output is versioned as `matterhorn.crypto-app-integration-setup.v1`. It does not connect a client, start a process, contact a server, read a filesystem, or certify an integration.

@@ -10,15 +10,15 @@ This package is the server/control complement to:
 
 ## Install
 
-```bash
-npm install -g matterhorn-work-mcp
-```
-
-Or run it without installing:
+The MCP packages are not published to npm yet. Clone the Matterhorn repository,
+run `pnpm install`, and launch the checked-out entrypoint with Node:
 
 ```bash
-npx matterhorn-work-mcp
+node /absolute/path/to/matterhorn-work/packages/matterhorn-work-mcp/index.mjs
 ```
+
+Do not use older `npm install -g matterhorn-work-mcp` or
+`npx matterhorn-work-mcp` examples until a release is published.
 
 ## Configure
 
@@ -44,17 +44,20 @@ For app-specific setup in Codex, Claude Code, Claude Desktop, Cursor, and generi
 {
   "mcpServers": {
     "matterhorn-work": {
-      "command": "npx",
-      "args": ["-y", "matterhorn-work-mcp"],
+      "command": "node",
+      "args": ["/absolute/path/to/matterhorn-work/packages/matterhorn-work-mcp/index.mjs"],
       "env": {
         "MATTERHORN_WORK_SERVER_URL": "http://127.0.0.1:8787",
-        "MATTERHORN_WORK_TOKEN": "<client-token>",
-        "MATTERHORN_WORK_HOST_TOKEN": "<host-token>"
+        "MATTERHORN_WORK_TOKEN": "<client-token>"
       }
     }
   }
 }
 ```
+
+This default is client-scoped and cannot answer host approval requests. Add
+`MATTERHORN_WORK_HOST_TOKEN` only to a trusted local operator client that is
+intentionally allowed to review approvals.
 
 ## Tools
 

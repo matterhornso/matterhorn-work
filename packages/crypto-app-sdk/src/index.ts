@@ -52,6 +52,17 @@ export {
   type MatterhornCryptoAppLocalRunReport,
 } from "./local-runner.js";
 
+export {
+  createMatterhornCryptoIntegrationSetup,
+  MATTERHORN_CRYPTO_APP_INTEGRATION_SETUP_VERSION,
+  MatterhornCryptoIntegrationSetupError,
+  type MatterhornCryptoIntegrationSetup,
+  type MatterhornCryptoIntegrationSetupArtifact,
+  type MatterhornCryptoIntegrationSetupOptions,
+  type MatterhornCryptoIntegrationSetupStep,
+  type MatterhornCryptoIntegrationTarget,
+} from "./integration-setup.js";
+
 type CanonicalValue = null | boolean | number | string | CanonicalValue[] | { [key: string]: CanonicalValue };
 
 export type MatterhornUnsignedCryptoAppManifest = Omit<MatterhornCryptoAppManifest, "version" | "publisher"> & {
