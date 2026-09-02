@@ -2745,6 +2745,10 @@ export function SessionRoute() {
             ...(executionModeTools ? { requestToolProfiles: [executionModeTools] } : {}),
             ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
             ...(draft.privacy?.attachmentIds?.length ? { attachmentIds: draft.privacy.attachmentIds } : {}),
+            ...(draft.privacy?.agentFileIds?.length ? {
+              agentFileIds: draft.privacy.agentFileIds,
+              coworkerId: draft.privacy.coworkerId,
+            } : {}),
             ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
           });
           if (privacyPreflight.decision !== "allow") {
@@ -2784,6 +2788,10 @@ export function SessionRoute() {
               ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
               ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
               ...(draft.privacy?.attachmentIds?.length ? { attachmentIds: draft.privacy.attachmentIds } : {}),
+              ...(draft.privacy?.agentFileIds?.length ? {
+                agentFileIds: draft.privacy.agentFileIds,
+                coworkerId: draft.privacy.coworkerId,
+              } : {}),
               ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
             });
           } else {

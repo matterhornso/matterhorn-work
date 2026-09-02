@@ -54,6 +54,8 @@ export type MatterhornAgentPrivacyPreflightRequest = {
   agentId?: string | null;
   coworkerId?: string | null;
   attachmentIds?: string[];
+  /** Server-owned encrypted files selected for this exact coworker request. */
+  agentFileIds?: string[];
   memoryIds?: string[];
   privacyMode?: MatterhornAgentPrivacyMode;
   executionMode?: "discuss" | "plan" | "work";

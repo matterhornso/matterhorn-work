@@ -13,6 +13,7 @@ import {
   Copy,
   Dumbbell,
   FileText,
+  Files,
   FolderOpen,
   Globe,
   Home,
@@ -199,6 +200,9 @@ const MemoryPanel = lazy(() => import("../../memory/memory-panel").then((module)
 })));
 const NotesPanel = lazy(() => import("../../notes/notes-page").then((module) => ({
   default: module.NotesPage,
+})));
+const SessionAgentFilesPanel = lazy(() => import("../../agent-files/agent-files-panel").then((module) => ({
+  default: module.SessionAgentFilesPanel,
 })));
 const WorkspaceMissionOverview = lazy(() => import("./workspace-mission-overview").then((module) => ({
   default: module.WorkspaceMissionOverview,
@@ -1576,6 +1580,7 @@ export function SessionPage(props: SessionPageProps) {
   const extensionsRailActive = activeSidePanel === "extensions";
   const voiceRailActive = activeSidePanel === "voice";
   const profileRailActive = activeSidePanel === "profile";
+  const filesRailActive = activeSidePanel === "files";
   const memoryRailActive = activeSidePanel === "memory";
   const notesRailActive = activeSidePanel === "notes";
   const walletRailActive = activeSidePanel === "wallet";
@@ -1601,6 +1606,8 @@ export function SessionPage(props: SessionPageProps) {
           : "MCPs & Tools"
         : visibleSidePanel === "memory"
           ? "Memory"
+          : visibleSidePanel === "files"
+            ? "Coworker files"
           : visibleSidePanel === "notes"
             ? "Notes"
             : visibleSidePanel === "artifacts"
@@ -2223,6 +2230,9 @@ export function SessionPage(props: SessionPageProps) {
   const openMemoryRailPane = useCallback(() => {
     toggleCurrentSidePanel("memory");
   }, [toggleCurrentSidePanel]);
+  const openAgentFilesRailPane = useCallback(() => {
+    toggleCurrentSidePanel("files");
+  }, [toggleCurrentSidePanel]);
   const startMemoryChatFromHome = useCallback((records: MatterhornMemoryRecord[]) => {
     const startTask = props.sidebar.onCreateTaskWithPrompt;
     if (!startTask) {
@@ -2344,6 +2354,15 @@ export function SessionPage(props: SessionPageProps) {
       workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
       onClose={closeRightPane}
       onUseInChat={props.selectedSessionId && props.surface ? undefined : startMemoryChatFromHome}
+    />
+  ) : visibleSidePanel === "files" ? (
+    <SessionAgentFilesPanel
+      client={props.matterhornServerClient}
+      workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+      selectedSessionId={props.selectedSessionId}
+      selectedWorkspaceId={props.selectedWorkspaceId}
+      onClose={closeRightPane}
+      onStartTask={props.sidebar.onCreateTaskWithPrompt}
     />
   ) : visibleSidePanel === "notes" ? (
     <NotesPanel
@@ -3414,9 +3433,9 @@ export function SessionPage(props: SessionPageProps) {
                 />
                 <ResizablePanel
                   panelRef={browserPanelRef}
-                  defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
-                  minSize={visibleSidePanel === "extensions" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
-                  maxSize={protocolSidePanelOpen || visibleSidePanel === "memory" || visibleSidePanel === "notes" || visibleSidePanel === "extensions" ? "500px" : "70%"}
+                  defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
+                  minSize={visibleSidePanel === "extensions" || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
+                  maxSize={protocolSidePanelOpen || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" || visibleSidePanel === "extensions" ? "500px" : "70%"}
                   className="matterhorn-side-panel hidden h-full min-h-0 overflow-hidden bg-dls-background lg:flex lg:flex-col"
                 >
                   <Suspense fallback={<LazyPanelFallback />}>
@@ -3524,6 +3543,21 @@ export function SessionPage(props: SessionPageProps) {
                 <span className={RAIL_LABEL_CLASS}>Outputs</span>
               </Button>
             ) : null}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(
+                RAIL_BUTTON_CLASS,
+                filesRailActive && RAIL_ACTIVE_CLASS,
+              )}
+              onClick={openAgentFilesRailPane}
+              title="Files for your coworker"
+              aria-label="Files for your coworker"
+              aria-pressed={filesRailActive}
+            >
+              <Files size={17} />
+              <span className={RAIL_LABEL_CLASS}>Files</span>
+            </Button>
             <Button
               variant="ghost"
               size="icon-sm"

@@ -20,6 +20,7 @@ import {
   Database,
   Dumbbell,
   FileText,
+  Files,
   Info,
   Minimize2,
   ShieldCheck,
@@ -105,6 +106,12 @@ import {
   getComposerPasteParts,
   useComposerStateStore,
 } from "./composer-state-store";
+import {
+  describeMatterhornAgentFileContext,
+  getMatterhornSessionAgentFileContext,
+  useMatterhornSessionAgentFileContextStore,
+  type MatterhornSessionAgentFileContext,
+} from "./agent-file-context-store";
 
 // These project-local tools are maintained for the Matterhorn Desks team, not
 // workspace users. The server marks them as non-invocable; this list protects
@@ -1473,6 +1480,29 @@ function MemoryContextStrip(props: { context: MatterhornSessionMemoryContext; on
   );
 }
 
+function AgentFileContextStrip(props: { context: MatterhornSessionAgentFileContext; onClear: () => void }) {
+  return (
+    <div className="border-b border-dls-border bg-dls-surface/70 px-4 py-2">
+      <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 font-medium text-dls-text">
+            <Files aria-hidden="true" size={13} />
+            <span>Coworker files</span>
+          </div>
+          <div className="truncate text-dls-secondary">{describeMatterhornAgentFileContext(props.context)}</div>
+        </div>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-dls-border px-2 py-1 font-medium text-dls-secondary transition-colors hover:border-primary/35 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+          onClick={props.onClear}
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function revokeAttachmentPreview(attachment: { previewUrl?: string | undefined }) {
   if (!attachment.previewUrl) return;
   URL.revokeObjectURL(attachment.previewUrl);
@@ -1506,6 +1536,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const memoryContext = useMatterhornSessionMemoryContextStore((state) => getMatterhornSessionMemoryContext(state, props.sessionId));
   const setMemoryContext = useMatterhornSessionMemoryContextStore((state) => state.setContext);
   const clearMemoryContext = useMatterhornSessionMemoryContextStore((state) => state.clearContext);
+  const agentFileContext = useMatterhornSessionAgentFileContextStore((state) => getMatterhornSessionAgentFileContext(state, props.sessionId));
+  const clearAgentFileContext = useMatterhornSessionAgentFileContextStore((state) => state.clearContext);
   const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [error, setError] = useState<SessionError | null>(null);
   const [sending, setSending] = useState(false);
@@ -2044,6 +2076,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     const resolvedSlashMatch = resolved.trim().match(/^\/([^\s]+)\s*(.*)$/);
     const attachmentIds = nextAttachments.map((attachment) => attachment.id).filter(Boolean).sort();
     const memoryIds = (memoryContext?.records ?? []).map((record) => record.id).filter(Boolean).sort();
+    const agentFileIds = (agentFileContext?.files ?? []).map((file) => file.id).filter(Boolean).sort();
     return {
       mode: "prompt",
       parts,
@@ -2052,18 +2085,22 @@ export function SessionSurface(props: SessionSurfaceProps) {
       resolvedText: resolved,
       command: resolvedSlashMatch ? { name: resolvedSlashMatch[1] ?? "", arguments: resolvedSlashMatch[2] ?? "" } : undefined,
       ...(
-        options?.privacyConsentToken || attachmentIds.length > 0 || memoryIds.length > 0
+        options?.privacyConsentToken || attachmentIds.length > 0 || memoryIds.length > 0 || agentFileIds.length > 0
           ? {
               privacy: {
                 ...(options?.privacyConsentToken ? { consentToken: options.privacyConsentToken } : {}),
                 ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
+                ...(agentFileIds.length > 0 && agentFileContext ? {
+                  agentFileIds,
+                  coworkerId: agentFileContext.coworker.id,
+                } : {}),
                 ...(memoryIds.length > 0 ? { memoryIds } : {}),
               },
             }
           : {}
       ),
     };
-  }, [memoryContext?.records, mentions, pasteParts]);
+  }, [agentFileContext, memoryContext?.records, mentions, pasteParts]);
 
   const handleComposerDraftChange = useCallback((value: string) => {
     setComposerDraft(props.sessionId, value);
@@ -3191,6 +3228,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       props.activePermission ||
       activeDeskMode ||
       bittensorContext ||
+      agentFileContext ||
       memoryContext,
   );
 
@@ -3601,6 +3639,15 @@ export function SessionSurface(props: SessionSurfaceProps) {
                           updatedAt: new Date().toISOString(),
                         });
                       }
+                    }}
+                  />
+                ) : null}
+                {agentFileContext ? (
+                  <AgentFileContextStrip
+                    context={agentFileContext}
+                    onClear={() => {
+                      clearAgentFileContext(props.sessionId);
+                      setNotice({ title: "Coworker files cleared", tone: "info" });
                     }}
                   />
                 ) : null}

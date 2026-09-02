@@ -118,8 +118,12 @@ import type {
   MatterhornCryptoAppCatalogSummary,
   MatterhornCryptoAppConnectionState,
   MatterhornCryptoAppConnectionView,
+  MatterhornAgentFileListResponse,
+  MatterhornAgentFileWalrusVerification,
+  MatterhornCoworkerProfile,
   MatterhornEvidenceVerificationListResponse,
   MatterhornEvidenceVerificationResult,
+  MatterhornStoredAgentFile,
 } from "@matterhorn-work/types/crypto-coworkers";
 import type {
   MatterhornWorkflowRun,
@@ -1740,6 +1744,70 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/${encodeURIComponent(connectionId)}`,
       { token, method: "DELETE", timeoutMs: timeouts.config },
+    ),
+    listCoworkers: (workspaceId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      coworkers: Array<Omit<MatterhornCoworkerProfile, "ownerId">>;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    createCoworkerFromTemplate: (
+      workspaceId: string,
+      input: { templateId: "market_analyst" | "risk_monitor"; name?: string; mission?: string },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      templateId: "market_analyst" | "risk_monitor";
+      coworker: Omit<MatterhornCoworkerProfile, "ownerId">;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/from-template`, {
+      token,
+      method: "POST",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    listAgentFiles: (workspaceId: string) => requestJson<MatterhornAgentFileListResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files`,
+      { token, timeoutMs: timeouts.status },
+    ),
+    createAgentFile: (workspaceId: string, input: {
+      name: string;
+      mimeType: "text/plain" | "text/markdown" | "text/csv" | "application/json";
+      coworkerIds: string[];
+      expiresAt: string | null;
+      contentBase64: string;
+    }) => requestJson<{ mode: "encrypted"; item: MatterhornStoredAgentFile }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files`,
+      { token, method: "POST", body: input, timeoutMs: timeouts.binary },
+    ),
+    publishAgentFile: (workspaceId: string, fileId: string, expectedRevision: number) => requestJson<{
+      item: MatterhornStoredAgentFile;
+      disclosure: {
+        network: "testnet";
+        stored: "encrypted_bytes_only";
+        publicBytesMayRemainAfterDeletion: true;
+        deletionDestroysRecoveryKey: true;
+      };
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/publish`, {
+      token,
+      method: "POST",
+      body: {
+        expectedRevision,
+        network: "testnet",
+        acknowledgePublicCiphertext: true,
+      },
+      timeoutMs: timeouts.binary,
+    }),
+    verifyAgentFile: (workspaceId: string, fileId: string) => requestJson<MatterhornAgentFileWalrusVerification>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/verify`,
+      { token, method: "POST", timeoutMs: timeouts.binary },
+    ),
+    deleteAgentFile: (workspaceId: string, fileId: string, expectedRevision: number) => requestJson<{ deleted: true }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}`,
+      { token, method: "DELETE", body: { expectedRevision }, timeoutMs: timeouts.config },
     ),
     backendModels: () =>
       requestJson<MatterhornBackendModelsResponse>(baseUrl, "/api/backend/models", {
