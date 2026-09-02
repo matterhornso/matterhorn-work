@@ -8,6 +8,7 @@ import type {
 import {
   hasRegisteredVenicePrivateModels,
   isRegisteredVenicePrivateModel,
+  venicePrivateModelRegistryStatus,
   VENICE_PRIVACY_POLICY_URL,
   VENICE_PROVIDER_ID,
 } from "./venice-provider.js";
@@ -107,7 +108,8 @@ export function resolveProviderPrivacyPolicy(
     };
   }
 
-  if (id === VENICE_PROVIDER_ID && hasRegisteredVenicePrivateModels()) {
+  if (id === VENICE_PROVIDER_ID && hasRegisteredVenicePrivateModels(now)) {
+    const registry = venicePrivateModelRegistryStatus(now);
     return {
       providerId,
       providerName: suppliedName || "Venice Private",
@@ -115,7 +117,7 @@ export function resolveProviderPrivacyPolicy(
       trainingUse: "none",
       retentionDays: 0,
       policyUrl: VENICE_PRIVACY_POLICY_URL,
-      verifiedAt: null,
+      verifiedAt: registry.verifiedAt,
       allowed: true,
       label: "Private model · zero retention",
       description:
@@ -203,7 +205,7 @@ export function resolveModelProviderPrivacyPolicy(
   const policy = resolveProviderPrivacyPolicy(providerId, providerName, env, now);
   if (
     providerId.trim().toLowerCase() !== VENICE_PROVIDER_ID ||
-    isRegisteredVenicePrivateModel(modelId)
+    isRegisteredVenicePrivateModel(modelId, now)
   ) {
     return policy;
   }

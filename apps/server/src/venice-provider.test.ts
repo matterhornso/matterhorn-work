@@ -7,6 +7,8 @@ import {
   hasRegisteredVenicePrivateModels,
   isRegisteredVenicePrivateModel,
   parseVenicePrivateModels,
+  startManagedVenicePrivateModelRegistryRefresh,
+  venicePrivateModelRegistryStatus,
   VENICE_MODELS_URL,
 } from "./venice-provider.js";
 
@@ -67,24 +69,55 @@ describe("Venice private provider", () => {
     ]);
   });
 
-  test("discovers the public catalog without sending a provider credential", async () => {
-    let requestInit: RequestInit | undefined;
+  test("discovers the public catalog only through the exact pinned endpoint without a credential", async () => {
+    let requested = false;
     const models = await discoverVenicePrivateModels({
-      fetchImpl: async (input, init) => {
-        expect(String(input)).toBe(VENICE_MODELS_URL);
-        requestInit = init;
+      resolveEndpoint: async (value) => {
+        expect(value).toBe(VENICE_MODELS_URL);
         return {
-          ok: true,
-          status: 200,
-          json: async () => ({ data: [model({ id: "private-tools" })] }),
+          endpoint: new URL(VENICE_MODELS_URL),
+          hostname: "api.venice.ai",
+          approvedAddresses: ["93.184.216.34"],
+        };
+      },
+      requestJson: async (input) => {
+        requested = true;
+        expect(input).toMatchObject({
+          endpoint: new URL(VENICE_MODELS_URL),
+          approvedAddresses: ["93.184.216.34"],
+          method: "GET",
+        });
+        expect(input.headers).toBeUndefined();
+        expect(input.body).toBeUndefined();
+        return {
+          value: { data: [model({ id: "private-tools" })] },
+          connectedAddress: "93.184.216.34",
+          requestBytes: 0,
+          responseBytes: 256,
         };
       },
     });
 
+    expect(requested).toBe(true);
     expect(models).toEqual([{ id: "private-tools", name: "private-tools" }]);
-    expect(requestInit?.headers).toEqual({ Accept: "application/json" });
-    expect(JSON.stringify(requestInit)).not.toContain("Authorization");
-    expect(JSON.stringify(requestInit)).not.toContain("VENICE_API_KEY");
+  });
+
+  test("rejects endpoint substitution and invalid timeout bounds before provider contact", async () => {
+    let requested = false;
+    await expect(discoverVenicePrivateModels({
+      resolveEndpoint: async () => ({
+        endpoint: new URL("https://attacker.example/models"),
+        hostname: "attacker.example",
+        approvedAddresses: ["93.184.216.34"],
+      }),
+      requestJson: async () => {
+        requested = true;
+        throw new Error("must not request");
+      },
+    })).rejects.toThrow("venice_private_model_discovery_endpoint_invalid");
+    await expect(discoverVenicePrivateModels({ timeoutMs: 0 })).rejects
+      .toThrow("venice_private_model_discovery_timeout_invalid");
+    expect(requested).toBe(false);
   });
 
   test("keeps API keys out of the generated OpenCode config", () => {
@@ -101,10 +134,47 @@ describe("Venice private provider", () => {
   });
 
   test("tracks the exact runtime-verified model ids", () => {
-    configureVenicePrivateModelRegistry([{ id: "private-tools", name: "Private Tools" }]);
+    const verifiedAt = new Date("2026-09-02T12:00:00.000Z");
+    configureVenicePrivateModelRegistry(
+      [{ id: "private-tools", name: "Private Tools" }],
+      { now: verifiedAt, ttlMs: 60_000 },
+    );
 
-    expect(hasRegisteredVenicePrivateModels()).toBe(true);
-    expect(isRegisteredVenicePrivateModel("private-tools")).toBe(true);
-    expect(isRegisteredVenicePrivateModel("anonymized-tools")).toBe(false);
+    expect(hasRegisteredVenicePrivateModels(new Date("2026-09-02T12:00:59.999Z"))).toBe(true);
+    expect(isRegisteredVenicePrivateModel("private-tools", new Date("2026-09-02T12:00:59.999Z"))).toBe(true);
+    expect(isRegisteredVenicePrivateModel("anonymized-tools", new Date("2026-09-02T12:00:59.999Z"))).toBe(false);
+    expect(hasRegisteredVenicePrivateModels(new Date("2026-09-02T12:01:00.000Z"))).toBe(false);
+    expect(isRegisteredVenicePrivateModel("private-tools", new Date("2026-09-02T12:01:00.000Z"))).toBe(false);
+    expect(venicePrivateModelRegistryStatus(new Date("2026-09-02T12:01:00.000Z"))).toEqual({
+      active: false,
+      verifiedAt: "2026-09-02T12:00:00.000Z",
+      expiresAt: "2026-09-02T12:01:00.000Z",
+    });
+  });
+
+  test("refreshes the private-model proof before expiry and stops cleanly", async () => {
+    let scheduled: (() => void) | undefined;
+    let scheduledInterval = 0;
+    let refreshes = 0;
+    let cancelled = false;
+    const refresh = startManagedVenicePrivateModelRegistryRefresh({
+      env: { VENICE_API_KEY: "present-but-never-read-by-the-refresh-test" },
+      refresh: async () => { refreshes += 1; },
+      schedule: (callback, intervalMs) => {
+        scheduled = callback;
+        scheduledInterval = intervalMs;
+        return {
+          cancel: () => { cancelled = true; },
+          unref: () => undefined,
+        };
+      },
+    });
+    expect(scheduledInterval).toBe(12 * 60 * 60 * 1_000);
+    if (!scheduled) throw new Error("missing_refresh_callback");
+    scheduled();
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(refreshes).toBe(1);
+    refresh.stop();
+    expect(cancelled).toBe(true);
   });
 });

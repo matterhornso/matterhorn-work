@@ -131,21 +131,32 @@ describe("provider privacy policy", () => {
   });
 
   test("allows only runtime-verified Venice private models", () => {
-    configureVenicePrivateModelRegistry([
-      { id: "private-tools", name: "Private Tools" },
-    ]);
+    const verifiedAt = new Date("2026-09-02T12:00:00.000Z");
+    configureVenicePrivateModelRegistry(
+      [{ id: "private-tools", name: "Private Tools" }],
+      { now: verifiedAt, ttlMs: 60_000 },
+    );
     try {
       const approved = resolveModelProviderPrivacyPolicy(
         "venice",
         "private-tools",
         "Venice Private",
         { MATTERHORN_PROVIDER_PRIVACY_MODE: "verified-only" },
+        new Date("2026-09-02T12:00:59.999Z"),
       );
       const rejected = resolveModelProviderPrivacyPolicy(
         "venice",
         "anonymized-tools",
         "Venice Private",
         { MATTERHORN_PROVIDER_PRIVACY_MODE: "disclosure" },
+        new Date("2026-09-02T12:00:59.999Z"),
+      );
+      const expired = resolveModelProviderPrivacyPolicy(
+        "venice",
+        "private-tools",
+        "Venice Private",
+        { MATTERHORN_PROVIDER_PRIVACY_MODE: "verified-only" },
+        new Date("2026-09-02T12:01:00.000Z"),
       );
 
       expect(approved).toMatchObject({
@@ -154,8 +165,14 @@ describe("provider privacy policy", () => {
         retentionDays: 0,
         allowed: true,
         label: "Private model · zero retention",
+        verifiedAt: "2026-09-02T12:00:00.000Z",
       });
       expect(rejected).toMatchObject({
+        status: "unverified",
+        allowed: false,
+        label: "Model privacy not verified",
+      });
+      expect(expired).toMatchObject({
         status: "unverified",
         allowed: false,
         label: "Model privacy not verified",

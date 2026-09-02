@@ -8,13 +8,20 @@ model private.
 
 1. The backend checks for `VENICE_API_KEY` only in its server environment.
 2. Before the managed OpenCode runtime starts, Matterhorn fetches Venice's
-   public `/api/v1/models` catalog over HTTPS.
+   public `/api/v1/models` catalog through its DNS-resolved, TLS-hostname and
+   socket-peer-pinned JSON transport. Redirects, endpoint substitution,
+   private-network addresses, non-JSON responses, and oversized responses fail
+   closed. No provider credential is sent during catalog discovery.
 3. Matterhorn admits only `text` models whose current metadata says
    `privacy: private`, `offline` is not true, and function calling is enabled.
 4. The exact admitted model identifiers are registered in the backend privacy
    firewall and injected into OpenCode's in-memory runtime config.
 5. Requests claiming `providerId: venice` with any other model identifier fail
    closed, including when general provider enforcement is in disclosure mode.
+6. The admitted-model proof expires after 24 hours and is refreshed every 12
+   hours while the managed runtime is running. A failed refresh clears the
+   authoritative registry immediately; an expired model cannot receive a
+   prompt even if it remains visible in a stale client view.
 
 Venice documents its private API path as no-retention processing. Matterhorn's
 provider policy therefore reports no training and zero-day prompt retention for
@@ -45,6 +52,7 @@ or include environment dumps in acceptance evidence.
 The release remains fail closed when:
 
 - Venice catalog discovery times out or returns a non-2xx response.
+- DNS, TLS peer, origin, response type, response size, or freshness checks fail.
 - The catalog contains no eligible private, tool-capable text model.
 - A request names an anonymized, retired, offline, or otherwise unregistered
   Venice model.

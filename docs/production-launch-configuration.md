@@ -62,10 +62,12 @@ user failure.
   prompt-retention terms. A policy for a related provider product is not proof
   for the configured API endpoint.
 - Venice private mode is optional. When `VENICE_API_KEY` is present, the
-  managed runtime verifies Venice's live public catalog at startup and exposes
-  only text models labeled `private` with function calling enabled. Catalog
-  failure disables the provider; anonymized Venice models are never admitted
-  to the private-mode selector.
+  managed runtime verifies Venice's live public catalog through a pinned,
+  no-redirect, bounded JSON transport at startup and exposes only text models
+  labeled `private` with function calling enabled. The proof refreshes every
+  12 hours and expires after 24 hours. Catalog or refresh failure disables the
+  provider; anonymized Venice models are never admitted to the private-mode
+  selector.
 - Keep Sui publishing on `sui-testnet` until reviewed mainnet packages and a separate money-path review exist.
 - Keep Matterhorn Cloud disabled unless its full acceptance flow has passed.
 - Public Beta web traffic must use the authenticated same-origin deployment
