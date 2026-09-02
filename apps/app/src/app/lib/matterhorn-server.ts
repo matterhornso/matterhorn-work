@@ -184,6 +184,18 @@ export type MatterhornCoworkerWalletIntentView = {
   };
 };
 
+export type MatterhornCoworkerWalletReceiptInput = {
+  expectedRevision: number;
+  status: "submitted" | "failed";
+  publicId: string;
+  transactionHash: string | null;
+  blockHash: string | null;
+  network: string;
+  signer: string | null;
+  operation: string;
+  authorizedArgumentsHash: string;
+};
+
 export type MatterhornServerCapabilities = {
   skills: {
     read: boolean;
@@ -1889,6 +1901,20 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       token,
       method: "POST",
       body: { expectedRevision },
+      timeoutMs: timeouts.config,
+    }),
+    recordCoworkerWalletReceipt: (
+      workspaceId: string,
+      coworkerId: string,
+      intentId: string,
+      input: MatterhornCoworkerWalletReceiptInput,
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      item: MatterhornCoworkerWalletIntentView;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/wallet-intents/${encodeURIComponent(intentId)}/receipt`, {
+      token,
+      method: "POST",
+      body: input,
       timeoutMs: timeouts.config,
     }),
     transitionCoworker: (

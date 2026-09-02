@@ -34,6 +34,7 @@ import { OPENWORK_EXTENSION_CATALOG } from "../../../../app/constants";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import {
+  type MatterhornCoworkerWalletIntentView,
   type MatterhornServerClient,
   type MatterhornServerStatus,
   type MatterhornWalletTransactionSimulationInput,
@@ -120,7 +121,10 @@ import { ProjectHistoryPage } from "../../recent-activity/project-history-page";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import { useWallet } from "../../wallet/WalletProvider";
-import { subscribeReviewedActionHandoff } from "../../wallet/reviewed-action-handoff";
+import {
+  stageReviewedActionHandoff,
+  subscribeReviewedActionHandoff,
+} from "../../wallet/reviewed-action-handoff";
 import { configureSecurityLogReporter } from "../../wallet/state/security-log";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
@@ -1815,6 +1819,22 @@ export function SessionPage(props: SessionPageProps) {
     );
   }, [navigate, props.selectedWorkspaceId, setSidePanelState, sidePanelScopeId]);
 
+  const openCoworkerWalletIntent = useCallback((item: MatterhornCoworkerWalletIntentView) => (
+    stageReviewedActionHandoff(item.reviewedAction, {
+      version: "matterhorn.coworker-wallet-intent-handoff.v1",
+      workspaceId: item.workspaceId,
+      sessionId: item.sessionId,
+      coworkerId: item.coworkerId,
+      intentId: item.id,
+      expectedRevision: item.revision,
+      protocol: item.reviewedAction.protocol,
+      network: item.intent.network,
+      signer: item.intent.signer,
+      operation: item.intent.operation,
+      authorizedArgumentsHash: item.intent.authorizedArgumentsHash,
+    })
+  ), []);
+
   useEffect(
     () => subscribeReviewedActionHandoff((handoff) => {
       setReviewedActionEntryProtocol(handoff.protocol);
@@ -2372,7 +2392,7 @@ export function SessionPage(props: SessionPageProps) {
       selectedSessionId={props.selectedSessionId}
       selectedWorkspaceId={props.selectedWorkspaceId}
       onClose={closeRightPane}
-      onOpenWallet={() => setCurrentSidePanel("wallet")}
+      onOpenWallet={openCoworkerWalletIntent}
       onStartTask={props.sidebar.onCreateTaskWithPrompt}
     />
   ) : visibleSidePanel === "files" ? (
@@ -2446,6 +2466,7 @@ export function SessionPage(props: SessionPageProps) {
         initialVenue={visibleSidePanel}
         openReviewedAction={reviewedActionEntryProtocol === visibleSidePanel}
         initialReviewedActionOperation={reviewedActionEntryOperation}
+        matterhornServerClient={props.matterhornServerClient}
         workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
         sessionId={props.selectedSessionId}
       />

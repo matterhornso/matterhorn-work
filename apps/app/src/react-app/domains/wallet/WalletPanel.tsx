@@ -12,6 +12,7 @@ import { TokenIcon } from "./components/TokenIcon";
 import { getSecurityLog, subscribeSecurityLog, type SecurityLogEntry } from "./state/security-log";
 import { useTokenPrices } from "./hooks/useTokenPrices";
 import type { ReviewedActionOperation } from "@matterhorn-work/types";
+import type { MatterhornServerClient } from "../../../app/lib/matterhorn-server";
 
 const PortfolioView = lazy(() => import("./pages/PortfolioView"));
 const CowSwapPanel = lazy(() => import("./pages/CowSwapPanel"));
@@ -86,6 +87,7 @@ export type WalletPanelProps = {
   initialVenue?: CryptoVenue;
   openReviewedAction?: boolean;
   initialReviewedActionOperation?: ReviewedActionOperation | null;
+  matterhornServerClient?: MatterhornServerClient | null;
   workspaceId?: string | null;
   sessionId?: string | null;
 };
@@ -97,6 +99,7 @@ export function WalletPanel({
   initialVenue = "bittensor",
   openReviewedAction = false,
   initialReviewedActionOperation = null,
+  matterhornServerClient = null,
   workspaceId = null,
   sessionId = null,
 }: WalletPanelProps) {
@@ -171,6 +174,7 @@ export function WalletPanel({
             initialVenue={initialVenue}
             openReviewedAction={openReviewedAction}
             initialOperation={initialReviewedActionOperation}
+            matterhornServerClient={matterhornServerClient}
             workspaceId={workspaceId}
             sessionId={sessionId}
           />
@@ -387,6 +391,7 @@ export function WalletPanel({
               initialVenue={initialVenue}
               openReviewedAction={openReviewedAction}
               initialOperation={initialReviewedActionOperation}
+              matterhornServerClient={matterhornServerClient}
               workspaceId={workspaceId}
               sessionId={sessionId}
             />

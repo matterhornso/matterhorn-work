@@ -44,6 +44,8 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("Only your connected wallet can approve and send.");
     expect(panel).toContain("Exact review details");
     expect(panel).toContain("Policy checks:");
+    expect(panel).toContain("Review in wallet");
+    expect(panel).toContain("openWalletReview(item)");
     expect(panel).toContain("Cancel review");
     expect(panel).toContain("cancelCoworkerWalletIntent");
     expect(panel).toContain("Checks");

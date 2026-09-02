@@ -69,12 +69,15 @@ import {
 import {
   normalizeMatterhornServerUrl,
   readMatterhornServerSettings,
+  type MatterhornServerClient,
 } from "../../../../app/lib/matterhorn-server";
 import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import {
   subscribeReviewedActionHandoff,
+  takePendingCoworkerWalletIntentContext,
   takePendingReviewedActionGuard,
   takePendingReviewedActionHandoff,
+  type CoworkerWalletIntentHandoffContext,
 } from "../reviewed-action-handoff";
 import {
   createHyperliquidReviewDraft,
@@ -1045,6 +1048,8 @@ function buildBittensorChatPrompt(prompt: string, context: Record<string, unknow
 function HyperliquidTradeExecution({
   initialDraft,
   guardedHandoff: initialGuardedHandoff,
+  coworkerIntentContext: initialCoworkerIntentContext,
+  matterhornServerClient,
   initialOperation,
   executionAvailable,
   workspaceId,
@@ -1052,6 +1057,8 @@ function HyperliquidTradeExecution({
 }: {
   initialDraft?: HyperliquidDraftHandoff | null;
   guardedHandoff?: Extract<ReviewedActionHandoffV2, { protocol: "hyperliquid" }> | null;
+  coworkerIntentContext?: CoworkerWalletIntentHandoffContext | null;
+  matterhornServerClient?: MatterhornServerClient | null;
   initialOperation?: HyperliquidExecutionIntent["operation"] | null;
   executionAvailable?: boolean | null;
   workspaceId?: string | null;
@@ -1079,7 +1086,13 @@ function HyperliquidTradeExecution({
   const [busy, setBusy] = useState<"prepare" | "submit" | null>(null);
   const [tradeError, setTradeError] = useState<string | null>(null);
   const [guardedHandoff, setGuardedHandoff] = useState(initialGuardedHandoff ?? null);
+  const [coworkerIntentContext, setCoworkerIntentContext] = useState(initialCoworkerIntentContext ?? null);
+  const [coworkerReceiptWarning, setCoworkerReceiptWarning] = useState<string | null>(null);
   useEffect(() => setGuardedHandoff(initialGuardedHandoff ?? null), [initialGuardedHandoff]);
+  useEffect(() => {
+    setCoworkerIntentContext(initialCoworkerIntentContext ?? null);
+    setCoworkerReceiptWarning(null);
+  }, [initialCoworkerIntentContext]);
   // Execution must fail closed until the deployment reports this exact route is enabled.
   const executionUnavailable = executionAvailable !== true;
   const executionStatusMessage = executionAvailable === false
@@ -1092,6 +1105,7 @@ function HyperliquidTradeExecution({
     setReceipt(null);
     setEvidencePath(null);
     setEvidenceWarning(null);
+    setCoworkerReceiptWarning(null);
     setTradeError(null);
     setLiveConfirmation("");
   }, []);
@@ -1208,6 +1222,42 @@ function HyperliquidTradeExecution({
     }
   }, [address, guardedHandoff, initialDraft, reviewDraft, workspaceId]);
 
+  const reconcileCoworkerReceipt = useCallback(async (nextReceipt: HyperliquidExecutionReceipt) => {
+    if (!matterhornServerClient || !coworkerIntentContext) return;
+    if (nextReceipt.status === "uncertain") {
+      setCoworkerReceiptWarning(
+        "Hyperliquid has not returned a final result. Coworker history stays pending; check open orders before trying anything again.",
+      );
+      return;
+    }
+    try {
+      await matterhornServerClient.recordCoworkerWalletReceipt(
+        coworkerIntentContext.workspaceId,
+        coworkerIntentContext.coworkerId,
+        coworkerIntentContext.intentId,
+        {
+          expectedRevision: coworkerIntentContext.expectedRevision,
+          status: nextReceipt.status === "submitted" ? "submitted" : "failed",
+          publicId: nextReceipt.orderId === null
+            ? nextReceipt.intentId
+            : `hyperliquid-order:${nextReceipt.orderId}`,
+          transactionHash: null,
+          blockHash: null,
+          network: coworkerIntentContext.network,
+          signer: coworkerIntentContext.signer,
+          operation: coworkerIntentContext.operation,
+          authorizedArgumentsHash: coworkerIntentContext.authorizedArgumentsHash,
+        },
+      );
+      setCoworkerIntentContext(null);
+      setCoworkerReceiptWarning(null);
+    } catch {
+      setCoworkerReceiptWarning(
+        "The wallet action completed, but its result could not be linked to coworker history. Do not send it again; check Hyperliquid first.",
+      );
+    }
+  }, [coworkerIntentContext, matterhornServerClient]);
+
   const signAndSubmit = useCallback(async () => {
     if (!intent || !address) return;
     if (intent.network === "mainnet" && liveConfirmation !== intent.confirmation.phrase) {
@@ -1246,6 +1296,7 @@ function HyperliquidTradeExecution({
       if (workspaceId && !json.evidence?.outputPath) {
         setEvidenceWarning(json.evidenceWarning ?? "The action reached Hyperliquid, but its public receipt was not added to this workspace.");
       }
+      await reconcileCoworkerReceipt(json.receipt);
       if (!response.ok || json.receipt.status !== "submitted") {
         setTradeError(json.receipt.status === "uncertain"
           ? "Submission status is uncertain. Check your Hyperliquid open orders before trying again."
@@ -1256,7 +1307,7 @@ function HyperliquidTradeExecution({
     } finally {
       setBusy(null);
     }
-  }, [address, guardedHandoff, intent, liveConfirmation, sessionId, signTypedDataAsync, workspaceId]);
+  }, [address, guardedHandoff, intent, liveConfirmation, reconcileCoworkerReceipt, sessionId, signTypedDataAsync, workspaceId]);
 
   const shortWalletAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null;
   const firstConnector = connectors.find((connector) => connector.id !== "injected") ?? connectors[0];
@@ -1496,6 +1547,7 @@ function HyperliquidTradeExecution({
         </div>
       ) : null}
       {evidenceWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Receipt not saved">{evidenceWarning}</Notice> : null}
+      {coworkerReceiptWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Coworker history">{coworkerReceiptWarning}</Notice> : null}
       {tradeError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Hyperliquid action">{tradeError}</Notice> : null}
       <p className="text-[11px] leading-5 text-dls-secondary">
         {executionUnavailable
@@ -2656,12 +2708,14 @@ export default function BittensorPanel({
   initialVenue = "bittensor",
   openReviewedAction = false,
   initialOperation = null,
+  matterhornServerClient = null,
   workspaceId = null,
   sessionId = null,
 }: {
   initialVenue?: CryptoVenue;
   openReviewedAction?: boolean;
   initialOperation?: ReviewedActionOperation | null;
+  matterhornServerClient?: MatterhornServerClient | null;
   workspaceId?: string | null;
   sessionId?: string | null;
 }) {
@@ -2669,6 +2723,7 @@ export default function BittensorPanel({
   const [tab, setTab] = useState<Tab>("overview");
   const [draftHandoff, setDraftHandoff] = useState<ReviewedActionDraftHandoff | null>(null);
   const [guardedHandoff, setGuardedHandoff] = useState<ReviewedActionHandoffV2 | null>(null);
+  const [coworkerIntentContext, setCoworkerIntentContext] = useState<CoworkerWalletIntentHandoffContext | null>(null);
   const [subnets, setSubnets] = useState<BittensorSubnetSummary[]>([]);
   const [selectedNetuid, setSelectedNetuid] = useState<number | null>(null);
   const [detail, setDetail] = useState<BittensorSubnetDetail | null>(null);
@@ -2717,19 +2772,30 @@ export default function BittensorPanel({
   }, [initialVenue, openReviewedAction]);
 
   useEffect(() => {
-    const applyHandoff = (handoff: ReviewedActionDraftHandoff, guard: ReviewedActionHandoffV2 | null) => {
+    const applyHandoff = (
+      handoff: ReviewedActionDraftHandoff,
+      guard: ReviewedActionHandoffV2 | null,
+      coworkerContext: CoworkerWalletIntentHandoffContext | null,
+    ) => {
       if (handoff.protocol === "sui") return;
       setDraftHandoff(handoff);
       setGuardedHandoff(guard?.protocol === handoff.protocol ? guard : null);
+      setCoworkerIntentContext(coworkerContext?.protocol === handoff.protocol ? coworkerContext : null);
       setVenue(handoff.protocol);
       setTab(handoff.protocol === "bittensor" ? "actions" : "overview");
     };
     const pending = takePendingReviewedActionHandoff();
     const pendingGuard = takePendingReviewedActionGuard();
-    if (pending) applyHandoff(pending, pendingGuard);
+    if (pending) {
+      applyHandoff(pending, pendingGuard, takePendingCoworkerWalletIntentContext(pending.protocol));
+    }
     return subscribeReviewedActionHandoff((handoff) => {
       takePendingReviewedActionHandoff();
-      applyHandoff(handoff, takePendingReviewedActionGuard());
+      applyHandoff(
+        handoff,
+        takePendingReviewedActionGuard(),
+        takePendingCoworkerWalletIntentContext(handoff.protocol),
+      );
     });
   }, []);
 
@@ -3577,6 +3643,8 @@ export default function BittensorPanel({
                   <HyperliquidTradeExecution
                     initialDraft={draftHandoff?.protocol === "hyperliquid" ? draftHandoff.draft : null}
                     guardedHandoff={guardedHandoff?.protocol === "hyperliquid" ? guardedHandoff : null}
+                    coworkerIntentContext={coworkerIntentContext?.protocol === "hyperliquid" ? coworkerIntentContext : null}
+                    matterhornServerClient={matterhornServerClient}
                     initialOperation={initialOperation === "place_order" || initialOperation === "cancel_order" || initialOperation === "modify_order" || initialOperation === "close_position" ? initialOperation : null}
                     executionAvailable={marketExecutionReadiness?.reviewedWalletTickets.hyperliquid.available ?? null}
                     workspaceId={workspaceId}

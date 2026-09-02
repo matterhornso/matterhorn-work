@@ -44,8 +44,10 @@ import { getSuiWorkflowAvailability } from "./sui-workflow-state";
 import { usePhantomSui } from "./phantom-sui-provider";
 import {
   subscribeReviewedActionHandoff,
+  takePendingCoworkerWalletIntentContext,
   takePendingReviewedActionGuard,
   takePendingReviewedActionHandoff,
+  type CoworkerWalletIntentHandoffContext,
 } from "./reviewed-action-handoff";
 
 type SuiDraftHandoff = Extract<ReviewedActionDraftHandoff, { protocol: "sui" }>[
@@ -185,6 +187,8 @@ export function SuiWorkflowPanel(props: {
   const [copyLabel, setCopyLabel] = useState<string | null>(null);
   const [draftHandoff, setDraftHandoff] = useState<Extract<ReviewedActionDraftHandoff, { protocol: "sui" }> | null>(null);
   const [guardedHandoff, setGuardedHandoff] = useState<Extract<ReviewedActionHandoffV2, { protocol: "sui" }> | null>(null);
+  const [coworkerIntentContext, setCoworkerIntentContext] = useState<CoworkerWalletIntentHandoffContext | null>(null);
+  const [coworkerReceiptWarning, setCoworkerReceiptWarning] = useState<string | null>(null);
 
   useEffect(() => {
     const operation = props.initialOperation;
@@ -197,6 +201,8 @@ export function SuiWorkflowPanel(props: {
     setTransactionKind(operation);
     setDraftHandoff(null);
     setGuardedHandoff(null);
+    setCoworkerIntentContext(null);
+    setCoworkerReceiptWarning(null);
     setPreviewResponse(null);
     setReceiptResponse(null);
     setConfirmation("");
@@ -227,21 +233,33 @@ export function SuiWorkflowPanel(props: {
       setError(null);
     };
 
-    const applyHandoff = (handoff: ReviewedActionDraftHandoff, guard: ReviewedActionHandoffV2 | null) => {
+    const applyHandoff = (
+      handoff: ReviewedActionDraftHandoff,
+      guard: ReviewedActionHandoffV2 | null,
+      coworkerContext: CoworkerWalletIntentHandoffContext | null,
+    ) => {
       if (handoff.protocol !== "sui") return;
       setDraftHandoff(handoff);
       setGuardedHandoff(guard?.protocol === "sui" ? guard : null);
+      setCoworkerIntentContext(coworkerContext?.protocol === "sui" ? coworkerContext : null);
+      setCoworkerReceiptWarning(null);
       applyDraft(handoff.draft);
     };
 
     const pending = takePendingReviewedActionHandoff();
     const pendingGuard = takePendingReviewedActionGuard();
-    if (pending?.protocol === "sui") applyHandoff(pending, pendingGuard);
+    if (pending?.protocol === "sui") {
+      applyHandoff(pending, pendingGuard, takePendingCoworkerWalletIntentContext("sui"));
+    }
 
     return subscribeReviewedActionHandoff((handoff) => {
       if (handoff.protocol !== "sui") return;
       takePendingReviewedActionHandoff();
-      applyHandoff(handoff, takePendingReviewedActionGuard());
+      applyHandoff(
+        handoff,
+        takePendingReviewedActionGuard(),
+        takePendingCoworkerWalletIntentContext("sui"),
+      );
     });
   }, []);
 
@@ -459,6 +477,42 @@ export function SuiWorkflowPanel(props: {
     workspaceId,
   ]);
 
+  const reconcileCoworkerReceipt = useCallback(async (
+    receipt: MatterhornSuiTransactionReceiptResponse["receipt"],
+  ) => {
+    if (!client || !coworkerIntentContext) return;
+    if (receipt.status === "unknown") {
+      setCoworkerReceiptWarning(
+        "Sui has not confirmed a result yet. Coworker history will stay pending until the public transaction has a final status.",
+      );
+      return;
+    }
+    try {
+      await client.recordCoworkerWalletReceipt(
+        coworkerIntentContext.workspaceId,
+        coworkerIntentContext.coworkerId,
+        coworkerIntentContext.intentId,
+        {
+          expectedRevision: coworkerIntentContext.expectedRevision,
+          status: receipt.status === "failure" ? "failed" : "submitted",
+          publicId: receipt.transactionDigest,
+          transactionHash: receipt.transactionDigest,
+          blockHash: null,
+          network: coworkerIntentContext.network,
+          signer: coworkerIntentContext.signer,
+          operation: coworkerIntentContext.operation,
+          authorizedArgumentsHash: coworkerIntentContext.authorizedArgumentsHash,
+        },
+      );
+      setCoworkerIntentContext(null);
+      setCoworkerReceiptWarning(null);
+    } catch {
+      setCoworkerReceiptWarning(
+        "The wallet action completed, but its result could not be linked to coworker history. Do not send it again; verify the public transaction ID first.",
+      );
+    }
+  }, [client, coworkerIntentContext]);
+
   const importReceipt = useCallback(async () => {
     if (!client) {
       setError("Matterhorn Desks engine is offline.");
@@ -486,6 +540,7 @@ export function SuiWorkflowPanel(props: {
       );
       setReceiptResponse(response);
       emitEvidenceSaved(response.evidence?.outputPath);
+      await reconcileCoworkerReceipt(response.receipt);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not verify the Sui receipt.");
     } finally {
@@ -502,6 +557,7 @@ export function SuiWorkflowPanel(props: {
     previewResponse,
     props.sessionId,
     recipient,
+    reconcileCoworkerReceipt,
     workspaceId,
   ]);
 
@@ -589,6 +645,7 @@ export function SuiWorkflowPanel(props: {
       setDigest(nextDigest);
       setReceiptResponse(response);
       emitEvidenceSaved(response.evidence?.outputPath);
+      await reconcileCoworkerReceipt(response.receipt);
       if (nextStatus === "failure") {
         const message = executed.status?.error?.message ?? "The Sui wallet returned a failed transaction.";
         setError(message);
@@ -598,7 +655,7 @@ export function SuiWorkflowPanel(props: {
     } finally {
       setBusyAction(null);
     }
-  }, [account, client, confirmation, emitEvidenceSaved, guardedHandoff, network, previewResponse, props.sessionId, workspaceId]);
+  }, [account, client, confirmation, emitEvidenceSaved, guardedHandoff, network, previewResponse, props.sessionId, reconcileCoworkerReceipt, workspaceId]);
 
   const preview = previewResponse?.preview ?? null;
   const receipt = receiptResponse?.receipt ?? null;
@@ -1108,6 +1165,12 @@ export function SuiWorkflowPanel(props: {
         </div>
       ) : null}
       </>
+
+      {coworkerReceiptWarning ? (
+        <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-200" role="status">
+          {coworkerReceiptWarning}
+        </div>
+      ) : null}
 
       {error || phantomSui.error ? (
         <div className="rounded-lg bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-300">

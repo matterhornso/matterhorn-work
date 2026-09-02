@@ -56,7 +56,7 @@ export type SessionCoworkersPanelProps = {
   selectedSessionId: string | null;
   selectedWorkspaceId: string;
   onClose: () => void;
-  onOpenWallet: () => void;
+  onOpenWallet: (item: MatterhornCoworkerWalletIntentView) => boolean;
   onStartTask?: StartCoworkerTask;
 };
 
@@ -238,7 +238,6 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     ...activeIntents,
     ...walletIntents.filter((item) => !isActiveCoworkerWalletIntent(item)),
   ].slice(0, 4), [activeIntents, walletIntents]);
-  const hasWalletReview = useMemo(() => walletIntents.some(canOpenCoworkerWalletIntent), [walletIntents]);
 
   const refresh = useCallback(async () => {
     await Promise.all([
@@ -395,6 +394,12 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     }
   }, [props.client, refresh, showToast, workspaceId]);
 
+  const openWalletReview = useCallback((item: MatterhornCoworkerWalletIntentView) => {
+    setError(null);
+    if (props.onOpenWallet(item)) return;
+    setError("This wallet review expired or no longer matches its protected terms. Ask the coworker to prepare it again.");
+  }, [props.onOpenWallet]);
+
   if (!props.client || !workspaceId) {
     return (
       <div className="flex h-full flex-col justify-center px-5 py-8 text-center">
@@ -549,14 +554,9 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
             ) : (
               <>
                 <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-wallet-title">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 id="coworker-wallet-title" className="text-sm font-semibold text-dls-text">Wallet activity</h3>
-                      <p className="mt-1 text-xs text-dls-secondary">Only your connected wallet can approve and send.</p>
-                    </div>
-                    {hasWalletReview ? (
-                      <Button size="xs" variant="ghost" onClick={props.onOpenWallet}><WalletCards aria-hidden="true" /> Open wallet</Button>
-                    ) : null}
+                  <div>
+                    <h3 id="coworker-wallet-title" className="text-sm font-semibold text-dls-text">Wallet activity</h3>
+                    <p className="mt-1 text-xs text-dls-secondary">Only your connected wallet can approve and send.</p>
                   </div>
                   {walletIntents.length ? (
                     <ul className="mt-2 divide-y divide-dls-border/70">
@@ -593,11 +593,18 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                                 {item.receipt ? <div><dt className="inline font-medium text-dls-text">Public receipt: </dt><dd className="inline break-all">{item.receipt.publicId}</dd></div> : null}
                               </dl>
                             </details>
-                            {canCancel ? (
-                              <Button className="mt-2" size="xs" variant="ghost" disabled={busyAction !== null} onClick={() => setCancelIntent(item)}>
-                                Cancel review
-                              </Button>
-                            ) : null}
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {canOpenCoworkerWalletIntent(item) ? (
+                                <Button size="xs" disabled={busyAction !== null} onClick={() => openWalletReview(item)}>
+                                  <WalletCards aria-hidden="true" /> Review in wallet
+                                </Button>
+                              ) : null}
+                              {canCancel ? (
+                                <Button size="xs" variant="ghost" disabled={busyAction !== null} onClick={() => setCancelIntent(item)}>
+                                  Cancel review
+                                </Button>
+                              ) : null}
+                            </div>
                           </li>
                         );
                       })}

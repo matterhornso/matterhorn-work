@@ -1147,6 +1147,13 @@ describe("crypto coworker HTTP boundary", () => {
     expect(rejectedSecret.response.status).toBe(400);
     expect(rejectedSecret.payload.code).toBe("pending_crypto_receipt_secret_rejected");
 
+    const crossAccountReceipt = await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/wallet-intents/${pending.id}/receipt`,
+      { cookie: cookieB, body: receiptBody },
+    );
+    expect(crossAccountReceipt.response.status).toBe(404);
+
     const reconciled = await request(
       server.base,
       `/workspace/${workspaceA}/coworkers/${coworkerId}/wallet-intents/${pending.id}/receipt`,

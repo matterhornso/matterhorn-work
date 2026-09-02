@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import type {
+  MatterhornServerClient,
   MatterhornWalletTransactionSimulationInput,
   MatterhornWalletTransactionSimulationResponse,
 } from "../../../app/lib/matterhorn-server";
@@ -14,6 +15,7 @@ export function SessionWalletPanel(props: {
   initialVenue: CryptoVenue;
   openReviewedAction: boolean;
   initialReviewedActionOperation: ReviewedActionOperation | null;
+  matterhornServerClient?: MatterhornServerClient | null;
   workspaceId?: string | null;
   sessionId?: string | null;
 }) {
@@ -27,6 +29,7 @@ export function SessionWalletPanel(props: {
       initialVenue={props.initialVenue}
       openReviewedAction={props.openReviewedAction}
       initialReviewedActionOperation={props.initialReviewedActionOperation}
+      matterhornServerClient={props.matterhornServerClient}
       workspaceId={props.workspaceId}
       sessionId={props.sessionId}
     />

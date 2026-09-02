@@ -5,8 +5,46 @@ import { resolve } from "node:path";
 import {
   reviewedActionHandoffFromCard,
   stageReviewedActionHandoff,
+  takePendingCoworkerWalletIntentContext,
   takePendingReviewedActionGuard,
 } from "../src/react-app/domains/wallet/reviewed-action-handoff";
+
+function guardedSuiHandoff(options?: { simulatedAt?: string; expiresAt?: string }) {
+  const now = new Date();
+  return {
+    version: "matterhorn.reviewed-action-handoff.v2" as const,
+    protocol: "sui" as const,
+    source: "agent-card" as const,
+    runId: "run_guarded_ui",
+    intentHash: "a".repeat(64),
+    policyHash: "b".repeat(64),
+    signer: `0x${"1".repeat(64)}`,
+    network: "testnet",
+    operation: "transfer_sui",
+    amount: "0.1",
+    asset: "SUI",
+    recipient: `0x${"2".repeat(64)}`,
+    slippage: null,
+    expiresAt: options?.expiresAt ?? new Date(now.getTime() + 300_000).toISOString(),
+    simulation: {
+      reference: "sha256:preview",
+      block: "checkpoint:1",
+      simulatedAt: options?.simulatedAt ?? now.toISOString(),
+    },
+    preparedAt: now.toISOString(),
+    capabilityClass: "wallet_review_only" as const,
+    draft: {
+      operation: "transfer_sui" as const,
+      network: "testnet" as const,
+      sender: `0x${"1".repeat(64)}`,
+      recipient: `0x${"2".repeat(64)}`,
+      amount: "0.1",
+      coinType: null,
+      objectId: null,
+      transfers: [] as [],
+    },
+  };
+}
 
 describe("agent card to wallet review handoff", () => {
   it("prefers a fresh hash-bound v2 handoff over reparsing display copy", () => {
@@ -50,6 +88,59 @@ describe("agent card to wallet review handoff", () => {
     expect(takePendingReviewedActionGuard()?.intentHash).toBe(guarded.intentHash);
   });
 
+  it("binds coworker identity to one exact, unexpired wallet handoff", () => {
+    const handoff = guardedSuiHandoff();
+    const context = {
+      version: "matterhorn.coworker-wallet-intent-handoff.v1" as const,
+      workspaceId: "workspace_exact",
+      sessionId: "session_exact",
+      coworkerId: "coworker_exact",
+      intentId: "intent_exact",
+      expectedRevision: 3,
+      protocol: "sui" as const,
+      network: `sui:${handoff.network}`,
+      signer: handoff.signer,
+      operation: handoff.operation,
+      authorizedArgumentsHash: "c".repeat(64),
+    };
+
+    expect(stageReviewedActionHandoff(handoff, context)).toBe(true);
+    expect(takePendingCoworkerWalletIntentContext("hyperliquid")).toBeNull();
+    expect(takePendingCoworkerWalletIntentContext("sui")).toEqual(context);
+    expect(takePendingCoworkerWalletIntentContext("sui")).toBeNull();
+  });
+
+  it("rejects expired or mutated coworker bindings but stages stale simulations for server refresh", () => {
+    const stale = guardedSuiHandoff({
+      simulatedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+    const context = {
+      version: "matterhorn.coworker-wallet-intent-handoff.v1" as const,
+      workspaceId: "workspace_exact",
+      sessionId: "session_exact",
+      coworkerId: "coworker_exact",
+      intentId: "intent_exact",
+      expectedRevision: 1,
+      protocol: "sui" as const,
+      network: `sui:${stale.network}`,
+      signer: stale.signer,
+      operation: stale.operation,
+      authorizedArgumentsHash: "d".repeat(64),
+    };
+    expect(stageReviewedActionHandoff(stale, context)).toBe(true);
+    expect(takePendingCoworkerWalletIntentContext("sui")).toEqual(context);
+
+    expect(stageReviewedActionHandoff(stale, { ...context, operation: "transfer_object" })).toBe(false);
+    expect(stageReviewedActionHandoff(stale, { ...context, authorizedArgumentsHash: "not-a-hash" })).toBe(false);
+    expect(stageReviewedActionHandoff(guardedSuiHandoff({
+      expiresAt: new Date(Date.now() - 1_000).toISOString(),
+    }), context)).toBe(false);
+    expect(stageReviewedActionHandoff({
+      ...guardedSuiHandoff(),
+      expiresAt: "not-a-date",
+    }, context)).toBe(false);
+  });
+
   it("opens the matching protocol ticket instead of generic wallet settings", () => {
     const sessionPage = readFileSync(
       resolve(import.meta.dir, "../src/react-app/domains/session/chat/session-page.tsx"),
@@ -59,6 +150,27 @@ describe("agent card to wallet review handoff", () => {
     expect(sessionPage).toContain("subscribeReviewedActionHandoff((handoff) => {");
     expect(sessionPage).toContain("setReviewedActionEntryProtocol(handoff.protocol);");
     expect(sessionPage).toContain("setCurrentSidePanel(handoff.protocol);");
+    expect(sessionPage).toContain("stageReviewedActionHandoff(item.reviewedAction");
+    expect(sessionPage).toContain("authorizedArgumentsHash: item.intent.authorizedArgumentsHash");
+  });
+
+  it("reconciles Sui and Hyperliquid public results without exposing signing authority", () => {
+    const suiPanel = readFileSync(
+      resolve(import.meta.dir, "../src/react-app/domains/wallet/sui-workflow-panel.tsx"),
+      "utf8",
+    );
+    const marketPanel = readFileSync(
+      resolve(import.meta.dir, "../src/react-app/domains/wallet/pages/BittensorPanel.tsx"),
+      "utf8",
+    );
+
+    for (const source of [suiPanel, marketPanel]) {
+      expect(source).toContain("recordCoworkerWalletReceipt");
+      expect(source).toContain("authorizedArgumentsHash: coworkerIntentContext.authorizedArgumentsHash");
+      expect(source).toContain("Do not send it again");
+      expect(source).not.toContain("MATTERHORN_CAPABILITY_SIGNING_SECRET");
+      expect(source).not.toContain("MATTERHORN_AGENT_RUNTIME_SECRET");
+    }
   });
 
   it("makes a disabled Hyperliquid submission route clear before wallet connection", () => {
