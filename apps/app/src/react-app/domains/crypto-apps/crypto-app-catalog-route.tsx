@@ -38,8 +38,25 @@ function userMessage(error: unknown): string {
   return "Matterhorn could not update this crypto app. Try again.";
 }
 
-function humanize(value: string): string {
-  return value.replaceAll("_", " ");
+function accessLabel(access: MatterhornCryptoAppActionAccess): string {
+  if (access === "read") return "Research";
+  if (access === "watch") return "Monitoring";
+  if (access === "prepare") return "Wallet review";
+  return "Safety check";
+}
+
+function riskLabel(risk: MatterhornCryptoAppCatalogSummary["actions"][number]["risk"]): string {
+  if (risk === "informational") return "Public data";
+  if (risk === "private_data") return "Uses approved private data";
+  if (risk === "financial_low") return "Low-value financial preview";
+  return "High-value financial preview";
+}
+
+function checkedDate(value: string): string {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp)
+    ? new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(timestamp))
+    : "recently";
 }
 
 function activeConnection(
@@ -87,6 +104,7 @@ export function CryptoAppCatalogRoute() {
   const [search, setSearch] = useState("");
   const [access, setAccess] = useState<AccessFilter>("all");
   const [protocol, setProtocol] = useState("all");
+  const [network, setNetwork] = useState("all");
   const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
   const [scopeByApp, setScopeByApp] = useState<Record<string, ConnectionScope>>({});
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
@@ -113,12 +131,17 @@ export function CryptoAppCatalogRoute() {
       ].join(" ").toLocaleLowerCase("en-US");
       return (!needle || text.includes(needle))
         && (access === "all" || app.actions.some((action) => action.access === access))
-        && (protocol === "all" || app.networks.some((network) => network.protocol === protocol));
+        && (protocol === "all" || app.networks.some((item) => item.protocol === protocol))
+        && (network === "all" || app.networks.some((item) => item.chainId === network));
     });
-  }, [access, protocol, search, snapshot?.apps]);
+  }, [access, network, protocol, search, snapshot?.apps]);
 
   const protocols = useMemo(() => [...new Set(
     (snapshot?.apps ?? []).flatMap((app) => app.networks.map((network) => network.protocol)),
+  )].sort((left, right) => left.localeCompare(right)), [snapshot?.apps]);
+
+  const networks = useMemo(() => [...new Set(
+    (snapshot?.apps ?? []).flatMap((app) => app.networks.map((item) => item.chainId)),
   )].sort((left, right) => left.localeCompare(right)), [snapshot?.apps]);
 
   const refresh = useCallback(async () => {
@@ -182,15 +205,15 @@ export function CryptoAppCatalogRoute() {
         </div>
 
         <header className="border-b border-border pb-6">
-          <h1 className="text-2xl font-semibold tracking-[-0.02em]">Certified crypto apps</h1>
+          <h1 className="text-2xl font-semibold tracking-[-0.02em]">Apps for your coworkers</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Give a Matterhorn coworker narrow testnet access to a certified app. You choose the actions; every financial result remains a wallet preview.
+            Choose what a coworker may research, monitor, or prepare for your wallet. You can pause or remove access at any time.
           </p>
           <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground" aria-label="Crypto app safety boundary">
-            <span>Testnet only</span>
-            <span>No credentials in chat</span>
-            <span>Connected wallet signs</span>
-            <span>{snapshot?.mode === "enforce" ? "Invite enforcement active" : "Invite preview mode"}</span>
+            <span>Testing networks only</span>
+            <span>Never paste keys in chat</span>
+            <span>Your wallet approves every transaction</span>
+            <span>{snapshot?.mode === "enforce" ? "Access controls active" : "Preview access only"}</span>
           </div>
         </header>
 
@@ -207,24 +230,24 @@ export function CryptoAppCatalogRoute() {
           </section>
         ) : (
           <>
-            <section className="grid gap-3 border-b border-border py-5 sm:grid-cols-[minmax(0,1fr)_11rem_11rem]" aria-label="Catalog filters">
+            <section className="grid gap-3 border-b border-border py-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_10rem_10rem_12rem]" aria-label="Catalog filters">
               <label className="relative block">
-                <span className="sr-only">Search certified apps</span>
+                <span className="sr-only">Search apps</span>
                 <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search protocol or capability" />
+                <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search apps or tasks" />
               </label>
               <label>
-                <span className="sr-only">Filter by access</span>
+                <span className="sr-only">Filter by what the app can do</span>
                 <select
                   className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={access}
                   onChange={(event) => setAccess(event.target.value as AccessFilter)}
                 >
-                  <option value="all">All capabilities</option>
-                  <option value="read">Reads</option>
-                  <option value="watch">Watches</option>
-                  <option value="prepare">Wallet previews</option>
-                  <option value="simulate">Simulations</option>
+                  <option value="all">Any task</option>
+                  <option value="read">Research</option>
+                  <option value="watch">Monitoring</option>
+                  <option value="prepare">Wallet review</option>
+                  <option value="simulate">Safety checks</option>
                 </select>
               </label>
               <label>
@@ -234,8 +257,19 @@ export function CryptoAppCatalogRoute() {
                   value={protocol}
                   onChange={(event) => setProtocol(event.target.value)}
                 >
-                  <option value="all">All protocols</option>
+                  <option value="all">Any protocol</option>
                   {protocols.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </label>
+              <label>
+                <span className="sr-only">Filter by network</span>
+                <select
+                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={network}
+                  onChange={(event) => setNetwork(event.target.value)}
+                >
+                  <option value="all">Any network</option>
+                  {networks.map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
               </label>
             </section>
@@ -247,6 +281,9 @@ export function CryptoAppCatalogRoute() {
                 <p className="py-10 text-sm text-muted-foreground">No certified testnet apps match these filters.</p>
               ) : filtered.map((app) => {
                 const connection = activeConnection(snapshot.connections, app.appId);
+                const revokedConnections = snapshot.connections.filter((item) => (
+                  item.appId === app.appId && item.state === "revoked"
+                ));
                 const expanded = expandedAppId === app.appId;
                 const scope = scopeByApp[app.appId] ?? defaultScope(app);
                 const supportsResearch = app.actions.some((action) => action.access === "read" || action.access === "watch");
@@ -265,7 +302,7 @@ export function CryptoAppCatalogRoute() {
                         </div>
                         <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{app.description}</p>
                         <p className="mt-2 text-xs text-muted-foreground">
-                          {app.networks.map((network) => network.chainId).join(" · ")} · {app.actions.length} capabilities · {humanize(app.certification.state)}
+                          {app.networks.map((item) => item.chainId).join(" · ")} · {app.actions.length} {app.actions.length === 1 ? "task" : "tasks"} · Testnet checked {checkedDate(app.certification.updatedAt)}
                         </p>
                       </div>
                       <Button
@@ -283,25 +320,32 @@ export function CryptoAppCatalogRoute() {
                     {expanded ? (
                       <div className="mt-5 grid gap-6 border-t border-border pt-5 md:grid-cols-[minmax(0,1fr)_18rem]">
                         <div>
-                          <h3 className="text-sm font-medium">Declared capabilities</h3>
+                          <h3 className="text-sm font-medium">What this app can do</h3>
                           <ul className="mt-3 space-y-4">
                             {app.actions.map((action) => (
                               <li key={action.id} className="text-sm">
                                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                                   <span className="font-medium">{action.title}</span>
-                                  <span className="text-xs capitalize text-muted-foreground">{humanize(action.access)} · {humanize(action.risk)}</span>
+                                  <span className="text-xs text-muted-foreground">{accessLabel(action.access)} · {riskLabel(action.risk)}</span>
                                 </div>
                                 <p className="mt-1 leading-6 text-muted-foreground">{action.description}</p>
                                 <p className="mt-1 text-xs text-muted-foreground">
-                                  {action.requiresFreshness ? `Fresh within ${Math.round((action.freshnessMaxAgeMs ?? 0) / 1_000)}s` : "No freshness claim"}
-                                  {action.walletSubmissionOnly && (action.access === "prepare" || action.access === "simulate") ? " · Wallet submits" : ""}
+                                  {action.requiresFreshness ? `Data refreshed within ${Math.round((action.freshnessMaxAgeMs ?? 0) / 1_000)}s` : "Uses stable data"}
+                                  {action.requiredScopes.length ? ` · Needs ${action.requiredScopes.length} approved ${action.requiredScopes.length === 1 ? "permission" : "permissions"}` : " · No account permission needed"}
+                                  {action.walletSubmissionOnly && (action.access === "prepare" || action.access === "simulate") ? " · Your wallet submits" : ""}
                                 </p>
                               </li>
                             ))}
                           </ul>
+                          <dl className="mt-6 grid gap-3 border-t border-border pt-5 text-xs sm:grid-cols-2">
+                            <div><dt className="text-muted-foreground">Version</dt><dd className="mt-1 break-words">{app.manifestRevision}</dd></div>
+                            <div><dt className="text-muted-foreground">Safety check</dt><dd className="mt-1">Testnet certified · policy {app.certification.policyVersion}</dd></div>
+                            <div><dt className="text-muted-foreground">Task cost</dt><dd className="mt-1">Measured per run and shown in its receipt</dd></div>
+                            <div><dt className="text-muted-foreground">Connection history</dt><dd className="mt-1">{revokedConnections.length ? `${revokedConnections.length} previously removed` : "No previous removals"}</dd></div>
+                          </dl>
                           <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm">
-                            <a className="underline underline-offset-4" href={app.support.privacyPolicyUrl} target="_blank" rel="noreferrer">Provider privacy policy</a>
-                            {app.support.statusUrl ? <a className="underline underline-offset-4" href={app.support.statusUrl} target="_blank" rel="noreferrer">Provider status</a> : null}
+                            <a className="underline underline-offset-4" href={app.support.privacyPolicyUrl} target="_blank" rel="noreferrer">How this provider handles data</a>
+                            {app.support.statusUrl ? <a className="underline underline-offset-4" href={app.support.statusUrl} target="_blank" rel="noreferrer">Check service status</a> : <span className="text-muted-foreground">No public status page</span>}
                           </div>
                         </div>
 
@@ -313,7 +357,7 @@ export function CryptoAppCatalogRoute() {
                                 {connection.state === "active" ? "Connected" : "Paused"}
                               </div>
                               <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                                {connection.grantedActionIds.length} capabilities · {connection.grantedNetworks.join(" · ")}
+                                {connection.grantedActionIds.length} {connection.grantedActionIds.length === 1 ? "task" : "tasks"} · {connection.grantedNetworks.join(" · ")}
                               </p>
                               {connection.availability !== "available" ? <p className="mt-3 text-xs leading-5 text-destructive">Certification unavailable. This connection cannot run.</p> : null}
                               <div className="mt-4 flex flex-wrap gap-2">

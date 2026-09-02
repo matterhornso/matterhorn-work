@@ -44,9 +44,9 @@ describe("invite-only crypto app catalog route", () => {
     const route = readAppSource("react-app/domains/crypto-apps/crypto-app-catalog-route.tsx");
 
     expect(route).toContain('client.listCryptoApps({ environment: "testnet" })');
-    expect(route).toContain("Testnet only");
-    expect(route).toContain("No credentials in chat");
-    expect(route).toContain("Connected wallet signs");
+    expect(route).toContain("Testing networks only");
+    expect(route).toContain("Never paste keys in chat");
+    expect(route).toContain("Your wallet approves every transaction");
     expect(route).toContain("Research only");
     expect(route).toContain("Research + wallet previews");
     expect(route).toContain("Your connected wallet still signs and submits");
@@ -60,6 +60,26 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).not.toContain("seedPhrase");
     expect(route).not.toContain("signTransaction");
     expect(route).not.toContain("executeTransaction");
+  });
+
+  test("keeps catalog decisions understandable while exposing complete safe details", () => {
+    const route = readAppSource("react-app/domains/crypto-apps/crypto-app-catalog-route.tsx");
+
+    expect(route).toContain("Apps for your coworkers");
+    expect(route).toContain("Search apps or tasks");
+    expect(route).toContain("Any protocol");
+    expect(route).toContain("Any network");
+    expect(route).toContain('item.chainId === network');
+    expect(route).toContain("What this app can do");
+    expect(route).toContain("Uses approved private data");
+    expect(route).toContain("Your wallet submits");
+    expect(route).toContain("Measured per run and shown in its receipt");
+    expect(route).toContain("Connection history");
+    expect(route).toContain("How this provider handles data");
+    expect(route).toContain("Check service status");
+    expect(route).not.toContain("manifestHash}");
+    expect(route).not.toContain("reportHash}");
+    expect(route).not.toContain("runtimeReportHash}");
   });
 
   test("uses account-token catalog methods without operator authority", () => {
