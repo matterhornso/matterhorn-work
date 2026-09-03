@@ -2,6 +2,17 @@
 
 The Crypto Coworkers release gate turns the remaining live Phase 1–5 exit criteria into one fail-closed, exact-commit decision. It does not certify an app, enable a runtime mode, publish to Walrus, promote a deployment, or grant wallet authority.
 
+Create a non-passing, exact-commit template after the immutable candidate is deployed:
+
+```bash
+pnpm template:crypto-coworkers-acceptance -- \
+  --expected-commit <full-40-character-candidate-sha> \
+  --app-url https://candidate.example/workspace/example \
+  --output /absolute/path/to/crypto-coworkers-acceptance.json
+```
+
+The command refuses local, credential-bearing, or non-HTTPS URLs and will not overwrite an existing file. It writes an owner-only `0600` manifest with the pinned runtime versions, exact networks, every outcome marked `pending`, and a separate relative report path for each group. It creates no report, hash, or passing claim. Replace a report placeholder only after the redacted report has been reviewed, then calculate its exact SHA-256 and change that group's status and verified outcomes.
+
 Run it only against a deployed immutable candidate:
 
 ```bash

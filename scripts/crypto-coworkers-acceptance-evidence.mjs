@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, constants as fsConstants, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import process from "node:process";
@@ -98,16 +98,20 @@ const TRANSACTION_SCENARIOS = Object.freeze({
 });
 
 function parseArgs(argv) {
+  const command = argv[0] === "template" ? "template" : "evaluate";
   const config = {
+    command,
     evidence: "",
     expectedCommit: "",
+    appUrl: "",
+    output: "",
     now: new Date(),
     strict: false,
     json: false,
     jsonOutput: "",
     help: false,
   };
-  for (let index = 0; index < argv.length; index += 1) {
+  for (let index = command === "template" ? 1 : 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const next = () => {
       const value = argv[index + 1];
@@ -118,6 +122,8 @@ function parseArgs(argv) {
     if (arg === "--") continue;
     if (arg === "--evidence") config.evidence = resolve(next());
     else if (arg === "--expected-commit") config.expectedCommit = next().toLowerCase();
+    else if (arg === "--app-url") config.appUrl = next();
+    else if (arg === "--output") config.output = resolve(next());
     else if (arg === "--now") config.now = new Date(next());
     else if (arg === "--json-output") config.jsonOutput = resolve(next());
     else if (arg === "--strict") config.strict = true;
@@ -125,9 +131,16 @@ function parseArgs(argv) {
     else if (arg === "--help" || arg === "-h") config.help = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
-  if (!config.help && !config.evidence) throw new Error("--evidence is required.");
+  if (!config.help && command === "evaluate" && !config.evidence) throw new Error("--evidence is required.");
   if (!config.help && !COMMIT_PATTERN.test(config.expectedCommit)) {
     throw new Error("--expected-commit must be a full 40-character Git SHA.");
+  }
+  if (!config.help && command === "template") {
+    if (!config.output) throw new Error("template requires --output.");
+    if (!config.appUrl) throw new Error("template requires --app-url.");
+  }
+  if (!config.help && command === "evaluate" && config.output) {
+    throw new Error("Use --json-output when evaluating evidence.");
   }
   if (!Number.isFinite(config.now.getTime())) throw new Error("--now must be a valid timestamp.");
   return config;
@@ -143,8 +156,150 @@ function help() {
     "wallet exports, private keys, and session tokens are forbidden from the evidence manifest.",
     "",
     "Usage:",
+    "  pnpm template:crypto-coworkers-acceptance -- --expected-commit <sha> --app-url https://app.example --output acceptance.json",
     "  pnpm gate:crypto-coworkers-acceptance -- --evidence acceptance.json --expected-commit <sha> --json --strict",
   ].join("\n");
+}
+
+function safeDeployedAppUrl(value) {
+  const url = new URL(value);
+  const hostname = url.hostname.toLowerCase();
+  const address = hostname.startsWith("[") && hostname.endsWith("]")
+    ? hostname.slice(1, -1)
+    : hostname;
+  const deployed = url.protocol === "https:"
+    && !url.username
+    && !url.password
+    && !url.search
+    && !url.hash
+    && (!url.port || url.port === "443")
+    && hostname !== "localhost"
+    && !hostname.endsWith(".localhost")
+    && !hostname.endsWith(".local")
+    && isIP(address) === 0;
+  if (!deployed) {
+    throw new Error("--app-url must be a credential-free deployed HTTPS URL.");
+  }
+  return url.toString();
+}
+
+function pendingFields(keys) {
+  return Object.fromEntries(keys.map((key) => [key, false]));
+}
+
+function pendingEvidence(name) {
+  return {
+    path: `reports/${name}.md`,
+    sha256: "REPLACE_WITH_SHA256_AFTER_REDACTED_REPORT_REVIEW",
+  };
+}
+
+function buildPendingTemplate(config) {
+  const expected = expectedRuntime();
+  return {
+    version: INPUT_VERSION,
+    capturedAt: config.now.toISOString(),
+    commit: config.expectedCommit,
+    environment: "deployed",
+    appUrl: safeDeployedAppUrl(config.appUrl),
+    runtime: {
+      status: "pending",
+      openworkVersion: expected.openwork.version,
+      openworkCommit: expected.openwork.commit,
+      opencodeVersion: expected.opencode.version,
+      opencodeCommit: expected.opencode.commit,
+      opencodeSdkVersion: expected.opencode.sdkVersion,
+      permissionDenyByDefault: false,
+      evidence: pendingEvidence("runtime"),
+    },
+    certifications: Object.fromEntries(Object.entries(CERTIFICATION_SCENARIOS).map(([id, scenario]) => [id, {
+      status: "pending",
+      network: scenario.network,
+      ...pendingFields(scenario.required),
+      evidence: pendingEvidence(`certification-${id}`),
+    }])),
+    coworkers: Object.fromEntries(Object.entries(COWORKER_SCENARIOS).map(([id, required]) => [id, {
+      status: "pending",
+      ...pendingFields([...COWORKER_COMMON, ...required]),
+      evidence: pendingEvidence(`coworker-${id}`),
+    }])),
+    transactions: Object.fromEntries(Object.entries(TRANSACTION_SCENARIOS).map(([id, scenario]) => [id, {
+      status: "pending",
+      network: scenario.network,
+      ...pendingFields(scenario.required),
+      evidence: pendingEvidence(`transaction-${id}`),
+    }])),
+    encryptedEvidence: {
+      status: "pending",
+      ...pendingFields([
+        "explicitOptIn", "ciphertextOnly", "exactReadback", "suiCertification",
+        "tamperBlocked", "renewalWalletOnly", "expiryBlocked", "deleted",
+        "recoveryKeyDestroyed", "publicScanNonIdentifying", "restoreDrill", "erasureLedgerVerified",
+      ]),
+      evidence: pendingEvidence("walrus-sui-evidence"),
+    },
+    developerPlatform: {
+      status: "pending",
+      ...pendingFields([
+        "quickstartUnder30Minutes", "localConformance", "signedRevision",
+        "failedOutcomeVisible", "passedOutcomeVisible", "inviteSingleUse",
+        "connectionWithoutChatCredentials", "codexGuardedClient", "claudeCodeGuardedClient",
+        "genericMcpGuardedClient", "meteringTenantSafe", "sdkPackageGate", "sdkPublished",
+        "packageProvenanceVerified",
+      ]),
+      evidence: pendingEvidence("developer-platform"),
+    },
+    designPartners: {
+      status: "pending",
+      count: 0,
+      inviteOnly: false,
+      noChatCredentials: false,
+      noWalletAuthority: false,
+      evidence: pendingEvidence("design-partners"),
+    },
+    rollout: {
+      status: "pending",
+      mode: "shadow",
+      hours: 0,
+      unexplainedDenials: 0,
+      allBypassesReviewed: false,
+      rollbackProven: false,
+      sequentialProtocolReview: false,
+      evidence: pendingEvidence("shadow-rollout"),
+    },
+    operations: {
+      status: "pending",
+      ...pendingFields([
+        "twoAccountIsolation", "tenantExportIsolation", "hostBackupRestore", "deletionResume",
+        "privacyFirewall", "capabilityAdversarial", "accessibility", "responsive", "performance", "rollback",
+      ]),
+      evidence: pendingEvidence("hosted-operations"),
+    },
+  };
+}
+
+function writePendingTemplate(config) {
+  const template = buildPendingTemplate(config);
+  rejectSensitiveKeys(template);
+  validateClosedInput(template);
+  mkdirSync(dirname(config.output), { recursive: true });
+  let descriptor;
+  try {
+    descriptor = openSync(
+      config.output,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | (fsConstants.O_NOFOLLOW ?? 0),
+      0o600,
+    );
+    writeFileSync(descriptor, `${JSON.stringify(template, null, 2)}\n`, "utf8");
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") {
+      throw new Error("Template output already exists.");
+    }
+    throw error;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+  return template;
 }
 
 function rejectSensitiveKeys(value, path = "evidence") {
@@ -301,18 +456,8 @@ function evaluate(input, config) {
     && config.now.getTime() - capturedAt.getTime() <= MAX_AGE_MS;
   let deployed = false;
   try {
-    const url = new URL(input.appUrl);
-    const hostname = url.hostname.toLowerCase();
-    deployed = url.protocol === "https:"
-      && !url.username
-      && !url.password
-      && !url.search
-      && !url.hash
-      && (!url.port || url.port === "443")
-      && hostname !== "localhost"
-      && !hostname.endsWith(".localhost")
-      && !hostname.endsWith(".local")
-      && isIP(hostname) === 0;
+    safeDeployedAppUrl(input.appUrl);
+    deployed = true;
   } catch {
     deployed = false;
   }
@@ -494,6 +639,12 @@ function main() {
   const config = parseArgs(process.argv.slice(2));
   if (config.help) {
     process.stdout.write(`${help()}\n`);
+    return;
+  }
+  if (config.command === "template") {
+    const template = writePendingTemplate(config);
+    if (config.json) process.stdout.write(`${JSON.stringify(template, null, 2)}\n`);
+    else process.stdout.write(`Pending acceptance template written to ${config.output}.\n`);
     return;
   }
   const input = JSON.parse(readFileSync(config.evidence, "utf8"));

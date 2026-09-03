@@ -2,7 +2,17 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  constants as fsConstants,
+  fstatSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -147,17 +157,11 @@ const input = {
   },
 };
 
-function run(value, expectedCommit = commit) {
-  writeFileSync(evidencePath, `${JSON.stringify(value, null, 2)}\n`);
+function runCli(args) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [
-      "scripts/crypto-coworkers-acceptance-evidence.mjs",
-      "--evidence", evidencePath,
-      "--expected-commit", expectedCommit,
-      "--now", now,
-      "--strict",
-      "--json",
-    ], { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(process.execPath, ["scripts/crypto-coworkers-acceptance-evidence.mjs", ...args], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -168,7 +172,86 @@ function run(value, expectedCommit = commit) {
   });
 }
 
+function run(value, expectedCommit = commit) {
+  writeFileSync(evidencePath, `${JSON.stringify(value, null, 2)}\n`);
+  return runCli([
+    "--evidence", evidencePath,
+    "--expected-commit", expectedCommit,
+    "--now", now,
+    "--strict",
+    "--json",
+  ]);
+}
+
+function readSecureFile(path) {
+  const descriptor = openSync(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+  try {
+    return {
+      mode: fstatSync(descriptor).mode & 0o777,
+      content: readFileSync(descriptor, "utf8"),
+    };
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 try {
+  const templatePath = join(directory, "pending", "acceptance.json");
+  const template = await runCli([
+    "template",
+    "--expected-commit", commit,
+    "--app-url", "https://matterhorn.example/workspace/example",
+    "--output", templatePath,
+    "--now", "2026-09-03T11:00:00.000Z",
+    "--json",
+  ]);
+  assert.equal(template.code, 0, template.stderr || template.stdout);
+  const templateFile = readSecureFile(templatePath);
+  assert.equal(templateFile.mode, 0o600);
+  const pending = JSON.parse(template.stdout);
+  assert.deepEqual(pending, JSON.parse(templateFile.content));
+  assert.equal(pending.commit, commit);
+  assert.equal(pending.runtime.openworkVersion, constants.openworkUpstreamVersion);
+  assert.equal(pending.runtime.opencodeVersion, constants.opencodeVersion);
+  assert.equal(pending.runtime.status, "pending");
+  assert.equal(pending.certifications.sui.network, "sui-testnet");
+  assert.equal(pending.transactions.polymarket.network, "mainnet-public-readonly");
+  assert.equal(pending.coworkers.transactionCoordinator.walletReviewRequired, false);
+  assert.equal(pending.encryptedEvidence.recoveryKeyDestroyed, false);
+  assert.equal(pending.developerPlatform.sdkPublished, false);
+  assert.equal(pending.rollout.hours, 0);
+  assert.match(pending.runtime.evidence.path, /^reports\//);
+  assert.equal(pending.runtime.evidence.sha256, "REPLACE_WITH_SHA256_AFTER_REDACTED_REPORT_REVIEW");
+
+  const pendingResult = await run(pending);
+  assert.equal(pendingResult.code, 1);
+  const pendingReport = JSON.parse(pendingResult.stdout);
+  assert.equal(pendingReport.decision, "NO-GO");
+  assert.equal(pendingReport.checks.length, 21);
+  assert.equal(pendingReport.blockers.length, 18);
+
+  const overwrite = await runCli([
+    "template", "--expected-commit", commit,
+    "--app-url", "https://matterhorn.example/workspace/example",
+    "--output", templatePath,
+  ]);
+  assert.equal(overwrite.code, 1);
+  assert.match(overwrite.stderr, /already exists/i);
+
+  for (const [index, appUrl] of [
+    "http://matterhorn.example/workspace/example",
+    "https://operator:password@matterhorn.example/workspace/example",
+    "https://[::1]/workspace/example",
+  ].entries()) {
+    const unsafeTemplate = await runCli([
+      "template", "--expected-commit", commit,
+      "--app-url", appUrl,
+      "--output", join(directory, `unsafe-${index}.json`),
+    ]);
+    assert.equal(unsafeTemplate.code, 1);
+    assert.match(unsafeTemplate.stderr, /deployed HTTPS URL/i);
+  }
+
   const passing = await run(input);
   assert.equal(passing.code, 0, passing.stderr || passing.stdout);
   const report = JSON.parse(passing.stdout);
@@ -192,6 +275,10 @@ try {
   const localUrl = await run({ ...input, appUrl: "https://localhost/workspace/example" });
   assert.equal(localUrl.code, 1);
   assert.ok(JSON.parse(localUrl.stdout).blockers.some((item) => item.id === "deployed_https"));
+
+  const ipv6Loopback = await run({ ...input, appUrl: "https://[::1]/workspace/example" });
+  assert.equal(ipv6Loopback.code, 1);
+  assert.ok(JSON.parse(ipv6Loopback.stdout).blockers.some((item) => item.id === "deployed_https"));
 
   const missingCertifications = structuredClone(input);
   delete missingCertifications.certifications;
