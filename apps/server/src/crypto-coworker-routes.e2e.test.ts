@@ -746,9 +746,17 @@ describe("crypto coworker HTTP boundary", () => {
     expect(replay.response.status).toBe(409);
     expect(replay.payload.code).toBe("coworker_access_invite_consumed");
 
+    const accessList = await request(server.base, "/operator/coworker-access", { host: true });
+    expect(accessList.response.status).toBe(200);
+    expect(accessList.payload.accounts).toHaveLength(1);
+    expect(JSON.stringify(accessList.payload)).not.toContain(String(signupA.payload.user.id));
+    expect(JSON.stringify(accessList.payload)).not.toContain("coworker-invite-a@example.com");
+    const accessId = String(accessList.payload.accounts[0].accessId);
+    expect(accessId).toMatch(/^mhca_[A-Za-z0-9_-]{20,64}$/);
+
     const revoked = await request(server.base, "/operator/coworker-access/revoke", {
       host: true,
-      body: { accountId: String(signupA.payload.user.id) },
+      body: { accessId },
     });
     expect(revoked.response.status).toBe(200);
     expect(revoked.payload.status).toMatchObject({ allowed: false, acceptedAt: null });

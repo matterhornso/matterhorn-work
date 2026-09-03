@@ -10205,11 +10205,11 @@ function createRoutes(
       }
       const body = await readJsonBody(ctx.request, 4_096, "Coworker access revocation");
       if (!isRecord(body)
-        || Object.keys(body).some((key) => key !== "accountId")
-        || typeof body.accountId !== "string") {
+        || Object.keys(body).some((key) => key !== "accessId")
+        || typeof body.accessId !== "string") {
         throw new ApiError(400, "coworker_access_input_invalid", "Coworker access revocation is invalid.");
       }
-      const status = coworkerRuntime.access.revoke(body.accountId.trim());
+      const status = coworkerRuntime.access.revokeByAccessId(body.accessId.trim());
       return noStoreJsonResponse({ status });
     } catch (error) {
       if (error instanceof ApiError) throw error;

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 
 import {
   MatterhornCoworkerAccess,
@@ -28,6 +29,40 @@ function fixture(now = new Date("2026-09-03T08:00:00.000Z")) {
 }
 
 describe("crypto coworker invite access", () => {
+  test("backfills opaque access IDs for pre-invite-management databases", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-access-migration-"));
+    const path = join(root, "coworkers.db");
+    const legacy = new Database(path);
+    legacy.exec(`
+      CREATE TABLE crypto_coworker_account_access (
+        owner_id TEXT PRIMARY KEY,
+        state TEXT NOT NULL,
+        granted_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revoked_at TEXT
+      );
+      INSERT INTO crypto_coworker_account_access(
+        owner_id, state, granted_at, updated_at, revoked_at
+      ) VALUES (
+        'legacy-account', 'active',
+        '2026-09-03T08:00:00.000Z', '2026-09-03T08:00:00.000Z', NULL
+      );
+    `);
+    legacy.close();
+    const store = new MatterhornCoworkerStore(path);
+    try {
+      const access = new MatterhornCoworkerAccess({ store });
+      const listed = access.list();
+      expect(listed).toHaveLength(1);
+      expect(listed[0].accessId).toMatch(/^mhca_[A-Za-z0-9_-]{20,64}$/);
+      expect(JSON.stringify(listed)).not.toContain("legacy-account");
+      expect(access.isAllowed("legacy-account")).toBe(true);
+    } finally {
+      store.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("stores only the invite hash and binds one-time acceptance to one account", () => {
     const state = fixture();
     try {
@@ -76,7 +111,10 @@ describe("crypto coworker invite access", () => {
     try {
       const original = state.access.issueInvite();
       state.access.accept("account-a", original.token);
-      expect(state.access.revoke("account-a")).toEqual({
+      const listed = state.access.list();
+      expect(listed).toHaveLength(1);
+      expect(JSON.stringify(listed)).not.toContain("account-a");
+      expect(state.access.revokeByAccessId(listed[0].accessId)).toEqual({
         version: "matterhorn.coworker-access-status.v1",
         allowed: false,
         acceptedAt: null,
@@ -88,6 +126,7 @@ describe("crypto coworker invite access", () => {
 
       const replacement = state.access.issueInvite();
       expect(state.access.accept("account-a", replacement.token)).toMatchObject({ allowed: true });
+      expect(state.access.list()[0].accessId).toBe(listed[0].accessId);
     } finally {
       state.close();
     }

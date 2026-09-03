@@ -14,6 +14,8 @@ export type MatterhornCoworkerAccessStatus = {
   acceptedAt: string | null;
 };
 
+export type MatterhornCoworkerOperatorAccess = Omit<MatterhornCoworkerAccessRecord, "ownerId">;
+
 export class MatterhornCoworkerAccessError extends Error {
   constructor(public readonly code:
     | "coworker_access_input_invalid"
@@ -28,6 +30,7 @@ export class MatterhornCoworkerAccessError extends Error {
 }
 
 const OWNER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$/;
+const ACCESS_ID_PATTERN = /^mhca_[A-Za-z0-9_-]{20,64}$/;
 const INVITE_TOKEN_PATTERN = /^mhci_[A-Za-z0-9_-]{40,96}$/;
 const MAX_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 
@@ -86,6 +89,7 @@ export class MatterhornCoworkerAccess {
     }
     try {
       return status(this.#store.consumeAccessInvite({
+        accessId: `mhca_${randomBytes(18).toString("base64url")}`,
         inviteHash: inviteHash(token),
         ownerId,
         now: this.#now().toISOString(),
@@ -117,10 +121,27 @@ export class MatterhornCoworkerAccess {
     }
   }
 
-  list(limit = 100): MatterhornCoworkerAccessRecord[] {
+  list(limit = 100): MatterhornCoworkerOperatorAccess[] {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
       throw new MatterhornCoworkerAccessError("coworker_access_input_invalid");
     }
-    return this.#store.listAccountAccess(limit);
+    return this.#store.listAccountAccess(limit).map((record) => ({
+      accessId: record.accessId,
+      state: record.state,
+      grantedAt: record.grantedAt,
+      updatedAt: record.updatedAt,
+      revokedAt: record.revokedAt,
+    }));
+  }
+
+  revokeByAccessId(accessId: string): MatterhornCoworkerAccessStatus {
+    if (!ACCESS_ID_PATTERN.test(accessId)) {
+      throw new MatterhornCoworkerAccessError("coworker_access_input_invalid");
+    }
+    try {
+      return status(this.#store.revokeAccountAccessById(accessId, this.#now().toISOString()));
+    } catch (error) {
+      mapStoreError(error);
+    }
   }
 }

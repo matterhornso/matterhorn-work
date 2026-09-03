@@ -92,6 +92,21 @@ pnpm invite:crypto-coworker -- \
 
 The command calls only the host-authenticated invite route and places the returned `mhci_` token in the `/coworker-access` URL fragment. The app removes the fragment before rendering, keeps the token in memory only, and binds successful acceptance to the signed-in account. Each link is single-use; expiry, replay, cross-account use, and access after operator revocation fail closed. Coworker access never grants wallet signing or transaction-submission authority.
 
+Operators manage accepted invitations with opaque access IDs, never account IDs, emails, or wallet addresses:
+
+```bash
+MATTERHORN_WORK_HOST_TOKEN=<server-only-token> \
+pnpm manage:crypto-coworkers -- list \
+  --server-url https://control-plane.example
+
+MATTERHORN_WORK_HOST_TOKEN=<server-only-token> \
+pnpm manage:crypto-coworkers -- revoke \
+  --server-url https://control-plane.example \
+  --access-id mhca_<opaque-id>
+```
+
+Revocation is immediate and idempotent. It blocks coworker routes, new messages, certified app calls, and scheduled checks. Restoring access requires a new one-time invite.
+
 Signed test-harness contracts now define testnet-only Sui balance/transfer-preview actions, Hyperliquid market/orderbook/account/order-preview actions, and Bittensor subnet/validator plus transfer/stake/unstake-preview actions. They use closed input and model-facing output schemas, map every action to a compatible guarded tool, and never contain production publisher keys or automatic registration. Their offline router fixtures deliberately include private and malicious extra fields to prove projection removes them.
 
 A signed Polymarket discovery contract defines one informational `polymarket_market_search` action over the unauthenticated Gamma API. Matterhorn constructs the exact same-origin `/public-search` request itself, permits only a bodyless `GET`, bounds the query and result count, and projects typed active-market fields plus the exact outcome token IDs needed for the next certified read. A separate signed CLOB contract defines only `polymarket_orderbook_read` against the unauthenticated CLOB origin. It accepts one canonical uint256 token ID returned by discovery, constructs `/book?token_id=...` itself, and projects at most 20 sorted bid and ask levels plus snapshot, tick, minimum-size, and freshness evidence. Splitting the origins prevents the discovery grant from reaching CLOB routes and prevents the CLOB grant from reaching account, order, cancellation, relay, or credential routes. Profile data, instruction-like fields, arbitrary URLs, methods, headers, wallet data, geoblock decisions, order preparation, signing, relaying, and submission remain outside both contracts. Because these are current mainnet public metadata rather than transaction-testnet actions, neither is included in the first-party testnet manifest bundle or accepted by the testnet promotion command. A separate public-read-only command can create a sealed `certified_mainnet` promotion body for exactly these two contracts after the same static, live egress, schema, tenant, quarantine, timeout, replay, quota, and circuit probes pass. Registration, certification execution with operator-owned signed inputs, and promotion remain explicit operator work; the gateway stays off by default.

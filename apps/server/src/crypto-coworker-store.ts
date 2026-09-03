@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -92,6 +92,7 @@ type CoworkerInboxItemRow = {
 };
 
 type CoworkerAccessRow = {
+  access_id: string;
   owner_id: string;
   state: string;
   granted_at: string;
@@ -100,6 +101,7 @@ type CoworkerAccessRow = {
 };
 
 export type MatterhornCoworkerAccessRecord = {
+  accessId: string;
   ownerId: string;
   state: "active" | "revoked";
   grantedAt: string;
@@ -257,6 +259,7 @@ function inboxItemFromRow(row: CoworkerInboxItemRow): MatterhornCoworkerInboxIte
 
 function accessFromRow(row: CoworkerAccessRow): MatterhornCoworkerAccessRecord {
   if ((row.state !== "active" && row.state !== "revoked")
+    || !/^mhca_[A-Za-z0-9_-]{20,64}$/.test(row.access_id)
     || !row.owner_id
     || !Number.isFinite(Date.parse(row.granted_at))
     || !Number.isFinite(Date.parse(row.updated_at))
@@ -264,6 +267,7 @@ function accessFromRow(row: CoworkerAccessRow): MatterhornCoworkerAccessRecord {
     throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   }
   return {
+    accessId: row.access_id,
     ownerId: row.owner_id,
     state: row.state,
     grantedAt: row.granted_at,
@@ -421,6 +425,7 @@ export class MatterhornCoworkerStore {
       );
       CREATE TABLE IF NOT EXISTS crypto_coworker_account_access (
         owner_id TEXT PRIMARY KEY,
+        access_id TEXT NOT NULL UNIQUE,
         state TEXT NOT NULL,
         granted_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -430,6 +435,30 @@ export class MatterhornCoworkerStore {
       );
       CREATE INDEX IF NOT EXISTS crypto_coworker_account_access_state_idx
         ON crypto_coworker_account_access(state, updated_at, owner_id);
+    `);
+    const accessColumns = statement(this.#db, "PRAGMA table_info(crypto_coworker_account_access)")
+      .all() as Array<{ name: string }>;
+    if (!accessColumns.some((column) => column.name === "access_id")) {
+      this.#db.exec("BEGIN IMMEDIATE;");
+      try {
+        this.#db.exec("ALTER TABLE crypto_coworker_account_access ADD COLUMN access_id TEXT;");
+        const owners = statement(this.#db, "SELECT owner_id FROM crypto_coworker_account_access")
+          .all() as Array<{ owner_id: string }>;
+        const update = statement(this.#db, `
+          UPDATE crypto_coworker_account_access SET access_id = ? WHERE owner_id = ?
+        `);
+        for (const owner of owners) {
+          update.run(`mhca_${randomBytes(18).toString("base64url")}`, owner.owner_id);
+        }
+        this.#db.exec("COMMIT;");
+      } catch (error) {
+        this.#db.exec("ROLLBACK;");
+        throw error;
+      }
+    }
+    this.#db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS crypto_coworker_account_access_id_idx
+        ON crypto_coworker_account_access(access_id);
     `);
     chmodSync(path, 0o600);
   }
@@ -485,7 +514,7 @@ export class MatterhornCoworkerStore {
 
   getAccountAccess(ownerId: string): MatterhornCoworkerAccessRecord | null {
     const row = statement(this.#db, `
-      SELECT owner_id, state, granted_at, updated_at, revoked_at
+      SELECT access_id, owner_id, state, granted_at, updated_at, revoked_at
       FROM crypto_coworker_account_access WHERE owner_id = ? LIMIT 1
     `).get(ownerId) as CoworkerAccessRow | undefined;
     return row ? accessFromRow(row) : null;
@@ -493,7 +522,7 @@ export class MatterhornCoworkerStore {
 
   listAccountAccess(limit = 100): MatterhornCoworkerAccessRecord[] {
     return (statement(this.#db, `
-      SELECT owner_id, state, granted_at, updated_at, revoked_at
+      SELECT access_id, owner_id, state, granted_at, updated_at, revoked_at
       FROM crypto_coworker_account_access
       ORDER BY updated_at DESC, owner_id ASC
       LIMIT ?
@@ -501,6 +530,7 @@ export class MatterhornCoworkerStore {
   }
 
   consumeAccessInvite(input: {
+    accessId: string;
     inviteHash: string;
     ownerId: string;
     now: string;
@@ -532,14 +562,14 @@ export class MatterhornCoworkerStore {
       }
       statement(this.#db, `
         INSERT INTO crypto_coworker_account_access(
-          owner_id, state, granted_at, updated_at, revoked_at
-        ) VALUES (?, 'active', ?, ?, NULL)
+          owner_id, access_id, state, granted_at, updated_at, revoked_at
+        ) VALUES (?, ?, 'active', ?, ?, NULL)
         ON CONFLICT(owner_id) DO UPDATE SET
           state = 'active',
           granted_at = excluded.granted_at,
           updated_at = excluded.updated_at,
           revoked_at = NULL
-      `).run(input.ownerId, input.now, input.now);
+      `).run(input.ownerId, input.accessId, input.now, input.now);
       const consumed = statement(this.#db, `
         UPDATE crypto_coworker_access_invites
         SET consumed_at = ?, consumed_by_owner_id = ?
@@ -563,11 +593,27 @@ export class MatterhornCoworkerStore {
       UPDATE crypto_coworker_account_access
       SET state = 'revoked', updated_at = ?, revoked_at = ?
       WHERE owner_id = ? AND state = 'active'
-      RETURNING owner_id, state, granted_at, updated_at, revoked_at
+      RETURNING access_id, owner_id, state, granted_at, updated_at, revoked_at
     `).get(now, now, ownerId) as CoworkerAccessRow | undefined;
     if (row) return accessFromRow(row);
     const existing = this.getAccountAccess(ownerId);
     if (existing?.state === "revoked") return existing;
+    throw new MatterhornCoworkerStoreError("coworker_access_not_found");
+  }
+
+  revokeAccountAccessById(accessId: string, now: string): MatterhornCoworkerAccessRecord {
+    const row = statement(this.#db, `
+      UPDATE crypto_coworker_account_access
+      SET state = 'revoked', updated_at = ?, revoked_at = ?
+      WHERE access_id = ? AND state = 'active'
+      RETURNING access_id, owner_id, state, granted_at, updated_at, revoked_at
+    `).get(now, now, accessId) as CoworkerAccessRow | undefined;
+    if (row) return accessFromRow(row);
+    const existing = statement(this.#db, `
+      SELECT access_id, owner_id, state, granted_at, updated_at, revoked_at
+      FROM crypto_coworker_account_access WHERE access_id = ? LIMIT 1
+    `).get(accessId) as CoworkerAccessRow | undefined;
+    if (existing?.state === "revoked") return accessFromRow(existing);
     throw new MatterhornCoworkerStoreError("coworker_access_not_found");
   }
 

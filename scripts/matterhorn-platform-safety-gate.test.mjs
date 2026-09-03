@@ -112,6 +112,7 @@ for (const required of [
   "product-readiness-smoke.test.mjs",
   "test:crypto-developer-invite",
   "test:crypto-coworker-invite",
+  "test:crypto-coworker-access-ops",
   "public-beta-rollback-hook.test.mjs",
   "product-hunt-rollback-rehearsal.test.mjs",
   "guarded-runtime-shadow-evidence.test.mjs",
