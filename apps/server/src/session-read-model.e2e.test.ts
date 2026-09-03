@@ -7,6 +7,7 @@ import { gunzipSync } from "node:zlib";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
+import { configureVenicePrivateModelRegistry } from "./venice-provider.js";
 
 type Served = {
   port: number;
@@ -45,6 +46,7 @@ function restoreEnv(name: string, value: string | undefined) {
 }
 
 afterEach(async () => {
+  configureVenicePrivateModelRegistry([]);
   while (stops.length) {
     await stops.pop()?.();
   }
@@ -1200,6 +1202,123 @@ describe("workspace session read APIs", () => {
     });
     expect(staleConsent.status).toBe(409);
     await expect(staleConsent.json()).resolves.toMatchObject({ code: "agent_privacy_consent_required" });
+  });
+
+  test("routes private Memory through only a current server-verified Venice model", async () => {
+    process.env.MATTERHORN_PROVIDER_PRIVACY_MODE = "verified-only";
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "shadow";
+    process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "agent-runtime-secret-for-venice-gateway-test";
+    process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "capability-signing-secret-for-venice-gateway-test";
+    process.env.MATTERHORN_WORK_MEMORY_SCOPE = "global";
+    const workspaceRoot = await createWorkspaceRoot();
+    process.env.OPENWORK_DATA_DIR = join(workspaceRoot, ".guarded-runtime");
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const captured = await fetch(`${base}/workspace/ws_1/memory/capture`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ record: privateMemoryRecord() }),
+    });
+    expect(captured.status).toBe(201);
+
+    configureVenicePrivateModelRegistry(
+      [{ id: "private-tools", name: "Private Tools" }],
+      { ttlMs: 60_000 },
+    );
+    const requestBody = {
+      parts: [{ type: "text", text: "Compare validators using my saved preference" }],
+      memoryIds: ["mem_agent_gateway_private"],
+      agentId: "matterhorn-bittensor",
+      privacyMode: "private_workspace",
+      model: { providerID: "venice", modelID: "private-tools" },
+    };
+    const preflightResponse = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages/preflight`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+    expect(preflightResponse.status).toBe(200);
+    await expect(preflightResponse.json()).resolves.toMatchObject({
+      decision: "allow",
+      effectiveMode: "private_workspace",
+      provider: {
+        id: "venice",
+        privacyStatus: "verified_no_training",
+        trainingUse: "none",
+        retentionDays: 0,
+      },
+    });
+
+    const sent = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+    expect(sent.status).toBe(202);
+    const accepted = await sent.json();
+    expect(accepted).toMatchObject({
+      privacy: {
+        decision: "allow",
+        consentUsed: false,
+      },
+    });
+    const upstreamRequests = mock.requests.filter(
+      (request) => request.pathname === "/session/ses_1/prompt_async",
+    );
+    expect(upstreamRequests).toHaveLength(1);
+    expect(upstreamRequests[0]?.body).toMatchObject({
+      model: { providerID: "venice", modelID: "private-tools" },
+    });
+    expect(String((upstreamRequests[0]?.body as Record<string, unknown>)?.system))
+      .toContain("Prefer validators with stable emissions and low take.");
+
+    const receiptResponse = await fetch(
+      `${base}/workspace/ws_1/agent-run-receipts/${encodeURIComponent(accepted.runId)}`,
+      { headers: auth(openwork.token) },
+    );
+    expect(receiptResponse.status).toBe(200);
+    await expect(receiptResponse.json()).resolves.toMatchObject({
+      item: {
+        provider: {
+          id: "venice",
+          modelId: "private-tools",
+          trainingUse: "none",
+          retentionDays: 0,
+        },
+        privacy: {
+          mode: "private_workspace",
+          consent: "not_required",
+        },
+        memory: { readIds: ["mem_agent_gateway_private"] },
+      },
+    });
+
+    configureVenicePrivateModelRegistry([]);
+    const stalePreflight = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages/preflight`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+    expect(stalePreflight.status).toBe(200);
+    await expect(stalePreflight.json()).resolves.toMatchObject({
+      decision: "blocked",
+      provider: { id: "venice", privacyStatus: "unverified" },
+    });
+    const blocked = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+    expect(blocked.status).toBe(422);
+    await expect(blocked.json()).resolves.toMatchObject({ code: "agent_privacy_blocked" });
+    expect(mock.requests.filter(
+      (request) => request.pathname === "/session/ses_1/prompt_async",
+    )).toHaveLength(1);
   });
 
   test("rejects client-authored system context before provider dispatch", async () => {
