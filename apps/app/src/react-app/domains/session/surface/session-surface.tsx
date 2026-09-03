@@ -991,6 +991,18 @@ function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgentRunRec
                 Memory: {receipt.memory.readIds.length} read · {receipt.memory.writtenIds.length} written
               </>
             ) : null}
+            {receipt.privacy.requestHash ? (
+              <>
+                <br />
+                Request proof: <span
+                  className="font-mono text-dls-text"
+                  title={receipt.privacy.requestHash}
+                  aria-label={`Request proof ${receipt.privacy.requestHash}`}
+                >
+                  {receipt.privacy.requestHash.slice(0, 12)}…
+                </span>
+              </>
+            ) : null}
             {receipt.provider.policyUrl ? (
               <>
                 <br />

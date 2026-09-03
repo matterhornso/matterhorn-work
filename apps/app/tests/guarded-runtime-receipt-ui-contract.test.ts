@@ -17,6 +17,8 @@ describe("guarded runtime receipt UI contract", () => {
     expect(source).toContain(">Wallet review<");
     expect(source).toContain("simulationReference");
     expect(source).toContain("publicReceipt");
+    expect(source).toContain("receipt.privacy.requestHash");
+    expect(source).toContain("Request proof:");
   });
 
   test("does not render raw prompt or capability bearer fields", () => {
