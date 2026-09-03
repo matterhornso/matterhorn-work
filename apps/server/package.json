@@ -57,7 +57,7 @@
     "@msgpack/msgpack": "^3.1.2",
     "@mysten/sui": "^2.20.1",
     "@mysten/walrus": "1.2.0",
-    "@opencode-ai/sdk": "1.18.23",
+    "@opencode-ai/sdk": "1.18.27",
     "@protobuf-ts/grpcweb-transport": "^2.11.1",
     "better-sqlite3": "^13.0.3",
     "hyperliquid": "^1.7.7",

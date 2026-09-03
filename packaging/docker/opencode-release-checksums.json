@@ -14,5 +14,11 @@
     "opencode-darwin-x64-baseline.zip": "02e36bd8a979e282a3a7288b3e37ec34b76f33b53c7e59f3ea69f3350aa1f428",
     "opencode-linux-arm64.tar.gz": "86d3afaf4e8784f9adab189be2a315c12b27ec40a04b70defbe70595c3cc7c65",
     "opencode-linux-x64-baseline.tar.gz": "5f375b83a33ac67af12e0767baa3b987c8b9034c8f400f4a2e245c1cf371e897"
+  },
+  "1.18.27": {
+    "opencode-darwin-arm64.zip": "149b0c6d272d0059b8b5ffcd18c84b24f1d6cbf585942b10e60c601211992eb1",
+    "opencode-darwin-x64-baseline.zip": "626d59cc4ac6f617e7bb59623a7223ecad00923a456c7598e913830e441976e5",
+    "opencode-linux-arm64.tar.gz": "8cbc134eb5e100baf61ee7196150f503e352056e703276e2d8637c38bafd2c39",
+    "opencode-linux-x64-baseline.tar.gz": "79810a59cd0a805eacc897534d5514e28a042a908679d0378447a2051841bd10"
   }
 }

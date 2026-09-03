@@ -2264,30 +2264,14 @@ async function ensureMatterhornSessionPermissionProfile(input: {
   const current = normalizeMatterhornPermissionRules(session.permission);
   if (matterhornPermissionProfileIsActive(current, profile)) return;
 
-  // The generated 1.18.23 SDK serializes a PermissionRuleset array as `{}` on
-  // PATCH. Use the upstream HTTP contract directly until that generator bug is
-  // fixed; the response is still validated by OpenCode itself.
-  const connection = resolveWorkspaceOpencodeConnection(input.config, input.workspace);
-  const baseUrl = connection.baseUrl?.trim().replace(/\/+$/, "");
-  if (!baseUrl) {
-    throw new ApiError(400, "opencode_unconfigured", "Agent runtime is not connected for this workspace");
-  }
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (connection.authHeader) headers.set("Authorization", connection.authHeader);
-  if (directory) headers.set("x-opencode-directory", buildOpencodeDirectoryHeader(directory));
-  const response = await fetch(`${baseUrl}/session/${encodeURIComponent(input.sessionId)}`, {
-    method: "PATCH",
-    headers,
-    body: JSON.stringify({ permission: profile as MatterhornPermissionRule[] }),
-  });
-  if (!response.ok) {
-    throw new ApiError(
-      502,
-      "opencode_request_failed",
-      `OpenCode permission update failed with HTTP ${response.status}`,
-    );
-  }
-  await response.arrayBuffer();
+  await opencode.session.update({
+    sessionID: input.sessionId,
+    ...(directory ? { directory } : {}),
+    permission: profile as MatterhornPermissionRule[],
+  }).then((result) => unwrapOpencodeResult(
+    result,
+    `/session/${encodeURIComponent(input.sessionId)}`,
+  ));
 }
 
 function promptTextFromParts(value: unknown): string {

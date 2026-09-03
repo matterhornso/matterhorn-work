@@ -26,7 +26,7 @@
     "test:e2e:bittensor": "node ./e2e/bittensor-smoke.mjs"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "1.18.23",
+    "@opencode-ai/sdk": "1.18.27",
     "better-sqlite3": "^13.0.3",
     "electron-updater": "^6.8.9",
     "hyperliquid": "^1.7.7",
