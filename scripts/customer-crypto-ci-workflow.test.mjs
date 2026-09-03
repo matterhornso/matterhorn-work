@@ -17,6 +17,7 @@ for (const phrase of [
   "runs-on: ubuntu-22.04",
   "oven-sh/setup-bun@v2",
   "pnpm install --frozen-lockfile --ignore-scripts --prefer-offline",
+  "pnpm --filter @matterhorn-work/crypto-app-sdk build",
   "pnpm test:customer-ready-crypto-smoke",
   "pnpm test:agent-control-mcp",
   "pnpm smoke:customer-ready-crypto",

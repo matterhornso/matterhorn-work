@@ -17,6 +17,7 @@ for (const required of [
   "working-directory: examples/microsandbox-openwork-rust",
   "cargo check --locked --manifest-path examples/microsandbox-openwork-rust/Cargo.toml --all-targets",
   "pnpm release:secret-scan",
+  "pnpm --filter @matterhorn-work/crypto-app-sdk build",
   "pnpm test:dependency-bulk-audit",
   "pnpm audit:dependencies",
   "request-rate-limit-store.test.ts",
