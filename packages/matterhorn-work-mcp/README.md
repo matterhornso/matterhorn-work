@@ -68,7 +68,10 @@ Claude Desktop, Cursor, and other external agents. This profile exposes only
 the authoritative workspace session workflow: status, visible workspaces,
 session lifecycle, message submission, progress, snapshots, and deletion. It
 hides host approval, local-file, Memory-write, direct protocol, operator, and
-QA tools from the model and rejects hidden calls before any server request.
+QA tools from the model and rejects hidden calls before any server request. Its
+prompt tool also omits legacy system/tool overrides and consent bearer values;
+Matterhorn constructs authority on the server, and one-request consent is
+completed in the account UI.
 
 If the profile variable is omitted, the MCP selects `guarded_client`. The
 legacy `full` profile is available only for trusted operator setups and must be

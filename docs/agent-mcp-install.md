@@ -75,6 +75,11 @@ Profiles:
 The CLI and server-control MCP both default to `guarded`. Select `server` or
 `full` explicitly only for a trusted local operator.
 
+The guarded prompt tool cannot supply system instructions, tool overrides, or
+privacy-consent bearer values. Matterhorn builds the effective system and tool
+policy on the server. If an unverified provider requires one-request consent,
+complete that disclosure in the Matterhorn account UI before continuing.
+
 Targets:
 
 - `json`, `claude`, `claude-desktop`, and `cursor` print the common `mcpServers` JSON shape.

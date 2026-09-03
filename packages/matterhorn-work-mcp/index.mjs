@@ -51,6 +51,25 @@ const GUARDED_CLIENT_TOOL_NAMES = new Set([
   "matterhorn_get_session_snapshot",
   "matterhorn_delete_session",
 ]);
+const GUARDED_SESSION_PROMPT_ARGUMENT_NAMES = new Set([
+  "workspaceId",
+  "sessionId",
+  "message",
+  "parts",
+  "messageID",
+  "model",
+  "agentId",
+  "coworkerId",
+  "attachmentIds",
+  "agentFileIds",
+  "memoryIds",
+  "privacyMode",
+  "executionMode",
+  "variant",
+  "noReply",
+  "reasoningEffort",
+  "reasoning_effort",
+]);
 
 if (!SUPPORTED_MCP_PROFILES.has(MCP_PROFILE)) {
   process.stderr.write("Matterhorn MCP profile is not supported.\n");
@@ -220,6 +239,14 @@ const tools = [
         providerID: { type: "string", description: "Optional provider id for compatibility with existing clients." },
         modelID: { type: "string", description: "Optional model id for compatibility with existing clients." },
         agent: { type: "string", description: "Optional Matterhorn Desks agent mode." },
+        agentId: { type: "string", description: "Optional Matterhorn agent selected for this request." },
+        coworkerId: { type: "string", description: "Optional approved Matterhorn coworker selected for this request." },
+        attachmentIds: { type: "array", items: { type: "string" }, description: "Optional workspace attachment ids selected for this request." },
+        agentFileIds: { type: "array", items: { type: "string" }, description: "Optional encrypted Agent File ids already approved for the selected coworker." },
+        memoryIds: { type: "array", items: { type: "string" }, description: "Optional Matterhorn Memory ids selected for this request." },
+        privacyMode: { type: "string", enum: ["public_research", "private_workspace", "transaction"], description: "Requested privacy mode. Matterhorn may only escalate sensitivity." },
+        executionMode: { type: "string", enum: ["discuss", "plan", "work"], description: "Requested execution mode. Server policy remains authoritative." },
+        privacyConsentToken: { type: "string", description: "Optional one-request consent token issued for this exact request." },
         variant: { type: "string", description: "Optional prompt variant." },
         noReply: { type: "boolean", description: "When true, enqueue the user message without asking the engine for a reply." },
         tools: { type: "object", description: "Optional tool-mode overrides accepted by the Matterhorn Desks server." },
@@ -1338,8 +1365,26 @@ const tools = [
   },
 ];
 
+function guardedClientTool(tool) {
+  if (tool.name !== "matterhorn_submit_session_prompt") return tool;
+  const properties = Object.fromEntries(
+    Object.entries(tool.inputSchema.properties).filter(([name]) => (
+      GUARDED_SESSION_PROMPT_ARGUMENT_NAMES.has(name)
+    )),
+  );
+  return {
+    ...tool,
+    description: "Submit a prompt through Matterhorn's authoritative privacy, usage, coworker, and tool-policy gateway.",
+    inputSchema: {
+      ...tool.inputSchema,
+      properties,
+      additionalProperties: false,
+    },
+  };
+}
+
 const exposedTools = MCP_PROFILE === "guarded_client"
-  ? tools.filter((tool) => GUARDED_CLIENT_TOOL_NAMES.has(tool.name))
+  ? tools.filter((tool) => GUARDED_CLIENT_TOOL_NAMES.has(tool.name)).map(guardedClientTool)
   : tools;
 const exposedToolNames = new Set(exposedTools.map((tool) => tool.name));
 
@@ -1353,6 +1398,18 @@ function jsonRpcError(id, code, message) {
 
 function textResult(data) {
   return { content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] };
+}
+
+function assertGuardedSessionPromptArguments(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) {
+    throw new Error("Guarded Matterhorn prompt arguments must be an object.");
+  }
+  const unsupported = Object.keys(args).filter((name) => (
+    !GUARDED_SESSION_PROMPT_ARGUMENT_NAMES.has(name)
+  ));
+  if (unsupported.length > 0) {
+    throw new Error("This prompt argument is not available in the guarded Matterhorn MCP profile.");
+  }
 }
 
 function requireToken(kind) {
@@ -3544,6 +3601,9 @@ async function handleTool(name, args = {}) {
     case "matterhorn_watch_session_events":
       return callSessionEventStream(args);
     case "matterhorn_submit_session_prompt": {
+      if (MCP_PROFILE === "guarded_client") {
+        assertGuardedSessionPromptArguments(args);
+      }
       const body = {
         ...(typeof args.message === "string" ? { message: args.message } : {}),
         ...(Array.isArray(args.parts) ? { parts: args.parts } : {}),
@@ -3552,6 +3612,14 @@ async function handleTool(name, args = {}) {
         ...(typeof args.providerID === "string" ? { providerID: args.providerID } : {}),
         ...(typeof args.modelID === "string" ? { modelID: args.modelID } : {}),
         ...(typeof args.agent === "string" ? { agent: args.agent } : {}),
+        ...(typeof args.agentId === "string" ? { agentId: args.agentId } : {}),
+        ...(typeof args.coworkerId === "string" ? { coworkerId: args.coworkerId } : {}),
+        ...(Array.isArray(args.attachmentIds) ? { attachmentIds: args.attachmentIds } : {}),
+        ...(Array.isArray(args.agentFileIds) ? { agentFileIds: args.agentFileIds } : {}),
+        ...(Array.isArray(args.memoryIds) ? { memoryIds: args.memoryIds } : {}),
+        ...(typeof args.privacyMode === "string" ? { privacyMode: args.privacyMode } : {}),
+        ...(typeof args.executionMode === "string" ? { executionMode: args.executionMode } : {}),
+        ...(typeof args.privacyConsentToken === "string" ? { privacyConsentToken: args.privacyConsentToken } : {}),
         ...(typeof args.variant === "string" ? { variant: args.variant } : {}),
         ...(typeof args.noReply === "boolean" ? { noReply: args.noReply } : {}),
         ...(args.tools && typeof args.tools === "object" ? { tools: args.tools } : {}),
