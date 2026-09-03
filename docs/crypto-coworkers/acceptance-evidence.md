@@ -25,6 +25,8 @@ pnpm gate:crypto-coworkers-acceptance -- \
 
 The input must use `matterhorn.crypto-coworkers-acceptance-evidence.v1`. Evidence is valid for 12 hours and must identify the same exact commit under test. The deployed runtime evidence must match the OpenWork, OpenCode, and OpenCode SDK versions and upstream commits pinned in `constants.json` and `upstream-compatibility.json`.
 
+The manifest and every referenced report must be regular non-symlink files. Intermediate directory symlinks are rejected, canonical paths must remain inside the acceptance packet, and the gate verifies that the opened file still matches the checked path while it is hashed. JSON readiness output is written owner-only and refuses to overwrite an existing path.
+
 ## Required evidence groups
 
 The gate requires 21 independent checks:

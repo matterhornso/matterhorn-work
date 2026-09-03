@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const directory = mkdtempSync(join(tmpdir(), "matterhorn-crypto-coworkers-acceptance-"));
+const outsideDirectory = mkdtempSync(join(tmpdir(), "matterhorn-crypto-coworkers-outside-"));
 const evidencePath = join(directory, "acceptance.json");
 const now = "2026-09-03T12:00:00.000Z";
 const commit = "a".repeat(40);
@@ -275,6 +276,17 @@ try {
   assert.equal(overwrite.code, 1);
   assert.match(overwrite.stderr, /already exists/i);
 
+  const manifestLink = join(directory, "acceptance-link.json");
+  symlinkSync(evidencePath, manifestLink);
+  const linkedManifest = await runCli([
+    "--evidence", manifestLink,
+    "--expected-commit", commit,
+    "--now", now,
+    "--strict",
+  ]);
+  assert.equal(linkedManifest.code, 1);
+  assert.match(linkedManifest.stderr, /non-symlink/i);
+
   for (const [index, appUrl] of [
     "http://matterhorn.example/workspace/example",
     "https://operator:password@matterhorn.example/workspace/example",
@@ -297,6 +309,24 @@ try {
   assert.equal(report.ready, true);
   assert.equal(report.checks.length, 21);
   assert.equal(report.runtime.opencode.version, constants.opencodeVersion);
+
+  const jsonOutputPath = join(directory, "readiness.json");
+  const jsonOutput = await runCli([
+    "--evidence", evidencePath,
+    "--expected-commit", commit,
+    "--now", now,
+    "--json-output", jsonOutputPath,
+  ]);
+  assert.equal(jsonOutput.code, 0, jsonOutput.stderr || jsonOutput.stdout);
+  assert.equal(readSecureFile(jsonOutputPath).mode, 0o600);
+  const jsonOutputOverwrite = await runCli([
+    "--evidence", evidencePath,
+    "--expected-commit", commit,
+    "--now", now,
+    "--json-output", jsonOutputPath,
+  ]);
+  assert.equal(jsonOutputOverwrite.code, 1);
+  assert.match(jsonOutputOverwrite.stderr, /already exists/i);
 
   const wrongCommit = await run(input, "b".repeat(40));
   assert.equal(wrongCommit.code, 1);
@@ -380,6 +410,18 @@ try {
   assert.equal(symlinkedEvidenceResult.code, 1);
   assert.ok(JSON.parse(symlinkedEvidenceResult.stdout).blockers.some((item) => item.id === "runtime_compatibility"));
 
+  const linkedDirectoryEvidence = structuredClone(input);
+  const outsideRuntime = "Redacted acceptance outcomes from outside the packet.\n";
+  writeFileSync(join(outsideDirectory, "runtime.md"), outsideRuntime);
+  symlinkSync(outsideDirectory, join(directory, "linked-reports"));
+  linkedDirectoryEvidence.runtime.evidence = {
+    path: "linked-reports/runtime.md",
+    sha256: sha256(outsideRuntime),
+  };
+  const linkedDirectoryResult = await run(linkedDirectoryEvidence);
+  assert.equal(linkedDirectoryResult.code, 1);
+  assert.ok(JSON.parse(linkedDirectoryResult.stdout).blockers.some((item) => item.id === "runtime_compatibility"));
+
   const secretReport = structuredClone(input);
   const unsafeReport = "Authorization: Bearer this-is-a-provider-token\n";
   writeFileSync(join(directory, secretReport.runtime.evidence.path), unsafeReport);
@@ -398,6 +440,7 @@ try {
   assert.match(arbitraryContent.stderr, /unsupported fields/i);
 } finally {
   rmSync(directory, { recursive: true, force: true });
+  rmSync(outsideDirectory, { recursive: true, force: true });
 }
 
 console.log("Guarded Crypto Coworkers acceptance evidence contract passed.");

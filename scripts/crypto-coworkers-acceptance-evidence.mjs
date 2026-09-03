@@ -1,8 +1,18 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { closeSync, constants as fsConstants, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  constants as fsConstants,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { isIP } from "node:net";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -289,27 +299,31 @@ function buildPendingTemplate(config) {
   };
 }
 
-function writePendingTemplate(config) {
-  const template = buildPendingTemplate(config);
-  rejectSensitiveKeys(template);
-  validateClosedInput(template);
-  mkdirSync(dirname(config.output), { recursive: true });
+function writeOwnerOnlyFile(path, content, label) {
+  mkdirSync(dirname(path), { recursive: true });
   let descriptor;
   try {
     descriptor = openSync(
-      config.output,
+      path,
       fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | (fsConstants.O_NOFOLLOW ?? 0),
       0o600,
     );
-    writeFileSync(descriptor, `${JSON.stringify(template, null, 2)}\n`, "utf8");
+    writeFileSync(descriptor, content, "utf8");
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") {
-      throw new Error("Template output already exists.");
+      throw new Error(`${label} already exists.`);
     }
     throw error;
   } finally {
     if (descriptor !== undefined) closeSync(descriptor);
   }
+}
+
+function writePendingTemplate(config) {
+  const template = buildPendingTemplate(config);
+  rejectSensitiveKeys(template);
+  validateClosedInput(template);
+  writeOwnerOnlyFile(config.output, `${JSON.stringify(template, null, 2)}\n`, "Template output");
   return template;
 }
 
@@ -332,24 +346,52 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function relativePathEscapesBase(offset) {
+  return !offset || offset === ".." || offset.startsWith(`..${sep}`) || isAbsolute(offset);
+}
+
+function resolveEvidenceTarget(referencePath, evidencePath) {
+  const base = resolve(dirname(evidencePath));
+  const target = resolve(base, referencePath);
+  const offset = relative(base, target);
+  if (relativePathEscapesBase(offset)) return null;
+
+  // O_NOFOLLOW protects only the final path component. Reject every symlink in
+  // the report path as well so a linked parent cannot escape the packet.
+  let cursor = base;
+  for (const component of offset.split(sep)) {
+    cursor = resolve(cursor, component);
+    if (lstatSync(cursor).isSymbolicLink()) return null;
+  }
+
+  const canonicalBase = realpathSync(base);
+  const canonicalTarget = realpathSync(target);
+  if (relativePathEscapesBase(relative(canonicalBase, canonicalTarget))) return null;
+  return { target, canonicalTarget };
+}
+
 function readEvidenceReference(reference, evidencePath) {
   if (!reference || typeof reference !== "object" || Array.isArray(reference)) return null;
   if (Object.keys(reference).some((key) => !["path", "sha256"].includes(key))) return null;
   if (typeof reference.path !== "string" || !reference.path.trim() || isAbsolute(reference.path)) return null;
   if (!HASH_PATTERN.test(reference.sha256 ?? "")) return null;
-  const base = resolve(dirname(evidencePath));
-  const target = resolve(base, reference.path);
-  const offset = relative(base, target);
-  if (!offset || offset.startsWith("..") || isAbsolute(offset)) return null;
   let descriptor;
   try {
+    const resolved = resolveEvidenceTarget(reference.path, evidencePath);
+    if (!resolved) return null;
+    const { target, canonicalTarget } = resolved;
     descriptor = openSync(target, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
     const stat = fstatSync(descriptor);
     if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_EVIDENCE_BYTES) return null;
+    const pathStat = lstatSync(target);
+    if (pathStat.isSymbolicLink() || pathStat.dev !== stat.dev || pathStat.ino !== stat.ino) return null;
     const content = readFileSync(descriptor);
     if (sha256(content) !== reference.sha256.toLowerCase()) return null;
     const text = content.toString("utf8");
     if (FORBIDDEN_EVIDENCE_PATTERNS.some((pattern) => pattern.test(text))) return null;
+    const finalPathStat = lstatSync(target);
+    if (finalPathStat.isSymbolicLink() || finalPathStat.dev !== stat.dev || finalPathStat.ino !== stat.ino) return null;
+    if (realpathSync(target) !== canonicalTarget) return null;
     return content;
   } catch {
     return null;
@@ -360,6 +402,25 @@ function readEvidenceReference(reference, evidencePath) {
 
 function evidenceReferenceReady(reference, evidencePath) {
   return Buffer.isBuffer(readEvidenceReference(reference, evidencePath));
+}
+
+function readAcceptanceManifest(path) {
+  let descriptor;
+  try {
+    descriptor = openSync(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+    const stat = fstatSync(descriptor);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_EVIDENCE_BYTES) {
+      throw new Error("Acceptance evidence must be a non-empty regular file no larger than 5 MiB.");
+    }
+    return JSON.parse(readFileSync(descriptor, "utf8"));
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ELOOP") {
+      throw new Error("Acceptance evidence must be a regular non-symlink file.");
+    }
+    throw error;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
 }
 
 function exactKeys(value, keys) {
@@ -712,9 +773,15 @@ function main() {
     else process.stdout.write(`Pending acceptance template written to ${config.output}.\n`);
     return;
   }
-  const input = JSON.parse(readFileSync(config.evidence, "utf8"));
+  const input = readAcceptanceManifest(config.evidence);
   const report = evaluate(input, config);
-  if (config.jsonOutput) writeFileSync(config.jsonOutput, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+  if (config.jsonOutput) {
+    writeOwnerOnlyFile(
+      config.jsonOutput,
+      `${JSON.stringify(report, null, 2)}\n`,
+      "Readiness output",
+    );
+  }
   if (config.json) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else process.stdout.write(`Guarded Crypto Coworkers acceptance: ${report.decision}\n`);
   if (config.strict && !report.ready) process.exitCode = 1;
