@@ -13,6 +13,7 @@ COPY . /app
 
 RUN pnpm install --frozen-lockfile --ignore-scripts --prefer-offline \
   && pnpm --filter matterhorn-work-server rebuild better-sqlite3 --pending \
+  && pnpm --dir packages/crypto-app-sdk build \
   && pnpm store prune
 
 RUN OPENCODE_VERSION="${OPENCODE_VERSION}" \
