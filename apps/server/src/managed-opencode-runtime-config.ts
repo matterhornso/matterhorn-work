@@ -43,7 +43,8 @@ export function buildManagedOpencodeRuntimeConfig(input: {
   enableCudosProvider?: boolean;
   venicePrivateModels?: readonly VenicePrivateModel[];
 }): string {
-  const serverUrl = input.serverUrl.trim().replace(/\/+$/, "");
+  let serverUrl = input.serverUrl.trim();
+  while (serverUrl.endsWith("/")) serverUrl = serverUrl.slice(0, -1);
   const clientToken = input.clientToken.trim();
   if (!serverUrl || !clientToken) {
     throw new Error("Managed OpenCode requires a Matterhorn server URL and client token");

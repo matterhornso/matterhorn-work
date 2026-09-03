@@ -14,7 +14,6 @@ const CALL_VERSION = "matterhorn.crypto-app-call.v1";
 const REPORT_VERSION = "matterhorn.crypto-app-local-run.v1";
 const ENVELOPE_KEYS = new Set(["data", "source", "observedAt", "blockOrVersion"]);
 const SECRET_KEY = /^(?:api[_-]?key|authorization|bearer|client[_-]?secret|mnemonic|password|private[_-]?key|recovery[_-]?phrase|seed[_-]?phrase|secret[_-]?key|wallet[_-]?export)$/i;
-const SECRET_VALUE = /BEGIN [A-Z ]*PRIVATE KEY|\b(?:seed|recovery) phrase\b|\bwallet export\b/i;
 const MAX_ARGUMENT_BYTES = 64 * 1024;
 const DEFAULT_MAX_RESPONSE_BYTES = 256 * 1024;
 const MAX_LOCAL_TIMEOUT_MS = 30_000;
@@ -111,7 +110,13 @@ function byteLength(value: unknown): number {
 }
 
 function containsSecret(value: unknown, seen = new Set<object>()): boolean {
-  if (typeof value === "string") return SECRET_VALUE.test(value);
+  if (typeof value === "string") {
+    const normalized = value.toLowerCase();
+    return (normalized.includes("begin ") && normalized.includes("private key"))
+      || normalized.includes("seed phrase")
+      || normalized.includes("recovery phrase")
+      || normalized.includes("wallet export");
+  }
   if (!value || typeof value !== "object") return false;
   if (seen.has(value)) return true;
   seen.add(value);

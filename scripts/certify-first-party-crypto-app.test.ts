@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -102,6 +102,35 @@ describe("first-party crypto app certification CLI", () => {
       expect(result.exitCode).toBe(1);
       expect(result.stderr.toString()).toContain("certification_cli_output_exists");
       expect(Bun.file(output).text()).resolves.toBe("do-not-overwrite\n");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects symlinked operator inputs", () => {
+    if (process.platform === "win32") return;
+    const directory = mkdtempSync(join(tmpdir(), "matterhorn-cert-cli-symlink-"));
+    try {
+      const manifest = join(directory, "manifest.json");
+      const publicKey = join(directory, "publisher.pem");
+      const inputsTarget = join(directory, "inputs-target.json");
+      const inputs = join(directory, "inputs.json");
+      const output = join(directory, "output.json");
+      writeFileSync(manifest, "{}\n", { mode: 0o600 });
+      writeFileSync(publicKey, "not-a-key\n", { mode: 0o600 });
+      writeFileSync(inputsTarget, "{}\n", { mode: 0o600 });
+      symlinkSync(inputsTarget, inputs);
+      const result = Bun.spawnSync([
+        "bun", SCRIPT,
+        "--manifest", manifest,
+        "--publisher-public-key", publicKey,
+        "--inputs", inputs,
+        "--policy-version", "policy-1",
+        "--output", output,
+      ], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr.toString()).toContain("certification_cli_input_invalid");
+      expect(existsSync(output)).toBe(false);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

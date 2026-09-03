@@ -5,8 +5,7 @@ import {
   access,
   chmod,
   link,
-  lstat,
-  readFile,
+  open,
   realpath,
   unlink,
   writeFile,
@@ -107,14 +106,35 @@ function parseArgs(argv: string[]): CliConfig | "help" {
 }
 
 async function readBounded(path: string, maxBytes: number, ownerOnly = false): Promise<Buffer> {
-  const metadata = await lstat(path);
-  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > maxBytes) {
+  const flags = process.platform === "win32"
+    ? constants.O_RDONLY
+    : constants.O_RDONLY | constants.O_NOFOLLOW;
+  let handle;
+  try {
+    handle = await open(path, flags);
+  } catch {
     throw new Error("certification_cli_input_invalid");
   }
-  if (ownerOnly && process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
-    throw new Error("certification_cli_input_permissions_invalid");
+  try {
+    const before = await handle.stat();
+    if (!before.isFile() || before.size > maxBytes) {
+      throw new Error("certification_cli_input_invalid");
+    }
+    if (ownerOnly && process.platform !== "win32" && (before.mode & 0o077) !== 0) {
+      throw new Error("certification_cli_input_permissions_invalid");
+    }
+    const bytes = await handle.readFile();
+    const after = await handle.stat();
+    if (bytes.byteLength > maxBytes
+      || after.size !== bytes.byteLength
+      || after.size !== before.size
+      || after.mtimeMs !== before.mtimeMs) {
+      throw new Error("certification_cli_input_invalid");
+    }
+    return bytes;
+  } finally {
+    await handle.close();
   }
-  return readFile(path);
 }
 
 function parseJsonObject<T>(bytes: Buffer): T {

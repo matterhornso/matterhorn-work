@@ -260,7 +260,8 @@ export function attachCryptoAppManifestSignature(
   draft: MatterhornUnsignedCryptoAppManifest,
   signature: string,
 ): MatterhornCryptoAppManifest {
-  if (/PRIVATE KEY|BEGIN [A-Z ]*PRIVATE/i.test(signature)) {
+  const normalizedSignature = signature.toUpperCase();
+  if (normalizedSignature.includes("PRIVATE KEY") || normalizedSignature.includes("BEGIN ")) {
     throw new MatterhornCryptoAppSdkError("manifest_private_key_forbidden");
   }
   if (!validDetachedEd25519Signature(signature)) {

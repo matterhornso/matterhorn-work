@@ -1516,6 +1516,30 @@ function userAppDataDir() {
   return process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
 }
 
+function normalizeLocalUiBridgeBaseUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:"
+    || parsed.username
+    || parsed.password
+    || parsed.search
+    || parsed.hash
+    || (parsed.pathname !== "" && parsed.pathname !== "/")) {
+    return null;
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  const isIpv6Loopback = hostname === "[::1]" || hostname === "::1";
+  if (hostname !== "127.0.0.1" && hostname !== "localhost" && !isIpv6Loopback) return null;
+  const port = parsed.port ? Number(parsed.port) : 80;
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) return null;
+  const loopbackHost = isIpv6Loopback ? "[::1]" : "127.0.0.1";
+  return `http://${loopbackHost}:${port}`;
+}
+
 async function discoverUiBridge() {
   const appData = userAppDataDir();
   const candidates = [
@@ -1535,7 +1559,8 @@ async function discoverUiBridge() {
     try {
       const parsed = JSON.parse(await readFile(candidate, "utf8"));
       if (typeof parsed.baseUrl === "string" && typeof parsed.token === "string") {
-        return { baseUrl: parsed.baseUrl.replace(/\/+$/, ""), path: candidate };
+        const baseUrl = normalizeLocalUiBridgeBaseUrl(parsed.baseUrl);
+        if (baseUrl) return { baseUrl, path: candidate };
       }
     } catch {
       // Try the next discovery file.
@@ -3000,6 +3025,14 @@ function customerEvidenceBullet(items) {
   return items.length ? items.map((item) => "- " + item).join("\n") : "None.";
 }
 
+function escapeMarkdownTableCell(value) {
+  return String(value ?? "")
+    .replaceAll("\\", "\\\\")
+    .replaceAll("|", "\\|")
+    .replaceAll("\r", " ")
+    .replaceAll("\n", " ");
+}
+
 function renderCustomerEvidenceMarkdown(summary, title) {
   const rows = [
     ["Bittensor live QA", summary.bittensor.ready ? "pass" : "fail", summary.bittensor.detail],
@@ -3027,7 +3060,7 @@ function renderCustomerEvidenceMarkdown(summary, title) {
     "",
     "| Area | Status | Detail |",
     "| --- | --- | --- |",
-    ...rows.map(([area, status, detail]) => "| " + area + " | " + status + " | " + String(detail || "").replace(/\|/g, "\\|") + " |"),
+    ...rows.map(([area, status, detail]) => "| " + escapeMarkdownTableCell(area) + " | " + escapeMarkdownTableCell(status) + " | " + escapeMarkdownTableCell(detail) + " |"),
     "",
     "## Covered Bittensor Paths",
     "",
@@ -3155,7 +3188,7 @@ function countBittensorHandoffFindings(findings, status) {
 }
 
 function escapeBittensorHandoffCell(value) {
-  return String(value ?? "").replace(/\r?\n/g, " ").replace(/\|/g, "\\|").trim();
+  return escapeMarkdownTableCell(value).trim();
 }
 
 function renderBittensorSigningHandoffMarkdown(summary) {

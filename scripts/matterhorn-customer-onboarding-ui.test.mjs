@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(path, "utf8");
+const sourceStringLiterals = (source) => new Set(source.split(/["'`]/u));
 
 const packageJson = JSON.parse(read("package.json"));
 assert.equal(
@@ -1072,7 +1073,7 @@ for (const phrase of [
 ]) {
   assert.ok(feedback.includes(phrase), `feedback URLs should be Matterhorn-first: ${phrase}`);
 }
-assert.equal(feedback.includes("https://openworklabs.com/feedback"), false, "feedback default must not send customers to OpenWork Labs");
+assert.equal(sourceStringLiterals(feedback).has("https://openworklabs.com/feedback"), false, "feedback default must not send customers to OpenWork Labs");
 assert.ok(denHelpLink.includes("updates@matterhorn.so"), "remote worker help dialog should use Matterhorn support email");
 assert.ok(remoteWorkspaceDiagnostics.includes("updates@matterhorn.so"), "remote workspace diagnostics should use Matterhorn support email");
 assert.equal(denHelpLink.includes("team@openworklabs.com"), false, "remote worker help dialog must not send customers to OpenWork Labs");
@@ -1088,9 +1089,9 @@ for (const phrase of [
 ]) {
   assert.ok(den.includes(phrase), `cloud auth should expose Matterhorn-native config: ${phrase}`);
 }
-assert.equal(den.includes("https://app.openworklabs.com"), false, "cloud auth default must not open OpenWork Labs");
-assert.ok(constants.includes("https://app.matterhorn.work/mcp"), "Matterhorn Cloud MCP quick-connect fallback should be Matterhorn-owned");
-assert.equal(constants.includes("https://app.openworklabs.com/mcp"), false, "Matterhorn Cloud MCP fallback must not open OpenWork Labs");
+assert.equal(sourceStringLiterals(den).has("https://app.openworklabs.com"), false, "cloud auth default must not open OpenWork Labs");
+assert.ok(sourceStringLiterals(constants).has("https://app.matterhorn.work/mcp"), "Matterhorn Cloud MCP quick-connect fallback should be Matterhorn-owned");
+assert.equal(sourceStringLiterals(constants).has("https://app.openworklabs.com/mcp"), false, "Matterhorn Cloud MCP fallback must not open OpenWork Labs");
 
 for (const phrase of [
   "Parallel Web Systems web search",

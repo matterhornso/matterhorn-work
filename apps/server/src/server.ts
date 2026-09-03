@@ -356,8 +356,8 @@ import {
   type MatterhornExecutionMode,
   type MatterhornReasoningEffort,
 } from "@matterhorn-work/types/execution-mode";
-import { existsSync, realpathSync } from "node:fs";
-import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
+import { constants as fsConstants, existsSync, realpathSync } from "node:fs";
+import { open, readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -3096,7 +3096,13 @@ function sanitizeMarketArtifactValidationInputForSecretScan(value: unknown): unk
 }
 
 function jsonResponse(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
+  const body = JSON.stringify(data, (_key, value) => {
+    if (value instanceof Error) {
+      return { name: "Error", message: "Request failed" };
+    }
+    return value;
+  });
+  return new Response(body, {
     status,
     headers: { "Content-Type": "application/json" },
   });
@@ -8349,6 +8355,57 @@ type FileSessionCatalogEntry = {
 
 function fileRevision(info: { mtimeMs: number; size: number }): string {
   return `${Math.floor(info.mtimeMs)}:${info.size}`;
+}
+
+async function readWorkspaceFileSnapshot(absPath: string, maxBytes: number): Promise<{
+  content: Buffer;
+  info: { mtimeMs: number; size: number };
+}> {
+  const flags = process.platform === "win32"
+    ? fsConstants.O_RDONLY
+    : fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW;
+  let handle;
+  try {
+    handle = await open(absPath, flags);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ELOOP") {
+      throw new ApiError(404, "file_not_found", "File not found");
+    }
+    throw error;
+  }
+
+  try {
+    const before = await handle.stat();
+    if (!before.isFile()) {
+      throw new ApiError(404, "file_not_found", "File not found");
+    }
+    if (before.size > maxBytes) {
+      throw new ApiError(413, "file_too_large", "File exceeds size limit", {
+        maxBytes,
+        size: before.size,
+      });
+    }
+
+    const content = await handle.readFile();
+    const after = await handle.stat();
+    if (content.byteLength > maxBytes || after.size > maxBytes) {
+      throw new ApiError(413, "file_too_large", "File exceeds size limit", {
+        maxBytes,
+        size: Math.max(content.byteLength, after.size),
+      });
+    }
+    if (after.size !== content.byteLength || after.size !== before.size || after.mtimeMs !== before.mtimeMs) {
+      throw new ApiError(409, "file_changed", "File changed while it was being read");
+    }
+
+    return {
+      content,
+      info: { mtimeMs: after.mtimeMs, size: after.size },
+    };
+  } finally {
+    await handle.close();
+  }
 }
 
 function parseFileSessionTtlMs(input: unknown): number {
@@ -14532,28 +14589,7 @@ function createRoutes(
     for (const relativePath of paths) {
       try {
         const absPath = resolveSafeChildPath(workspace.path, relativePath);
-        if (!(await exists(absPath))) {
-          items.push({ ok: false, path: relativePath, code: "file_not_found", message: "File not found" });
-          continue;
-        }
-        const info = await stat(absPath);
-        if (!info.isFile()) {
-          items.push({ ok: false, path: relativePath, code: "file_not_found", message: "File not found" });
-          continue;
-        }
-        if (info.size > FILE_SESSION_MAX_FILE_BYTES) {
-          items.push({
-            ok: false,
-            path: relativePath,
-            code: "file_too_large",
-            message: "File exceeds size limit",
-            maxBytes: FILE_SESSION_MAX_FILE_BYTES,
-            size: info.size,
-          });
-          continue;
-        }
-
-        const content = await readFile(absPath);
+        const { content, info } = await readWorkspaceFileSnapshot(absPath, FILE_SESSION_MAX_FILE_BYTES);
         items.push({
           ok: true,
           path: relativePath,
@@ -14875,21 +14911,13 @@ function createRoutes(
     }
 
     const absPath = resolveSafeChildPath(workspace.path, relativePath);
-    if (!(await exists(absPath))) {
-      throw new ApiError(404, "file_not_found", "File not found");
-    }
-    const info = await stat(absPath);
-    if (!info.isFile()) {
-      throw new ApiError(404, "file_not_found", "File not found");
-    }
-
-    const maxBytes = FILE_SESSION_MAX_FILE_BYTES;
-    if (info.size > maxBytes) {
-      throw new ApiError(413, "file_too_large", "File exceeds size limit", { maxBytes, size: info.size });
-    }
-
-    const content = await readFile(absPath, "utf8");
-    return jsonResponse({ path: relativePath, content, bytes: info.size, updatedAt: info.mtimeMs });
+    const { content, info } = await readWorkspaceFileSnapshot(absPath, FILE_SESSION_MAX_FILE_BYTES);
+    return jsonResponse({
+      path: relativePath,
+      content: content.toString("utf8"),
+      bytes: info.size,
+      updatedAt: info.mtimeMs,
+    });
   });
 
   addRoute(routes, "GET", "/workspace/:id/files/stat", "client", async (ctx) => {
@@ -14916,20 +14944,13 @@ function createRoutes(
     const requested = (ctx.url.searchParams.get("path") ?? "").trim();
     const relativePath = normalizeWorkspaceRelativePath(requested, { allowSubdirs: true });
     const absPath = resolveSafeChildPath(workspace.path, relativePath);
-    if (!(await exists(absPath))) {
-      throw new ApiError(404, "file_not_found", "File not found");
-    }
-    const info = await stat(absPath);
-    if (!info.isFile()) {
-      throw new ApiError(404, "file_not_found", "File not found");
-    }
+    const { content, info } = await readWorkspaceFileSnapshot(absPath, FILE_SESSION_MAX_FILE_BYTES);
 
     const headers = new Headers();
     headers.set("Content-Type", contentTypeForPath(relativePath));
     headers.set("Content-Length", String(info.size));
     headers.set("Content-Disposition", `inline; filename="${basename(relativePath)}"`);
-    const stream = Readable.toWeb(createReadStream(absPath)) as unknown as ReadableStream;
-    return new Response(stream, { status: 200, headers });
+    return new Response(new Uint8Array(content), { status: 200, headers });
   });
 
   addRoute(routes, "POST", "/workspace/:id/files/raw", "client", async (ctx) => {
