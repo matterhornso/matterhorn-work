@@ -24,6 +24,9 @@ describe("invite-only crypto app developer route", () => {
 
     expect(appRoot).toContain('path="/developer/crypto-apps"');
     expect(appRoot).toContain('import("../domains/developer/crypto-app-developer-route")');
+    expect(appRoot).toContain("capturePendingDeveloperInviteFromBrowser");
+    expect(appRoot).toContain("hasPendingDeveloperInvite");
+    expect(appRoot).toContain('? "/developer/crypto-apps"');
     expect(appRoot.indexOf("<DenSigninGate>")).toBeLessThan(appRoot.indexOf('path="/developer/crypto-apps"'));
     expect(appRoot).not.toContain('pathname === "/developer/crypto-apps"');
     expect(viteConfig).toContain('"/developer": sameOriginWorkspaceProxy');
@@ -87,6 +90,13 @@ describe("invite-only crypto app developer route", () => {
     const quickstart = readAppSource("domains/developer/developer-quickstart-setup.tsx");
 
     expect(route).toContain("snapshot.status.enrolled");
+    expect(route).toContain("capturePendingDeveloperInviteFromBrowser");
+    expect(route).toContain("takePendingDeveloperInvite");
+    expect(route).toContain("Developer invite ready");
+    expect(route).toContain("The one-time token was removed from the address bar");
+    expect(route).toContain("Use a different invite");
+    expect(route).not.toContain("localStorage");
+    expect(route).not.toContain("sessionStorage");
     expect(route).toContain("<DeveloperQuickstartSetup");
     expect(route).toContain("<DeveloperIntegrationSetup");
     expect(route).toContain("Sui, Hyperliquid, or Bittensor testnet");

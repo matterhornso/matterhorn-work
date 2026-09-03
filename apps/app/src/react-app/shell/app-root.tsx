@@ -21,7 +21,15 @@ import { workspaceSessionRoute } from "./workspace-routes";
 import { AppErrorBoundary } from "./app-error-boundary";
 import { RemoteConnectDeepLinkHandler } from "./remote-connect-deep-links";
 import { isPublicTrustPath } from "../domains/public/public-trust-content";
+import {
+  capturePendingDeveloperInviteFromBrowser,
+  hasPendingDeveloperInvite,
+} from "../domains/developer/developer-invite-fragment";
 import { UnknownRouteRecovery } from "./route-recovery";
+
+// Strip one-time developer invite fragments before the app shell, route
+// controls, or telemetry can inspect the initial browser location.
+capturePendingDeveloperInviteFromBrowser();
 
 const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboarding-page").then((module) => ({
   default: module.OrgOnboardingPage,
@@ -113,6 +121,9 @@ function DenSigninGate({ children }: DenSigninGateProps) {
   );
 
   useEffect(() => {
+    // Also capture links opened through client-side navigation after boot.
+    capturePendingDeveloperInviteFromBrowser();
+
     // Wait for the first auth check so we don't bounce the user between
     // `/session` and `/signin` every navigation while we figure out if
     // their cached token is still valid.
@@ -124,9 +135,11 @@ function DenSigninGate({ children }: DenSigninGateProps) {
     const explicitCloudSignin = onSignin && isExplicitCloudSignin(location.search);
 
     const onOnboarding = path === "/onboarding" || path.startsWith("/onboarding/");
+    const onDeveloperPortal = path === "/developer/crypto-apps" || path.startsWith("/developer/crypto-apps/");
     const hasActiveOrganization = Boolean(
       readDenSettings().activeOrgId?.trim(),
     );
+    const pendingDeveloperInvite = hasPendingDeveloperInvite();
 
     if (explicitCloudSignin) return;
 
@@ -134,17 +147,40 @@ function DenSigninGate({ children }: DenSigninGateProps) {
       if (!denAuth.isSignedIn && !onSignin) {
         navigate("/signin", { replace: true });
       } else if (denAuth.isSignedIn && onSignin) {
-        // Signed in — route to onboarding so the user sees their org resources.
-        navigate("/onboarding", { replace: true });
+        navigate(
+          pendingDeveloperInvite && hasActiveOrganization
+            ? "/developer/crypto-apps"
+            : "/onboarding",
+          { replace: true },
+        );
       } else if (
         denAuth.isSignedIn &&
         !onOnboarding &&
         !hasActiveOrganization
       ) {
         navigate("/onboarding", { replace: true });
+      } else if (
+        denAuth.isSignedIn &&
+        hasActiveOrganization &&
+        pendingDeveloperInvite &&
+        !onDeveloperPortal
+      ) {
+        navigate("/developer/crypto-apps", { replace: true });
       }
     } else if (onSignin) {
-      navigate("/session", { replace: true });
+      navigate(
+        denAuth.isSignedIn && hasActiveOrganization && pendingDeveloperInvite
+          ? "/developer/crypto-apps"
+          : "/session",
+        { replace: true },
+      );
+    } else if (
+      denAuth.isSignedIn &&
+      hasActiveOrganization &&
+      pendingDeveloperInvite &&
+      !onDeveloperPortal
+    ) {
+      navigate("/developer/crypto-apps", { replace: true });
     }
 
     // If on /onboarding but not signed in, bounce to signin or session
@@ -167,7 +203,12 @@ function DenSigninGate({ children }: DenSigninGateProps) {
     const handler = (event: WindowEventMap[typeof denSessionUpdatedEvent]) => {
       if (event.detail?.status !== "success") return;
       if (publicBetaWeb) {
-        navigate("/onboarding", { replace: true });
+        navigate(
+          hasPendingDeveloperInvite() && Boolean(readDenSettings().activeOrgId?.trim())
+            ? "/developer/crypto-apps"
+            : "/onboarding",
+          { replace: true },
+        );
         return;
       }
       let attempts = 0;
@@ -175,7 +216,12 @@ function DenSigninGate({ children }: DenSigninGateProps) {
         attempts++;
         const settings = readDenSettings();
         if (settings.authToken?.trim()) {
-          navigate("/onboarding", { replace: true });
+          navigate(
+            hasPendingDeveloperInvite() && Boolean(settings.activeOrgId?.trim())
+              ? "/developer/crypto-apps"
+              : "/onboarding",
+            { replace: true },
+          );
         } else if (attempts < 10) {
           // Auth persistence has not settled yet — retry (max ~5 seconds).
           setTimeout(check, 500);

@@ -110,6 +110,7 @@ for (const required of [
   "generated-media-diagnostics.test.ts",
   "generated-media-production-readiness.test.mjs",
   "product-readiness-smoke.test.mjs",
+  "test:crypto-developer-invite",
   "public-beta-rollback-hook.test.mjs",
   "product-hunt-rollback-rehearsal.test.mjs",
   "guarded-runtime-shadow-evidence.test.mjs",

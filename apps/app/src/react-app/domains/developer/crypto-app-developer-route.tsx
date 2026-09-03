@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, Clock3, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -22,6 +22,10 @@ import { Label } from "../../../components/ui/label";
 import { Textarea } from "../../../components/ui/textarea";
 import { resolveMatterhornConnection } from "../../shell/matterhorn-connection";
 import { DeveloperIntegrationSetup } from "./developer-integration-setup";
+import {
+  capturePendingDeveloperInviteFromBrowser,
+  takePendingDeveloperInvite,
+} from "./developer-invite-fragment";
 import { DeveloperQuickstartSetup } from "./developer-quickstart-setup";
 
 const QUERY_KEY = ["crypto-app-developer-portal"] as const;
@@ -122,6 +126,19 @@ export function CryptoAppDeveloperRoute() {
   const [keyId, setKeyId] = useState("");
   const [publicKeyPem, setPublicKeyPem] = useState("");
   const [manifestJson, setManifestJson] = useState("");
+  const [inviteLoaded, setInviteLoaded] = useState(false);
+
+  useEffect(() => {
+    capturePendingDeveloperInviteFromBrowser();
+    const fragment = takePendingDeveloperInvite();
+    if (!fragment.detected) return;
+    if (fragment.token) {
+      setInviteToken(fragment.token);
+      setInviteLoaded(true);
+      return;
+    }
+    setError("This developer invite link is not valid. Ask Matterhorn for a new invite.");
+  }, []);
 
   const portal = useQuery({ queryKey: QUERY_KEY, queryFn: connect, retry: false });
   const snapshot = portal.data?.snapshot;
@@ -236,7 +253,36 @@ export function CryptoAppDeveloperRoute() {
                     event.preventDefault();
                     void run((client) => client.enroll({ inviteToken, publisherId, displayName }));
                   }}>
-                    <div><Label htmlFor="developer-invite">Invite token</Label><Input id="developer-invite" className="mt-2" value={inviteToken} onChange={(event) => setInviteToken(event.target.value)} autoComplete="off" required /></div>
+                    {inviteLoaded ? (
+                      <div>
+                        <p className="text-sm font-medium" role="status">Developer invite ready</p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">The one-time token was removed from the address bar and is not stored by your browser.</p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="-ml-2 mt-2 min-h-11"
+                          onClick={() => {
+                            setInviteToken("");
+                            setInviteLoaded(false);
+                          }}
+                        >
+                          Use a different invite
+                        </Button>
+                      </div>
+                    ) : (
+                      <div>
+                        <Label htmlFor="developer-invite">Developer invite</Label>
+                        <Input
+                          id="developer-invite"
+                          className="mt-2"
+                          value={inviteToken}
+                          onChange={(event) => setInviteToken(event.target.value)}
+                          autoComplete="off"
+                          required
+                        />
+                      </div>
+                    )}
                     <div><Label htmlFor="publisher-id">Publisher ID</Label><Input id="publisher-id" className="mt-2" value={publisherId} onChange={(event) => setPublisherId(event.target.value)} placeholder="company.protocol" required /></div>
                     <div><Label htmlFor="publisher-name">Display name</Label><Input id="publisher-name" className="mt-2" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></div>
                     <Button type="submit" className="min-h-11" disabled={busy}>{busy ? "Enrolling…" : "Accept invite"}</Button>
