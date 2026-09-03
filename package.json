@@ -143,6 +143,8 @@
     "test:fs-engine": "pnpm --filter @matterhorn-work/app test:fs-engine",
     "test:e2e": "pnpm --filter @matterhorn-work/app test:e2e",
     "test:agent-control-mcp": "node packages/matterhorn-work-mcp/test-smoke.mjs",
+    "test:guarded-mcp": "node packages/matterhorn-guarded-mcp/test-smoke.mjs",
+    "test:guarded-mcp-package": "node scripts/guarded-mcp-package.test.mjs",
     "test:agent-control-doctor": "node scripts/agent-control-doctor.test.mjs",
     "test:agent-control-live-qa": "node scripts/agent-control-live-qa.test.mjs",
     "test:agent-operator-workflow": "node scripts/agent-operator-workflow.test.mjs",

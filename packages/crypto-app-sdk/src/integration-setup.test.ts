@@ -88,7 +88,7 @@ describe("Matterhorn crypto integration setup", () => {
     expect(codex.distribution).toEqual({
       mode: "local_checkout",
       npmPublished: false,
-      entrypoint: `${repositoryPath}/packages/matterhorn-work-mcp/index.mjs`,
+      entrypoint: `${repositoryPath}/packages/matterhorn-guarded-mcp/index.mjs`,
     });
     expect(codex.artifacts[0]?.content).toContain(
       "[mcp_servers.matterhorn-work]",
@@ -107,7 +107,7 @@ describe("Matterhorn crypto integration setup", () => {
       "claude mcp add --transport stdio",
     );
     expect(claude.artifacts[0]?.content).toContain(
-      "'/Users/o'\"'\"'hara/Matterhorn Work/packages/matterhorn-work-mcp/index.mjs'",
+      "'/Users/o'\"'\"'hara/Matterhorn Work/packages/matterhorn-guarded-mcp/index.mjs'",
     );
     expect(claude.artifacts[0]?.content).toContain(
       "MATTERHORN_WORK_MCP_PROFILE='guarded_client'",

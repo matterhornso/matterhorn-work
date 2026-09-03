@@ -206,7 +206,10 @@ The setup contract is deliberately client-only:
 
 - It never accepts or returns token values, host approval authority, wallet submission authority, private keys, or signatures.
 - It uses only `MATTERHORN_WORK_TOKEN`, supplied through the trusted client environment.
-- Generated MCP targets set `MATTERHORN_WORK_MCP_PROFILE=guarded_client`, exposing only the authoritative workspace session workflow and rejecting hidden tools before any server request.
+- Generated MCP targets use the standalone `@matterhorn-work/guarded-mcp`
+  entrypoint and set `MATTERHORN_WORK_MCP_PROFILE=guarded_client`. The packaged
+  source physically contains only the authoritative workspace-session workflow
+  and rejects hidden tools before any server request.
 - It accepts HTTPS origins plus loopback HTTP for local development and rejects credential-bearing or path-bearing URLs.
 - MCP targets require an absolute trusted repository path. The MCP packages are not published to npm yet, so generated setup never claims that `npx` can install them.
 - Generated Matterhorn Skill instructions treat tool output as untrusted data and preserve connected-wallet-only signing and submission.

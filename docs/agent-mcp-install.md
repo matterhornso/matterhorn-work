@@ -2,7 +2,10 @@
 
 This guide shows how to connect Matterhorn Desks to Codex, Claude Code, Claude Desktop, Cursor, and other MCP-capable clients.
 
-The default setup uses local stdio MCP servers launched by the client. The server-control MCP (`matterhorn-work-mcp`) talks to a running Matterhorn Desks server over `MATTERHORN_WORK_SERVER_URL`.
+The default setup uses a local stdio MCP server launched by the client. The
+standalone guarded MCP (`@matterhorn-work/guarded-mcp`) talks to a running
+Matterhorn Desks server over `MATTERHORN_WORK_SERVER_URL`. Its release artifact
+physically contains only the 11 account-scoped workspace and session tools.
 
 > **Current distribution:** the MCP packages are not published to npm yet. Clone
 > this repository and run `pnpm install` once, then use the absolute `index.mjs`
@@ -105,7 +108,7 @@ codex mcp add matterhorn-work \
   --env MATTERHORN_WORK_SERVER_URL=http://127.0.0.1:8787 \
   --env MATTERHORN_WORK_TOKEN=<client-token> \
   --env MATTERHORN_WORK_MCP_PROFILE=guarded_client \
-  -- node <matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs
+  -- node <matterhorn-repo>/packages/matterhorn-guarded-mcp/index.mjs
 ```
 
 Trusted local operator only: add the remaining full-profile servers one at a time when you deliberately need protocol, UI, or wallet development tools:
@@ -128,7 +131,7 @@ Equivalent `config.toml` entry for the server-control MCP:
 ```toml
 [mcp_servers.matterhorn-work]
 command = "node"
-args = ["<matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs"]
+args = ["<matterhorn-repo>/packages/matterhorn-guarded-mcp/index.mjs"]
 
 [mcp_servers.matterhorn-work.env]
 MATTERHORN_WORK_SERVER_URL = "http://127.0.0.1:8787"
@@ -148,7 +151,7 @@ claude mcp add --transport stdio \
   --env MATTERHORN_WORK_TOKEN=<client-token> \
   --env MATTERHORN_WORK_MCP_PROFILE=guarded_client \
   matterhorn-work \
-  -- node <matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs
+  -- node <matterhorn-repo>/packages/matterhorn-guarded-mcp/index.mjs
 ```
 
 For a project-shared setup, generate the JSON and place it in a project `.mcp.json`:
@@ -210,7 +213,7 @@ Use this minimal stdio config when a client accepts the common `mcpServers` shap
   "mcpServers": {
     "matterhorn-work": {
       "command": "node",
-      "args": ["<matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs"],
+      "args": ["<matterhorn-repo>/packages/matterhorn-guarded-mcp/index.mjs"],
       "env": {
         "MATTERHORN_WORK_SERVER_URL": "http://127.0.0.1:8787",
         "MATTERHORN_WORK_TOKEN": "<client-token>",
@@ -240,7 +243,7 @@ For upstream OpenWork checks without MCP, use `matterhorn-work upstream openwork
 
 ## Troubleshooting
 
-- If the server does not start, run `node <matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs` manually with the same environment variables.
+- If the server does not start, run `node <matterhorn-repo>/packages/matterhorn-guarded-mcp/index.mjs` manually with the same environment variables.
 - If tools return `MATTERHORN_WORK_TOKEN is required`, check that the MCP client passes environment variables to stdio servers.
 - If approval tools are intentionally required, regenerate with `--profile server` or `--profile full` plus `--include-host-approvals --host-token <host-token>`. The guarded profile never accepts host approval authority.
 - If Claude Desktop does not show the server, restart the app and check MCP logs.

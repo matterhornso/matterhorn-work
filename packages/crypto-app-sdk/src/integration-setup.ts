@@ -277,7 +277,7 @@ export function createMatterhornCryptoIntegrationSetup(
     ? normalizedRepositoryPath(options.repositoryPath)
     : null;
   const entrypoint = repositoryPath
-    ? `${repositoryPath}/packages/matterhorn-work-mcp/index.mjs`
+    ? `${repositoryPath}/packages/matterhorn-guarded-mcp/index.mjs`
     : null;
   const artifacts: MatterhornCryptoIntegrationSetupArtifact[] = [];
   const steps: MatterhornCryptoIntegrationSetupStep[] = [];

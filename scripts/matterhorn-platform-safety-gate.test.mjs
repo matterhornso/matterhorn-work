@@ -115,6 +115,8 @@ for (const required of [
   "test:crypto-app-sdk-provenance",
   "test:crypto-app-sdk-publish-workflow",
   "test:agent-control-mcp",
+  "test:guarded-mcp",
+  "test:guarded-mcp-package",
   "test:crypto-coworker-invite",
   "test:crypto-coworker-access-ops",
   "crypto-coworker-reference-patterns.test.mjs",

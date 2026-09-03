@@ -2,6 +2,11 @@
 
 Unified MCP server for controlling a running Matterhorn Desks server from Claude Code, Codex, Cursor, Claude Desktop, or another MCP-capable agent.
 
+This is the broad trusted-operator implementation. External agents should use
+the standalone `@matterhorn-work/guarded-mcp` package. That artifact physically
+contains only the 11 account-scoped workspace/session tools rather than relying
+on a runtime filter over this broader source file.
+
 This package is the server/control complement to:
 
 - `matterhorn-work-ui-mcp` for desktop UI control

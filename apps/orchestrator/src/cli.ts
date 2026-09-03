@@ -10248,6 +10248,7 @@ type McpConfigEntry = {
 type McpConfigProfile = "guarded" | "server" | "full";
 
 const MCP_PACKAGE_NAMES = [
+  "matterhorn-guarded-mcp",
   "matterhorn-work-mcp",
   "matterhorn-work-ui-mcp",
   "matterhorn-work-crypto-mcp",
@@ -10280,7 +10281,12 @@ function mcpRunner(args: ParsedArgs): {
   if (explicitRunner === "npx") {
     return {
       command: "npx",
-      argsFor: (packageName) => ["-y", packageName],
+      argsFor: (packageName) => [
+        "-y",
+        packageName === "matterhorn-guarded-mcp"
+          ? "@matterhorn-work/guarded-mcp"
+          : packageName,
+      ],
     };
   }
   if (repositoryPath) {
@@ -10356,7 +10362,9 @@ function buildMcpServersConfig(args: ParsedArgs): Record<string, McpConfigEntry>
   const servers: Record<string, McpConfigEntry> = {
     "matterhorn-work": {
       command: runner.command,
-      args: runner.argsFor("matterhorn-work-mcp"),
+      args: runner.argsFor(
+        profile === "guarded" ? "matterhorn-guarded-mcp" : "matterhorn-work-mcp",
+      ),
       env: serverEnvironment,
     },
   };

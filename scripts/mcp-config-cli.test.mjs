@@ -45,6 +45,7 @@ for (const snippet of [
   "[mcp_servers.${name}.env]",
   'if (target === "codex")',
   "codex | claude | claude-desktop | cursor | json | env",
+  '"matterhorn-guarded-mcp"',
   '"matterhorn-work-mcp"',
   '"matterhorn-work-ui-mcp"',
   '"matterhorn-work-crypto-mcp"',
@@ -138,7 +139,7 @@ const safeServers = JSON.parse(safeConfig.stdout).mcpServers;
 assert.equal(safeServers["matterhorn-work"].command, "node");
 assert.equal(
   safeServers["matterhorn-work"].args[0],
-  `${process.cwd()}/packages/matterhorn-work-mcp/index.mjs`,
+  `${process.cwd()}/packages/matterhorn-guarded-mcp/index.mjs`,
 );
 assert.equal(safeServers["matterhorn-work"].env.MATTERHORN_WORK_TOKEN, "test-client-token");
 assert.equal(
@@ -238,6 +239,16 @@ assert.equal(explicitFutureRunner.status, 0, explicitFutureRunner.stderr);
 const futureServer = JSON.parse(explicitFutureRunner.stdout).mcpServers["matterhorn-work"];
 assert.equal(futureServer.command, "npx");
 assert.deepEqual(futureServer.args, ["-y", "matterhorn-work-mcp"]);
+
+const guardedFutureRunner = runMcpConfig([
+  "--target", "json",
+  "--profile", "guarded",
+  "--runner", "npx",
+]);
+assert.equal(guardedFutureRunner.status, 0, guardedFutureRunner.stderr);
+const guardedFutureServer = JSON.parse(guardedFutureRunner.stdout).mcpServers["matterhorn-work"];
+assert.equal(guardedFutureServer.command, "npx");
+assert.deepEqual(guardedFutureServer.args, ["-y", "@matterhorn-work/guarded-mcp"]);
 
 const invalidProfile = runMcpConfig([
   "--target", "json",
