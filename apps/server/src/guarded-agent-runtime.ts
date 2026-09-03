@@ -823,6 +823,21 @@ export class MatterhornGuardedAgentRuntime {
     await this.finishRun(runId, status);
   }
 
+  /**
+   * Completes a run dispatched by a trusted Matterhorn server route rather
+   * than by the OpenCode runtime plugin. This is intentionally not exposed as
+   * an HTTP capability: it lets first-party gateways such as safe session
+   * compaction produce the same content-free receipt and revoke the same run
+   * authority as an ordinary model response.
+   */
+  async completeTrustedGatewayRun(
+    runId: string,
+    status: Exclude<MatterhornAgentRunReceipt["status"], "pending"> = "success",
+    usage?: Partial<Omit<MatterhornAgentRunReceipt["usage"], "toolCallBudget">>,
+  ): Promise<void> {
+    await this.finishRun(runId, status, usage);
+  }
+
   runtimeSecretFingerprint(): string | null {
     const secret = process.env.MATTERHORN_AGENT_RUNTIME_SECRET?.trim();
     return secret ? sha256(secret).slice(0, 12) : null;

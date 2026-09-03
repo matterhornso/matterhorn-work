@@ -2772,6 +2772,10 @@ export function SessionRoute() {
               selectedWorkspaceId,
               selectedSessionId,
               selectedPromptModel ?? undefined,
+              {
+                ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
+                ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
+              },
             );
             return;
           }

@@ -101,6 +101,7 @@ import type {
   MatterhornAgentPrivacyConsentResponse,
   MatterhornAgentMessageRequest,
   MatterhornAgentMessageResponse,
+  MatterhornAgentPrivacyMode,
   MatterhornAgentPrivacyPreflightRequest,
   MatterhornAgentPrivacyPreflightResponse,
   MatterhornAgentRunReceipt,
@@ -2320,14 +2321,25 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       workspaceId: string,
       sessionId: string,
       model?: { providerID: string; modelID: string },
-    ) => requestJson<{ ok: true; accepted: true; sessionId: string }>(
+      options?: { privacyMode?: MatterhornAgentPrivacyMode; privacyConsentToken?: string },
+    ) => requestJson<{
+      ok: true;
+      accepted: true;
+      sessionId: string;
+      runId: string;
+      privacy: { requestHash: string; decision: string; consentUsed: boolean };
+    }>(
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/compact`,
       {
         token,
         hostToken,
         method: "POST",
-        body: model ? { model } : {},
+        body: {
+          ...(model ? { model } : {}),
+          ...(options?.privacyMode ? { privacyMode: options.privacyMode } : {}),
+          ...(options?.privacyConsentToken ? { privacyConsentToken: options.privacyConsentToken } : {}),
+        },
         timeoutMs: timeouts.sessionRead,
       },
     ),

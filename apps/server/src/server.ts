@@ -616,7 +616,9 @@ import {
   GuardedRuntimeError,
   MatterhornGuardedAgentRuntime,
   type GuardedPromptAcceptance,
+  type GuardedPromptAuthorization,
 } from "./guarded-agent-runtime.js";
+import { canonicalJson } from "./guarded-runtime-crypto.js";
 import {
   awsKmsEvidenceKeyManagerFromEnv,
   evidenceKmsRotationDaysFromEnv,
@@ -13836,11 +13838,28 @@ function createRoutes(
     }
     const body = await readJsonBody(ctx.request, 16_384, "Session compaction");
     const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
-
-    // Compaction sends existing conversation content back to the selected
-    // provider, so the same provider privacy policy and hard usage allowance
-    // apply as they do to a new message.
-    assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
+    const privacyMode = parseAgentPrivacyMode(body.privacyMode);
+    const privacyConsentToken = typeof body.privacyConsentToken === "string"
+      ? body.privacyConsentToken.trim()
+      : undefined;
+    const messages = await readWorkspaceSessionMessages(config, workspace, sessionId, {});
+    const guardedInput = {
+      workspaceId: workspace.id,
+      sessionId,
+      parts: sessionCompactionPrivacyParts(messages),
+      providerId: modelResolution.model.providerID,
+      modelId: modelResolution.model.modelID,
+      privacyMode,
+      privacyConsentToken,
+      executionMode: "discuss" as const,
+      requestToolProfiles: [] as Record<string, boolean>[],
+    };
+    let guardedAuthorization: GuardedPromptAuthorization;
+    try {
+      guardedAuthorization = guardedRuntime.authorizePrompt(guardedInput);
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
     await requireApproval(ctx, {
       workspaceId: workspace.id,
       action: "session.compact",
@@ -13868,7 +13887,16 @@ function createRoutes(
         modelID: string;
       }) => Promise<OpencodeClientResult<unknown, unknown>>;
     };
+    let guardedAcceptance: GuardedPromptAcceptance | null = null;
     try {
+      // Consent is bound to the exact stored transcript. Re-read immediately
+      // before dispatch so a concurrent message, tool result, edit, or revert
+      // invalidates the authorization instead of being silently compacted.
+      const currentMessages = await readWorkspaceSessionMessages(config, workspace, sessionId, {});
+      guardedAcceptance = await guardedRuntime.startAuthorizedPrompt({
+        ...guardedInput,
+        parts: sessionCompactionPrivacyParts(currentMessages),
+      }, guardedAuthorization);
       unwrapOpencodeResult(
         await sessionApi.summarize({
           sessionID: sessionId,
@@ -13880,8 +13908,21 @@ function createRoutes(
       );
     } catch (error) {
       modelUsageStore.cancel(usage.reservation.reservationId);
+      if (guardedAcceptance) {
+        await guardedRuntime.failRun(guardedAcceptance.runId);
+      }
+      if (error instanceof GuardedRuntimeError) {
+        throw guardedRuntimeApiError(error);
+      }
       throw error;
     }
+
+    if (!guardedAcceptance) {
+      modelUsageStore.cancel(usage.reservation.reservationId);
+      throw new ApiError(500, "agent_run_not_started", "Matterhorn could not start the protected compaction run.");
+    }
+
+    await guardedRuntime.completeTrustedGatewayRun(guardedAcceptance.runId, "success");
 
     await recordAudit(workspace.path, {
       id: shortId(),
@@ -13908,7 +13949,17 @@ function createRoutes(
       });
     }
 
-    return jsonResponse({ ok: true, accepted: true, sessionId }, 202);
+    return jsonResponse({
+      ok: true,
+      accepted: true,
+      sessionId,
+      runId: guardedAcceptance.runId,
+      privacy: {
+        requestHash: guardedAcceptance.preflight.requestHash,
+        decision: guardedAcceptance.preflight.decision,
+        consentUsed: guardedAcceptance.consentUsed,
+      },
+    }, 202);
   });
 
   addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages", "client", async (ctx) => {
@@ -19914,6 +19965,74 @@ type ResolvedCryptoRunContext = {
 
 function sha256Bytes(value: Uint8Array | string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function sessionCompactionInspectionText(value: unknown): string {
+  const lines: string[] = [];
+  const visit = (candidate: unknown, path: string) => {
+    if (typeof candidate === "string") {
+      lines.push(`${path}: ${candidate}`);
+      return;
+    }
+    if (typeof candidate === "number" || typeof candidate === "boolean") return;
+    if (Array.isArray(candidate)) {
+      candidate.forEach((item, index) => visit(item, `${path}[${index}]`));
+      return;
+    }
+    if (!candidate || typeof candidate !== "object") return;
+    for (const [key, item] of Object.entries(candidate)) {
+      visit(item, path ? `${path}.${key}` : key);
+    }
+  };
+  visit(value, "history");
+  return lines.join("\n");
+}
+
+function sessionCompactionPrivacyParts(
+  messages: Awaited<ReturnType<typeof readWorkspaceSessionMessages>>,
+): MatterhornAgentPrivacyPart[] {
+  const messageParts = messages.map((message, index): MatterhornAgentPrivacyPart => {
+    const canonical = canonicalJson(message);
+    const messageId = typeof message.info.id === "string" && message.info.id.trim()
+      ? message.info.id.trim()
+      : `turn-${index + 1}`;
+    return {
+      type: "session_history",
+      name: `Stored chat turn ${index + 1}`,
+      text: sessionCompactionInspectionText(message),
+      source: "system",
+      label: "workspace_private",
+      contentHash: sha256Bytes(canonical),
+      sizeBytes: Buffer.byteLength(canonical, "utf8"),
+      version: messageId,
+    };
+  });
+  const toolParts = messages.flatMap((message, messageIndex) => (
+    Array.isArray(message.parts)
+      ? message.parts.flatMap((part, partIndex): MatterhornAgentPrivacyPart[] => {
+          if (!isRecord(part) || part.type !== "tool") return [];
+          const canonical = canonicalJson(part);
+          return [{
+            type: "session_tool_history",
+            name: `Stored tool result ${messageIndex + 1}.${partIndex + 1}`,
+            source: "tool",
+            label: "untrusted_external",
+            contentHash: sha256Bytes(canonical),
+            sizeBytes: Buffer.byteLength(canonical, "utf8"),
+          }];
+        })
+      : []
+  ));
+  const manifest = canonicalJson(messages.map((message) => sha256Bytes(canonicalJson(message))));
+  return [{
+    type: "session_history_manifest",
+    name: "Exact stored chat selected for compaction",
+    source: "system",
+    label: "workspace_private",
+    contentHash: sha256Bytes(manifest),
+    sizeBytes: Buffer.byteLength(manifest, "utf8"),
+    version: "matterhorn.session-compaction.v1",
+  }, ...messageParts, ...toolParts];
 }
 
 function decodeInlineAttachmentData(url: string): { bytes: Uint8Array; mimeFromUrl: string | null } {
