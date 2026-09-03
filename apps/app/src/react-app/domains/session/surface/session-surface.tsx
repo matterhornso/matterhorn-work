@@ -664,6 +664,7 @@ export type SessionSurfaceProps = {
   providerPrivacyPolicy?: MatterhornProviderPrivacyPolicy | null;
   privateModeAvailable?: boolean;
   privateModeEnabled?: boolean;
+  privateModeUnavailableReason?: string | null;
   onPrivateModeChange?: (enabled: boolean) => void;
   onModelPickerOpenChange: (open: boolean) => void;
   onModelChange: (model: ModelRef) => void;
@@ -3583,6 +3584,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         selectedModel={props.selectedModel}
         privateModeAvailable={Boolean(props.privateModeAvailable)}
         privateModeEnabled={Boolean(props.privateModeEnabled)}
+        privateModeUnavailableReason={props.privateModeUnavailableReason}
         onPrivateModeChange={props.onPrivateModeChange}
         onModelPickerOpenChange={props.onModelPickerOpenChange}
         onModelChange={props.onModelChange}

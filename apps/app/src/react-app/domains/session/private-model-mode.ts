@@ -1,3 +1,4 @@
+import type { MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
 import type { ModelRef } from "../../../app/types";
 
 export const MATTERHORN_PRIVATE_MODEL_PROVIDER_ID = "venice";
@@ -48,4 +49,33 @@ export function standardModeModelFromProviders(
 
 export function isPrivateModeModel(model: ModelRef | null | undefined): boolean {
   return model?.providerID.trim().toLowerCase() === MATTERHORN_PRIVATE_MODEL_PROVIDER_ID;
+}
+
+/**
+ * The provider list describes configured models, not their current privacy
+ * assurance. Only the server's time-bounded policy proof may enable the
+ * customer-facing Private mode claim.
+ */
+export function isVerifiedPrivateModePolicy(
+  policy: MatterhornProviderPrivacyPolicy | null | undefined,
+  model: ModelRef | null | undefined,
+  nowMs = Date.now(),
+): boolean {
+  if (!Number.isFinite(nowMs) || nowMs < 0) return false;
+  const modelId = model?.modelID.trim() ?? "";
+  const verifiedAtMs = Date.parse(policy?.verifiedAt ?? "");
+  const expiresAtMs = Date.parse(policy?.verificationExpiresAt ?? "");
+  return policy?.providerId.trim().toLowerCase() === MATTERHORN_PRIVATE_MODEL_PROVIDER_ID
+    && isPrivateModeModel(model)
+    && Boolean(modelId)
+    && policy.verifiedModelIds?.includes(modelId) === true
+    && policy.status === "verified_no_training"
+    && policy.trainingUse === "none"
+    && policy.retentionDays === 0
+    && policy.allowed === true
+    && Number.isFinite(verifiedAtMs)
+    && verifiedAtMs <= nowMs
+    && Number.isFinite(expiresAtMs)
+    && expiresAtMs > nowMs
+    && expiresAtMs > verifiedAtMs;
 }

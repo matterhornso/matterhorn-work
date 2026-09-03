@@ -94,6 +94,7 @@ type ComposerProps = {
   selectedModel: ModelRef;
   privateModeAvailable?: boolean;
   privateModeEnabled?: boolean;
+  privateModeUnavailableReason?: string | null;
   onPrivateModeChange?: (enabled: boolean) => void;
   onModelPickerOpenChange: (open: boolean) => void;
   onModelChange: (model: ModelRef) => void;
@@ -1826,14 +1827,14 @@ export function ReactSessionComposer(props: ComposerProps) {
               ) : (
                 <button
                   type="button"
-                  aria-label="Set up a private model"
+                  aria-label={props.privateModeUnavailableReason ? "Private model unavailable" : "Set up a private model"}
                   className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:bg-dls-surface-muted/[0.2] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none"
                   onClick={() => props.onPrivateModeChange?.(true)}
                   disabled={props.busy}
-                  title="Set up a Venice private model"
+                  title={props.privateModeUnavailableReason ?? "Set up a Venice private model"}
                 >
                   <LockKeyhole size={12} aria-hidden="true" />
-                  <span>Private setup</span>
+                  <span>{props.privateModeUnavailableReason ? "Private unavailable" : "Private setup"}</span>
                 </button>
               )
             ) : null}

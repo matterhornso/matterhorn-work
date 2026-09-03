@@ -159,11 +159,15 @@ export function venicePrivateModelRegistryStatus(now = new Date()): {
   active: boolean;
   verifiedAt: string | null;
   expiresAt: string | null;
+  modelIds: string[];
 } {
   return {
     active: privateModelRegistryActive(now),
     verifiedAt: privateModelRegistry.verifiedAt,
     expiresAt: privateModelRegistry.expiresAt,
+    modelIds: privateModelRegistryActive(now)
+      ? [...privateModelRegistry.ids].sort()
+      : [],
   };
 }
 

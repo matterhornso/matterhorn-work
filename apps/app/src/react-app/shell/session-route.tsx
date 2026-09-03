@@ -116,6 +116,8 @@ import {
 import { buildMatterhornPromptTools } from "../domains/session/modes/prompt-tool-policy";
 import {
   isPrivateModeModel,
+  isVerifiedPrivateModePolicy,
+  MATTERHORN_PRIVATE_MODEL_PROVIDER_ID,
   privateModeModelFromProviders,
   standardModeModelFromProviders,
 } from "../domains/session/private-model-mode";
@@ -1945,8 +1947,18 @@ export function SessionRoute() {
     () => standardModeModelFromProviders(providers, providerConnectedIds),
     [providerConnectedIds, providers],
   );
+  const privateModePrivacyPolicy = workspaceModelSelection?.privacy?.providers?.find(
+    (policy) => policy.providerId.trim().toLowerCase() === MATTERHORN_PRIVATE_MODEL_PROVIDER_ID,
+  ) ?? null;
+  const privateModeVerified = Boolean(
+    privateModeModel && isVerifiedPrivateModePolicy(privateModePrivacyPolicy, privateModeModel),
+  );
+  const selectedPrivateModeVerified = Boolean(
+    selectedPromptModel
+      && isVerifiedPrivateModePolicy(privateModePrivacyPolicy, selectedPromptModel),
+  );
   const privateModeEnabled = Boolean(
-    privateModeModel &&
+    selectedPrivateModeVerified &&
     selectedPromptModel &&
     isPrivateModeModel(selectedPromptModel) &&
     providerListQuery.data &&
@@ -1958,16 +1970,41 @@ export function SessionRoute() {
       lastNonPrivateModelRef.current = selectedPromptModel;
     }
   }, [selectedPromptModel]);
-  const selectedProviderPrivacyPolicy: MatterhornProviderPrivacyPolicy | null =
+  useEffect(() => {
+    const expiresAtMs = Date.parse(privateModePrivacyPolicy?.verificationExpiresAt ?? "");
+    if (!Number.isFinite(expiresAtMs)) return undefined;
+    const delayMs = Math.max(0, expiresAtMs - Date.now() + 25);
+    const timer = window.setTimeout(() => refreshWorkspaceModelSelection(), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [privateModePrivacyPolicy?.verificationExpiresAt, refreshWorkspaceModelSelection]);
+  const rawSelectedProviderPrivacyPolicy: MatterhornProviderPrivacyPolicy | null =
     workspaceModelSelection?.privacy?.providers?.find(
       (policy) => policy.providerId === selectedPromptModel?.providerID,
     ) ?? null;
+  const selectedProviderPrivacyPolicy: MatterhornProviderPrivacyPolicy | null =
+    rawSelectedProviderPrivacyPolicy
+      && isPrivateModeModel(selectedPromptModel)
+      && !selectedPrivateModeVerified
+      ? {
+          ...rawSelectedProviderPrivacyPolicy,
+          status: "unverified",
+          trainingUse: "unknown",
+          retentionDays: null,
+          verifiedAt: null,
+          verificationExpiresAt: null,
+          verifiedModelIds: [],
+          allowed: false,
+          label: "Model privacy not verified",
+          description: "This Venice model is not covered by Matterhorn's current private-model proof.",
+        }
+      : rawSelectedProviderPrivacyPolicy;
   const promptProviderReady = hasConnectedPromptProvider(providerListQuery.data);
   const selectedModelUnavailable = Boolean(
     !selectedPromptModel ||
       providerListQuery.isLoading ||
       providerListQuery.isError ||
       !promptProviderReady ||
+      (isPrivateModeModel(selectedPromptModel) && !selectedPrivateModeVerified) ||
       isDesktopProviderBlocked({
         providerId: selectedPromptModel.providerID,
         checkRestriction: checkDesktopRestriction,
@@ -2661,11 +2698,14 @@ export function SessionRoute() {
       modelUnavailable: selectedModelUnavailable,
       selectedModel: selectedPromptModel ?? { providerID: "", modelID: "" },
       providerPrivacyPolicy: selectedProviderPrivacyPolicy,
-      privateModeAvailable: Boolean(privateModeModel),
+      privateModeAvailable: privateModeVerified,
       privateModeEnabled,
+      privateModeUnavailableReason: privateModeModel && !privateModeVerified
+        ? "Matterhorn could not verify Venice's current private-model list. Open model settings and try again."
+        : null,
       onPrivateModeChange: (enabled: boolean) => {
         if (enabled) {
-          if (!privateModeModel) {
+          if (!privateModeModel || !privateModeVerified) {
             handleOpenSettings("/settings/ai");
             return;
           }
@@ -3033,6 +3073,7 @@ export function SessionRoute() {
     opencodeClient,
     privateModeEnabled,
     privateModeModel,
+    privateModeVerified,
     providerListQuery.data,
     recoverMissingSession,
     responsePerspective,
@@ -3042,6 +3083,7 @@ export function SessionRoute() {
     selectedSessionPending,
     selectedModelUnavailable,
     selectedProviderPrivacyPolicy,
+    selectedPrivateModeVerified,
     selectedPromptModel,
     standardModeModel,
     selectedWorkspace,

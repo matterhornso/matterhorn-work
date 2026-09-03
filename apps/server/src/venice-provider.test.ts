@@ -174,6 +174,7 @@ describe("Venice private provider", () => {
       active: false,
       verifiedAt: "2026-09-02T12:00:00.000Z",
       expiresAt: "2026-09-02T12:01:00.000Z",
+      modelIds: [],
     });
   });
 

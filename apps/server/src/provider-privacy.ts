@@ -118,6 +118,8 @@ export function resolveProviderPrivacyPolicy(
       retentionDays: 0,
       policyUrl: VENICE_PRIVACY_POLICY_URL,
       verifiedAt: registry.verifiedAt,
+      verificationExpiresAt: registry.expiresAt,
+      verifiedModelIds: registry.modelIds,
       allowed: true,
       label: "Private model · zero retention",
       description:
@@ -215,6 +217,8 @@ export function resolveModelProviderPrivacyPolicy(
     trainingUse: "unknown",
     retentionDays: null,
     verifiedAt: null,
+    verificationExpiresAt: null,
+    verifiedModelIds: [],
     allowed: false,
     label: "Model privacy not verified",
     description:

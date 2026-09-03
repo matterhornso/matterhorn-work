@@ -166,11 +166,15 @@ describe("provider privacy policy", () => {
         allowed: true,
         label: "Private model · zero retention",
         verifiedAt: "2026-09-02T12:00:00.000Z",
+        verificationExpiresAt: "2026-09-02T12:01:00.000Z",
+        verifiedModelIds: ["private-tools"],
       });
       expect(rejected).toMatchObject({
         status: "unverified",
         allowed: false,
         label: "Model privacy not verified",
+        verificationExpiresAt: null,
+        verifiedModelIds: [],
       });
       expect(expired).toMatchObject({
         status: "unverified",
