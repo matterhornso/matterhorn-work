@@ -1,6 +1,12 @@
 /** @jsxImportSource react */
 
 import { useCallback, useState } from "react";
+import {
+  useCurrentAccount,
+  useWallets,
+  type UiWallet,
+} from "@mysten/dapp-kit-react";
+import { Transaction } from "@mysten/sui/transactions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -13,6 +19,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Trash2,
+  Wallet,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router";
 
@@ -23,6 +30,7 @@ import type {
 
 import { Button } from "../../../components/ui/button";
 import { createMatterhornServerClient, MatterhornServerError } from "../../../app/lib/matterhorn-server";
+import { suiDAppKit } from "../../infra/sui-dapp-kit";
 import { resolveMatterhornConnection } from "../../shell/matterhorn-connection";
 
 type ServerClient = ReturnType<typeof createMatterhornServerClient>;
@@ -58,6 +66,12 @@ function userMessage(error: unknown): string {
     if (error.code === "crypto_evidence_key_destruction_confirmation_required") return "Confirm that you understand this evidence cannot be recovered after its key is deleted.";
     if (error.code === "crypto_evidence_operation_in_progress") return "This evidence record is being updated. Try again shortly.";
     if (error.code === "crypto_evidence_key_destruction_unavailable") return "The recovery key could not be deleted. The evidence record is unchanged.";
+    if (error.code === "crypto_evidence_walrus_renewal_not_due") return "This encrypted copy does not need renewal yet.";
+    if (error.code === "crypto_evidence_walrus_renewal_in_progress") return "A renewal is already waiting for wallet review.";
+    if (error.code === "crypto_evidence_walrus_renewal_expired_or_replayed") return "This renewal expired or was already used. Check the proof and try again.";
+    if (error.code === "crypto_evidence_walrus_renewal_transaction_failed") return "The Sui wallet transaction failed. The encrypted copy was not renewed.";
+    if (error.code === "crypto_evidence_walrus_renewal_unavailable") return "Encrypted testnet storage renewal is temporarily unavailable.";
+    if (error.code.includes("crypto_evidence_walrus_renewal") && error.code.includes("mismatch")) return "The renewal changed after review. Nothing was recorded; check the proof and try again.";
   }
   return "Matterhorn could not load the evidence proof. Try again.";
 }
@@ -91,6 +105,8 @@ function CheckLine(props: { ok: boolean; children: string }) {
 export function CryptoEvidenceRoute() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const account = useCurrentAccount();
+  const wallets = useWallets();
   const { workspaceId = "" } = useParams<{ workspaceId: string }>();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
@@ -100,6 +116,8 @@ export function CryptoEvidenceRoute() {
   const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [renewCandidateId, setRenewCandidateId] = useState<string | null>(null);
+  const [renewingId, setRenewingId] = useState<string | null>(null);
   const [verificationById, setVerificationById] = useState<Record<string, MatterhornEvidenceVerificationResult>>({});
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -170,6 +188,74 @@ export function CryptoEvidenceRoute() {
     }
   }, [deleteAcknowledged, query.data, queryClient, queryKey, workspaceId]);
 
+  const connectRenewalWallet = useCallback(async (evidenceId: string, wallet: UiWallet) => {
+    setRenewingId(evidenceId);
+    setError(null);
+    try {
+      await suiDAppKit.connectWallet({ wallet });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not connect the Sui wallet.");
+    } finally {
+      setRenewingId(null);
+    }
+  }, []);
+
+  const renew = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
+    if (!account?.address) {
+      setError("Connect the Sui wallet that will review and pay for this renewal.");
+      return;
+    }
+    setRenewingId(item.evidenceId);
+    setError(null);
+    try {
+      const active = query.data ?? await loadEvidence(workspaceId);
+      const prepared = await active.client.renewCryptoEvidence(workspaceId, item.evidenceId, {
+        expectedRevision: item.revision,
+        signer: account.address,
+      });
+      if (prepared.preview.signer.toLowerCase() !== account.address.toLowerCase()) {
+        throw new Error("The connected Sui wallet does not match the renewal signer.");
+      }
+      const transaction = Transaction.from(prepared.preview.transactionBytesBase64);
+      if (await transaction.getDigest() !== prepared.preview.transactionDigest) {
+        throw new Error("The renewal transaction changed before wallet review.");
+      }
+      const result = await suiDAppKit.signAndExecuteTransaction({
+        transaction,
+        account,
+        network: "testnet",
+      });
+      const executed = "Transaction" in result ? result.Transaction : result.FailedTransaction;
+      if (!executed?.digest || executed.digest !== prepared.preview.transactionDigest) {
+        throw new Error("The wallet returned a different transaction. The renewal was not recorded.");
+      }
+      if (!("Transaction" in result)) {
+        throw new Error(executed.status?.error?.message ?? "The Sui wallet returned a failed renewal transaction.");
+      }
+      const confirmed = await active.client.confirmCryptoEvidenceRenewal(workspaceId, item.evidenceId, {
+        intentId: prepared.preview.intentId,
+        intentHash: prepared.preview.intentHash,
+        transactionDigest: executed.digest,
+      });
+      setVerificationById((current) => ({
+        ...current,
+        [item.evidenceId]: {
+          version: confirmed.item.version,
+          evidence: confirmed.item,
+          verification: confirmed.verification,
+        },
+      }));
+      setRenewCandidateId(null);
+      await queryClient.invalidateQueries({ queryKey });
+    } catch (cause) {
+      const message = userMessage(cause);
+      setError(message === "Matterhorn could not load the evidence proof. Try again."
+        && cause instanceof Error ? cause.message : message);
+    } finally {
+      setRenewingId(null);
+    }
+  }, [account, query.data, queryClient, queryKey, workspaceId]);
+
   const copyPacket = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
     setError(null);
     try {
@@ -203,8 +289,8 @@ export function CryptoEvidenceRoute() {
           <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground" aria-label="Evidence safety boundary">
             <span>Ciphertext only</span>
             <span>Owner-scoped access</span>
-            <span>Nothing stored automatically</span>
-            <span>No wallet signature</span>
+            <span>Nothing published automatically</span>
+            <span>No agent wallet authority</span>
           </div>
         </header>
 
@@ -242,6 +328,15 @@ export function CryptoEvidenceRoute() {
               const verification = result?.verification ?? item.lastVerification;
               const canVerify = item.state === "published" && snapshot.mode === "testnet";
               const canPublish = item.state === "sealed" && snapshot.publicationAvailable;
+              const remainingEpochs = verification?.currentEpoch != null && item.publication
+                ? Math.max(0, item.publication.validUntilEpoch - verification.currentEpoch)
+                : null;
+              const renewalDue = verification?.status === "verified"
+                && remainingEpochs !== null
+                && remainingEpochs > 0
+                && remainingEpochs <= 2;
+              const canRenew = Boolean(snapshot.renewalAvailable && renewalDue);
+              const confirmingRenewal = renewCandidateId === item.evidenceId;
               const confirmingPublish = publishCandidateId === item.evidenceId;
               const canDeleteRecoveryKey = item.retention.keyAvailable;
               const confirmingDelete = deleteCandidateId === item.evidenceId;
@@ -291,6 +386,12 @@ export function CryptoEvidenceRoute() {
                           <dd className="break-all font-mono text-xs">{item.publication?.blobId ?? "Not published"}</dd>
                           <dt className="text-muted-foreground">Valid epochs</dt>
                           <dd>{item.publication ? `${item.publication.certifiedEpoch}–${item.publication.validUntilEpoch}` : "Not published"}</dd>
+                          {remainingEpochs !== null ? (
+                            <>
+                              <dt className="text-muted-foreground">Storage remaining</dt>
+                              <dd>{remainingEpochs} period{remainingEpochs === 1 ? "" : "s"}</dd>
+                            </>
+                          ) : null}
                           <dt className="text-muted-foreground">Recovery key</dt>
                           <dd>{item.retention.keyAvailable ? "Available to this workspace" : "Deleted"}</dd>
                           <dt className="text-muted-foreground">Content expiry</dt>
@@ -323,6 +424,69 @@ export function CryptoEvidenceRoute() {
                             {verifyingId === item.evidenceId ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : <RefreshCw aria-hidden="true" className="size-4" />}
                             {verifyingId === item.evidenceId ? "Checking…" : "Check now"}
                           </Button>
+                        ) : null}
+                        {canRenew && !confirmingRenewal ? (
+                          <Button
+                            variant="outline"
+                            className="mt-3 w-full"
+                            onClick={() => {
+                              setRenewCandidateId(item.evidenceId);
+                              setDeleteCandidateId(null);
+                              setDeleteAcknowledged(false);
+                              setError(null);
+                            }}
+                          >
+                            Renew encrypted copy
+                          </Button>
+                        ) : null}
+                        {canRenew && confirmingRenewal ? (
+                          <div className="mt-5 border-t border-border pt-4">
+                            <p className="text-xs leading-5 text-muted-foreground">
+                              Renewal uses WAL on Sui testnet. Matterhorn checks the exact transaction; only your connected wallet can sign and submit it.
+                            </p>
+                            {account?.address ? (
+                              <p className="mt-2 font-mono text-[11px] text-foreground">
+                                {account.address.slice(0, 10)}…{account.address.slice(-6)}
+                              </p>
+                            ) : wallets.length > 0 ? (
+                              <div className="mt-3 flex flex-wrap gap-2" aria-label="Available Sui wallets">
+                                {wallets.slice(0, 3).map((wallet) => (
+                                  <Button
+                                    key={`${wallet.name}-${wallet.version}`}
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={renewingId === item.evidenceId}
+                                    onClick={() => void connectRenewalWallet(item.evidenceId, wallet)}
+                                  >
+                                    <Wallet aria-hidden="true" className="size-4" />
+                                    Connect {wallet.name}
+                                  </Button>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-xs leading-5 text-foreground">Install a Sui-compatible wallet to renew this copy.</p>
+                            )}
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {account?.address ? (
+                                <Button
+                                  size="sm"
+                                  disabled={renewingId === item.evidenceId}
+                                  onClick={() => void renew(item)}
+                                >
+                                  {renewingId === item.evidenceId ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : null}
+                                  {renewingId === item.evidenceId ? "Opening wallet…" : "Review in wallet"}
+                                </Button>
+                              ) : null}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={renewingId === item.evidenceId}
+                                onClick={() => setRenewCandidateId(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
                         ) : null}
                         {canPublish && !confirmingPublish ? (
                           <Button

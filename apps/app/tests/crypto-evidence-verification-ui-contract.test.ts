@@ -16,9 +16,10 @@ describe("encrypted evidence verification UI", () => {
   });
 
   test("keeps the safety boundary explicit and avoids autonomous publication language", () => {
-    expect(source).toContain("Nothing stored automatically");
-    expect(source).toContain("No wallet signature");
+    expect(source).toContain("Nothing published automatically");
+    expect(source).toContain("No agent wallet authority");
     expect(source).toContain("Only encrypted bytes go to the public Walrus test network");
+    expect(source).toContain("only your connected wallet can sign and submit it");
     expect(source).not.toContain("Publish automatically");
     expect(source).not.toContain("Sign and publish");
   });

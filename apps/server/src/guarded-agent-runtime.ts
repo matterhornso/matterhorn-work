@@ -32,6 +32,7 @@ import {
   type MatterhornWalrusRenewalTransactionBuilder,
 } from "./agent-file-walrus-renewal.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
+import { MatterhornCryptoEvidenceWalrusRenewalService } from "./crypto-evidence-walrus-renewal.js";
 import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
 import type { MatterhornFinalizedCoworkerRun } from "./crypto-evidence-finalizer.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
@@ -204,6 +205,23 @@ export class MatterhornGuardedAgentRuntime {
     extensionEpochs: number;
   }): MatterhornAgentFileWalrusRenewalService {
     return new MatterhornAgentFileWalrusRenewalService(
+      input.store,
+      this.stateStore,
+      input.buildTransaction,
+      input.verifyTransaction,
+      input.verifyCertification,
+      input.extensionEpochs,
+    );
+  }
+
+  createCryptoEvidenceWalrusRenewalService(input: {
+    store: MatterhornCryptoEvidenceStore;
+    buildTransaction: MatterhornWalrusRenewalTransactionBuilder;
+    verifyTransaction: MatterhornSuiTransactionStatusVerifier;
+    verifyCertification: MatterhornWalrusCertificationVerifier;
+    extensionEpochs: number;
+  }): MatterhornCryptoEvidenceWalrusRenewalService {
+    return new MatterhornCryptoEvidenceWalrusRenewalService(
       input.store,
       this.stateStore,
       input.buildTransaction,
@@ -825,7 +843,7 @@ export class MatterhornGuardedAgentRuntime {
     for (const callId of capabilities.callIds) this.stagedCapabilities.delete(callId);
     this.stateStore.purgeWorkspace(
       workspaceId,
-      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_publication_claim", "crypto_evidence_operation_claim", "crypto_evidence_finalization"],
+      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_publication_claim", "crypto_evidence_operation_claim", "crypto_evidence_finalization", "crypto_evidence_renewal_intent"],
       { includeConsumedCapabilities: false },
     );
     return {

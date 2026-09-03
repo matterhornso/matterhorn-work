@@ -621,9 +621,14 @@ import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import { sealFinalizedCoworkerRunEvidence } from "./crypto-evidence-finalizer.js";
 import {
   createMatterhornCryptoEvidenceRuntime,
+  matterhornCryptoEvidenceStorageEpochs,
   type MatterhornCryptoEvidenceRuntime,
 } from "./crypto-evidence-runtime.js";
 import { cryptoEvidenceAccountPacket } from "./crypto-evidence-verification.js";
+import {
+  MatterhornCryptoEvidenceWalrusRenewalError,
+  type MatterhornCryptoEvidenceWalrusRenewalService,
+} from "./crypto-evidence-walrus-renewal.js";
 import {
   agentSecurityReceiptDirectory,
   purgeAllExpiredAgentRunReceipts,
@@ -1432,16 +1437,29 @@ export async function startServer(
       certificationVerifier: agentFileWalrusCertificationVerifier,
     },
   );
+  const walrusRenewalTransactionBuilder = dependencies.agentFileWalrusRenewalTransactionBuilder
+    ?? createPinnedWalrusRenewalTransactionBuilder({ endpoint: SUI_GRPC_URLS.testnet });
+  const suiTransactionStatusVerifier = dependencies.agentFileWalrusTransactionStatusVerifier
+    ?? createPinnedSuiTransactionStatusVerifier({ endpoint: SUI_GRPC_URLS.testnet });
   const agentFileWalrusRenewal: MatterhornAgentFileWalrusRenewalService | null = agentFileStore
     && agentFileWalrusPublisher
     ? guardedRuntime.createAgentFileWalrusRenewalService({
       store: agentFileStore,
-      buildTransaction: dependencies.agentFileWalrusRenewalTransactionBuilder
-        ?? createPinnedWalrusRenewalTransactionBuilder({ endpoint: SUI_GRPC_URLS.testnet }),
-      verifyTransaction: dependencies.agentFileWalrusTransactionStatusVerifier
-        ?? createPinnedSuiTransactionStatusVerifier({ endpoint: SUI_GRPC_URLS.testnet }),
+      buildTransaction: walrusRenewalTransactionBuilder,
+      verifyTransaction: suiTransactionStatusVerifier,
       verifyCertification: agentFileWalrusCertificationVerifier,
       extensionEpochs: matterhornAgentFileWalrusStorageEpochs(process.env),
+    })
+    : null;
+  const cryptoEvidenceWalrusRenewal: MatterhornCryptoEvidenceWalrusRenewalService | null = cryptoEvidenceStore
+    && cryptoEvidenceRuntime.publisher
+    && cryptoEvidenceRuntime.certificationVerifier
+    ? guardedRuntime.createCryptoEvidenceWalrusRenewalService({
+      store: cryptoEvidenceStore,
+      buildTransaction: walrusRenewalTransactionBuilder,
+      verifyTransaction: suiTransactionStatusVerifier,
+      verifyCertification: cryptoEvidenceRuntime.certificationVerifier,
+      extensionEpochs: matterhornCryptoEvidenceStorageEpochs(process.env),
     })
     : null;
   guardedRuntime.setCoworkerResolver((binding) => (
@@ -1654,6 +1672,7 @@ export async function startServer(
     coworkerRuntime,
     cryptoEvidenceStore,
     cryptoEvidenceRuntime,
+    cryptoEvidenceWalrusRenewal,
     agentFileStore,
     agentFileWalrusPublisher,
     agentFileWalrusRenewal,
@@ -3809,6 +3828,45 @@ function cryptoEvidencePublicationApiError(error: unknown): ApiError {
     503,
     "crypto_evidence_publication_unavailable",
     "The encrypted copy could not be verified, so Matterhorn did not attach it.",
+  );
+}
+
+function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
+  if (error instanceof MatterhornCryptoEvidenceWalrusRenewalError) {
+    if (error.code === "crypto_evidence_not_found") {
+      return new ApiError(404, error.code, "Evidence record not found.");
+    }
+    if (error.code === "crypto_evidence_walrus_renewal_signer_invalid") {
+      return new ApiError(400, error.code, "Connect a valid Sui testnet wallet.");
+    }
+    if (error.code === "crypto_evidence_walrus_certification_expired"
+      || error.code === "crypto_evidence_walrus_renewal_expired_or_replayed") {
+      return new ApiError(410, error.code, "This renewal expired or was already used. Prepare a new renewal.");
+    }
+    if (error.code === "crypto_evidence_walrus_renewal_not_due") {
+      return new ApiError(409, error.code, "This encrypted copy does not need renewal yet.");
+    }
+    if (error.code === "crypto_evidence_walrus_renewal_in_progress") {
+      return new ApiError(409, error.code, "A wallet renewal is already waiting for this evidence.");
+    }
+    if (error.code === "crypto_evidence_walrus_renewal_transaction_failed") {
+      return new ApiError(409, error.code, "The wallet transaction failed. Prepare a new renewal.");
+    }
+    if (error.code.includes("mismatch") || error.code.endsWith("_invalid")) {
+      return new ApiError(409, error.code, "The renewal changed or could not be verified. Prepare it again.");
+    }
+  }
+  const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
+  if (code === "crypto_evidence_not_found") {
+    return new ApiError(404, code, "Evidence record not found.");
+  }
+  if (code === "crypto_evidence_revision_conflict") {
+    return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
+  }
+  return new ApiError(
+    503,
+    "crypto_evidence_walrus_renewal_unavailable",
+    "The encrypted copy could not be renewed safely. Nothing was changed.",
   );
 }
 
@@ -8872,6 +8930,7 @@ function createRoutes(
   coworkerRuntime: MatterhornCoworkerRuntimeServices,
   cryptoEvidenceStore: MatterhornCryptoEvidenceStore | null,
   cryptoEvidenceRuntime: MatterhornCryptoEvidenceRuntime,
+  cryptoEvidenceWalrusRenewal: MatterhornCryptoEvidenceWalrusRenewalService | null,
   agentFileStore: MatterhornAgentFileStore | null,
   agentFileWalrusPublisher: MatterhornAgentFileWalrusPublisher | null,
   agentFileWalrusRenewal: MatterhornAgentFileWalrusRenewalService | null,
@@ -10215,6 +10274,7 @@ function createRoutes(
       mode: cryptoEvidenceRuntime.mode,
       available: cryptoEvidenceRuntime.available,
       publicationAvailable: cryptoEvidenceRuntime.publicationAvailable,
+      renewalAvailable: Boolean(cryptoEvidenceWalrusRenewal),
       items,
     });
   });
@@ -10278,6 +10338,108 @@ function createRoutes(
         });
       } catch (error) {
         throw cryptoEvidencePublicationApiError(error);
+      }
+    },
+  );
+
+  addRoute(
+    routes,
+    "POST",
+    "/workspace/:id/crypto-evidence/:evidenceId/renew",
+    "client",
+    async (ctx) => {
+      ensureWritable(config);
+      requireClientScope(ctx, "collaborator");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const evidenceId = ctx.params.evidenceId?.trim() ?? "";
+      if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+      }
+      if (!cryptoEvidenceWalrusRenewal) {
+        throw new ApiError(
+          503,
+          "crypto_evidence_walrus_renewal_unavailable",
+          "Encrypted testnet storage renewal is not enabled for this deployment.",
+        );
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Encrypted evidence renewal");
+      const expectedRevision = isRecord(body)
+        && typeof body.expectedRevision === "number"
+        && Number.isSafeInteger(body.expectedRevision)
+        && body.expectedRevision > 0
+        ? body.expectedRevision
+        : null;
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => ![
+          "expectedRevision", "network", "signer", "acknowledgeWalletPayment",
+        ].includes(key))
+        || expectedRevision === null
+        || body.network !== "testnet"
+        || typeof body.signer !== "string"
+        || body.acknowledgeWalletPayment !== true) {
+        throw new ApiError(
+          400,
+          "crypto_evidence_walrus_renewal_confirmation_required",
+          "Confirm the connected Sui testnet wallet will review and pay the WAL renewal cost.",
+        );
+      }
+      try {
+        return noStoreJsonResponse(await cryptoEvidenceWalrusRenewal.prepare({
+          workspaceId: workspace.id,
+          ownerId: cryptoAppCreatedBy(ctx),
+          evidenceId,
+          expectedRevision,
+          signer: body.signer,
+          signal: ctx.request.signal,
+        }));
+      } catch (error) {
+        throw cryptoEvidenceRenewalApiError(error);
+      }
+    },
+  );
+
+  addRoute(
+    routes,
+    "POST",
+    "/workspace/:id/crypto-evidence/:evidenceId/renew/confirm",
+    "client",
+    async (ctx) => {
+      ensureWritable(config);
+      requireClientScope(ctx, "collaborator");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const evidenceId = ctx.params.evidenceId?.trim() ?? "";
+      if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+      }
+      if (!cryptoEvidenceWalrusRenewal) {
+        throw new ApiError(
+          503,
+          "crypto_evidence_walrus_renewal_unavailable",
+          "Encrypted testnet storage renewal is not enabled for this deployment.",
+        );
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Encrypted evidence renewal confirmation");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => ![
+          "intentId", "intentHash", "transactionDigest",
+        ].includes(key))
+        || typeof body.intentId !== "string"
+        || typeof body.intentHash !== "string"
+        || typeof body.transactionDigest !== "string") {
+        throw new ApiError(400, "crypto_evidence_walrus_renewal_input_invalid", "Renewal confirmation is invalid.");
+      }
+      try {
+        return noStoreJsonResponse(await cryptoEvidenceWalrusRenewal.confirm({
+          workspaceId: workspace.id,
+          ownerId: cryptoAppCreatedBy(ctx),
+          evidenceId,
+          intentId: body.intentId,
+          intentHash: body.intentHash,
+          transactionDigest: body.transactionDigest,
+          signal: ctx.request.signal,
+        }));
+      } catch (error) {
+        throw cryptoEvidenceRenewalApiError(error);
       }
     },
   );

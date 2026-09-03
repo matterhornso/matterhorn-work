@@ -384,6 +384,7 @@ export class MatterhornRecoveryErasureLedger {
           expiresAtMs: destroyedAtMs + SECURITY_RETENTION_MS,
           nowMs: destroyedAtMs,
         });
+        stateStore.delete("crypto_evidence_renewal_intent", next.id);
         evidenceKeysDestroyed += 1;
       }
       for (const record of agentFiles) {

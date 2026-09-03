@@ -611,6 +611,8 @@ export type MatterhornWalrusProof = {
   merkleRoot: string;
   merkleProof: string[];
   suiTransactionDigest: string | null;
+  renewalTransactionDigest?: string;
+  renewedAt?: string;
 };
 
 export const MATTERHORN_EVIDENCE_VERIFICATION_VERSION =
@@ -664,6 +666,7 @@ export type MatterhornEvidenceVerificationListResponse = {
   mode: "off" | "testnet";
   available: boolean;
   publicationAvailable: boolean;
+  renewalAvailable: boolean;
   items: MatterhornEvidenceVerificationPacket[];
 };
 
@@ -684,6 +687,46 @@ export type MatterhornEvidenceRecoveryKeyDeletionResponse = {
     contentRecoverable: false;
     publicCiphertextMayRemain: boolean;
   };
+};
+
+export const MATTERHORN_CRYPTO_EVIDENCE_WALRUS_RENEWAL_VERSION =
+  "matterhorn.crypto-evidence-walrus-renewal.v1" as const;
+
+export type MatterhornCryptoEvidenceWalrusRenewalPreview = {
+  version: typeof MATTERHORN_CRYPTO_EVIDENCE_WALRUS_RENEWAL_VERSION;
+  intentId: string;
+  intentHash: string;
+  evidenceId: string;
+  evidenceRevision: number;
+  network: "testnet";
+  signer: string;
+  blobId: string;
+  suiObjectId: string;
+  currentEpoch: number;
+  previousValidUntilEpoch: number;
+  extensionEpochs: number;
+  targetValidUntilEpoch: number;
+  transactionBytesBase64: string;
+  transactionDigest: string;
+  simulationReference: string;
+  simulatedAt: string;
+  expiresAt: string;
+  walletAuthority: "connected_wallet_only";
+};
+
+export type MatterhornCryptoEvidenceWalrusRenewalPrepareResponse = {
+  preview: MatterhornCryptoEvidenceWalrusRenewalPreview;
+  disclosure: {
+    network: "testnet";
+    paymentAsset: "WAL";
+    signingAndSubmission: "connected_wallet_only";
+    agentAuthority: "none";
+  };
+};
+
+export type MatterhornCryptoEvidenceWalrusRenewalConfirmResponse = {
+  item: MatterhornEvidenceVerificationPacket;
+  verification: MatterhornEvidenceVerificationStatus;
 };
 
 export const MATTERHORN_AGENT_FILE_VERSION = "matterhorn.agent-file.v1";
@@ -2065,6 +2108,8 @@ export function validateMatterhornWalrusProof(value: unknown): string[] {
     "merkleRoot",
     "merkleProof",
     "suiTransactionDigest",
+    "renewalTransactionDigest",
+    "renewedAt",
   ])) issues.push("walrus_proof_unknown_field");
   const publicText = (text: unknown, maximum: number) => typeof text === "string"
     && text.trim().length > 0
@@ -2092,6 +2137,14 @@ export function validateMatterhornWalrusProof(value: unknown): string[] {
   }
   if (value.suiTransactionDigest !== null && !publicText(value.suiTransactionDigest, 256)) {
     issues.push("walrus_proof_sui_transaction_digest_invalid");
+  }
+  const hasRenewalDigest = value.renewalTransactionDigest !== undefined;
+  const hasRenewedAt = value.renewedAt !== undefined;
+  if (hasRenewalDigest !== hasRenewedAt
+    || (hasRenewalDigest && !publicText(value.renewalTransactionDigest, 256))
+    || (hasRenewedAt && (typeof value.renewedAt !== "string"
+      || !Number.isFinite(Date.parse(value.renewedAt))))) {
+    issues.push("walrus_proof_renewal_invalid");
   }
   return [...new Set(issues)];
 }

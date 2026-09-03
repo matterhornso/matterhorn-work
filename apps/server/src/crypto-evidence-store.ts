@@ -70,7 +70,7 @@ export type MatterhornCryptoEvidenceAccessEvent = {
   workspaceIdHash: string;
   ownerIdHash: string;
   coworkerIdHash: string;
-  action: "seal" | "decrypt" | "attach_proof" | "rotate_key" | "destroy_key";
+  action: "seal" | "decrypt" | "attach_proof" | "renew_proof" | "rotate_key" | "destroy_key";
   outcome: "allowed" | "denied";
   reason: string;
   recordRevision: number;
@@ -679,6 +679,72 @@ export class MatterhornCryptoEvidenceStore {
     return clone(next);
   }
 
+  renewVerifiedWalrusProof(input: {
+    workspaceId: string;
+    ownerId: string;
+    evidenceId: string;
+    expectedRevision: number;
+    expectedBlobId: string;
+    expectedSuiObjectId: string;
+    expectedCiphertextSha256: string;
+    expectedPreviousValidUntilEpoch: number;
+    proof: MatterhornWalrusProof;
+    now?: Date;
+  }): MatterhornCryptoEvidenceRecord {
+    const current = this.get(input);
+    if (!current) throw new Error("crypto_evidence_not_found");
+    if (current.state !== "published" || !current.envelope || !current.walrusProof) {
+      throw new Error("crypto_evidence_walrus_renewal_state_invalid");
+    }
+    if (current.revision !== input.expectedRevision
+      || current.index.ciphertextHash !== input.expectedCiphertextSha256
+      || current.walrusProof.blobId !== input.expectedBlobId
+      || current.walrusProof.suiObjectId !== input.expectedSuiObjectId
+      || current.walrusProof.validUntilEpoch !== input.expectedPreviousValidUntilEpoch) {
+      throw new Error("crypto_evidence_revision_conflict");
+    }
+    const issues = validateMatterhornWalrusProof(input.proof);
+    if (issues.length > 0) throw new Error(`crypto_evidence_walrus_proof_invalid:${issues.join(",")}`);
+    const previous = current.walrusProof;
+    if (input.proof.network !== "testnet"
+      || input.proof.blobId !== previous.blobId
+      || input.proof.suiObjectId !== previous.suiObjectId
+      || input.proof.certifiedEpoch !== previous.certifiedEpoch
+      || input.proof.quiltPatchId !== previous.quiltPatchId
+      || input.proof.merkleRoot !== previous.merkleRoot
+      || JSON.stringify(input.proof.merkleProof) !== JSON.stringify(previous.merkleProof)
+      || input.proof.suiTransactionDigest !== previous.suiTransactionDigest
+      || input.proof.validUntilEpoch <= previous.validUntilEpoch
+      || !input.proof.renewalTransactionDigest
+      || !input.proof.renewedAt) {
+      throw new Error("crypto_evidence_walrus_renewal_invalid");
+    }
+    if (!verifyMatterhornEvidenceMerkleProof({
+      ciphertextHash: current.index.ciphertextHash,
+      leaf: current.index.merkleLeaf,
+      root: input.proof.merkleRoot,
+      proof: input.proof.merkleProof,
+    })) throw new Error("crypto_evidence_merkle_proof_mismatch");
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    const next: MatterhornCryptoEvidenceRecord = {
+      ...current,
+      revision: current.revision + 1,
+      walrusProof: structuredClone(input.proof),
+      updatedAt: now.toISOString(),
+    };
+    this.stateStore.put({
+      kind: STATE_KIND,
+      key: next.id,
+      workspaceId: next.workspaceId,
+      value: next,
+      nowMs: now.getTime(),
+    });
+    this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
+    this.recordAccess({ record: next, action: "renew_proof", outcome: "allowed", reason: "wallet_renewal_verified", now });
+    return clone(next);
+  }
+
   /**
    * Atomically attaches every proof from one ciphertext-only Walrus Quilt.
    * All records and proofs are validated before the first durable mutation, so
@@ -981,6 +1047,7 @@ export class MatterhornCryptoEvidenceStore {
         expiresAtMs: now.getTime() + SECURITY_RETENTION_MS,
         nowMs: now.getTime(),
       });
+      this.stateStore.delete("crypto_evidence_renewal_intent", next.id);
       this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
       this.stateStore.put({
         kind: RUN_INDEX_KIND,

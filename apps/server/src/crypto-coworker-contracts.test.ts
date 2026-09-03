@@ -561,6 +561,16 @@ describe("crypto coworker public contracts", () => {
       suiTransactionDigest: null,
     };
     expect(validateMatterhornWalrusProof(proof)).toEqual([]);
+    expect(validateMatterhornWalrusProof({
+      ...proof,
+      validUntilEpoch: 25,
+      renewalTransactionDigest: "renewal-public-digest",
+      renewedAt: "2026-09-02T00:01:00.000Z",
+    })).toEqual([]);
+    expect(validateMatterhornWalrusProof({
+      ...proof,
+      renewalTransactionDigest: "renewal-public-digest",
+    })).toContain("walrus_proof_renewal_invalid");
     expect(validateMatterhornEvidenceBundle({ ...evidence, walrus: proof })).toContain("evidence_unknown_field");
     expect(validateMatterhornWalrusProof({ ...proof, signer: "wallet-private" })).toContain("walrus_proof_unknown_field");
   });

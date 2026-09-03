@@ -1160,6 +1160,7 @@ describe("crypto coworker HTTP boundary", () => {
       mode: "off",
       available: false,
       publicationAvailable: false,
+      renewalAvailable: false,
       items: [],
     });
   });
@@ -1361,6 +1362,153 @@ describe("crypto coworker HTTP boundary", () => {
     expect(publishAfterDeletion.payload.code).toBe("crypto_evidence_walrus_publish_state_invalid");
   });
 
+  test("renews published evidence only through one exact connected-wallet transaction", async () => {
+    const server = await boot("internal", { agentFiles: true, walrus: true });
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "evidence-renew-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "evidence-renew-b@example.com", password: PASSWORD },
+    });
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
+    const coworker = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: coworkerInput(),
+    });
+    if (!server.keyManager) throw new Error("route_test_key_manager_missing");
+    const record = await seedCryptoEvidence({
+      guardedDb: server.guardedDb,
+      keyManager: server.keyManager,
+      workspaceId: workspaceA,
+      ownerId: String(signupA.payload.user.id),
+      coworkerId: String(coworker.payload.coworker.id),
+      runId: "run_route_renewal_evidence",
+    });
+    const published = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
+      {
+        cookie: cookieA,
+        body: { expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true },
+      },
+    );
+    expect(published.response.status).toBe(200);
+    server.setWalrusCurrentEpoch(13);
+
+    const missingWalletConfirmation = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/renew`,
+      { cookie: cookieA, body: { expectedRevision: 2, network: "testnet", signer: "0x1" } },
+    );
+    expect(missingWalletConfirmation.response.status).toBe(400);
+    expect(missingWalletConfirmation.payload.code).toBe("crypto_evidence_walrus_renewal_confirmation_required");
+
+    const crossTenant = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/renew`,
+      {
+        cookie: cookieB,
+        body: {
+          expectedRevision: 2,
+          network: "testnet",
+          signer: "0x1",
+          acknowledgeWalletPayment: true,
+        },
+      },
+    );
+    expect(crossTenant.response.status).toBe(404);
+
+    const prepared = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/renew`,
+      {
+        cookie: cookieA,
+        body: {
+          expectedRevision: 2,
+          network: "testnet",
+          signer: "0x1",
+          acknowledgeWalletPayment: true,
+        },
+      },
+    );
+    expect(prepared.response.status).toBe(200);
+    expect(prepared.payload).toMatchObject({
+      preview: {
+        evidenceId: record.id,
+        evidenceRevision: 2,
+        currentEpoch: 13,
+        previousValidUntilEpoch: 15,
+        targetValidUntilEpoch: 20,
+        walletAuthority: "connected_wallet_only",
+      },
+      disclosure: {
+        network: "testnet",
+        paymentAsset: "WAL",
+        signingAndSubmission: "connected_wallet_only",
+        agentAuthority: "none",
+      },
+    });
+    expect(JSON.stringify(prepared.payload)).not.toContain(String(signupA.payload.user.id));
+
+    const mutated = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/renew/confirm`,
+      {
+        cookie: cookieA,
+        body: {
+          intentId: prepared.payload.preview.intentId,
+          intentHash: "0".repeat(64),
+          transactionDigest: prepared.payload.preview.transactionDigest,
+        },
+      },
+    );
+    expect(mutated.response.status).toBe(409);
+    expect(mutated.payload.code).toBe("crypto_evidence_walrus_renewal_intent_mismatch");
+
+    server.setWalrusValidUntilEpoch(20);
+    const confirmed = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/renew/confirm`,
+      {
+        cookie: cookieA,
+        body: {
+          intentId: prepared.payload.preview.intentId,
+          intentHash: prepared.payload.preview.intentHash,
+          transactionDigest: prepared.payload.preview.transactionDigest,
+        },
+      },
+    );
+    expect(confirmed.response.status).toBe(200);
+    expect(confirmed.payload).toMatchObject({
+      item: {
+        revision: 3,
+        publication: {
+          validUntilEpoch: 20,
+          renewalTransactionDigest: prepared.payload.preview.transactionDigest,
+        },
+        lastVerification: { status: "verified", currentEpoch: 13 },
+      },
+      verification: { status: "verified", currentEpoch: 13 },
+    });
+
+    const replay = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/renew/confirm`,
+      {
+        cookie: cookieA,
+        body: {
+          intentId: prepared.payload.preview.intentId,
+          intentHash: prepared.payload.preview.intentHash,
+          transactionDigest: prepared.payload.preview.transactionDigest,
+        },
+      },
+    );
+    expect(replay.response.status).toBe(410);
+    expect(replay.payload.code).toBe("crypto_evidence_walrus_renewal_expired_or_replayed");
+  });
+
   test("creates, isolates, revisions, pauses and deletes account-owned coworkers", async () => {
     const server = await boot("internal");
     const signupA = await request(server.base, "/api/auth/sign-up/email", {
@@ -1384,6 +1532,7 @@ describe("crypto coworker HTTP boundary", () => {
       mode: "off",
       available: false,
       publicationAvailable: false,
+      renewalAvailable: false,
       items: [],
     });
     expect((await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieB })).response.status)

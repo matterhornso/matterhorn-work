@@ -17,6 +17,7 @@ export type MatterhornCryptoEvidenceRuntime = {
   publicationAvailable: boolean;
   verification: MatterhornCryptoEvidenceVerificationService | null;
   publisher: MatterhornTestnetWalrusEvidencePublisher | null;
+  certificationVerifier: MatterhornWalrusCertificationVerifier | null;
 };
 
 export type MatterhornCryptoEvidenceRuntimeDependencies = {
@@ -24,7 +25,7 @@ export type MatterhornCryptoEvidenceRuntimeDependencies = {
   certificationVerifier?: MatterhornWalrusCertificationVerifier;
 };
 
-function storageEpochs(env: NodeJS.ProcessEnv): number {
+export function matterhornCryptoEvidenceStorageEpochs(env: NodeJS.ProcessEnv): number {
   const value = env.MATTERHORN_WALRUS_STORAGE_EPOCHS?.trim();
   if (!value) return 5;
   const parsed = Number(value);
@@ -52,6 +53,7 @@ export function createMatterhornCryptoEvidenceRuntime(
       publicationAvailable: false,
       verification: null,
       publisher: null,
+      certificationVerifier: null,
     };
   }
   if (feature.walrusEvidenceMode === "mainnet") {
@@ -64,6 +66,7 @@ export function createMatterhornCryptoEvidenceRuntime(
       publicationAvailable: false,
       verification: new MatterhornCryptoEvidenceVerificationService(store, null),
       publisher: null,
+      certificationVerifier: null,
     };
   }
   if (!feature.ready) throw new Error(`crypto_evidence_runtime_not_ready:${feature.issues.join(",")}`);
@@ -71,7 +74,7 @@ export function createMatterhornCryptoEvidenceRuntime(
     publisherUrl: env.MATTERHORN_WALRUS_PUBLISHER_URL ?? "",
     aggregatorUrl: env.MATTERHORN_WALRUS_AGGREGATOR_URL ?? "",
     bearerToken: env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN ?? "",
-    storageEpochs: storageEpochs(env),
+    storageEpochs: matterhornCryptoEvidenceStorageEpochs(env),
   });
   const verifyCertification = dependencies.certificationVerifier ?? (async (input) => {
     const sui = await resolvePublicCryptoAdapterEndpoint(SUI_GRPC_URLS.testnet);
@@ -84,7 +87,7 @@ export function createMatterhornCryptoEvidenceRuntime(
     store,
     transport,
     verifyCertification,
-    storageEpochs(env),
+    matterhornCryptoEvidenceStorageEpochs(env),
   );
   return {
     mode: "testnet",
@@ -95,5 +98,6 @@ export function createMatterhornCryptoEvidenceRuntime(
       (input) => publisher.verify(input),
     ),
     publisher,
+    certificationVerifier: verifyCertification,
   };
 }

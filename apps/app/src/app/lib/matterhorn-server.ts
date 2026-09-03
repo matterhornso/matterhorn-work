@@ -143,6 +143,8 @@ import type {
   MatterhornEvidencePublicationResponse,
   MatterhornEvidenceRecoveryKeyDeletionResponse,
   MatterhornEvidenceVerificationResult,
+  MatterhornCryptoEvidenceWalrusRenewalConfirmResponse,
+  MatterhornCryptoEvidenceWalrusRenewalPrepareResponse,
   MatterhornStoredAgentFile,
 } from "@matterhorn-work/types/crypto-coworkers";
 import type {
@@ -2376,8 +2378,37 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           network: "testnet",
           acknowledgePublicCiphertext: true,
         },
-        timeoutMs: timeouts.status,
+        timeoutMs: timeouts.binary,
       },
+    ),
+    renewCryptoEvidence: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { expectedRevision: number; signer: string },
+    ) => requestJson<MatterhornCryptoEvidenceWalrusRenewalPrepareResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/renew`,
+      {
+        token,
+        hostToken,
+        method: "POST",
+        body: {
+          expectedRevision: input.expectedRevision,
+          network: "testnet",
+          signer: input.signer,
+          acknowledgeWalletPayment: true,
+        },
+        timeoutMs: timeouts.binary,
+      },
+    ),
+    confirmCryptoEvidenceRenewal: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { intentId: string; intentHash: string; transactionDigest: string },
+    ) => requestJson<MatterhornCryptoEvidenceWalrusRenewalConfirmResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/renew/confirm`,
+      { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.binary },
     ),
     destroyCryptoEvidenceRecoveryKey: (
       workspaceId: string,

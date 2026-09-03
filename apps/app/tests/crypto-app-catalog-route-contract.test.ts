@@ -27,12 +27,15 @@ describe("invite-only crypto app catalog route", () => {
     expect(catalog).toContain("Evidence proofs");
     expect(route).toContain("Ciphertext only");
     expect(route).toContain("Owner-scoped access");
-    expect(route).toContain("Nothing stored automatically");
-    expect(route).toContain("No wallet signature");
+    expect(route).toContain("Nothing published automatically");
+    expect(route).toContain("No agent wallet authority");
     expect(route).toContain("client.listCryptoEvidence(workspaceId)");
     expect(route).toContain("client.publishCryptoEvidence(workspaceId, item.evidenceId, item.revision)");
     expect(route).toContain("client.verifyCryptoEvidence(workspaceId, item.evidenceId)");
     expect(route).toContain("client.destroyCryptoEvidenceRecoveryKey(workspaceId, item.evidenceId, item.revision)");
+    expect(route).toContain("active.client.renewCryptoEvidence(workspaceId, item.evidenceId");
+    expect(route).toContain("active.client.confirmCryptoEvidenceRenewal(workspaceId, item.evidenceId");
+    expect(route).toContain("only your connected wallet can sign and submit it");
     expect(route).toContain("Only encrypted bytes go to the public Walrus test network");
     expect(route).toContain("I understand that the encrypted public bytes may remain.");
     expect(route).toContain("I understand this evidence cannot be recovered.");
