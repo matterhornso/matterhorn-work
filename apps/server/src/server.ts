@@ -10003,8 +10003,8 @@ function createRoutes(
         })
         .join("\n");
       await appendFile(target, `${lines}\n`, "utf8");
-    } catch (error) {
-      return jsonResponse({ ok: false, reason: error instanceof Error ? error.message : String(error) }, 500);
+    } catch {
+      return jsonResponse({ ok: false, reason: "dev_log_write_failed" }, 500);
     }
     return jsonResponse({ ok: true, count: entries.length });
   });

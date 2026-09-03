@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import process from "node:process";
@@ -174,16 +174,20 @@ function evidenceReferenceReady(reference, evidencePath) {
   const base = resolve(dirname(evidencePath));
   const target = resolve(base, reference.path);
   const offset = relative(base, target);
-  if (!offset || offset.startsWith("..") || isAbsolute(offset) || !existsSync(target)) return false;
+  if (!offset || offset.startsWith("..") || isAbsolute(offset)) return false;
+  let descriptor;
   try {
-    const stat = lstatSync(target);
+    descriptor = openSync(target, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+    const stat = fstatSync(descriptor);
     if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_EVIDENCE_BYTES) return false;
-    const content = readFileSync(target);
+    const content = readFileSync(descriptor);
     if (sha256(content) !== reference.sha256.toLowerCase()) return false;
     const text = content.toString("utf8");
     return !FORBIDDEN_EVIDENCE_PATTERNS.some((pattern) => pattern.test(text));
   } catch {
     return false;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
   }
 }
 

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -222,6 +222,13 @@ try {
   assert.equal(tampered.code, 1);
   assert.ok(JSON.parse(tampered.stdout).blockers.some((item) => item.id === "encrypted_evidence_lifecycle"));
   writeFileSync(join(directory, input.encryptedEvidence.evidence.path), "Redacted acceptance outcomes for walrus-sui-evidence.\n");
+
+  const symlinkedEvidence = structuredClone(input);
+  symlinkSync(input.runtime.evidence.path, join(directory, "runtime-link.md"));
+  symlinkedEvidence.runtime.evidence.path = "runtime-link.md";
+  const symlinkedEvidenceResult = await run(symlinkedEvidence);
+  assert.equal(symlinkedEvidenceResult.code, 1);
+  assert.ok(JSON.parse(symlinkedEvidenceResult.stdout).blockers.some((item) => item.id === "runtime_compatibility"));
 
   const secretReport = structuredClone(input);
   const unsafeReport = "Authorization: Bearer this-is-a-provider-token\n";
