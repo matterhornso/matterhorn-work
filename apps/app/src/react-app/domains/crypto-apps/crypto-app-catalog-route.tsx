@@ -34,10 +34,10 @@ const QUERY_PREFIX = "crypto-app-catalog";
 
 function userMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
-    if (error.code === "crypto_app_gateway_disabled") return "Certified crypto apps are not enabled for this invite yet.";
+    if (error.code === "crypto_app_gateway_disabled") return "Coworker apps are not enabled for this invite yet.";
     if (error.code === "crypto_app_connection_flow_required") return "This app needs a managed connection flow that is not available in this release.";
     if (error.code === "crypto_app_managed_credential_unavailable") return "This app connection is not ready yet. Ask your workspace owner to finish its secure setup.";
-    if (error.code === "app_certification_unavailable") return "This certification is no longer available. Refresh before reconnecting.";
+    if (error.code === "app_certification_unavailable") return "This app did not pass its latest safety check. Refresh before reconnecting.";
     if (error.code === "connection_transition_invalid") return "That connection changed. Refresh and try again.";
     if (error.code === "wallet_connection_unavailable") return "Secure wallet connections are not available in this environment yet.";
     if (error.code === "wallet_challenge_expired") return "The wallet check expired. Try connecting again.";
@@ -356,11 +356,11 @@ export function CryptoAppCatalogRoute() {
         {catalog.isLoading ? (
           <div className="flex min-h-64 items-center gap-3 text-sm text-muted-foreground" role="status">
             <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
-            Loading certified apps…
+            Loading apps…
           </div>
         ) : catalog.isError || !snapshot ? (
           <section className="py-10" aria-live="polite">
-            <h2 className="text-base font-semibold">Crypto app catalog unavailable</h2>
+            <h2 className="text-base font-semibold">Apps are unavailable</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">{userMessage(catalog.error)}</p>
             <Button className="mt-5" onClick={() => void catalog.refetch()}>Try again</Button>
           </section>
@@ -412,9 +412,9 @@ export function CryptoAppCatalogRoute() {
 
             {error ? <p className="border-b border-border py-4 text-sm text-destructive" role="alert">{error}</p> : null}
 
-            <section className="py-2" aria-label="Certified app results">
+            <section className="py-2" aria-label="Available apps">
               {filtered.length === 0 ? (
-                <p className="py-10 text-sm text-muted-foreground">No certified testnet apps match these filters.</p>
+                <p className="py-10 text-sm text-muted-foreground">No test-network apps match these filters.</p>
               ) : filtered.map((app) => {
                 const connection = activeConnection(snapshot.connections, app.appId);
                 const revokedConnections = snapshot.connections.filter((item) => (
@@ -441,7 +441,7 @@ export function CryptoAppCatalogRoute() {
                         </div>
                         <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{app.description}</p>
                         <p className="mt-2 text-xs text-muted-foreground">
-                          {app.networks.map((item) => item.chainId).join(" · ")} · {app.actions.length} {app.actions.length === 1 ? "task" : "tasks"} · Testnet checked {checkedDate(app.certification.updatedAt)}
+                          {app.networks.map((item) => item.chainId).join(" · ")} · {app.actions.length} {app.actions.length === 1 ? "task" : "tasks"} · Safety checked {checkedDate(app.certification.updatedAt)}
                         </p>
                       </div>
                       <Button
@@ -478,7 +478,7 @@ export function CryptoAppCatalogRoute() {
                           </ul>
                           <dl className="mt-6 grid gap-3 border-t border-border pt-5 text-xs sm:grid-cols-2">
                             <div><dt className="text-muted-foreground">Version</dt><dd className="mt-1 break-words">{app.manifestRevision}</dd></div>
-                            <div><dt className="text-muted-foreground">Safety check</dt><dd className="mt-1">Testnet certified · policy {app.certification.policyVersion}</dd></div>
+                            <div><dt className="text-muted-foreground">Safety check</dt><dd className="mt-1">Passed for the listed test networks</dd></div>
                             <div><dt className="text-muted-foreground">Task cost</dt><dd className="mt-1">Measured per run and shown in its receipt</dd></div>
                             <div><dt className="text-muted-foreground">Connection history</dt><dd className="mt-1">{revokedConnections.length ? `${revokedConnections.length} previously removed` : "No previous removals"}</dd></div>
                           </dl>
@@ -498,7 +498,7 @@ export function CryptoAppCatalogRoute() {
                               <p className="mt-2 text-xs leading-5 text-muted-foreground">
                                 {connection.grantedActionIds.length} {connection.grantedActionIds.length === 1 ? "task" : "tasks"} · {connection.grantedNetworks.join(" · ")}
                               </p>
-                              {connection.availability !== "available" ? <p className="mt-3 text-xs leading-5 text-destructive">Certification unavailable. This connection cannot run.</p> : null}
+                              {connection.availability !== "available" ? <p className="mt-3 text-xs leading-5 text-destructive">Safety review expired. This connection cannot run.</p> : null}
                               <div className="mt-4 flex flex-wrap gap-2">
                                 {connection.state === "active" ? (
                                   <Button variant="outline" size="sm" disabled={busyId === connection.id} onClick={() => void mutate(connection.id, (client) => client.transitionCryptoAppConnection(workspaceId, connection.id, "paused"))}>
@@ -510,12 +510,12 @@ export function CryptoAppCatalogRoute() {
                                   </Button>
                                 )}
                                 {confirmRevokeId === connection.id ? (
-                                  <Button variant="destructive" size="sm" disabled={busyId === connection.id} onClick={() => void mutate(connection.id, (client) => client.revokeCryptoAppConnection(workspaceId, connection.id))}>Confirm revoke</Button>
+                                  <Button variant="destructive" size="sm" disabled={busyId === connection.id} onClick={() => void mutate(connection.id, (client) => client.revokeCryptoAppConnection(workspaceId, connection.id))}>Remove access</Button>
                                 ) : (
-                                  <Button variant="ghost" size="sm" onClick={() => setConfirmRevokeId(connection.id)}><X aria-hidden="true" className="size-4" /> Revoke</Button>
+                                  <Button variant="ghost" size="sm" onClick={() => setConfirmRevokeId(connection.id)}><X aria-hidden="true" className="size-4" /> Remove access</Button>
                                 )}
                               </div>
-                              {confirmRevokeId === connection.id ? <p className="mt-3 text-xs leading-5 text-muted-foreground">Revocation is permanent. You can create a new connection later.</p> : null}
+                              {confirmRevokeId === connection.id ? <p className="mt-3 text-xs leading-5 text-muted-foreground">This removal cannot be undone. You can connect the app again later.</p> : null}
                             </div>
                           ) : canConnect ? (
                             <div>

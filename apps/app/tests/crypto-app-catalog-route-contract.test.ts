@@ -63,7 +63,7 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).toContain("It does not give Matterhorn permission to move funds");
     expect(route).toContain("Connect wallet");
     expect(route).toContain("crypto_app_managed_credential_unavailable");
-    expect(route).toContain("Revocation is permanent");
+    expect(route).toContain("This removal cannot be undone");
     expect(route).toContain('role="alert"');
     expect(route).toContain('role="status"');
     expect(route).toContain("motion-reduce:animate-none");
@@ -83,6 +83,8 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).toContain("Any network");
     expect(route).toContain('item.chainId === network');
     expect(route).toContain("What this app can do");
+    expect(route).toContain("Safety checked");
+    expect(route).toContain("Passed for the listed test networks");
     expect(route).toContain("Uses approved private data");
     expect(route).toContain("Your wallet submits");
     expect(route).toContain("Measured per run and shown in its receipt");

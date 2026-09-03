@@ -97,6 +97,40 @@ const COWORKER_CHOICES: ReadonlyArray<{
   { id: "treasury_coworker", label: "Track treasury" },
 ];
 
+type CoworkerNextStepAction = "start" | "wait" | "reload" | "connect" | "review" | "resume" | "none";
+
+export function resolveCoworkerNextStep(input: {
+  coworkerState: MatterhornCoworkerAccountProfile["state"];
+  ready: boolean;
+  loading: boolean;
+  loadFailed: boolean;
+  connectionsAvailable?: boolean;
+  connectedAppCount: number;
+}): { action: CoworkerNextStepAction; label: string | null; message: string } {
+  if (input.coworkerState === "paused") {
+    return { action: "resume", label: "Resume coworker", message: "This coworker is paused." };
+  }
+  if (input.coworkerState === "revoked") {
+    return { action: "none", label: null, message: "This coworker is permanently disabled." };
+  }
+  if (input.ready) {
+    return { action: "start", label: "Start chat", message: "Ready. Start a chat and describe what you need." };
+  }
+  if (input.loading || input.connectionsAvailable === undefined) {
+    return { action: "wait", label: "Checking setup…", message: "Checking what this coworker can use…" };
+  }
+  if (input.loadFailed) {
+    return { action: "reload", label: "Reload setup", message: "Next: reload this coworker's setup." };
+  }
+  if (!input.connectionsAvailable) {
+    return { action: "none", label: null, message: "Coworker apps are not available in this invite yet." };
+  }
+  if (input.connectedAppCount === 0) {
+    return { action: "connect", label: "Connect an app", message: "Next: connect one app for this coworker." };
+  }
+  return { action: "review", label: "Review access", message: "Next: review and save what this coworker can use." };
+}
+
 function coworkerErrorMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
     if (error.code === "coworker_runtime_disabled" || error.code === "coworker_execution_not_ready") {
@@ -109,15 +143,15 @@ function coworkerErrorMessage(error: unknown): string {
     if (error.code === "coworker_resources_stale") return "This access list changed. Review it again before starting work.";
     if (error.code === "coworker_transition_invalid") return "That change is no longer available for this coworker.";
     if (error.code === "coworker_inbox_state_conflict") return "This alert changed. Refresh and try again.";
-    if (error.code === "crypto_app_gateway_disabled") return "Certified apps are not enabled for this invite yet.";
-    if (error.code === "app_certification_unavailable") return "This app is no longer approved. Refresh before connecting it.";
+    if (error.code === "crypto_app_gateway_disabled") return "Coworker apps are not enabled for this invite yet.";
+    if (error.code === "app_certification_unavailable") return "This app did not pass its latest safety check. Refresh before connecting it.";
     if (error.code === "crypto_app_connection_conflict" || error.code === "connection_transition_invalid") {
       return "This app connection changed. Refresh and try again.";
     }
     if (error.code === "connection_action_not_allowed"
       || error.code === "connection_scope_not_allowed"
       || error.code === "connection_network_not_allowed") {
-      return "This app's approved access changed. Refresh and review it again.";
+      return "This app's available access changed. Refresh and review it again.";
     }
     if (error.code === "pending_crypto_intent_revision_conflict") return "This wallet review changed. Refresh and try again.";
     if (error.code === "pending_crypto_intent_expired" || error.code === "pending_crypto_intent_transition_invalid") {
@@ -380,6 +414,14 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     )),
     [resourceQuery.data?.apps, resourceQuery.data?.connections],
   );
+  const nextStep = resolveCoworkerNextStep({
+    coworkerState: selectedCoworker?.state ?? "revoked",
+    ready: canStartCoworker,
+    loading: resourceQuery.isLoading,
+    loadFailed: resourceQuery.isError,
+    connectionsAvailable: resourceQuery.data?.connectionsAvailable,
+    connectedAppCount: resourceQuery.data?.scope.resources?.connections.length ?? 0,
+  });
 
   const refresh = useCallback(async () => {
     await Promise.all([
@@ -583,8 +625,8 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       setConfirmAction(null);
       await refresh();
       showToast({
-        title: state === "active" ? `${coworker.name} resumed` : state === "paused" ? `${coworker.name} paused` : `${coworker.name} revoked`,
-        description: state === "active" ? "It can receive new work again." : "No new work or tool access can start.",
+        title: state === "active" ? `${coworker.name} resumed` : state === "paused" ? `${coworker.name} paused` : `${coworker.name} disabled`,
+        description: state === "active" ? "It can receive new work again." : "It cannot start new work or use connected apps.",
         tone: state === "active" ? "success" : "info",
       });
     } catch (cause) {
@@ -603,7 +645,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       setConfirmAction(null);
       setCoworkerChoice("");
       await refresh();
-      showToast({ title: "Coworker deleted", description: "Its scheduled work and pending authority were removed.", tone: "success" });
+      showToast({ title: "Coworker deleted", description: "Its recurring checks and unfinished wallet reviews were removed.", tone: "success" });
     } catch (cause) {
       setError(coworkerErrorMessage(cause));
     } finally {
@@ -777,7 +819,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                     <span className={cn(
                       "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
                       selectedCoworker.state === "active" ? "bg-status-success/10 text-status-success" : "bg-dls-surface-muted text-dls-secondary",
-                    )}>{selectedCoworker.state === "active" ? "Active" : selectedCoworker.state === "paused" ? "Paused" : "Revoked"}</span>
+                    )}>{selectedCoworker.state === "active" ? "Active" : selectedCoworker.state === "paused" ? "Paused" : "Disabled"}</span>
                   </div>
                   <p className="mt-1 text-xs text-dls-secondary">{humanizeId(selectedCoworker.role)}</p>
                   <p className="mt-2 text-sm leading-6 text-dls-text">{selectedCoworker.mission}</p>
@@ -791,15 +833,40 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                 <ShieldCheck aria-hidden="true" className="size-5 shrink-0 text-dls-secondary" />
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button size="sm" disabled={!canStartCoworker} onClick={() => startChat(selectedCoworker)}>Start chat</Button>
+              {selectedCoworker.state === "active" ? (
+                <p className="mt-4 text-xs leading-5 text-dls-secondary" role="status">
+                  {nextStep.message}
+                </p>
+              ) : null}
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {nextStep.action === "start" ? (
+                  <Button size="sm" onClick={() => startChat(selectedCoworker)}>{nextStep.label}</Button>
+                ) : nextStep.action === "wait" ? (
+                  <Button size="sm" disabled>{nextStep.label}</Button>
+                ) : nextStep.action === "reload" ? (
+                  <Button size="sm" onClick={() => void resourceQuery.refetch()}>{nextStep.label}</Button>
+                ) : nextStep.action === "connect" || nextStep.action === "review" ? (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (nextStep.action === "connect" && appsNeedingConnection.length === 0) {
+                        props.onBrowseApps();
+                        return;
+                      }
+                      setResourcesOpen(true);
+                    }}
+                  >
+                    {nextStep.label}
+                  </Button>
+                ) : nextStep.action === "resume" ? (
+                  <Button size="sm" disabled={busyAction !== null} onClick={() => void transitionCoworker(selectedCoworker, "active")}>
+                    <Play aria-hidden="true" /> {nextStep.label}
+                  </Button>
+                ) : null}
                 {selectedCoworker.state === "active" ? (
                   <Button size="sm" variant="outline" disabled={busyAction !== null} onClick={() => void transitionCoworker(selectedCoworker, "paused")}>
                     <Pause aria-hidden="true" /> Pause
-                  </Button>
-                ) : selectedCoworker.state === "paused" ? (
-                  <Button size="sm" variant="outline" disabled={busyAction !== null} onClick={() => void transitionCoworker(selectedCoworker, "active")}>
-                    <Play aria-hidden="true" /> Resume
                   </Button>
                 ) : null}
               </div>
@@ -810,18 +877,18 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
             <section className="border-b border-dls-border/70 py-4" aria-labelledby="coworker-resources-title">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 id="coworker-resources-title" className="text-sm font-semibold text-dls-text">Files, Memory, and apps</h3>
+                  <h3 id="coworker-resources-title" className="text-sm font-semibold text-dls-text">What this coworker can use</h3>
                   <p className="mt-1 text-xs leading-5 text-dls-secondary">
                     {resourceQuery.isLoading
                       ? "Loading access…"
                       : resourceQuery.isError
-                        ? "Access could not be loaded."
+                        ? "Setup could not be loaded."
                         : !resourceQuery.data?.scope.resources
                           ? "Nothing is shared until you choose."
                           : !resourceQuery.data.scope.active
                             ? "Review access again because this coworker changed."
                             : resourceQuery.data.scope.resources.connections.length === 0
-                              ? "Choose at least one connected app before starting chat."
+                              ? "Connect at least one app before starting chat."
                             : `${resourceQuery.data.scope.resources.agentFiles.length} files · ${resourceQuery.data.scope.resources.memories.length} memories · ${resourceQuery.data.scope.resources.connections.length} apps`}
                   </p>
                 </div>
@@ -832,14 +899,14 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   aria-expanded={resourcesOpen}
                   onClick={() => setResourcesOpen((open) => !open)}
                 >
-                  {resourcesOpen ? "Close" : "Choose access"}
+                  {resourcesOpen ? "Close" : "Choose"}
                 </Button>
               </div>
 
               {resourceSuggestionAvailable && resourceQuery.data ? (
                 <div className="mt-4 flex items-start justify-between gap-3 border-t border-dls-border/70 pt-4">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-dls-text">Suggested access</p>
+                    <p className="text-xs font-medium text-dls-text">Suggested items</p>
                     <p className="mt-1 text-xs leading-5 text-dls-secondary">
                       Matterhorn found {
                         resourceQuery.data.recommendation.agentFiles.length
@@ -848,7 +915,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       } items that match this coworker. Nothing changes until you review and save.
                     </p>
                   </div>
-                  <Button size="sm" variant="ghost" onClick={reviewResourceRecommendation}>Review suggestion</Button>
+                  <Button size="sm" variant="ghost" onClick={reviewResourceRecommendation}>Review</Button>
                 </div>
               ) : null}
 
@@ -993,7 +1060,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   </fieldset>
 
                   <p className="text-xs leading-5 text-dls-secondary">
-                    Private files and Memory use only an approved private model. This coworker cannot bypass that rule.
+                    Private files and saved Memory are sent only through a model approved for private data. This coworker cannot bypass that rule.
                   </p>
                   <div className="flex gap-2">
                     <Button
@@ -1009,8 +1076,11 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
               ) : null}
             </section>
 
-            <section className="py-4" aria-labelledby="coworker-access-title">
-              <h3 id="coworker-access-title" className="text-sm font-semibold text-dls-text">Access and limits</h3>
+            <details className="border-b border-dls-border/70 py-4">
+              <summary className="min-h-8 cursor-pointer text-sm font-semibold text-dls-text outline-none focus-visible:ring-2 focus-visible:ring-ring/35">
+                Safety limits
+              </summary>
+              <p className="mt-1 text-xs leading-5 text-dls-secondary">See how often this coworker may read data, run checks, or prepare a wallet review.</p>
               <dl className="mt-3 grid gap-2 text-xs leading-5">
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Apps this role can use</dt><dd className="text-right text-dls-text">{selectedCoworker.allowedAppIds.map(humanizeId).join(", ") || "None"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Reads per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxReadCallsPerRun}</dd></div>
@@ -1019,7 +1089,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Per wallet action</dt><dd className="text-dls-text">{selectedCoworker.limits.perActionUsd > 0 ? `Up to $${selectedCoworker.limits.perActionUsd.toLocaleString()}` : "Not allowed"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Daily wallet actions</dt><dd className="text-dls-text">{selectedCoworker.limits.dailyUsd > 0 ? `Up to $${selectedCoworker.limits.dailyUsd.toLocaleString()}` : "Not allowed"}</dd></div>
               </dl>
-            </section>
+            </details>
 
             {detailQuery.isLoading ? (
               <div className="space-y-3 border-t border-dls-border/70 py-4" role="status" aria-label="Loading coworker activity">
@@ -1067,13 +1137,13 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                               <p className="mt-1 text-amber-12 dark:text-amber-11" role="status">{reviewUnavailableReason}</p>
                             ) : null}
                             <details className="mt-2">
-                              <summary className="min-h-8 cursor-pointer text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Exact review details</summary>
+                              <summary className="min-h-8 cursor-pointer text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Transaction details</summary>
                               <dl className="mt-2 grid gap-1.5 border-y border-dls-border/70 py-2 text-dls-secondary">
-                                <div><dt className="inline font-medium text-dls-text">Signer: </dt><dd className="inline break-all">{item.reviewedAction.signer ?? "Chosen in wallet"}</dd></div>
-                                <div><dt className="inline font-medium text-dls-text">Recipient: </dt><dd className="inline break-all">{item.reviewedAction.recipient ?? "Protocol-managed destination"}</dd></div>
-                                <div><dt className="inline font-medium text-dls-text">Simulation: </dt><dd className="inline break-all">{item.reviewedAction.simulation.reference}</dd></div>
-                                <div><dt className="inline font-medium text-dls-text">Simulated: </dt><dd className="inline">{shortDate(item.reviewedAction.simulation.simulatedAt)}</dd></div>
-                                <div><dt className="inline font-medium text-dls-text">Policy checks: </dt><dd className="inline">{item.policy.limits.length ? `${item.policy.limits.filter((limit) => limit.passed).length} of ${item.policy.limits.length} passed` : "No numeric limits applied"}</dd></div>
+                                <div><dt className="inline font-medium text-dls-text">Wallet: </dt><dd className="inline break-all">{item.reviewedAction.signer ?? "Chosen in wallet"}</dd></div>
+                                <div><dt className="inline font-medium text-dls-text">Recipient: </dt><dd className="inline break-all">{item.reviewedAction.recipient ?? "Set by the connected app"}</dd></div>
+                                <div><dt className="inline font-medium text-dls-text">Safety preview: </dt><dd className="inline break-all">{item.reviewedAction.simulation.reference}</dd></div>
+                                <div><dt className="inline font-medium text-dls-text">Checked: </dt><dd className="inline">{shortDate(item.reviewedAction.simulation.simulatedAt)}</dd></div>
+                                <div><dt className="inline font-medium text-dls-text">Safety checks: </dt><dd className="inline">{item.policy.limits.length ? `${item.policy.limits.filter((limit) => limit.passed).length} of ${item.policy.limits.length} passed` : "No numeric limits applied"}</dd></div>
                                 {item.receipt ? <div><dt className="inline font-medium text-dls-text">Public receipt: </dt><dd className="inline break-all">{item.receipt.publicId}</dd></div> : null}
                               </dl>
                             </details>
@@ -1131,10 +1201,10 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
 
             <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-stop-title">
               <h3 id="coworker-stop-title" className="text-sm font-semibold text-dls-text">Stop this coworker</h3>
-              <p className="mt-1 text-xs leading-5 text-dls-secondary">Revoking is permanent and immediately blocks new work. Delete removes the saved profile after revocation.</p>
+              <p className="mt-1 text-xs leading-5 text-dls-secondary">Pause is reversible. Disabling is permanent and immediately stops new chats, checks, and access to connected apps.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {selectedCoworker.state !== "revoked" ? (
-                  <Button size="sm" variant="outline" disabled={busyAction !== null} onClick={() => setConfirmAction({ kind: "revoke", coworker: selectedCoworker })}>Revoke</Button>
+                  <Button size="sm" variant="outline" disabled={busyAction !== null} onClick={() => setConfirmAction({ kind: "revoke", coworker: selectedCoworker })}>Disable permanently</Button>
                 ) : (
                   <Button size="sm" variant="destructive" disabled={busyAction !== null} onClick={() => setConfirmAction({ kind: "delete", coworker: selectedCoworker })}>
                     <Trash2 aria-hidden="true" /> Delete
@@ -1148,11 +1218,11 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
 
       <ConfirmModal
         open={Boolean(confirmAction)}
-        title={confirmAction?.kind === "delete" ? "Delete this coworker?" : "Revoke this coworker?"}
+        title={confirmAction?.kind === "delete" ? "Delete this coworker?" : "Disable this coworker permanently?"}
         message={confirmAction?.kind === "delete"
           ? "This removes the saved coworker profile. It cannot be undone."
-          : "Revoking is permanent. New chats, checks, tool access, and pending financial authority stop immediately."}
-        confirmLabel={busyAction ? "Working…" : confirmAction?.kind === "delete" ? "Delete coworker" : "Revoke coworker"}
+          : "This cannot be undone. New chats and checks stop, connected apps are blocked, and unfinished wallet reviews are cancelled."}
+        confirmLabel={busyAction ? "Working…" : confirmAction?.kind === "delete" ? "Delete coworker" : "Disable coworker"}
         cancelLabel="Keep coworker"
         variant="danger"
         onConfirm={() => {
