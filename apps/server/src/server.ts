@@ -662,7 +662,10 @@ import {
 import {
   assertReviewedActionReceiptBinding,
 } from "./reviewed-action-airlock.js";
-import { refreshReviewedActionHandoffV2 } from "./reviewed-action-refresh.js";
+import {
+  refreshReviewedActionHandoffV2,
+  type ReviewedActionRefreshAdapter,
+} from "./reviewed-action-refresh.js";
 import { refreshReviewedActionProtocolState } from "./reviewed-action-protocol-refresh.js";
 import pkg from "../package.json" with { type: "json" };
 import constants from "../../../constants.json" with { type: "json" };
@@ -1375,6 +1378,7 @@ export type MatterhornServerDependencies = {
   agentFileWalrusRenewalTransactionBuilder?: MatterhornWalrusRenewalTransactionBuilder;
   cryptoEvidenceWalrusDeletionTransactionBuilder?: MatterhornWalrusDeletionTransactionBuilder;
   agentFileWalrusTransactionStatusVerifier?: MatterhornSuiTransactionStatusVerifier;
+  reviewedActionProtocolRefresh?: ReviewedActionRefreshAdapter;
 };
 
 export async function startServer(
@@ -1764,6 +1768,7 @@ export async function startServer(
     agentFileWalrusRenewal,
     recoveryErasureLedger,
     drainEmailOutbox,
+    dependencies.reviewedActionProtocolRefresh ?? refreshReviewedActionProtocolState,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
 
@@ -9179,6 +9184,7 @@ function createRoutes(
   agentFileWalrusRenewal: MatterhornAgentFileWalrusRenewalService | null,
   recoveryErasureLedger: MatterhornRecoveryErasureLedger | null,
   drainEmailOutbox: () => Promise<void>,
+  reviewedActionProtocolRefresh: ReviewedActionRefreshAdapter,
 ): Route[] {
   const routes: Route[] = [];
   const billingRouteContext = createBillingRouteContext(config);
@@ -13804,7 +13810,7 @@ function createRoutes(
     const validation = await refreshReviewedActionHandoffV2({
       handoff: body.handoff,
       currentDraft: body.currentDraft,
-      refresh: refreshReviewedActionProtocolState,
+      refresh: reviewedActionProtocolRefresh,
     });
     const response = jsonResponse(validation);
     response.headers.set("Cache-Control", "no-store");

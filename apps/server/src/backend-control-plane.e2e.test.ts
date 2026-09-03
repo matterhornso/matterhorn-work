@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { buildMatterhornBillingSubscription } from "./billing.js";
-import { startServer } from "./server.js";
+import { startServer, type MatterhornServerDependencies } from "./server.js";
 import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
 import { MatterhornAgentRunReceiptStore } from "./agent-run-receipts.js";
 import type { ServerConfig } from "./types.js";
@@ -198,7 +198,12 @@ async function startWalrusDiagnosticServer() {
   return { url: `http://127.0.0.1:${port}`, calls };
 }
 
-async function boot(options: { readOnly?: boolean; opencodeBaseUrl?: string; workspaceMemoryScope?: string } = {}) {
+async function boot(options: {
+  readOnly?: boolean;
+  opencodeBaseUrl?: string;
+  workspaceMemoryScope?: string;
+  dependencies?: MatterhornServerDependencies;
+} = {}) {
   const dir = mkdtempSync(join(tmpdir(), "matterhorn-backend-control-plane-"));
   dirs.push(dir);
   process.env.OPENWORK_DATA_DIR = join(dir, "openwork-data");
@@ -208,7 +213,10 @@ async function boot(options: { readOnly?: boolean; opencodeBaseUrl?: string; wor
   if (options.workspaceMemoryScope) process.env.MATTERHORN_WORK_MEMORY_SCOPE = options.workspaceMemoryScope;
   else delete process.env.MATTERHORN_WORK_MEMORY_SCOPE;
   process.env.OPENCODE_DB = join(dir, "opencode.db");
-  const server = await startServer(baseConfig(await getFreePort(), dir, options.readOnly ?? false, options.opencodeBaseUrl)) as Served;
+  const server = await startServer(
+    baseConfig(await getFreePort(), dir, options.readOnly ?? false, options.opencodeBaseUrl),
+    options.dependencies,
+  ) as Served;
   stops.push(() => server.stop(true));
   return { base: `http://127.0.0.1:${server.port}`, dir };
 }
@@ -1688,7 +1696,15 @@ describe("backend control plane routes", () => {
   });
 
   test("workspace Sui preview and receipt routes save evidence into the project ledger", async () => {
-    const { base, dir } = await boot();
+    const { base, dir } = await boot({
+      dependencies: {
+        reviewedActionProtocolRefresh: async () => ({
+          reference: "a".repeat(64),
+          block: "sui_e2e_checkpoint",
+          observedAt: new Date(),
+        }),
+      },
+    });
 
     const preview = await jsonFetch(base, "/workspace/ws_backend/sui/transactions/preview", {
       method: "POST",
