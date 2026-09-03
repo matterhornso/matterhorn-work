@@ -15,6 +15,7 @@ describe("crypto coworker master prompts", () => {
       expect(prompt).toContain("connected-wallet review");
       expect(prompt).toContain("untrusted data");
       expect(prompt).toContain("Never request secrets");
+      expect(prompt).toContain("Facts, Inference, Done, Needs approval, Open questions");
       expect(prompt).not.toContain(template.profile.mission);
     }
   });

@@ -2,11 +2,12 @@
 
 Status: active delivery goal
 
-Reference patterns: [Monid reference audit](./monid-reference-audit.md)
+Reference patterns: [Monid reference audit](./monid-reference-audit.md) and [Grok Bot reference audit](./grokbot-reference-audit.md)
 
 ## Execution status
 
 - Phase 0 contracts, fail-closed flags, threat model, and offline evidence encryption: complete.
+- Product-reference boundary: complete. Monid informs capability discovery and developer setup; Grok Bot informs the named persistent-teammate, chat-first handoff, reviewable-result, and tested-routine experience. Matterhorn does not copy broad cloud-computer authority, cross-coworker session sharing, model-based financial approval, or mandatory non-private storage.
 - Phase 1 signed manifest registry and static conformance gate: complete.
 - Phase 1 manifest trust boundary: complete. Every authority-bearing manifest object is closed against unknown fields; identifiers, descriptions, networks, actions, scopes, and audiences are bounded; action identifiers use canonical lowercase snake case; composite signing, submission, relay, broadcast, and unqualified execution names fail closed; freshness and timeout metadata must be finite, integral, and internally consistent; and OAuth issuer/resource, adapter transport, privacy-policy, status, and URL-based security-contact destinations must be canonical public HTTPS locations without credentials, query, fragments, local names, literal IP addresses, path normalization, or non-default ports. Security contacts may instead use one bounded public email address.
 - Phase 1 durable manifest/certification history, atomic revocation, and policy-version invalidation: complete.

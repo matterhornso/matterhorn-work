@@ -114,6 +114,7 @@ for (const required of [
   "test:crypto-app-sdk-package",
   "test:crypto-coworker-invite",
   "test:crypto-coworker-access-ops",
+  "crypto-coworker-reference-patterns.test.mjs",
   "public-beta-rollback-hook.test.mjs",
   "product-hunt-rollback-rehearsal.test.mjs",
   "guarded-runtime-shadow-evidence.test.mjs",

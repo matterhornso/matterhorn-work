@@ -201,7 +201,7 @@ Account users can inspect their redacted evidence packets through `GET /workspac
 
 ## Build sequence
 
-The comprehensive execution plan, delivery cadence, metrics, and stop conditions are maintained in [`phases-1-5-plan.md`](./phases-1-5-plan.md). Monid-derived product patterns and the crypto-specific changes are documented in [`monid-reference-audit.md`](./monid-reference-audit.md).
+The comprehensive execution plan, delivery cadence, metrics, and stop conditions are maintained in [`phases-1-5-plan.md`](./phases-1-5-plan.md). Monid-derived discovery patterns and crypto-specific changes are documented in [`monid-reference-audit.md`](./monid-reference-audit.md); Grok Bot's persistent-teammate patterns and the boundaries Matterhorn deliberately tightens are documented in [`grokbot-reference-audit.md`](./grokbot-reference-audit.md).
 
 ### Phase 1 — Crypto App Gateway
 
