@@ -32,6 +32,7 @@ import { WalletProvider } from "../domains/wallet/WalletProvider";
 
 const WALLET_RUNTIME_PANELS = new Set([
   "wallet",
+  "files",
   "bittensor",
   "hyperliquid",
   "polymarket",

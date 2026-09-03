@@ -62,6 +62,7 @@ describe("wallet runtime connector contract", () => {
     expect(providersSource).toContain("settings\\/wallet");
     expect(providersSource).toContain("crypto-apps");
     expect(providersSource).toContain("evidence-proofs");
+    expect(providersSource).toContain('"files"');
     expect(providersSource).toContain(
       'new URLSearchParams(search).get("panel")',
     );
