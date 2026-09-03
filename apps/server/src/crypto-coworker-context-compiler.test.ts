@@ -6,6 +6,7 @@ import {
 } from "./crypto-coworker-context-compiler.js";
 import { buildMatterhornCoworkerMasterPrompt } from "./crypto-coworker-master-prompt.js";
 import { listMatterhornCoworkerTemplates } from "./crypto-coworker-templates.js";
+import { sha256 } from "./guarded-runtime-crypto.js";
 
 describe("crypto coworker context compiler", () => {
   test("places hostile data before a complete authoritative policy suffix", () => {
@@ -24,7 +25,30 @@ describe("crypto coworker context compiler", () => {
     expect(result.system).toContain(MATTERHORN_COWORKER_CONTEXT_COMPILER_VERSION);
     expect(result.system.indexOf(malicious)).toBeLessThan(result.system.indexOf("## Matterhorn Authoritative Policy"));
     expect(result.system.endsWith(finalRule)).toBe(true);
+    expect(result.systemHash).toBe(sha256(result.system));
     expect(result.includedSections).toEqual(["selected_memory"]);
+  });
+
+  test("changes the exact provider-context hash for framing, data, and policy mutations", () => {
+    const compile = (memory: string, policy: string, maxChars = 4_000) => (
+      compileMatterhornCoworkerSystemContext({
+        maxChars,
+        dataSections: [{
+          id: "selected_memory",
+          label: "Selected Memory",
+          text: memory,
+          maxChars: 2_000,
+        }],
+        policySections: [policy],
+      })
+    );
+    const baseline = compile("Use testnet.", "Wallet approval is required.");
+    expect(compile("Use testnet!", "Wallet approval is required.").systemHash)
+      .not.toBe(baseline.systemHash);
+    expect(compile("Use testnet.", "Connected-wallet approval is required.").systemHash)
+      .not.toBe(baseline.systemHash);
+    expect(compile("Use testnet. ".repeat(400), "Wallet approval is required.", 2_048).systemHash)
+      .not.toBe(baseline.systemHash);
   });
 
   test("never truncates policy when every private context section is oversized", () => {

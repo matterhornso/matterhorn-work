@@ -1,3 +1,5 @@
+import { sha256 } from "./guarded-runtime-crypto.js";
+
 export const MATTERHORN_COWORKER_CONTEXT_COMPILER_VERSION =
   "matterhorn.coworker-context-compiler.v1";
 
@@ -16,6 +18,8 @@ export type MatterhornCoworkerContextDataSection = {
 
 export type MatterhornCoworkerContextCompilation = {
   system: string;
+  /** SHA-256 of the exact UTF-8 system context sent to the provider. */
+  systemHash: string;
   totalChars: number;
   policyChars: number;
   dataChars: number;
@@ -137,6 +141,7 @@ export function compileMatterhornCoworkerSystemContext(input: {
 
   return {
     system,
+    systemHash: sha256(system),
     totalChars: system.length,
     policyChars: policy.length,
     dataChars: data.length,

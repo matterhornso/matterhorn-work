@@ -3,6 +3,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentPrivacyRequestHash, MatterhornPrivacyFirewall } from "./agent-privacy.js";
+import {
+  MATTERHORN_COWORKER_CONTEXT_COMPILER_VERSION,
+  compileMatterhornCoworkerSystemContext,
+} from "./crypto-coworker-context-compiler.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 import { configureVenicePrivateModelRegistry } from "./venice-provider.js";
 
@@ -164,6 +168,63 @@ describe("agent privacy firewall", () => {
     for (const mutation of mutations) {
       expect(agentPrivacyRequestHash(mutation)).not.toBe(hash);
     }
+  });
+
+  test("binds one-request consent to the exact compiled provider system context", () => {
+    const firewall = new MatterhornPrivacyFirewall();
+    const compile = (policy: string) => compileMatterhornCoworkerSystemContext({
+      dataSections: [{
+        id: "selected_memory",
+        label: "Selected Memory",
+        text: "Prefer testnet validators.",
+        maxChars: 1_000,
+      }],
+      policySections: [policy],
+    });
+    const baseline = compile("Only the connected wallet may approve.");
+    const request = {
+      ...baseInput(),
+      memoryIds: ["memory_1"],
+      parts: [
+        ...baseInput().parts,
+        {
+          type: "compiled_system_context",
+          source: "system" as const,
+          label: "public" as const,
+          contentHash: baseline.systemHash,
+          sizeBytes: Buffer.byteLength(baseline.system, "utf8"),
+          version: MATTERHORN_COWORKER_CONTEXT_COMPILER_VERSION,
+        },
+      ],
+    };
+    const preflight = firewall.preflight(request);
+    const consent = firewall.confirm({
+      challengeId: preflight.response.challenge?.id ?? "",
+      requestHash: preflight.response.requestHash,
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+    });
+    const changed = compile("Only the connected wallet may review and approve.");
+    const changedHash = agentPrivacyRequestHash({
+      ...request,
+      parts: request.parts.map((part) => part.type === "compiled_system_context"
+        ? { ...part, contentHash: changed.systemHash, sizeBytes: Buffer.byteLength(changed.system, "utf8") }
+        : part),
+    });
+
+    expect(changedHash).not.toBe(preflight.response.requestHash);
+    expect(firewall.consumeConsent({
+      token: consent.consentToken,
+      requestHash: changedHash,
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+    })).toBe(false);
+    expect(firewall.consumeConsent({
+      token: consent.consentToken,
+      requestHash: preflight.response.requestHash,
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+    })).toBe(true);
   });
 
   test("allows private context through a local provider without consent", () => {

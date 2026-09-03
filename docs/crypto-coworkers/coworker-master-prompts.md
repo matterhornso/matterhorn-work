@@ -12,6 +12,12 @@ server-owned execution, desk, coworker, and security policy is appended last and
 is never truncated. A data block can be bounded or omitted when the request hits
 the context budget; the immutable policy cannot.
 
+The compiler also hashes the exact final system context. Privacy preflight binds
+that digest and compiler version into the one-request consent challenge, without
+duplicating private context in receipts or account responses. Any change to
+framing, ordering, truncation, data, or policy therefore invalidates consent
+before provider dispatch.
+
 ## Shared rules
 
 Every coworker is told to:

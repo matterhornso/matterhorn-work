@@ -423,7 +423,10 @@ import {
   listMatterhornCoworkerTemplates,
 } from "./crypto-coworker-templates.js";
 import { buildMatterhornCoworkerMasterPrompt } from "./crypto-coworker-master-prompt.js";
-import { compileMatterhornCoworkerSystemContext } from "./crypto-coworker-context-compiler.js";
+import {
+  MATTERHORN_COWORKER_CONTEXT_COMPILER_VERSION,
+  compileMatterhornCoworkerSystemContext,
+} from "./crypto-coworker-context-compiler.js";
 import {
   MatterhornCryptoAppCatalogError,
   type MatterhornCryptoAppCatalogQuery,
@@ -20283,7 +20286,7 @@ function buildAuthoritativeAgentSystemContext(input: {
     `Automatic authority: ${input.coworker.automaticAuthorities.join(", ") || "none"}`,
     "These limits are server-enforced. Never claim broader authority. Every transaction remains connected-wallet-only.",
   ].join("\n") : "";
-  const system = compileMatterhornCoworkerSystemContext({
+  const compilation = compileMatterhornCoworkerSystemContext({
     maxChars: AGENT_MESSAGE_MAX_SYSTEM_CHARS,
     dataSections: [
       { id: "coworker_profile", label: "Active coworker profile", text: coworkerText, maxChars: 4_000 },
@@ -20292,7 +20295,8 @@ function buildAuthoritativeAgentSystemContext(input: {
       { id: "agent_files", label: "Selected Agent Files", text: input.agentFileText, maxChars: 7_000 },
     ],
     policySections,
-  }).system;
+  });
+  const system = compilation.system;
   const coworkerPrivacyParts: MatterhornAgentPrivacyPart[] = coworkerText ? [{
     type: "coworker_profile",
     name: input.coworker!.name,
@@ -20305,6 +20309,15 @@ function buildAuthoritativeAgentSystemContext(input: {
   return {
     system,
     privacyParts: [
+      {
+        type: "compiled_system_context",
+        name: "Exact Matterhorn provider system context",
+        source: "system",
+        label: "public",
+        contentHash: compilation.systemHash,
+        sizeBytes: Buffer.byteLength(system, "utf8"),
+        version: MATTERHORN_COWORKER_CONTEXT_COMPILER_VERSION,
+      },
       ...policySections.map((text): MatterhornAgentPrivacyPart => ({
         type: "system",
         text,
