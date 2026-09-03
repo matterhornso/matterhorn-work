@@ -78,6 +78,20 @@ The invite-only developer staging service defaults to `<data-dir>/crypto-apps/de
 
 The web app exposes two authenticated, lazy-loaded testnet surfaces. `/developer/crypto-apps` guides invited developers through public-key registration, signed manifest submission, static findings, and a certification request without accepting a private key. `/workspace/:id/crypto-apps` is discoverable from managed Tools and lets a workspace review certified capabilities, select research-only or wallet-preview access, connect an EVM or Sui wallet with a proof-only message, complete a certified OAuth authorization-code flow, and pause, resume, or permanently revoke its own connection. The account client deliberately omits host authority. Deployment-managed API connections require no secret field in the browser. OAuth uses S256 PKCE and exact manifest-bound issuer, resource, audience, redirect, tenant, and revision checks; verifiers and tokens remain encrypted and server-only. The UI never accepts credentials in chat. The connected wallet remains the only signing and submission surface.
 
+### Operator coworker invitations
+
+With `MATTERHORN_COWORKER_MODE=invite`, an operator can create one short-lived link without placing host authority in command arguments, output, or the browser URL:
+
+```bash
+MATTERHORN_WORK_HOST_TOKEN=<server-only-token> \
+pnpm invite:crypto-coworker -- \
+  --server-url https://control-plane.example \
+  --app-url https://matterhorn.example \
+  --ttl-minutes 1440
+```
+
+The command calls only the host-authenticated invite route and places the returned `mhci_` token in the `/coworker-access` URL fragment. The app removes the fragment before rendering, keeps the token in memory only, and binds successful acceptance to the signed-in account. Each link is single-use; expiry, replay, cross-account use, and access after operator revocation fail closed. Coworker access never grants wallet signing or transaction-submission authority.
+
 Signed test-harness contracts now define testnet-only Sui balance/transfer-preview actions, Hyperliquid market/orderbook/account/order-preview actions, and Bittensor subnet/validator plus transfer/stake/unstake-preview actions. They use closed input and model-facing output schemas, map every action to a compatible guarded tool, and never contain production publisher keys or automatic registration. Their offline router fixtures deliberately include private and malicious extra fields to prove projection removes them.
 
 A signed Polymarket discovery contract defines one informational `polymarket_market_search` action over the unauthenticated Gamma API. Matterhorn constructs the exact same-origin `/public-search` request itself, permits only a bodyless `GET`, bounds the query and result count, and projects typed active-market fields plus the exact outcome token IDs needed for the next certified read. A separate signed CLOB contract defines only `polymarket_orderbook_read` against the unauthenticated CLOB origin. It accepts one canonical uint256 token ID returned by discovery, constructs `/book?token_id=...` itself, and projects at most 20 sorted bid and ask levels plus snapshot, tick, minimum-size, and freshness evidence. Splitting the origins prevents the discovery grant from reaching CLOB routes and prevents the CLOB grant from reaching account, order, cancellation, relay, or credential routes. Profile data, instruction-like fields, arbitrary URLs, methods, headers, wallet data, geoblock decisions, order preparation, signing, relaying, and submission remain outside both contracts. Because these are current mainnet public metadata rather than transaction-testnet actions, neither is included in the first-party testnet manifest bundle or accepted by the testnet promotion command. A separate public-read-only command can create a sealed `certified_mainnet` promotion body for exactly these two contracts after the same static, live egress, schema, tenant, quarantine, timeout, replay, quota, and circuit probes pass. Registration, certification execution with operator-owned signed inputs, and promotion remain explicit operator work; the gateway stays off by default.

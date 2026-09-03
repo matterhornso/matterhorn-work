@@ -111,6 +111,7 @@ for (const required of [
   "generated-media-production-readiness.test.mjs",
   "product-readiness-smoke.test.mjs",
   "test:crypto-developer-invite",
+  "test:crypto-coworker-invite",
   "public-beta-rollback-hook.test.mjs",
   "product-hunt-rollback-rehearsal.test.mjs",
   "guarded-runtime-shadow-evidence.test.mjs",
