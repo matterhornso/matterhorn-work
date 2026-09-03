@@ -209,6 +209,11 @@ export type MatterhornAgentRunReceipt = {
     policyUrl: string | null;
   };
   privacy: {
+    /**
+     * Digest of the complete privacy-preflight request, including the exact
+     * compiled provider context. Legacy v1 receipts may omit this field.
+     */
+    requestHash?: string;
     mode: MatterhornAgentPrivacyMode;
     dataCategories: string[];
     redactionCount: number;

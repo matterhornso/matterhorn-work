@@ -87,10 +87,12 @@ describe("guarded agent run receipts", () => {
     expect(items).toHaveLength(1);
     expect(items[0]?.usage.inputTokens).toBe(120);
     expect(items[0]?.provider).toMatchObject({ name: "ASI:Cloud", policyUrl: null });
+    expect(items[0]?.privacy.requestHash).toBe("hash-only");
     expect(items[0]?.memory.writtenIds).toEqual(["memory_saved_from_run"]);
     expect(items[0]?.integrity.recordHash).toHaveLength(64);
     const files = await readFile(join(root, "security-receipts", "ws_receipt", `${new Date().toISOString().slice(0, 10)}.jsonl`), "utf8");
     expect(files).not.toContain(sensitivePrompt);
+    expect(files).toContain('"requestHash":"hash-only"');
     expect(files.trim().split("\n").length).toBe(3);
   });
 

@@ -1138,7 +1138,10 @@ describe("workspace session read APIs", () => {
     );
     expect(receiptResponse.status).toBe(200);
     await expect(receiptResponse.json()).resolves.toMatchObject({
-      item: { memory: { readIds: ["mem_agent_gateway_private"] } },
+      item: {
+        privacy: { requestHash: preflight.requestHash },
+        memory: { readIds: ["mem_agent_gateway_private"] },
+      },
     });
 
     const memoryWrite = await fetch(`${base}/workspace/ws_1/memory/capture`, {

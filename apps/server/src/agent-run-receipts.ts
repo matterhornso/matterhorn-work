@@ -111,6 +111,7 @@ export class MatterhornAgentRunReceiptStore {
         policyUrl: input.preflight.provider.policyUrl,
       },
       privacy: {
+        requestHash: input.preflight.requestHash,
         mode: input.preflight.effectiveMode,
         dataCategories: input.preflight.detectedData.categories,
         redactionCount: input.preflight.detectedData.redactionCount,
