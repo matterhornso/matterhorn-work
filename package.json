@@ -80,6 +80,8 @@
     "test:crypto-developer-invite": "bun test scripts/issue-crypto-developer-invite.test.ts apps/app/tests/developer-invite-fragment.test.ts",
     "test:crypto-coworker-invite": "bun test scripts/issue-crypto-coworker-invite.test.ts apps/app/tests/coworker-invite-fragment.test.ts",
     "test:crypto-coworker-access-ops": "bun test scripts/manage-crypto-coworker-access.test.ts apps/server/src/crypto-coworker-access.test.ts apps/server/src/crypto-coworker-routes.e2e.test.ts",
+    "gate:crypto-coworkers-acceptance": "node scripts/crypto-coworkers-acceptance-evidence.mjs",
+    "test:crypto-coworkers-acceptance": "node scripts/crypto-coworkers-acceptance-evidence.test.mjs",
     "test:crypto-app-certifier": "bun test apps/server/src/first-party-crypto-app-certification-driver.test.ts scripts/certify-first-party-crypto-app.test.ts",
     "test:public-beta-candidate-certifier": "node scripts/public-beta-candidate-certifier.test.mjs",
     "public-beta:owner-acceptance": "node scripts/public-beta-owner-acceptance.mjs",

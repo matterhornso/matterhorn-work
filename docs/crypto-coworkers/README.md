@@ -2,6 +2,8 @@
 
 Status: Phases 1–4 security foundations plus the invite-only testnet developer and workspace integration path. All runtime switches still default to `off`; no production adapter traffic is enabled by this work.
 
+Live release proof is defined by the [Guarded Crypto Coworkers acceptance gate](./acceptance-evidence.md). Local tests do not satisfy that gate and do not authorize enabling any runtime switch.
+
 ## Product boundary
 
 Matterhorn is the authorization, privacy, transaction-review, and evidence layer between an untrusted model and a crypto application. A coworker can research, monitor, prepare, and simulate. It cannot possess a signing key or sign, relay, broadcast, or submit a financial transaction. The connected wallet remains the only transaction submission surface.
