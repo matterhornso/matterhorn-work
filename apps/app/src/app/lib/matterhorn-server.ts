@@ -137,6 +137,7 @@ import type {
   MatterhornCoworkerState,
   MatterhornCoworkerTemplateId,
   MatterhornCoworkerWatch,
+  MatterhornCoworkerWatchCreateInput,
   MatterhornCoworkerWorkingState,
   MatterhornEvidenceVerificationListResponse,
   MatterhornEvidencePublicationResponse,
@@ -1941,6 +1942,19 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       token,
       timeoutMs: timeouts.status,
     }),
+    createCoworkerWatch: (
+      workspaceId: string,
+      coworkerId: string,
+      input: MatterhornCoworkerWatchCreateInput,
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      watch: MatterhornCoworkerAccountWatch;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/watches`, {
+      token,
+      method: "POST",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
     transitionCoworkerWatch: (
       workspaceId: string,
       coworkerId: string,
@@ -1953,6 +1967,17 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       token,
       method: "PATCH",
       body: input,
+      timeoutMs: timeouts.config,
+    }),
+    deleteCoworkerWatch: (
+      workspaceId: string,
+      coworkerId: string,
+      watchId: string,
+      expectedRevision: number,
+    ) => requestJson<{ deleted: true }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/watches/${encodeURIComponent(watchId)}`, {
+      token,
+      method: "DELETE",
+      body: { expectedRevision },
       timeoutMs: timeouts.config,
     }),
     listCoworkerInbox: (workspaceId: string, coworkerId: string) => requestJson<{

@@ -27,6 +27,7 @@ import {
   type MatterhornServerClient,
 } from "../../../app/lib/matterhorn-server";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { ConfirmModal } from "../../design-system/modals/confirm-modal";
@@ -43,8 +44,19 @@ import {
   sortCoworkerWalletIntents,
 } from "./coworker-wallet-intent-view";
 import { buildCoworkerAppConnectionDraft } from "./coworker-app-connection";
+import {
+  parseCoworkerWatchParameters,
+  resolveCoworkerWatchFields,
+  resolveCoworkerWatchSources,
+} from "./coworker-watch-form";
 
 const QUERY_PREFIX = "coworker-control";
+const WATCH_INTERVALS = [
+  { label: "Every 15 minutes", value: 15 * 60_000 },
+  { label: "Every hour", value: 60 * 60_000 },
+  { label: "Every 6 hours", value: 6 * 60 * 60_000 },
+  { label: "Every day", value: 24 * 60 * 60_000 },
+] as const;
 
 type StartCoworkerTask = (
   workspaceId: string,
@@ -142,6 +154,10 @@ function coworkerErrorMessage(error: unknown): string {
     if (error.code === "coworker_resource_recommendation_stale") return "The suggested access changed. Review the latest suggestion before saving.";
     if (error.code === "coworker_resources_stale") return "This access list changed. Review it again before starting work.";
     if (error.code === "coworker_transition_invalid") return "That change is no longer available for this coworker.";
+    if (error.code === "coworker_watch_invalid") return "This check no longer matches the app access you approved. Review access and try again.";
+    if (error.code === "coworker_watch_limit") return "This coworker has reached its active check limit. Pause or remove a check first.";
+    if (error.code === "coworker_watch_not_found") return "This check is no longer available. Refresh and try again.";
+    if (error.code === "coworker_watch_transition_invalid") return "This check cannot be resumed with its current app access.";
     if (error.code === "coworker_inbox_state_conflict") return "This alert changed. Refresh and try again.";
     if (error.code === "crypto_app_gateway_disabled") return "Coworker apps are not enabled for this invite yet.";
     if (error.code === "app_certification_unavailable") return "This app did not pass its latest safety check. Refresh before connecting it.";
@@ -207,6 +223,7 @@ function WatchRow(props: {
   watch: MatterhornCoworkerAccountWatch;
   busy: boolean;
   onToggle: () => void;
+  onDelete: () => void;
 }) {
   return (
     <li className="flex items-start justify-between gap-3 py-2.5">
@@ -216,10 +233,22 @@ function WatchRow(props: {
           {humanizeId(props.watch.appId)} · {props.watch.state === "active" ? `Next check ${shortDate(props.watch.schedule.nextCheckAt)}` : "Paused"}
         </p>
       </div>
-      <Button size="xs" variant="ghost" disabled={props.busy} onClick={props.onToggle}>
-        {props.watch.state === "active" ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-        {props.watch.state === "active" ? "Pause" : "Resume"}
-      </Button>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button size="xs" variant="ghost" disabled={props.busy} onClick={props.onToggle}>
+          {props.watch.state === "active" ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+          {props.watch.state === "active" ? "Pause" : "Resume"}
+        </Button>
+        <Button
+          size="icon-xs"
+          variant="ghost"
+          title={`Remove ${props.watch.name}`}
+          aria-label={`Remove ${props.watch.name}`}
+          disabled={props.busy}
+          onClick={props.onDelete}
+        >
+          <Trash2 aria-hidden="true" />
+        </Button>
+      </div>
     </li>
   );
 }
@@ -269,6 +298,13 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [cancelIntent, setCancelIntent] = useState<MatterhornCoworkerWalletIntentView | null>(null);
+  const [watchToDelete, setWatchToDelete] = useState<MatterhornCoworkerAccountWatch | null>(null);
+  const [watchFormOpen, setWatchFormOpen] = useState(false);
+  const [watchSourceId, setWatchSourceId] = useState("");
+  const [watchName, setWatchName] = useState("");
+  const [watchIntervalMs, setWatchIntervalMs] = useState<number>(WATCH_INTERVALS[1].value);
+  const [watchValues, setWatchValues] = useState<Record<string, string | boolean>>({});
+  const [watchFormError, setWatchFormError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const handledInitialTemplateRef = useRef<MatterhornCoworkerTemplateId | null>(null);
   const newlyConnectedAppRef = useRef<string | null>(null);
@@ -414,6 +450,68 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     )),
     [resourceQuery.data?.apps, resourceQuery.data?.connections],
   );
+  const watchSources = useMemo(() => selectedCoworker ? resolveCoworkerWatchSources({
+    coworker: selectedCoworker,
+    scope: resourceQuery.data?.scope.active ? resourceQuery.data.scope.resources : null,
+    apps: resourceQuery.data?.apps ?? [],
+    connections: resourceQuery.data?.allConnections ?? [],
+  }) : [], [
+    resourceQuery.data?.allConnections,
+    resourceQuery.data?.apps,
+    resourceQuery.data?.scope.active,
+    resourceQuery.data?.scope.resources,
+    selectedCoworker,
+  ]);
+  const watchSource = watchSources.find((source) => source.id === watchSourceId) ?? null;
+  const watchDetailQuery = useQuery({
+    queryKey: [
+      QUERY_PREFIX,
+      "watch-app",
+      watchSource?.appId ?? "none",
+      watchSource?.connectionId ?? "none",
+      watchSource?.manifestRevision ?? "none",
+    ],
+    enabled: Boolean(props.client && watchFormOpen && watchSource),
+    retry: false,
+    queryFn: async () => {
+      if (!props.client || !watchSource) throw new Error("coworker_watch_source_unavailable");
+      const response = await props.client.getCryptoApp(watchSource.appId);
+      if (response.app.manifestRevision !== watchSource.manifestRevision) {
+        throw new Error("coworker_watch_source_stale");
+      }
+      return response.app;
+    },
+  });
+  const watchFieldResult = useMemo(
+    () => resolveCoworkerWatchFields(watchDetailQuery.data ?? null, watchSource?.actionId ?? ""),
+    [watchDetailQuery.data, watchSource?.actionId],
+  );
+  const activeWatchCount = detailQuery.data?.watches.filter((watch) => watch.state === "active").length ?? 0;
+  const canAddWatch = Boolean(
+    selectedCoworker?.state === "active"
+    && selectedCoworker.automaticAuthorities.includes("watch")
+    && selectedCoworker.limits.maxActiveWatches > activeWatchCount
+    && watchSources.length > 0,
+  );
+
+  useEffect(() => {
+    if (!watchFormOpen) return;
+    if (!watchSources.some((source) => source.id === watchSourceId)) {
+      const first = watchSources[0] ?? null;
+      setWatchSourceId(first?.id ?? "");
+      setWatchName(first?.actionName ?? "");
+      setWatchValues({});
+      setWatchFormError(null);
+    }
+  }, [watchFormOpen, watchSourceId, watchSources]);
+
+  useEffect(() => {
+    setWatchFormOpen(false);
+    setWatchSourceId("");
+    setWatchName("");
+    setWatchValues({});
+    setWatchFormError(null);
+  }, [selectedCoworker?.id]);
   const nextStep = resolveCoworkerNextStep({
     coworkerState: selectedCoworker?.state ?? "revoked",
     ready: canStartCoworker,
@@ -669,6 +767,96 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       setBusyAction(null);
     }
   }, [props.client, refresh, selectedCoworker, workspaceId]);
+
+  const createWatch = useCallback(async () => {
+    if (!props.client || !workspaceId || !selectedCoworker || !watchSource) return;
+    const name = watchName.trim();
+    if (!name) {
+      setWatchFormError("Give this check a name.");
+      return;
+    }
+    if (!watchFieldResult.supported) {
+      setWatchFormError(watchFieldResult.reason);
+      return;
+    }
+    const parsed = parseCoworkerWatchParameters(watchFieldResult.fields, watchValues);
+    if (!parsed.ok) {
+      setWatchFormError(parsed.error);
+      return;
+    }
+    setBusyAction("watch:create");
+    setWatchFormError(null);
+    setError(null);
+    try {
+      await props.client.createCoworkerWatch(workspaceId, selectedCoworker.id, {
+        profileRevision: selectedCoworker.revision,
+        connectionId: watchSource.connectionId,
+        name,
+        appId: watchSource.appId,
+        actionId: watchSource.actionId,
+        network: watchSource.network,
+        parameters: parsed.parameters,
+        schedule: {
+          intervalMs: watchIntervalMs,
+          maxChecksPerDay: Math.max(1, Math.floor(86_400_000 / watchIntervalMs)),
+        },
+        budgets: {
+          maxReadCallsPerCheck: 1,
+          maxModelTokensPerCheck: 0,
+          maxCostMicrosPerCheck: 10_000,
+        },
+        conditions: [{
+          id: "result_changed",
+          metric: "matterhorn_result_hash",
+          operator: "changed",
+          value: null,
+        }],
+      });
+      setWatchFormOpen(false);
+      setWatchSourceId("");
+      setWatchName("");
+      setWatchValues({});
+      await queryClient.invalidateQueries({ queryKey: detailKey });
+      showToast({
+        title: "Check started",
+        description: `${selectedCoworker.name} will alert you when the result changes.`,
+        tone: "success",
+      });
+    } catch (cause) {
+      setWatchFormError(coworkerErrorMessage(cause));
+    } finally {
+      setBusyAction(null);
+    }
+  }, [
+    detailKey,
+    props.client,
+    queryClient,
+    selectedCoworker,
+    showToast,
+    watchFieldResult,
+    watchIntervalMs,
+    watchName,
+    watchSource,
+    watchValues,
+    workspaceId,
+  ]);
+
+  const deleteWatch = useCallback(async (watch: MatterhornCoworkerAccountWatch) => {
+    if (!props.client || !workspaceId || !selectedCoworker) return;
+    setBusyAction(`watch:${watch.id}`);
+    setError(null);
+    try {
+      await props.client.deleteCoworkerWatch(workspaceId, selectedCoworker.id, watch.id, watch.revision);
+      setWatchToDelete(null);
+      await queryClient.invalidateQueries({ queryKey: detailKey });
+      showToast({ title: "Check removed", description: "It will not run again.", tone: "success" });
+    } catch (cause) {
+      setWatchToDelete(null);
+      setError(coworkerErrorMessage(cause));
+    } finally {
+      setBusyAction(null);
+    }
+  }, [detailKey, props.client, queryClient, selectedCoworker, showToast, workspaceId]);
 
   const updateInbox = useCallback(async (item: MatterhornCoworkerAccountInboxItem, state: "read" | "dismissed") => {
     if (!props.client || !workspaceId || !selectedCoworker) return;
@@ -1168,14 +1356,160 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                 </section>
 
                 <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-watches-title">
-                  <h3 id="coworker-watches-title" className="text-sm font-semibold text-dls-text">Checks</h3>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 id="coworker-watches-title" className="text-sm font-semibold text-dls-text">Checks</h3>
+                      <p className="mt-1 text-xs leading-5 text-dls-secondary">Get an update when approved app data changes.</p>
+                    </div>
+                    {selectedCoworker.automaticAuthorities.includes("watch") && selectedCoworker.limits.maxActiveWatches > 0 ? (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        disabled={busyAction !== null || !canAddWatch}
+                        onClick={() => {
+                          const first = watchSources[0] ?? null;
+                          setWatchFormOpen(true);
+                          setWatchSourceId(first?.id ?? "");
+                          setWatchName(first?.actionName ?? "");
+                          setWatchValues({});
+                          setWatchFormError(null);
+                        }}
+                      >
+                        Add check
+                      </Button>
+                    ) : null}
+                  </div>
+                  {watchFormOpen ? (
+                    <div className="mt-3 rounded-lg border border-dls-border bg-dls-surface/45 p-3">
+                      <h4 className="text-sm font-medium text-dls-text">Add a recurring check</h4>
+                      <p className="mt-1 text-xs leading-5 text-dls-secondary">This reads your approved app and alerts you when the result changes. It cannot move funds.</p>
+                      <div className="mt-3 grid gap-3">
+                        <label className="grid gap-1.5 text-xs font-medium text-dls-text">
+                          What to check
+                          <select
+                            className="h-9 w-full rounded-md border border-dls-border bg-dls-background px-3 text-sm text-dls-text outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
+                            value={watchSource?.id ?? ""}
+                            onChange={(event) => {
+                              const source = watchSources.find((candidate) => candidate.id === event.currentTarget.value) ?? null;
+                              setWatchSourceId(source?.id ?? "");
+                              setWatchName(source?.actionName ?? "");
+                              setWatchValues({});
+                              setWatchFormError(null);
+                            }}
+                          >
+                            {watchSources.map((source) => (
+                              <option key={source.id} value={source.id}>{source.appName} — {source.actionName}</option>
+                            ))}
+                          </select>
+                        </label>
+                        {watchSource ? <p className="-mt-1 text-xs leading-5 text-dls-secondary">{watchSource.actionDescription}</p> : null}
+                        <label className="grid gap-1.5 text-xs font-medium text-dls-text">
+                          Name
+                          <Input
+                            value={watchName}
+                            maxLength={120}
+                            onChange={(event) => setWatchName(event.currentTarget.value)}
+                          />
+                        </label>
+                        {watchDetailQuery.isLoading ? (
+                          <div className="grid gap-2" role="status" aria-label="Loading check fields">
+                            <Skeleton className="h-9 w-full rounded-md" />
+                          </div>
+                        ) : watchDetailQuery.isError ? (
+                          <p className="text-xs leading-5 text-destructive" role="alert">This app changed. Refresh access before adding the check.</p>
+                        ) : watchFieldResult.supported ? watchFieldResult.fields.filter((field) => field.kind !== "constant").map((field) => (
+                          field.kind === "boolean" ? (
+                            <label key={field.name} className="flex min-h-9 cursor-pointer items-center gap-2 text-xs font-medium text-dls-text">
+                              <input
+                                type="checkbox"
+                                className="size-4 accent-current"
+                                checked={watchValues[field.name] === true}
+                                onChange={(event) => setWatchValues((current) => ({ ...current, [field.name]: event.currentTarget.checked }))}
+                              />
+                              <span>{field.label}</span>
+                            </label>
+                          ) : field.options ? (
+                            <label key={field.name} className="grid gap-1.5 text-xs font-medium text-dls-text">
+                              {field.label}{field.required ? "" : " (optional)"}
+                              <select
+                                className="h-9 w-full rounded-md border border-dls-border bg-dls-background px-3 text-sm text-dls-text outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
+                                value={typeof watchValues[field.name] === "string" ? watchValues[field.name] as string : ""}
+                                onChange={(event) => setWatchValues((current) => ({ ...current, [field.name]: event.currentTarget.value }))}
+                              >
+                                <option value="">Choose one</option>
+                                {field.options.map((option) => <option key={String(option)} value={String(option)}>{humanizeId(String(option))}</option>)}
+                              </select>
+                            </label>
+                          ) : (
+                            <label key={field.name} className="grid gap-1.5 text-xs font-medium text-dls-text">
+                              {field.label}{field.required ? "" : " (optional)"}
+                              <Input
+                                type={field.kind === "string" ? "text" : "number"}
+                                min={field.minimum}
+                                max={field.maximum}
+                                step={field.kind === "integer" ? 1 : "any"}
+                                minLength={field.minLength}
+                                maxLength={field.maxLength}
+                                value={typeof watchValues[field.name] === "string" ? watchValues[field.name] as string : ""}
+                                onChange={(event) => setWatchValues((current) => ({ ...current, [field.name]: event.currentTarget.value }))}
+                              />
+                            </label>
+                          )
+                        )) : (
+                          <p className="text-xs leading-5 text-dls-secondary">{watchFieldResult.reason}</p>
+                        )}
+                        <label className="grid gap-1.5 text-xs font-medium text-dls-text">
+                          How often
+                          <select
+                            className="h-9 w-full rounded-md border border-dls-border bg-dls-background px-3 text-sm text-dls-text outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
+                            value={watchIntervalMs}
+                            onChange={(event) => setWatchIntervalMs(Number(event.currentTarget.value))}
+                          >
+                            {WATCH_INTERVALS.map((interval) => <option key={interval.value} value={interval.value}>{interval.label}</option>)}
+                          </select>
+                        </label>
+                        <p className="text-xs font-medium text-dls-text">Notify me when the result changes.</p>
+                        {watchFormError ? <p className="text-xs leading-5 text-destructive" role="alert">{watchFormError}</p> : null}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            disabled={busyAction !== null || watchDetailQuery.isLoading || watchDetailQuery.isError || !watchFieldResult.supported}
+                            onClick={() => void createWatch()}
+                          >
+                            {busyAction === "watch:create" ? "Starting…" : "Start check"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busyAction !== null}
+                            onClick={() => {
+                              setWatchFormOpen(false);
+                              setWatchFormError(null);
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : !canAddWatch && watchSources.length === 0 && selectedCoworker.automaticAuthorities.includes("watch") ? (
+                    <p className="mt-3 text-xs leading-5 text-dls-secondary">Give this coworker access to a read-only app before adding a check.</p>
+                  ) : activeWatchCount >= selectedCoworker.limits.maxActiveWatches && selectedCoworker.limits.maxActiveWatches > 0 ? (
+                    <p className="mt-3 text-xs leading-5 text-dls-secondary">Pause or remove a check before adding another.</p>
+                  ) : null}
                   {detailQuery.data?.watches.length ? (
                     <ul className="mt-2 divide-y divide-dls-border/70">
                       {detailQuery.data.watches.map((watch) => (
-                        <WatchRow key={watch.id} watch={watch} busy={busyAction === `watch:${watch.id}`} onToggle={() => void toggleWatch(watch)} />
+                        <WatchRow
+                          key={watch.id}
+                          watch={watch}
+                          busy={busyAction === `watch:${watch.id}`}
+                          onToggle={() => void toggleWatch(watch)}
+                          onDelete={() => setWatchToDelete(watch)}
+                        />
                       ))}
                     </ul>
-                  ) : <p className="mt-3 text-xs leading-5 text-dls-secondary">No recurring checks yet. Start a chat and ask this coworker what to monitor.</p>}
+                  ) : !watchFormOpen ? <p className="mt-3 text-xs leading-5 text-dls-secondary">No recurring checks yet.</p> : null}
                 </section>
 
                 <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-inbox-title">
@@ -1247,6 +1581,21 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
         }}
         onCancel={() => {
           if (!busyAction) setCancelIntent(null);
+        }}
+      />
+      <ConfirmModal
+        open={Boolean(watchToDelete)}
+        title="Remove this check?"
+        message="This stops the schedule and removes it from the coworker. It will not run again."
+        confirmLabel={busyAction ? "Removing…" : "Remove check"}
+        cancelLabel="Keep check"
+        variant="warning"
+        confirmButtonVariant="outline"
+        onConfirm={() => {
+          if (watchToDelete) void deleteWatch(watchToDelete);
+        }}
+        onCancel={() => {
+          if (!busyAction) setWatchToDelete(null);
         }}
       />
     </div>

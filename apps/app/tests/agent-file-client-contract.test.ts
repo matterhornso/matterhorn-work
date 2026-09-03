@@ -114,7 +114,20 @@ describe("Agent File server client", () => {
       recommendationHash: "a".repeat(64),
     });
     await client.listCoworkerWatches("workspace one", "coworker one");
+    await client.createCoworkerWatch("workspace one", "coworker one", {
+      profileRevision: 3,
+      connectionId: "connection one",
+      name: "Watch balance",
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+      parameters: { address: "0x1234" },
+      schedule: { intervalMs: 3_600_000, maxChecksPerDay: 24 },
+      budgets: { maxReadCallsPerCheck: 1, maxModelTokensPerCheck: 0, maxCostMicrosPerCheck: 10_000 },
+      conditions: [{ id: "result_changed", metric: "matterhorn_result_hash", operator: "changed", value: null }],
+    });
     await client.transitionCoworkerWatch("workspace one", "coworker one", "watch one", { state: "paused", expectedRevision: 2 });
+    await client.deleteCoworkerWatch("workspace one", "coworker one", "watch one", 3);
     await client.listCoworkerInbox("workspace one", "coworker one");
     await client.transitionCoworkerInboxItem("workspace one", "coworker one", "item one", { state: "read", expectedState: "unread" });
     await client.listCoworkerWalletIntents("workspace one", "coworker one");
@@ -140,7 +153,9 @@ describe("Agent File server client", () => {
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/resources/recommendation",
       "PUT https://control.example/workspace/workspace%20one/coworkers/coworker%20one/resources",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/watches",
+      "POST https://control.example/workspace/workspace%20one/coworkers/coworker%20one/watches",
       "PATCH https://control.example/workspace/workspace%20one/coworkers/coworker%20one/watches/watch%20one",
+      "DELETE https://control.example/workspace/workspace%20one/coworkers/coworker%20one/watches/watch%20one",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/inbox?limit=50",
       "PATCH https://control.example/workspace/workspace%20one/coworkers/coworker%20one/inbox/item%20one",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/wallet-intents",
@@ -157,8 +172,21 @@ describe("Agent File server client", () => {
       connectionIds: ["connection one"],
       recommendationHash: "a".repeat(64),
     });
-    expect(requests[10]?.body).toEqual({ expectedRevision: 5 });
-    expect(requests[11]?.body).toEqual({
+    expect(requests[6]?.body).toEqual({
+      profileRevision: 3,
+      connectionId: "connection one",
+      name: "Watch balance",
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+      parameters: { address: "0x1234" },
+      schedule: { intervalMs: 3_600_000, maxChecksPerDay: 24 },
+      budgets: { maxReadCallsPerCheck: 1, maxModelTokensPerCheck: 0, maxCostMicrosPerCheck: 10_000 },
+      conditions: [{ id: "result_changed", metric: "matterhorn_result_hash", operator: "changed", value: null }],
+    });
+    expect(requests[8]?.body).toEqual({ expectedRevision: 3 });
+    expect(requests[12]?.body).toEqual({ expectedRevision: 5 });
+    expect(requests[13]?.body).toEqual({
       expectedRevision: 5,
       status: "submitted",
       publicId: "public-transaction-id",

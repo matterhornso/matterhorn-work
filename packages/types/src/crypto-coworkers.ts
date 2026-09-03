@@ -457,6 +457,15 @@ export type MatterhornCoworkerWatch = {
   appId: string;
   actionId: string;
   network: string;
+  /**
+   * Exact user-approved app connection used by this schedule. Older local
+   * records may omit the binding; those records remain readable but must fail
+   * closed before a scheduled adapter call.
+   */
+  connectionBinding?: {
+    connectionId: string;
+    manifestRevision: string;
+  };
   parameters: Record<string, string | number | boolean | null>;
   schedule: {
     intervalMs: number;
@@ -481,6 +490,14 @@ export type MatterhornCoworkerWatch = {
   }>;
   createdAt: string;
   updatedAt: string;
+};
+
+export type MatterhornCoworkerWatchCreateInput = Pick<
+  MatterhornCoworkerWatch,
+  "profileRevision" | "name" | "appId" | "actionId" | "network" | "parameters" | "budgets" | "conditions"
+> & {
+  connectionId: string;
+  schedule: Pick<MatterhornCoworkerWatch["schedule"], "intervalMs" | "maxChecksPerDay">;
 };
 
 export type MatterhornCoworkerInboxItem = {
@@ -1517,7 +1534,7 @@ export function validateMatterhornCoworkerWatch(value: unknown): string[] {
   if (!isRecord(value)) return ["coworker_watch_not_object"];
   const topLevelKeys = [
     "version", "id", "workspaceId", "ownerId", "coworkerId", "revision", "profileRevision",
-    "state", "pauseReason", "name", "appId", "actionId", "network", "parameters", "schedule",
+    "state", "pauseReason", "name", "appId", "actionId", "network", "connectionBinding", "parameters", "schedule",
     "budgets", "conditions", "createdAt", "updatedAt",
   ];
   if (!hasOnlyKeys(value, topLevelKeys)) issues.push("coworker_watch_unknown_field");
@@ -1536,6 +1553,14 @@ export function validateMatterhornCoworkerWatch(value: unknown): string[] {
   }
   if (!validText(value.name, 120)) issues.push("coworker_watch_name_invalid");
   if (!validText(value.network, 160)) issues.push("coworker_watch_network_invalid");
+  if (value.connectionBinding !== undefined && (
+    !isRecord(value.connectionBinding)
+    || !hasOnlyKeys(value.connectionBinding, ["connectionId", "manifestRevision"])
+    || !validId(value.connectionBinding.connectionId)
+    || !validText(value.connectionBinding.manifestRevision, 160)
+  )) {
+    issues.push("coworker_watch_connection_binding_invalid");
+  }
   for (const key of ["revision", "profileRevision"]) {
     if (!Number.isSafeInteger(value[key]) || (value[key] as number) < 1) issues.push(`coworker_watch_${key}_invalid`);
   }
@@ -1603,7 +1628,9 @@ export function validateMatterhornCoworkerWatch(value: unknown): string[] {
       || !["gt", "gte", "lt", "lte", "eq", "changed"].includes(String(condition.operator))
       || (condition.value !== null && !validText(condition.value, 160))
       || (condition.operator === "changed" && condition.value !== null)
-      || (condition.operator !== "changed" && condition.value === null))) {
+      || (condition.operator !== "changed" && condition.value === null)
+      || (condition.metric === "matterhorn_result_hash"
+        && (condition.operator !== "changed" || condition.value !== null)))) {
     issues.push("coworker_watch_conditions_invalid");
   } else if (new Set(value.conditions.map((condition) => (condition as Record<string, unknown>).id)).size !== value.conditions.length) {
     issues.push("coworker_watch_conditions_duplicate");

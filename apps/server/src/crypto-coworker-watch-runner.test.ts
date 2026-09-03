@@ -64,11 +64,16 @@ function result(balance: string, now: Date): MatterhornCryptoAppResult {
       evidenceReference: `sha256:${"a".repeat(64)}`,
     },
     metering: { costMicros: 0, reservationId: "reservation_sui" },
-    result: { balanceAtomic: balance },
+    result: { balanceAtomic: balance, observedAt: completedAt },
   };
 }
 
-function fixture() {
+function fixture(condition: {
+  id: string;
+  metric: string;
+  operator: "changed";
+  value: null;
+} = { id: "balance_changed", metric: "balanceAtomic", operator: "changed", value: null }) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-watch-runner-"));
   roots.push(root);
   const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
@@ -82,8 +87,22 @@ function fixture() {
     inboxItemId: () => `cinbox_${now.getTime()}`,
   });
   const profile = coworkers.create("ws_alpha", "account_alpha", profileInput());
+  coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, {
+    expectedRevision: 0,
+    profileRevision: profile.revision,
+    agentFiles: [],
+    memories: [],
+    connections: [{
+      id: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionIds: ["sui_account_read"],
+      networks: ["sui:testnet"],
+    }],
+  });
   const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, {
     profileRevision: profile.revision,
+    connectionId: "cxc_sui",
     name: "Sui balance",
     appId: "matterhorn.sui-testnet",
     actionId: "sui_account_read",
@@ -91,7 +110,7 @@ function fixture() {
     parameters: { address: "0x1234" },
     schedule: { intervalMs: 300_000, maxChecksPerDay: 288 },
     budgets: { maxReadCallsPerCheck: 1, maxModelTokensPerCheck: 0, maxCostMicrosPerCheck: 10_000 },
-    conditions: [{ id: "balance_changed", metric: "balanceAtomic", operator: "changed", value: null }],
+    conditions: [condition],
   });
   return {
     store,
@@ -140,6 +159,37 @@ describe("crypto coworker watch runner", () => {
       });
       expect(setup.coworkers.getWatch("ws_alpha", "account_alpha", setup.profile.id, setup.watch.id)?.schedule)
         .toMatchObject({ checksToday: 2, lastConditionValues: { balance_changed: "11" } });
+    } finally {
+      setup.store.close();
+    }
+  });
+
+  test("ignores observation timestamps when watching for any typed result change", async () => {
+    const setup = fixture({
+      id: "result_changed",
+      metric: "matterhorn_result_hash",
+      operator: "changed",
+      value: null,
+    });
+    let balance = "10";
+    const runner = new MatterhornCoworkerWatchRunner({
+      coworkers: setup.coworkers,
+      now: setup.now,
+      execute: async () => result(balance, setup.now()),
+    });
+    try {
+      setup.advance("2026-09-01T12:05:00.000Z");
+      expect(await runner.tick()).toEqual({ claimed: 1, completed: 1, alerted: 0, failed: 0 });
+      setup.advance("2026-09-01T12:10:00.000Z");
+      expect(await runner.tick()).toEqual({ claimed: 1, completed: 1, alerted: 0, failed: 0 });
+      balance = "11";
+      setup.advance("2026-09-01T12:15:00.000Z");
+      expect(await runner.tick()).toEqual({ claimed: 1, completed: 1, alerted: 1, failed: 0 });
+      expect(setup.coworkers.listInbox({
+        workspaceId: "ws_alpha",
+        ownerId: "account_alpha",
+        coworkerId: setup.profile.id,
+      })[0]?.reasonCodes).toEqual(["result_changed"]);
     } finally {
       setup.store.close();
     }

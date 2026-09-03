@@ -62,6 +62,14 @@ function metricValue(result: unknown, path: string): string | null | undefined {
   return scalar(current);
 }
 
+function semanticResult(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(semanticResult);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .filter(([key]) => key !== "observedAt")
+    .map(([key, item]) => [key, semanticResult(item)]));
+}
+
 function matches(
   operator: MatterhornCoworkerWatch["conditions"][number]["operator"],
   current: string | null,
@@ -131,10 +139,19 @@ export class MatterhornCoworkerWatchRunner {
     try {
       const result = await this.#execute(watch);
       const completedAt = this.#now();
+      const resultHash = sha256({
+        app: result.app,
+        action: result.action,
+        observation: result.observation,
+        result: JSON.parse(canonicalJson(result.result)),
+      });
+      const semanticResultHash = sha256(semanticResult(result.result));
       const values: Record<string, string | null> = {};
       const matched: string[] = [];
       for (const condition of watch.conditions) {
-        const value = metricValue(result.result, condition.metric);
+        const value = condition.metric === "matterhorn_result_hash"
+          ? semanticResultHash
+          : metricValue(result.result, condition.metric);
         if (value === undefined) throw new MatterhornCryptoAppAdapterError("adapter_output_invalid");
         values[condition.id] = value;
         if (matches(
@@ -144,12 +161,6 @@ export class MatterhornCoworkerWatchRunner {
           watch.schedule.lastConditionValues[condition.id],
         )) matched.push(condition.id);
       }
-      const resultHash = sha256({
-        app: result.app,
-        action: result.action,
-        observation: result.observation,
-        result: JSON.parse(canonicalJson(result.result)),
-      });
       let inboxItem: MatterhornCoworkerInboxItemInput | null = null;
       if (matched.length > 0) {
         inboxItem = {

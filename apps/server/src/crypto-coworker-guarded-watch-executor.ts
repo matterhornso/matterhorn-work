@@ -64,9 +64,12 @@ function activeConnection(
   connections: MatterhornCryptoAppConnectionView[],
   watch: MatterhornCoworkerWatch,
 ): MatterhornCryptoAppConnectionView | null {
+  if (!watch.connectionBinding) return null;
   return connections.find((connection) => connection.state === "active"
     && connection.availability === "available"
+    && connection.id === watch.connectionBinding?.connectionId
     && connection.appId === watch.appId
+    && connection.manifestRevision === watch.connectionBinding?.manifestRevision
     && connection.grantedActionIds.includes(watch.actionId)
     && connection.grantedNetworks.includes(watch.network)) ?? null;
 }
@@ -86,6 +89,20 @@ export function createGuardedCoworkerWatchExecutor(options: Options): Matterhorn
     }
     const profile = options.coworkers.resolveActive(watch.workspaceId, watch.ownerId, watch.coworkerId);
     if (!profile || profile.revision !== watch.profileRevision) throw new Error("coworker_watch_profile_stale");
+    const resourceScope = options.coworkers.resolveActiveResourceScope(
+      watch.workspaceId,
+      watch.ownerId,
+      watch.coworkerId,
+    );
+    if (!watch.connectionBinding || !resourceScope?.connections.some((connection) => (
+      connection.id === watch.connectionBinding?.connectionId
+      && connection.appId === watch.appId
+      && connection.manifestRevision === watch.connectionBinding?.manifestRevision
+      && connection.actionIds.includes(watch.actionId)
+      && connection.networks.includes(watch.network)
+    ))) {
+      throw new Error("coworker_watch_resource_unavailable");
+    }
     const proxyToolName = firstPartyCryptoAppProxyTool(watch.appId, watch.actionId);
     if (!proxyToolName) throw new Error("coworker_watch_action_unavailable");
     const tool = getMatterhornCryptoTool(proxyToolName);

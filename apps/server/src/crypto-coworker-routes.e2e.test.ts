@@ -620,6 +620,7 @@ async function seedCryptoEvidence(input: {
 function watchInput() {
   return {
     profileRevision: 1,
+    connectionId: "cxc_sui_route",
     name: "Sui balance change",
     appId: "matterhorn.sui-testnet",
     actionId: "sui_account_read",
@@ -1644,13 +1645,44 @@ describe("crypto coworker HTTP boundary", () => {
     });
     expect(created.response.status).toBe(201);
     const coworkerId = String(created.payload.coworker.id);
+    const resourceStore = new MatterhornCoworkerStore(server.coworkerDb);
+    try {
+      const resourceCoworkers = new MatterhornCoworkers({
+        store: resourceStore,
+        policyVersion: "coworker-policy-1",
+      });
+      resourceCoworkers.setResourceScope(
+        workspaceA,
+        String(signupA.payload.user.id),
+        coworkerId,
+        {
+          expectedRevision: 0,
+          profileRevision: 1,
+          agentFiles: [],
+          memories: [],
+          connections: [{
+            id: "cxc_sui_route",
+            appId: "matterhorn.sui-testnet",
+            manifestRevision: "1.0.0",
+            actionIds: ["sui_account_read"],
+            networks: ["sui:testnet"],
+          }],
+        },
+      );
+    } finally {
+      resourceStore.close();
+    }
 
     const createdWatch = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/watches`, {
       cookie: cookieA,
       body: watchInput(),
     });
     expect(createdWatch.response.status).toBe(201);
-    expect(createdWatch.payload.watch).toMatchObject({ state: "active", profileRevision: 1 });
+    expect(createdWatch.payload.watch).toMatchObject({
+      state: "active",
+      profileRevision: 1,
+      connectionBinding: { connectionId: "cxc_sui_route", manifestRevision: "1.0.0" },
+    });
     expect(createdWatch.payload.watch.ownerId).toBeUndefined();
     const watchId = String(createdWatch.payload.watch.id);
     const watchList = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/watches`, { cookie: cookieA });

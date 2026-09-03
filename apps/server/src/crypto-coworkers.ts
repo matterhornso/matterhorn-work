@@ -12,6 +12,7 @@ import {
   type MatterhornCoworkerResourceScope,
   type MatterhornCoworkerState,
   type MatterhornCoworkerWatch,
+  type MatterhornCoworkerWatchCreateInput,
   type MatterhornCoworkerWorkingState,
   validateMatterhornCoworkerInboxItem,
   validateMatterhornCoworkerProfile,
@@ -58,12 +59,7 @@ export type MatterhornCoworkerResourceScopeInput = Pick<
   expectedRevision: number;
 };
 
-export type MatterhornCoworkerWatchCreateInput = Pick<
-  MatterhornCoworkerWatch,
-  "profileRevision" | "name" | "appId" | "actionId" | "network" | "parameters" | "budgets" | "conditions"
-> & {
-  schedule: Pick<MatterhornCoworkerWatch["schedule"], "intervalMs" | "maxChecksPerDay">;
-};
+export type { MatterhornCoworkerWatchCreateInput } from "@matterhorn-work/types/crypto-coworkers";
 
 export type MatterhornCoworkerInboxItemInput = Omit<
   MatterhornCoworkerInboxItem,
@@ -424,13 +420,27 @@ export class MatterhornCoworkers {
     if (input.profileRevision !== profile.revision) throw new MatterhornCoworkerError("coworker_revision_conflict");
     const normalized = structuredClone({
       ...input,
+      connectionId: input.connectionId.trim(),
       name: input.name.trim(),
       appId: input.appId.trim(),
       actionId: input.actionId.trim(),
       network: input.network.trim(),
     });
+    const resourceScope = this.resolveActiveResourceScope(workspaceId, ownerId, coworkerId);
+    const connectionBinding = resourceScope?.connections.find((connection) => (
+      connection.id === normalized.connectionId
+      && connection.appId === normalized.appId
+      && connection.actionIds.includes(normalized.actionId)
+      && connection.networks.includes(normalized.network)
+    ));
+    const invalidResultChangeCondition = normalized.conditions.some((condition) => (
+      condition.metric === "matterhorn_result_hash"
+      && (condition.operator !== "changed" || condition.value !== null)
+    ));
     if (!profile.automaticAuthorities.includes("watch")
       || profile.limits.maxActiveWatches < 1
+      || !connectionBinding
+      || invalidResultChangeCondition
       || !profile.allowedAppIds.includes(normalized.appId)
       || !profile.allowedActionIds.includes(normalized.actionId)
       || !profile.allowedNetworks.includes(normalized.network)
@@ -454,6 +464,10 @@ export class MatterhornCoworkers {
       appId: normalized.appId,
       actionId: normalized.actionId,
       network: normalized.network,
+      connectionBinding: {
+        connectionId: connectionBinding.id,
+        manifestRevision: connectionBinding.manifestRevision,
+      },
       parameters: normalized.parameters,
       schedule: {
         intervalMs: normalized.schedule.intervalMs,
@@ -562,7 +576,15 @@ export class MatterhornCoworkers {
       || profile.limits.maxActiveWatches < 1
       || !profile.allowedAppIds.includes(current.appId)
       || !profile.allowedActionIds.includes(current.actionId)
-      || !profile.allowedNetworks.includes(current.network))) {
+      || !profile.allowedNetworks.includes(current.network)
+      || !current.connectionBinding
+      || !this.resolveActiveResourceScope(workspaceId, ownerId, coworkerId)?.connections.some((connection) => (
+        connection.id === current.connectionBinding?.connectionId
+        && connection.appId === current.appId
+        && connection.manifestRevision === current.connectionBinding?.manifestRevision
+        && connection.actionIds.includes(current.actionId)
+        && connection.networks.includes(current.network)
+      )))) {
       throw new MatterhornCoworkerError("coworker_watch_invalid");
     }
     const now = this.#now();

@@ -267,6 +267,7 @@ const watch: MatterhornCoworkerWatch = {
   appId: "matterhorn.sui",
   actionId: "sui_account_read",
   network: "sui:testnet",
+  connectionBinding: { connectionId: "cxc_sui", manifestRevision: "1.0.0" },
   parameters: { address: "0x1234" },
   schedule: {
     intervalMs: 300_000,
@@ -504,6 +505,13 @@ describe("crypto coworker public contracts", () => {
 
   test("accepts bounded read watches and rejects submit-shaped or unbounded schedules", () => {
     expect(validateMatterhornCoworkerWatch(watch)).toEqual([]);
+    const legacyWatch = structuredClone(watch);
+    delete legacyWatch.connectionBinding;
+    expect(validateMatterhornCoworkerWatch(legacyWatch)).toEqual([]);
+    expect(validateMatterhornCoworkerWatch({
+      ...watch,
+      connectionBinding: { connectionId: "not a valid id", manifestRevision: "" },
+    })).toContain("coworker_watch_connection_binding_invalid");
     expect(validateMatterhornCoworkerWatch({
       ...watch,
       submitTransaction: true,

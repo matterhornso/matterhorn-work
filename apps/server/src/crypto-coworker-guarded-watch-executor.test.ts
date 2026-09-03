@@ -100,8 +100,22 @@ describe("guarded coworker watch executor", () => {
       },
       privacy: { allowedDataLabels: ["public", "untrusted_external"], allowUnverifiedProviderConsent: false },
     });
+    coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, {
+      expectedRevision: 0,
+      profileRevision: profile.revision,
+      agentFiles: [],
+      memories: [],
+      connections: [{
+        id: "cxc_sui",
+        appId: "matterhorn.sui-testnet",
+        manifestRevision: "1.0.0",
+        actionIds: ["sui_account_read"],
+        networks: ["sui:testnet"],
+      }],
+    });
     const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, {
       profileRevision: profile.revision,
+      connectionId: "cxc_sui",
       name: "Sui balance",
       appId: "matterhorn.sui-testnet",
       actionId: "sui_account_read",
@@ -186,6 +200,16 @@ describe("guarded coworker watch executor", () => {
         status: "success",
         usage: expect.objectContaining({ inputTokens: 0, outputTokens: 0, reasoningTokens: 0 }),
       })]);
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, {
+        expectedRevision: 1,
+        profileRevision: profile.revision,
+        agentFiles: [],
+        memories: [],
+        connections: [],
+      });
+      await expect(execute(watch)).rejects.toThrow("coworker_watch_resource_unavailable");
+      expect(started).toHaveLength(1);
+      expect(routed).toHaveLength(1);
     } finally {
       store.close();
     }

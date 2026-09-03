@@ -130,6 +130,7 @@ function resourceScopeInput(
 function watchInput(overrides: Partial<MatterhornCoworkerWatchCreateInput> = {}): MatterhornCoworkerWatchCreateInput {
   return {
     profileRevision: 1,
+    connectionId: "cxc_sui",
     name: "Sui balance change",
     appId: "matterhorn.sui-testnet",
     actionId: "sui_account_read",
@@ -140,6 +141,12 @@ function watchInput(overrides: Partial<MatterhornCoworkerWatchCreateInput> = {})
     conditions: [{ id: "balance_changed", metric: "totalBalance", operator: "changed", value: null }],
     ...overrides,
   };
+}
+
+function watchResourceScopeInput(
+  overrides: Partial<MatterhornCoworkerResourceScopeInput> = {},
+): MatterhornCoworkerResourceScopeInput {
+  return resourceScopeInput({ agentFiles: [], memories: [], ...overrides });
 }
 
 function inboxInput(watchId: string, overrides: Partial<MatterhornCoworkerInboxItemInput> = {}): MatterhornCoworkerInboxItemInput {
@@ -606,11 +613,13 @@ describe("durable crypto coworkers", () => {
         automaticAuthorities: ["read", "watch"],
         limits: { ...input().limits, maxActiveWatches: 1 },
       }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
       const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
       expect(watch).toMatchObject({
         state: "active",
         pauseReason: null,
         profileRevision: profile.revision,
+        connectionBinding: { connectionId: "cxc_sui", manifestRevision: "1.0.0" },
         schedule: { nextCheckAt: "2026-09-01T12:05:00.000Z", lastCheckedAt: null },
       });
       expect(coworkers.listWatches("ws_alpha", "account_alpha", profile.id)).toHaveLength(1);
@@ -639,13 +648,18 @@ describe("durable crypto coworkers", () => {
         automaticAuthorities: ["read", "watch"],
         limits: { ...input().limits, maxActiveWatches: 2 },
       }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
       const unsafe: MatterhornCoworkerWatchCreateInput[] = [
+        watchInput({ connectionId: "unapproved_connection" }),
         watchInput({ appId: "unapproved.app" }),
         watchInput({ actionId: "unapproved_action" }),
         watchInput({ network: "sui:mainnet" }),
         watchInput({ budgets: { ...watchInput().budgets, maxReadCallsPerCheck: 13 } }),
         watchInput({ schedule: { intervalMs: 1_000, maxChecksPerDay: 1_000 } }),
         watchInput({ parameters: { privateKey: "secret material" } }),
+        watchInput({
+          conditions: [{ id: "unsafe_hash", metric: "matterhorn_result_hash", operator: "eq", value: "attacker" }],
+        }),
       ];
       for (const candidate of unsafe) {
         expect(() => coworkers.createWatch("ws_alpha", "account_alpha", profile.id, candidate))
@@ -664,6 +678,7 @@ describe("durable crypto coworkers", () => {
         automaticAuthorities: ["read", "watch"],
         limits: { ...input().limits, maxActiveWatches: 2 },
       }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
       const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
       const updated = coworkers.update("ws_alpha", "account_alpha", profile.id, {
         expectedRevision: profile.revision,
@@ -674,13 +689,15 @@ describe("durable crypto coworkers", () => {
         pauseReason: "profile_changed",
         profileRevision: updated.revision,
       });
+      expect(() => coworkers.transitionWatch(
+        "ws_alpha", "account_alpha", profile.id, watch.id, "active", 2,
+      )).toThrow(new MatterhornCoworkerError("coworker_watch_invalid"));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput({
+        expectedRevision: 1,
+        profileRevision: updated.revision,
+      }));
       const resumedWatch = coworkers.transitionWatch(
-        "ws_alpha",
-        "account_alpha",
-        profile.id,
-        watch.id,
-        "active",
-        2,
+        "ws_alpha", "account_alpha", profile.id, watch.id, "active", 2,
       );
       expect(resumedWatch).toMatchObject({ state: "active", pauseReason: null, profileRevision: updated.revision });
       const pausedCoworker = coworkers.transition("ws_alpha", "account_alpha", profile.id, "paused", updated.revision);
@@ -702,6 +719,7 @@ describe("durable crypto coworkers", () => {
         automaticAuthorities: ["read", "watch"],
         limits: { ...input().limits, maxActiveWatches: 1 },
       }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
       const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
       const item = coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
       expect(item).toMatchObject({ state: "unread", watchId: watch.id, kind: "alert" });

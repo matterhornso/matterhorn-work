@@ -7,6 +7,11 @@ import {
 } from "../src/react-app/shell/session-panel-route";
 import { buildCoworkerAppConnectionDraft } from "../src/react-app/domains/coworkers/coworker-app-connection";
 import { resolveCoworkerNextStep } from "../src/react-app/domains/coworkers/coworkers-panel";
+import {
+  parseCoworkerWatchParameters,
+  resolveCoworkerWatchFields,
+  resolveCoworkerWatchSources,
+} from "../src/react-app/domains/coworkers/coworker-watch-form";
 import { suggestCoworkerTemplate } from "../src/react-app/domains/session/chat/workspace-coworker-suggestion";
 
 function appSource(path: string): string {
@@ -85,11 +90,135 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("Cancel review");
     expect(panel).toContain("cancelCoworkerWalletIntent");
     expect(panel).toContain("Checks");
+    expect(panel).toContain("Add check");
+    expect(panel).toContain("Notify me when the result changes.");
+    expect(panel).toContain("It cannot move funds.");
+    expect(panel).toContain("Remove check");
     expect(panel).toContain("Updates");
     expect(panel).toContain("Not available");
     expect(panel).toContain("Not allowed");
     expect(panel).not.toContain("signTransaction");
     expect(panel).not.toContain("submitTransaction");
+  });
+
+  test("offers only read/watch actions from the exact approved live connection", () => {
+    const sources = resolveCoworkerWatchSources({
+      coworker: {
+        allowedAppIds: ["matterhorn.sui-testnet"],
+        allowedActionIds: ["sui_account_read", "sui_transfer_preview"],
+        allowedNetworks: ["sui:testnet"],
+      },
+      scope: {
+        connections: [{
+          id: "connection_1",
+          appId: "matterhorn.sui-testnet",
+          manifestRevision: "1.0.0",
+          actionIds: ["sui_account_read", "sui_transfer_preview"],
+          networks: ["sui:testnet"],
+        }],
+      },
+      connections: [{
+        version: "matterhorn.crypto-app-connection.v1",
+        id: "connection_1",
+        workspaceId: "workspace_1",
+        appId: "matterhorn.sui-testnet",
+        manifestRevision: "1.0.0",
+        state: "active",
+        grantedActionIds: ["sui_account_read", "sui_transfer_preview"],
+        grantedScopes: [],
+        grantedNetworks: ["sui:testnet"],
+        credential: { type: "none", connected: true },
+        availability: "available",
+        createdAt: "2026-09-01T00:00:00.000Z",
+        updatedAt: "2026-09-01T00:00:00.000Z",
+      }],
+      apps: [{
+        version: "matterhorn.crypto-app-catalog.v1",
+        appId: "matterhorn.sui-testnet",
+        displayName: "Sui Testnet",
+        description: "Safe Sui reads",
+        manifestRevision: "1.0.0",
+        manifestHash: "a".repeat(64),
+        certification: {
+          state: "certified_testnet",
+          reportHash: "b".repeat(64),
+          runtimeReportHash: "c".repeat(64),
+          policyVersion: "policy-1",
+          updatedAt: "2026-09-01T00:00:00.000Z",
+        },
+        authentication: { type: "none", scopes: [], connectionRequired: false },
+        networks: [{ protocol: "sui", chainId: "sui:testnet", environment: "testnet" }],
+        actions: [
+          {
+            id: "sui_account_read",
+            title: "Read Sui balance",
+            description: "Read one balance",
+            access: "read",
+            risk: "private_data",
+            requiredScopes: [],
+            requiresFreshness: true,
+            freshnessMaxAgeMs: 30_000,
+            timeoutMs: 10_000,
+            simulationRequired: false,
+            walletSubmissionOnly: true,
+            agentMaySubmit: false,
+          },
+          {
+            id: "sui_transfer_preview",
+            title: "Prepare transfer",
+            description: "Prepare one transfer",
+            access: "prepare",
+            risk: "financial_high",
+            requiredScopes: [],
+            requiresFreshness: true,
+            freshnessMaxAgeMs: 15_000,
+            timeoutMs: 15_000,
+            simulationRequired: true,
+            walletSubmissionOnly: true,
+            agentMaySubmit: false,
+          },
+        ],
+        support: { privacyPolicyUrl: "https://matterhorn.so/privacy", statusUrl: null },
+      }],
+    });
+
+    expect(sources).toHaveLength(1);
+    expect(sources[0]).toMatchObject({
+      connectionId: "connection_1",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+    });
+  });
+
+  test("turns certified scalar schemas into guided, validated check fields", () => {
+    const fields = resolveCoworkerWatchFields({
+      actionSchemas: [{
+        actionId: "balance_read",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            address: { type: "string", minLength: 3, maxLength: 128 },
+            limit: { type: "integer", minimum: 1, maximum: 50 },
+            testnet: { type: "boolean" },
+          },
+          required: ["address"],
+        },
+        outputProjectionSchema: {},
+      }],
+    } as Parameters<typeof resolveCoworkerWatchFields>[0], "balance_read");
+
+    expect(fields.supported).toBe(true);
+    if (!fields.supported) throw new Error("expected supported fields");
+    expect(fields.fields.map((field) => field.label)).toEqual(["Address", "Limit", "Testnet"]);
+    expect(parseCoworkerWatchParameters(fields.fields, {
+      address: "0x1234",
+      limit: "10",
+      testnet: true,
+    })).toEqual({ ok: true, parameters: { address: "0x1234", limit: 10, testnet: true } });
+    expect(parseCoworkerWatchParameters(fields.fields, { address: "0x1234", limit: "51" }))
+      .toEqual({ ok: false, error: "Check limit." });
   });
 
   test("gives every coworker one clear next step before exposing optional details", () => {

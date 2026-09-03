@@ -10938,13 +10938,14 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const body = await readJsonBody(ctx.request, 64 * 1_024, "Coworker watch");
       const keys = [
-        "profileRevision", "name", "appId", "actionId", "network", "parameters", "schedule", "budgets", "conditions",
+        "profileRevision", "name", "connectionId", "appId", "actionId", "network", "parameters", "schedule", "budgets", "conditions",
       ];
       if (!isRecord(body)
         || Object.keys(body).some((key) => !keys.includes(key))
         || keys.some((key) => !Object.hasOwn(body, key))
         || !Number.isSafeInteger(body.profileRevision)
         || typeof body.name !== "string"
+        || typeof body.connectionId !== "string"
         || typeof body.appId !== "string"
         || typeof body.actionId !== "string"
         || typeof body.network !== "string"
