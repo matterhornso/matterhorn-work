@@ -536,6 +536,50 @@ function validateClosedInput(input) {
   ], "evidence.operations");
 }
 
+function acceptanceEvidenceReferences(input) {
+  return [
+    ["runtime", input.runtime?.evidence],
+    ...Object.keys(CERTIFICATION_SCENARIOS).map((id) => [
+      `certifications.${id}`,
+      input.certifications?.[id]?.evidence,
+    ]),
+    ...Object.keys(COWORKER_SCENARIOS).map((id) => [
+      `coworkers.${id}`,
+      input.coworkers?.[id]?.evidence,
+    ]),
+    ...Object.keys(TRANSACTION_SCENARIOS).map((id) => [
+      `transactions.${id}`,
+      input.transactions?.[id]?.evidence,
+    ]),
+    ["encryptedEvidence", input.encryptedEvidence?.evidence],
+    ["developerPlatform", input.developerPlatform?.evidence],
+    ["developerPlatform.sdkProvenance", input.developerPlatform?.sdkProvenance],
+    ["designPartners", input.designPartners?.evidence],
+    ["rollout", input.rollout?.evidence],
+    ["operations", input.operations?.evidence],
+  ];
+}
+
+function validateIndependentEvidenceReferences(input, evidencePath) {
+  const pathOwners = new Map();
+  const hashOwners = new Map();
+  for (const [label, reference] of acceptanceEvidenceReferences(input)) {
+    if (!reference || typeof reference !== "object" || Array.isArray(reference)) continue;
+    if (typeof reference.path === "string" && reference.path.trim() && !isAbsolute(reference.path)) {
+      const canonicalCandidate = resolve(dirname(evidencePath), reference.path);
+      const prior = pathOwners.get(canonicalCandidate);
+      if (prior) throw new Error(`Acceptance evidence report is reused by ${prior} and ${label}.`);
+      pathOwners.set(canonicalCandidate, label);
+    }
+    if (HASH_PATTERN.test(reference.sha256 ?? "")) {
+      const normalizedHash = reference.sha256.toLowerCase();
+      const prior = hashOwners.get(normalizedHash);
+      if (prior) throw new Error(`Acceptance evidence content is reused by ${prior} and ${label}.`);
+      hashOwners.set(normalizedHash, label);
+    }
+  }
+}
+
 function check(checks, id, gate, label, pass, evidence = null) {
   checks.push({
     id,
@@ -573,6 +617,7 @@ function evaluate(input, config) {
   if (input.version !== INPUT_VERSION) throw new Error(`Evidence version must be ${INPUT_VERSION}.`);
   rejectSensitiveKeys(input);
   validateClosedInput(input);
+  validateIndependentEvidenceReferences(input, config.evidence);
 
   const checks = [];
   const capturedAt = new Date(input.capturedAt);

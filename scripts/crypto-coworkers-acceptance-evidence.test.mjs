@@ -310,6 +310,27 @@ try {
   assert.equal(report.checks.length, 21);
   assert.equal(report.runtime.opencode.version, constants.opencodeVersion);
 
+  const reusedPath = structuredClone(input);
+  reusedPath.coworkers.riskMonitor.evidence = reusedPath.coworkers.marketAnalyst.evidence;
+  const reusedPathResult = await run(reusedPath);
+  assert.equal(reusedPathResult.code, 1);
+  assert.match(reusedPathResult.stderr, /report is reused/i);
+
+  const reusedContent = structuredClone(input);
+  const marketAnalystReport = readFileSync(
+    join(directory, reusedContent.coworkers.marketAnalyst.evidence.path),
+    "utf8",
+  );
+  writeFileSync(join(directory, "risk-monitor-copy.md"), marketAnalystReport);
+  reusedContent.coworkers.riskMonitor.evidence = {
+    path: "risk-monitor-copy.md",
+    sha256: sha256(marketAnalystReport),
+  };
+  const reusedContentResult = await run(reusedContent);
+  assert.equal(reusedContentResult.code, 1);
+  assert.match(reusedContentResult.stderr, /content is reused/i);
+
+  writeFileSync(evidencePath, `${JSON.stringify(input, null, 2)}\n`);
   const jsonOutputPath = join(directory, "readiness.json");
   const jsonOutput = await runCli([
     "--evidence", evidencePath,
