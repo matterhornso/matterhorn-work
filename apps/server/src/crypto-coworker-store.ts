@@ -565,6 +565,7 @@ export class MatterhornCoworkerStore {
           owner_id, access_id, state, granted_at, updated_at, revoked_at
         ) VALUES (?, ?, 'active', ?, ?, NULL)
         ON CONFLICT(owner_id) DO UPDATE SET
+          access_id = excluded.access_id,
           state = 'active',
           granted_at = excluded.granted_at,
           updated_at = excluded.updated_at,

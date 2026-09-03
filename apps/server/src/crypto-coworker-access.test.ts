@@ -126,7 +126,13 @@ describe("crypto coworker invite access", () => {
 
       const replacement = state.access.issueInvite();
       expect(state.access.accept("account-a", replacement.token)).toMatchObject({ allowed: true });
-      expect(state.access.list()[0].accessId).toBe(listed[0].accessId);
+      const replacementAccessId = state.access.list()[0].accessId;
+      expect(replacementAccessId).not.toBe(listed[0].accessId);
+      expect(() => state.access.revokeByAccessId(listed[0].accessId)).toThrow(
+        new MatterhornCoworkerAccessError("coworker_access_not_found"),
+      );
+      expect(state.access.isAllowed("account-a")).toBe(true);
+      expect(state.access.revokeByAccessId(replacementAccessId)).toMatchObject({ allowed: false });
     } finally {
       state.close();
     }

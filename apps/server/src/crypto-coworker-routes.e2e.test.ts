@@ -777,6 +777,29 @@ describe("crypto coworker HTTP boundary", () => {
     );
     expect(blockedMessage.response.status).toBe(403);
     expect(blockedMessage.payload.code).toBe("coworker_access_required");
+
+    const replacementInvite = await request(server.base, "/operator/coworker-access/invites", {
+      host: true,
+      body: { ttlMinutes: 60 },
+    });
+    const restored = await request(server.base, "/coworker-access/accept", {
+      cookie: cookieA,
+      body: { inviteToken: String(replacementInvite.payload.invite.token) },
+    });
+    expect(restored.response.status).toBe(200);
+    expect(restored.payload.status).toMatchObject({ allowed: true });
+    const replacementAccessList = await request(server.base, "/operator/coworker-access", { host: true });
+    const replacementAccessId = String(replacementAccessList.payload.accounts[0].accessId);
+    expect(replacementAccessId).not.toBe(accessId);
+
+    const staleRevoke = await request(server.base, "/operator/coworker-access/revoke", {
+      host: true,
+      body: { accessId },
+    });
+    expect(staleRevoke.response.status).toBe(404);
+    expect(staleRevoke.payload.code).toBe("coworker_access_not_found");
+    expect((await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA })).response.status)
+      .toBe(200);
   });
 
   test("stores encrypted Agent Files for the selected tenant and coworker only", async () => {
