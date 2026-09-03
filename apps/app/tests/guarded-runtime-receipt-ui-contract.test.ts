@@ -22,6 +22,9 @@ describe("guarded runtime receipt UI contract", () => {
     expect(source).toContain("publicReceipt");
     expect(source).toContain("receipt.privacy.requestHash");
     expect(source).toContain("request proof");
+    expect(source).toContain("Used for this run:");
+    expect(source).toContain("coworkerFiles");
+    expect(source).toContain("savedMemories");
   });
 
   test("does not render raw prompt or capability bearer fields", () => {

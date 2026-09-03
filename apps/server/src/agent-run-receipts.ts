@@ -49,6 +49,7 @@ export type StartAgentRunReceiptInput = {
   preflight: MatterhornAgentPrivacyPreflightResponse;
   consentUsed: boolean;
   memoryReadIds?: string[];
+  context?: MatterhornAgentRunReceipt["context"];
   toolCallBudget?: MatterhornAgentRunReceipt["usage"]["toolCallBudget"];
   now?: Date;
 };
@@ -118,6 +119,13 @@ export class MatterhornAgentRunReceiptStore {
         consent: input.consentUsed ? "single_request" : "not_required",
         dataLeavesMatterhorn: input.preflight.provider.dataLeavesMatterhorn,
       },
+      ...(input.context ? {
+        context: {
+          chatFiles: Math.max(0, Math.floor(input.context.chatFiles)),
+          coworkerFiles: Math.max(0, Math.floor(input.context.coworkerFiles)),
+          savedMemories: Math.max(0, Math.floor(input.context.savedMemories)),
+        },
+      } : {}),
       usage: {
         inputTokens: 0,
         outputTokens: 0,

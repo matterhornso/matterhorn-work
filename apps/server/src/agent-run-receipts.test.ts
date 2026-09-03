@@ -76,6 +76,7 @@ describe("guarded agent run receipts", () => {
         detectedData: { labels: ["public"], categories: [], redactionCount: 0 },
         reason: sensitivePrompt,
       },
+      context: { chatFiles: 2, coworkerFiles: 1, savedMemories: 1 },
     });
     await store.complete({
       runId: "run_receipt_1",
@@ -88,10 +89,13 @@ describe("guarded agent run receipts", () => {
     expect(items[0]?.usage.inputTokens).toBe(120);
     expect(items[0]?.provider).toMatchObject({ name: "ASI:Cloud", policyUrl: null });
     expect(items[0]?.privacy.requestHash).toBe("hash-only");
+    expect(items[0]?.context).toEqual({ chatFiles: 2, coworkerFiles: 1, savedMemories: 1 });
     expect(items[0]?.memory.writtenIds).toEqual(["memory_saved_from_run"]);
     expect(items[0]?.integrity.recordHash).toHaveLength(64);
     const files = await readFile(join(root, "security-receipts", "ws_receipt", `${new Date().toISOString().slice(0, 10)}.jsonl`), "utf8");
     expect(files).not.toContain(sensitivePrompt);
+    expect(files).not.toContain("attachmentIds");
+    expect(files).not.toContain("agentFileIds");
     expect(files).toContain('"requestHash":"hash-only"');
     expect(files.trim().split("\n").length).toBe(3);
   });

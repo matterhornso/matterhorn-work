@@ -220,6 +220,15 @@ export type MatterhornAgentRunReceipt = {
     consent: "not_required" | "single_request";
     dataLeavesMatterhorn: boolean;
   };
+  /**
+   * Content-free counts of the user-selected context compiled for this run.
+   * Legacy v1 receipts may omit this field.
+   */
+  context?: {
+    chatFiles: number;
+    coworkerFiles: number;
+    savedMemories: number;
+  };
   usage: {
     inputTokens: number;
     outputTokens: number;

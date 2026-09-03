@@ -1140,6 +1140,7 @@ describe("workspace session read APIs", () => {
     await expect(receiptResponse.json()).resolves.toMatchObject({
       item: {
         privacy: { requestHash: preflight.requestHash },
+        context: { chatFiles: 0, coworkerFiles: 0, savedMemories: 1 },
         memory: { readIds: ["mem_agent_gateway_private"] },
       },
     });
@@ -1302,6 +1303,7 @@ describe("workspace session read APIs", () => {
           mode: "private_workspace",
           consent: "not_required",
         },
+        context: { chatFiles: 0, coworkerFiles: 0, savedMemories: 1 },
         memory: { readIds: ["mem_agent_gateway_private"] },
       },
     });

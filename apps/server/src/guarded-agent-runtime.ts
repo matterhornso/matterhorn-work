@@ -66,6 +66,8 @@ export type GuardedPromptInput = {
   modelId: string;
   agentId?: string;
   attachmentIds?: string[];
+  /** Selected encrypted Agent Files. Included separately for content-free receipt counts. */
+  agentFileIds?: string[];
   memoryIds?: string[];
   privacyMode?: MatterhornAgentPrivacyMode;
   privacyConsentToken?: string;
@@ -85,6 +87,21 @@ export type GuardedPromptAuthorization = {
   preflight: MatterhornAgentPrivacyPreflightResponse;
   consentRequired: boolean;
 };
+
+function selectedContextCounts(input: GuardedPromptInput): NonNullable<MatterhornAgentRunReceipt["context"]> {
+  const coworkerFiles = new Set((input.agentFileIds ?? []).map((id) => id.trim()).filter(Boolean));
+  const chatFiles = new Set(
+    (input.attachmentIds ?? [])
+      .map((id) => id.trim())
+      .filter((id) => Boolean(id) && !coworkerFiles.has(id)),
+  );
+  const savedMemories = new Set((input.memoryIds ?? []).map((id) => id.trim()).filter(Boolean));
+  return {
+    chatFiles: chatFiles.size,
+    coworkerFiles: coworkerFiles.size,
+    savedMemories: savedMemories.size,
+  };
+}
 
 export type DeterministicCoworkerRunInput = {
   workspaceId: string;
@@ -510,6 +527,7 @@ export class MatterhornGuardedAgentRuntime {
         preflight: current,
         consentUsed,
         memoryReadIds: input.memoryIds,
+        context: selectedContextCounts(input),
       });
     } catch (error) {
       this.revokeRun(runId);

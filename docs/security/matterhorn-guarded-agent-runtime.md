@@ -37,10 +37,11 @@ The internal capability and completion routes require
 
 ## Retention and deletion
 
-Run receipts contain provider policy, categories, counts, bounded tool outcomes,
-usage, memory ids, capability decisions, action hashes, and public chain receipt
-references. They never contain raw prompts, unrestricted tool output, secrets,
-signatures, private keys, wallet exports, or bearer capabilities.
+Run receipts contain provider policy, categories, content-free counts of chat files,
+coworker files, and saved memories used for that run, bounded tool outcomes, usage,
+memory ids, capability decisions, action hashes, and public chain receipt references.
+They never contain raw prompts, file names, file identifiers, unrestricted tool output,
+secrets, signatures, private keys, wallet exports, or bearer capabilities.
 
 Receipts are created in every guarded mode, including `off`, then written to
 date-segmented, hash-chained workspace storage and expired by the daily retention

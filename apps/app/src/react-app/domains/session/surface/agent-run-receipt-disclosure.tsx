@@ -16,9 +16,24 @@ function receiptToolLabel(tool: MatterhornAgentRunReceipt["tools"][number]): str
   ].filter(Boolean).join(" · ");
 }
 
+function selectedContextLabel(receipt: MatterhornAgentRunReceipt): string | null {
+  if (!receipt.context) return null;
+  const entries = [
+    receipt.context.chatFiles > 0 ? `${receipt.context.chatFiles} chat file${receipt.context.chatFiles === 1 ? "" : "s"}` : null,
+    receipt.context.coworkerFiles > 0
+      ? `${receipt.context.coworkerFiles} coworker file${receipt.context.coworkerFiles === 1 ? "" : "s"}`
+      : null,
+    receipt.context.savedMemories > 0
+      ? `${receipt.context.savedMemories} saved memor${receipt.context.savedMemories === 1 ? "y" : "ies"}`
+      : null,
+  ].filter((entry): entry is string => Boolean(entry));
+  return entries.length > 0 ? entries.join(" · ") : "No files or saved memories";
+}
+
 export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgentRunReceipt }) {
   const totalTokens = receipt.usage.inputTokens + receipt.usage.outputTokens + receipt.usage.reasoningTokens;
   const capabilityDenials = receipt.capabilities.filter((decision) => decision.decision === "denied").length;
+  const contextLabel = selectedContextLabel(receipt);
   const trainingLabel = receipt.provider.trainingUse === "none"
     ? "No training"
     : receipt.provider.trainingUse === "opt_in_only"
@@ -61,6 +76,12 @@ export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgen
                 <br />
                 Sent: {receipt.privacy.dataCategories.join(", ")}
                 {receipt.privacy.redactionCount > 0 ? ` · ${receipt.privacy.redactionCount} redacted` : ""}
+              </>
+            ) : null}
+            {contextLabel ? (
+              <>
+                <br />
+                Used for this run: {contextLabel}
               </>
             ) : null}
             {receipt.memory.readIds.length > 0 || receipt.memory.writtenIds.length > 0 ? (
