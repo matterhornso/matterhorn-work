@@ -423,6 +423,7 @@ import {
   listMatterhornCoworkerTemplates,
 } from "./crypto-coworker-templates.js";
 import { buildMatterhornCoworkerMasterPrompt } from "./crypto-coworker-master-prompt.js";
+import { compileMatterhornCoworkerSystemContext } from "./crypto-coworker-context-compiler.js";
 import {
   MatterhornCryptoAppCatalogError,
   type MatterhornCryptoAppCatalogQuery,
@@ -20260,7 +20261,7 @@ function buildAuthoritativeAgentSystemContext(input: {
   coworker?: MatterhornCoworkerProfile;
 }): { system: string; privacyParts: MatterhornAgentPrivacyPart[] } {
   const desk = getMatterhornDeskAgentById(input.agentId);
-  const publicSections = [
+  const policySections = [
     buildMatterhornExecutionModeSystemPrompt(input.executionMode),
     desk ? buildMatterhornDeskRequestOverlay(desk) : "",
     input.coworker ? buildMatterhornCoworkerMasterPrompt(input.coworker) : "",
@@ -20282,10 +20283,16 @@ function buildAuthoritativeAgentSystemContext(input: {
     `Automatic authority: ${input.coworker.automaticAuthorities.join(", ") || "none"}`,
     "These limits are server-enforced. Never claim broader authority. Every transaction remains connected-wallet-only.",
   ].join("\n") : "";
-  const system = [...publicSections, coworkerText, input.cryptoStateText, input.memoryText, input.agentFileText]
-    .filter(Boolean)
-    .join("\n\n")
-    .slice(0, AGENT_MESSAGE_MAX_SYSTEM_CHARS);
+  const system = compileMatterhornCoworkerSystemContext({
+    maxChars: AGENT_MESSAGE_MAX_SYSTEM_CHARS,
+    dataSections: [
+      { id: "coworker_profile", label: "Active coworker profile", text: coworkerText, maxChars: 4_000 },
+      { id: "crypto_state", label: "Approved crypto state", text: input.cryptoStateText, maxChars: 10_000 },
+      { id: "selected_memory", label: "Selected Memory", text: input.memoryText, maxChars: 7_000 },
+      { id: "agent_files", label: "Selected Agent Files", text: input.agentFileText, maxChars: 7_000 },
+    ],
+    policySections,
+  }).system;
   const coworkerPrivacyParts: MatterhornAgentPrivacyPart[] = coworkerText ? [{
     type: "coworker_profile",
     name: input.coworker!.name,
@@ -20298,7 +20305,7 @@ function buildAuthoritativeAgentSystemContext(input: {
   return {
     system,
     privacyParts: [
-      ...publicSections.map((text): MatterhornAgentPrivacyPart => ({
+      ...policySections.map((text): MatterhornAgentPrivacyPart => ({
         type: "system",
         text,
         source: "system",

@@ -1274,8 +1274,13 @@ describe("workspace session read APIs", () => {
     expect(upstreamRequests[0]?.body).toMatchObject({
       model: { providerID: "venice", modelID: "private-tools" },
     });
-    expect(String((upstreamRequests[0]?.body as Record<string, unknown>)?.system))
-      .toContain("Prefer validators with stable emissions and low take.");
+    const system = String((upstreamRequests[0]?.body as Record<string, unknown>)?.system);
+    expect(system).toContain("Prefer validators with stable emissions and low take.");
+    expect(system.indexOf("## User-selected Memory"))
+      .toBeLessThan(system.indexOf("## Matterhorn Authoritative Policy"));
+    expect(system).toEndWith(
+      "Wallet review and submission remain user-controlled outside the model.",
+    );
 
     const receiptResponse = await fetch(
       `${base}/workspace/ws_1/agent-run-receipts/${encodeURIComponent(accepted.runId)}`,

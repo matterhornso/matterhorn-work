@@ -15,7 +15,8 @@ describe("crypto coworker master prompts", () => {
       expect(prompt).toContain("connected-wallet review");
       expect(prompt).toContain("untrusted data");
       expect(prompt).toContain("Never request secrets");
-      expect(prompt).toContain("Facts, Inference, Done, Needs approval, Open questions");
+      expect(prompt).toContain("What I found, What it means, Done, Review needed, What I need from you");
+      expect(prompt).toContain("Hide internal app ids");
       expect(prompt).not.toContain(template.profile.mission);
     }
   });
@@ -25,6 +26,12 @@ describe("crypto coworker master prompts", () => {
       const prompt = buildMatterhornCoworkerMasterPrompt({ role });
       expect(prompt).toContain("exact user-supplied terms");
     }
+  });
+
+  test("keeps treasury transfer instructions aligned with its certified profile", () => {
+    const prompt = buildMatterhornCoworkerMasterPrompt({ role: "treasury_coworker" });
+    expect(prompt).toContain("Sui or Bittensor testnet transfer");
+    expect(prompt).not.toContain("Prepare a Sui transfer only");
   });
 
   test("keeps custom roles on the narrow fallback", () => {

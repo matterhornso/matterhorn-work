@@ -44,8 +44,10 @@ assert.ok(plan.includes("[Grok Bot reference audit](./grokbot-reference-audit.md
 assert.ok(plan.includes("[Monid reference audit](./monid-reference-audit.md)"));
 assert.ok(readme.includes("[`grokbot-reference-audit.md`](./grokbot-reference-audit.md)"));
 assert.ok(readme.includes("[`monid-reference-audit.md`](./monid-reference-audit.md)"));
-assert.ok(prompt.includes("matterhorn.coworker-master-prompt.v2"));
-assert.ok(prompt.includes("Facts, Inference, Done, Needs approval, Open questions"));
+assert.ok(prompt.includes("matterhorn.coworker-master-prompt.v3"));
+assert.ok(
+  prompt.includes("What I found, What it means, Done, Review needed, What I need from you"),
+);
 assert.equal(/general cloud computer|cross-coworker session sharing/.test(prompt), false);
 
 console.log("Crypto coworker reference-pattern contract passed.");

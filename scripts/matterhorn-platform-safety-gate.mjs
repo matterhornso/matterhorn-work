@@ -78,6 +78,8 @@ const STAGES = [
       "bun",
       "test",
       "apps/server/src/project-evidence-routes.e2e.test.ts",
+      "apps/server/src/crypto-coworker-context-compiler.test.ts",
+      "apps/server/src/crypto-coworker-master-prompt.test.ts",
       "&&",
       "node",
       "scripts/wellness-creator-workflow.test.mjs",

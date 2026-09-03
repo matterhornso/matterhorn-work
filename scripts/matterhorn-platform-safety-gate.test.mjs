@@ -73,6 +73,8 @@ for (const required of [
   "workflow-stage-card.test.ts",
   "customer-workflow-templates.test.ts",
   "project-evidence-routes.e2e.test.ts",
+  "crypto-coworker-context-compiler.test.ts",
+  "crypto-coworker-master-prompt.test.ts",
   "wellness-creator-workflow.test.mjs",
   "billing-routes.e2e.test.ts",
   "apps/opencode-router/test/health-send.test.js",
