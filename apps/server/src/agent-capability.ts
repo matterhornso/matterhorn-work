@@ -714,6 +714,13 @@ export class MatterhornAgentCapabilityBroker {
       .map((grant) => grant.runId);
   }
 
+  runIdsForConnection(input: { workspaceId: string; connectionId: string }): string[] {
+    return [...this.grants.values()]
+      .filter((grant) => grant.workspaceId === input.workspaceId
+        && grant.coworker?.actionBindings.some((binding) => binding.connectionId === input.connectionId))
+      .map((grant) => grant.runId);
+  }
+
   closeRun(runId: string): { callIds: string[] } {
     const grant = this.grants.get(runId);
     if (!grant) return { callIds: [] };

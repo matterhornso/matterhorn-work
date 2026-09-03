@@ -578,6 +578,50 @@ describe("guarded crypto transaction service", () => {
       .toMatchObject({ revision: 2, state: "refreshing" });
   });
 
+  test("cancels only wallet reviews bound to the disconnected app connection", async () => {
+    const input = request();
+    const pendingIntents = pendingStore();
+    const service = new MatterhornCryptoTransactionService({
+      router: { execute: async () => adapterResult() },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents,
+      recordReviewedAction: async () => undefined,
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 25,
+        dailySpendUsdBefore: 0,
+        weeklySpendUsdBefore: 0,
+        projectedReserveUsd: 75,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 0,
+        regionCode: "ch",
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    const prepared = await service.prepare(input);
+    const pendingId = prepared.pendingIntent?.id ?? "missing";
+
+    expect(pendingIntents.invalidateConnection({
+      workspaceId: "ws_other",
+      connectionId: "cxc_sui",
+    })).toBe(0);
+    expect(pendingIntents.invalidateConnection({
+      workspaceId: "ws_alpha",
+      connectionId: "cxc_other",
+    })).toBe(0);
+    expect(pendingIntents.invalidateConnection({
+      workspaceId: "ws_alpha",
+      connectionId: "cxc_sui",
+    })).toBe(1);
+    expect(pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", pendingId))
+      .toMatchObject({ revision: 2, state: "cancelled" });
+    expect(pendingIntents.invalidateConnection({
+      workspaceId: "ws_alpha",
+      connectionId: "cxc_sui",
+    })).toBe(0);
+  });
+
   test("denies static policy before calling the certified adapter", async () => {
     const input = request(false);
     let routerCalls = 0;

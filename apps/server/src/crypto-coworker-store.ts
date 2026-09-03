@@ -972,6 +972,54 @@ export class MatterhornCoworkerStore {
     }
   }
 
+  pauseWatchesForConnection(input: {
+    workspaceId: string;
+    connectionId: string;
+    updatedAt: string;
+  }): number {
+    let changed = 0;
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      const watches = (statement(this.#db, `
+        SELECT * FROM crypto_coworker_watches
+        WHERE workspace_id = ? AND state = 'active'
+        ORDER BY owner_id ASC, coworker_id ASC, created_at ASC, watch_id ASC
+      `).all(input.workspaceId) as CoworkerWatchRow[]).map(watchFromRow);
+      for (const watch of watches) {
+        if (watch.connectionBinding?.connectionId !== input.connectionId) continue;
+        const next: MatterhornCoworkerWatch = {
+          ...watch,
+          revision: watch.revision + 1,
+          state: "paused",
+          pauseReason: "app_disconnected",
+          updatedAt: input.updatedAt,
+        };
+        const result = statement(this.#db, `
+          UPDATE crypto_coworker_watches
+          SET revision = ?, state = ?, watch_json = ?, updated_at = ?
+          WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? AND revision = ? AND state = 'active'
+        `).run(
+          next.revision,
+          next.state,
+          JSON.stringify(next),
+          next.updatedAt,
+          next.workspaceId,
+          next.ownerId,
+          next.coworkerId,
+          next.id,
+          watch.revision,
+        );
+        if ((result.changes ?? 0) !== 1) throw new MatterhornCoworkerStoreError("coworker_revision_conflict");
+        changed += 1;
+      }
+      this.#db.exec("COMMIT;");
+      return changed;
+    } catch (error) {
+      this.#db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
   deleteWatch(workspaceId: string, ownerId: string, coworkerId: string, watchId: string, expectedRevision: number): boolean {
     return (statement(this.#db, `
       DELETE FROM crypto_coworker_watches

@@ -31,6 +31,9 @@ const ENV_KEYS = [
   "MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET",
   "MATTERHORN_CRYPTO_APP_OAUTH_CLIENTS_JSON",
   "MATTERHORN_CRYPTO_APP_OAUTH_ENCRYPTION_KEY",
+  "MATTERHORN_COWORKER_MODE",
+  "MATTERHORN_COWORKER_POLICY_VERSION",
+  "MATTERHORN_COWORKER_DB",
   "MATTERHORN_WORK_DATA_DIR",
 ] as const;
 const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -123,6 +126,9 @@ function configureCatalog(root: string) {
   }]);
   process.env.MATTERHORN_CRYPTO_APP_REGISTRY_DB = registryPath;
   process.env.MATTERHORN_CRYPTO_APP_CONNECTION_DB = join(root, "connections.db");
+  process.env.MATTERHORN_COWORKER_MODE = "internal";
+  process.env.MATTERHORN_COWORKER_POLICY_VERSION = "coworker-policy-1";
+  process.env.MATTERHORN_COWORKER_DB = join(root, "coworkers.db");
   const manifests = buildMatterhornFirstPartyTestnetManifests({
     publisherId: "matterhorn",
     publisherKeyId: "publisher-1",
@@ -457,6 +463,37 @@ describe("crypto app catalog HTTP boundary", () => {
     expect(replay.payload.code).toBe("wallet_challenge_invalid");
 
     const connectionId = created.payload.connection.id as string;
+    const createdCoworker = await request(server.base, "/workspace/ws_catalog/coworkers/from-template", {
+      body: { templateId: "risk_monitor", name: "Sui connection monitor" },
+    });
+    expect(createdCoworker.response.status).toBe(201);
+    const coworkerId = createdCoworker.payload.coworker.id as string;
+    const resources = await request(server.base, `/workspace/ws_catalog/coworkers/${coworkerId}/resources`, {
+      method: "PUT",
+      body: {
+        expectedRevision: 0,
+        profileRevision: 1,
+        agentFileIds: [],
+        memoryIds: [],
+        connectionIds: [connectionId],
+      },
+    });
+    expect(resources.response.status).toBe(200);
+    const createdWatch = await request(server.base, `/workspace/ws_catalog/coworkers/${coworkerId}/watches`, {
+      body: {
+        profileRevision: 1,
+        connectionId,
+        name: "Sui balance change",
+        appId: "matterhorn.sui-testnet",
+        actionId: "sui_account_read",
+        network: "sui:testnet",
+        parameters: { address: suiAddress },
+        schedule: { intervalMs: 300_000, maxChecksPerDay: 288 },
+        budgets: { maxReadCallsPerCheck: 1, maxModelTokensPerCheck: 0, maxCostMicrosPerCheck: 10_000 },
+        conditions: [{ id: "balance_changed", metric: "totalBalance", operator: "changed", value: null }],
+      },
+    });
+    expect(createdWatch.response.status).toBe(201);
     const otherWorkspace = await request(server.base, "/workspace/ws_other/crypto-app-connections");
     expect(otherWorkspace.response.status).toBe(404);
     const paused = await request(server.base, `/workspace/ws_catalog/crypto-app-connections/${connectionId}`, {
@@ -464,6 +501,24 @@ describe("crypto app catalog HTTP boundary", () => {
       body: { state: "paused" },
     });
     expect(paused.payload.connection.state).toBe("paused");
+    const watchesAfterDisconnect = await request(
+      server.base,
+      `/workspace/ws_catalog/coworkers/${coworkerId}/watches`,
+    );
+    expect(watchesAfterDisconnect.payload.watches).toEqual([
+      expect.objectContaining({
+        id: createdWatch.payload.watch.id,
+        revision: 2,
+        state: "paused",
+        pauseReason: "app_disconnected",
+      }),
+    ]);
+    const pausedAgain = await request(server.base, `/workspace/ws_catalog/crypto-app-connections/${connectionId}`, {
+      method: "PATCH",
+      body: { state: "paused" },
+    });
+    expect(pausedAgain.response.status).toBe(200);
+    expect(pausedAgain.payload.connection.state).toBe("paused");
     const revoked = await request(server.base, `/workspace/ws_catalog/crypto-app-connections/${connectionId}`, {
       method: "DELETE",
     });

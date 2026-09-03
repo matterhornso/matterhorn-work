@@ -170,7 +170,11 @@ function inboxInput(watchId: string, overrides: Partial<MatterhornCoworkerInboxI
   };
 }
 
-function fixture(policyVersion = "coworker-policy-1", invalidations: unknown[] = []) {
+function fixture(
+  policyVersion = "coworker-policy-1",
+  invalidations: unknown[] = [],
+  connectionIsActive?: ConstructorParameters<typeof MatterhornCoworkers>[0]["connectionIsActive"],
+) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-coworkers-"));
   roots.push(root);
   const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
@@ -182,6 +186,7 @@ function fixture(policyVersion = "coworker-policy-1", invalidations: unknown[] =
     watchId: () => "cwatch_sui_balance",
     inboxItemId: () => "cinbox_sui_balance",
     onInvalidate: (event) => invalidations.push(event),
+    connectionIsActive,
   });
   return { root, store, coworkers };
 }
@@ -636,6 +641,78 @@ describe("durable crypto coworkers", () => {
       } finally {
         reopenedStore.close();
       }
+    } finally {
+      store.close();
+    }
+  });
+
+  test("pauses only active watches bound to a disconnected app connection", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profileInput = input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      });
+      const alpha = coworkers.create("ws_shared", "account_alpha", profileInput);
+      const beta = coworkers.create("ws_shared", "account_beta", profileInput);
+      const otherWorkspace = coworkers.create("ws_other", "account_alpha", profileInput);
+      for (const [workspaceId, ownerId, profile] of [
+        ["ws_shared", "account_alpha", alpha],
+        ["ws_shared", "account_beta", beta],
+        ["ws_other", "account_alpha", otherWorkspace],
+      ] as const) {
+        coworkers.setResourceScope(workspaceId, ownerId, profile.id, watchResourceScopeInput());
+        coworkers.createWatch(workspaceId, ownerId, profile.id, watchInput());
+      }
+
+      expect(coworkers.pauseWatchesForConnection("ws_shared", "cxc_sui")).toBe(2);
+      expect(coworkers.listWatches("ws_shared", "account_alpha", alpha.id)[0]).toMatchObject({
+        revision: 2,
+        state: "paused",
+        pauseReason: "app_disconnected",
+      });
+      expect(coworkers.listWatches("ws_shared", "account_beta", beta.id)[0]).toMatchObject({
+        revision: 2,
+        state: "paused",
+        pauseReason: "app_disconnected",
+      });
+      expect(coworkers.listWatches("ws_other", "account_alpha", otherWorkspace.id)[0]).toMatchObject({
+        revision: 1,
+        state: "active",
+        pauseReason: null,
+      });
+      expect(coworkers.pauseWatchesForConnection("ws_shared", "cxc_sui")).toBe(0);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("requires the exact app connection to be active before a paused watch can resume", () => {
+    let connectionActive = true;
+    const { store, coworkers } = fixture(
+      "coworker-policy-1",
+      [],
+      (binding) => connectionActive
+        && binding.workspaceId === "ws_alpha"
+        && binding.connectionId === "cxc_sui"
+        && binding.manifestRevision === "1.0.0",
+    );
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      expect(coworkers.pauseWatchesForConnection("ws_alpha", "cxc_sui")).toBe(1);
+      connectionActive = false;
+      expect(() => coworkers.transitionWatch(
+        "ws_alpha", "account_alpha", profile.id, watch.id, "active", 2,
+      )).toThrow(new MatterhornCoworkerError("coworker_watch_invalid"));
+      connectionActive = true;
+      expect(coworkers.transitionWatch(
+        "ws_alpha", "account_alpha", profile.id, watch.id, "active", 2,
+      )).toMatchObject({ revision: 3, state: "active", pauseReason: null });
     } finally {
       store.close();
     }

@@ -29,6 +29,7 @@ export function createMatterhornCoworkerRuntime(
   env: NodeJS.ProcessEnv = process.env,
   options: {
     onInvalidate?: ConstructorParameters<typeof MatterhornCoworkers>[0]["onInvalidate"];
+    connectionIsActive?: ConstructorParameters<typeof MatterhornCoworkers>[0]["connectionIsActive"];
   } = {},
 ): MatterhornCoworkerRuntimeServices {
   const feature = cryptoCoworkerFeatureConfig(env);
@@ -48,6 +49,7 @@ export function createMatterhornCoworkerRuntime(
     store,
     policyVersion,
     onInvalidate: options.onInvalidate,
+    connectionIsActive: options.connectionIsActive,
   });
   return {
     mode: feature.coworkerMode,

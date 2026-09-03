@@ -808,6 +808,13 @@ export class MatterhornGuardedAgentRuntime {
     return runIds.length + pendingIntents;
   }
 
+  invalidateConnection(input: { workspaceId: string; connectionId: string }): number {
+    const runIds = this.capabilities.runIdsForConnection(input);
+    for (const runId of runIds) this.revokeRun(runId);
+    const pendingIntents = this.pendingCryptoIntents.invalidateConnection(input);
+    return runIds.length + pendingIntents;
+  }
+
   observationSnapshot(): GuardedRuntimeObservationMetric[] {
     return [...this.observations.values()].map((observation) => ({ ...observation }));
   }

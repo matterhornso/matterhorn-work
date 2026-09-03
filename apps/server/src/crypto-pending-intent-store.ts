@@ -584,4 +584,29 @@ export class MatterhornPendingCryptoIntentStore {
     }
     return invalidated;
   }
+
+  invalidateConnection(input: { workspaceId: string; connectionId: string }): number {
+    const records = this.stateStore.list<MatterhornPendingCryptoIntent>("crypto_pending_intent", {
+      workspaceId: input.workspaceId,
+      nowMs: this.now().getTime(),
+    }).map((stored) => {
+      const record = normalizeRecord(stored);
+      validateRecord(record);
+      return record;
+    }).filter((record) => record.intent.connectionId === input.connectionId);
+    let invalidated = 0;
+    for (const record of records) {
+      if (!TRANSITIONS[record.state].has("cancelled")) continue;
+      this.transition({
+        workspaceId: record.workspaceId,
+        ownerId: record.ownerId,
+        coworkerId: record.coworkerId,
+        id: record.id,
+        expectedRevision: record.revision,
+        nextState: "cancelled",
+      });
+      invalidated += 1;
+    }
+    return invalidated;
+  }
 }

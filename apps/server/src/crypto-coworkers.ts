@@ -89,6 +89,14 @@ type CoworkerServiceOptions = {
     revision: number;
     reason: InvalidationReason;
   }) => void;
+  connectionIsActive?: (input: {
+    workspaceId: string;
+    connectionId: string;
+    appId: string;
+    manifestRevision: string;
+    actionId: string;
+    network: string;
+  }) => boolean;
 };
 
 const TRANSITIONS: Record<MatterhornCoworkerState, ReadonlySet<MatterhornCoworkerState>> = {
@@ -182,6 +190,7 @@ export class MatterhornCoworkers {
   readonly #watchId: () => string;
   readonly #inboxItemId: () => string;
   readonly #onInvalidate: NonNullable<CoworkerServiceOptions["onInvalidate"]>;
+  readonly #connectionIsActive: CoworkerServiceOptions["connectionIsActive"];
 
   constructor(options: CoworkerServiceOptions) {
     this.#store = options.store;
@@ -191,6 +200,7 @@ export class MatterhornCoworkers {
     this.#watchId = options.watchId ?? (() => `cwatch_${randomUUID()}`);
     this.#inboxItemId = options.inboxItemId ?? (() => `cinbox_${randomUUID()}`);
     this.#onInvalidate = options.onInvalidate ?? (() => undefined);
+    this.#connectionIsActive = options.connectionIsActive;
   }
 
   create(workspaceId: string, ownerId: string, input: MatterhornCoworkerCreateInput): MatterhornCoworkerProfile {
@@ -409,6 +419,17 @@ export class MatterhornCoworkers {
     return this.#store.getWatch(workspaceId, ownerId, coworkerId, watchId);
   }
 
+  pauseWatchesForConnection(workspaceId: string, connectionId: string): number {
+    if (!validIdentity(workspaceId) || !validIdentity(connectionId)) {
+      throw new MatterhornCoworkerError("coworker_input_invalid");
+    }
+    return this.#store.pauseWatchesForConnection({
+      workspaceId,
+      connectionId,
+      updatedAt: this.#now().toISOString(),
+    });
+  }
+
   createWatch(
     workspaceId: string,
     ownerId: string,
@@ -433,6 +454,14 @@ export class MatterhornCoworkers {
       && connection.actionIds.includes(normalized.actionId)
       && connection.networks.includes(normalized.network)
     ));
+    const connectionIsActive = connectionBinding && (!this.#connectionIsActive || this.#connectionIsActive({
+      workspaceId,
+      connectionId: connectionBinding.id,
+      appId: connectionBinding.appId,
+      manifestRevision: connectionBinding.manifestRevision,
+      actionId: normalized.actionId,
+      network: normalized.network,
+    }));
     const invalidResultChangeCondition = normalized.conditions.some((condition) => (
       condition.metric === "matterhorn_result_hash"
       && (condition.operator !== "changed" || condition.value !== null)
@@ -440,6 +469,7 @@ export class MatterhornCoworkers {
     if (!profile.automaticAuthorities.includes("watch")
       || profile.limits.maxActiveWatches < 1
       || !connectionBinding
+      || !connectionIsActive
       || invalidResultChangeCondition
       || !profile.allowedAppIds.includes(normalized.appId)
       || !profile.allowedActionIds.includes(normalized.actionId)
@@ -572,19 +602,30 @@ export class MatterhornCoworkers {
     if (!current) throw new MatterhornCoworkerError("coworker_watch_not_found");
     if (current.revision !== expectedRevision) throw new MatterhornCoworkerError("coworker_revision_conflict");
     if (current.state === nextState) throw new MatterhornCoworkerError("coworker_watch_transition_invalid");
+    const resourceConnection = nextState === "active"
+      ? this.resolveActiveResourceScope(workspaceId, ownerId, coworkerId)?.connections.find((connection) => (
+          connection.id === current.connectionBinding?.connectionId
+          && connection.appId === current.appId
+          && connection.manifestRevision === current.connectionBinding?.manifestRevision
+          && connection.actionIds.includes(current.actionId)
+          && connection.networks.includes(current.network)
+        ))
+      : null;
     if (nextState === "active" && (!profile.automaticAuthorities.includes("watch")
       || profile.limits.maxActiveWatches < 1
       || !profile.allowedAppIds.includes(current.appId)
       || !profile.allowedActionIds.includes(current.actionId)
       || !profile.allowedNetworks.includes(current.network)
       || !current.connectionBinding
-      || !this.resolveActiveResourceScope(workspaceId, ownerId, coworkerId)?.connections.some((connection) => (
-        connection.id === current.connectionBinding?.connectionId
-        && connection.appId === current.appId
-        && connection.manifestRevision === current.connectionBinding?.manifestRevision
-        && connection.actionIds.includes(current.actionId)
-        && connection.networks.includes(current.network)
-      )))) {
+      || !resourceConnection
+      || (this.#connectionIsActive && !this.#connectionIsActive({
+        workspaceId,
+        connectionId: resourceConnection.id,
+        appId: resourceConnection.appId,
+        manifestRevision: resourceConnection.manifestRevision,
+        actionId: current.actionId,
+        network: current.network,
+      })))) {
       throw new MatterhornCoworkerError("coworker_watch_invalid");
     }
     const now = this.#now();

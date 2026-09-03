@@ -267,6 +267,12 @@ describe("agent capability broker", () => {
     })).toThrow("capability_read_budget_exhausted");
     expect(broker.runIdsForCoworker({ workspaceId: "ws_1", ownerId: "account_1", coworkerId: "cw_sui" }))
       .toEqual(["run_coworker"]);
+    expect(broker.runIdsForConnection({ workspaceId: "ws_1", connectionId: "cxc_sui" }))
+      .toEqual(["run_coworker"]);
+    expect(broker.runIdsForConnection({ workspaceId: "ws_other", connectionId: "cxc_sui" }))
+      .toEqual([]);
+    expect(broker.runIdsForConnection({ workspaceId: "ws_1", connectionId: "cxc_other" }))
+      .toEqual([]);
 
     active = false;
     expect(() => broker.issue({

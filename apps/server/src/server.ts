@@ -1404,6 +1404,16 @@ export async function startServer(
     onInvalidate: (input) => {
       guardedRuntime.invalidateCoworker(input);
     },
+    ...(cryptoAppRuntime.catalog ? {
+      connectionIsActive: (input) => cryptoAppRuntime.catalog!.listConnections(input.workspaceId)
+        .some((connection) => connection.id === input.connectionId
+          && connection.appId === input.appId
+          && connection.manifestRevision === input.manifestRevision
+          && connection.state === "active"
+          && connection.availability === "available"
+          && connection.grantedActionIds.includes(input.actionId)
+          && connection.grantedNetworks.includes(input.network)),
+    } : {}),
   });
   const cryptoCoworkerConfig = cryptoCoworkerFeatureConfig(process.env);
   const agentFileStore = cryptoCoworkerConfig.agentFilesMode === "encrypted"
@@ -11628,11 +11638,20 @@ function createRoutes(
         || (body.state !== "active" && body.state !== "paused" && body.state !== "revoked")) {
         throw new ApiError(400, "crypto_app_connection_state_invalid", "Crypto app connection state is invalid.");
       }
-      const connection = cryptoAppRuntime.catalog.transitionConnection(
-        workspace.id,
-        ctx.params.connectionId,
-        body.state as MatterhornCryptoAppConnectionState,
-      );
+      const current = cryptoAppRuntime.catalog.listConnections(workspace.id)
+        .find((connection) => connection.id === ctx.params.connectionId);
+      if (!current) throw new MatterhornCryptoAppConnectionError("connection_not_found");
+      const connection = current.state === body.state
+        ? current
+        : cryptoAppRuntime.catalog.transitionConnection(
+            workspace.id,
+            ctx.params.connectionId,
+            body.state as MatterhornCryptoAppConnectionState,
+          );
+      if (connection.state !== "active") {
+        coworkerRuntime.coworkers?.pauseWatchesForConnection(workspace.id, connection.id);
+        guardedRuntime.invalidateConnection({ workspaceId: workspace.id, connectionId: connection.id });
+      }
       return noStoreJsonResponse({ connection });
     } catch (error) {
       throw cryptoAppApiError(error);
@@ -11651,6 +11670,8 @@ function createRoutes(
       const connection = current.state === "revoked"
         ? current
         : cryptoAppRuntime.catalog.transitionConnection(workspace.id, current.id, "revoked");
+      coworkerRuntime.coworkers?.pauseWatchesForConnection(workspace.id, connection.id);
+      guardedRuntime.invalidateConnection({ workspaceId: workspace.id, connectionId: connection.id });
       return noStoreJsonResponse({ connection });
     } catch (error) {
       throw cryptoAppApiError(error);

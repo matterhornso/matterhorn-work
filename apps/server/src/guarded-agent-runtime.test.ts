@@ -515,6 +515,78 @@ describe("guarded agent runtime transport", () => {
     })).toThrow("unknown, expired, or replayed");
   });
 
+  test("revokes staged authority immediately when an exact app connection is disconnected", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    runtime.setCoworkerResolver(() => true);
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_connection",
+      sessionId: "ses_connection",
+      parts: [{ type: "text", text: "Read the approved Sui balance" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker: {
+        id: "cw_connection",
+        workspaceId: "ws_connection",
+        ownerId: "account_connection",
+        revision: 1,
+        policyVersion: "coworker-policy-1",
+        allowedAppIds: ["matterhorn.sui-testnet"],
+        allowedActionIds: ["sui_account_read"],
+        allowedNetworks: ["sui:testnet"],
+        automaticAuthorities: ["read"],
+        actionBindings: [{
+          connectionId: "cxc_connection",
+          appId: "matterhorn.sui-testnet",
+          manifestRevision: "1.0.0",
+          actionId: "sui_account_read",
+          network: "sui:testnet",
+          proxyToolName: "matterhorn_sui_get_balance",
+          access: "read",
+        }],
+        allowedDataLabels: ["public", "untrusted_external"],
+        allowUnverifiedProviderConsent: false,
+        maxReadCallsPerRun: 4,
+        maxPrepareCallsPerFamily: 0,
+      },
+    });
+    const args = {
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      connectionId: "cxc_connection",
+      actionId: "sui_account_read",
+      access: "read",
+      network: "sui:testnet",
+      canonicalArgumentsHash: "b".repeat(64),
+    };
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_connection",
+      sessionId: "ses_connection",
+      callId: "call_connection_pending",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args,
+    });
+
+    expect(runtime.invalidateConnection({
+      workspaceId: "ws_other",
+      connectionId: "cxc_connection",
+    })).toBe(0);
+    expect(runtime.invalidateConnection({
+      workspaceId: "ws_connection",
+      connectionId: "cxc_connection",
+    })).toBe(1);
+    expect(runtime.capabilities.activeRun("ses_connection")).toBeNull();
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { ...args, _matterhornCallId: "call_connection_pending" },
+    })).toThrow("unknown, expired, or replayed");
+  });
+
   test("finalizes a coworker receipt exactly before revoking its tenant binding", async () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     runtime.setCoworkerResolver(() => true);
