@@ -163,6 +163,12 @@ export type MatterhornCryptoAppOAuthTokenRecord = {
   updatedAt: string;
 };
 
+export type MatterhornCryptoAppConnectionMaintenanceResult = {
+  walletChallengesDeleted: number;
+  oauthFlowsDeleted: number;
+  oauthVerifiersCleared: number;
+};
+
 const require = createRequire(import.meta.url);
 
 function openSqliteDatabase(path: string): SqliteDatabase {
@@ -866,6 +872,35 @@ export class MatterhornCryptoAppConnectionStore {
         .run(workspaceId).changes ?? 0;
       this.#db.exec("COMMIT");
       return changes;
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  pruneSetupMetadata(input: {
+    now: string;
+    deleteBefore: string;
+  }): MatterhornCryptoAppConnectionMaintenanceResult {
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      const walletChallengesDeleted = statement(this.#db, `
+        DELETE FROM crypto_app_wallet_challenges
+        WHERE (consumed_at IS NOT NULL AND consumed_at < ?)
+          OR (consumed_at IS NULL AND expires_at < ?)
+      `).run(input.deleteBefore, input.deleteBefore).changes ?? 0;
+      const oauthFlowsDeleted = statement(this.#db, `
+        DELETE FROM crypto_app_oauth_flows
+        WHERE (consumed_at IS NOT NULL AND consumed_at < ?)
+          OR (consumed_at IS NULL AND expires_at < ?)
+      `).run(input.deleteBefore, input.deleteBefore).changes ?? 0;
+      const oauthVerifiersCleared = statement(this.#db, `
+        UPDATE crypto_app_oauth_flows
+        SET verifier_envelope = ''
+        WHERE state = 'pending' AND expires_at <= ? AND verifier_envelope <> ''
+      `).run(input.now).changes ?? 0;
+      this.#db.exec("COMMIT");
+      return { walletChallengesDeleted, oauthFlowsDeleted, oauthVerifiersCleared };
     } catch (error) {
       this.#db.exec("ROLLBACK");
       throw error;

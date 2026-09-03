@@ -2,7 +2,10 @@ import { existsSync } from "node:fs";
 
 import { MatterhornCryptoAppCatalog } from "./crypto-app-catalog.js";
 import { MatterhornCryptoAppAdapterRouter } from "./crypto-app-adapter-router.js";
-import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
+import {
+  MatterhornCryptoAppConnectionStore,
+  type MatterhornCryptoAppConnectionMaintenanceResult,
+} from "./crypto-app-connection-store.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
 import { MatterhornManagedCryptoAppCredentials } from "./crypto-app-managed-credentials.js";
 import { MatterhornCryptoAppOAuthConnections } from "./crypto-app-oauth-connections.js";
@@ -44,6 +47,7 @@ export type MatterhornCryptoAppRuntimeServices = {
     manifestRevision: string;
     windowDays?: number;
   }): MatterhornCryptoAppDeveloperUsageReport | null;
+  maintainConnectionSetupMetadata(): MatterhornCryptoAppConnectionMaintenanceResult;
   maintainDeveloperInviteMetadata(): { invitesDeleted: number };
   purgeWorkspace(workspaceId: string): { connections: number; usage: number; circuits: number };
   purgeAccount(accountId: string): { developers: number; keys: number; submissions: number };
@@ -73,6 +77,13 @@ type PublisherKeyEnvironmentValue = {
 
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const POLICY_VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$/;
+const CONNECTION_SETUP_METADATA_GRACE_MS = 24 * 60 * 60 * 1_000;
+
+const EMPTY_CONNECTION_MAINTENANCE: MatterhornCryptoAppConnectionMaintenanceResult = {
+  walletChallengesDeleted: 0,
+  oauthFlowsDeleted: 0,
+  oauthVerifiersCleared: 0,
+};
 
 function parsePublisherKeys(value: string | undefined): MatterhornTrustedPublisherKey[] {
   if (!value?.trim()) throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_publisher_keys_required");
@@ -141,6 +152,7 @@ export function createMatterhornCryptoAppRuntime(
       verifySuiTransaction: null,
       ready: true,
       developerUsage: () => null,
+      maintainConnectionSetupMetadata: () => EMPTY_CONNECTION_MAINTENANCE,
       maintainDeveloperInviteMetadata: () => ({ invitesDeleted: 0 }),
       purgeWorkspace: () => ({ connections: 0, usage: 0, circuits: 0 }),
       purgeAccount: () => ({ developers: 0, keys: 0, submissions: 0 }),
@@ -288,6 +300,13 @@ export function createMatterhornCryptoAppRuntime(
       verifySuiTransaction,
       ready: feature.cryptoAppGatewayMode !== "enforce" || Boolean(router),
       developerUsage: (input) => operationalPolicy?.developerUsage(input) ?? null,
+      maintainConnectionSetupMetadata: () => {
+        const now = new Date();
+        return activeConnectionStore.pruneSetupMetadata({
+          now: now.toISOString(),
+          deleteBefore: new Date(now.getTime() - CONNECTION_SETUP_METADATA_GRACE_MS).toISOString(),
+        });
+      },
       maintainDeveloperInviteMetadata: () => developerPortal.pruneExpiredInviteMetadata(),
       purgeWorkspace: (workspaceId) => {
         const connectionsPurged = connections.purgeWorkspace(workspaceId);

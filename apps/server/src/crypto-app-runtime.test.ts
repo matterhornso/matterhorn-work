@@ -40,6 +40,11 @@ describe("crypto app runtime startup", () => {
     env.MATTERHORN_CRYPTO_APP_MANAGED_CREDENTIALS_JSON = "malformed-but-inert-while-off";
     const runtime = createMatterhornCryptoAppRuntime(env);
     expect(runtime).toMatchObject({ mode: "off", catalog: null });
+    expect(runtime.maintainConnectionSetupMetadata()).toEqual({
+      walletChallengesDeleted: 0,
+      oauthFlowsDeleted: 0,
+      oauthVerifiersCleared: 0,
+    });
     expect(runtime.maintainDeveloperInviteMetadata()).toEqual({ invitesDeleted: 0 });
     expect(runtime.purgeAccount("account-missing")).toEqual({ developers: 0, keys: 0, submissions: 0 });
     expect(cryptoAppRuntimeDatabaseFiles(env)).toEqual({
@@ -57,6 +62,11 @@ describe("crypto app runtime startup", () => {
     expect(runtime.catalog?.list()).toEqual([]);
     expect(runtime.purgeWorkspace("ws_missing")).toEqual({ connections: 0, usage: 0, circuits: 0 });
     expect(runtime.purgeAccount("account-missing")).toEqual({ developers: 0, keys: 0, submissions: 0 });
+    expect(runtime.maintainConnectionSetupMetadata()).toEqual({
+      walletChallengesDeleted: 0,
+      oauthFlowsDeleted: 0,
+      oauthVerifiersCleared: 0,
+    });
     expect(runtime.maintainDeveloperInviteMetadata()).toEqual({ invitesDeleted: 0 });
     expect(cryptoAppRuntimeDatabaseFiles(env)).toEqual({
       registryExists: true,

@@ -1436,7 +1436,23 @@ export async function startServer(
     } : {}),
   });
   coworkerRuntime.maintainAccessMetadata();
+  cryptoAppRuntime.maintainConnectionSetupMetadata();
   cryptoAppRuntime.maintainDeveloperInviteMetadata();
+  const connectionSetupMaintenanceTimer = cryptoAppRuntime.mode !== "off"
+    ? setInterval(() => {
+      try {
+        const result = cryptoAppRuntime.maintainConnectionSetupMetadata();
+        if (result.walletChallengesDeleted > 0
+          || result.oauthFlowsDeleted > 0
+          || result.oauthVerifiersCleared > 0) {
+          logger.log("info", "Expired app connection setup metadata removed", result);
+        }
+      } catch (error) {
+        logger.log("error", "App connection setup metadata maintenance failed", unhandledErrorAttributes(error));
+      }
+    }, 60 * 60 * 1_000)
+    : null;
+  connectionSetupMaintenanceTimer?.unref?.();
   const accessMetadataMaintenanceTimer = coworkerRuntime.access || cryptoAppRuntime.developerPortal
     ? setInterval(() => {
       try {
@@ -1977,6 +1993,7 @@ export async function startServer(
       clearInterval(emailOutboxTimer);
       if (coworkerWatchTimer) clearInterval(coworkerWatchTimer);
       if (coworkerEvidenceRetryTimer) clearInterval(coworkerEvidenceRetryTimer);
+      if (connectionSetupMaintenanceTimer) clearInterval(connectionSetupMaintenanceTimer);
       if (accessMetadataMaintenanceTimer) clearInterval(accessMetadataMaintenanceTimer);
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);

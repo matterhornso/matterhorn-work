@@ -224,4 +224,79 @@ describe("workspace-scoped crypto app connections", () => {
     expect(service.list("ws_b")).toHaveLength(1);
     store.close();
   });
+
+  test("removes expired setup records and clears expired OAuth verifier material", () => {
+    const { store } = fixture();
+    const walletChallenge = {
+      workspaceId: "ws_a",
+      accountId: "account_a",
+      appId: "matterhorn.sui",
+      manifestRevision: "1.0.0",
+      walletFamily: "sui" as const,
+      addressDigest: "a".repeat(64),
+      actionIds: ["read_balance"],
+      scopes: ["sui:read"],
+      networks: ["sui:testnet"],
+      issuedAt: "2026-09-01T11:00:00.000Z",
+      state: "pending" as const,
+      consumedAt: null,
+    };
+    store.createWalletChallenge({
+      ...walletChallenge,
+      challengeId: "cwc_old",
+      expiresAt: "2026-09-01T11:05:00.000Z",
+    });
+    store.createWalletChallenge({
+      ...walletChallenge,
+      challengeId: "cwc_recent",
+      expiresAt: "2026-09-03T11:59:00.000Z",
+    });
+    const oauthFlow = {
+      workspaceId: "ws_a",
+      accountId: "account_a",
+      appId: "matterhorn.sui",
+      manifestRevision: "1.0.0",
+      bindingId: "SUI_BINDING",
+      actionIds: ["read_balance"],
+      scopes: ["sui:read"],
+      networks: ["sui:testnet"],
+      issuer: "https://issuer.example/",
+      resource: "https://api.example/",
+      audience: "matterhorn",
+      redirectUri: "https://matterhorn.example/oauth/crypto-apps/callback",
+      issuedAt: "2026-09-01T11:00:00.000Z",
+      state: "pending" as const,
+      errorCode: null,
+      connectionId: null,
+      consumedAt: null,
+    };
+    store.createOAuthFlow({
+      ...oauthFlow,
+      flowId: "flow_old",
+      stateDigest: "b".repeat(64),
+      verifierEnvelope: "encrypted-old-verifier",
+      expiresAt: "2026-09-01T11:10:00.000Z",
+    });
+    store.createOAuthFlow({
+      ...oauthFlow,
+      flowId: "flow_recent",
+      stateDigest: "c".repeat(64),
+      verifierEnvelope: "encrypted-recent-verifier",
+      expiresAt: "2026-09-03T11:59:00.000Z",
+    });
+
+    expect(store.pruneSetupMetadata({
+      now: "2026-09-03T12:00:00.000Z",
+      deleteBefore: "2026-09-02T12:00:00.000Z",
+    })).toEqual({
+      walletChallengesDeleted: 1,
+      oauthFlowsDeleted: 1,
+      oauthVerifiersCleared: 1,
+    });
+    expect(store.getWalletChallenge("ws_a", "account_a", "cwc_old")).toBeNull();
+    expect(store.getWalletChallenge("ws_a", "account_a", "cwc_recent")).not.toBeNull();
+    expect(store.getOAuthFlow("ws_a", "account_a", "flow_old")).toBeNull();
+    expect(store.getOAuthFlow("ws_a", "account_a", "flow_recent")?.verifierEnvelope).toBe("");
+    store.close();
+  });
 });
