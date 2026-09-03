@@ -10281,6 +10281,46 @@ function createRoutes(
     }
   });
 
+  addRoute(
+    routes,
+    "GET",
+    "/developer/crypto-apps/submissions/:appId/:manifestRevision/usage",
+    "client",
+    async (ctx) => {
+      try {
+        if (!cryptoAppRuntime.developerPortal) {
+          throw new MatterhornCryptoAppCatalogError("crypto_app_gateway_disabled");
+        }
+        if ([...ctx.url.searchParams.keys()].some((key) => key !== "days")
+          || ctx.url.searchParams.getAll("days").length > 1) {
+          throw new ApiError(400, "developer_usage_query_invalid", "Usage window must be between 1 and 30 days.");
+        }
+        const rawDays = ctx.url.searchParams.get("days");
+        const windowDays = rawDays === null ? 7 : Number(rawDays);
+        if (!Number.isSafeInteger(windowDays) || windowDays < 1 || windowDays > 30) {
+          throw new ApiError(400, "developer_usage_query_invalid", "Usage window must be between 1 and 30 days.");
+        }
+        const accountId = cryptoDeveloperAccountId(ctx);
+        cryptoAppRuntime.developerPortal.assertOwnsSubmission(
+          accountId,
+          ctx.params.appId,
+          ctx.params.manifestRevision,
+        );
+        const usage = cryptoAppRuntime.developerUsage({
+          appId: ctx.params.appId,
+          manifestRevision: ctx.params.manifestRevision,
+          windowDays,
+        });
+        if (!usage) {
+          throw new ApiError(503, "developer_usage_unavailable", "App usage is unavailable for this deployment.");
+        }
+        return noStoreJsonResponse({ mode: cryptoAppRuntime.mode, usage });
+      } catch (error) {
+        throw cryptoDeveloperApiError(error);
+      }
+    },
+  );
+
   addRoute(routes, "POST", "/developer/crypto-apps/submissions", "client", async (ctx) => {
     ensureWritable(config);
     try {

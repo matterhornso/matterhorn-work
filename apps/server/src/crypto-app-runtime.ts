@@ -10,7 +10,10 @@ import { MatterhornCryptoAppWalletConnections } from "./crypto-app-wallet-connec
 import { MatterhornCryptoDeveloperPortal } from "./crypto-app-developer-portal.js";
 import { MatterhornCryptoDeveloperPortalStore } from "./crypto-app-developer-portal-store.js";
 import { MatterhornCryptoAppOperator } from "./crypto-app-operator.js";
-import { MatterhornCryptoAppOperationalPolicyStore } from "./crypto-app-operational-policy.js";
+import {
+  MatterhornCryptoAppOperationalPolicyStore,
+  type MatterhornCryptoAppDeveloperUsageReport,
+} from "./crypto-app-operational-policy.js";
 import { MatterhornCryptoAppRegistryStore } from "./crypto-app-registry-store.js";
 import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
 import { isTrustedEd25519PublisherKey, type MatterhornTrustedPublisherKey } from "./crypto-app-signature.js";
@@ -36,6 +39,11 @@ export type MatterhornCryptoAppRuntimeServices = {
   router: MatterhornCryptoAppAdapterRouter | null;
   verifySuiTransaction: MatterhornSuiPublicTransactionVerifier | null;
   ready: boolean;
+  developerUsage(input: {
+    appId: string;
+    manifestRevision: string;
+    windowDays?: number;
+  }): MatterhornCryptoAppDeveloperUsageReport | null;
   purgeWorkspace(workspaceId: string): { connections: number; usage: number; circuits: number };
   purgeAccount(accountId: string): { developers: number; keys: number; submissions: number };
   close(): void;
@@ -131,6 +139,7 @@ export function createMatterhornCryptoAppRuntime(
       router: null,
       verifySuiTransaction: null,
       ready: true,
+      developerUsage: () => null,
       purgeWorkspace: () => ({ connections: 0, usage: 0, circuits: 0 }),
       purgeAccount: () => ({ developers: 0, keys: 0, submissions: 0 }),
       close: () => undefined,
@@ -195,6 +204,8 @@ export function createMatterhornCryptoAppRuntime(
       store: developerPortalStore,
       policyVersion,
     });
+    const operationalPath = env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB?.trim();
+    operationalPolicy = new MatterhornCryptoAppOperationalPolicyStore(operationalPath || undefined);
     let router: MatterhornCryptoAppAdapterRouter | null = null;
     let verifySuiTransaction: MatterhornSuiPublicTransactionVerifier | null = null;
     if (feature.cryptoAppGatewayMode === "enforce" && options.guardedRuntime) {
@@ -208,8 +219,6 @@ export function createMatterhornCryptoAppRuntime(
           return proxyToolName ? { ...input, proxyToolName } : null;
         },
       });
-      const operationalPath = env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB?.trim();
-      operationalPolicy = new MatterhornCryptoAppOperationalPolicyStore(operationalPath || undefined);
       const pinnedJsonTransport = createPinnedJsonCryptoAppTransport({
         resolveCredentialHeaders: (input) => {
           if (input.credential.type === "oauth2") {
@@ -276,6 +285,7 @@ export function createMatterhornCryptoAppRuntime(
       router,
       verifySuiTransaction,
       ready: feature.cryptoAppGatewayMode !== "enforce" || Boolean(router),
+      developerUsage: (input) => operationalPolicy?.developerUsage(input) ?? null,
       purgeWorkspace: (workspaceId) => {
         const connectionsPurged = connections.purgeWorkspace(workspaceId);
         const operational = operationalPolicy?.purgeWorkspace(workspaceId) ?? { usage: 0, circuits: 0 };

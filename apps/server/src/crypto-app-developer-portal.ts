@@ -392,6 +392,19 @@ export class MatterhornCryptoDeveloperPortal {
     return this.#store.listSubmissions(profile.id).map(submissionView);
   }
 
+  assertOwnsSubmission(accountId: string, appId: string, manifestRevision: string): void {
+    const profile = this.#requireDeveloper(accountId);
+    if (!IDENTIFIER_PATTERN.test(appId) || !IDENTIFIER_PATTERN.test(manifestRevision)) {
+      throw new MatterhornCryptoDeveloperPortalError("developer_input_invalid");
+    }
+    const submission = this.#store.getSubmission(appId, manifestRevision);
+    if (!submission || submission.developerId !== profile.id) {
+      // Cross-account guesses are intentionally indistinguishable from a
+      // missing revision.
+      throw new MatterhornCryptoDeveloperPortalError("developer_submission_not_found");
+    }
+  }
+
   listCertificationRequests(): MatterhornCryptoDeveloperHostSubmission[] {
     return this.#store.listCertificationRequests().map((item) => this.#hostSubmission(item));
   }

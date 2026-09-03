@@ -142,6 +142,100 @@ describe("durable crypto app operational policy", () => {
     store.close();
   });
 
+  test("reports only bounded app-revision aggregates without tenant or request identifiers", () => {
+    let nowMs = Date.parse("2026-09-01T12:00:00.000Z");
+    let sequence = 0;
+    const store = new MatterhornCryptoAppOperationalPolicyStore(path(), {
+      now: () => new Date(nowMs),
+      reservationTtlMs: 60_000,
+      id: () => `operational_${++sequence}`,
+    });
+    const first = store.reserve({ ...reservation("call_a", "private_workspace_a"), actionId: "read_markets" });
+    nowMs += 100;
+    store.reconcile({ reservationId: first.reservationId, outcome: "success", actualCostMicros: 100 });
+    const second = store.reserve({ ...reservation("call_b", "private_workspace_b"), actionId: "read_markets" });
+    nowMs += 300;
+    store.reconcile({ reservationId: second.reservationId, outcome: "error", actualCostMicros: 300 });
+    const ignored = store.reserve({
+      ...reservation("call_other", "private_workspace_a"),
+      appId: "different.app",
+    });
+    store.reconcile({ reservationId: ignored.reservationId, outcome: "success", actualCostMicros: 900 });
+
+    nowMs = Date.parse("2026-09-02T00:00:00.000Z");
+    store.reserve({ ...reservation("call_abandoned", "private_workspace_c"), actionId: "prepare_transfer" });
+    nowMs += 60_001;
+    store.reserve({ ...reservation("call_pending", "private_workspace_d"), actionId: "prepare_transfer" });
+
+    const report = store.developerUsage({
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      windowDays: 2,
+    });
+    expect(report).toMatchObject({
+      version: "matterhorn.crypto-app-developer-usage.v1",
+      costUnit: "micro_usd",
+      fromDay: "2026-09-01",
+      throughDay: "2026-09-02",
+      budgetPolicy: {
+        scope: "per_workspace",
+        dailyToolCostLimitMicros: 10_000_000,
+        perCallToolCostLimitMicros: 1_000_000,
+        walletTransactionLimitsIncluded: false,
+      },
+      totals: {
+        calls: 4,
+        succeeded: 1,
+        failed: 1,
+        timedOut: 0,
+        pending: 1,
+        abandoned: 1,
+        actualCostMicros: 400,
+        pendingReservedCostMicros: 1_000_000,
+        averageLatencyMs: 200,
+        maximumLatencyMs: 300,
+      },
+      privacy: {
+        aggregateOnly: true,
+        tenantIdentifiersIncluded: false,
+        requestContentIncluded: false,
+        walletDataIncluded: false,
+      },
+    });
+    expect(report.byDay).toHaveLength(2);
+    expect(report.byAction).toEqual([
+      expect.objectContaining({ actionId: "read_markets", calls: 2, succeeded: 1, failed: 1 }),
+      expect.objectContaining({ actionId: "prepare_transfer", calls: 2, pending: 1, abandoned: 1 }),
+    ]);
+    expect(store.developerUsage({
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      windowDays: 1,
+    }).totals.calls).toBe(2);
+    expect(JSON.stringify(report)).not.toMatch(/private_workspace|connection|reservation|run_|call_/);
+    expect(() => store.developerUsage({
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      windowDays: 31,
+    })).toThrow("crypto_app_usage_window_invalid");
+    store.close();
+  });
+
+  test("returns a zeroed usage report for an unused revision", () => {
+    const store = new MatterhornCryptoAppOperationalPolicyStore(path(), {
+      now: () => new Date("2026-09-02T00:00:00.000Z"),
+    });
+    expect(store.developerUsage({ appId: "unused.app", manifestRevision: "1", windowDays: 7 }))
+      .toMatchObject({
+        fromDay: "2026-08-27",
+        throughDay: "2026-09-02",
+        totals: { calls: 0, actualCostMicros: 0, averageLatencyMs: null },
+        byDay: [],
+        byAction: [],
+      });
+    store.close();
+  });
+
   test("rejects invalid policy configuration before opening the database", () => {
     expect(() => new MatterhornCryptoAppOperationalPolicyStore(path(), {
       dailyWorkspaceLimitMicros: 0,

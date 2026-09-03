@@ -26,6 +26,7 @@ function environment(mode: "off" | "shadow" | "enforce" = "shadow") {
     MATTERHORN_CRYPTO_APP_REGISTRY_DB: join(root, "registry.db"),
     MATTERHORN_CRYPTO_APP_CONNECTION_DB: join(root, "connections.db"),
     MATTERHORN_CRYPTO_APP_DEVELOPER_DB: join(root, "developer.db"),
+    MATTERHORN_CRYPTO_APP_OPERATIONAL_DB: join(root, "operational.db"),
     ...(mode === "enforce" ? {
       MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET: "wallet-proof-runtime-secret-with-at-least-32-characters",
     } : {}),

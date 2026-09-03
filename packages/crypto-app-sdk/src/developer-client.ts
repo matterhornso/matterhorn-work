@@ -91,6 +91,45 @@ export type MatterhornCryptoDeveloperStatus = {
     | "certification_complete";
 };
 
+export type MatterhornCryptoDeveloperUsageStats = {
+  calls: number;
+  succeeded: number;
+  failed: number;
+  timedOut: number;
+  pending: number;
+  abandoned: number;
+  actualCostMicros: number;
+  pendingReservedCostMicros: number;
+  averageLatencyMs: number | null;
+  maximumLatencyMs: number | null;
+};
+
+export type MatterhornCryptoDeveloperUsageReport = {
+  version: "matterhorn.crypto-app-developer-usage.v1";
+  appId: string;
+  manifestRevision: string;
+  costUnit: "micro_usd";
+  windowDays: number;
+  fromDay: string;
+  throughDay: string;
+  generatedAt: string;
+  budgetPolicy: {
+    scope: "per_workspace";
+    dailyToolCostLimitMicros: number;
+    perCallToolCostLimitMicros: number;
+    walletTransactionLimitsIncluded: false;
+  };
+  totals: MatterhornCryptoDeveloperUsageStats;
+  byDay: Array<MatterhornCryptoDeveloperUsageStats & { day: string }>;
+  byAction: Array<MatterhornCryptoDeveloperUsageStats & { actionId: string }>;
+  privacy: {
+    aggregateOnly: true;
+    tenantIdentifiersIncluded: false;
+    requestContentIncluded: false;
+    walletDataIncluded: false;
+  };
+};
+
 export type MatterhornCryptoDeveloperClientOptions = {
   /** Omit for same-origin browser use. Remote origins must use HTTPS. */
   baseUrl?: string;
@@ -349,6 +388,152 @@ function gatewayMode(value: unknown): MatterhornCryptoGatewayMode {
   return value;
 }
 
+function usageStatsFrom(value: unknown): MatterhornCryptoDeveloperUsageStats {
+  if (!isRecord(value)) {
+    throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+  }
+  const numericKeys = [
+    "calls",
+    "succeeded",
+    "failed",
+    "timedOut",
+    "pending",
+    "abandoned",
+    "actualCostMicros",
+    "pendingReservedCostMicros",
+  ] as const;
+  if (numericKeys.some((key) => !Number.isSafeInteger(value[key]) || Number(value[key]) < 0)
+    || (value.averageLatencyMs !== null
+      && (!Number.isSafeInteger(value.averageLatencyMs) || Number(value.averageLatencyMs) < 0))
+    || (value.maximumLatencyMs !== null
+      && (!Number.isSafeInteger(value.maximumLatencyMs) || Number(value.maximumLatencyMs) < 0))) {
+    throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+  }
+  const stats = Object.fromEntries(numericKeys.map((key) => [key, Number(value[key])])) as unknown as Omit<
+    MatterhornCryptoDeveloperUsageStats,
+    "averageLatencyMs" | "maximumLatencyMs"
+  >;
+  if (stats.calls !== stats.succeeded + stats.failed + stats.timedOut + stats.pending + stats.abandoned) {
+    throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+  }
+  return {
+    ...stats,
+    averageLatencyMs: value.averageLatencyMs === null ? null : Number(value.averageLatencyMs),
+    maximumLatencyMs: value.maximumLatencyMs === null ? null : Number(value.maximumLatencyMs),
+  };
+}
+
+function usageProjectionMatchesTotals(
+  rows: MatterhornCryptoDeveloperUsageStats[],
+  totals: MatterhornCryptoDeveloperUsageStats,
+): boolean {
+  const additiveKeys = [
+    "calls",
+    "succeeded",
+    "failed",
+    "timedOut",
+    "pending",
+    "abandoned",
+    "actualCostMicros",
+    "pendingReservedCostMicros",
+  ] as const;
+  return additiveKeys.every((key) => {
+    const sum = rows.reduce((total, row) => total + row[key], 0);
+    return Number.isSafeInteger(sum) && sum === totals[key];
+  });
+}
+
+function developerUsageFrom(value: unknown): MatterhornCryptoDeveloperUsageReport {
+  if (!isRecord(value)
+    || value.version !== "matterhorn.crypto-app-developer-usage.v1"
+    || typeof value.appId !== "string"
+    || !SAFE_IDENTIFIER.test(value.appId)
+    || typeof value.manifestRevision !== "string"
+    || !SAFE_IDENTIFIER.test(value.manifestRevision)
+    || value.costUnit !== "micro_usd"
+    || !Number.isSafeInteger(value.windowDays)
+    || Number(value.windowDays) < 1
+    || Number(value.windowDays) > 30
+    || typeof value.fromDay !== "string"
+    || !/^\d{4}-\d{2}-\d{2}$/.test(value.fromDay)
+    || typeof value.throughDay !== "string"
+    || !/^\d{4}-\d{2}-\d{2}$/.test(value.throughDay)
+    || value.fromDay > value.throughDay
+    || typeof value.generatedAt !== "string"
+    || !Number.isFinite(Date.parse(value.generatedAt))
+    || !isRecord(value.budgetPolicy)
+    || value.budgetPolicy.scope !== "per_workspace"
+    || !Number.isSafeInteger(value.budgetPolicy.dailyToolCostLimitMicros)
+    || Number(value.budgetPolicy.dailyToolCostLimitMicros) < 1
+    || !Number.isSafeInteger(value.budgetPolicy.perCallToolCostLimitMicros)
+    || Number(value.budgetPolicy.perCallToolCostLimitMicros) < 1
+    || Number(value.budgetPolicy.perCallToolCostLimitMicros) > Number(value.budgetPolicy.dailyToolCostLimitMicros)
+    || value.budgetPolicy.walletTransactionLimitsIncluded !== false
+    || !Array.isArray(value.byDay)
+    || value.byDay.length > 30
+    || !Array.isArray(value.byAction)
+    || value.byAction.length > 256
+    || !isRecord(value.privacy)
+    || value.privacy.aggregateOnly !== true
+    || value.privacy.tenantIdentifiersIncluded !== false
+    || value.privacy.requestContentIncluded !== false
+    || value.privacy.walletDataIncluded !== false) {
+    throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+  }
+  const fromDay = value.fromDay;
+  const throughDay = value.throughDay;
+  const byDay = value.byDay.map((item) => {
+    if (!isRecord(item)
+      || typeof item.day !== "string"
+      || !/^\d{4}-\d{2}-\d{2}$/.test(item.day)
+      || item.day < fromDay
+      || item.day > throughDay) {
+      throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+    }
+    return { day: item.day, ...usageStatsFrom(item) };
+  });
+  const byAction = value.byAction.map((item) => {
+    if (!isRecord(item)
+      || typeof item.actionId !== "string"
+      || !SAFE_IDENTIFIER.test(item.actionId)) {
+      throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+    }
+    return { actionId: item.actionId, ...usageStatsFrom(item) };
+  });
+  const totals = usageStatsFrom(value.totals);
+  if (new Set(byDay.map((item) => item.day)).size !== byDay.length
+    || new Set(byAction.map((item) => item.actionId)).size !== byAction.length
+    || !usageProjectionMatchesTotals(byDay, totals)
+    || !usageProjectionMatchesTotals(byAction, totals)) {
+    throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+  }
+  return {
+    version: "matterhorn.crypto-app-developer-usage.v1",
+    appId: value.appId,
+    manifestRevision: value.manifestRevision,
+    costUnit: "micro_usd",
+    windowDays: Number(value.windowDays),
+    fromDay,
+    throughDay,
+    generatedAt: value.generatedAt,
+    budgetPolicy: {
+      scope: "per_workspace",
+      dailyToolCostLimitMicros: Number(value.budgetPolicy.dailyToolCostLimitMicros),
+      perCallToolCostLimitMicros: Number(value.budgetPolicy.perCallToolCostLimitMicros),
+      walletTransactionLimitsIncluded: false,
+    },
+    totals,
+    byDay,
+    byAction,
+    privacy: {
+      aggregateOnly: true,
+      tenantIdentifiersIncluded: false,
+      requestContentIncluded: false,
+      walletDataIncluded: false,
+    },
+  };
+}
+
 function developerStatusFrom(value: unknown): MatterhornCryptoDeveloperStatus {
   const steps = [
     "enroll",
@@ -495,6 +680,24 @@ export function createMatterhornCryptoDeveloperClient(options: MatterhornCryptoD
         throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
       }
       return payload.submissions.map(submissionFrom);
+    },
+
+    async getUsage(
+      appId: string,
+      manifestRevision: string,
+      windowDays = 7,
+    ): Promise<MatterhornCryptoDeveloperUsageReport> {
+      if (!Number.isSafeInteger(windowDays) || windowDays < 1 || windowDays > 30) {
+        throw new MatterhornCryptoDeveloperClientError("developer_client_configuration_invalid", null);
+      }
+      const payload = await request(
+        `/developer/crypto-apps/submissions/${identifier(appId)}/${identifier(manifestRevision)}/usage?days=${windowDays}`,
+      );
+      const usage = developerUsageFrom(payload.usage);
+      if (usage.appId !== appId || usage.manifestRevision !== manifestRevision) {
+        throw new MatterhornCryptoDeveloperClientError("developer_client_response_invalid", 200);
+      }
+      return usage;
     },
 
     async submitTestnetManifest(

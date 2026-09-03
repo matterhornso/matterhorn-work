@@ -33,6 +33,7 @@ const ENV_KEYS = [
   "MATTERHORN_CRYPTO_APP_REGISTRY_DB",
   "MATTERHORN_CRYPTO_APP_CONNECTION_DB",
   "MATTERHORN_CRYPTO_APP_DEVELOPER_DB",
+  "MATTERHORN_CRYPTO_APP_OPERATIONAL_DB",
 ] as const;
 const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
 const roots: string[] = [];
@@ -96,6 +97,7 @@ async function boot(mode: "off" | "shadow") {
     process.env.MATTERHORN_CRYPTO_APP_REGISTRY_DB = join(root, "registry.db");
     process.env.MATTERHORN_CRYPTO_APP_CONNECTION_DB = join(root, "connections.db");
     process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB = join(root, "developer.db");
+    process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB = join(root, "operational.db");
   }
   const server = await startServer(config(await freePort(), root)) as Served;
   let stopped = false;
@@ -254,6 +256,47 @@ describe("crypto developer HTTP boundary", () => {
     const listB = await request(server.base, "/developer/crypto-apps/submissions", { cookie: cookieB });
     expect(listA.payload.submissions).toHaveLength(1);
     expect(listB.payload.submissions).toEqual([]);
+    const usageA = await request(
+      server.base,
+      `/developer/crypto-apps/submissions/${manifest.appId}/${manifest.manifestRevision}/usage?days=7`,
+      { cookie: cookieA },
+    );
+    expect(usageA.response.status).toBe(200);
+    expect(usageA.payload.usage).toMatchObject({
+      version: "matterhorn.crypto-app-developer-usage.v1",
+      appId: manifest.appId,
+      manifestRevision: manifest.manifestRevision,
+      costUnit: "micro_usd",
+      windowDays: 7,
+      budgetPolicy: {
+        scope: "per_workspace",
+        dailyToolCostLimitMicros: 10_000_000,
+        perCallToolCostLimitMicros: 1_000_000,
+        walletTransactionLimitsIncluded: false,
+      },
+      totals: { calls: 0, actualCostMicros: 0 },
+      privacy: {
+        aggregateOnly: true,
+        tenantIdentifiersIncluded: false,
+        requestContentIncluded: false,
+        walletDataIncluded: false,
+      },
+    });
+    expect(JSON.stringify(usageA.payload)).not.toMatch(/workspaceId|connectionId|reservationId|runId|callId|walletAddress/);
+    const crossAccountUsage = await request(
+      server.base,
+      `/developer/crypto-apps/submissions/${manifest.appId}/${manifest.manifestRevision}/usage`,
+      { cookie: cookieB },
+    );
+    expect(crossAccountUsage.response.status).toBe(404);
+    expect(crossAccountUsage.payload.code).toBe("developer_submission_not_found");
+    const invalidUsageWindow = await request(
+      server.base,
+      `/developer/crypto-apps/submissions/${manifest.appId}/${manifest.manifestRevision}/usage?days=31`,
+      { cookie: cookieA },
+    );
+    expect(invalidUsageWindow.response.status).toBe(400);
+    expect(invalidUsageWindow.payload.code).toBe("developer_usage_query_invalid");
 
     const requested = await request(
       server.base,

@@ -77,6 +77,7 @@ describe("invite-only crypto app developer route", () => {
       "enroll",
       "getProfile",
       "getStatus",
+      "getUsage",
       "listSubmissions",
       "registerPublisherKey",
       "requestTestnetCertification",
@@ -86,6 +87,7 @@ describe("invite-only crypto app developer route", () => {
 
   test("generates client-only setup for enrolled developers without sending local paths", () => {
     const route = readAppSource("domains/developer/crypto-app-developer-route.tsx");
+    const clientSource = readRepoSource("packages/crypto-app-sdk/src/developer-client.ts");
     const setup = readAppSource("domains/developer/developer-integration-setup.tsx");
     const quickstart = readAppSource("domains/developer/developer-quickstart-setup.tsx");
 
@@ -100,6 +102,18 @@ describe("invite-only crypto app developer route", () => {
     expect(route).toContain("<DeveloperQuickstartSetup");
     expect(route).toContain("<DeveloperIntegrationSetup");
     expect(route).toContain("Sui, Hyperliquid, or Bittensor testnet");
+    expect(route).toContain("App usage");
+    expect(route).toContain("Calls routed through Matterhorn for this exact app revision");
+    expect(route).toContain("Aggregate only. No workspace, prompt, wallet, credential, or request identifiers are included.");
+    expect(route).toContain("Wallet transaction limits are separate.");
+    expect(route).toContain('id="developer-usage-revision"');
+    expect(route).toContain('id="developer-usage-window"');
+    expect(route).toContain("No calls reached this revision in the selected window.");
+    expect(route).not.toContain("workspaceId");
+    expect(route).not.toContain("walletAddress");
+    expect(clientSource).toContain("matterhorn.crypto-app-developer-usage.v1");
+    expect(clientSource).toContain("tenantIdentifiersIncluded");
+    expect(clientSource).toContain("requestContentIncluded");
     expect(quickstart).toContain("createMatterhornCryptoAppQuickstartCommand");
     expect(quickstart).toContain("Create a testnet starter");
     expect(quickstart).toContain("Copy command");

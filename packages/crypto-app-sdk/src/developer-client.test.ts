@@ -47,6 +47,67 @@ const submission = {
   runtimeReview: null,
 };
 
+const usage = {
+  version: "matterhorn.crypto-app-developer-usage.v1",
+  appId: "acme-sui",
+  manifestRevision: "revision-1",
+  costUnit: "micro_usd",
+  windowDays: 7,
+  fromDay: "2026-08-26",
+  throughDay: "2026-09-01",
+  generatedAt: "2026-09-01T12:00:00.000Z",
+  budgetPolicy: {
+    scope: "per_workspace",
+    dailyToolCostLimitMicros: 10_000_000,
+    perCallToolCostLimitMicros: 1_000_000,
+    walletTransactionLimitsIncluded: false,
+  },
+  totals: {
+    calls: 2,
+    succeeded: 1,
+    failed: 1,
+    timedOut: 0,
+    pending: 0,
+    abandoned: 0,
+    actualCostMicros: 1_500,
+    pendingReservedCostMicros: 0,
+    averageLatencyMs: 250,
+    maximumLatencyMs: 400,
+  },
+  byDay: [{
+    day: "2026-09-01",
+    calls: 2,
+    succeeded: 1,
+    failed: 1,
+    timedOut: 0,
+    pending: 0,
+    abandoned: 0,
+    actualCostMicros: 1_500,
+    pendingReservedCostMicros: 0,
+    averageLatencyMs: 250,
+    maximumLatencyMs: 400,
+  }],
+  byAction: [{
+    actionId: "read_markets",
+    calls: 2,
+    succeeded: 1,
+    failed: 1,
+    timedOut: 0,
+    pending: 0,
+    abandoned: 0,
+    actualCostMicros: 1_500,
+    pendingReservedCostMicros: 0,
+    averageLatencyMs: 250,
+    maximumLatencyMs: 400,
+  }],
+  privacy: {
+    aggregateOnly: true,
+    tenantIdentifiersIncluded: false,
+    requestContentIncluded: false,
+    walletDataIncluded: false,
+  },
+};
+
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
@@ -87,6 +148,7 @@ describe("Matterhorn crypto developer client", () => {
         }
         if (url.endsWith("/enroll")) return json({ mode: "shadow", profile }, 201);
         if (url.endsWith("/publisher-keys")) return json({ mode: "shadow", profile }, 201);
+        if (url.includes("/usage?days=")) return json({ mode: "shadow", usage });
         if (url.endsWith("/certification-request")) {
           return json({
             mode: "shadow",
@@ -112,8 +174,12 @@ describe("Matterhorn crypto developer client", () => {
     await client.submitTestnetManifest({ appId: "acme-sui" } as never);
     expect((await client.requestTestnetCertification("acme-sui", "revision-1")).state)
       .toBe("certification_requested");
+    expect((await client.getUsage("acme-sui", "revision-1", 7)).totals).toMatchObject({
+      calls: 2,
+      actualCostMicros: 1_500,
+    });
 
-    expect(calls).toHaveLength(7);
+    expect(calls).toHaveLength(8);
     for (const call of calls) {
       expect(call.init.credentials).toBe("include");
       expect(call.init.redirect).toBe("error");
@@ -160,6 +226,13 @@ describe("Matterhorn crypto developer client", () => {
       .toThrowError(expect.objectContaining({ code: "developer_client_configuration_invalid" }));
     expect(() => createMatterhornCryptoDeveloperClient({ baseUrl: "https://user:password@example.com" }))
       .toThrowError(expect.objectContaining({ code: "developer_client_configuration_invalid" }));
+    const client = createMatterhornCryptoDeveloperClient({ fetch: async () => json({ usage }) });
+    await expect(client.getUsage("acme-sui", "revision-1", 31)).rejects.toMatchObject({
+      code: "developer_client_configuration_invalid",
+    });
+    await expect(client.getUsage("different-app", "revision-1")).rejects.toMatchObject({
+      code: "developer_client_response_invalid",
+    });
 
     const oversized = createMatterhornCryptoDeveloperClient({
       fetch: async () => new Response("{}", { headers: { "content-length": String(513 * 1_024) } }),

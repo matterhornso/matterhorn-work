@@ -10,6 +10,7 @@ import {
   MatterhornCryptoDeveloperClientError,
   type MatterhornCryptoDeveloperStatus,
   type MatterhornCryptoDeveloperSubmissionView,
+  type MatterhornCryptoDeveloperUsageReport,
 } from "@matterhorn-work/crypto-app-sdk";
 import {
   validateMatterhornCryptoAppManifest,
@@ -92,6 +93,31 @@ function readableFinding(code: string): string {
   return code.replaceAll("_", " ");
 }
 
+function usageRevisionKey(item: Pick<MatterhornCryptoDeveloperSubmissionView, "appId" | "manifestRevision">): string {
+  return JSON.stringify([item.appId, item.manifestRevision]);
+}
+
+function formatEstimatedCost(costMicros: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: costMicros > 0 && costMicros < 10_000 ? 4 : 2,
+  }).format(costMicros / 1_000_000);
+}
+
+function formatLatency(latencyMs: number | null): string {
+  if (latencyMs === null) return "No completed calls";
+  if (latencyMs < 1_000) return `${latencyMs} ms`;
+  return `${(latencyMs / 1_000).toFixed(latencyMs < 10_000 ? 1 : 0)} sec`;
+}
+
+function successRate(usage: MatterhornCryptoDeveloperUsageReport): string {
+  const completed = usage.totals.succeeded + usage.totals.failed + usage.totals.timedOut;
+  if (completed === 0) return "No completed calls";
+  return `${Math.round((usage.totals.succeeded / completed) * 100)}%`;
+}
+
 async function connect(): Promise<{
   client: DeveloperClient;
   snapshot: PortalSnapshot;
@@ -127,6 +153,8 @@ export function CryptoAppDeveloperRoute() {
   const [publicKeyPem, setPublicKeyPem] = useState("");
   const [manifestJson, setManifestJson] = useState("");
   const [inviteLoaded, setInviteLoaded] = useState(false);
+  const [usageRevision, setUsageRevision] = useState("");
+  const [usageWindowDays, setUsageWindowDays] = useState<7 | 30>(7);
 
   useEffect(() => {
     capturePendingDeveloperInviteFromBrowser();
@@ -143,6 +171,29 @@ export function CryptoAppDeveloperRoute() {
   const portal = useQuery({ queryKey: QUERY_KEY, queryFn: connect, retry: false });
   const snapshot = portal.data?.snapshot;
   const copy = snapshot ? stepCopy[snapshot.status.nextStep] : null;
+  const selectedUsageSubmission = useMemo(() => {
+    const submissions = snapshot?.submissions ?? [];
+    return submissions.find((item) => usageRevisionKey(item) === usageRevision) ?? submissions[0] ?? null;
+  }, [snapshot?.submissions, usageRevision]);
+  const usage = useQuery({
+    queryKey: [
+      ...QUERY_KEY,
+      "usage",
+      selectedUsageSubmission?.appId ?? "none",
+      selectedUsageSubmission?.manifestRevision ?? "none",
+      usageWindowDays,
+    ],
+    enabled: Boolean(portal.data && selectedUsageSubmission),
+    retry: false,
+    queryFn: async () => {
+      if (!portal.data || !selectedUsageSubmission) throw new Error("developer_usage_unavailable");
+      return portal.data.client.getUsage(
+        selectedUsageSubmission.appId,
+        selectedUsageSubmission.manifestRevision,
+        usageWindowDays,
+      );
+    },
+  });
 
   const refresh = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
@@ -358,6 +409,95 @@ export function CryptoAppDeveloperRoute() {
                 <DeveloperQuickstartSetup />
                 <DeveloperIntegrationSetup serverOrigin={portal.data.serverOrigin} />
               </>
+            ) : null}
+
+            {snapshot.status.enrolled && selectedUsageSubmission ? (
+              <section className="border-b border-border py-8" aria-labelledby="developer-app-usage-title">
+                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+                  <div>
+                    <h2 id="developer-app-usage-title" className="text-base font-semibold">App usage</h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      Calls routed through Matterhorn for this exact app revision. Estimates are shown in USD.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <div>
+                      <Label htmlFor="developer-usage-revision">App revision</Label>
+                      <select
+                        id="developer-usage-revision"
+                        className="mt-2 min-h-11 max-w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={usageRevisionKey(selectedUsageSubmission)}
+                        onChange={(event) => setUsageRevision(event.target.value)}
+                      >
+                        {snapshot.submissions.map((item) => (
+                          <option key={usageRevisionKey(item)} value={usageRevisionKey(item)}>
+                            {item.manifest.displayName} · {item.manifestRevision}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor="developer-usage-window">Time window</Label>
+                      <select
+                        id="developer-usage-window"
+                        className="mt-2 min-h-11 rounded-md border border-input bg-background px-3 text-sm"
+                        value={usageWindowDays}
+                        onChange={(event) => setUsageWindowDays(event.target.value === "30" ? 30 : 7)}
+                      >
+                        <option value="7">Last 7 days</option>
+                        <option value="30">Last 30 days</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {usage.isLoading ? (
+                  <div className="mt-6 flex min-h-24 items-center gap-3 text-sm text-muted-foreground" role="status">
+                    <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+                    Loading aggregate usage…
+                  </div>
+                ) : usage.isError || !usage.data ? (
+                  <div className="mt-6 border-t border-border py-5" role="alert">
+                    <p className="text-sm font-medium">Usage is unavailable</p>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">No app data was exposed. Try loading this report again.</p>
+                    <Button variant="outline" size="sm" className="mt-3 min-h-11" onClick={() => void usage.refetch()}>Try again</Button>
+                  </div>
+                ) : (
+                  <>
+                    <dl className="mt-6 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="bg-background p-4"><dt className="text-xs text-muted-foreground">Calls</dt><dd className="mt-2 text-xl font-semibold tabular-nums">{usage.data.totals.calls}</dd></div>
+                      <div className="bg-background p-4"><dt className="text-xs text-muted-foreground">Success rate</dt><dd className="mt-2 text-xl font-semibold tabular-nums">{successRate(usage.data)}</dd></div>
+                      <div className="bg-background p-4"><dt className="text-xs text-muted-foreground">Estimated cost</dt><dd className="mt-2 text-xl font-semibold tabular-nums">{formatEstimatedCost(usage.data.totals.actualCostMicros)}</dd></div>
+                      <div className="bg-background p-4"><dt className="text-xs text-muted-foreground">Average response</dt><dd className="mt-2 text-xl font-semibold tabular-nums">{formatLatency(usage.data.totals.averageLatencyMs)}</dd></div>
+                    </dl>
+                    {usage.data.byAction.length > 0 ? (
+                      <div className="mt-6 overflow-x-auto border-y border-border">
+                        <table className="w-full min-w-[34rem] text-left text-sm">
+                          <thead className="text-xs text-muted-foreground"><tr><th className="py-3 pr-4 font-medium">Action</th><th className="px-4 py-3 font-medium">Calls</th><th className="px-4 py-3 font-medium">Succeeded</th><th className="px-4 py-3 font-medium">Average response</th></tr></thead>
+                          <tbody>{usage.data.byAction.slice(0, 8).map((item) => (
+                            <tr key={item.actionId} className="border-t border-border">
+                              <td className="py-3 pr-4 font-mono text-xs">{item.actionId}</td>
+                              <td className="px-4 py-3 tabular-nums">{item.calls}</td>
+                              <td className="px-4 py-3 tabular-nums">{item.succeeded}</td>
+                              <td className="px-4 py-3 tabular-nums">{formatLatency(item.averageLatencyMs)}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="mt-6 border-t border-border py-5 text-sm text-muted-foreground">No calls reached this revision in the selected window.</p>
+                    )}
+                    <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                      Aggregate only. No workspace, prompt, wallet, credential, or request identifiers are included.
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                      Tool-cost guardrail: up to {formatEstimatedCost(usage.data.budgetPolicy.perCallToolCostLimitMicros)} per call and {formatEstimatedCost(usage.data.budgetPolicy.dailyToolCostLimitMicros)} per day for each workspace. Wallet transaction limits are separate.
+                      {usage.data.totals.pending > 0 ? ` ${usage.data.totals.pending} call${usage.data.totals.pending === 1 ? " is" : "s are"} still in progress.` : ""}
+                      {usage.data.totals.abandoned > 0 ? ` ${usage.data.totals.abandoned} unfinished call${usage.data.totals.abandoned === 1 ? " was" : "s were"} closed after its reservation expired.` : ""}
+                    </p>
+                  </>
+                )}
+              </section>
             ) : null}
 
             <section className="py-8">

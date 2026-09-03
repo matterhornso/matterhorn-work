@@ -20,6 +20,47 @@ type SqliteConstructor = new (path: string) => SqliteDatabase;
 
 export type MatterhornCryptoAppOperationalOutcome = "success" | "error" | "timeout";
 
+export type MatterhornCryptoAppDeveloperUsageBucket = {
+  day: string;
+  actionId: string;
+  calls: number;
+  succeeded: number;
+  failed: number;
+  timedOut: number;
+  pending: number;
+  abandoned: number;
+  actualCostMicros: number;
+  pendingReservedCostMicros: number;
+  averageLatencyMs: number | null;
+  maximumLatencyMs: number | null;
+};
+
+export type MatterhornCryptoAppDeveloperUsageReport = {
+  version: "matterhorn.crypto-app-developer-usage.v1";
+  appId: string;
+  manifestRevision: string;
+  costUnit: "micro_usd";
+  windowDays: number;
+  fromDay: string;
+  throughDay: string;
+  generatedAt: string;
+  budgetPolicy: {
+    scope: "per_workspace";
+    dailyToolCostLimitMicros: number;
+    perCallToolCostLimitMicros: number;
+    walletTransactionLimitsIncluded: false;
+  };
+  totals: Omit<MatterhornCryptoAppDeveloperUsageBucket, "day" | "actionId">;
+  byDay: Array<Omit<MatterhornCryptoAppDeveloperUsageBucket, "actionId">>;
+  byAction: Array<Omit<MatterhornCryptoAppDeveloperUsageBucket, "day">>;
+  privacy: {
+    aggregateOnly: true;
+    tenantIdentifiersIncluded: false;
+    requestContentIncluded: false;
+    walletDataIncluded: false;
+  };
+};
+
 export type MatterhornCryptoAppOperationalPolicy = {
   reserve(input: {
     workspaceId: string;
@@ -54,6 +95,22 @@ type UsageRow = {
   reserved_cost_micros: number;
   actual_cost_micros: number | null;
   state: string;
+};
+
+type DeveloperUsageRow = {
+  day_bucket: string;
+  action_id: string;
+  calls: number;
+  succeeded: number;
+  failed: number;
+  timed_out: number;
+  pending: number;
+  abandoned: number;
+  actual_cost_micros: number;
+  pending_reserved_cost_micros: number;
+  completed_calls: number;
+  duration_sum_ms: number;
+  maximum_latency_ms: number | null;
 };
 
 type CircuitRow = {
@@ -97,6 +154,45 @@ function nonNegativeSafeInteger(value: number, code: string): number {
 function utcDay(now: Date): string {
   if (!Number.isFinite(now.getTime())) throw new MatterhornCryptoAppOperationalPolicyError("crypto_app_policy_clock_invalid");
   return now.toISOString().slice(0, 10);
+}
+
+function aggregateDeveloperUsage(
+  rows: MatterhornCryptoAppDeveloperUsageBucket[],
+): Omit<MatterhornCryptoAppDeveloperUsageBucket, "day" | "actionId"> {
+  const aggregate = {
+    calls: 0,
+    succeeded: 0,
+    failed: 0,
+    timedOut: 0,
+    pending: 0,
+    abandoned: 0,
+    actualCostMicros: 0,
+    pendingReservedCostMicros: 0,
+    averageLatencyMs: null as number | null,
+    maximumLatencyMs: null as number | null,
+  };
+  let completedCalls = 0;
+  let durationSumMs = 0;
+  for (const row of rows) {
+    aggregate.calls += row.calls;
+    aggregate.succeeded += row.succeeded;
+    aggregate.failed += row.failed;
+    aggregate.timedOut += row.timedOut;
+    aggregate.pending += row.pending;
+    aggregate.abandoned += row.abandoned;
+    aggregate.actualCostMicros += row.actualCostMicros;
+    aggregate.pendingReservedCostMicros += row.pendingReservedCostMicros;
+    const completed = row.succeeded + row.failed + row.timedOut;
+    if (row.averageLatencyMs !== null && completed > 0) {
+      completedCalls += completed;
+      durationSumMs += row.averageLatencyMs * completed;
+    }
+    if (row.maximumLatencyMs !== null) {
+      aggregate.maximumLatencyMs = Math.max(aggregate.maximumLatencyMs ?? 0, row.maximumLatencyMs);
+    }
+  }
+  aggregate.averageLatencyMs = completedCalls > 0 ? Math.round(durationSumMs / completedCalls) : null;
+  return aggregate;
 }
 
 function stateOutcome(value: string): MatterhornCryptoAppOperationalOutcome {
@@ -187,6 +283,8 @@ export class MatterhornCryptoAppOperationalPolicyStore implements MatterhornCryp
         ON crypto_app_usage_reservations(workspace_id, day_bucket, state);
       CREATE INDEX IF NOT EXISTS crypto_app_usage_expiry_idx
         ON crypto_app_usage_reservations(state, expires_at_ms);
+      CREATE INDEX IF NOT EXISTS crypto_app_usage_developer_report_idx
+        ON crypto_app_usage_reservations(app_id, manifest_revision, day_bucket, action_id, state);
       CREATE TABLE IF NOT EXISTS crypto_app_circuits (
         circuit_key TEXT NOT NULL,
         workspace_id TEXT NOT NULL,
@@ -311,6 +409,150 @@ export class MatterhornCryptoAppOperationalPolicyStore implements MatterhornCryp
       else actualCostMicros += row.actual_cost_micros ?? 0;
     }
     return { actualCostMicros, pendingReservedCostMicros };
+  }
+
+  /**
+   * App-revision aggregate for the owning developer portal. The query never
+   * selects workspace, connection, run, call or reservation identifiers and
+   * therefore cannot become a tenant-enumeration surface.
+   */
+  developerUsage(input: {
+    appId: string;
+    manifestRevision: string;
+    windowDays?: number;
+  }): MatterhornCryptoAppDeveloperUsageReport {
+    const windowDays = positiveSafeInteger(
+      input.windowDays ?? 7,
+      "crypto_app_usage_window_invalid",
+    );
+    if (windowDays > 30) {
+      throw new MatterhornCryptoAppOperationalPolicyError("crypto_app_usage_window_invalid");
+    }
+    const now = this.#now();
+    const throughDay = utcDay(now);
+    const from = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() - (windowDays - 1),
+    ));
+    const fromDay = utcDay(from);
+    const nowMs = now.getTime();
+    const rawRows = statement(this.#db, `
+      SELECT
+        day_bucket,
+        action_id,
+        COUNT(*) AS calls,
+        SUM(CASE WHEN state = 'success' THEN 1 ELSE 0 END) AS succeeded,
+        SUM(CASE WHEN state = 'error' THEN 1 ELSE 0 END) AS failed,
+        SUM(CASE WHEN state = 'timeout' THEN 1 ELSE 0 END) AS timed_out,
+        SUM(CASE WHEN state = 'pending' AND expires_at_ms > ? THEN 1 ELSE 0 END) AS pending,
+        SUM(CASE WHEN state = 'expired' OR (state = 'pending' AND expires_at_ms <= ?) THEN 1 ELSE 0 END) AS abandoned,
+        SUM(CASE
+          WHEN state IN ('success', 'error', 'timeout') THEN COALESCE(actual_cost_micros, 0)
+          ELSE 0
+        END) AS actual_cost_micros,
+        SUM(CASE
+          WHEN state = 'pending' AND expires_at_ms > ? THEN reserved_cost_micros
+          ELSE 0
+        END) AS pending_reserved_cost_micros,
+        SUM(CASE WHEN state IN ('success', 'error', 'timeout') THEN 1 ELSE 0 END) AS completed_calls,
+        SUM(CASE
+          WHEN state IN ('success', 'error', 'timeout') AND reconciled_at_ms IS NOT NULL
+            THEN MAX(reconciled_at_ms - created_at_ms, 0)
+          ELSE 0
+        END) AS duration_sum_ms,
+        MAX(CASE
+          WHEN state IN ('success', 'error', 'timeout') AND reconciled_at_ms IS NOT NULL
+            THEN MAX(reconciled_at_ms - created_at_ms, 0)
+          ELSE NULL
+        END) AS maximum_latency_ms
+      FROM crypto_app_usage_reservations
+      WHERE app_id = ? AND manifest_revision = ? AND day_bucket BETWEEN ? AND ?
+      GROUP BY day_bucket, action_id
+      ORDER BY day_bucket ASC, action_id ASC
+    `).all(
+      nowMs,
+      nowMs,
+      nowMs,
+      input.appId,
+      input.manifestRevision,
+      fromDay,
+      throughDay,
+    ) as DeveloperUsageRow[];
+    const rows = rawRows.map((row): MatterhornCryptoAppDeveloperUsageBucket => {
+      const numeric = [
+        row.calls,
+        row.succeeded,
+        row.failed,
+        row.timed_out,
+        row.pending,
+        row.abandoned,
+        row.actual_cost_micros,
+        row.pending_reserved_cost_micros,
+        row.completed_calls,
+        row.duration_sum_ms,
+      ].map(Number);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(row.day_bucket)
+        || typeof row.action_id !== "string"
+        || row.action_id.length < 1
+        || row.action_id.length > 160
+        || numeric.some((value) => !Number.isSafeInteger(value) || value < 0)
+        || numeric[0] !== numeric[1]! + numeric[2]! + numeric[3]! + numeric[4]! + numeric[5]!) {
+        throw new MatterhornCryptoAppOperationalPolicyError("crypto_app_policy_state_corrupt");
+      }
+      const maximumLatencyMs = row.maximum_latency_ms === null ? null : Number(row.maximum_latency_ms);
+      if (maximumLatencyMs !== null && (!Number.isSafeInteger(maximumLatencyMs) || maximumLatencyMs < 0)) {
+        throw new MatterhornCryptoAppOperationalPolicyError("crypto_app_policy_state_corrupt");
+      }
+      const completedCalls = numeric[8]!;
+      return {
+        day: row.day_bucket,
+        actionId: row.action_id,
+        calls: numeric[0]!,
+        succeeded: numeric[1]!,
+        failed: numeric[2]!,
+        timedOut: numeric[3]!,
+        pending: numeric[4]!,
+        abandoned: numeric[5]!,
+        actualCostMicros: numeric[6]!,
+        pendingReservedCostMicros: numeric[7]!,
+        averageLatencyMs: completedCalls > 0 ? Math.round(numeric[9]! / completedCalls) : null,
+        maximumLatencyMs,
+      };
+    });
+    const byDay = [...new Set(rows.map((row) => row.day))].map((day) => ({
+      day,
+      ...aggregateDeveloperUsage(rows.filter((row) => row.day === day)),
+    }));
+    const byAction = [...new Set(rows.map((row) => row.actionId))].map((actionId) => ({
+      actionId,
+      ...aggregateDeveloperUsage(rows.filter((row) => row.actionId === actionId)),
+    }));
+    return {
+      version: "matterhorn.crypto-app-developer-usage.v1",
+      appId: input.appId,
+      manifestRevision: input.manifestRevision,
+      costUnit: "micro_usd",
+      windowDays,
+      fromDay,
+      throughDay,
+      generatedAt: now.toISOString(),
+      budgetPolicy: {
+        scope: "per_workspace",
+        dailyToolCostLimitMicros: this.#dailyWorkspaceLimitMicros,
+        perCallToolCostLimitMicros: this.#maxCallCostMicros,
+        walletTransactionLimitsIncluded: false,
+      },
+      totals: aggregateDeveloperUsage(rows),
+      byDay,
+      byAction,
+      privacy: {
+        aggregateOnly: true,
+        tenantIdentifiersIncluded: false,
+        requestContentIncluded: false,
+        walletDataIncluded: false,
+      },
+    };
   }
 
   circuitOpen(input: { workspaceId: string; circuitKey: string }): boolean {
