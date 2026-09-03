@@ -15,6 +15,26 @@ The SDK is deliberately non-custodial:
 - Schema descriptions, constants, enums, bounds, and unions are closed and bounded. Embedded credential literals, contradictory bounds, ignored `oneOf` siblings, and attacker-controlled error-path text fail closed.
 - Unsafe schemas fail before the SDK emits signing bytes or the local runner invokes a developer callback.
 
+## One-command testnet starter
+
+From a Matterhorn checkout, create a locally validated read-only starter:
+
+```bash
+pnpm create:crypto-app -- \
+  --protocol sui \
+  --app-id acme.sui-testnet \
+  --endpoint https://adapter.acme.example/v1 \
+  --output-dir ./acme-sui
+```
+
+The new directory contains an unsigned manifest, canonical external-signing
+request, inert fixture pack, developer-owned callback, validation report, and
+next-step guide. Generation is atomic and refuses an existing output directory.
+It performs no network request and creates no key, credential, wallet access,
+certification, financial action, or mainnet authority. Hyperliquid and Bittensor
+testnet starters use the same command with `--protocol hyperliquid` or
+`--protocol bittensor`.
+
 ## Minimal flow
 
 ```ts

@@ -65,6 +65,16 @@ export {
   type MatterhornCryptoIntegrationVerificationCheck,
 } from "./integration-setup.js";
 
+export {
+  createMatterhornCryptoAppQuickstart,
+  MATTERHORN_CRYPTO_APP_QUICKSTART_VERSION,
+  MatterhornCryptoAppQuickstartError,
+  type MatterhornCryptoAppQuickstart,
+  type MatterhornCryptoAppQuickstartArtifact,
+  type MatterhornCryptoAppQuickstartOptions,
+  type MatterhornCryptoAppQuickstartProtocol,
+} from "./quickstart.js";
+
 type CanonicalValue = null | boolean | number | string | CanonicalValue[] | { [key: string]: CanonicalValue };
 
 export type MatterhornUnsignedCryptoAppManifest = Omit<MatterhornCryptoAppManifest, "version" | "publisher"> & {
