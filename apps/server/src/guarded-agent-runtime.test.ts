@@ -39,6 +39,30 @@ afterAll(async () => {
 });
 
 describe("guarded agent runtime transport", () => {
+  test("records selected context as counts without retaining file identifiers", async () => {
+    const path = join(dataDir, "run-context-counts.db");
+    const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_context_counts",
+      sessionId: "ses_context_counts",
+      parts: [{ type: "text", text: "Use my selected files to compare public Sui activity" }],
+      providerId: "local",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      attachmentIds: ["chat-file-one", "coworker-file-one", "coworker-file-one"],
+      agentFileIds: ["coworker-file-one", "coworker-file-one"],
+      memoryIds: ["saved-memory-one", "saved-memory-one"],
+      privacyMode: "private_workspace",
+      executionMode: "work",
+    });
+
+    const receipt = await runtime.receipts.get("ws_context_counts", accepted.runId);
+    expect(receipt?.context).toEqual({ chatFiles: 1, coworkerFiles: 1, savedMemories: 1 });
+    expect(JSON.stringify(receipt?.context)).not.toContain("chat-file-one");
+    expect(JSON.stringify(receipt?.context)).not.toContain("coworker-file-one");
+    runtime.close();
+  });
+
   test("rolls back every run record when scope persistence fails", async () => {
     const path = join(dataDir, "run-scope-startup-rollback.db");
     const store = new MatterhornGuardedRuntimeStateStore(path);
