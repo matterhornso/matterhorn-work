@@ -165,6 +165,11 @@ export type MatterhornCoworkerAccountResourceScope = Omit<MatterhornCoworkerReso
 export type MatterhornCoworkerAccountResourceRecommendation = MatterhornCoworkerResourceRecommendation;
 export type MatterhornCoworkerAccountWatch = Omit<MatterhornCoworkerWatch, "ownerId">;
 export type MatterhornCoworkerAccountInboxItem = Omit<MatterhornCoworkerInboxItem, "ownerId">;
+export type MatterhornCoworkerAccessStatus = {
+  version: "matterhorn.coworker-access-status.v1";
+  allowed: boolean;
+  acceptedAt: string | null;
+};
 
 export type MatterhornCoworkerWalletIntentView = {
   version: "matterhorn.pending-crypto-intent.v1";
@@ -1876,6 +1881,22 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/${encodeURIComponent(connectionId)}`,
       { token, method: "DELETE", timeoutMs: timeouts.config },
     ),
+    getCoworkerAccess: () => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      status: MatterhornCoworkerAccessStatus;
+    }>(baseUrl, "/coworker-access", {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    acceptCoworkerInvite: (inviteToken: string) => requestJson<{
+      mode: "invite";
+      status: MatterhornCoworkerAccessStatus;
+    }>(baseUrl, "/coworker-access/accept", {
+      token,
+      method: "POST",
+      body: { inviteToken },
+      timeoutMs: timeouts.config,
+    }),
     listCoworkers: (workspaceId: string) => requestJson<{
       mode: "off" | "internal" | "invite" | "public";
       coworkers: MatterhornCoworkerAccountProfile[];

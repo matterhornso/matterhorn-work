@@ -60,7 +60,9 @@ describe("Den auth URL behavior", () => {
 
     expect(appRoot).toContain("isExplicitCloudSignin");
     expect(appRoot).toContain('params.get("intent") === "cloud-auth"');
-    expect(appRoot).toContain('pendingDeveloperInvite\n          ? "/developer/crypto-apps"\n          : "/session"');
+    expect(appRoot).toContain('pendingCoworkerInvite\n      ? "/coworker-access"');
+    expect(appRoot).toContain('pendingDeveloperInvite\n        ? "/developer/crypto-apps"');
+    expect(appRoot).toContain("pendingInvitePath");
     expect(forcedSignin).toContain("readDenBootstrapConfig().requireSignin");
     expect(forcedSignin).toContain("onContinueWithoutCloud");
     expect(surface).toContain("Continue locally without Cloud");

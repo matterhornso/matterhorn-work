@@ -25,11 +25,16 @@ import {
   capturePendingDeveloperInviteFromBrowser,
   hasPendingDeveloperInvite,
 } from "../domains/developer/developer-invite-fragment";
+import {
+  capturePendingCoworkerInviteFromBrowser,
+  hasPendingCoworkerInvite,
+} from "../domains/coworkers/coworker-invite-fragment";
 import { UnknownRouteRecovery } from "./route-recovery";
 
-// Strip one-time developer invite fragments before the app shell, route
+// Strip one-time invite fragments before the app shell, route
 // controls, or telemetry can inspect the initial browser location.
 capturePendingDeveloperInviteFromBrowser();
+capturePendingCoworkerInviteFromBrowser();
 
 const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboarding-page").then((module) => ({
   default: module.OrgOnboardingPage,
@@ -48,6 +53,9 @@ const CryptoAppCatalogRoute = lazy(() => import("../domains/crypto-apps/crypto-a
 })));
 const CryptoEvidenceRoute = lazy(() => import("../domains/crypto-apps/crypto-evidence-route").then((module) => ({
   default: module.CryptoEvidenceRoute,
+})));
+const CoworkerAccessRoute = lazy(() => import("../domains/coworkers/coworker-access-route").then((module) => ({
+  default: module.CoworkerAccessRoute,
 })));
 type DenSigninGateProps = {
   children: ReactNode;
@@ -123,6 +131,7 @@ function DenSigninGate({ children }: DenSigninGateProps) {
   useEffect(() => {
     // Also capture links opened through client-side navigation after boot.
     capturePendingDeveloperInviteFromBrowser();
+    capturePendingCoworkerInviteFromBrowser();
 
     // Wait for the first auth check so we don't bounce the user between
     // `/session` and `/signin` every navigation while we figure out if
@@ -136,10 +145,17 @@ function DenSigninGate({ children }: DenSigninGateProps) {
 
     const onOnboarding = path === "/onboarding" || path.startsWith("/onboarding/");
     const onDeveloperPortal = path === "/developer/crypto-apps" || path.startsWith("/developer/crypto-apps/");
+    const onCoworkerAccess = path === "/coworker-access" || path.startsWith("/coworker-access/");
     const hasActiveOrganization = Boolean(
       readDenSettings().activeOrgId?.trim(),
     );
     const pendingDeveloperInvite = hasPendingDeveloperInvite();
+    const pendingCoworkerInvite = hasPendingCoworkerInvite();
+    const pendingInvitePath = pendingCoworkerInvite
+      ? "/coworker-access"
+      : pendingDeveloperInvite
+        ? "/developer/crypto-apps"
+        : null;
 
     if (explicitCloudSignin) return;
 
@@ -148,8 +164,8 @@ function DenSigninGate({ children }: DenSigninGateProps) {
         navigate("/signin", { replace: true });
       } else if (denAuth.isSignedIn && onSignin) {
         navigate(
-          pendingDeveloperInvite && hasActiveOrganization
-            ? "/developer/crypto-apps"
+          pendingInvitePath && hasActiveOrganization
+            ? pendingInvitePath
             : "/onboarding",
           { replace: true },
         );
@@ -162,25 +178,27 @@ function DenSigninGate({ children }: DenSigninGateProps) {
       } else if (
         denAuth.isSignedIn &&
         hasActiveOrganization &&
-        pendingDeveloperInvite &&
-        !onDeveloperPortal
+        pendingInvitePath &&
+        !onDeveloperPortal &&
+        !onCoworkerAccess
       ) {
-        navigate("/developer/crypto-apps", { replace: true });
+        navigate(pendingInvitePath, { replace: true });
       }
     } else if (onSignin) {
       navigate(
-        denAuth.isSignedIn && hasActiveOrganization && pendingDeveloperInvite
-          ? "/developer/crypto-apps"
+        denAuth.isSignedIn && hasActiveOrganization && pendingInvitePath
+          ? pendingInvitePath
           : "/session",
         { replace: true },
       );
     } else if (
       denAuth.isSignedIn &&
       hasActiveOrganization &&
-      pendingDeveloperInvite &&
-      !onDeveloperPortal
+      pendingInvitePath &&
+      !onDeveloperPortal &&
+      !onCoworkerAccess
     ) {
-      navigate("/developer/crypto-apps", { replace: true });
+      navigate(pendingInvitePath, { replace: true });
     }
 
     // If on /onboarding but not signed in, bounce to signin or session
@@ -203,9 +221,14 @@ function DenSigninGate({ children }: DenSigninGateProps) {
     const handler = (event: WindowEventMap[typeof denSessionUpdatedEvent]) => {
       if (event.detail?.status !== "success") return;
       if (publicBetaWeb) {
-        navigate(
-          hasPendingDeveloperInvite() && Boolean(readDenSettings().activeOrgId?.trim())
+        const pendingInvitePath = hasPendingCoworkerInvite()
+          ? "/coworker-access"
+          : hasPendingDeveloperInvite()
             ? "/developer/crypto-apps"
+            : null;
+        navigate(
+          pendingInvitePath && Boolean(readDenSettings().activeOrgId?.trim())
+            ? pendingInvitePath
             : "/onboarding",
           { replace: true },
         );
@@ -216,9 +239,14 @@ function DenSigninGate({ children }: DenSigninGateProps) {
         attempts++;
         const settings = readDenSettings();
         if (settings.authToken?.trim()) {
-          navigate(
-            hasPendingDeveloperInvite() && Boolean(settings.activeOrgId?.trim())
+          const pendingInvitePath = hasPendingCoworkerInvite()
+            ? "/coworker-access"
+            : hasPendingDeveloperInvite()
               ? "/developer/crypto-apps"
+              : null;
+          navigate(
+            pendingInvitePath && Boolean(settings.activeOrgId?.trim())
+              ? pendingInvitePath
               : "/onboarding",
             { replace: true },
           );
@@ -334,6 +362,14 @@ export function AppRoot() {
                 element={
                   <Suspense fallback={<RouteFallback />}>
                     <CryptoAppDeveloperRoute />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/coworker-access"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <CoworkerAccessRoute />
                   </Suspense>
                 }
               />

@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -57,6 +57,15 @@ const ENV_KEYS = [
   "MATTERHORN_COWORKER_POLICY_VERSION",
   "MATTERHORN_COWORKER_DB",
   "MATTERHORN_CRYPTO_APP_GATEWAY_MODE",
+  "MATTERHORN_CRYPTO_APP_POLICY_VERSION",
+  "MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON",
+  "MATTERHORN_CRYPTO_APP_REGISTRY_DB",
+  "MATTERHORN_CRYPTO_APP_CONNECTION_DB",
+  "MATTERHORN_CRYPTO_APP_DEVELOPER_DB",
+  "MATTERHORN_CRYPTO_APP_OPERATIONAL_DB",
+  "MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET",
+  "MATTERHORN_GUARDED_RUNTIME_MODE",
+  "MATTERHORN_CAPABILITY_SIGNING_SECRET",
   "MATTERHORN_GUARDED_RUNTIME_DB",
   "MATTERHORN_AGENT_FILES_MODE",
   "MATTERHORN_EVIDENCE_KMS_REGION",
@@ -173,7 +182,7 @@ function routeTestCertification(): MatterhornWalrusCertification {
 }
 
 async function boot(
-  mode: "off" | "internal",
+  mode: "off" | "internal" | "invite",
   options: { agentFiles?: boolean; walrus?: boolean } = {},
 ) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-routes-"));
@@ -190,7 +199,32 @@ async function boot(
   const guardedDb = join(root, "guarded-runtime.db");
   process.env.MATTERHORN_COWORKER_DB = coworkerDb;
   process.env.MATTERHORN_GUARDED_RUNTIME_DB = guardedDb;
-  process.env.MATTERHORN_CRYPTO_APP_GATEWAY_MODE = "off";
+  process.env.MATTERHORN_CRYPTO_APP_GATEWAY_MODE = mode === "invite" ? "enforce" : "off";
+  process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode === "invite" ? "enforce" : "off";
+  process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "coworker-route-capability-secret-at-least-32-characters";
+  if (mode === "invite") {
+    const publisherKeys = generateKeyPairSync("ed25519");
+    process.env.MATTERHORN_CRYPTO_APP_POLICY_VERSION = "crypto-app-policy-1";
+    process.env.MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON = JSON.stringify([{
+      publisherId: "matterhorn",
+      keyId: "route-publisher-1",
+      algorithm: "ed25519",
+      publicKeyPem: publisherKeys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    }]);
+    process.env.MATTERHORN_CRYPTO_APP_REGISTRY_DB = join(root, "crypto-app-registry.db");
+    process.env.MATTERHORN_CRYPTO_APP_CONNECTION_DB = join(root, "crypto-app-connections.db");
+    process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB = join(root, "crypto-app-developers.db");
+    process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB = join(root, "crypto-app-operations.db");
+    process.env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET = "route-wallet-proof-secret-at-least-32-characters";
+  } else {
+    delete process.env.MATTERHORN_CRYPTO_APP_POLICY_VERSION;
+    delete process.env.MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON;
+    delete process.env.MATTERHORN_CRYPTO_APP_REGISTRY_DB;
+    delete process.env.MATTERHORN_CRYPTO_APP_CONNECTION_DB;
+    delete process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB;
+    delete process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB;
+    delete process.env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET;
+  }
   process.env.MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT = "1";
   if (options.agentFiles) {
     process.env.MATTERHORN_AGENT_FILES_MODE = "encrypted";
@@ -311,11 +345,13 @@ async function request(base: string, path: string, options: {
   body?: Record<string, unknown>;
   cookie?: string;
   bearer?: string;
+  host?: boolean;
 } = {}) {
   const headers = new Headers();
   if (options.body) headers.set("Content-Type", "application/json");
   if (options.cookie) headers.set("Cookie", options.cookie);
   if (options.bearer) headers.set("Authorization", `Bearer ${options.bearer}`);
+  if (options.host) headers.set("x-matterhorn-host-token", HOST_TOKEN);
   const response = await fetch(`${base}${path}`, {
     method: options.method ?? (options.body ? "POST" : "GET"),
     headers,
@@ -658,6 +694,83 @@ afterEach(async () => {
 });
 
 describe("crypto coworker HTTP boundary", () => {
+  test("requires a one-time account invite and applies revocation immediately", async () => {
+    const server = await boot("invite");
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "coworker-invite-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "coworker-invite-b@example.com", password: PASSWORD },
+    });
+    expect(signupA.response.status).toBe(200);
+    expect(signupB.response.status).toBe(200);
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
+
+    expect((await request(server.base, "/coworker-access", { bearer: TOKEN })).payload.code)
+      .toBe("coworker_account_session_required");
+    expect((await request(server.base, "/coworker-access", { cookie: cookieA })).payload.status)
+      .toMatchObject({ allowed: false, acceptedAt: null });
+    const denied = await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA });
+    expect(denied.response.status).toBe(403);
+    expect(denied.payload.code).toBe("coworker_access_required");
+
+    const issued = await request(server.base, "/operator/coworker-access/invites", {
+      host: true,
+      body: { ttlMinutes: 60 },
+    });
+    expect(issued.response.status).toBe(201);
+    expect(issued.response.headers.get("cache-control")).toBe("no-store");
+    const invite = String(issued.payload.invite.token);
+
+    const accepted = await request(server.base, "/coworker-access/accept", {
+      cookie: cookieA,
+      body: { inviteToken: invite },
+    });
+    expect(accepted.response.status).toBe(200);
+    expect(accepted.payload.status).toMatchObject({ allowed: true });
+    expect((await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA })).response.status)
+      .toBe(200);
+    const created = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: coworkerInput(),
+    });
+    expect(created.response.status).toBe(201);
+    const coworkerId = String(created.payload.coworker.id);
+
+    const replay = await request(server.base, "/coworker-access/accept", {
+      cookie: cookieB,
+      body: { inviteToken: invite },
+    });
+    expect(replay.response.status).toBe(409);
+    expect(replay.payload.code).toBe("coworker_access_invite_consumed");
+
+    const revoked = await request(server.base, "/operator/coworker-access/revoke", {
+      host: true,
+      body: { accountId: String(signupA.payload.user.id) },
+    });
+    expect(revoked.response.status).toBe(200);
+    expect(revoked.payload.status).toMatchObject({ allowed: false, acceptedAt: null });
+    const blockedAfterRevoke = await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA });
+    expect(blockedAfterRevoke.response.status).toBe(403);
+    expect(blockedAfterRevoke.payload.code).toBe("coworker_access_required");
+    const blockedMessage = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_revoked_coworker/messages/preflight`,
+      {
+        cookie: cookieA,
+        body: {
+          coworkerId,
+          parts: [{ type: "text", text: "Read approved Sui testnet state." }],
+          executionMode: "work",
+        },
+      },
+    );
+    expect(blockedMessage.response.status).toBe(403);
+    expect(blockedMessage.payload.code).toBe("coworker_access_required");
+  });
+
   test("stores encrypted Agent Files for the selected tenant and coworker only", async () => {
     const server = await boot("internal", { agentFiles: true });
     const signupA = await request(server.base, "/api/auth/sign-up/email", {

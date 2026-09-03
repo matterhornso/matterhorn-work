@@ -91,6 +91,22 @@ type CoworkerInboxItemRow = {
   item_json: string;
 };
 
+type CoworkerAccessRow = {
+  owner_id: string;
+  state: string;
+  granted_at: string;
+  updated_at: string;
+  revoked_at: string | null;
+};
+
+export type MatterhornCoworkerAccessRecord = {
+  ownerId: string;
+  state: "active" | "revoked";
+  grantedAt: string;
+  updatedAt: string;
+  revokedAt: string | null;
+};
+
 const require = createRequire(import.meta.url);
 
 function openSqliteDatabase(path: string): SqliteDatabase {
@@ -239,11 +255,33 @@ function inboxItemFromRow(row: CoworkerInboxItemRow): MatterhornCoworkerInboxIte
   return structuredClone(result);
 }
 
+function accessFromRow(row: CoworkerAccessRow): MatterhornCoworkerAccessRecord {
+  if ((row.state !== "active" && row.state !== "revoked")
+    || !row.owner_id
+    || !Number.isFinite(Date.parse(row.granted_at))
+    || !Number.isFinite(Date.parse(row.updated_at))
+    || (row.revoked_at !== null && !Number.isFinite(Date.parse(row.revoked_at)))) {
+    throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+  }
+  return {
+    ownerId: row.owner_id,
+    state: row.state,
+    grantedAt: row.granted_at,
+    updatedAt: row.updated_at,
+    revokedAt: row.revoked_at,
+  };
+}
+
 export class MatterhornCoworkerStoreError extends Error {
   constructor(public readonly code:
     | "coworker_conflict"
     | "coworker_revision_conflict"
     | "coworker_watch_limit"
+    | "coworker_access_invite_invalid"
+    | "coworker_access_invite_expired"
+    | "coworker_access_invite_consumed"
+    | "coworker_access_already_active"
+    | "coworker_access_not_found"
     | "coworker_state_corrupt") {
     super(code);
     this.name = "MatterhornCoworkerStoreError";
@@ -373,6 +411,25 @@ export class MatterhornCoworkerStore {
       );
       CREATE INDEX IF NOT EXISTS crypto_coworker_inbox_owner_idx
         ON crypto_coworker_inbox(workspace_id, owner_id, coworker_id, state, created_at DESC);
+      CREATE TABLE IF NOT EXISTS crypto_coworker_access_invites (
+        invite_hash TEXT PRIMARY KEY,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        consumed_at TEXT,
+        consumed_by_owner_id TEXT,
+        CHECK (length(invite_hash) = 64)
+      );
+      CREATE TABLE IF NOT EXISTS crypto_coworker_account_access (
+        owner_id TEXT PRIMARY KEY,
+        state TEXT NOT NULL,
+        granted_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revoked_at TEXT,
+        CHECK (state IN ('active', 'revoked')),
+        CHECK ((state = 'active' AND revoked_at IS NULL) OR (state = 'revoked' AND revoked_at IS NOT NULL))
+      );
+      CREATE INDEX IF NOT EXISTS crypto_coworker_account_access_state_idx
+        ON crypto_coworker_account_access(state, updated_at, owner_id);
     `);
     chmodSync(path, 0o600);
   }
@@ -417,6 +474,101 @@ export class MatterhornCoworkerStore {
       WHERE workspace_id = ? AND owner_id = ?
       ORDER BY created_at ASC, coworker_id ASC
     `).all(workspaceId, ownerId) as CoworkerRow[]).map(profileFromRow);
+  }
+
+  issueAccessInvite(inviteHash: string, expiresAt: string, createdAt: string): void {
+    statement(this.#db, `
+      INSERT INTO crypto_coworker_access_invites(invite_hash, expires_at, created_at)
+      VALUES (?, ?, ?)
+    `).run(inviteHash, expiresAt, createdAt);
+  }
+
+  getAccountAccess(ownerId: string): MatterhornCoworkerAccessRecord | null {
+    const row = statement(this.#db, `
+      SELECT owner_id, state, granted_at, updated_at, revoked_at
+      FROM crypto_coworker_account_access WHERE owner_id = ? LIMIT 1
+    `).get(ownerId) as CoworkerAccessRow | undefined;
+    return row ? accessFromRow(row) : null;
+  }
+
+  listAccountAccess(limit = 100): MatterhornCoworkerAccessRecord[] {
+    return (statement(this.#db, `
+      SELECT owner_id, state, granted_at, updated_at, revoked_at
+      FROM crypto_coworker_account_access
+      ORDER BY updated_at DESC, owner_id ASC
+      LIMIT ?
+    `).all(limit) as CoworkerAccessRow[]).map(accessFromRow);
+  }
+
+  consumeAccessInvite(input: {
+    inviteHash: string;
+    ownerId: string;
+    now: string;
+  }): MatterhornCoworkerAccessRecord {
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      const invite = statement(this.#db, `
+        SELECT expires_at, consumed_at, consumed_by_owner_id
+        FROM crypto_coworker_access_invites WHERE invite_hash = ? LIMIT 1
+      `).get(input.inviteHash) as {
+        expires_at: string;
+        consumed_at: string | null;
+        consumed_by_owner_id: string | null;
+      } | undefined;
+      if (!invite) throw new MatterhornCoworkerStoreError("coworker_access_invite_invalid");
+      const existing = this.getAccountAccess(input.ownerId);
+      if (invite.consumed_at) {
+        if (invite.consumed_by_owner_id === input.ownerId && existing?.state === "active") {
+          this.#db.exec("COMMIT;");
+          return existing;
+        }
+        throw new MatterhornCoworkerStoreError("coworker_access_invite_consumed");
+      }
+      if (Date.parse(invite.expires_at) <= Date.parse(input.now)) {
+        throw new MatterhornCoworkerStoreError("coworker_access_invite_expired");
+      }
+      if (existing?.state === "active") {
+        throw new MatterhornCoworkerStoreError("coworker_access_already_active");
+      }
+      statement(this.#db, `
+        INSERT INTO crypto_coworker_account_access(
+          owner_id, state, granted_at, updated_at, revoked_at
+        ) VALUES (?, 'active', ?, ?, NULL)
+        ON CONFLICT(owner_id) DO UPDATE SET
+          state = 'active',
+          granted_at = excluded.granted_at,
+          updated_at = excluded.updated_at,
+          revoked_at = NULL
+      `).run(input.ownerId, input.now, input.now);
+      const consumed = statement(this.#db, `
+        UPDATE crypto_coworker_access_invites
+        SET consumed_at = ?, consumed_by_owner_id = ?
+        WHERE invite_hash = ? AND consumed_at IS NULL
+      `).run(input.now, input.ownerId, input.inviteHash);
+      if (consumed.changes !== 1) {
+        throw new MatterhornCoworkerStoreError("coworker_access_invite_consumed");
+      }
+      const access = this.getAccountAccess(input.ownerId);
+      if (!access) throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+      this.#db.exec("COMMIT;");
+      return access;
+    } catch (error) {
+      this.#db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  revokeAccountAccess(ownerId: string, now: string): MatterhornCoworkerAccessRecord {
+    const row = statement(this.#db, `
+      UPDATE crypto_coworker_account_access
+      SET state = 'revoked', updated_at = ?, revoked_at = ?
+      WHERE owner_id = ? AND state = 'active'
+      RETURNING owner_id, state, granted_at, updated_at, revoked_at
+    `).get(now, now, ownerId) as CoworkerAccessRow | undefined;
+    if (row) return accessFromRow(row);
+    const existing = this.getAccountAccess(ownerId);
+    if (existing?.state === "revoked") return existing;
+    throw new MatterhornCoworkerStoreError("coworker_access_not_found");
   }
 
   replace(profile: MatterhornCoworkerProfile, expectedRevision: number): MatterhornCoworkerProfile | null {
@@ -576,7 +728,12 @@ export class MatterhornCoworkerStore {
     `).all(dueBefore, limit) as CoworkerWatchRow[]).map(watchFromRow);
   }
 
-  claimDueWatches(dueBefore: string, limit = 20, leaseMs = 60_000): MatterhornCoworkerWatch[] {
+  claimDueWatches(
+    dueBefore: string,
+    limit = 20,
+    leaseMs = 60_000,
+    requireActiveAccountAccess = false,
+  ): MatterhornCoworkerWatch[] {
     const now = new Date(dueBefore);
     if (!Number.isFinite(now.getTime())
       || !Number.isSafeInteger(limit) || limit < 1 || limit > 100
@@ -589,9 +746,13 @@ export class MatterhornCoworkerStore {
     this.#db.exec("BEGIN IMMEDIATE;");
     try {
       const candidates = (statement(this.#db, `
-        SELECT * FROM crypto_coworker_watches
-        WHERE state = 'active' AND next_check_at <= ?
-        ORDER BY next_check_at ASC, workspace_id ASC, owner_id ASC, coworker_id ASC, watch_id ASC
+        SELECT watches.* FROM crypto_coworker_watches AS watches
+        ${requireActiveAccountAccess
+          ? "INNER JOIN crypto_coworker_account_access AS access ON access.owner_id = watches.owner_id AND access.state = 'active'"
+          : ""}
+        WHERE watches.state = 'active' AND watches.next_check_at <= ?
+        ORDER BY watches.next_check_at ASC, watches.workspace_id ASC, watches.owner_id ASC,
+          watches.coworker_id ASC, watches.watch_id ASC
         LIMIT ?
       `).all(nowIso, Math.min(100, limit * 4)) as CoworkerWatchRow[]).map(watchFromRow);
       for (const watch of candidates) {
@@ -698,7 +859,10 @@ export class MatterhornCoworkerStore {
     }
   }
 
-  completeWatchCheck(input: MatterhornCoworkerWatchCompletion): MatterhornCoworkerWatch | null {
+  completeWatchCheck(
+    input: MatterhornCoworkerWatchCompletion,
+    requireActiveAccountAccess = false,
+  ): MatterhornCoworkerWatch | null {
     const checkedAt = new Date(input.checkedAt);
     if (!Number.isFinite(checkedAt.getTime())) throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
     this.#db.exec("BEGIN IMMEDIATE;");
@@ -716,6 +880,16 @@ export class MatterhornCoworkerStore {
       if (!row) {
         this.#db.exec("ROLLBACK;");
         return null;
+      }
+      if (requireActiveAccountAccess) {
+        const access = statement(this.#db, `
+          SELECT 1 AS allowed FROM crypto_coworker_account_access
+          WHERE owner_id = ? AND state = 'active' LIMIT 1
+        `).get(input.ownerId) as { allowed: number } | undefined;
+        if (!access) {
+          this.#db.exec("ROLLBACK;");
+          return null;
+        }
       }
       const watch = watchFromRow(row);
       const parent = statement(this.#db, `

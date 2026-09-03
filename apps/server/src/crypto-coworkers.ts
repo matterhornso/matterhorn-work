@@ -78,6 +78,8 @@ type InvalidationReason = "policy_updated" | "paused" | "revoked" | "deleted";
 type CoworkerServiceOptions = {
   store: MatterhornCoworkerStore;
   policyVersion: string;
+  enforceAccountAccess?: boolean;
+  accountIsAllowed?: (ownerId: string) => boolean;
   now?: () => Date;
   id?: () => string;
   watchId?: () => string;
@@ -119,6 +121,7 @@ export class MatterhornCoworkerError extends Error {
     | "coworker_inbox_item_invalid"
     | "coworker_inbox_item_not_found"
     | "coworker_inbox_state_conflict"
+    | "coworker_access_required"
     | "coworker_transition_invalid") {
     super(code);
     this.name = "MatterhornCoworkerError";
@@ -189,6 +192,8 @@ export class MatterhornCoworkers {
   readonly #id: () => string;
   readonly #watchId: () => string;
   readonly #inboxItemId: () => string;
+  readonly #enforceAccountAccess: boolean;
+  readonly #accountIsAllowed: NonNullable<CoworkerServiceOptions["accountIsAllowed"]>;
   readonly #onInvalidate: NonNullable<CoworkerServiceOptions["onInvalidate"]>;
   readonly #connectionIsActive: CoworkerServiceOptions["connectionIsActive"];
 
@@ -199,6 +204,8 @@ export class MatterhornCoworkers {
     this.#id = options.id ?? (() => `cw_${randomUUID()}`);
     this.#watchId = options.watchId ?? (() => `cwatch_${randomUUID()}`);
     this.#inboxItemId = options.inboxItemId ?? (() => `cinbox_${randomUUID()}`);
+    this.#enforceAccountAccess = options.enforceAccountAccess === true;
+    this.#accountIsAllowed = options.accountIsAllowed ?? (() => true);
     this.#onInvalidate = options.onInvalidate ?? (() => undefined);
     this.#connectionIsActive = options.connectionIsActive;
   }
@@ -207,6 +214,7 @@ export class MatterhornCoworkers {
     if (!validIdentity(workspaceId) || !validIdentity(ownerId)) {
       throw new MatterhornCoworkerError("coworker_input_invalid");
     }
+    this.#assertAccountAccess(ownerId);
     const normalized = normalizedProfileInput(input);
     const now = this.#now().toISOString();
     const profile: MatterhornCoworkerProfile = {
@@ -231,10 +239,12 @@ export class MatterhornCoworkers {
   }
 
   get(workspaceId: string, ownerId: string, coworkerId: string): MatterhornCoworkerProfile | null {
+    this.#assertAccountAccess(ownerId);
     return this.#store.get(workspaceId, ownerId, coworkerId);
   }
 
   list(workspaceId: string, ownerId: string): MatterhornCoworkerProfile[] {
+    this.#assertAccountAccess(ownerId);
     return this.#store.list(workspaceId, ownerId);
   }
 
@@ -246,6 +256,7 @@ export class MatterhornCoworkers {
   }
 
   resolveActive(workspaceId: string, ownerId: string, coworkerId: string): MatterhornCoworkerProfile | null {
+    if (!this.#accountIsAllowed(ownerId)) return null;
     const profile = this.#store.get(workspaceId, ownerId, coworkerId);
     return profile?.state === "active" && profile.policyVersion === this.#policyVersion ? profile : null;
   }
@@ -257,6 +268,7 @@ export class MatterhornCoworkers {
     revision: number;
     policyVersion: string;
   }): boolean {
+    if (!this.#accountIsAllowed(input.ownerId)) return false;
     const profile = this.#store.get(input.workspaceId, input.ownerId, input.id);
     return profile?.state === "active"
       && profile.revision === input.revision
@@ -269,6 +281,7 @@ export class MatterhornCoworkers {
     ownerId: string,
     coworkerId: string,
   ): MatterhornCoworkerWorkingState | null {
+    this.#assertAccountAccess(ownerId);
     if (!this.#store.get(workspaceId, ownerId, coworkerId)) {
       throw new MatterhornCoworkerError("coworker_not_found");
     }
@@ -280,6 +293,7 @@ export class MatterhornCoworkers {
     ownerId: string,
     coworkerId: string,
   ): MatterhornCoworkerResourceScope | null {
+    this.#assertAccountAccess(ownerId);
     if (!this.#store.get(workspaceId, ownerId, coworkerId)) {
       throw new MatterhornCoworkerError("coworker_not_found");
     }
@@ -303,6 +317,7 @@ export class MatterhornCoworkers {
     coworkerId: string,
     input: MatterhornCoworkerResourceScopeInput,
   ): MatterhornCoworkerResourceScope {
+    this.#assertAccountAccess(ownerId);
     const profile = this.resolveActive(workspaceId, ownerId, coworkerId);
     if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
     if (input.profileRevision !== profile.revision) {
@@ -362,6 +377,7 @@ export class MatterhornCoworkers {
     coworkerId: string,
     input: MatterhornCoworkerWorkingStateInput,
   ): MatterhornCoworkerWorkingState {
+    this.#assertAccountAccess(ownerId);
     const profile = this.resolveActive(workspaceId, ownerId, coworkerId);
     if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
     if (input.profileRevision !== profile.revision) {
@@ -406,6 +422,7 @@ export class MatterhornCoworkers {
   }
 
   listWatches(workspaceId: string, ownerId: string, coworkerId: string): MatterhornCoworkerWatch[] {
+    this.#assertAccountAccess(ownerId);
     if (!this.#store.get(workspaceId, ownerId, coworkerId)) {
       throw new MatterhornCoworkerError("coworker_not_found");
     }
@@ -413,6 +430,7 @@ export class MatterhornCoworkers {
   }
 
   getWatch(workspaceId: string, ownerId: string, coworkerId: string, watchId: string): MatterhornCoworkerWatch | null {
+    this.#assertAccountAccess(ownerId);
     if (!this.#store.get(workspaceId, ownerId, coworkerId)) {
       throw new MatterhornCoworkerError("coworker_not_found");
     }
@@ -436,6 +454,7 @@ export class MatterhornCoworkers {
     coworkerId: string,
     input: MatterhornCoworkerWatchCreateInput,
   ): MatterhornCoworkerWatch {
+    this.#assertAccountAccess(ownerId);
     const profile = this.resolveActive(workspaceId, ownerId, coworkerId);
     if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
     if (input.profileRevision !== profile.revision) throw new MatterhornCoworkerError("coworker_revision_conflict");
@@ -528,13 +547,19 @@ export class MatterhornCoworkers {
   }
 
   claimDueWatches(now = this.#now(), limit = 20): MatterhornCoworkerWatch[] {
-    return this.#store.claimDueWatches(now.toISOString(), limit, 120_000);
+    return this.#store.claimDueWatches(
+      now.toISOString(),
+      limit,
+      120_000,
+      this.#enforceAccountAccess,
+    );
   }
 
   completeWatchCheck(
     claimed: MatterhornCoworkerWatch,
     result: MatterhornCoworkerWatchCheckResult,
   ): MatterhornCoworkerWatch | null {
+    if (!this.#accountIsAllowed(claimed.ownerId)) return null;
     const conditionIds = new Set(claimed.conditions.map((condition) => condition.id));
     if (validateMatterhornCoworkerWatch(claimed).length > 0
       || !Number.isFinite(result.checkedAt.getTime())
@@ -585,7 +610,7 @@ export class MatterhornCoworkers {
       resultHash: result.resultHash,
       conditionValues: result.conditionValues,
       inboxItem,
-    });
+    }, this.#enforceAccountAccess);
   }
 
   transitionWatch(
@@ -596,6 +621,7 @@ export class MatterhornCoworkers {
     nextState: "active" | "paused",
     expectedRevision: number,
   ): MatterhornCoworkerWatch {
+    this.#assertAccountAccess(ownerId);
     const profile = this.resolveActive(workspaceId, ownerId, coworkerId);
     if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
     const current = this.#store.getWatch(workspaceId, ownerId, coworkerId, watchId);
@@ -665,6 +691,7 @@ export class MatterhornCoworkers {
     watchId: string,
     expectedRevision: number,
   ): void {
+    this.#assertAccountAccess(ownerId);
     if (!this.#store.get(workspaceId, ownerId, coworkerId)) throw new MatterhornCoworkerError("coworker_not_found");
     if (!this.#store.getWatch(workspaceId, ownerId, coworkerId, watchId)) {
       throw new MatterhornCoworkerError("coworker_watch_not_found");
@@ -680,6 +707,7 @@ export class MatterhornCoworkers {
     coworkerId: string,
     input: MatterhornCoworkerInboxItemInput,
   ): MatterhornCoworkerInboxItem {
+    this.#assertAccountAccess(ownerId);
     const profile = this.resolveActive(workspaceId, ownerId, coworkerId);
     if (!profile) throw new MatterhornCoworkerError("coworker_not_found");
     const watch = input.watchId === null
@@ -722,6 +750,7 @@ export class MatterhornCoworkers {
     includeDismissed?: boolean;
     limit?: number;
   }): MatterhornCoworkerInboxItem[] {
+    this.#assertAccountAccess(input.ownerId);
     if (!this.#store.get(input.workspaceId, input.ownerId, input.coworkerId)) {
       throw new MatterhornCoworkerError("coworker_not_found");
     }
@@ -743,6 +772,7 @@ export class MatterhornCoworkers {
     nextState: MatterhornCoworkerInboxItem["state"],
     expectedState: MatterhornCoworkerInboxItem["state"],
   ): MatterhornCoworkerInboxItem {
+    this.#assertAccountAccess(ownerId);
     if (!this.#store.get(workspaceId, ownerId, coworkerId)) throw new MatterhornCoworkerError("coworker_not_found");
     const current = this.#store.getInboxItem(workspaceId, ownerId, coworkerId, itemId);
     if (!current) throw new MatterhornCoworkerError("coworker_inbox_item_not_found");
@@ -766,6 +796,7 @@ export class MatterhornCoworkers {
     coworkerId: string,
     input: MatterhornCoworkerUpdateInput,
   ): MatterhornCoworkerProfile {
+    this.#assertAccountAccess(ownerId);
     const current = this.#store.get(workspaceId, ownerId, coworkerId);
     if (!current) throw new MatterhornCoworkerError("coworker_not_found");
     if (current.state === "revoked") throw new MatterhornCoworkerError("coworker_transition_invalid");
@@ -804,6 +835,7 @@ export class MatterhornCoworkers {
     nextState: MatterhornCoworkerState,
     expectedRevision: number,
   ): MatterhornCoworkerProfile {
+    this.#assertAccountAccess(ownerId);
     const current = this.#store.get(workspaceId, ownerId, coworkerId);
     if (!current) throw new MatterhornCoworkerError("coworker_not_found");
     if (current.revision !== expectedRevision) throw new MatterhornCoworkerError("coworker_revision_conflict");
@@ -822,6 +854,7 @@ export class MatterhornCoworkers {
   }
 
   delete(workspaceId: string, ownerId: string, coworkerId: string, expectedRevision: number): void {
+    this.#assertAccountAccess(ownerId);
     const current = this.#store.get(workspaceId, ownerId, coworkerId);
     if (!current) throw new MatterhornCoworkerError("coworker_not_found");
     if (current.revision !== expectedRevision) throw new MatterhornCoworkerError("coworker_revision_conflict");
@@ -862,5 +895,11 @@ export class MatterhornCoworkers {
       revision: profile.revision,
       reason,
     });
+  }
+
+  #assertAccountAccess(ownerId: string): void {
+    if (!this.#accountIsAllowed(ownerId)) {
+      throw new MatterhornCoworkerError("coworker_access_required");
+    }
   }
 }

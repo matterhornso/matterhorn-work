@@ -378,6 +378,7 @@ import {
   createMatterhornCoworkerRuntime,
   type MatterhornCoworkerRuntimeServices,
 } from "./crypto-coworker-runtime.js";
+import { MatterhornCoworkerAccessError } from "./crypto-coworker-access.js";
 import { createGuardedCoworkerWatchExecutor } from "./crypto-coworker-guarded-watch-executor.js";
 import { MatterhornCoworkerWatchRunner } from "./crypto-coworker-watch-runner.js";
 import {
@@ -1334,6 +1335,13 @@ interface Route {
   handler: (ctx: RequestContext) => Promise<Response>;
 }
 
+function routeRequiresCoworkerInvite(path: string): boolean {
+  return path === "/workspace/:id/coworkers"
+    || path.startsWith("/workspace/:id/coworkers/")
+    || path === "/workspace/:id/agent-files"
+    || path.startsWith("/workspace/:id/agent-files/");
+}
+
 interface RequestContext {
   request: Request;
   url: URL;
@@ -1889,6 +1897,20 @@ export async function startServer(
               : route.auth === "client"
                 ? clientAccess?.actor
                 : undefined;
+        if (route.auth === "client"
+          && coworkerRuntime.mode === "invite"
+          && routeRequiresCoworkerInvite(route.path)) {
+          const ownerId = clientAccess?.session?.user.id
+            ?? clientAccess?.actor.clientId
+            ?? clientAccess?.actor.tokenHash;
+          if (!ownerId || !coworkerRuntime.accountIsAllowed(ownerId)) {
+            throw new ApiError(
+              403,
+              "coworker_access_required",
+              "Accept a valid Matterhorn invite to use Crypto Coworkers.",
+            );
+          }
+        }
         const response = await route.handler({
           request,
           url,
@@ -3227,6 +3249,18 @@ function cryptoDeveloperAccountId(ctx: RequestContext): string {
   return accountId;
 }
 
+function coworkerAccountId(ctx: RequestContext): string {
+  const accountId = ctx.matterhornSession?.user.id;
+  if (!accountId) {
+    throw new ApiError(
+      403,
+      "coworker_account_session_required",
+      "Sign in with a Matterhorn account to accept coworker access.",
+    );
+  }
+  return accountId;
+}
+
 const COWORKER_PROFILE_INPUT_KEYS = [
   "name",
   "role",
@@ -3712,6 +3746,10 @@ function resolveMessageCoworker(input: {
   if (!coworkerId || coworkerId.length > 256) {
     throw new ApiError(400, "coworker_input_invalid", "coworkerId is invalid.");
   }
+  const ownerId = cryptoAppCreatedBy(input.ctx);
+  if (input.coworkerRuntime.mode === "invite" && !input.coworkerRuntime.accountIsAllowed(ownerId)) {
+    throw new ApiError(403, "coworker_access_required", "Accept a valid Matterhorn invite to use Crypto Coworkers.");
+  }
   if (!input.coworkerRuntime.coworkers
     || input.cryptoAppRuntime.mode !== "enforce"
     || input.guardedRuntime.capabilities.mode !== "enforce"
@@ -3724,7 +3762,7 @@ function resolveMessageCoworker(input: {
   }
   const profile = input.coworkerRuntime.coworkers.resolveActive(
     input.workspace.id,
-    cryptoAppCreatedBy(input.ctx),
+    ownerId,
     coworkerId,
   );
   if (!profile) throw new ApiError(404, "coworker_not_found", "Coworker not found.");
@@ -3764,7 +3802,9 @@ function resolveMessageCoworker(input: {
 
 function coworkerApiError(error: unknown): ApiError {
   if (error instanceof MatterhornCoworkerError) {
-    const status = error.code === "coworker_not_found"
+    const status = error.code === "coworker_access_required"
+      ? 403
+      : error.code === "coworker_not_found"
       || error.code === "coworker_watch_not_found"
       || error.code === "coworker_inbox_item_not_found"
       ? 404
@@ -3775,7 +3815,9 @@ function coworkerApiError(error: unknown): ApiError {
         || error.code === "coworker_inbox_state_conflict"
         ? 409
         : 400;
-    const message = error.code === "coworker_not_found"
+    const message = error.code === "coworker_access_required"
+      ? "Accept a valid Matterhorn invite to use Crypto Coworkers."
+      : error.code === "coworker_not_found"
       ? "Coworker not found."
       : error.code === "coworker_watch_not_found"
         ? "Coworker watch not found."
@@ -3818,6 +3860,32 @@ function coworkerApiError(error: unknown): ApiError {
   return error instanceof ApiError
     ? error
     : new ApiError(500, "coworker_internal_error", "Coworker service is unavailable.");
+}
+
+function coworkerAccessApiError(error: unknown): ApiError {
+  if (!(error instanceof MatterhornCoworkerAccessError)) {
+    return new ApiError(500, "coworker_access_unavailable", "Coworker access is unavailable.");
+  }
+  const status = error.code === "coworker_access_invite_expired"
+    ? 410
+    : error.code === "coworker_access_invite_consumed"
+      || error.code === "coworker_access_already_active"
+      ? 409
+      : error.code === "coworker_access_not_found"
+        ? 404
+        : 400;
+  const message = error.code === "coworker_access_invite_expired"
+    ? "This coworker invite has expired. Ask Matterhorn for a new invite."
+    : error.code === "coworker_access_invite_consumed"
+      ? "This coworker invite has already been used."
+      : error.code === "coworker_access_already_active"
+        ? "This account already has coworker access."
+        : error.code === "coworker_access_not_found"
+          ? "Coworker access was not found for this account."
+          : error.code === "coworker_access_invite_invalid"
+            ? "This coworker invite is not valid."
+            : "Coworker access input is invalid.";
+  return new ApiError(status, error.code, message);
 }
 
 function cryptoEvidencePublicationApiError(error: unknown): ApiError {
@@ -10090,6 +10158,65 @@ function createRoutes(
     },
   );
 
+  addRoute(routes, "POST", "/operator/coworker-access/invites", "host-token", async (ctx) => {
+    ensureWritable(config);
+    try {
+      if (coworkerRuntime.mode !== "invite" || !coworkerRuntime.access) {
+        throw new ApiError(409, "coworker_invite_mode_required", "Coworker invite mode is not enabled.");
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Coworker access invite");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => key !== "ttlMinutes")
+        || (body.ttlMinutes !== undefined
+          && (!Number.isSafeInteger(body.ttlMinutes)
+            || (body.ttlMinutes as number) < 1
+            || (body.ttlMinutes as number) > 10_080))) {
+        throw new ApiError(400, "coworker_access_input_invalid", "Coworker invite input is invalid.");
+      }
+      const invite = coworkerRuntime.access.issueInvite(
+        body.ttlMinutes === undefined ? undefined : (body.ttlMinutes as number) * 60_000,
+      );
+      return noStoreJsonResponse({ invite }, 201);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw coworkerAccessApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/operator/coworker-access", "host-token", async (ctx) => {
+    try {
+      if (coworkerRuntime.mode !== "invite" || !coworkerRuntime.access) {
+        throw new ApiError(409, "coworker_invite_mode_required", "Coworker invite mode is not enabled.");
+      }
+      const rawLimit = ctx.url.searchParams.get("limit");
+      const limit = rawLimit === null ? 100 : Number(rawLimit);
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, accounts: coworkerRuntime.access.list(limit) });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw coworkerAccessApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/operator/coworker-access/revoke", "host-token", async (ctx) => {
+    ensureWritable(config);
+    try {
+      if (coworkerRuntime.mode !== "invite" || !coworkerRuntime.access) {
+        throw new ApiError(409, "coworker_invite_mode_required", "Coworker invite mode is not enabled.");
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Coworker access revocation");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => key !== "accountId")
+        || typeof body.accountId !== "string") {
+        throw new ApiError(400, "coworker_access_input_invalid", "Coworker access revocation is invalid.");
+      }
+      const status = coworkerRuntime.access.revoke(body.accountId.trim());
+      return noStoreJsonResponse({ status });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw coworkerAccessApiError(error);
+    }
+  });
+
   addRoute(routes, "POST", "/operator/crypto-developers/invites", "host-token", async (ctx) => {
     ensureWritable(config);
     try {
@@ -11026,6 +11153,35 @@ function createRoutes(
       return noStoreJsonResponse({ deleted: true });
     } catch (error) {
       throw agentFileApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/coworker-access", "client", async (ctx) => {
+    const accountId = coworkerAccountId(ctx);
+    return noStoreJsonResponse({
+      mode: coworkerRuntime.mode,
+      status: coworkerRuntime.accountAccessStatus(accountId),
+    });
+  });
+
+  addRoute(routes, "POST", "/coworker-access/accept", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      if (coworkerRuntime.mode !== "invite" || !coworkerRuntime.access) {
+        throw new ApiError(409, "coworker_invite_mode_required", "This deployment does not require a coworker invite.");
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Coworker access acceptance");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => key !== "inviteToken")
+        || typeof body.inviteToken !== "string") {
+        throw new ApiError(400, "coworker_access_input_invalid", "Coworker invite input is invalid.");
+      }
+      const status = coworkerRuntime.access.accept(coworkerAccountId(ctx), body.inviteToken);
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, status });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw coworkerAccessApiError(error);
     }
   });
 

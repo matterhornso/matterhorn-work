@@ -8,6 +8,7 @@ import { Database } from "bun:sqlite";
 import type { MatterhornCoworkerProfile } from "@matterhorn-work/types/crypto-coworkers";
 
 import { MatterhornCoworkerStore, MatterhornCoworkerStoreError } from "./crypto-coworker-store.js";
+import { MatterhornCoworkerAccess } from "./crypto-coworker-access.js";
 import {
   MatterhornCoworkerError,
   MatterhornCoworkers,
@@ -832,6 +833,51 @@ describe("durable crypto coworkers", () => {
       coworkers.delete("ws_alpha", "account_alpha", profile.id, profile.revision);
       expect(store.getWatch("ws_alpha", "account_alpha", profile.id, watch.id)).toBeNull();
       expect(store.getInboxItem("ws_alpha", "account_alpha", profile.id, item.id)).toBeNull();
+    } finally {
+      store.close();
+    }
+  });
+
+  test("stops scheduled checks at claim and completion boundaries after invite revocation", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-access-watch-"));
+    roots.push(root);
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const access = new MatterhornCoworkerAccess({ store, now: () => new Date(NOW) });
+    const invite = access.issueInvite();
+    access.accept("account_alpha", invite.token);
+    const coworkers = new MatterhornCoworkers({
+      store,
+      policyVersion: "coworker-policy-1",
+      now: () => new Date(NOW),
+      id: () => "cw_access_watch",
+      watchId: () => "cwatch_access_watch",
+      enforceAccountAccess: true,
+      accountIsAllowed: (ownerId) => access.isAllowed(ownerId),
+    });
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+
+      access.revoke("account_alpha");
+      expect(coworkers.claimDueWatches(new Date("2026-09-01T12:05:00.000Z"))).toEqual([]);
+      const replacement = access.issueInvite();
+      access.accept("account_alpha", replacement.token);
+      const [claimed] = coworkers.claimDueWatches(new Date("2026-09-01T12:05:00.000Z"));
+      expect(claimed?.id).toBe("cwatch_access_watch");
+
+      access.revoke("account_alpha");
+      expect(coworkers.completeWatchCheck(claimed!, {
+        checkedAt: new Date("2026-09-01T12:05:01.000Z"),
+        resultHash: "f".repeat(64),
+        conditionValues: { balance_changed: "true" },
+        inboxItem: null,
+      })).toBeNull();
+      expect(() => coworkers.listWatches("ws_alpha", "account_alpha", profile.id))
+        .toThrow(new MatterhornCoworkerError("coworker_access_required"));
     } finally {
       store.close();
     }

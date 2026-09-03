@@ -25,6 +25,20 @@ describe("chat-operated coworker UI", () => {
     expect(resolveSessionPanelNavigation("?panel=coworkers", null)).toEqual({ search: "", replace: true });
   });
 
+  test("accepts invite access without persisting the one-time code in browser storage", () => {
+    const route = appSource("react-app/domains/coworkers/coworker-access-route.tsx");
+    const fragment = appSource("react-app/domains/coworkers/coworker-invite-fragment.ts");
+    const shell = appSource("react-app/shell/app-root.tsx");
+    expect(route).toContain("Coworker access");
+    expect(route).toContain("Your connected wallet always signs and sends.");
+    expect(route).toContain("The one-time code was removed from the address bar");
+    expect(fragment).toContain("window.history.replaceState");
+    expect(fragment).not.toMatch(/localStorage|sessionStorage/);
+    expect(route).not.toMatch(/localStorage|sessionStorage/);
+    expect(shell).toContain('path="/coworker-access"');
+    expect(shell).toContain("hasPendingCoworkerInvite");
+  });
+
   test("lets a first-time user describe one outcome and confirm a suggested coworker from Home", () => {
     const home = appSource("react-app/domains/session/chat/session-page.tsx");
     const start = appSource("react-app/domains/session/chat/workspace-coworker-start.tsx");
