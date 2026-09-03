@@ -112,6 +112,7 @@ for (const required of [
   "product-readiness-smoke.test.mjs",
   "test:crypto-developer-invite",
   "test:crypto-app-sdk-package",
+  "test:crypto-app-sdk-provenance",
   "test:crypto-coworker-invite",
   "test:crypto-coworker-access-ops",
   "crypto-coworker-reference-patterns.test.mjs",

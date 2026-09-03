@@ -12,6 +12,23 @@ an empty Node project, compiles a TypeScript consumer, imports both public entry
 points, and runs the quickstart binary. Registry publication and provenance
 attestation remain an operator release step.
 
+After an approved release, verify the exact public artifact before allowing it
+into developer acceptance evidence:
+
+```bash
+pnpm verify:crypto-app-sdk-provenance -- \
+  --version 0.1.0 \
+  --expected-commit <exact-40-character-git-commit> \
+  --json
+```
+
+The verifier downloads only the fixed Matterhorn package from npm's public
+registry, disables lifecycle scripts, strips npm credentials from the child
+environment, validates registry signatures and transparency-backed publish and
+SLSA provenance attestations, and binds the artifact to the fixed Matterhorn
+repository, release workflow, and exact commit. It never publishes or promotes
+anything and does not include raw attestations in its report.
+
 After an approved registry release, developers will be able to install and run
 the same reviewed artifact with:
 
