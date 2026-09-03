@@ -4134,7 +4134,7 @@ function printHelp(): void {
     "  --opencode-router-bin <path>     Path to opencodeRouter binary (requires --allow-external)",
     "  --opencode-router-health-port <p> Health server port for opencodeRouter (default: random)",
     "  --target <name>          MCP config target: codex | claude | claude-desktop | cursor | json | env",
-    "  --profile <name>         MCP config profile: guarded | server | full (default: full)",
+    "  --profile <name>         MCP config profile: guarded | server | full (default: guarded)",
     "  --server-url <url>       Matterhorn Desks server URL for MCP config",
     "  --token <token>          Matterhorn Desks client token for MCP config",
     "  --repo-path <path>       Trusted Matterhorn checkout for local MCP entrypoints",
@@ -10301,7 +10301,9 @@ function placeholder(value: string | undefined, fallback: string): string {
 }
 
 function readMcpConfigProfile(args: ParsedArgs): McpConfigProfile {
-  const profile = (readFlag(args.flags, "profile") ?? "full").trim().toLowerCase();
+  const profile = (readFlag(args.flags, "profile") ?? "guarded")
+    .trim()
+    .toLowerCase();
   if (profile !== "guarded" && profile !== "server" && profile !== "full") {
     throw new Error("mcp config --profile must be guarded, server, or full");
   }

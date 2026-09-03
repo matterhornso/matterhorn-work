@@ -27,7 +27,7 @@ Point the MCP server at a running Matterhorn Desks server:
 ```bash
 export MATTERHORN_WORK_SERVER_URL="http://127.0.0.1:8787"
 export MATTERHORN_WORK_TOKEN="<client-token>"
-export MATTERHORN_WORK_MCP_PROFILE="guarded_client" # recommended for external agents
+export MATTERHORN_WORK_MCP_PROFILE="guarded_client" # optional; this is the safe default
 export MATTERHORN_WORK_HOST_TOKEN="<host-token>" # only needed for approval tools
 ```
 
@@ -70,9 +70,11 @@ session lifecycle, message submission, progress, snapshots, and deletion. It
 hides host approval, local-file, Memory-write, direct protocol, operator, and
 QA tools from the model and rejects hidden calls before any server request.
 
-The legacy `full` profile remains the default for trusted operator setups while
-existing installations migrate. Generated Matterhorn client setup always
-chooses `guarded_client`. Unknown profiles fail closed during process startup.
+If the profile variable is omitted, the MCP selects `guarded_client`. The
+legacy `full` profile is available only for trusted operator setups and must be
+selected explicitly. Approval tools additionally require host authority.
+Generated external-client setup always chooses `guarded_client`. Unknown
+profiles fail closed during process startup.
 
 ## Tools
 

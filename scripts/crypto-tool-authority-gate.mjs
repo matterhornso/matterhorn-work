@@ -13,10 +13,10 @@ const SAFE_AUTHORITY_NAMES = new Set([
 ]);
 const FORBIDDEN_AUTHORITY_NAME = /(?:sign(?:ed|ature|transaction|message|typed)?|submit|relay|broadcast)/i;
 
-function startMcp(relativePath) {
+function startMcp(relativePath, environment = {}) {
   const child = spawn(process.execPath, [resolve(relativePath)], {
     stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, MATTERHORN_MCP_DEBUG: "0" },
+    env: { ...process.env, MATTERHORN_MCP_DEBUG: "0", ...environment },
   });
   child.stdout.setEncoding("utf8");
   child.stderr.setEncoding("utf8");
@@ -60,8 +60,8 @@ function parsedTextResult(message) {
   return JSON.parse(text);
 }
 
-async function auditServer(relativePath, deprecatedNames) {
-  const mcp = startMcp(relativePath);
+async function auditServer(relativePath, deprecatedNames, environment) {
+  const mcp = startMcp(relativePath, environment);
   try {
     await mcp.ask("initialize");
     const listed = await mcp.ask("tools/list");
@@ -93,8 +93,10 @@ await auditServer("packages/matterhorn-work-crypto-mcp/index.mjs", [
   "crypto_cowSubmit",
   "bittensor_submit_signed_extrinsic",
 ]);
-await auditServer("packages/matterhorn-work-mcp/index.mjs", [
-  "matterhorn_bittensor_submit_signed_extrinsic",
-]);
+await auditServer(
+  "packages/matterhorn-work-mcp/index.mjs",
+  ["matterhorn_bittensor_submit_signed_extrinsic"],
+  { MATTERHORN_WORK_MCP_PROFILE: "full" },
+);
 
 console.log("Matterhorn crypto tool authority gate passed.");

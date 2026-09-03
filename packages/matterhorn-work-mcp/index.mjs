@@ -32,7 +32,9 @@ const HOST_TOKEN =
   process.env.MATTERHORN_HOST_TOKEN ||
   "";
 
-const MCP_PROFILE = String(process.env.MATTERHORN_WORK_MCP_PROFILE || "full")
+const MCP_PROFILE = String(
+  process.env.MATTERHORN_WORK_MCP_PROFILE || "guarded_client",
+)
   .trim()
   .toLowerCase();
 const SUPPORTED_MCP_PROFILES = new Set(["full", "guarded_client"]);

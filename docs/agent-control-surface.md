@@ -37,7 +37,9 @@ For an executable, end-to-end operator loop, use [Matterhorn Desks Agent Operato
      --profile full \
      --repo-path /absolute/path/to/matterhorn-work \
      --server-url http://127.0.0.1:8787 \
-     --token <client-token>
+     --token <client-token> \
+     --include-host-approvals \
+     --host-token <host-token>
    ```
 
 4. Or configure an MCP client manually:

@@ -68,6 +68,7 @@ codex mcp add matterhorn-work \
   --env MATTERHORN_WORK_SERVER_URL="$MATTERHORN_WORK_SERVER_URL" \
   --env MATTERHORN_WORK_TOKEN="$MATTERHORN_WORK_TOKEN" \
   --env MATTERHORN_WORK_HOST_TOKEN="$MATTERHORN_WORK_HOST_TOKEN" \
+  --env MATTERHORN_WORK_MCP_PROFILE=full \
   -- node "$MATTERHORN_REPO/packages/matterhorn-work-mcp/index.mjs"
 ```
 
@@ -78,6 +79,7 @@ claude mcp add --transport stdio \
   --env MATTERHORN_WORK_SERVER_URL="$MATTERHORN_WORK_SERVER_URL" \
   --env MATTERHORN_WORK_TOKEN="$MATTERHORN_WORK_TOKEN" \
   --env MATTERHORN_WORK_HOST_TOKEN="$MATTERHORN_WORK_HOST_TOKEN" \
+  --env MATTERHORN_WORK_MCP_PROFILE=full \
   matterhorn-work \
   -- node "$MATTERHORN_REPO/packages/matterhorn-work-mcp/index.mjs"
 ```

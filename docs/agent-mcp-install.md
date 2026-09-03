@@ -72,7 +72,8 @@ Profiles:
 - `server`: the broad `matterhorn-work-mcp` toolset for a trusted local operator. Approval tools still require the explicit host-authority opt-in.
 - `full`: `server` plus UI, crypto, and wallet MCP servers for trusted local development.
 
-The CLI keeps `full` as its compatibility default, so select `guarded` explicitly for Codex, Claude, Cursor, or another external agent.
+The CLI and server-control MCP both default to `guarded`. Select `server` or
+`full` explicitly only for a trusted local operator.
 
 Targets:
 

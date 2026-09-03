@@ -149,6 +149,24 @@ assert.equal("MATTERHORN_WORK_HOST_TOKEN" in safeServers["matterhorn-work"].env,
 assert.deepEqual(Object.keys(safeServers), ["matterhorn-work"]);
 assert.equal(safeConfig.stdout.includes("npx"), false);
 
+const defaultConfig = runMcpConfig([
+  "--target", "json",
+  "--repo-path", process.cwd(),
+  "--server-url", "http://127.0.0.1:8787",
+  "--token", "test-client-token",
+]);
+assert.equal(defaultConfig.status, 0, defaultConfig.stderr);
+const defaultServers = JSON.parse(defaultConfig.stdout).mcpServers;
+assert.deepEqual(Object.keys(defaultServers), ["matterhorn-work"]);
+assert.equal(
+  defaultServers["matterhorn-work"].env.MATTERHORN_WORK_MCP_PROFILE,
+  "guarded_client",
+);
+assert.equal(
+  "MATTERHORN_WORK_HOST_TOKEN" in defaultServers["matterhorn-work"].env,
+  false,
+);
+
 const inheritedHostToken = runMcpConfig([
   "--target", "env",
   "--profile", "guarded",

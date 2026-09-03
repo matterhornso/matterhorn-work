@@ -1064,7 +1064,10 @@ function listen(server) {
   });
 }
 
-function createMcp(baseUrl, { profile, includeHostToken = true } = {}) {
+function createMcp(
+  baseUrl,
+  { profile = "full", includeHostToken = true, omitProfile = false } = {},
+) {
   const child = spawn("node", [MCP_ENTRYPOINT], {
     stdio: ["pipe", "pipe", "pipe"],
     env: {
@@ -1074,7 +1077,7 @@ function createMcp(baseUrl, { profile, includeHostToken = true } = {}) {
       ...(includeHostToken
         ? { MATTERHORN_WORK_HOST_TOKEN: HOST_TOKEN }
         : { MATTERHORN_WORK_HOST_TOKEN: "" }),
-      MATTERHORN_WORK_MCP_PROFILE: profile || "full",
+      ...(omitProfile ? {} : { MATTERHORN_WORK_MCP_PROFILE: profile }),
     },
   });
 
@@ -1234,6 +1237,41 @@ try {
     invalidProfileError,
     "Matterhorn MCP profile is not supported.\n",
   );
+
+  const defaultMcp = createMcp(`http://127.0.0.1:${port}`, {
+    includeHostToken: false,
+    omitProfile: true,
+  });
+  try {
+    await defaultMcp.ask("initialize");
+    const defaultList = await defaultMcp.ask("tools/list");
+    assert.deepEqual(
+      defaultList.result.tools.map((tool) => tool.name),
+      [
+        "matterhorn_status",
+        "matterhorn_list_workspaces",
+        "matterhorn_create_session",
+        "matterhorn_list_sessions",
+        "matterhorn_get_session",
+        "matterhorn_get_session_messages",
+        "matterhorn_submit_session_prompt",
+        "matterhorn_get_session_status",
+        "matterhorn_watch_session_events",
+        "matterhorn_get_session_snapshot",
+        "matterhorn_delete_session",
+      ],
+      "an omitted profile must fail safe to the guarded client tool set",
+    );
+    const requestsBeforeDefaultHiddenCall = requests.length;
+    const defaultHiddenCall = await defaultMcp.ask("tools/call", {
+      name: "matterhorn_reply_approval",
+      arguments: { approvalId: "approval-hidden-default", reply: "allow" },
+    });
+    assert.equal(defaultHiddenCall.error?.code, -32601);
+    assert.equal(requests.length, requestsBeforeDefaultHiddenCall);
+  } finally {
+    defaultMcp.child.kill();
+  }
 
   const guardedMcp = createMcp(`http://127.0.0.1:${port}`, {
     profile: "guarded_client",
