@@ -1436,17 +1436,28 @@ export async function startServer(
     } : {}),
   });
   coworkerRuntime.maintainAccessMetadata();
-  const coworkerAccessMaintenanceTimer = coworkerRuntime.access ? setInterval(() => {
-    try {
-      const result = coworkerRuntime.maintainAccessMetadata();
-      if (result.revokedAccessDeleted > 0 || result.invitesDeleted > 0) {
-        logger.log("info", "Expired coworker access metadata removed", result);
+  cryptoAppRuntime.maintainDeveloperInviteMetadata();
+  const accessMetadataMaintenanceTimer = coworkerRuntime.access || cryptoAppRuntime.developerPortal
+    ? setInterval(() => {
+      try {
+        const coworkerResult = coworkerRuntime.maintainAccessMetadata();
+        if (coworkerResult.revokedAccessDeleted > 0 || coworkerResult.invitesDeleted > 0) {
+          logger.log("info", "Expired coworker access metadata removed", coworkerResult);
+        }
+      } catch (error) {
+        logger.log("error", "Coworker access metadata maintenance failed", unhandledErrorAttributes(error));
       }
-    } catch (error) {
-      logger.log("error", "Coworker access metadata maintenance failed", unhandledErrorAttributes(error));
-    }
-  }, 24 * 60 * 60 * 1_000) : null;
-  coworkerAccessMaintenanceTimer?.unref?.();
+      try {
+        const developerResult = cryptoAppRuntime.maintainDeveloperInviteMetadata();
+        if (developerResult.invitesDeleted > 0) {
+          logger.log("info", "Expired developer invite metadata removed", developerResult);
+        }
+      } catch (error) {
+        logger.log("error", "Developer invite metadata maintenance failed", unhandledErrorAttributes(error));
+      }
+    }, 24 * 60 * 60 * 1_000)
+    : null;
+  accessMetadataMaintenanceTimer?.unref?.();
   const cryptoCoworkerConfig = cryptoCoworkerFeatureConfig(process.env);
   const agentFileStore = cryptoCoworkerConfig.agentFilesMode === "encrypted"
     && coworkerRuntime.mode !== "off"
@@ -1966,7 +1977,7 @@ export async function startServer(
       clearInterval(emailOutboxTimer);
       if (coworkerWatchTimer) clearInterval(coworkerWatchTimer);
       if (coworkerEvidenceRetryTimer) clearInterval(coworkerEvidenceRetryTimer);
-      if (coworkerAccessMaintenanceTimer) clearInterval(coworkerAccessMaintenanceTimer);
+      if (accessMetadataMaintenanceTimer) clearInterval(accessMetadataMaintenanceTimer);
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
       modelUsageStore.close();

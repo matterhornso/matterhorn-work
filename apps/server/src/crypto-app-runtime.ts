@@ -44,6 +44,7 @@ export type MatterhornCryptoAppRuntimeServices = {
     manifestRevision: string;
     windowDays?: number;
   }): MatterhornCryptoAppDeveloperUsageReport | null;
+  maintainDeveloperInviteMetadata(): { invitesDeleted: number };
   purgeWorkspace(workspaceId: string): { connections: number; usage: number; circuits: number };
   purgeAccount(accountId: string): { developers: number; keys: number; submissions: number };
   close(): void;
@@ -140,6 +141,7 @@ export function createMatterhornCryptoAppRuntime(
       verifySuiTransaction: null,
       ready: true,
       developerUsage: () => null,
+      maintainDeveloperInviteMetadata: () => ({ invitesDeleted: 0 }),
       purgeWorkspace: () => ({ connections: 0, usage: 0, circuits: 0 }),
       purgeAccount: () => ({ developers: 0, keys: 0, submissions: 0 }),
       close: () => undefined,
@@ -286,6 +288,7 @@ export function createMatterhornCryptoAppRuntime(
       verifySuiTransaction,
       ready: feature.cryptoAppGatewayMode !== "enforce" || Boolean(router),
       developerUsage: (input) => operationalPolicy?.developerUsage(input) ?? null,
+      maintainDeveloperInviteMetadata: () => developerPortal.pruneExpiredInviteMetadata(),
       purgeWorkspace: (workspaceId) => {
         const connectionsPurged = connections.purgeWorkspace(workspaceId);
         const operational = operationalPolicy?.purgeWorkspace(workspaceId) ?? { usage: 0, circuits: 0 };

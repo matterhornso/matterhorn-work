@@ -77,6 +77,10 @@ export type MatterhornCryptoDeveloperSubmission = {
   certificationDecidedAt: string | null;
 };
 
+export type MatterhornCryptoDeveloperInviteMaintenanceResult = {
+  invitesDeleted: number;
+};
+
 type DeveloperRow = {
   developer_id: string;
   account_id: string;
@@ -605,6 +609,15 @@ export class MatterhornCryptoDeveloperPortalStore {
       this.#db.exec("ROLLBACK;");
       throw error;
     }
+  }
+
+  pruneInviteMetadata(before: string): MatterhornCryptoDeveloperInviteMaintenanceResult {
+    const invitesDeleted = statement(this.#db, `
+      DELETE FROM crypto_developer_invites
+      WHERE (consumed_at IS NOT NULL AND consumed_at < ?)
+        OR (consumed_at IS NULL AND expires_at < ?)
+    `).run(before, before).changes ?? 0;
+    return { invitesDeleted };
   }
 
   close(): void {

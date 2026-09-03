@@ -157,6 +157,30 @@ describe("invite-only crypto developer portal", () => {
     store.close();
   });
 
+  test("expires consumed and unused invite metadata after 365 days", () => {
+    const now = new Date("2026-09-01T00:00:00.000Z");
+    const { path, store, portal } = harness(now);
+    const consumed = portal.issueInvite();
+    portal.enroll("account-a", {
+      inviteToken: consumed.token,
+      publisherId: "acme.crypto",
+      displayName: "Acme Crypto",
+    });
+    portal.issueInvite(60_000);
+    now.setTime(new Date("2027-09-02T00:00:00.000Z").getTime());
+    expect(portal.pruneExpiredInviteMetadata()).toEqual({ invitesDeleted: 2 });
+    const database = new Database(path, { readonly: true });
+    try {
+      expect(database.query("SELECT COUNT(*) AS count FROM crypto_developer_invites").get())
+        .toEqual({ count: 0 });
+    } finally {
+      database.close();
+    }
+    expect(() => portal.pruneExpiredInviteMetadata(366))
+      .toThrowError(expect.objectContaining({ code: "developer_input_invalid" }));
+    store.close();
+  });
+
   test("verifies a signed testnet manifest and queues certification without trusting it", () => {
     const { store, portal } = harness();
     const invite = portal.issueInvite();

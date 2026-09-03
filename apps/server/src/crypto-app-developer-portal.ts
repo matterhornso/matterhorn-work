@@ -16,6 +16,7 @@ import {
   MatterhornCryptoDeveloperPortalStore,
   MatterhornCryptoDeveloperStoreError,
   type MatterhornCryptoDeveloperProfile,
+  type MatterhornCryptoDeveloperInviteMaintenanceResult,
   type MatterhornCryptoDeveloperPublisherKey,
   type MatterhornCryptoDeveloperSubmission,
 } from "./crypto-app-developer-portal-store.js";
@@ -28,6 +29,7 @@ const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const DISPLAY_NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} ._&'()-]{0,79}$/u;
 const INVITE_TOKEN_PATTERN = /^mhdi_[A-Za-z0-9_-]{40,96}$/;
 const MAX_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
+const INVITE_METADATA_RETENTION_DAYS = 365;
 
 export type MatterhornCryptoDeveloperProfileView = Omit<MatterhornCryptoDeveloperProfile, "accountId"> & {
   keys: Array<Omit<MatterhornCryptoDeveloperPublisherKey, "developerId" | "publicKeyPem">>;
@@ -445,6 +447,24 @@ export class MatterhornCryptoDeveloperPortal {
   purgeAccount(accountId: string): { developers: number; keys: number; submissions: number } {
     try {
       return this.#store.purgeAccount(accountId);
+    } catch (error) {
+      mapStoreError(error);
+    }
+  }
+
+  pruneExpiredInviteMetadata(
+    retentionDays = INVITE_METADATA_RETENTION_DAYS,
+  ): MatterhornCryptoDeveloperInviteMaintenanceResult {
+    if (!Number.isSafeInteger(retentionDays)
+      || retentionDays < 1
+      || retentionDays > INVITE_METADATA_RETENTION_DAYS) {
+      throw new MatterhornCryptoDeveloperPortalError("developer_input_invalid");
+    }
+    const before = new Date(
+      this.#now().getTime() - retentionDays * 24 * 60 * 60 * 1_000,
+    ).toISOString();
+    try {
+      return this.#store.pruneInviteMetadata(before);
     } catch (error) {
       mapStoreError(error);
     }
