@@ -137,4 +137,39 @@ describe("crypto coworker invite access", () => {
       state.close();
     }
   });
+
+  test("account deletion removes access identity and old metadata expires after 365 days", () => {
+    const state = fixture();
+    try {
+      const first = state.access.issueInvite();
+      state.access.accept("account-a", first.token);
+      expect(state.access.revoke("account-a")).toMatchObject({ allowed: false });
+      state.setNow(new Date("2027-09-04T08:00:00.000Z"));
+      expect(state.access.pruneExpiredMetadata()).toEqual({
+        revokedAccessDeleted: 1,
+        invitesDeleted: 1,
+      });
+      expect(state.access.getStatus("account-a")).toMatchObject({ allowed: false });
+
+      const replacement = state.access.issueInvite();
+      state.access.accept("account-a", replacement.token);
+      expect(state.access.purgeAccount("account-a")).toEqual({
+        accessDeleted: 1,
+        inviteBindingsCleared: 1,
+      });
+      expect(state.access.isAllowed("account-a")).toBe(false);
+      const database = new Database(state.path, { readonly: true });
+      try {
+        const residual = database.query(`
+          SELECT COUNT(*) AS count FROM crypto_coworker_access_invites
+          WHERE consumed_by_owner_id = 'account-a'
+        `).get();
+        expect(residual).toEqual({ count: 0 });
+      } finally {
+        database.close();
+      }
+    } finally {
+      state.close();
+    }
+  });
 });

@@ -109,6 +109,16 @@ export type MatterhornCoworkerAccessRecord = {
   revokedAt: string | null;
 };
 
+export type MatterhornCoworkerAccessPurgeResult = {
+  accessDeleted: number;
+  inviteBindingsCleared: number;
+};
+
+export type MatterhornCoworkerAccessMaintenanceResult = {
+  revokedAccessDeleted: number;
+  invitesDeleted: number;
+};
+
 const require = createRequire(import.meta.url);
 
 function openSqliteDatabase(path: string): SqliteDatabase {
@@ -616,6 +626,45 @@ export class MatterhornCoworkerStore {
     `).get(accessId) as CoworkerAccessRow | undefined;
     if (existing?.state === "revoked") return accessFromRow(existing);
     throw new MatterhornCoworkerStoreError("coworker_access_not_found");
+  }
+
+  purgeAccountAccess(ownerId: string): MatterhornCoworkerAccessPurgeResult {
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      const inviteBindingsCleared = statement(this.#db, `
+        UPDATE crypto_coworker_access_invites
+        SET consumed_by_owner_id = NULL
+        WHERE consumed_by_owner_id = ?
+      `).run(ownerId).changes ?? 0;
+      const accessDeleted = statement(this.#db, `
+        DELETE FROM crypto_coworker_account_access WHERE owner_id = ?
+      `).run(ownerId).changes ?? 0;
+      this.#db.exec("COMMIT;");
+      return { accessDeleted, inviteBindingsCleared };
+    } catch (error) {
+      this.#db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  pruneAccessMetadata(before: string): MatterhornCoworkerAccessMaintenanceResult {
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      const revokedAccessDeleted = statement(this.#db, `
+        DELETE FROM crypto_coworker_account_access
+        WHERE state = 'revoked' AND revoked_at IS NOT NULL AND revoked_at < ?
+      `).run(before).changes ?? 0;
+      const invitesDeleted = statement(this.#db, `
+        DELETE FROM crypto_coworker_access_invites
+        WHERE (consumed_at IS NOT NULL AND consumed_at < ?)
+          OR (consumed_at IS NULL AND expires_at < ?)
+      `).run(before, before).changes ?? 0;
+      this.#db.exec("COMMIT;");
+      return { revokedAccessDeleted, invitesDeleted };
+    } catch (error) {
+      this.#db.exec("ROLLBACK;");
+      throw error;
+    }
   }
 
   replace(profile: MatterhornCoworkerProfile, expectedRevision: number): MatterhornCoworkerProfile | null {

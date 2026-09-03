@@ -4,6 +4,8 @@ import {
   MatterhornCoworkerStore,
   MatterhornCoworkerStoreError,
   type MatterhornCoworkerAccessRecord,
+  type MatterhornCoworkerAccessMaintenanceResult,
+  type MatterhornCoworkerAccessPurgeResult,
 } from "./crypto-coworker-store.js";
 
 export const MATTERHORN_COWORKER_ACCESS_STATUS_VERSION = "matterhorn.coworker-access-status.v1" as const;
@@ -33,6 +35,7 @@ const OWNER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$/;
 const ACCESS_ID_PATTERN = /^mhca_[A-Za-z0-9_-]{20,64}$/;
 const INVITE_TOKEN_PATTERN = /^mhci_[A-Za-z0-9_-]{40,96}$/;
 const MAX_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
+const ACCESS_METADATA_RETENTION_DAYS = 365;
 
 function inviteHash(token: string): string {
   return createHash("sha256").update(`matterhorn.coworker-access-invite.v1\u0000${token}`).digest("hex");
@@ -143,5 +146,20 @@ export class MatterhornCoworkerAccess {
     } catch (error) {
       mapStoreError(error);
     }
+  }
+
+  purgeAccount(ownerId: string): MatterhornCoworkerAccessPurgeResult {
+    if (!OWNER_ID_PATTERN.test(ownerId)) {
+      throw new MatterhornCoworkerAccessError("coworker_access_input_invalid");
+    }
+    return this.#store.purgeAccountAccess(ownerId);
+  }
+
+  pruneExpiredMetadata(retentionDays = ACCESS_METADATA_RETENTION_DAYS): MatterhornCoworkerAccessMaintenanceResult {
+    if (!Number.isSafeInteger(retentionDays) || retentionDays < 1 || retentionDays > ACCESS_METADATA_RETENTION_DAYS) {
+      throw new MatterhornCoworkerAccessError("coworker_access_input_invalid");
+    }
+    const before = new Date(this.#now().getTime() - retentionDays * 24 * 60 * 60 * 1_000).toISOString();
+    return this.#store.pruneAccessMetadata(before);
   }
 }

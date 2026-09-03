@@ -5,7 +5,11 @@ import {
   MatterhornCoworkerAccess,
   type MatterhornCoworkerAccessStatus,
 } from "./crypto-coworker-access.js";
-import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
+import {
+  MatterhornCoworkerStore,
+  type MatterhornCoworkerAccessMaintenanceResult,
+  type MatterhornCoworkerAccessPurgeResult,
+} from "./crypto-coworker-store.js";
 import { cryptoCoworkerFeatureConfig, type MatterhornCoworkerMode } from "./crypto-coworker-config.js";
 import { MatterhornCoworkers } from "./crypto-coworkers.js";
 import type { MatterhornCoworkerRunBinding } from "./agent-capability.js";
@@ -17,7 +21,19 @@ export type MatterhornCoworkerRuntimeServices = {
   coworkers: MatterhornCoworkers | null;
   accountIsAllowed(ownerId: string): boolean;
   accountAccessStatus(ownerId: string): MatterhornCoworkerAccessStatus;
+  purgeAccountAccess(ownerId: string): MatterhornCoworkerAccessPurgeResult;
+  maintainAccessMetadata(): MatterhornCoworkerAccessMaintenanceResult;
   close(): void;
+};
+
+const EMPTY_ACCESS_PURGE: MatterhornCoworkerAccessPurgeResult = {
+  accessDeleted: 0,
+  inviteBindingsCleared: 0,
+};
+
+const EMPTY_ACCESS_MAINTENANCE: MatterhornCoworkerAccessMaintenanceResult = {
+  revokedAccessDeleted: 0,
+  invitesDeleted: 0,
 };
 
 export class MatterhornCoworkerRuntimeConfigurationError extends Error {
@@ -54,6 +70,8 @@ export function createMatterhornCoworkerRuntime(
         allowed: false,
         acceptedAt: null,
       }),
+      purgeAccountAccess: () => EMPTY_ACCESS_PURGE,
+      maintainAccessMetadata: () => EMPTY_ACCESS_MAINTENANCE,
       close: () => undefined,
     };
   }
@@ -69,6 +87,8 @@ export function createMatterhornCoworkerRuntime(
         allowed: false,
         acceptedAt: null,
       }),
+      purgeAccountAccess: () => EMPTY_ACCESS_PURGE,
+      maintainAccessMetadata: () => EMPTY_ACCESS_MAINTENANCE,
       close: () => undefined,
     };
   }
@@ -106,6 +126,8 @@ export function createMatterhornCoworkerRuntime(
         acceptedAt: null,
       };
     },
+    purgeAccountAccess: (ownerId) => access?.purgeAccount(ownerId) ?? EMPTY_ACCESS_PURGE,
+    maintainAccessMetadata: () => access?.pruneExpiredMetadata() ?? EMPTY_ACCESS_MAINTENANCE,
     close: () => store.close(),
   };
 }

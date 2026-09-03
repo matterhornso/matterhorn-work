@@ -105,7 +105,7 @@ pnpm manage:crypto-coworkers -- revoke \
   --access-id mhca_<opaque-id>
 ```
 
-Revocation is immediate and idempotent. It blocks coworker routes, new messages, certified app calls, and scheduled checks. Restoring access requires a new one-time invite and creates a new opaque access ID, so a stale operator handle cannot revoke the replacement grant.
+Revocation is immediate and idempotent. It blocks coworker routes, new messages, certified app calls, and scheduled checks. Restoring access requires a new one-time invite and creates a new opaque access ID, so a stale operator handle cannot revoke the replacement grant. Account deletion removes the access record and unlinks the account from consumed-invite metadata. Revoked access and expired invite metadata are retained for no more than 365 days.
 
 Signed test-harness contracts now define testnet-only Sui balance/transfer-preview actions, Hyperliquid market/orderbook/account/order-preview actions, and Bittensor subnet/validator plus transfer/stake/unstake-preview actions. They use closed input and model-facing output schemas, map every action to a compatible guarded tool, and never contain production publisher keys or automatic registration. Their offline router fixtures deliberately include private and malicious extra fields to prove projection removes them.
 

@@ -1435,6 +1435,18 @@ export async function startServer(
           && connection.grantedNetworks.includes(input.network)),
     } : {}),
   });
+  coworkerRuntime.maintainAccessMetadata();
+  const coworkerAccessMaintenanceTimer = coworkerRuntime.access ? setInterval(() => {
+    try {
+      const result = coworkerRuntime.maintainAccessMetadata();
+      if (result.revokedAccessDeleted > 0 || result.invitesDeleted > 0) {
+        logger.log("info", "Expired coworker access metadata removed", result);
+      }
+    } catch (error) {
+      logger.log("error", "Coworker access metadata maintenance failed", unhandledErrorAttributes(error));
+    }
+  }, 24 * 60 * 60 * 1_000) : null;
+  coworkerAccessMaintenanceTimer?.unref?.();
   const cryptoCoworkerConfig = cryptoCoworkerFeatureConfig(process.env);
   const agentFileStore = cryptoCoworkerConfig.agentFilesMode === "encrypted"
     && coworkerRuntime.mode !== "off"
@@ -1954,6 +1966,7 @@ export async function startServer(
       clearInterval(emailOutboxTimer);
       if (coworkerWatchTimer) clearInterval(coworkerWatchTimer);
       if (coworkerEvidenceRetryTimer) clearInterval(coworkerEvidenceRetryTimer);
+      if (coworkerAccessMaintenanceTimer) clearInterval(coworkerAccessMaintenanceTimer);
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
       modelUsageStore.close();
@@ -4496,6 +4509,7 @@ async function processMatterhornAccountDeletionJob(input: {
         );
       }
       input.cryptoAppRuntime?.purgeAccount(job.userId);
+      input.coworkerRuntime?.purgeAccountAccess(job.userId);
       const workspaceDeletion = await purgeMatterhornOrganizationWorkspaces(
         input.config,
         job.deletedOrganizationIds,

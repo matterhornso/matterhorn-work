@@ -800,6 +800,22 @@ describe("crypto coworker HTTP boundary", () => {
     expect(staleRevoke.payload.code).toBe("coworker_access_not_found");
     expect((await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA })).response.status)
       .toBe(200);
+
+    const deleted = await request(server.base, "/api/auth/account", {
+      method: "DELETE",
+      cookie: cookieA,
+      body: { confirmationEmail: "coworker-invite-a@example.com", password: PASSWORD },
+    });
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload.status).toBe("deleted");
+    const afterDeletion = await request(server.base, "/operator/coworker-access", { host: true });
+    expect(afterDeletion.payload.accounts).toEqual([]);
+    const coworkerStore = new MatterhornCoworkerStore(server.coworkerDb);
+    try {
+      expect(coworkerStore.getAccountAccess(String(signupA.payload.user.id))).toBeNull();
+    } finally {
+      coworkerStore.close();
+    }
   });
 
   test("stores encrypted Agent Files for the selected tenant and coworker only", async () => {
