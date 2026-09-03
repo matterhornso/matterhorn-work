@@ -21,8 +21,12 @@ function model(input: {
   privacy?: string;
   type?: string;
   tools?: boolean;
-  offline?: boolean;
+  offline?: boolean | null;
   name?: string;
+  beta?: boolean;
+  deprecated?: boolean;
+  e2ee?: boolean;
+  tee?: boolean;
 }) {
   return {
     id: input.id,
@@ -30,9 +34,13 @@ function model(input: {
     model_spec: {
       name: input.name ?? input.id,
       privacy: input.privacy ?? "private",
-      offline: input.offline ?? false,
+      offline: input.offline === null ? undefined : input.offline ?? false,
+      betaModel: input.beta ?? false,
+      ...(input.deprecated ? { deprecation: { date: "2026-10-01T00:00:00.000Z" } } : {}),
       capabilities: {
         supportsFunctionCalling: input.tools ?? true,
+        supportsE2EE: input.e2ee ?? false,
+        supportsTeeAttestation: input.tee ?? false,
       },
     },
   };
@@ -47,11 +55,28 @@ describe("Venice private provider", () => {
         model({ id: "image", type: "image" }),
         model({ id: "no-tools", tools: false }),
         model({ id: "offline", offline: true }),
+        model({ id: "missing-online-proof", offline: null }),
+        model({ id: "beta", beta: true }),
+        model({ id: "deprecated", deprecated: true }),
+        model({ id: "e2ee", e2ee: true, tee: true }),
+        model({ id: "tee", tee: true }),
         model({ id: "bad id with spaces" }),
       ],
     });
 
     expect(models).toEqual([{ id: "z-ai-glm-5-3", name: "GLM 5.3" }]);
+  });
+
+  test("does not advertise privacy-enhanced models through the plaintext-compatible transport", () => {
+    const models = parseVenicePrivateModels({
+      data: [
+        model({ id: "stable-private" }),
+        model({ id: "e2ee-private", e2ee: true, tee: true }),
+        model({ id: "tee-private", tee: true }),
+      ],
+    });
+
+    expect(models).toEqual([{ id: "stable-private", name: "stable-private" }]);
   });
 
   test("places a recommended private model first without accepting anonymized models", () => {

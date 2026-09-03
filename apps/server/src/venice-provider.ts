@@ -78,8 +78,13 @@ function preferredModelRank(modelId: string): number {
 
 /**
  * Venice publishes privacy and capability metadata per model. Matterhorn only
- * admits text models that are explicitly private and tool-capable. Models with
- * anonymized routing, missing metadata, or no function calling fail closed.
+ * admits stable, online text models that are explicitly private and
+ * tool-capable. E2EE and TEE models require Venice's dedicated encryption or
+ * attestation protocol; the OpenAI-compatible transport below does not yet
+ * implement either boundary, so those models fail closed instead of silently
+ * receiving a plaintext request. Models with anonymized routing, missing
+ * online metadata, beta/deprecation state, or no function calling also fail
+ * closed.
  */
 export function parseVenicePrivateModels(payload: unknown): VenicePrivateModel[] {
   const root = recordLike(payload);
@@ -95,8 +100,12 @@ export function parseVenicePrivateModels(payload: unknown): VenicePrivateModel[]
       !id ||
       model?.type !== "text" ||
       spec?.privacy !== "private" ||
-      spec?.offline === true ||
-      capabilities?.supportsFunctionCalling !== true
+      spec?.offline !== false ||
+      spec?.betaModel === true ||
+      recordLike(spec?.deprecation) !== null ||
+      capabilities?.supportsFunctionCalling !== true ||
+      capabilities?.supportsE2EE === true ||
+      capabilities?.supportsTeeAttestation === true
     ) {
       continue;
     }
