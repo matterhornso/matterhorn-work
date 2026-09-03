@@ -1383,6 +1383,22 @@ export async function startServer(
   const authStore = new MatterhornAuthStore();
   const env = new EnvService();
   const logger = createServerLogger(config);
+  const maintainAuthSecurityState = () => {
+    const result = authStore.maintainEphemeralSecurityState();
+    if (Object.values(result).some((count) => count > 0)) {
+      logger.log("info", "Expired account security metadata removed", result);
+    }
+    return result;
+  };
+  maintainAuthSecurityState();
+  const authSecurityMaintenanceTimer = setInterval(() => {
+    try {
+      maintainAuthSecurityState();
+    } catch (error) {
+      logger.log("error", "Account security metadata maintenance failed", unhandledErrorAttributes(error));
+    }
+  }, 24 * 60 * 60 * 1_000);
+  authSecurityMaintenanceTimer.unref?.();
   const createWatcherHandle = () => config.reloadWatchers === false
     ? {
       close: () => undefined,
@@ -1995,6 +2011,7 @@ export async function startServer(
       if (coworkerEvidenceRetryTimer) clearInterval(coworkerEvidenceRetryTimer);
       if (connectionSetupMaintenanceTimer) clearInterval(connectionSetupMaintenanceTimer);
       if (accessMetadataMaintenanceTimer) clearInterval(accessMetadataMaintenanceTimer);
+      clearInterval(authSecurityMaintenanceTimer);
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
       modelUsageStore.close();

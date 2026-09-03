@@ -173,6 +173,8 @@ The server-owned watch runner claims each due schedule atomically with a short l
 
 Account deletion purges tenant coworker state, schedules, inbox items, certified-app connections, gateway usage reservations, and circuit records before the workspace deletion step can complete. Repeating a partially completed deletion remains idempotent.
 
+The shared account store runs privacy maintenance at startup and daily. Expired login sessions, verification capabilities, and password-reset capabilities are deleted. Pending email whose verification code or reset link has expired is stopped and its payload is erased before the challenge is removed. Finalized delivery metadata and completed deletion manifests are retained for at most 365 days, while active retries, email suppressions, and incomplete deletion jobs remain available for safety and recovery.
+
 Future readiness rules are fail-closed:
 
 - Enforced app access requires the guarded agent runtime in `enforce`.

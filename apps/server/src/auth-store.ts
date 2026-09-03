@@ -83,6 +83,15 @@ export type MatterhornEmailOutboxItem = {
   attempts: number;
 };
 
+export type MatterhornAuthMaintenanceResult = {
+  expiredSessionsDeleted: number;
+  expiredVerificationChallengesDeleted: number;
+  expiredPasswordResetChallengesDeleted: number;
+  expiredEmailsTerminalized: number;
+  finalizedEmailsDeleted: number;
+  completedDeletionJobsDeleted: number;
+};
+
 export type MatterhornVerificationRequired = {
   verificationRequired: true;
   email: string;
@@ -178,6 +187,7 @@ export class MatterhornAuthError extends Error {
 }
 
 const require = createRequire(import.meta.url);
+const AUTH_SECURITY_METADATA_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const EMAIL_VERIFICATION_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
@@ -520,6 +530,61 @@ export class MatterhornAuthStore {
 
   close(): void {
     this.db.close();
+  }
+
+  maintainEphemeralSecurityState(now = Date.now()): MatterhornAuthMaintenanceResult {
+    if (!Number.isSafeInteger(now) || now < 0) {
+      throw new Error("auth_maintenance_time_invalid");
+    }
+    const finalizedBefore = now - AUTH_SECURITY_METADATA_RETENTION_MS;
+    return this.withTransaction(() => {
+      const expiredVerificationEmails = statement(this.db, `
+        UPDATE email_outbox
+        SET state = 'terminal', last_error_code = 'challenge_expired',
+          props_json = '{}', updated_at = ?
+        WHERE template = 'verification' AND state IN ('pending', 'retry', 'sending')
+          AND user_id IN (
+            SELECT user_id FROM email_verification_challenges WHERE expires_at <= ?
+          )
+      `).run(now, now).changes ?? 0;
+      const expiredPasswordResetEmails = statement(this.db, `
+        UPDATE email_outbox
+        SET state = 'terminal', last_error_code = 'challenge_expired',
+          props_json = '{}', updated_at = ?
+        WHERE template = 'passwordReset' AND state IN ('pending', 'retry', 'sending')
+          AND user_id IN (
+            SELECT user_id FROM password_reset_challenges WHERE expires_at <= ?
+          )
+      `).run(now, now).changes ?? 0;
+      const expiredSessionsDeleted = statement(
+        this.db,
+        "DELETE FROM sessions WHERE expires_at <= ?",
+      ).run(now).changes ?? 0;
+      const expiredVerificationChallengesDeleted = statement(
+        this.db,
+        "DELETE FROM email_verification_challenges WHERE expires_at <= ?",
+      ).run(now).changes ?? 0;
+      const expiredPasswordResetChallengesDeleted = statement(
+        this.db,
+        "DELETE FROM password_reset_challenges WHERE expires_at <= ?",
+      ).run(now).changes ?? 0;
+      const finalizedEmailsDeleted = statement(this.db, `
+        DELETE FROM email_outbox
+        WHERE state IN ('accepted', 'delivered', 'suppressed', 'terminal') AND updated_at < ?
+      `).run(finalizedBefore).changes ?? 0;
+      const completedDeletionJobsDeleted = statement(this.db, `
+        DELETE FROM account_deletion_jobs
+        WHERE status = 'completed' AND completed_at IS NOT NULL AND completed_at < ?
+      `).run(finalizedBefore).changes ?? 0;
+      return {
+        expiredSessionsDeleted,
+        expiredVerificationChallengesDeleted,
+        expiredPasswordResetChallengesDeleted,
+        expiredEmailsTerminalized: expiredVerificationEmails + expiredPasswordResetEmails,
+        finalizedEmailsDeleted,
+        completedDeletionJobsDeleted,
+      };
+    });
   }
 
   createAccount(input: {
