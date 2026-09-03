@@ -1,11 +1,13 @@
 import {
-  MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
   validateMatterhornCryptoAppManifest,
-  type MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import { validateCryptoAppFixture } from "./fixture.js";
 import { validateCryptoAppSchemaDefinition } from "./json-schema.js";
+import {
+  MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+  type MatterhornCryptoAppManifest,
+} from "./manifest-contract.js";
 import {
   createMatterhornBittensorTestnetFixturePack,
   createMatterhornHyperliquidTestnetFixturePack,

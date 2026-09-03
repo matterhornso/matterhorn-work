@@ -1,4 +1,4 @@
-import type { MatterhornCryptoAppManifest } from "@matterhorn-work/types/crypto-coworkers";
+import type { MatterhornCryptoAppManifest } from "./manifest-contract.js";
 
 const MAX_RESPONSE_BYTES = 512 * 1_024;
 const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;

@@ -1,9 +1,12 @@
 import {
+  validateMatterhornCryptoAppManifest,
+} from "@matterhorn-work/types/crypto-coworkers";
+
+import {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
   type MatterhornCryptoAppAction,
   type MatterhornCryptoAppManifest,
-  validateMatterhornCryptoAppManifest,
-} from "@matterhorn-work/types/crypto-coworkers";
+} from "./manifest-contract.js";
 
 import {
   validateCryptoAppSchemaDefinition,
@@ -78,6 +81,18 @@ export {
   type MatterhornCryptoAppQuickstartOptions,
   type MatterhornCryptoAppQuickstartProtocol,
 } from "./quickstart.js";
+
+export {
+  MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+  type MatterhornCryptoAppAction,
+  type MatterhornCryptoAppActionAccess,
+  type MatterhornCryptoAppActionRisk,
+  type MatterhornCryptoAppAuthentication,
+  type MatterhornCryptoAppManifest,
+  type MatterhornCryptoAppNetworkEnvironment,
+  type MatterhornCryptoAppOAuth,
+  type MatterhornCryptoAppTransportKind,
+} from "./manifest-contract.js";
 
 type CanonicalValue = null | boolean | number | string | CanonicalValue[] | { [key: string]: CanonicalValue };
 
@@ -377,8 +392,3 @@ export function emulateCryptoAppPolicy(
     runtimeProbesRequired: true,
   };
 }
-
-export type {
-  MatterhornCryptoAppAction,
-  MatterhornCryptoAppManifest,
-};

@@ -1,7 +1,8 @@
 import {
   validateMatterhornCryptoAppManifest,
-  type MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
+
+import type { MatterhornCryptoAppManifest } from "./manifest-contract.js";
 
 import {
   projectCryptoAppOutput,

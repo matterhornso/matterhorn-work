@@ -489,11 +489,10 @@ importers:
   packages/bittensor-subtensor-sidecar: {}
 
   packages/crypto-app-sdk:
-    dependencies:
+    devDependencies:
       '@matterhorn-work/types':
         specifier: workspace:*
         version: link:../types
-    devDependencies:
       '@types/node':
         specifier: ^22.10.2
         version: 22.19.7

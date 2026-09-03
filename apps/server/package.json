@@ -11,10 +11,12 @@
     "dev": "OPENWORK_DEV_MODE=1 bun src/cli.ts",
     "test": "bun test src --timeout 15000",
     "test:artifacts": "bun test src/artifact-files.e2e.test.ts src/workspace-init.test.ts src/server.normalizeWorkspaceRelativePath.test.ts",
+    "prebuild": "pnpm --dir ../../packages/crypto-app-sdk build",
     "build": "tsc -p tsconfig.json",
     "build:bin": "bun ./script/build.ts --outdir dist/bin",
     "build:bin:all": "bun ./script/build.ts --outdir dist/bin --target bun-darwin-arm64 --target bun-darwin-x64 --target bun-linux-x64 --target bun-linux-arm64 --target bun-windows-x64",
     "start": "bun dist/cli.js",
+    "pretypecheck": "pnpm --dir ../../packages/crypto-app-sdk build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "pnpm build:bin"
   },

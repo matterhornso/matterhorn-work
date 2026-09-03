@@ -2,6 +2,27 @@
 
 This package builds signed-manifest requests and runs an advisory local policy check for Matterhorn Crypto App Gateway adapters.
 
+## Distribution status
+
+The package is prepared for registry publication but is not published yet. Its
+release artifact is self-contained: normal ESM imports and TypeScript
+declarations have no dependency on a private Matterhorn workspace package. The
+mandatory clean-package test packs the exact artifact, installs it offline into
+an empty Node project, compiles a TypeScript consumer, imports both public entry
+points, and runs the quickstart binary. Registry publication and provenance
+attestation remain an operator release step.
+
+After an approved registry release, developers will be able to install and run
+the same reviewed artifact with:
+
+```bash
+pnpm add @matterhorn-work/crypto-app-sdk
+pnpm dlx --package @matterhorn-work/crypto-app-sdk create-matterhorn-crypto-app --help
+```
+
+Until that release exists, use the repository command below. Do not substitute
+an unverified package with a similar name.
+
 The SDK is deliberately non-custodial:
 
 - It never accepts a private key, seed phrase, wallet export, or API credential.
