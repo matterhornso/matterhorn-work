@@ -58,9 +58,9 @@ function formatDate(value: string | null): string {
 
 function statusLabel(item: MatterhornEvidenceVerificationPacket): string {
   if (item.publication?.deletionTransactionDigest) return "Deleted from Walrus";
-  if (item.state === "key_destroyed") return "Recovery key deleted";
-  if (item.state === "published") return "Published and encrypted";
-  return "Encrypted locally";
+  if (item.state === "key_destroyed") return "Recovery removed";
+  if (item.state === "published") return "Encrypted backup on Walrus";
+  return "Encrypted in your workspace";
 }
 
 function userMessage(error: unknown): string {
@@ -359,45 +359,44 @@ export function CryptoEvidenceRoute() {
         </Button>
 
         <header className="border-b border-border pb-6">
-          <h1 className="text-2xl font-semibold tracking-[-0.02em]">Encrypted evidence</h1>
+          <h1 className="text-2xl font-semibold tracking-[-0.02em]">Secure records</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Keep a completed coworker receipt encrypted, then choose whether to store an encrypted copy on Walrus testnet. Prompts and recovery keys never enter the public copy.
+            Keep a private record of completed coworker work. If you choose, Matterhorn can store an encrypted backup on Walrus testnet. Your prompts and recovery keys stay private.
           </p>
-          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground" aria-label="Evidence safety boundary">
-            <span>Ciphertext only</span>
-            <span>Owner-scoped access</span>
-            <span>Nothing published automatically</span>
-            <span>No agent wallet authority</span>
+          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground" aria-label="Secure record protections">
+            <span>Readable only by you</span>
+            <span>Nothing stored publicly without your approval</span>
+            <span>Coworkers cannot use your wallet</span>
           </div>
         </header>
 
         {query.isLoading ? (
           <div className="flex min-h-64 items-center gap-3 text-sm text-muted-foreground" role="status">
             <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
-            Loading encrypted evidence…
+            Loading secure records…
           </div>
         ) : query.isError || !snapshot ? (
           <section className="py-10" aria-live="polite">
-            <h2 className="text-base font-semibold">Evidence unavailable</h2>
+            <h2 className="text-base font-semibold">Secure records unavailable</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">{userMessage(query.error)}</p>
             <Button className="mt-5" onClick={() => void query.refetch()}>Try again</Button>
           </section>
         ) : !snapshot.available ? (
           <section className="py-10">
-            <h2 className="text-base font-semibold">Encrypted evidence is not configured</h2>
+            <h2 className="text-base font-semibold">Secure records are not available yet</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              This deployment has no server-side evidence key manager. Chat and wallet receipts continue to use their existing private workspace storage.
+              Your chat and wallet receipts remain in this private workspace.
             </p>
           </section>
         ) : snapshot.items.length === 0 ? (
           <section className="py-10">
-            <h2 className="text-base font-semibold">No encrypted coworker evidence yet</h2>
+            <h2 className="text-base font-semibold">No secure records yet</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              Finalized coworker receipts will appear here after they are sealed by the server. Walrus publication is {snapshot.mode === "testnet" ? "configured for testnet" : "currently off"}.
+              Completed coworker receipts appear here after Matterhorn encrypts them. Optional Walrus backup is {snapshot.mode === "testnet" ? "available on testnet" : "currently off"}.
             </p>
           </section>
         ) : (
-          <section className="py-2" aria-label="Encrypted evidence records">
+          <section className="py-2" aria-label="Secure records">
             {error ? <p className="border-b border-border py-4 text-sm text-destructive" role="alert">{error}</p> : null}
             {snapshot.items.map((item) => {
               const expanded = expandedId === item.evidenceId;
@@ -431,7 +430,7 @@ export function CryptoEvidenceRoute() {
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <h2 className="font-semibold">Evidence {shortHash(item.evidenceId.replace(/^evidence_/, ""))}</h2>
+                        <h2 className="font-semibold">Record {shortHash(item.evidenceId.replace(/^evidence_/, ""))}</h2>
                         <span className="text-xs text-muted-foreground">{statusLabel(item)}</span>
                       </div>
                       <p className="mt-2 text-sm text-muted-foreground">Created {formatDate(item.createdAt)}</p>
@@ -454,7 +453,7 @@ export function CryptoEvidenceRoute() {
                       aria-expanded={expanded}
                       onClick={() => setExpandedId(expanded ? null : item.evidenceId)}
                     >
-                      {expanded ? "Hide proof" : "Review proof"}
+                      {expanded ? "Hide details" : "View details"}
                       {expanded ? <ChevronUp aria-hidden="true" className="size-4" /> : <ChevronDown aria-hidden="true" className="size-4" />}
                     </Button>
                   </div>
@@ -462,7 +461,7 @@ export function CryptoEvidenceRoute() {
                   {expanded ? (
                     <div className="mt-5 grid gap-6 border-t border-border pt-5 md:grid-cols-[minmax(0,1fr)_18rem]">
                       <div className="min-w-0">
-                        <h3 className="text-sm font-medium">Evidence proof</h3>
+                        <h3 className="text-sm font-medium">Technical proof</h3>
                         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-[9rem_minmax(0,1fr)]">
                           <dt className="text-muted-foreground">Ciphertext SHA-256</dt>
                           <dd className="break-all font-mono text-xs">{item.ciphertextSha256}</dd>
@@ -495,7 +494,7 @@ export function CryptoEvidenceRoute() {
                         </dl>
                         <Button variant="outline" size="sm" className="mt-5" onClick={() => void copyPacket(item)}>
                           {copiedId === item.evidenceId ? <Check aria-hidden="true" className="size-4" /> : <Clipboard aria-hidden="true" className="size-4" />}
-                          {copiedId === item.evidenceId ? "Copied" : "Copy proof packet"}
+                          {copiedId === item.evidenceId ? "Copied" : "Copy technical proof"}
                         </Button>
                       </div>
 
@@ -510,11 +509,11 @@ export function CryptoEvidenceRoute() {
                           </p>
                         ) : (
                           <ul className="mt-4 space-y-3">
-                            <CheckLine ok={verification?.checks.tenantScope ?? true}>Owner and workspace scope</CheckLine>
-                            <CheckLine ok={verification?.checks.ciphertextHash ?? false}>Exact ciphertext hash</CheckLine>
-                            <CheckLine ok={verification?.checks.merkleInclusion ?? false}>Merkle inclusion</CheckLine>
-                            <CheckLine ok={verification?.checks.suiCertification ?? false}>Sui certification is current</CheckLine>
-                            <CheckLine ok={verification?.checks.walrusReadback ?? false}>Walrus bytes match</CheckLine>
+                            <CheckLine ok={verification?.checks.tenantScope ?? true}>Belongs to this workspace</CheckLine>
+                            <CheckLine ok={verification?.checks.ciphertextHash ?? false}>Encrypted data matches</CheckLine>
+                            <CheckLine ok={verification?.checks.merkleInclusion ?? false}>Included in the stored backup</CheckLine>
+                            <CheckLine ok={verification?.checks.suiCertification ?? false}>Sui record is current</CheckLine>
+                            <CheckLine ok={verification?.checks.walrusReadback ?? false}>Stored backup matches</CheckLine>
                           </ul>
                         )}
                         {canVerify ? (

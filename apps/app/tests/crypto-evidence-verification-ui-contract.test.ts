@@ -16,12 +16,24 @@ describe("encrypted evidence verification UI", () => {
   });
 
   test("keeps the safety boundary explicit and avoids autonomous publication language", () => {
-    expect(source).toContain("Nothing published automatically");
-    expect(source).toContain("No agent wallet authority");
+    expect(source).toContain("Nothing stored publicly without your approval");
+    expect(source).toContain("Coworkers cannot use your wallet");
     expect(source).toContain("Only encrypted bytes go to the public Walrus test network");
     expect(source).toContain("only your connected wallet can sign and submit it");
     expect(source).not.toContain("Publish automatically");
     expect(source).not.toContain("Sign and publish");
+  });
+
+  test("leads with plain-language records and keeps cryptographic terms in details", () => {
+    expect(source).toContain("Secure records");
+    expect(source).toContain("Keep a private record of completed coworker work");
+    expect(source).toContain("Readable only by you");
+    expect(source).toContain("View details");
+    expect(source).toContain("Technical proof");
+    expect(source).toContain("Encrypted data matches");
+    expect(source).not.toContain("Ciphertext only");
+    expect(source).not.toContain("Owner-scoped access");
+    expect(source).not.toContain("Evidence proof");
   });
 
   test("keeps Walrus deletion wallet-only, explicit, and irreversible", () => {

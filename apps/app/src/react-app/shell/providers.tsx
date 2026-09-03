@@ -116,6 +116,7 @@ function routeNeedsWalletRuntime(
 
   if (/(?:^|\/)settings\/wallet(?:\/|$)/.test(path)) return true;
   if (/(?:^|\/)workspace\/[^/]+\/crypto-apps(?:\/|$)/.test(path)) return true;
+  if (/(?:^|\/)workspace\/[^/]+\/evidence-proofs(?:\/|$)/.test(path)) return true;
   const panel = new URLSearchParams(search).get("panel")?.toLowerCase() ?? "";
   // Public Beta keeps protocol rails light while reviewed actions are hidden.
   // Once the audited wallet-review paths are enabled, their protocol panels

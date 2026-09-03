@@ -17,6 +17,7 @@ describe("invite-only crypto app catalog route", () => {
     expect(appRoot.indexOf("<DenSigninGate>")).toBeLessThan(appRoot.indexOf('path="/workspace/:workspaceId/evidence-proofs"'));
     expect(appRoot).not.toContain('pathname === "/workspace/:workspaceId/crypto-apps"');
     expect(appRoot).not.toContain('pathname === "/workspace/:workspaceId/evidence-proofs"');
+    expect(readAppSource("react-app/shell/providers.tsx")).toContain("evidence-proofs");
   });
 
   test("keeps encrypted evidence publication explicit, testnet-only and redacted", () => {
@@ -25,10 +26,9 @@ describe("invite-only crypto app catalog route", () => {
     const client = readAppSource("app/lib/matterhorn-server.ts");
 
     expect(catalog).toContain("Evidence proofs");
-    expect(route).toContain("Ciphertext only");
-    expect(route).toContain("Owner-scoped access");
-    expect(route).toContain("Nothing published automatically");
-    expect(route).toContain("No agent wallet authority");
+    expect(route).toContain("Readable only by you");
+    expect(route).toContain("Nothing stored publicly without your approval");
+    expect(route).toContain("Coworkers cannot use your wallet");
     expect(route).toContain("client.listCryptoEvidence(workspaceId)");
     expect(route).toContain("client.publishCryptoEvidence(workspaceId, item.evidenceId, item.revision, account.address)");
     expect(route).toContain("client.verifyCryptoEvidence(workspaceId, item.evidenceId)");
