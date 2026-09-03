@@ -308,8 +308,12 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("About this coworker");
     expect(panel).toContain('onClick={props.onBrowseFiles}>Add file</Button>');
     expect(panel).toContain('onClick={props.onBrowseMemory}>Add memory</Button>');
+    expect(panel).toContain('onClick={props.onBrowseApps}>Browse apps</Button>');
+    expect(panel.match(/onClick=\{props\.onBrowseApps\}>Browse apps<\/Button>/g)?.length).toBe(2);
     expect(sessionPage).toContain('onBrowseFiles={() => setCurrentSidePanel("files")}');
     expect(sessionPage).toContain('onBrowseMemory={() => setCurrentSidePanel("memory")}');
+    expect(panel).not.toContain("This invalidates the current intent.");
+    expect(panel).toContain("Your wallet will no longer be able to approve or send this review.");
     expect(panel).toContain("Safety limits");
     expect(panel).toContain("<details className=\"border-b border-dls-border/70 py-4\">");
   });

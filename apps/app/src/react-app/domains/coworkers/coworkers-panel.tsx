@@ -900,7 +900,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       await refresh();
       showToast({
         title: "Wallet review cancelled",
-        description: "The old intent cannot be approved or sent.",
+        description: "The cancelled review cannot be approved or sent.",
         tone: "success",
       });
     } catch (cause) {
@@ -1130,7 +1130,10 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   <fieldset>
                     <legend className="text-xs font-medium text-dls-text">Connected apps</legend>
                     {!resourceQuery.data.connectionsAvailable ? (
-                      <p className="mt-2 text-xs leading-5 text-dls-secondary">App connections are not enabled in this environment.</p>
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <p className="text-xs leading-5 text-dls-secondary">App connections are not enabled in this environment.</p>
+                        <Button size="xs" variant="outline" onClick={props.onBrowseApps}>Browse apps</Button>
+                      </div>
                     ) : resourceQuery.data.connections.length ? (
                       <div className="mt-2 grid gap-2">
                         {resourceQuery.data.connections.map((connection) => (
@@ -1145,7 +1148,12 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                           </label>
                         ))}
                       </div>
-                    ) : <p className="mt-2 text-xs leading-5 text-dls-secondary">No approved apps are connected for this coworker.</p>}
+                    ) : (
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <p className="text-xs leading-5 text-dls-secondary">No approved apps are connected for this coworker.</p>
+                        <Button size="xs" variant="outline" onClick={props.onBrowseApps}>Browse apps</Button>
+                      </div>
+                    )}
 
                     {resourceQuery.data.connectionsAvailable && appsNeedingConnection.length ? (
                       <div className="mt-3 border-t border-dls-border/70 pt-3">
@@ -1599,7 +1607,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       <ConfirmModal
         open={Boolean(cancelIntent)}
         title="Cancel this wallet review?"
-        message="This invalidates the current intent. Your wallet will not be able to approve or send it afterward."
+        message="Your wallet will no longer be able to approve or send this review."
         confirmLabel={busyAction ? "Cancelling…" : "Cancel review"}
         cancelLabel="Keep review"
         variant="warning"
