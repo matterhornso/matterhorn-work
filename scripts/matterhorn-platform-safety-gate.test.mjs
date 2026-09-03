@@ -113,6 +113,7 @@ for (const required of [
   "test:crypto-developer-invite",
   "test:crypto-app-sdk-package",
   "test:crypto-app-sdk-provenance",
+  "test:crypto-app-sdk-publish-workflow",
   "test:crypto-coworker-invite",
   "test:crypto-coworker-access-ops",
   "crypto-coworker-reference-patterns.test.mjs",

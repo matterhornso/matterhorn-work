@@ -10,7 +10,13 @@ declarations have no dependency on a private Matterhorn workspace package. The
 mandatory clean-package test packs the exact artifact, installs it offline into
 an empty Node project, compiles a TypeScript consumer, imports both public entry
 points, and runs the quickstart binary. Registry publication and provenance
-attestation remain an operator release step.
+attestation remain an operator release step. Publication uses the manual,
+environment-approved `.github/workflows/publish-crypto-app-sdk.yml` workflow;
+the complete operator procedure is in
+`docs/crypto-coworkers/crypto-app-sdk-release.md`. The workflow accepts no npm
+token, binds the package version and immutable tag to the exact `dev` commit,
+publishes one tested archive with npm OIDC trusted publishing, and immediately
+verifies the public artifact's signatures and provenance.
 
 After an approved release, verify the exact public artifact before allowing it
 into developer acceptance evidence:

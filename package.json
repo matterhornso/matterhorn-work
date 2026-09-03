@@ -79,6 +79,7 @@
     "test:crypto-app-sdk-package": "node scripts/crypto-app-sdk-package.test.mjs",
     "verify:crypto-app-sdk-provenance": "node scripts/crypto-app-sdk-provenance.mjs",
     "test:crypto-app-sdk-provenance": "node scripts/crypto-app-sdk-provenance.test.mjs",
+    "test:crypto-app-sdk-publish-workflow": "node scripts/crypto-app-sdk-publish-workflow.test.mjs",
     "test:crypto-developer-invite": "bun test scripts/issue-crypto-developer-invite.test.ts apps/app/tests/developer-invite-fragment.test.ts",
     "test:crypto-coworker-invite": "bun test scripts/issue-crypto-coworker-invite.test.ts apps/app/tests/coworker-invite-fragment.test.ts",
     "test:crypto-coworker-access-ops": "bun test scripts/manage-crypto-coworker-access.test.ts apps/server/src/crypto-coworker-access.test.ts apps/server/src/crypto-coworker-routes.e2e.test.ts",
