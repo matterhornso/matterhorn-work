@@ -33,7 +33,8 @@ next-step guide. Generation is atomic and refuses an existing output directory.
 It performs no network request and creates no key, credential, wallet access,
 certification, financial action, or mainnet authority. Hyperliquid and Bittensor
 testnet starters use the same command with `--protocol hyperliquid` or
-`--protocol bittensor`.
+`--protocol bittensor`. Enrolled developers can build and copy the same validated
+command from Matterhorn's invite-only crypto app certification page.
 
 ## Minimal flow
 

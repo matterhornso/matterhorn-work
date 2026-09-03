@@ -35,6 +35,13 @@ export type MatterhornCryptoAppQuickstartOptions = {
   statusUrl?: string | null;
 };
 
+export type MatterhornCryptoAppQuickstartCommandOptions = Pick<
+  MatterhornCryptoAppQuickstartOptions,
+  "protocol" | "appId" | "endpoint"
+> & {
+  outputDirectory: string;
+};
+
 export type MatterhornCryptoAppQuickstartArtifact = {
   path: string;
   content: string;
@@ -187,6 +194,44 @@ function canonicalSupportDefaults(endpoint: string): {
       ["endpoint_invalid"],
     );
   }
+}
+
+function shellArgument(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+/**
+ * Builds a copyable local command after applying the same manifest boundary as
+ * the generated starter. It never executes the command or contacts a network.
+ */
+export function createMatterhornCryptoAppQuickstartCommand(
+  options: MatterhornCryptoAppQuickstartCommandOptions,
+): string {
+  const outputDirectory = options.outputDirectory?.trim();
+  if (
+    !outputDirectory
+    || outputDirectory.length > 512
+    || /[\u0000-\u001f\u007f]/.test(outputDirectory)
+  ) {
+    throw new MatterhornCryptoAppQuickstartError(
+      "quickstart_options_invalid",
+      ["output_directory_invalid"],
+    );
+  }
+  const publisherId = options.appId?.split(/[._-]/, 1)[0] ?? "";
+  const quickstart = createMatterhornCryptoAppQuickstart({
+    protocol: options.protocol,
+    appId: options.appId,
+    publisherId,
+    endpoint: options.endpoint,
+  });
+  return [
+    "pnpm create:crypto-app -- \\",
+    `  --protocol ${shellArgument(quickstart.protocol)} \\`,
+    `  --app-id ${shellArgument(quickstart.manifest.appId)} \\`,
+    `  --endpoint ${shellArgument(quickstart.manifest.transport.endpoint)} \\`,
+    `  --output-dir ${shellArgument(outputDirectory)}`,
+  ].join("\n");
 }
 
 function candidateManifest(

@@ -4,6 +4,7 @@ import {
   buildCryptoAppSigningRequest,
 } from "./index.js";
 import {
+  createMatterhornCryptoAppQuickstartCommand,
   createMatterhornCryptoAppQuickstart,
   MatterhornCryptoAppQuickstartError,
 } from "./quickstart.js";
@@ -131,5 +132,38 @@ describe("Matterhorn crypto app quickstart", () => {
       privateKey: secret,
     } as never);
     expect(JSON.stringify(quickstart)).not.toContain(secret);
+  });
+
+  test("builds a copyable command only after the starter passes validation", () => {
+    expect(createMatterhornCryptoAppQuickstartCommand({
+      protocol: "sui",
+      appId: "acme.sui-testnet",
+      endpoint: endpoints.sui,
+      outputDirectory: "./Acme's Sui adapter",
+    })).toBe([
+      "pnpm create:crypto-app -- \\",
+      "  --protocol 'sui' \\",
+      "  --app-id 'acme.sui-testnet' \\",
+      "  --endpoint 'https://sui-adapter.example/v1' \\",
+      "  --output-dir './Acme'\"'\"'s Sui adapter'",
+    ].join("\n"));
+
+    for (const outputDirectory of ["", "bad\nfolder", "x".repeat(513)]) {
+      expect(() => createMatterhornCryptoAppQuickstartCommand({
+        protocol: "sui",
+        appId: "acme.sui-testnet",
+        endpoint: endpoints.sui,
+        outputDirectory,
+      })).toThrowError(expect.objectContaining({
+        code: "quickstart_options_invalid",
+        issues: ["output_directory_invalid"],
+      }));
+    }
+    expect(() => createMatterhornCryptoAppQuickstartCommand({
+      protocol: "sui",
+      appId: "acme.sui-testnet",
+      endpoint: "http://localhost:8787",
+      outputDirectory: "./adapter",
+    })).toThrowError(expect.objectContaining({ code: "quickstart_manifest_invalid" }));
   });
 });

@@ -67,10 +67,12 @@ export {
 
 export {
   createMatterhornCryptoAppQuickstart,
+  createMatterhornCryptoAppQuickstartCommand,
   MATTERHORN_CRYPTO_APP_QUICKSTART_VERSION,
   MatterhornCryptoAppQuickstartError,
   type MatterhornCryptoAppQuickstart,
   type MatterhornCryptoAppQuickstartArtifact,
+  type MatterhornCryptoAppQuickstartCommandOptions,
   type MatterhornCryptoAppQuickstartOptions,
   type MatterhornCryptoAppQuickstartProtocol,
 } from "./quickstart.js";

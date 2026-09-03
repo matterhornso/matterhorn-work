@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { createMatterhornCryptoDeveloperClient } from "@matterhorn-work/crypto-app-sdk";
+import { DeveloperQuickstartSetup } from "../src/react-app/domains/developer/developer-quickstart-setup";
 
 function readAppSource(path: string): string {
   return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
@@ -81,9 +84,26 @@ describe("invite-only crypto app developer route", () => {
   test("generates client-only setup for enrolled developers without sending local paths", () => {
     const route = readAppSource("domains/developer/crypto-app-developer-route.tsx");
     const setup = readAppSource("domains/developer/developer-integration-setup.tsx");
+    const quickstart = readAppSource("domains/developer/developer-quickstart-setup.tsx");
 
     expect(route).toContain("snapshot.status.enrolled");
+    expect(route).toContain("<DeveloperQuickstartSetup");
     expect(route).toContain("<DeveloperIntegrationSetup");
+    expect(route).toContain("Sui, Hyperliquid, or Bittensor testnet");
+    expect(quickstart).toContain("createMatterhornCryptoAppQuickstartCommand");
+    expect(quickstart).toContain("Create a testnet starter");
+    expect(quickstart).toContain("Copy command");
+    expect(quickstart).toContain("The command refuses to overwrite an existing folder");
+    expect(quickstart).toContain("No credentials or keys");
+    expect(quickstart).toContain("No wallet access");
+    expect(quickstart).toContain("No certification granted");
+    expect(quickstart).toContain('aria-live="polite"');
+    expect(quickstart).toContain('role="alert"');
+    expect(quickstart).not.toContain("MATTERHORN_WORK_HOST_TOKEN");
+    expect(quickstart).not.toContain("privateKey");
+    expect(quickstart).not.toContain("signTransaction");
+    expect(quickstart).not.toContain("executeTransaction");
+    expect(quickstart).not.toContain("fetch(");
     expect(setup).toContain("createMatterhornCryptoIntegrationSetup");
     expect(setup).toContain("Connect your development tool");
     expect(setup).toContain("Check the connection");
@@ -105,5 +125,22 @@ describe("invite-only crypto app developer route", () => {
     expect(route.match(/<h1/g)).toHaveLength(1);
     expect(route).toContain('className="-ml-2 mb-6 min-h-11"');
     expect(route).toContain('className="min-h-11" disabled={busy}');
+  });
+
+  test("renders one calm local-start path before any network or wallet authority", () => {
+    const html = renderToStaticMarkup(React.createElement(DeveloperQuickstartSetup));
+
+    expect(html).toContain("Create a testnet starter");
+    expect(html).toContain("Sui testnet");
+    expect(html).toContain("your-company.sui-testnet");
+    expect(html).toContain("Add your public test adapter URL to generate the command");
+    expect(html).toContain("Copy command");
+    expect(html).toContain("disabled");
+    expect(html).toContain("No credentials or keys");
+    expect(html).toContain("No wallet access");
+    expect(html).toContain('aria-label="Test network"');
+    expect(html).toContain('aria-label="Quickstart safety"');
+    expect(html).not.toContain("Private key");
+    expect(html).not.toContain("Mainnet");
   });
 });
