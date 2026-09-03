@@ -104,6 +104,8 @@ export type MatterhornCryptoEvidenceRecord = {
     "keyReference" | "wrappedKey" | "keyContext" | "recipientKeyIds"
   >;
   walrusProof: MatterhornWalrusProof | null;
+  /** Hash only; the account-linked wallet address is never stored in this record. */
+  walrusOwnerAddressHash?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -466,6 +468,7 @@ export class MatterhornCryptoEvidenceStore {
         deletable: input.sealed.localIndex.deletable,
       },
       walrusProof: null,
+      walrusOwnerAddressHash: null,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
@@ -646,6 +649,7 @@ export class MatterhornCryptoEvidenceStore {
     evidenceId: string;
     expectedRevision: number;
     proof: MatterhornWalrusProof;
+    walrusOwnerAddressHash?: string | null;
     now?: Date;
   }): MatterhornCryptoEvidenceRecord {
     const current = this.get(input);
@@ -659,6 +663,11 @@ export class MatterhornCryptoEvidenceStore {
     if (input.proof.network === "mainnet" && this.options.allowMainnet !== true) {
       throw new Error("crypto_evidence_mainnet_disabled");
     }
+    if (input.walrusOwnerAddressHash !== undefined
+      && input.walrusOwnerAddressHash !== null
+      && !/^[a-f0-9]{64}$/.test(input.walrusOwnerAddressHash)) {
+      throw new Error("crypto_evidence_walrus_owner_invalid");
+    }
     if (!verifyMatterhornEvidenceMerkleProof({
       ciphertextHash: current.index.ciphertextHash,
       leaf: current.index.merkleLeaf,
@@ -671,6 +680,7 @@ export class MatterhornCryptoEvidenceStore {
       revision: current.revision + 1,
       state: "published",
       walrusProof: structuredClone(input.proof),
+      walrusOwnerAddressHash: input.walrusOwnerAddressHash ?? null,
       updatedAt: now.toISOString(),
     };
     this.stateStore.put({ kind: STATE_KIND, key: next.id, workspaceId: next.workspaceId, value: next, nowMs: now.getTime() });
@@ -998,12 +1008,49 @@ export class MatterhornCryptoEvidenceStore {
     coworkerId?: string;
     evidenceId: string;
     expectedRevision: number;
+    walrusDeletion?: {
+      expectedBlobId: string;
+      expectedSuiObjectId: string;
+      transactionDigest: string;
+      deletedAt: string;
+    };
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceRecord> {
     const existing = this.get(input);
     if (!existing) throw new Error("crypto_evidence_not_found");
-    if (existing.state === "key_destroyed") return existing;
+    if (existing.state === "key_destroyed") {
+      if (!input.walrusDeletion) return existing;
+      if (existing.walrusProof?.blobId !== input.walrusDeletion.expectedBlobId
+        || existing.walrusProof.suiObjectId !== input.walrusDeletion.expectedSuiObjectId
+        || existing.walrusProof.deletionTransactionDigest !== input.walrusDeletion.transactionDigest
+        || existing.walrusProof.deletedAt !== input.walrusDeletion.deletedAt) {
+        throw new Error("crypto_evidence_walrus_deletion_mismatch");
+      }
+      return existing;
+    }
     if (existing.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
+    let deletedWalrusProof: MatterhornWalrusProof | null = existing.walrusProof;
+    if (input.walrusDeletion) {
+      const deletion = input.walrusDeletion;
+      if (existing.state !== "published"
+        || !existing.walrusProof
+        || existing.walrusProof.network !== "testnet"
+        || existing.walrusProof.deletionTransactionDigest
+        || existing.walrusProof.blobId !== deletion.expectedBlobId
+        || existing.walrusProof.suiObjectId !== deletion.expectedSuiObjectId
+        || !/^[1-9A-HJ-NP-Za-km-z]{32,128}$/.test(deletion.transactionDigest)
+        || !Number.isFinite(Date.parse(deletion.deletedAt))) {
+        throw new Error("crypto_evidence_walrus_deletion_mismatch");
+      }
+      deletedWalrusProof = {
+        ...existing.walrusProof,
+        deletionTransactionDigest: deletion.transactionDigest,
+        deletedAt: deletion.deletedAt,
+      };
+      if (validateMatterhornWalrusProof(deletedWalrusProof).length > 0) {
+        throw new Error("crypto_evidence_walrus_deletion_mismatch");
+      }
+    }
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
     const claimed = this.beginExclusiveOperation({ ...input, operation: "destroy_key", now });
@@ -1030,6 +1077,7 @@ export class MatterhornCryptoEvidenceStore {
         revision: current.revision + 1,
         state: "key_destroyed",
         envelope: null,
+        walrusProof: deletedWalrusProof,
         key: {
           ...current.key,
           keyReference: null,
@@ -1048,6 +1096,7 @@ export class MatterhornCryptoEvidenceStore {
         nowMs: now.getTime(),
       });
       this.stateStore.delete("crypto_evidence_renewal_intent", next.id);
+      if (!input.walrusDeletion) this.stateStore.delete("crypto_evidence_deletion_intent", next.id);
       this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
       this.stateStore.put({
         kind: RUN_INDEX_KIND,
@@ -1057,7 +1106,15 @@ export class MatterhornCryptoEvidenceStore {
         expiresAtMs: now.getTime() + SECURITY_RETENTION_MS,
         nowMs: now.getTime(),
       });
-      this.recordAccess({ record: next, action: "destroy_key", outcome: "allowed", reason: "recovery_material_deleted", now });
+      this.recordAccess({
+        record: next,
+        action: "destroy_key",
+        outcome: "allowed",
+        reason: input.walrusDeletion
+          ? "walrus_deleted_and_recovery_material_deleted"
+          : "recovery_material_deleted",
+        now,
+      });
       this.stateStore.secureCheckpoint();
       return clone(next);
     } finally {

@@ -7,6 +7,7 @@ import {
   type UiWallet,
 } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -41,6 +42,14 @@ function shortHash(value: string): string {
   return value.length > 20 ? `${value.slice(0, 10)}…${value.slice(-8)}` : value;
 }
 
+function sameSuiAddress(left: string, right: string): boolean {
+  try {
+    return normalizeSuiAddress(left) === normalizeSuiAddress(right);
+  } catch {
+    return false;
+  }
+}
+
 function formatDate(value: string | null): string {
   if (!value) return "No automatic expiry";
   const date = new Date(value);
@@ -48,6 +57,7 @@ function formatDate(value: string | null): string {
 }
 
 function statusLabel(item: MatterhornEvidenceVerificationPacket): string {
+  if (item.publication?.deletionTransactionDigest) return "Deleted from Walrus";
   if (item.state === "key_destroyed") return "Recovery key deleted";
   if (item.state === "published") return "Published and encrypted";
   return "Encrypted locally";
@@ -72,6 +82,14 @@ function userMessage(error: unknown): string {
     if (error.code === "crypto_evidence_walrus_renewal_transaction_failed") return "The Sui wallet transaction failed. The encrypted copy was not renewed.";
     if (error.code === "crypto_evidence_walrus_renewal_unavailable") return "Encrypted testnet storage renewal is temporarily unavailable.";
     if (error.code.includes("crypto_evidence_walrus_renewal") && error.code.includes("mismatch")) return "The renewal changed after review. Nothing was recorded; check the proof and try again.";
+    if (error.code === "crypto_evidence_walrus_deletion_confirmation_required") return "Confirm that the wallet will delete the Walrus copy and Matterhorn recovery key.";
+    if (error.code === "crypto_evidence_walrus_not_deletable") return "This encrypted copy was not created as deletable. You can still delete its recovery key.";
+    if (error.code === "crypto_evidence_walrus_deletion_in_progress") return "A deletion is already waiting for wallet review.";
+    if (error.code === "crypto_evidence_walrus_deletion_expired_or_replayed") return "This deletion expired or was already used. Check the proof and try again.";
+    if (error.code === "crypto_evidence_walrus_deletion_transaction_failed") return "The Sui wallet transaction failed. The encrypted copy was not deleted.";
+    if (error.code === "crypto_evidence_walrus_deletion_unavailable") return "Encrypted Walrus deletion is temporarily unavailable.";
+    if (error.code === "crypto_evidence_walrus_wallet_owner_required") return "This copy is not owned by the connected Sui wallet. You can still delete its recovery key.";
+    if (error.code.includes("crypto_evidence_walrus_deletion") && error.code.includes("mismatch")) return "The deletion changed after review. Nothing was recorded; check the proof and try again.";
   }
   return "Matterhorn could not load the evidence proof. Try again.";
 }
@@ -118,6 +136,9 @@ export function CryptoEvidenceRoute() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [renewCandidateId, setRenewCandidateId] = useState<string | null>(null);
   const [renewingId, setRenewingId] = useState<string | null>(null);
+  const [walletConnectingId, setWalletConnectingId] = useState<string | null>(null);
+  const [cloudDeleteCandidateId, setCloudDeleteCandidateId] = useState<string | null>(null);
+  const [cloudDeletingId, setCloudDeletingId] = useState<string | null>(null);
   const [verificationById, setVerificationById] = useState<Record<string, MatterhornEvidenceVerificationResult>>({});
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -145,12 +166,12 @@ export function CryptoEvidenceRoute() {
   }, [query.data, queryClient, queryKey, workspaceId]);
 
   const publish = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
-    if (!publishAcknowledged) return;
+    if (!publishAcknowledged || !account?.address) return;
     setPublishingId(item.evidenceId);
     setError(null);
     try {
       const active = query.data ?? await loadEvidence(workspaceId);
-      await active.client.publishCryptoEvidence(workspaceId, item.evidenceId, item.revision);
+      await active.client.publishCryptoEvidence(workspaceId, item.evidenceId, item.revision, account.address);
       setPublishCandidateId(null);
       setPublishAcknowledged(false);
       setVerificationById((current) => {
@@ -164,7 +185,7 @@ export function CryptoEvidenceRoute() {
     } finally {
       setPublishingId(null);
     }
-  }, [publishAcknowledged, query.data, queryClient, queryKey, workspaceId]);
+  }, [account?.address, publishAcknowledged, query.data, queryClient, queryKey, workspaceId]);
 
   const destroyRecoveryKey = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
     if (!deleteAcknowledged) return;
@@ -188,15 +209,15 @@ export function CryptoEvidenceRoute() {
     }
   }, [deleteAcknowledged, query.data, queryClient, queryKey, workspaceId]);
 
-  const connectRenewalWallet = useCallback(async (evidenceId: string, wallet: UiWallet) => {
-    setRenewingId(evidenceId);
+  const connectSuiWallet = useCallback(async (evidenceId: string, wallet: UiWallet) => {
+    setWalletConnectingId(evidenceId);
     setError(null);
     try {
       await suiDAppKit.connectWallet({ wallet });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not connect the Sui wallet.");
     } finally {
-      setRenewingId(null);
+      setWalletConnectingId(null);
     }
   }, []);
 
@@ -213,7 +234,7 @@ export function CryptoEvidenceRoute() {
         expectedRevision: item.revision,
         signer: account.address,
       });
-      if (prepared.preview.signer.toLowerCase() !== account.address.toLowerCase()) {
+      if (!sameSuiAddress(prepared.preview.signer, account.address)) {
         throw new Error("The connected Sui wallet does not match the renewal signer.");
       }
       const transaction = Transaction.from(prepared.preview.transactionBytesBase64);
@@ -253,6 +274,62 @@ export function CryptoEvidenceRoute() {
         && cause instanceof Error ? cause.message : message);
     } finally {
       setRenewingId(null);
+    }
+  }, [account, query.data, queryClient, queryKey, workspaceId]);
+
+  const deleteWalrusCopy = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
+    if (!account?.address) {
+      setError("Connect the Sui wallet that owns this encrypted copy.");
+      return;
+    }
+    setCloudDeletingId(item.evidenceId);
+    setError(null);
+    try {
+      const active = query.data ?? await loadEvidence(workspaceId);
+      const prepared = await active.client.deleteCryptoEvidenceWalrusCopy(workspaceId, item.evidenceId, {
+        expectedRevision: item.revision,
+        signer: account.address,
+      });
+      if (!sameSuiAddress(prepared.preview.signer, account.address)) {
+        throw new Error("The connected Sui wallet does not match the deletion signer.");
+      }
+      const transaction = Transaction.from(prepared.preview.transactionBytesBase64);
+      if (await transaction.getDigest() !== prepared.preview.transactionDigest) {
+        throw new Error("The deletion transaction changed before wallet review.");
+      }
+      const result = await suiDAppKit.signAndExecuteTransaction({
+        transaction,
+        account,
+        network: "testnet",
+      });
+      const executed = "Transaction" in result ? result.Transaction : result.FailedTransaction;
+      if (!executed?.digest || executed.digest !== prepared.preview.transactionDigest) {
+        throw new Error("The wallet returned a different transaction. The deletion was not recorded.");
+      }
+      if (!("Transaction" in result)) {
+        throw new Error(executed.status?.error?.message ?? "The Sui wallet returned a failed deletion transaction.");
+      }
+      const confirmed = await active.client.confirmCryptoEvidenceWalrusDeletion(workspaceId, item.evidenceId, {
+        intentId: prepared.preview.intentId,
+        intentHash: prepared.preview.intentHash,
+        transactionDigest: executed.digest,
+      });
+      setVerificationById((current) => ({
+        ...current,
+        [item.evidenceId]: {
+          version: confirmed.item.version,
+          evidence: confirmed.item,
+          verification: confirmed.verification,
+        },
+      }));
+      setCloudDeleteCandidateId(null);
+      await queryClient.invalidateQueries({ queryKey });
+    } catch (cause) {
+      const message = userMessage(cause);
+      setError(message === "Matterhorn could not load the evidence proof. Try again."
+        && cause instanceof Error ? cause.message : message);
+    } finally {
+      setCloudDeletingId(null);
     }
   }, [account, query.data, queryClient, queryKey, workspaceId]);
 
@@ -335,8 +412,17 @@ export function CryptoEvidenceRoute() {
                 && remainingEpochs !== null
                 && remainingEpochs > 0
                 && remainingEpochs <= 2;
-              const canRenew = Boolean(snapshot.renewalAvailable && renewalDue);
+              const canRenew = Boolean(snapshot.renewalAvailable && item.walletLifecycleReady && renewalDue);
               const confirmingRenewal = renewCandidateId === item.evidenceId;
+              const deletedFromWalrus = Boolean(item.publication?.deletionTransactionDigest);
+              const canDeleteWalrusCopy = Boolean(
+                snapshot.deletionAvailable
+                && item.walletLifecycleReady
+                && item.state === "published"
+                && item.publication
+                && !deletedFromWalrus,
+              );
+              const confirmingCloudDelete = cloudDeleteCandidateId === item.evidenceId;
               const confirmingPublish = publishCandidateId === item.evidenceId;
               const canDeleteRecoveryKey = item.retention.keyAvailable;
               const confirmingDelete = deleteCandidateId === item.evidenceId;
@@ -350,9 +436,11 @@ export function CryptoEvidenceRoute() {
                       </div>
                       <p className="mt-2 text-sm text-muted-foreground">Created {formatDate(item.createdAt)}</p>
                       {verification ? (
-                        <p className={verification.status === "verified" ? "mt-2 text-sm text-emerald-600 dark:text-emerald-400" : "mt-2 text-sm text-destructive"} role="status">
+                        <p className={verification.status === "verified" || verification.status === "deleted" ? "mt-2 text-sm text-emerald-600 dark:text-emerald-400" : "mt-2 text-sm text-destructive"} role="status">
                           {verification.status === "verified"
                             ? `Integrity checked ${formatDate(verification.verifiedAt)}`
+                            : verification.status === "deleted"
+                              ? `Deletion checked ${formatDate(verification.verifiedAt)}`
                             : `Integrity check ${verification.status.replaceAll("_", " ")}`}
                         </p>
                       ) : item.state === "published" ? (
@@ -383,7 +471,9 @@ export function CryptoEvidenceRoute() {
                           <dt className="text-muted-foreground">Sui object</dt>
                           <dd className="break-all font-mono text-xs">{item.publication?.suiObjectId ?? "Not published"}</dd>
                           <dt className="text-muted-foreground">Walrus blob</dt>
-                          <dd className="break-all font-mono text-xs">{item.publication?.blobId ?? "Not published"}</dd>
+                          <dd className="break-all font-mono text-xs">
+                            {deletedFromWalrus ? "Deleted" : item.publication?.blobId ?? "Not published"}
+                          </dd>
                           <dt className="text-muted-foreground">Valid epochs</dt>
                           <dd>{item.publication ? `${item.publication.certifiedEpoch}–${item.publication.validUntilEpoch}` : "Not published"}</dd>
                           {remainingEpochs !== null ? (
@@ -396,6 +486,12 @@ export function CryptoEvidenceRoute() {
                           <dd>{item.retention.keyAvailable ? "Available to this workspace" : "Deleted"}</dd>
                           <dt className="text-muted-foreground">Content expiry</dt>
                           <dd>{formatDate(item.retention.expiresAt)}</dd>
+                          {item.publication?.deletedAt ? (
+                            <>
+                              <dt className="text-muted-foreground">Deleted</dt>
+                              <dd>{formatDate(item.publication.deletedAt)}</dd>
+                            </>
+                          ) : null}
                         </dl>
                         <Button variant="outline" size="sm" className="mt-5" onClick={() => void copyPacket(item)}>
                           {copiedId === item.evidenceId ? <Check aria-hidden="true" className="size-4" /> : <Clipboard aria-hidden="true" className="size-4" />}
@@ -406,15 +502,21 @@ export function CryptoEvidenceRoute() {
                       <div className="border-t border-border pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0">
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <ShieldCheck aria-hidden="true" className="size-4" />
-                          Verification checks
+                          {deletedFromWalrus ? "Deletion confirmed" : "Verification checks"}
                         </div>
-                        <ul className="mt-4 space-y-3">
-                          <CheckLine ok={verification?.checks.tenantScope ?? true}>Owner and workspace scope</CheckLine>
-                          <CheckLine ok={verification?.checks.ciphertextHash ?? false}>Exact ciphertext hash</CheckLine>
-                          <CheckLine ok={verification?.checks.merkleInclusion ?? false}>Merkle inclusion</CheckLine>
-                          <CheckLine ok={verification?.checks.suiCertification ?? false}>Sui certification is current</CheckLine>
-                          <CheckLine ok={verification?.checks.walrusReadback ?? false}>Walrus bytes match</CheckLine>
-                        </ul>
+                        {deletedFromWalrus ? (
+                          <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                            Sui confirmed the exact wallet-reviewed deletion. Matterhorn also destroyed the recovery key. The public transaction record may remain.
+                          </p>
+                        ) : (
+                          <ul className="mt-4 space-y-3">
+                            <CheckLine ok={verification?.checks.tenantScope ?? true}>Owner and workspace scope</CheckLine>
+                            <CheckLine ok={verification?.checks.ciphertextHash ?? false}>Exact ciphertext hash</CheckLine>
+                            <CheckLine ok={verification?.checks.merkleInclusion ?? false}>Merkle inclusion</CheckLine>
+                            <CheckLine ok={verification?.checks.suiCertification ?? false}>Sui certification is current</CheckLine>
+                            <CheckLine ok={verification?.checks.walrusReadback ?? false}>Walrus bytes match</CheckLine>
+                          </ul>
+                        )}
                         {canVerify ? (
                           <Button
                             className="mt-5 w-full"
@@ -431,6 +533,7 @@ export function CryptoEvidenceRoute() {
                             className="mt-3 w-full"
                             onClick={() => {
                               setRenewCandidateId(item.evidenceId);
+                              setCloudDeleteCandidateId(null);
                               setDeleteCandidateId(null);
                               setDeleteAcknowledged(false);
                               setError(null);
@@ -455,11 +558,11 @@ export function CryptoEvidenceRoute() {
                                     key={`${wallet.name}-${wallet.version}`}
                                     size="sm"
                                     variant="outline"
-                                    disabled={renewingId === item.evidenceId}
-                                    onClick={() => void connectRenewalWallet(item.evidenceId, wallet)}
+                                    disabled={walletConnectingId === item.evidenceId || renewingId === item.evidenceId}
+                                    onClick={() => void connectSuiWallet(item.evidenceId, wallet)}
                                   >
                                     <Wallet aria-hidden="true" className="size-4" />
-                                    Connect {wallet.name}
+                                    {walletConnectingId === item.evidenceId ? "Connecting…" : `Connect ${wallet.name}`}
                                   </Button>
                                 ))}
                               </div>
@@ -493,6 +596,7 @@ export function CryptoEvidenceRoute() {
                             className="mt-5 w-full"
                             onClick={() => {
                               setPublishCandidateId(item.evidenceId);
+                              setCloudDeleteCandidateId(null);
                               setPublishAcknowledged(false);
                               setDeleteCandidateId(null);
                               setDeleteAcknowledged(false);
@@ -506,7 +610,7 @@ export function CryptoEvidenceRoute() {
                         {canPublish && confirmingPublish ? (
                           <div className="mt-5 border-t border-border pt-4">
                             <p className="text-xs leading-5 text-muted-foreground">
-                              Only encrypted bytes go to the public Walrus test network. Those bytes may remain after deletion, but deleting the recovery key makes them unreadable.
+                              Only encrypted bytes go to the public Walrus test network. The Blob object will be assigned to your connected Sui wallet so only that wallet can renew or delete it. Your wallet address and the transaction remain public.
                             </p>
                             <label className="mt-3 flex cursor-pointer items-start gap-3 text-xs leading-5">
                               <input
@@ -517,10 +621,32 @@ export function CryptoEvidenceRoute() {
                               />
                               <span>I understand that the encrypted public bytes may remain.</span>
                             </label>
+                            {account?.address ? (
+                              <p className="mt-3 font-mono text-[11px] text-foreground">
+                                Owner {account.address.slice(0, 10)}…{account.address.slice(-6)}
+                              </p>
+                            ) : wallets.length > 0 ? (
+                              <div className="mt-3 flex flex-wrap gap-2" aria-label="Available Sui wallets">
+                                {wallets.slice(0, 3).map((wallet) => (
+                                  <Button
+                                    key={`${wallet.name}-${wallet.version}`}
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={walletConnectingId === item.evidenceId || publishingId === item.evidenceId}
+                                    onClick={() => void connectSuiWallet(item.evidenceId, wallet)}
+                                  >
+                                    <Wallet aria-hidden="true" className="size-4" />
+                                    {walletConnectingId === item.evidenceId ? "Connecting…" : `Connect ${wallet.name}`}
+                                  </Button>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-3 text-xs leading-5 text-foreground">Install a Sui-compatible wallet to own this encrypted copy.</p>
+                            )}
                             <div className="mt-4 flex gap-2">
                               <Button
                                 size="sm"
-                                disabled={!publishAcknowledged || publishingId === item.evidenceId}
+                                disabled={!publishAcknowledged || !account?.address || publishingId === item.evidenceId}
                                 onClick={() => void publish(item)}
                               >
                                 {publishingId === item.evidenceId ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : null}
@@ -540,13 +666,15 @@ export function CryptoEvidenceRoute() {
                             </div>
                           </div>
                         ) : null}
-                        {canDeleteRecoveryKey && !confirmingDelete ? (
+                        {canDeleteWalrusCopy && !confirmingCloudDelete && !confirmingRenewal ? (
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             className="mt-5 w-full justify-start text-destructive hover:text-destructive"
                             onClick={() => {
-                              setDeleteCandidateId(item.evidenceId);
+                              setCloudDeleteCandidateId(item.evidenceId);
+                              setRenewCandidateId(null);
+                              setDeleteCandidateId(null);
                               setDeleteAcknowledged(false);
                               setPublishCandidateId(null);
                               setPublishAcknowledged(false);
@@ -554,7 +682,83 @@ export function CryptoEvidenceRoute() {
                             }}
                           >
                             <Trash2 aria-hidden="true" className="size-4" />
-                            Delete recovery key
+                            Delete encrypted copy
+                          </Button>
+                        ) : null}
+                        {canDeleteWalrusCopy && confirmingCloudDelete ? (
+                          <div className="mt-5 border-t border-border pt-4">
+                            <p className="text-xs leading-5 text-foreground">
+                              Your Sui wallet will review and submit one exact testnet deletion. Matterhorn will then destroy the recovery key.
+                            </p>
+                            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                              This cannot be undone. The public Sui transaction may remain even after the encrypted Walrus copy is deleted.
+                            </p>
+                            {account?.address ? (
+                              <p className="mt-2 font-mono text-[11px] text-foreground">
+                                {account.address.slice(0, 10)}…{account.address.slice(-6)}
+                              </p>
+                            ) : wallets.length > 0 ? (
+                              <div className="mt-3 flex flex-wrap gap-2" aria-label="Available Sui wallets">
+                                {wallets.slice(0, 3).map((wallet) => (
+                                  <Button
+                                    key={`${wallet.name}-${wallet.version}`}
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={walletConnectingId === item.evidenceId || cloudDeletingId === item.evidenceId}
+                                    onClick={() => void connectSuiWallet(item.evidenceId, wallet)}
+                                  >
+                                    <Wallet aria-hidden="true" className="size-4" />
+                                    {walletConnectingId === item.evidenceId ? "Connecting…" : `Connect ${wallet.name}`}
+                                  </Button>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-xs leading-5 text-foreground">Install a Sui-compatible wallet to delete this copy.</p>
+                            )}
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {account?.address ? (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  disabled={cloudDeletingId === item.evidenceId}
+                                  onClick={() => void deleteWalrusCopy(item)}
+                                >
+                                  {cloudDeletingId === item.evidenceId ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : null}
+                                  {cloudDeletingId === item.evidenceId ? "Opening wallet…" : "Delete in wallet"}
+                                </Button>
+                              ) : null}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={cloudDeletingId === item.evidenceId}
+                                onClick={() => setCloudDeleteCandidateId(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {item.publication && !item.walletLifecycleReady && item.state === "published" ? (
+                          <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                            This older copy was not assigned to a user wallet, so wallet renewal and deletion are unavailable. You can still delete its recovery key below.
+                          </p>
+                        ) : null}
+                        {canDeleteRecoveryKey && !confirmingDelete && !confirmingCloudDelete ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-5 w-full justify-start text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setDeleteCandidateId(item.evidenceId);
+                              setCloudDeleteCandidateId(null);
+                              setDeleteAcknowledged(false);
+                              setPublishCandidateId(null);
+                              setPublishAcknowledged(false);
+                              setError(null);
+                            }}
+                          >
+                            <Trash2 aria-hidden="true" className="size-4" />
+                            {canDeleteWalrusCopy ? "Delete recovery key only" : "Delete recovery key"}
                           </Button>
                         ) : null}
                         {canDeleteRecoveryKey && confirmingDelete ? (
@@ -607,7 +811,9 @@ export function CryptoEvidenceRoute() {
                                 ? "This encrypted record stays private until you choose to store a testnet copy."
                                 : "Encrypted testnet storage is not configured. This record stays in Matterhorn."
                               : item.state === "key_destroyed"
-                                ? "The recovery key has been deleted, so this record can no longer be opened."
+                                ? deletedFromWalrus
+                                  ? "The wallet-confirmed Walrus deletion and recovery-key deletion are recorded."
+                                  : "The recovery key has been deleted, so this record can no longer be opened."
                                 : "Live verification is available only for published testnet evidence."}
                           </p>
                         ) : null}

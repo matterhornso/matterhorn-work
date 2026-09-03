@@ -1,15 +1,22 @@
 import { describe, expect, test } from "bun:test";
 
-import { normalizeSuiObjectId } from "@mysten/sui/utils";
+import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils";
 import { blobIdToInt } from "@mysten/walrus";
 
 import { createPinnedSuiWalrusCertificationVerifier } from "./sui-walrus-certification-verifier.js";
 
 const ENDPOINT = new URL("https://fullnode.testnet.sui.io");
 const OBJECT_ID = normalizeSuiObjectId("0x1234");
+const OWNER_ADDRESS = normalizeSuiAddress("0xabc");
 const BLOB_ID = Buffer.alloc(32, 23).toString("base64url");
 
-function client(overrides: Record<string, unknown> = {}) {
+function client(
+  overrides: Record<string, unknown> = {},
+  owner: { $kind: string; AddressOwner?: string } = {
+    $kind: "AddressOwner",
+    AddressOwner: OWNER_ADDRESS,
+  },
+) {
   return {
     walrus: {
       getBlobObject: async () => ({
@@ -23,6 +30,9 @@ function client(overrides: Record<string, unknown> = {}) {
     },
     ledgerService: {
       getServiceInfo: () => ({ response: Promise.resolve({ epoch: 101n }) }),
+    },
+    core: {
+      getObjects: async () => ({ objects: [{ objectId: OBJECT_ID, owner }] }),
     },
   };
 }
@@ -47,6 +57,7 @@ describe("pinned Sui Walrus certification verifier", () => {
       currentEpoch: 101,
       validUntilEpoch: 110,
       deletable: true,
+      ownerAddress: OWNER_ADDRESS,
       suiTransactionDigest: null,
     });
   });
@@ -111,5 +122,24 @@ describe("pinned Sui Walrus certification verifier", () => {
       signal: controller.signal,
     })).rejects.toThrow("crypto_evidence_walrus_aborted");
     expect(created).toBe(false);
+  });
+
+  test("requires one exact address-owned Blob object", async () => {
+    for (const [owner, code] of [
+      [{ $kind: "Shared" }, "crypto_evidence_walrus_wallet_owner_required"],
+      [{ $kind: "AddressOwner", AddressOwner: "not-an-address" }, "crypto_evidence_walrus_owner_invalid"],
+    ] as const) {
+      const verifier = createPinnedSuiWalrusCertificationVerifier({
+        endpoint: ENDPOINT,
+        approvedAddresses: ["93.184.216.34"],
+        createClient: () => client({}, owner),
+      });
+      await expect(verifier({
+        network: "testnet",
+        blobId: BLOB_ID,
+        suiObjectId: OBJECT_ID,
+        signal: new AbortController().signal,
+      })).rejects.toThrow(code);
+    }
   });
 });

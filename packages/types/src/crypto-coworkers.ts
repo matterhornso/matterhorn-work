@@ -613,13 +613,15 @@ export type MatterhornWalrusProof = {
   suiTransactionDigest: string | null;
   renewalTransactionDigest?: string;
   renewedAt?: string;
+  deletionTransactionDigest?: string;
+  deletedAt?: string;
 };
 
 export const MATTERHORN_EVIDENCE_VERIFICATION_VERSION =
   "matterhorn.evidence-verification.v1" as const;
 
 export type MatterhornEvidenceVerificationStatus = {
-  status: "verified" | "sealed_local" | "key_destroyed" | "expired" | "failed";
+  status: "verified" | "sealed_local" | "key_destroyed" | "deleted" | "expired" | "failed";
   verifiedAt: string;
   checks: {
     tenantScope: true;
@@ -651,6 +653,8 @@ export type MatterhornEvidenceVerificationPacket = {
     expiresAt: string | null;
     keyAvailable: boolean;
   };
+  /** True when the Walrus Blob object was transferred to a user wallet. */
+  walletLifecycleReady: boolean;
   publication: MatterhornWalrusProof | null;
   /** Last server-side check of this exact evidence revision. */
   lastVerification: MatterhornEvidenceVerificationStatus | null;
@@ -667,6 +671,7 @@ export type MatterhornEvidenceVerificationListResponse = {
   available: boolean;
   publicationAvailable: boolean;
   renewalAvailable: boolean;
+  deletionAvailable: boolean;
   items: MatterhornEvidenceVerificationPacket[];
 };
 
@@ -675,6 +680,7 @@ export type MatterhornEvidencePublicationResponse = {
   disclosure: {
     network: "testnet";
     stored: "encrypted_bytes_only";
+    ownership: "connected_wallet_only";
     publicBytesMayRemainAfterDeletion: true;
     deletionDestroysRecoveryKey: true;
   };
@@ -727,6 +733,51 @@ export type MatterhornCryptoEvidenceWalrusRenewalPrepareResponse = {
 export type MatterhornCryptoEvidenceWalrusRenewalConfirmResponse = {
   item: MatterhornEvidenceVerificationPacket;
   verification: MatterhornEvidenceVerificationStatus;
+};
+
+export const MATTERHORN_CRYPTO_EVIDENCE_WALRUS_DELETION_VERSION =
+  "matterhorn.crypto-evidence-walrus-deletion.v1" as const;
+
+export type MatterhornCryptoEvidenceWalrusDeletionPreview = {
+  version: typeof MATTERHORN_CRYPTO_EVIDENCE_WALRUS_DELETION_VERSION;
+  intentId: string;
+  intentHash: string;
+  evidenceId: string;
+  evidenceRevision: number;
+  network: "testnet";
+  signer: string;
+  blobId: string;
+  suiObjectId: string;
+  ciphertextSha256: string;
+  transactionBytesBase64: string;
+  transactionDigest: string;
+  simulationReference: string;
+  simulatedAt: string;
+  expiresAt: string;
+  walletAuthority: "connected_wallet_only";
+};
+
+export type MatterhornCryptoEvidenceWalrusDeletionPrepareResponse = {
+  preview: MatterhornCryptoEvidenceWalrusDeletionPreview;
+  disclosure: {
+    network: "testnet";
+    walletAction: "delete_walrus_blob";
+    signingAndSubmission: "connected_wallet_only";
+    agentAuthority: "none";
+    recoveryKeyDestroyedAfterConfirmation: true;
+    publicTransactionMayRemain: true;
+  };
+};
+
+export type MatterhornCryptoEvidenceWalrusDeletionConfirmResponse = {
+  item: MatterhornEvidenceVerificationPacket;
+  verification: MatterhornEvidenceVerificationStatus;
+  deletion: {
+    walrusDeletionConfirmed: true;
+    recoveryKeyDestroyed: true;
+    contentRecoverable: false;
+    publicTransactionMayRemain: true;
+  };
 };
 
 export const MATTERHORN_AGENT_FILE_VERSION = "matterhorn.agent-file.v1";
@@ -2110,6 +2161,8 @@ export function validateMatterhornWalrusProof(value: unknown): string[] {
     "suiTransactionDigest",
     "renewalTransactionDigest",
     "renewedAt",
+    "deletionTransactionDigest",
+    "deletedAt",
   ])) issues.push("walrus_proof_unknown_field");
   const publicText = (text: unknown, maximum: number) => typeof text === "string"
     && text.trim().length > 0
@@ -2145,6 +2198,14 @@ export function validateMatterhornWalrusProof(value: unknown): string[] {
     || (hasRenewedAt && (typeof value.renewedAt !== "string"
       || !Number.isFinite(Date.parse(value.renewedAt))))) {
     issues.push("walrus_proof_renewal_invalid");
+  }
+  const hasDeletionDigest = value.deletionTransactionDigest !== undefined;
+  const hasDeletedAt = value.deletedAt !== undefined;
+  if (hasDeletionDigest !== hasDeletedAt
+    || (hasDeletionDigest && !publicText(value.deletionTransactionDigest, 256))
+    || (hasDeletedAt && (typeof value.deletedAt !== "string"
+      || !Number.isFinite(Date.parse(value.deletedAt))))) {
+    issues.push("walrus_proof_deletion_invalid");
   }
   return [...new Set(issues)];
 }

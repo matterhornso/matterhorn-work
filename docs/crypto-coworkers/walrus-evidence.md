@@ -44,9 +44,9 @@ The local encrypted envelope and the public Walrus payload are deliberately diff
 ## Lifecycle
 
 - Financial and research/chat evidence remain local unless the user explicitly publishes one exact encrypted revision.
-- User-controlled evidence uses deletable blobs and a stated expiry/renewal policy.
+- New user-controlled publications use deletable blobs whose Sui object owner is the connected wallet, plus a stated expiry/renewal policy. Matterhorn independently verifies that exact owner before accepting proof metadata.
 - A non-content batch anchor can be permanent and cannot be removed; the UI must disclose this before enabling evidence publication.
-- Account/workspace deletion removes local content, queues deletable blob cleanup, and destroys Matterhorn-held wrapped keys. It must not promise erasure of public caches or independently copied ciphertext.
+- Wallet-controlled deletion prepares and simulates one exact short-lived Sui transaction, then waits for the owning wallet to sign and submit it. Only after pinned Sui verification of the exact digest, signer, object, and successful effects does Matterhorn destroy the local recovery key. Legacy or publisher-owned objects remain key-destruction-only. Account/workspace deletion removes local content and wrapped keys, but must not promise erasure of public caches or independently copied ciphertext.
 - A bounded read-only verifier checks published run evidence at startup and every six hours. It rechecks the exact ciphertext hash, Merkle proof, pinned Sui certification, and independent Walrus readback, then stores only a revision-bound redacted status. It never publishes, renews, signs, or submits.
 
 ## Publisher security
@@ -89,4 +89,4 @@ The first testnet prototype must use synthetic data and demonstrate:
 - Public serialization excludes the key reference and plaintext hash.
 - Deterministic, order-independent Merkle batches verify ciphertext modification and reject duplicate or mismatched leaves.
 - No publisher, Walrus network call, Sui anchor, or mainnet write is enabled by this foundation.
-- The authenticated account boundary exposes redacted proof listing, exact-revision testnet publication, live verification, automatic read-only verification health, and exact-revision recovery-key deletion. Publication and deletion share one durable operation claim, so they cannot race across server workers. Verification status is invalidated by any evidence revision, excludes tenant and key material, and is refreshed in a bounded four-worker batch. The certification verifier remains an independent Sui boundary, so an upload relay can never certify its own response.
+- The authenticated account boundary exposes redacted proof listing, exact-revision testnet publication, live verification, automatic read-only verification health, exact-revision recovery-key deletion, and wallet-only deletion of eligible connected-wallet-owned objects. Publication, renewal, deletion, and key destruction share durable single-use state so they cannot race across server workers. Verification status is invalidated by any evidence revision, excludes tenant, wallet-address, and key material, and is refreshed in a bounded four-worker batch. The certification verifier remains an independent Sui boundary, so an upload relay can never certify its own response.

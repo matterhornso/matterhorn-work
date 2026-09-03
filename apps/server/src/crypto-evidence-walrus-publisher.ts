@@ -5,6 +5,7 @@ import {
   type MatterhornWalrusProof,
   validateMatterhornWalrusProof,
 } from "@matterhorn-work/types/crypto-coworkers";
+import { isValidSuiAddress, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import type { MatterhornCryptoEvidenceRecord } from "./crypto-evidence-store.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
@@ -52,6 +53,8 @@ export type MatterhornWalrusCertification = {
   currentEpoch: number;
   validUntilEpoch: number;
   deletable: boolean;
+  /** Present only inside the server boundary; never copied into the public proof packet. */
+  ownerAddress?: string | null;
   suiTransactionDigest: string | null;
 };
 
@@ -67,6 +70,7 @@ export interface MatterhornWalrusEvidenceTransport {
     bytes: Uint8Array;
     ciphertextHash: string;
     storageEpochs: number;
+    ownerAddress?: string;
     signal: AbortSignal;
   }): Promise<MatterhornWalrusUpload>;
   readByObjectId(input: {
@@ -99,6 +103,25 @@ export type MatterhornWalrusEvidencePublisherOptions = {
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+export function matterhornWalrusOwnerAddressHash(value: string): string {
+  const ownerAddress = optionalSuiOwner(value);
+  if (!ownerAddress) throw new Error("crypto_evidence_walrus_owner_invalid");
+  return createHash("sha256")
+    .update(`matterhorn:walrus-owner:v1:${ownerAddress}`, "utf8")
+    .digest("hex");
+}
+
+function optionalSuiOwner(value: string | undefined): string | null {
+  if (value === undefined) return null;
+  try {
+    const normalized = normalizeSuiAddress(value);
+    if (!isValidSuiAddress(normalized)) throw new Error("crypto_evidence_walrus_owner_invalid");
+    return normalized;
+  } catch {
+    throw new Error("crypto_evidence_walrus_owner_invalid");
+  }
 }
 
 function boundedPositiveInteger(value: number, code: string, maximum = 10_000): number {
@@ -289,6 +312,9 @@ export function createPinnedWalrusEvidenceTransport(
       }
       const endpoint = endpointPath(publisher, "/v1/blobs");
       endpoint.searchParams.set("epochs", String(storageEpochs));
+      endpoint.searchParams.set("deletable", "true");
+      const ownerAddress = optionalSuiOwner(input.ownerAddress);
+      if (ownerAddress) endpoint.searchParams.set("send_object_to", ownerAddress);
       const resolved = await resolvePublicCryptoAdapterEndpoint(endpoint.href, resolver);
       const response = await requestBytes({
         endpoint: resolved.endpoint,
@@ -393,10 +419,14 @@ export class MatterhornTestnetWalrusEvidencePublisher {
     ownerId: string;
     evidenceId: string;
     expectedRevision: number;
+    ownerAddress?: string;
     signal: AbortSignal;
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceRecord> {
     if (input.signal.aborted) throw new Error("crypto_evidence_walrus_aborted");
+    // Validate the wallet owner before claiming the publication record. A malformed
+    // address must not leave behind a durable in-flight claim that blocks retries.
+    const ownerAddress = optionalSuiOwner(input.ownerAddress);
     const { record, claimId } = this.store.beginWalrusPublication(input);
     const publicBytes = serializeMatterhornWalrusCiphertext(record.envelope);
     try {
@@ -409,6 +439,7 @@ export class MatterhornTestnetWalrusEvidencePublisher {
         bytes: publicBytes,
         ciphertextHash: record.index.ciphertextHash,
         storageEpochs: this.storageEpochs,
+        ...(ownerAddress ? { ownerAddress } : {}),
         signal: input.signal,
       });
       const certification = await this.verifyCertification({
@@ -422,7 +453,8 @@ export class MatterhornTestnetWalrusEvidencePublisher {
         || certification.suiObjectId !== upload.suiObjectId
         || certification.validUntilEpoch !== upload.declaredEndEpoch
         || certification.certifiedEpoch > certification.currentEpoch
-        || certification.currentEpoch >= certification.validUntilEpoch) {
+        || certification.currentEpoch >= certification.validUntilEpoch
+        || (ownerAddress && certification.ownerAddress !== ownerAddress)) {
         throw new Error("crypto_evidence_walrus_certification_invalid");
       }
       const readback = await this.transport.readByObjectId({
@@ -455,6 +487,7 @@ export class MatterhornTestnetWalrusEvidencePublisher {
         evidenceId: input.evidenceId,
         expectedRevision: input.expectedRevision,
         proof,
+        walrusOwnerAddressHash: ownerAddress ? matterhornWalrusOwnerAddressHash(ownerAddress) : null,
         ...(input.now ? { now: input.now } : {}),
       });
     } finally {
@@ -633,7 +666,11 @@ export class MatterhornTestnetWalrusEvidencePublisher {
       || certification.certifiedEpoch !== record.walrusProof.certifiedEpoch
       || certification.validUntilEpoch !== record.walrusProof.validUntilEpoch
       || certification.certifiedEpoch > certification.currentEpoch
-      || certification.currentEpoch >= certification.validUntilEpoch) {
+      || certification.currentEpoch >= certification.validUntilEpoch
+      || (record.walrusOwnerAddressHash
+        && (!certification.ownerAddress
+          || matterhornWalrusOwnerAddressHash(certification.ownerAddress)
+            !== record.walrusOwnerAddressHash))) {
       throw new Error("crypto_evidence_walrus_certification_invalid");
     }
     let readback: Buffer;

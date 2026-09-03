@@ -45,6 +45,7 @@ type Served = { port: number; stop: (closeActiveConnections?: boolean) => void |
 const TOKEN = "owt_coworker_route_token";
 const HOST_TOKEN = "owt_coworker_route_host_token";
 const PASSWORD = "matterhorn-coworker-test-password";
+const ROUTE_SIGNER = normalizeSuiAddress("0x1");
 const ENV_KEYS = [
   "MATTERHORN_AUTH_DB",
   "MATTERHORN_WORK_DATA_DIR",
@@ -139,14 +140,16 @@ class RouteTestKeyManager implements MatterhornEvidenceKeyManager {
 class RouteTestWalrusTransport implements MatterhornWalrusEvidenceTransport {
   publishedBytes = Buffer.alloc(0);
   publishCalls = 0;
+  ownerAddress: string | null = null;
 
-  async publish(input: { bytes: Uint8Array }): Promise<{
+  async publish(input: { bytes: Uint8Array; ownerAddress?: string }): Promise<{
     blobId: string;
     suiObjectId: string;
     declaredEndEpoch: number;
   }> {
     this.publishCalls += 1;
     this.publishedBytes = Buffer.from(input.bytes);
+    this.ownerAddress = input.ownerAddress ?? null;
     return { blobId: "route-agent-file-blob", suiObjectId: "0x1234", declaredEndEpoch: 15 };
   }
 
@@ -164,6 +167,7 @@ function routeTestCertification(): MatterhornWalrusCertification {
     currentEpoch: 11,
     validUntilEpoch: 15,
     deletable: true,
+    ownerAddress: ROUTE_SIGNER,
     suiTransactionDigest: "route-agent-file-testnet-transaction",
   };
 }
@@ -232,7 +236,7 @@ async function boot(
       currentEpoch: walrusCurrentEpoch,
       validUntilEpoch: walrusValidUntilEpoch,
     });
-    const signer = normalizeSuiAddress("0x1");
+    const signer = ROUTE_SIGNER;
     const renewalTransaction = new Transaction();
     renewalTransaction.setSender(signer);
     renewalTransaction.setGasOwner(signer);
@@ -251,6 +255,17 @@ async function boot(
         transactionBytesBase64: Buffer.from(renewalBytes).toString("base64"),
         transactionDigest: renewalDigest,
         simulationReference: sha256({ test: "route-walrus-renewal" }),
+        simulatedAt: new Date().toISOString(),
+      };
+    };
+    dependencies.cryptoEvidenceWalrusDeletionTransactionBuilder = async (input) => {
+      expect(input.network).toBe("sui:testnet");
+      expect(input.signer).toBe(signer);
+      expect(input.blobObjectId).toBe("0x1234");
+      return {
+        transactionBytesBase64: Buffer.from(renewalBytes).toString("base64"),
+        transactionDigest: renewalDigest,
+        simulationReference: sha256({ test: "route-walrus-deletion" }),
         simulatedAt: new Date().toISOString(),
       };
     };
@@ -1161,6 +1176,7 @@ describe("crypto coworker HTTP boundary", () => {
       available: false,
       publicationAvailable: false,
       renewalAvailable: false,
+      deletionAvailable: false,
       items: [],
     });
   });
@@ -1216,12 +1232,34 @@ describe("crypto coworker HTTP boundary", () => {
     )).response.status).toBe(404);
     expect(server.walrusTransport?.publishCalls).toBe(0);
 
+    const invalidOwner = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
+      {
+        cookie: cookieA,
+        body: {
+          expectedRevision: 1,
+          network: "testnet",
+          ownerAddress: "not-a-sui-address",
+          acknowledgePublicCiphertext: true,
+        },
+      },
+    );
+    expect(invalidOwner.response.status).toBe(400);
+    expect(invalidOwner.payload.code).toBe("crypto_evidence_walrus_owner_invalid");
+    expect(server.walrusTransport?.publishCalls).toBe(0);
+
     const published = await request(
       server.base,
       `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
       {
         cookie: cookieA,
-        body: { expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true },
+        body: {
+          expectedRevision: 1,
+          network: "testnet",
+          ownerAddress: ROUTE_SIGNER,
+          acknowledgePublicCiphertext: true,
+        },
       },
     );
     expect(published.response.status).toBe(200);
@@ -1235,11 +1273,13 @@ describe("crypto coworker HTTP boundary", () => {
       disclosure: {
         network: "testnet",
         stored: "encrypted_bytes_only",
+        ownership: "connected_wallet_only",
         publicBytesMayRemainAfterDeletion: true,
         deletionDestroysRecoveryKey: true,
       },
     });
     expect(server.walrusTransport?.publishCalls).toBe(1);
+    expect(server.walrusTransport?.ownerAddress).toBe(ROUTE_SIGNER);
     const publicPayload = server.walrusTransport?.publishedBytes.toString("utf8") ?? "";
     expect(publicPayload).toContain("matterhorn.walrus-ciphertext.v1");
     for (const privateValue of [workspaceA, ownerId, coworkerId, runId, `route-test-${runId}`]) {
@@ -1253,7 +1293,12 @@ describe("crypto coworker HTTP boundary", () => {
       `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
       {
         cookie: cookieA,
-        body: { expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true },
+        body: {
+          expectedRevision: 1,
+          network: "testnet",
+          ownerAddress: ROUTE_SIGNER,
+          acknowledgePublicCiphertext: true,
+        },
       },
     );
     expect(staleReplay.response.status).toBe(409);
@@ -1355,7 +1400,12 @@ describe("crypto coworker HTTP boundary", () => {
       `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
       {
         cookie: cookieA,
-        body: { expectedRevision: 3, network: "testnet", acknowledgePublicCiphertext: true },
+        body: {
+          expectedRevision: 3,
+          network: "testnet",
+          ownerAddress: ROUTE_SIGNER,
+          acknowledgePublicCiphertext: true,
+        },
       },
     );
     expect(publishAfterDeletion.response.status).toBe(409);
@@ -1391,7 +1441,12 @@ describe("crypto coworker HTTP boundary", () => {
       `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
       {
         cookie: cookieA,
-        body: { expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true },
+        body: {
+          expectedRevision: 1,
+          network: "testnet",
+          ownerAddress: ROUTE_SIGNER,
+          acknowledgePublicCiphertext: true,
+        },
       },
     );
     expect(published.response.status).toBe(200);
@@ -1509,6 +1564,204 @@ describe("crypto coworker HTTP boundary", () => {
     expect(replay.payload.code).toBe("crypto_evidence_walrus_renewal_expired_or_replayed");
   });
 
+  test("deletes published Walrus evidence only through one exact connected-wallet transaction", async () => {
+    const server = await boot("internal", { agentFiles: true, walrus: true });
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "evidence-delete-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "evidence-delete-b@example.com", password: PASSWORD },
+    });
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
+    const coworker = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: coworkerInput(),
+    });
+    if (!server.keyManager) throw new Error("route_test_key_manager_missing");
+    const ownerId = String(signupA.payload.user.id);
+    const coworkerId = String(coworker.payload.coworker.id);
+    const runId = "run_route_deletion_evidence";
+    const record = await seedCryptoEvidence({
+      guardedDb: server.guardedDb,
+      keyManager: server.keyManager,
+      workspaceId: workspaceA,
+      ownerId,
+      coworkerId,
+      runId,
+    });
+    const published = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
+      {
+        cookie: cookieA,
+        body: {
+          expectedRevision: 1,
+          network: "testnet",
+          ownerAddress: ROUTE_SIGNER,
+          acknowledgePublicCiphertext: true,
+        },
+      },
+    );
+    expect(published.response.status).toBe(200);
+    const list = await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieA });
+    expect(list.payload).toMatchObject({ deletionAvailable: true });
+
+    const missingConfirmation = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/delete`,
+      {
+        cookie: cookieA,
+        body: { expectedRevision: 2, network: "testnet", signer: "0x1" },
+      },
+    );
+    expect(missingConfirmation.response.status).toBe(400);
+    expect(missingConfirmation.payload.code).toBe("crypto_evidence_walrus_deletion_confirmation_required");
+    expect(server.keyManager.keys.size).toBe(1);
+
+    const crossTenant = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/delete`,
+      {
+        cookie: cookieB,
+        body: {
+          expectedRevision: 2,
+          network: "testnet",
+          signer: "0x1",
+          confirm: `delete-walrus-copy:${record.id}`,
+        },
+      },
+    );
+    expect(crossTenant.response.status).toBe(404);
+    expect(server.keyManager.keys.size).toBe(1);
+
+    const prepared = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/delete`,
+      {
+        cookie: cookieA,
+        body: {
+          expectedRevision: 2,
+          network: "testnet",
+          signer: "0x1",
+          confirm: `delete-walrus-copy:${record.id}`,
+        },
+      },
+    );
+    expect(prepared.response.status).toBe(200);
+    expect(prepared.payload).toMatchObject({
+      preview: {
+        evidenceId: record.id,
+        evidenceRevision: 2,
+        network: "testnet",
+        signer: normalizeSuiAddress("0x1"),
+        blobId: "route-agent-file-blob",
+        suiObjectId: "0x1234",
+        walletAuthority: "connected_wallet_only",
+      },
+      disclosure: {
+        network: "testnet",
+        walletAction: "delete_walrus_blob",
+        signingAndSubmission: "connected_wallet_only",
+        agentAuthority: "none",
+        recoveryKeyDestroyedAfterConfirmation: true,
+        publicTransactionMayRemain: true,
+      },
+    });
+    const preparedJson = JSON.stringify(prepared.payload);
+    for (const privateValue of [workspaceA, ownerId, coworkerId, runId]) {
+      expect(preparedJson).not.toContain(privateValue);
+    }
+    expect(preparedJson).not.toContain('"ciphertext"');
+    expect(preparedJson).not.toContain('"wrappedKey"');
+    expect(preparedJson).not.toContain('"keyReference"');
+
+    const mutated = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/delete/confirm`,
+      {
+        cookie: cookieA,
+        body: {
+          intentId: prepared.payload.preview.intentId,
+          intentHash: "0".repeat(64),
+          transactionDigest: prepared.payload.preview.transactionDigest,
+        },
+      },
+    );
+    expect(mutated.response.status).toBe(409);
+    expect(mutated.payload.code).toBe("crypto_evidence_walrus_deletion_intent_mismatch");
+    expect(server.keyManager.keys.size).toBe(1);
+
+    const confirmed = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/delete/confirm`,
+      {
+        cookie: cookieA,
+        body: {
+          intentId: prepared.payload.preview.intentId,
+          intentHash: prepared.payload.preview.intentHash,
+          transactionDigest: prepared.payload.preview.transactionDigest,
+        },
+      },
+    );
+    expect(confirmed.response.status).toBe(200);
+    expect(confirmed.payload).toMatchObject({
+      item: {
+        evidenceId: record.id,
+        revision: 3,
+        state: "key_destroyed",
+        retention: { keyAvailable: false },
+        publication: {
+          blobId: "route-agent-file-blob",
+          suiObjectId: "0x1234",
+          deletionTransactionDigest: prepared.payload.preview.transactionDigest,
+        },
+        lastVerification: {
+          status: "deleted",
+          reason: "wallet_walrus_deletion_verified",
+        },
+      },
+      verification: {
+        status: "deleted",
+        reason: "wallet_walrus_deletion_verified",
+      },
+      deletion: {
+        walrusDeletionConfirmed: true,
+        recoveryKeyDestroyed: true,
+        contentRecoverable: false,
+        publicTransactionMayRemain: true,
+      },
+    });
+    expect(server.keyManager.keys.size).toBe(0);
+
+    const replay = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/delete/confirm`,
+      {
+        cookie: cookieA,
+        body: {
+          intentId: prepared.payload.preview.intentId,
+          intentHash: prepared.payload.preview.intentHash,
+          transactionDigest: prepared.payload.preview.transactionDigest,
+        },
+      },
+    );
+    expect(replay.response.status).toBe(410);
+    expect(replay.payload.code).toBe("crypto_evidence_walrus_deletion_expired_or_replayed");
+
+    const verified = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/verify`,
+      { cookie: cookieA, method: "POST" },
+    );
+    expect(verified.response.status).toBe(200);
+    expect(verified.payload.verification).toMatchObject({
+      status: "deleted",
+      reason: "wallet_walrus_deletion_verified",
+    });
+  });
+
   test("creates, isolates, revisions, pauses and deletes account-owned coworkers", async () => {
     const server = await boot("internal");
     const signupA = await request(server.base, "/api/auth/sign-up/email", {
@@ -1533,6 +1786,7 @@ describe("crypto coworker HTTP boundary", () => {
       available: false,
       publicationAvailable: false,
       renewalAvailable: false,
+      deletionAvailable: false,
       items: [],
     });
     expect((await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieB })).response.status)

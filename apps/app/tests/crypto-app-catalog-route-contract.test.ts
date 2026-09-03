@@ -30,7 +30,7 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).toContain("Nothing published automatically");
     expect(route).toContain("No agent wallet authority");
     expect(route).toContain("client.listCryptoEvidence(workspaceId)");
-    expect(route).toContain("client.publishCryptoEvidence(workspaceId, item.evidenceId, item.revision)");
+    expect(route).toContain("client.publishCryptoEvidence(workspaceId, item.evidenceId, item.revision, account.address)");
     expect(route).toContain("client.verifyCryptoEvidence(workspaceId, item.evidenceId)");
     expect(route).toContain("client.destroyCryptoEvidenceRecoveryKey(workspaceId, item.evidenceId, item.revision)");
     expect(route).toContain("active.client.renewCryptoEvidence(workspaceId, item.evidenceId");

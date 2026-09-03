@@ -23,4 +23,18 @@ describe("encrypted evidence verification UI", () => {
     expect(source).not.toContain("Publish automatically");
     expect(source).not.toContain("Sign and publish");
   });
+
+  test("keeps Walrus deletion wallet-only, explicit, and irreversible", () => {
+    expect(source).toContain("snapshot.deletionAvailable");
+    expect(source).toContain("item.walletLifecycleReady");
+    expect(source).toContain("The Blob object will be assigned to your connected Sui wallet");
+    expect(source).toContain("deleteCryptoEvidenceWalrusCopy");
+    expect(source).toContain("confirmCryptoEvidenceWalrusDeletion");
+    expect(source).toContain("Delete encrypted copy");
+    expect(source).toContain("Delete in wallet");
+    expect(source).toContain("This cannot be undone.");
+    expect(source).toContain("The public Sui transaction may remain");
+    expect(source).toContain("await transaction.getDigest() !== prepared.preview.transactionDigest");
+    expect(source).not.toContain("agentDeleteWalrus");
+  });
 });

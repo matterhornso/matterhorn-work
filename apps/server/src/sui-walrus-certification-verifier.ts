@@ -1,5 +1,10 @@
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { isValidSuiObjectId, normalizeSuiObjectId } from "@mysten/sui/utils";
+import {
+  isValidSuiAddress,
+  isValidSuiObjectId,
+  normalizeSuiAddress,
+  normalizeSuiObjectId,
+} from "@mysten/sui/utils";
 import { blobIdToInt, walrus } from "@mysten/walrus";
 import { GrpcWebFetchTransport } from "@protobuf-ts/grpcweb-transport";
 
@@ -22,6 +27,14 @@ type WalrusBlobObject = {
 
 type SuiWalrusReadClient = {
   walrus: { getBlobObject: (objectId: string) => Promise<WalrusBlobObject> };
+  core: {
+    getObjects: (input: { objectIds: string[] }) => Promise<{
+      objects: Array<{
+        objectId: string;
+        owner: { $kind: string; AddressOwner?: string };
+      } | Error>;
+    }>;
+  };
   ledgerService: {
     getServiceInfo: (
       request: Record<string, never>,
@@ -52,6 +65,23 @@ function objectId(value: string): string {
   const normalized = normalizeSuiObjectId(value);
   if (!isValidSuiObjectId(normalized)) throw new Error("crypto_evidence_walrus_object_id_invalid");
   return normalized;
+}
+
+function addressOwner(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("crypto_evidence_walrus_owner_invalid");
+  }
+  const owner = value as { $kind?: unknown; AddressOwner?: unknown };
+  if (owner.$kind !== "AddressOwner" || typeof owner.AddressOwner !== "string") {
+    throw new Error("crypto_evidence_walrus_wallet_owner_required");
+  }
+  try {
+    const normalized = normalizeSuiAddress(owner.AddressOwner);
+    if (!isValidSuiAddress(normalized)) throw new Error();
+    return normalized;
+  } catch {
+    throw new Error("crypto_evidence_walrus_owner_invalid");
+  }
 }
 
 function defaultClient(input: Parameters<NonNullable<MatterhornSuiWalrusVerifierOptions["createClient"]>>[0]): SuiWalrusReadClient {
@@ -96,10 +126,19 @@ export function createPinnedSuiWalrusCertificationVerifier(
       onObservation: options.onObservation,
     });
     const serviceInfoCall = client.ledgerService.getServiceInfo({}, { abort: input.signal });
-    const [blob, serviceInfo] = await Promise.all([
+    const [blob, serviceInfo, objectResponse] = await Promise.all([
       client.walrus.getBlobObject(expectedObjectId),
       serviceInfoCall.response,
+      client.core.getObjects({ objectIds: [expectedObjectId] }),
     ]);
+    if (objectResponse.objects.length !== 1 || objectResponse.objects[0] instanceof Error) {
+      throw new Error("crypto_evidence_walrus_object_binding_missing");
+    }
+    const object = objectResponse.objects[0];
+    if (objectId(object.objectId) !== expectedObjectId) {
+      throw new Error("crypto_evidence_walrus_object_binding_mismatch");
+    }
+    const ownerAddress = addressOwner(object.owner);
     const observedObjectId = objectId(blob.id);
     if (observedObjectId !== expectedObjectId) throw new Error("crypto_evidence_walrus_object_binding_mismatch");
     let observedBlobId: bigint;
@@ -124,6 +163,7 @@ export function createPinnedSuiWalrusCertificationVerifier(
       currentEpoch,
       validUntilEpoch,
       deletable: blob.deletable === true,
+      ownerAddress,
       suiTransactionDigest: null,
     };
   };

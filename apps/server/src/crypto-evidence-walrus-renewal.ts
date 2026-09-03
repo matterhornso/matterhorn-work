@@ -17,7 +17,10 @@ import type {
 } from "./agent-file-walrus-renewal.js";
 import { cryptoEvidenceAccountPacket } from "./crypto-evidence-verification.js";
 import type { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
-import type { MatterhornWalrusCertificationVerifier } from "./crypto-evidence-walrus-publisher.js";
+import {
+  matterhornWalrusOwnerAddressHash,
+  type MatterhornWalrusCertificationVerifier,
+} from "./crypto-evidence-walrus-publisher.js";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 import { assessMatterhornWalrusStorageLifecycle } from "./walrus-storage-lifecycle.js";
@@ -208,6 +211,10 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
     if (record.state !== "published" || !record.envelope || !proof) {
       fail("crypto_evidence_walrus_renewal_state_invalid");
     }
+    if (!record.walrusOwnerAddressHash
+      || record.walrusOwnerAddressHash !== matterhornWalrusOwnerAddressHash(signer)) {
+      fail("crypto_evidence_walrus_wallet_owner_required");
+    }
     let certification;
     try {
       certification = await this.verifyCertification({
@@ -225,7 +232,8 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
       || certification.suiObjectId !== proof.suiObjectId
       || certification.certifiedEpoch !== proof.certifiedEpoch
       || certification.validUntilEpoch !== proof.validUntilEpoch
-      || certification.suiTransactionDigest !== proof.suiTransactionDigest) {
+      || certification.suiTransactionDigest !== proof.suiTransactionDigest
+      || certification.ownerAddress !== signer) {
       fail("crypto_evidence_walrus_certification_changed");
     }
     const lifecycle = assessMatterhornWalrusStorageLifecycle({
@@ -353,12 +361,16 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
       || certification.blobId !== preview.blobId
       || certification.suiObjectId !== preview.suiObjectId
       || certification.validUntilEpoch !== preview.targetValidUntilEpoch
-      || certification.currentEpoch >= certification.validUntilEpoch) {
+      || certification.currentEpoch >= certification.validUntilEpoch
+      || certification.ownerAddress !== preview.signer) {
       fail("crypto_evidence_walrus_renewal_certification_mismatch");
     }
     const current = this.store.get(input);
     const currentProof = current?.walrusProof;
     if (!current || !currentProof) fail("crypto_evidence_walrus_renewal_state_invalid");
+    if (current.walrusOwnerAddressHash !== matterhornWalrusOwnerAddressHash(preview.signer)) {
+      fail("crypto_evidence_walrus_wallet_owner_required");
+    }
     const renewedProof: MatterhornWalrusProof = {
       ...currentProof,
       validUntilEpoch: certification.validUntilEpoch,

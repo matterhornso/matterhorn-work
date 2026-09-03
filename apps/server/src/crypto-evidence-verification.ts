@@ -43,6 +43,7 @@ export function cryptoEvidenceAccountPacket(
       expiresAt: record.index.expiresAt,
       keyAvailable: record.state !== "key_destroyed",
     },
+    walletLifecycleReady: Boolean(record.walrusOwnerAddressHash),
     publication: record.walrusProof ? structuredClone(record.walrusProof) : null,
     lastVerification: lastVerification ? structuredClone(lastVerification) : null,
   };
@@ -133,6 +134,18 @@ export class MatterhornCryptoEvidenceVerificationService {
       suiCertification: false,
       walrusReadback: false,
     };
+    if (record.state === "key_destroyed" && record.walrusProof?.deletionTransactionDigest) {
+      return this.persistResult(record, {
+        status: "deleted",
+        verifiedAt: verifiedAt.toISOString(),
+        checks: {
+          ...baseChecks,
+          suiCertification: true,
+        },
+        currentEpoch: null,
+        reason: "wallet_walrus_deletion_verified",
+      });
+    }
     if (record.state === "key_destroyed") {
       return this.persistResult(record, {
         status: "key_destroyed",

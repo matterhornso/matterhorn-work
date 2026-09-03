@@ -143,6 +143,8 @@ import type {
   MatterhornEvidencePublicationResponse,
   MatterhornEvidenceRecoveryKeyDeletionResponse,
   MatterhornEvidenceVerificationResult,
+  MatterhornCryptoEvidenceWalrusDeletionConfirmResponse,
+  MatterhornCryptoEvidenceWalrusDeletionPrepareResponse,
   MatterhornCryptoEvidenceWalrusRenewalConfirmResponse,
   MatterhornCryptoEvidenceWalrusRenewalPrepareResponse,
   MatterhornStoredAgentFile,
@@ -2366,6 +2368,7 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       workspaceId: string,
       evidenceId: string,
       expectedRevision: number,
+      ownerAddress: string,
     ) => requestJson<MatterhornEvidencePublicationResponse>(
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/publish`,
@@ -2376,6 +2379,7 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         body: {
           expectedRevision,
           network: "testnet",
+          ownerAddress,
           acknowledgePublicCiphertext: true,
         },
         timeoutMs: timeouts.binary,
@@ -2408,6 +2412,35 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     ) => requestJson<MatterhornCryptoEvidenceWalrusRenewalConfirmResponse>(
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/renew/confirm`,
+      { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.binary },
+    ),
+    deleteCryptoEvidenceWalrusCopy: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { expectedRevision: number; signer: string },
+    ) => requestJson<MatterhornCryptoEvidenceWalrusDeletionPrepareResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/delete`,
+      {
+        token,
+        hostToken,
+        method: "POST",
+        body: {
+          expectedRevision: input.expectedRevision,
+          network: "testnet",
+          signer: input.signer,
+          confirm: `delete-walrus-copy:${evidenceId}`,
+        },
+        timeoutMs: timeouts.binary,
+      },
+    ),
+    confirmCryptoEvidenceWalrusDeletion: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { intentId: string; intentHash: string; transactionDigest: string },
+    ) => requestJson<MatterhornCryptoEvidenceWalrusDeletionConfirmResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/delete/confirm`,
       { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.binary },
     ),
     destroyCryptoEvidenceRecoveryKey: (

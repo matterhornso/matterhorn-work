@@ -630,6 +630,12 @@ import {
   type MatterhornCryptoEvidenceWalrusRenewalService,
 } from "./crypto-evidence-walrus-renewal.js";
 import {
+  createPinnedWalrusDeletionTransactionBuilder,
+  MatterhornCryptoEvidenceWalrusDeletionError,
+  type MatterhornCryptoEvidenceWalrusDeletionService,
+  type MatterhornWalrusDeletionTransactionBuilder,
+} from "./crypto-evidence-walrus-deletion.js";
+import {
   agentSecurityReceiptDirectory,
   purgeAllExpiredAgentRunReceipts,
 } from "./agent-run-receipts.js";
@@ -1355,6 +1361,7 @@ export type MatterhornServerDependencies = {
   agentFileWalrusTransport?: MatterhornWalrusEvidenceTransport;
   agentFileWalrusCertificationVerifier?: MatterhornWalrusCertificationVerifier;
   agentFileWalrusRenewalTransactionBuilder?: MatterhornWalrusRenewalTransactionBuilder;
+  cryptoEvidenceWalrusDeletionTransactionBuilder?: MatterhornWalrusDeletionTransactionBuilder;
   agentFileWalrusTransactionStatusVerifier?: MatterhornSuiTransactionStatusVerifier;
 };
 
@@ -1460,6 +1467,17 @@ export async function startServer(
       verifyTransaction: suiTransactionStatusVerifier,
       verifyCertification: cryptoEvidenceRuntime.certificationVerifier,
       extensionEpochs: matterhornCryptoEvidenceStorageEpochs(process.env),
+    })
+    : null;
+  const cryptoEvidenceWalrusDeletion: MatterhornCryptoEvidenceWalrusDeletionService | null = cryptoEvidenceStore
+    && cryptoEvidenceRuntime.publisher
+    && cryptoEvidenceRuntime.certificationVerifier
+    ? guardedRuntime.createCryptoEvidenceWalrusDeletionService({
+      store: cryptoEvidenceStore,
+      buildTransaction: dependencies.cryptoEvidenceWalrusDeletionTransactionBuilder
+        ?? createPinnedWalrusDeletionTransactionBuilder({ endpoint: SUI_GRPC_URLS.testnet }),
+      verifyTransaction: suiTransactionStatusVerifier,
+      verifyCertification: cryptoEvidenceRuntime.certificationVerifier,
     })
     : null;
   guardedRuntime.setCoworkerResolver((binding) => (
@@ -1673,6 +1691,7 @@ export async function startServer(
     cryptoEvidenceStore,
     cryptoEvidenceRuntime,
     cryptoEvidenceWalrusRenewal,
+    cryptoEvidenceWalrusDeletion,
     agentFileStore,
     agentFileWalrusPublisher,
     agentFileWalrusRenewal,
@@ -3824,6 +3843,9 @@ function cryptoEvidencePublicationApiError(error: unknown): ApiError {
   if (code === "crypto_evidence_walrus_aborted") {
     return new ApiError(408, code, "Storing the encrypted copy was cancelled. Nothing was attached.");
   }
+  if (code === "crypto_evidence_walrus_owner_invalid") {
+    return new ApiError(400, code, "Connect a valid Sui testnet wallet.");
+  }
   return new ApiError(
     503,
     "crypto_evidence_publication_unavailable",
@@ -3838,6 +3860,9 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
     }
     if (error.code === "crypto_evidence_walrus_renewal_signer_invalid") {
       return new ApiError(400, error.code, "Connect a valid Sui testnet wallet.");
+    }
+    if (error.code === "crypto_evidence_walrus_wallet_owner_required") {
+      return new ApiError(409, error.code, "This encrypted copy is not owned by that wallet.");
     }
     if (error.code === "crypto_evidence_walrus_certification_expired"
       || error.code === "crypto_evidence_walrus_renewal_expired_or_replayed") {
@@ -3867,6 +3892,51 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
     503,
     "crypto_evidence_walrus_renewal_unavailable",
     "The encrypted copy could not be renewed safely. Nothing was changed.",
+  );
+}
+
+function cryptoEvidenceDeletionApiError(error: unknown): ApiError {
+  if (error instanceof MatterhornCryptoEvidenceWalrusDeletionError) {
+    if (error.code === "crypto_evidence_not_found") {
+      return new ApiError(404, error.code, "Evidence record not found.");
+    }
+    if (error.code === "crypto_evidence_walrus_deletion_signer_invalid") {
+      return new ApiError(400, error.code, "Connect a valid Sui testnet wallet.");
+    }
+    if (error.code === "crypto_evidence_walrus_wallet_owner_required") {
+      return new ApiError(409, error.code, "This encrypted copy is not owned by that wallet.");
+    }
+    if (error.code === "crypto_evidence_walrus_certification_expired"
+      || error.code === "crypto_evidence_walrus_deletion_expired_or_replayed") {
+      return new ApiError(410, error.code, "This deletion expired or was already used. Prepare a new deletion.");
+    }
+    if (error.code === "crypto_evidence_walrus_not_deletable") {
+      return new ApiError(409, error.code, "This Walrus copy was not created as deletable.");
+    }
+    if (error.code === "crypto_evidence_walrus_deletion_in_progress") {
+      return new ApiError(409, error.code, "A wallet deletion is already waiting for this evidence.");
+    }
+    if (error.code === "crypto_evidence_walrus_deletion_transaction_failed") {
+      return new ApiError(409, error.code, "The wallet transaction failed. Prepare a new deletion.");
+    }
+    if (error.code.includes("mismatch") || error.code.endsWith("_invalid")) {
+      return new ApiError(409, error.code, "The deletion changed or could not be verified. Prepare it again.");
+    }
+  }
+  const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
+  if (code === "crypto_evidence_not_found") {
+    return new ApiError(404, code, "Evidence record not found.");
+  }
+  if (code === "crypto_evidence_revision_conflict") {
+    return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
+  }
+  if (code === "crypto_evidence_operation_in_progress") {
+    return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
+  }
+  return new ApiError(
+    503,
+    "crypto_evidence_walrus_deletion_unavailable",
+    "The encrypted Walrus copy could not be deleted safely. Nothing was changed.",
   );
 }
 
@@ -8931,6 +9001,7 @@ function createRoutes(
   cryptoEvidenceStore: MatterhornCryptoEvidenceStore | null,
   cryptoEvidenceRuntime: MatterhornCryptoEvidenceRuntime,
   cryptoEvidenceWalrusRenewal: MatterhornCryptoEvidenceWalrusRenewalService | null,
+  cryptoEvidenceWalrusDeletion: MatterhornCryptoEvidenceWalrusDeletionService | null,
   agentFileStore: MatterhornAgentFileStore | null,
   agentFileWalrusPublisher: MatterhornAgentFileWalrusPublisher | null,
   agentFileWalrusRenewal: MatterhornAgentFileWalrusRenewalService | null,
@@ -10275,6 +10346,7 @@ function createRoutes(
       available: cryptoEvidenceRuntime.available,
       publicationAvailable: cryptoEvidenceRuntime.publicationAvailable,
       renewalAvailable: Boolean(cryptoEvidenceWalrusRenewal),
+      deletionAvailable: Boolean(cryptoEvidenceWalrusDeletion),
       items,
     });
   });
@@ -10308,10 +10380,11 @@ function createRoutes(
         : null;
       if (!isRecord(body)
         || Object.keys(body).some((key) => ![
-          "expectedRevision", "network", "acknowledgePublicCiphertext",
+          "expectedRevision", "network", "ownerAddress", "acknowledgePublicCiphertext",
         ].includes(key))
         || expectedRevision === null
         || body.network !== "testnet"
+        || typeof body.ownerAddress !== "string"
         || body.acknowledgePublicCiphertext !== true) {
         throw new ApiError(
           400,
@@ -10325,6 +10398,7 @@ function createRoutes(
           ownerId: cryptoAppCreatedBy(ctx),
           evidenceId,
           expectedRevision,
+          ownerAddress: body.ownerAddress,
           signal: ctx.request.signal,
         });
         return noStoreJsonResponse({
@@ -10332,6 +10406,7 @@ function createRoutes(
           disclosure: {
             network: "testnet",
             stored: "encrypted_bytes_only",
+            ownership: "connected_wallet_only",
             publicBytesMayRemainAfterDeletion: true,
             deletionDestroysRecoveryKey: true,
           },
@@ -10440,6 +10515,108 @@ function createRoutes(
         }));
       } catch (error) {
         throw cryptoEvidenceRenewalApiError(error);
+      }
+    },
+  );
+
+  addRoute(
+    routes,
+    "POST",
+    "/workspace/:id/crypto-evidence/:evidenceId/delete",
+    "client",
+    async (ctx) => {
+      ensureWritable(config);
+      requireClientScope(ctx, "collaborator");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const evidenceId = ctx.params.evidenceId?.trim() ?? "";
+      if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+      }
+      if (!cryptoEvidenceWalrusDeletion) {
+        throw new ApiError(
+          503,
+          "crypto_evidence_walrus_deletion_unavailable",
+          "Encrypted Walrus deletion is not enabled for this deployment.",
+        );
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Encrypted evidence deletion");
+      const expectedRevision = isRecord(body)
+        && typeof body.expectedRevision === "number"
+        && Number.isSafeInteger(body.expectedRevision)
+        && body.expectedRevision > 0
+        ? body.expectedRevision
+        : null;
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => ![
+          "expectedRevision", "network", "signer", "confirm",
+        ].includes(key))
+        || expectedRevision === null
+        || body.network !== "testnet"
+        || typeof body.signer !== "string"
+        || body.confirm !== `delete-walrus-copy:${evidenceId}`) {
+        throw new ApiError(
+          400,
+          "crypto_evidence_walrus_deletion_confirmation_required",
+          "Confirm deletion of this encrypted Walrus copy and its Matterhorn recovery key.",
+        );
+      }
+      try {
+        return noStoreJsonResponse(await cryptoEvidenceWalrusDeletion.prepare({
+          workspaceId: workspace.id,
+          ownerId: cryptoAppCreatedBy(ctx),
+          evidenceId,
+          expectedRevision,
+          signer: body.signer,
+          signal: ctx.request.signal,
+        }));
+      } catch (error) {
+        throw cryptoEvidenceDeletionApiError(error);
+      }
+    },
+  );
+
+  addRoute(
+    routes,
+    "POST",
+    "/workspace/:id/crypto-evidence/:evidenceId/delete/confirm",
+    "client",
+    async (ctx) => {
+      ensureWritable(config);
+      requireClientScope(ctx, "collaborator");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const evidenceId = ctx.params.evidenceId?.trim() ?? "";
+      if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+      }
+      if (!cryptoEvidenceWalrusDeletion) {
+        throw new ApiError(
+          503,
+          "crypto_evidence_walrus_deletion_unavailable",
+          "Encrypted Walrus deletion is not enabled for this deployment.",
+        );
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Encrypted evidence deletion confirmation");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => ![
+          "intentId", "intentHash", "transactionDigest",
+        ].includes(key))
+        || typeof body.intentId !== "string"
+        || typeof body.intentHash !== "string"
+        || typeof body.transactionDigest !== "string") {
+        throw new ApiError(400, "crypto_evidence_walrus_deletion_input_invalid", "Deletion confirmation is invalid.");
+      }
+      try {
+        return noStoreJsonResponse(await cryptoEvidenceWalrusDeletion.confirm({
+          workspaceId: workspace.id,
+          ownerId: cryptoAppCreatedBy(ctx),
+          evidenceId,
+          intentId: body.intentId,
+          intentHash: body.intentHash,
+          transactionDigest: body.transactionDigest,
+          signal: ctx.request.signal,
+        }));
+      } catch (error) {
+        throw cryptoEvidenceDeletionApiError(error);
       }
     },
   );

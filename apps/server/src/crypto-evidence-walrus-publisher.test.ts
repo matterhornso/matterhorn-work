@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 import type { MatterhornAgentRunReceipt } from "@matterhorn-work/types/guarded-agent-runtime";
 
@@ -13,11 +14,14 @@ import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import {
   createPinnedWalrusEvidenceTransport,
   MATTERHORN_WALRUS_EVIDENCE_CONTENT_TYPE,
+  matterhornWalrusOwnerAddressHash,
   MatterhornTestnetWalrusEvidencePublisher,
   type MatterhornWalrusCertification,
   type MatterhornWalrusEvidenceTransport,
 } from "./crypto-evidence-walrus-publisher.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+
+const WALLET_OWNER = normalizeSuiAddress("0xabc");
 
 function receipt(input: { id?: string; runId?: string } = {}): MatterhornAgentRunReceipt {
   return {
@@ -148,6 +152,7 @@ describe("testnet Walrus evidence publisher", () => {
         publish: async (input) => {
           publishedBytes = Buffer.from(input.bytes);
           expect(input.storageEpochs).toBe(5);
+          expect(input.ownerAddress).toBe(WALLET_OWNER);
           return { blobId: "blob-testnet-1", suiObjectId: "0x1234", declaredEndEpoch: 110 };
         },
         readByObjectId: async ({ suiObjectId }) => {
@@ -158,16 +163,18 @@ describe("testnet Walrus evidence publisher", () => {
       const publisher = new MatterhornTestnetWalrusEvidencePublisher(
         value.store,
         transport,
-        async () => certification(),
+        async () => certification({ ownerAddress: WALLET_OWNER }),
       );
       const published = await publisher.publish({
         workspaceId: "workspace_walrus",
         ownerId: "owner_walrus",
         evidenceId: value.record.id,
         expectedRevision: value.record.revision,
+        ownerAddress: "0xabc",
         signal: new AbortController().signal,
       });
       expect(published.state).toBe("published");
+      expect(published.walrusOwnerAddressHash).toBe(matterhornWalrusOwnerAddressHash(WALLET_OWNER));
       expect(published.walrusProof).toMatchObject({
         network: "testnet",
         blobId: "blob-testnet-1",
@@ -187,7 +194,7 @@ describe("testnet Walrus evidence publisher", () => {
         ownerId: "owner_walrus",
         evidenceId: value.record.id,
         signal: new AbortController().signal,
-      })).resolves.toEqual({ certification: certification() });
+      })).resolves.toEqual({ certification: certification({ ownerAddress: WALLET_OWNER }) });
       await expect(publisher.verify({
         workspaceId: "workspace_walrus",
         ownerId: "attacker_owner",
@@ -276,6 +283,83 @@ describe("testnet Walrus evidence publisher", () => {
         value.state.close();
         await rm(value.directory, { recursive: true, force: true });
       }
+    }
+  });
+
+  test("rejects publication when the certified Blob owner differs from the requested wallet", async () => {
+    const value = await fixture();
+    try {
+      let uploaded = Buffer.alloc(0);
+      const transport: MatterhornWalrusEvidenceTransport = {
+        publish: async ({ bytes }) => {
+          uploaded = Buffer.from(bytes);
+          return { blobId: "blob-testnet-1", suiObjectId: "0x1234", declaredEndEpoch: 110 };
+        },
+        readByObjectId: async () => Buffer.from(uploaded),
+      };
+      const publisher = new MatterhornTestnetWalrusEvidencePublisher(
+        value.store,
+        transport,
+        async () => certification({ ownerAddress: normalizeSuiAddress("0xdef") }),
+      );
+      await expect(publisher.publish({
+        workspaceId: "workspace_walrus",
+        ownerId: "owner_walrus",
+        evidenceId: value.record.id,
+        expectedRevision: value.record.revision,
+        ownerAddress: WALLET_OWNER,
+        signal: new AbortController().signal,
+      })).rejects.toThrow("crypto_evidence_walrus_certification_invalid");
+      expect(value.store.get({
+        workspaceId: "workspace_walrus",
+        ownerId: "owner_walrus",
+        evidenceId: value.record.id,
+      })?.state).toBe("sealed");
+    } finally {
+      value.state.close();
+      await rm(value.directory, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects an invalid wallet owner before claiming the evidence record", async () => {
+    const value = await fixture();
+    try {
+      let uploaded = Buffer.alloc(0);
+      let publishCalls = 0;
+      const transport: MatterhornWalrusEvidenceTransport = {
+        publish: async ({ bytes }) => {
+          publishCalls += 1;
+          uploaded = Buffer.from(bytes);
+          return { blobId: "blob-testnet-1", suiObjectId: "0x1234", declaredEndEpoch: 110 };
+        },
+        readByObjectId: async () => Buffer.from(uploaded),
+      };
+      const publisher = new MatterhornTestnetWalrusEvidencePublisher(
+        value.store,
+        transport,
+        async () => certification({ ownerAddress: WALLET_OWNER }),
+      );
+      const input = {
+        workspaceId: "workspace_walrus",
+        ownerId: "owner_walrus",
+        evidenceId: value.record.id,
+        expectedRevision: value.record.revision,
+        signal: new AbortController().signal,
+      };
+      await expect(publisher.publish({
+        ...input,
+        ownerAddress: "not-a-sui-address",
+      })).rejects.toThrow("crypto_evidence_walrus_owner_invalid");
+      expect(publishCalls).toBe(0);
+
+      await expect(publisher.publish({
+        ...input,
+        ownerAddress: WALLET_OWNER,
+      })).resolves.toMatchObject({ state: "published", revision: 2 });
+      expect(publishCalls).toBe(1);
+    } finally {
+      value.state.close();
+      await rm(value.directory, { recursive: true, force: true });
     }
   });
 
@@ -521,6 +605,7 @@ describe("testnet Walrus evidence publisher", () => {
       bytes: body,
       ciphertextHash: hash(body),
       storageEpochs: 5,
+      ownerAddress: "0xabc",
       signal: new AbortController().signal,
     });
     expect(upload).toEqual({ blobId: "blob-testnet-1", suiObjectId: "0x1234", declaredEndEpoch: 110 });
@@ -535,7 +620,9 @@ describe("testnet Walrus evidence publisher", () => {
       signal: new AbortController().signal,
     })).toEqual(body);
     expect(requests).toHaveLength(2);
-    expect((requests[0]?.endpoint as URL).href).toBe("https://publisher.example.test/base/v1/blobs?epochs=5");
+    expect((requests[0]?.endpoint as URL).href).toBe(
+      `https://publisher.example.test/base/v1/blobs?epochs=5&deletable=true&send_object_to=${WALLET_OWNER}`,
+    );
     expect(requests[0]).toMatchObject({
       method: "PUT",
       headers: {
