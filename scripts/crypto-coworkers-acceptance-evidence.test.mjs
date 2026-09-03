@@ -34,6 +34,41 @@ function evidence(name) {
   return { path, sha256: sha256(content) };
 }
 
+function jsonEvidence(name, value) {
+  const path = `${name}.json`;
+  const content = `${JSON.stringify(value, null, 2)}\n`;
+  writeFileSync(join(directory, path), content);
+  return { path, sha256: sha256(content) };
+}
+
+function sdkProvenance(sourceCommit = commit) {
+  return {
+    version: "matterhorn.crypto-app-sdk-provenance.v1",
+    decision: "GO",
+    package: {
+      name: "@matterhorn-work/crypto-app-sdk",
+      version: "0.1.0",
+      registry: "https://registry.npmjs.org/",
+      integrity: "sha512",
+    },
+    source: {
+      repository: "https://github.com/matterhornso/matterhorn-work",
+      commit: sourceCommit,
+      workflow: ".github/workflows/publish-crypto-app-sdk.yml",
+      workflowRef: "refs/tags/crypto-app-sdk-v0.1.0",
+      builder: "https://github.com/actions/runner/github-hosted",
+      invocation: "https://github.com/matterhornso/matterhorn-work/actions/runs/123/attempts/1",
+    },
+    checks: {
+      registrySignature: "verified",
+      publishAttestation: "verified",
+      provenanceAttestation: "verified",
+      transparencyLog: "verified",
+      lifecycleScripts: "disabled_during_verification",
+    },
+  };
+}
+
 const coworkerCommon = {
   status: "pass",
   created: true,
@@ -139,6 +174,7 @@ const input = {
     claudeCodeGuardedClient: true, genericMcpGuardedClient: true, meteringTenantSafe: true,
     sdkPackageGate: true, sdkPublished: true, packageProvenanceVerified: true,
     evidence: evidence("developer-platform"),
+    sdkProvenance: jsonEvidence("crypto-app-sdk-provenance", sdkProvenance()),
   },
   designPartners: {
     status: "pass", count: 3, inviteOnly: true, noChatCredentials: true,
@@ -219,6 +255,7 @@ try {
   assert.equal(pending.coworkers.transactionCoordinator.walletReviewRequired, false);
   assert.equal(pending.encryptedEvidence.recoveryKeyDestroyed, false);
   assert.equal(pending.developerPlatform.sdkPublished, false);
+  assert.equal(pending.developerPlatform.sdkProvenance.path, "reports/crypto-app-sdk-provenance.json");
   assert.equal(pending.rollout.hours, 0);
   assert.match(pending.runtime.evidence.path, /^reports\//);
   assert.equal(pending.runtime.evidence.sha256, "REPLACE_WITH_SHA256_AFTER_REDACTED_REPORT_REVIEW");
@@ -271,6 +308,32 @@ try {
   });
   assert.equal(runtimeMismatch.code, 1);
   assert.ok(JSON.parse(runtimeMismatch.stdout).blockers.some((item) => item.id === "runtime_compatibility"));
+
+  const wrongSdkCommit = structuredClone(input);
+  wrongSdkCommit.developerPlatform.sdkProvenance = jsonEvidence(
+    "crypto-app-sdk-provenance-wrong-commit",
+    sdkProvenance("b".repeat(40)),
+  );
+  const wrongSdkCommitResult = await run(wrongSdkCommit);
+  assert.equal(wrongSdkCommitResult.code, 1);
+  assert.ok(JSON.parse(wrongSdkCommitResult.stdout).blockers.some((item) => item.id === "developer_platform"));
+
+  const unclosedSdkReport = sdkProvenance();
+  unclosedSdkReport.attestationBundles = ["must-not-enter-acceptance"];
+  const unclosedSdkEvidence = structuredClone(input);
+  unclosedSdkEvidence.developerPlatform.sdkProvenance = jsonEvidence(
+    "crypto-app-sdk-provenance-unclosed",
+    unclosedSdkReport,
+  );
+  const unclosedSdkResult = await run(unclosedSdkEvidence);
+  assert.equal(unclosedSdkResult.code, 1);
+  assert.ok(JSON.parse(unclosedSdkResult.stdout).blockers.some((item) => item.id === "developer_platform"));
+
+  const missingSdkProof = structuredClone(input);
+  delete missingSdkProof.developerPlatform.sdkProvenance;
+  const missingSdkProofResult = await run(missingSdkProof);
+  assert.equal(missingSdkProofResult.code, 1);
+  assert.ok(JSON.parse(missingSdkProofResult.stdout).blockers.some((item) => item.id === "developer_platform"));
 
   const localUrl = await run({ ...input, appUrl: "https://localhost/workspace/example" });
   assert.equal(localUrl.code, 1);

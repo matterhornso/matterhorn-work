@@ -12,6 +12,13 @@ const MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
 const HASH_PATTERN = /^[a-f0-9]{64}$/i;
 const COMMIT_PATTERN = /^[a-f0-9]{40}$/i;
+const SDK_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const SDK_PROVENANCE_VERSION = "matterhorn.crypto-app-sdk-provenance.v1";
+const SDK_PACKAGE = "@matterhorn-work/crypto-app-sdk";
+const SDK_REGISTRY = "https://registry.npmjs.org/";
+const SDK_REPOSITORY = "https://github.com/matterhornso/matterhorn-work";
+const SDK_WORKFLOW = ".github/workflows/publish-crypto-app-sdk.yml";
+const SDK_BUILDER = "https://github.com/actions/runner/github-hosted";
 const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const FORBIDDEN_KEYS = new Set([
   "token",
@@ -248,6 +255,10 @@ function buildPendingTemplate(config) {
         "packageProvenanceVerified",
       ]),
       evidence: pendingEvidence("developer-platform"),
+      sdkProvenance: {
+        path: "reports/crypto-app-sdk-provenance.json",
+        sha256: "REPLACE_WITH_SHA256_AFTER_REDACTED_REPORT_REVIEW",
+      },
     },
     designPartners: {
       status: "pending",
@@ -321,28 +332,81 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function evidenceReferenceReady(reference, evidencePath) {
-  if (!reference || typeof reference !== "object" || Array.isArray(reference)) return false;
-  if (Object.keys(reference).some((key) => !["path", "sha256"].includes(key))) return false;
-  if (typeof reference.path !== "string" || !reference.path.trim() || isAbsolute(reference.path)) return false;
-  if (!HASH_PATTERN.test(reference.sha256 ?? "")) return false;
+function readEvidenceReference(reference, evidencePath) {
+  if (!reference || typeof reference !== "object" || Array.isArray(reference)) return null;
+  if (Object.keys(reference).some((key) => !["path", "sha256"].includes(key))) return null;
+  if (typeof reference.path !== "string" || !reference.path.trim() || isAbsolute(reference.path)) return null;
+  if (!HASH_PATTERN.test(reference.sha256 ?? "")) return null;
   const base = resolve(dirname(evidencePath));
   const target = resolve(base, reference.path);
   const offset = relative(base, target);
-  if (!offset || offset.startsWith("..") || isAbsolute(offset)) return false;
+  if (!offset || offset.startsWith("..") || isAbsolute(offset)) return null;
   let descriptor;
   try {
     descriptor = openSync(target, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
     const stat = fstatSync(descriptor);
-    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_EVIDENCE_BYTES) return false;
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_EVIDENCE_BYTES) return null;
     const content = readFileSync(descriptor);
-    if (sha256(content) !== reference.sha256.toLowerCase()) return false;
+    if (sha256(content) !== reference.sha256.toLowerCase()) return null;
     const text = content.toString("utf8");
-    return !FORBIDDEN_EVIDENCE_PATTERNS.some((pattern) => pattern.test(text));
+    if (FORBIDDEN_EVIDENCE_PATTERNS.some((pattern) => pattern.test(text))) return null;
+    return content;
   } catch {
-    return false;
+    return null;
   } finally {
     if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
+function evidenceReferenceReady(reference, evidencePath) {
+  return Buffer.isBuffer(readEvidenceReference(reference, evidencePath));
+}
+
+function exactKeys(value, keys) {
+  return Boolean(value)
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.keys(value).length === keys.length
+    && keys.every((key) => Object.hasOwn(value, key));
+}
+
+function sdkProvenanceReady(reference, evidencePath, expectedCommit) {
+  const content = readEvidenceReference(reference, evidencePath);
+  if (!Buffer.isBuffer(content)) return false;
+  try {
+    const report = JSON.parse(content.toString("utf8"));
+    rejectSensitiveKeys(report, "sdkProvenance");
+    if (!exactKeys(report, ["version", "decision", "package", "source", "checks"])) return false;
+    if (!exactKeys(report.package, ["name", "version", "registry", "integrity"])) return false;
+    if (!exactKeys(report.source, ["repository", "commit", "workflow", "workflowRef", "builder", "invocation"])) return false;
+    if (!exactKeys(report.checks, [
+      "registrySignature",
+      "publishAttestation",
+      "provenanceAttestation",
+      "transparencyLog",
+      "lifecycleScripts",
+    ])) return false;
+    const invocationPattern = /^https:\/\/github\.com\/matterhornso\/matterhorn-work\/actions\/runs\/[1-9]\d*\/attempts\/[1-9]\d*$/;
+    return report.version === SDK_PROVENANCE_VERSION
+      && report.decision === "GO"
+      && report.package.name === SDK_PACKAGE
+      && SDK_VERSION_PATTERN.test(report.package.version ?? "")
+      && report.package.registry === SDK_REGISTRY
+      && report.package.integrity === "sha512"
+      && report.source.repository === SDK_REPOSITORY
+      && report.source.commit === expectedCommit
+      && report.source.workflow === SDK_WORKFLOW
+      && typeof report.source.workflowRef === "string"
+      && report.source.workflowRef.startsWith("refs/")
+      && report.source.builder === SDK_BUILDER
+      && invocationPattern.test(report.source.invocation ?? "")
+      && report.checks.registrySignature === "verified"
+      && report.checks.publishAttestation === "verified"
+      && report.checks.provenanceAttestation === "verified"
+      && report.checks.transparencyLog === "verified"
+      && report.checks.lifecycleScripts === "disabled_during_verification";
+  } catch {
+    return false;
   }
 }
 
@@ -395,7 +459,7 @@ function validateClosedInput(input) {
     "failedOutcomeVisible", "passedOutcomeVisible", "inviteSingleUse",
     "connectionWithoutChatCredentials", "codexGuardedClient", "claudeCodeGuardedClient",
     "genericMcpGuardedClient", "meteringTenantSafe", "sdkPackageGate", "sdkPublished",
-    "packageProvenanceVerified", "evidence",
+    "packageProvenanceVerified", "evidence", "sdkProvenance",
   ], "evidence.developerPlatform");
   onlyKeys(input.designPartners, [
     "status", "count", "inviteOnly", "noChatCredentials", "noWalletAuthority", "evidence",
@@ -564,7 +628,8 @@ function evaluate(input, config) {
       "sdkPackageGate",
       "sdkPublished",
       "packageProvenanceVerified",
-    ], config.evidence),
+    ], config.evidence)
+      && sdkProvenanceReady(developer?.sdkProvenance, config.evidence, config.expectedCommit),
     developer?.evidence,
   );
 
