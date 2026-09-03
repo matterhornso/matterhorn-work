@@ -34,7 +34,7 @@ const QUERY_PREFIX = "crypto-app-catalog";
 
 function userMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
-    if (error.code === "crypto_app_gateway_disabled") return "Coworker apps are not enabled for this invite yet.";
+    if (error.code === "crypto_app_gateway_disabled") return "App connections are currently unavailable.";
     if (error.code === "crypto_app_connection_flow_required") return "This app needs a managed connection flow that is not available in this release.";
     if (error.code === "crypto_app_managed_credential_unavailable") return "This app connection is not ready yet. Ask your workspace owner to finish its secure setup.";
     if (error.code === "app_certification_unavailable") return "This app did not pass its latest safety check. Refresh before reconnecting.";

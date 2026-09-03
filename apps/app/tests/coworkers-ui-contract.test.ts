@@ -257,9 +257,16 @@ describe("chat-operated coworker UI", () => {
       ready: false,
       loading: false,
       loadFailed: true,
-      connectionsAvailable: true,
       connectedAppCount: 0,
     })).toMatchObject({ action: "reload", label: "Reload setup" });
+    expect(resolveCoworkerNextStep({
+      coworkerState: "active",
+      ready: false,
+      loading: false,
+      loadFailed: false,
+      connectionsAvailable: false,
+      connectedAppCount: 0,
+    })).toMatchObject({ action: "none", label: null, message: "App connections are currently unavailable." });
     expect(resolveCoworkerNextStep({
       coworkerState: "active",
       ready: false,
@@ -292,6 +299,12 @@ describe("chat-operated coworker UI", () => {
       connectionsAvailable: true,
       connectedAppCount: 1,
     })).toMatchObject({ action: "none", label: null });
+    expect(panel).toContain('aria-label="Next step"');
+    expect(panel).toContain("Next, choose what it can use.");
+    expect(panel).toContain("setResourcesOpen(true)");
+    expect(panel).not.toContain("is ready`, description: \"Start a chat whenever you have an outcome in mind.");
+    expect(panel).toContain("Safety and wallet control");
+    expect(panel).toContain("About this coworker");
     expect(panel).toContain("Safety limits");
     expect(panel).toContain("<details className=\"border-b border-dls-border/70 py-4\">");
   });

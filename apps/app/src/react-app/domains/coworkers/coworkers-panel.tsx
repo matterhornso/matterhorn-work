@@ -102,12 +102,18 @@ const EMPTY_RESOURCE_DRAFT: CoworkerResourceDraft = {
 const COWORKER_CHOICES: ReadonlyArray<{
   id: MatterhornCoworkerTemplateId;
   label: string;
+  summary: string;
 }> = [
-  { id: "market_analyst", label: "Research markets" },
-  { id: "risk_monitor", label: "Monitor risk" },
-  { id: "transaction_coordinator", label: "Prepare wallet actions" },
-  { id: "treasury_coworker", label: "Track treasury" },
+  { id: "market_analyst", label: "Research markets", summary: "Finds and compares current market information." },
+  { id: "risk_monitor", label: "Monitor risk", summary: "Checks approved data and alerts you when it changes." },
+  { id: "transaction_coordinator", label: "Prepare wallet actions", summary: "Prepares exact wallet actions for you to review." },
+  { id: "treasury_coworker", label: "Track treasury", summary: "Tracks the balances and activity you approve." },
 ];
+
+function coworkerSummary(role: string): string {
+  return COWORKER_CHOICES.find((choice) => choice.id === role)?.summary
+    ?? "Helps with the crypto work and access you approve.";
+}
 
 type CoworkerNextStepAction = "start" | "wait" | "reload" | "connect" | "review" | "resume" | "none";
 
@@ -128,14 +134,14 @@ export function resolveCoworkerNextStep(input: {
   if (input.ready) {
     return { action: "start", label: "Start chat", message: "Ready. Start a chat and describe what you need." };
   }
-  if (input.loading || input.connectionsAvailable === undefined) {
-    return { action: "wait", label: "Checking setup…", message: "Checking what this coworker can use…" };
-  }
   if (input.loadFailed) {
     return { action: "reload", label: "Reload setup", message: "Next: reload this coworker's setup." };
   }
+  if (input.loading || input.connectionsAvailable === undefined) {
+    return { action: "wait", label: "Checking setup…", message: "Checking what this coworker can use…" };
+  }
   if (!input.connectionsAvailable) {
-    return { action: "none", label: null, message: "Coworker apps are not available in this invite yet." };
+    return { action: "none", label: null, message: "App connections are currently unavailable." };
   }
   if (input.connectedAppCount === 0) {
     return { action: "connect", label: "Connect an app", message: "Next: connect one app for this coworker." };
@@ -159,7 +165,7 @@ function coworkerErrorMessage(error: unknown): string {
     if (error.code === "coworker_watch_not_found") return "This check is no longer available. Refresh and try again.";
     if (error.code === "coworker_watch_transition_invalid") return "This check cannot be resumed with its current app access.";
     if (error.code === "coworker_inbox_state_conflict") return "This alert changed. Refresh and try again.";
-    if (error.code === "crypto_app_gateway_disabled") return "Coworker apps are not enabled for this invite yet.";
+    if (error.code === "crypto_app_gateway_disabled") return "App connections are currently unavailable.";
     if (error.code === "app_certification_unavailable") return "This app did not pass its latest safety check. Refresh before connecting it.";
     if (error.code === "crypto_app_connection_conflict" || error.code === "connection_transition_invalid") {
       return "This app connection changed. Refresh and try again.";
@@ -200,22 +206,28 @@ function shortDate(value: string): string {
 function CoworkerBoundary(props: { coworker: MatterhornCoworkerAccountProfile }) {
   const automatic = props.coworker.automaticAuthorities.map(authorityLabel);
   return (
-    <section className="grid gap-3 border-y border-dls-border/70 py-4" aria-label="Coworker boundaries">
-      <div>
-        <p className="text-xs font-medium text-dls-text">Can do automatically</p>
-        <p className="mt-1 text-xs leading-5 text-dls-secondary">
-          {automatic.length ? automatic.join(" · ") : "Nothing until you choose access"}
-        </p>
+    <details className="border-y border-dls-border/70 py-4" aria-label="Coworker boundaries">
+      <summary className="min-h-8 cursor-pointer list-none outline-none focus-visible:ring-2 focus-visible:ring-ring/35 [&::-webkit-details-marker]:hidden">
+        <span className="block text-sm font-semibold text-dls-text">Safety and wallet control</span>
+        <span className="mt-1 block text-xs leading-5 text-dls-secondary">It cannot see private keys or send funds. Open for details.</span>
+      </summary>
+      <div className="mt-3 grid gap-3 border-t border-dls-border/60 pt-3">
+        <div>
+          <p className="text-xs font-medium text-dls-text">Can do automatically</p>
+          <p className="mt-1 text-xs leading-5 text-dls-secondary">
+            {automatic.length ? automatic.join(" · ") : "Nothing until you choose access"}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-dls-text">Stops for your approval</p>
+          <p className="mt-1 text-xs leading-5 text-dls-secondary">Anything involving funds opens an exact wallet review.</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-dls-text">Can never do</p>
+          <p className="mt-1 text-xs leading-5 text-dls-secondary">See private keys, sign for you, or send a transaction on its own.</p>
+        </div>
       </div>
-      <div>
-        <p className="text-xs font-medium text-dls-text">Stops for your approval</p>
-        <p className="mt-1 text-xs leading-5 text-dls-secondary">Anything involving funds opens an exact wallet review.</p>
-      </div>
-      <div>
-        <p className="text-xs font-medium text-dls-text">Can never do</p>
-        <p className="mt-1 text-xs leading-5 text-dls-secondary">See private keys, sign for you, or send a transaction on its own.</p>
-      </div>
-    </section>
+    </details>
   );
 }
 
@@ -636,8 +648,9 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       const response = await props.client.createCoworkerFromTemplate(workspaceId, { templateId });
       setCoworkerChoice(response.coworker.id);
       setShowCreateChoices(false);
+      setResourcesOpen(true);
       await refresh();
-      showToast({ title: `${response.coworker.name} is ready`, description: "Start a chat whenever you have an outcome in mind.", tone: "success" });
+      showToast({ title: `${response.coworker.name} added`, description: "Next, choose what it can use.", tone: "success" });
     } catch (cause) {
       setError(coworkerErrorMessage(cause));
     } finally {
@@ -916,8 +929,8 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       <header className="shrink-0 border-b border-dls-border/70 px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-dls-text">Your coworkers</h2>
-            <p className="mt-1 text-xs leading-5 text-dls-secondary">Choose one, describe the outcome, and keep every financial action in your wallet.</p>
+            <h2 className="text-base font-semibold text-dls-text">Coworkers</h2>
+            <p className="mt-1 text-xs leading-5 text-dls-secondary">Pick who helps. You choose what it can access.</p>
           </div>
           <Button size="icon-sm" variant="ghost" title="Refresh coworkers" aria-label="Refresh coworkers" onClick={() => void refresh()}>
             <RefreshCw aria-hidden="true" />
@@ -1009,8 +1022,11 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       selectedCoworker.state === "active" ? "bg-status-success/10 text-status-success" : "bg-dls-surface-muted text-dls-secondary",
                     )}>{selectedCoworker.state === "active" ? "Active" : selectedCoworker.state === "paused" ? "Paused" : "Disabled"}</span>
                   </div>
-                  <p className="mt-1 text-xs text-dls-secondary">{humanizeId(selectedCoworker.role)}</p>
-                  <p className="mt-2 text-sm leading-6 text-dls-text">{selectedCoworker.mission}</p>
+                  <p className="mt-2 text-sm leading-6 text-dls-secondary">{coworkerSummary(selectedCoworker.role)}</p>
+                  <details className="mt-2">
+                    <summary className="min-h-8 cursor-pointer text-xs text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">About this coworker</summary>
+                    <p className="mt-1 border-l border-dls-border/70 pl-3 text-xs leading-5 text-dls-secondary">{selectedCoworker.mission}</p>
+                  </details>
                   {pendingOutcome ? (
                     <div className="mt-4 border-y border-dls-border/70 py-3">
                       <p className="text-xs font-medium text-dls-text">Your outcome</p>
@@ -1021,13 +1037,12 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                 <ShieldCheck aria-hidden="true" className="size-5 shrink-0 text-dls-secondary" />
               </div>
 
-              {selectedCoworker.state === "active" ? (
-                <p className="mt-4 text-xs leading-5 text-dls-secondary" role="status">
-                  {nextStep.message}
-                </p>
-              ) : null}
-
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-4 flex items-center justify-between gap-3 border-y border-dls-border/70 py-3" role="region" aria-label="Next step">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-dls-text">Next step</p>
+                  <p className="mt-1 text-xs leading-5 text-dls-secondary" role="status">{nextStep.message}</p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
                 {nextStep.action === "start" ? (
                   <Button size="sm" onClick={() => startChat(selectedCoworker)}>{nextStep.label}</Button>
                 ) : nextStep.action === "wait" ? (
@@ -1052,11 +1067,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                     <Play aria-hidden="true" /> {nextStep.label}
                   </Button>
                 ) : null}
-                {selectedCoworker.state === "active" ? (
-                  <Button size="sm" variant="outline" disabled={busyAction !== null} onClick={() => void transitionCoworker(selectedCoworker, "paused")}>
-                    <Pause aria-hidden="true" /> Pause
-                  </Button>
-                ) : null}
+                </div>
               </div>
             </section>
 
@@ -1537,6 +1548,11 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
               <h3 id="coworker-stop-title" className="text-sm font-semibold text-dls-text">Stop this coworker</h3>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">Pause is reversible. Disabling is permanent and immediately stops new chats, checks, and access to connected apps.</p>
               <div className="mt-3 flex flex-wrap gap-2">
+                {selectedCoworker.state === "active" ? (
+                  <Button size="sm" variant="outline" disabled={busyAction !== null} onClick={() => void transitionCoworker(selectedCoworker, "paused")}>
+                    <Pause aria-hidden="true" /> Pause
+                  </Button>
+                ) : null}
                 {selectedCoworker.state !== "revoked" ? (
                   <Button size="sm" variant="outline" disabled={busyAction !== null} onClick={() => setConfirmAction({ kind: "revoke", coworker: selectedCoworker })}>Disable permanently</Button>
                 ) : (
