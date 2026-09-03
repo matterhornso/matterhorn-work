@@ -62,6 +62,12 @@ jobs:
             echo "RUSTSEC-2023-0071 is reachable and may not be ignored."
             exit 1
           fi
+      - name: Reject the vulnerable LRU release
+        run: |
+          if cargo tree --locked --target all --manifest-path examples/microsandbox-openwork-rust/Cargo.toml -i 'lru@0.16.3' --prefix none 2>/dev/null | grep -q '^lru v0.16.3'; then
+            echo "RUSTSEC-2026-0253 is reachable through lru 0.16.3."
+            exit 1
+          fi
       - name: Audit Rust dependencies
         uses: rustsec/audit-check@v2.0.0
         with:

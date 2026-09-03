@@ -13,6 +13,8 @@ for (const required of [
   "rustsec/audit-check@v2.0.0",
   "cargo tree --locked --target all --manifest-path examples/microsandbox-openwork-rust/Cargo.toml -i rsa",
   "RUSTSEC-2023-0071 is reachable and may not be ignored",
+  "cargo tree --locked --target all --manifest-path examples/microsandbox-openwork-rust/Cargo.toml -i 'lru@0.16.3'",
+  "RUSTSEC-2026-0253 is reachable through lru 0.16.3",
   "ignore: RUSTSEC-2023-0071",
   "working-directory: examples/microsandbox-openwork-rust",
   "cargo check --locked --manifest-path examples/microsandbox-openwork-rust/Cargo.toml --all-targets",
