@@ -78,6 +78,8 @@ export type SessionCoworkersPanelProps = {
   selectedWorkspaceId: string;
   onClose: () => void;
   onBrowseApps: () => void;
+  onBrowseFiles: () => void;
+  onBrowseMemory: () => void;
   onOpenWallet: (item: MatterhornCoworkerWalletIntentView) => boolean;
   onStartTask?: StartCoworkerTask;
 };
@@ -1236,7 +1238,12 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                           </label>
                         ))}
                       </div>
-                    ) : <p className="mt-2 text-xs leading-5 text-dls-secondary">No private files are available for this coworker.</p>}
+                    ) : (
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <p className="text-xs leading-5 text-dls-secondary">No private files are available for this coworker.</p>
+                        <Button size="xs" variant="outline" onClick={props.onBrowseFiles}>Add file</Button>
+                      </div>
+                    )}
                   </fieldset>
 
                   <fieldset>
@@ -1255,7 +1262,12 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                           </label>
                         ))}
                       </div>
-                    ) : <p className="mt-2 text-xs leading-5 text-dls-secondary">No approved Memory is available yet.</p>}
+                    ) : (
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <p className="text-xs leading-5 text-dls-secondary">No saved Memory is available yet.</p>
+                        <Button size="xs" variant="outline" onClick={props.onBrowseMemory}>Add memory</Button>
+                      </div>
+                    )}
                   </fieldset>
 
                   <p className="text-xs leading-5 text-dls-secondary">

@@ -2463,6 +2463,8 @@ export function SessionPage(props: SessionPageProps) {
       selectedWorkspaceId={props.selectedWorkspaceId}
       onClose={closeRightPane}
       onBrowseApps={() => navigate(`/workspace/${encodeURIComponent(props.selectedWorkspaceId)}/crypto-apps`)}
+      onBrowseFiles={() => setCurrentSidePanel("files")}
+      onBrowseMemory={() => setCurrentSidePanel("memory")}
       onOpenWallet={openCoworkerWalletIntent}
       onStartTask={props.sidebar.onCreateTaskWithPrompt}
     />

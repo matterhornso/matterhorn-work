@@ -237,6 +237,7 @@ describe("chat-operated coworker UI", () => {
 
   test("gives every coworker one clear next step before exposing optional details", () => {
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const sessionPage = appSource("react-app/domains/session/chat/session-page.tsx");
     expect(resolveCoworkerNextStep({
       coworkerState: "active",
       ready: true,
@@ -305,6 +306,10 @@ describe("chat-operated coworker UI", () => {
     expect(panel).not.toContain("is ready`, description: \"Start a chat whenever you have an outcome in mind.");
     expect(panel).toContain("Safety and wallet control");
     expect(panel).toContain("About this coworker");
+    expect(panel).toContain('onClick={props.onBrowseFiles}>Add file</Button>');
+    expect(panel).toContain('onClick={props.onBrowseMemory}>Add memory</Button>');
+    expect(sessionPage).toContain('onBrowseFiles={() => setCurrentSidePanel("files")}');
+    expect(sessionPage).toContain('onBrowseMemory={() => setCurrentSidePanel("memory")}');
     expect(panel).toContain("Safety limits");
     expect(panel).toContain("<details className=\"border-b border-dls-border/70 py-4\">");
   });
