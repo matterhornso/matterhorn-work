@@ -38,5 +38,8 @@ through an unverified provider, complete Matterhorn's exact-request disclosure
 inside the account UI. Connected wallets remain the only signing and submission
 surface.
 
-No package publication is implied by this source. Release requires the separate
-reviewed provenance workflow and immutable registry verification.
+No package publication is implied by this source. Release requires the manual,
+protected-environment workflow in `.github/workflows/publish-guarded-mcp.yml`,
+an immutable `guarded-mcp-v<version>` tag at the exact protected `dev` commit,
+npm OIDC trusted publishing without a long-lived token, and post-publication
+registry-signature and SLSA-provenance verification.
