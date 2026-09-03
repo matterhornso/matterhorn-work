@@ -161,13 +161,13 @@ Print ready-to-paste MCP config for Claude Code, Codex, Cursor, Claude Desktop, 
 ```bash
 matterhorn-work mcp config \
   --target codex \
-  --profile full \
+  --profile guarded \
   --repo-path /absolute/path/to/matterhorn-work \
   --server-url http://127.0.0.1:8787 \
   --token <client-token>
 ```
 
-Use `--profile server` to include only the unified `matterhorn-work-mcp` server-control MCP. Use `--target env` to print shell exports instead of JSON. The default is client-scoped; add `--include-host-approvals --host-token <host-token>` only for a trusted local operator client. MCP packages are not published yet, so config generation uses a verified checkout from `--repo-path` (or the current source checkout). `--runner npx` is an explicit future opt-in after publication. Flags override `MATTERHORN_WORK_*` environment variables, with legacy `OPENWORK_*` variables preserved as fallbacks.
+Use `--profile guarded` for external agents; it exposes only focused status, workspace, and chat-session tools. Use `--profile server` for the broad unified MCP or `--profile full` to add UI, crypto, and wallet MCPs in a trusted local environment. Use `--target env` to print shell exports instead of JSON. Host approval authority is never available in the guarded profile; add `--include-host-approvals --host-token <host-token>` only with `server` or `full` for a trusted local operator. The CLI retains `full` as its compatibility default. MCP packages are not published yet, so config generation uses a verified checkout from `--repo-path` (or the current source checkout). `--runner npx` is an explicit future opt-in after publication. Flags override `MATTERHORN_WORK_*` environment variables, with legacy `OPENWORK_*` variables preserved as fallbacks.
 
 ## Agent doctor
 

@@ -49,6 +49,7 @@ for (const signal of [
   "ERR_NETWORK_CHANGED",
   "waitForChatComposer",
   "chatSurfaceMarkers",
+  "name: /^Ask (Matterhorn|about)/i",
   '"Cautious"',
   "Choose a desk to begin",
   "document.getAnimations()",

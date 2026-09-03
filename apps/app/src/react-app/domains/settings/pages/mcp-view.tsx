@@ -405,81 +405,79 @@ const MATTERHORN_MCP_CLIENT_INSTALL_GUIDES: MatterhornMcpClientInstallGuide[] =
     {
       id: "codex",
       label: "Codex",
-      command: "matterhorn-work mcp config --target codex --profile full",
+      command: "matterhorn-work mcp config --target codex --profile guarded",
       configSurface: "~/.codex/config.toml",
       summary:
-        "Generates Codex-native TOML for Matterhorn protocol, memory, workflow, and UI tools.",
+        "Connects Codex to Matterhorn chats with a focused set of workspace tools.",
       steps: [
         "Run the command and add its TOML output to ~/.codex/config.toml.",
         "Restart or refresh Codex.",
-        "Confirm Matterhorn tools are listed.",
+        "Confirm Matterhorn status and chat tools are listed.",
       ],
       verifyTools: [
-        "matterhorn_bittensor_chat",
-        "matterhorn_crypto_chat",
-        "matterhorn_memory_list",
+        "matterhorn_status",
+        "matterhorn_create_session",
+        "matterhorn_submit_session_prompt",
       ],
-      safetyNote:
-        "Preview or external-signer only. Never paste keys, seeds, signatures, payloads, secrets, or wallet exports.",
+      safetyNote: "Matterhorn can work in chat. Wallet approval stays separate.",
     },
     {
       id: "claude-code",
       label: "Claude Code",
-      command: "matterhorn-work mcp config --target claude --profile full",
+      command: "matterhorn-work mcp config --target claude --profile guarded",
       configSurface: "Project .mcp.json",
       summary:
-        "Generates MCP JSON for protocol reads, memory, workflow, and evidence tools.",
+        "Connects Claude Code to Matterhorn chats with a focused set of workspace tools.",
       steps: [
         "Run the command and save its JSON output as .mcp.json.",
         "Restart Claude Code.",
-        "Confirm Matterhorn tools appear.",
+        "Confirm Matterhorn status and chat tools appear.",
       ],
       verifyTools: [
-        "matterhorn_hyperliquid_chat",
-        "matterhorn_polymarket_chat",
-        "matterhorn_crypto_chat",
+        "matterhorn_status",
+        "matterhorn_create_session",
+        "matterhorn_submit_session_prompt",
       ],
-      safetyNote: "No custody, live submit, API secrets, or signed payloads.",
+      safetyNote: "Matterhorn can work in chat. Wallet approval stays separate.",
     },
     {
       id: "claude-desktop",
       label: "Claude Desktop",
       command:
-        "matterhorn-work mcp config --target claude-desktop --profile full",
+        "matterhorn-work mcp config --target claude-desktop --profile guarded",
       configSurface: "claude_desktop_config.json",
-      summary: "Generates Matterhorn MCP JSON for Claude Desktop.",
+      summary:
+        "Connects Claude Desktop to Matterhorn chats with a focused set of workspace tools.",
       steps: [
         "Run the command and merge its output into claude_desktop_config.json.",
         "Quit and reopen Claude Desktop.",
-        "Test one public Matterhorn tool.",
+        "Confirm Matterhorn status and chat tools are listed.",
       ],
       verifyTools: [
-        "matterhorn_bittensor_prepare_extrinsic",
-        "matterhorn_hyperliquid_preview_order",
-        "matterhorn_polymarket_preview_order",
+        "matterhorn_status",
+        "matterhorn_create_session",
+        "matterhorn_submit_session_prompt",
       ],
-      safetyNote:
-        "Handoffs stay unsigned. Review actions in your wallet or protocol client.",
+      safetyNote: "Matterhorn can work in chat. Wallet approval stays separate.",
     },
     {
       id: "cursor",
       label: "Cursor",
-      command: "matterhorn-work mcp config --target cursor --profile full",
+      command: "matterhorn-work mcp config --target cursor --profile guarded",
       configSurface: ".cursor/mcp.json",
       summary:
-        "Generates MCP JSON for protocol, workflow, memory, and UI tools in Cursor.",
+        "Connects Cursor to Matterhorn chats with a focused set of workspace tools.",
       steps: [
         "Run the command and save its JSON output as .cursor/mcp.json.",
         "Restart Cursor and reopen the project.",
-        "Confirm the Matterhorn server is active.",
+        "Confirm Matterhorn status and chat tools are listed.",
       ],
       verifyTools: [
-        "matterhorn_crypto_chat",
-        "matterhorn_memory_search",
-        "matterhorn_ui_control",
+        "matterhorn_status",
+        "matterhorn_create_session",
+        "matterhorn_submit_session_prompt",
       ],
-      safetyNote:
-        "Public or redacted context only. Never paste keys, secrets, signatures, payloads, or wallet exports.",
+      safetyNote: "Matterhorn can work in chat. Wallet approval stays separate.",
     },
   ];
 
@@ -2257,6 +2255,9 @@ function MatterhornMcpProductSection(props: {
                 </li>
               ))}
             </ol>
+            <p className="pt-1 text-dls-secondary">
+              {selectedClient.safetyNote}
+            </p>
           </div>
         </details>
 

@@ -35,10 +35,12 @@ for (const snippet of [
   "/sessions/${encodeURIComponent(sessionId)}/events",
   "/api/bittensor/chat/execute",
   "/api/bittensor/readiness",
-  "function buildMcpServersConfig(args: ParsedArgs)",
+  "function buildMcpServersConfig(",
+  "function readMcpConfigProfile(args: ParsedArgs)",
+  "function readMcpHostApprovalOptions(",
   "function resolveMcpRepositoryPath(args: ParsedArgs)",
   "function mcpRunner(args: ParsedArgs)",
-  "function renderCodexMcpConfig(mcpServers: Record<string, McpConfigEntry>): string",
+  "function renderCodexMcpConfig(",
   "[mcp_servers.${name}]",
   "[mcp_servers.${name}.env]",
   'if (target === "codex")',
@@ -50,6 +52,7 @@ for (const snippet of [
   "MATTERHORN_WORK_SERVER_URL",
   "MATTERHORN_WORK_TOKEN",
   "MATTERHORN_WORK_HOST_TOKEN",
+  "MATTERHORN_WORK_MCP_PROFILE",
   "include-host-approvals",
   "--repo-path",
   "Matterhorn MCP packages are not published",
@@ -62,7 +65,7 @@ for (const snippet of [
   assert.ok(cli.includes(snippet), `missing CLI snippet: ${snippet}`);
 }
 
-const helperStart = cli.indexOf("function buildMcpServersConfig(args: ParsedArgs)");
+const helperStart = cli.indexOf("function buildMcpServersConfig(");
 const helperEnd = cli.indexOf("async function runStart(args: ParsedArgs)");
 assert.ok(helperStart > 0 && helperEnd > helperStart, "could not isolate MCP config helper block");
 const helperBlock = cli.slice(helperStart, helperEnd);
@@ -125,7 +128,7 @@ function runMcpConfig(args, environment = {}) {
 
 const safeConfig = runMcpConfig([
   "--target", "json",
-  "--profile", "server",
+  "--profile", "guarded",
   "--repo-path", process.cwd(),
   "--server-url", "http://127.0.0.1:8787",
   "--token", "test-client-token",
@@ -138,17 +141,24 @@ assert.equal(
   `${process.cwd()}/packages/matterhorn-work-mcp/index.mjs`,
 );
 assert.equal(safeServers["matterhorn-work"].env.MATTERHORN_WORK_TOKEN, "test-client-token");
+assert.equal(
+  safeServers["matterhorn-work"].env.MATTERHORN_WORK_MCP_PROFILE,
+  "guarded_client",
+);
 assert.equal("MATTERHORN_WORK_HOST_TOKEN" in safeServers["matterhorn-work"].env, false);
+assert.deepEqual(Object.keys(safeServers), ["matterhorn-work"]);
 assert.equal(safeConfig.stdout.includes("npx"), false);
 
 const inheritedHostToken = runMcpConfig([
   "--target", "env",
+  "--profile", "guarded",
   "--server-url", "http://127.0.0.1:8787",
   "--token", "test-client-token",
 ], { MATTERHORN_WORK_HOST_TOKEN: "must-not-inherit" });
 assert.equal(inheritedHostToken.status, 0, inheritedHostToken.stderr);
 assert.equal(inheritedHostToken.stdout.includes("must-not-inherit"), false);
 assert.equal(inheritedHostToken.stdout.includes("MATTERHORN_WORK_HOST_TOKEN"), false);
+assert.match(inheritedHostToken.stdout, /MATTERHORN_WORK_MCP_PROFILE="guarded_client"/);
 
 const rejectedHostToken = runMcpConfig([
   "--target", "json",
@@ -172,6 +182,27 @@ assert.equal(
   JSON.parse(operatorConfig.stdout).mcpServers["matterhorn-work"].env.MATTERHORN_WORK_HOST_TOKEN,
   "explicit-test-host-token",
 );
+assert.equal(
+  JSON.parse(operatorConfig.stdout).mcpServers["matterhorn-work"].env.MATTERHORN_WORK_MCP_PROFILE,
+  "full",
+);
+
+const rejectedGuardedHostAuthority = runMcpConfig([
+  "--target", "json",
+  "--profile", "guarded",
+  "--repo-path", process.cwd(),
+  "--include-host-approvals",
+  "--host-token", "must-not-cross-guarded-boundary",
+]);
+assert.notEqual(rejectedGuardedHostAuthority.status, 0);
+assert.match(
+  rejectedGuardedHostAuthority.stderr,
+  /requires the server or full profile/,
+);
+assert.equal(
+  rejectedGuardedHostAuthority.stdout.includes("must-not-cross-guarded-boundary"),
+  false,
+);
 
 const invalidCheckout = runMcpConfig([
   "--target", "json",
@@ -189,5 +220,13 @@ assert.equal(explicitFutureRunner.status, 0, explicitFutureRunner.stderr);
 const futureServer = JSON.parse(explicitFutureRunner.stdout).mcpServers["matterhorn-work"];
 assert.equal(futureServer.command, "npx");
 assert.deepEqual(futureServer.args, ["-y", "matterhorn-work-mcp"]);
+
+const invalidProfile = runMcpConfig([
+  "--target", "json",
+  "--profile", "unknown",
+  "--repo-path", process.cwd(),
+]);
+assert.notEqual(invalidProfile.status, 0);
+assert.match(invalidProfile.stderr, /must be guarded, server, or full/);
 
 console.log("Matterhorn MCP config CLI static check passed.");

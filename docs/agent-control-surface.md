@@ -15,6 +15,8 @@ Matterhorn Desks should be usable from agent environments such as Claude Code, C
 
 See [Matterhorn Desks Agent Operator Workflow](./agent-operator-workflow.md) for the copy-paste Codex/Claude workflow that starts Matterhorn, runs the doctor, creates a session, submits prompts, watches events, reads/writes files, and runs Bittensor chat. See [Matterhorn Desks Bittensor Operator Playbook](./bittensor-operator-playbook.md) for Bittensor-specific prompt flows, expected cards, clarification behavior, unsupported-adapter handling, and no-custody safety rules. See [Matterhorn Desks Bittensor Live QA](./bittensor-live-qa.md) for the repeatable Bittensor operator harness covering wallet clarifications, subnet discovery, validator comparison, unsigned staking previews, and unsupported-adapter behavior. See [Matterhorn Desks Local Agent API](./agent-control-api.md) for the OpenAPI-style endpoint contract currently wrapped by `matterhorn-work-mcp`. See [Matterhorn Desks Agent Control Coverage Matrix](./agent-control-coverage-matrix.md) for the current HTTP/MCP/CLI coverage and remaining gaps. See [Matterhorn Desks Session Event Stream Contract](./agent-session-event-stream.md) for the planned session-progress stream that will complement status polling. See [Matterhorn Desks MCP Install Guide](./agent-mcp-install.md) for Codex, Claude Code, Claude Desktop, Cursor, and generic MCP client setup. See [Matterhorn Desks Agent Action Model](./agent-action-model-contract.md) before adding new browser/control tools. See [Matterhorn Desks Agent Browser Control](./agent-browser-control.md) and [Matterhorn Desks Browser Control Live QA](./agent-browser-live-qa.md) for the semantic browser tool workflow. See [Matterhorn Desks Agent Control Live QA](./agent-control-live-qa.md) for the full server/session/file/Bittensor harness.
 
+External clients should start with the `guarded` profile in the install guide. The flow below is for a trusted local operator and deliberately uses the broader tool surface.
+
 ## First Agent Flow
 
 For an executable, end-to-end operator loop, use [Matterhorn Desks Agent Operator Workflow](./agent-operator-workflow.md). The short version is:
@@ -48,7 +50,8 @@ For an executable, end-to-end operator loop, use [Matterhorn Desks Agent Operato
          "args": ["/absolute/path/to/matterhorn-work/packages/matterhorn-work-mcp/index.mjs"],
          "env": {
            "MATTERHORN_WORK_SERVER_URL": "http://127.0.0.1:8787",
-           "MATTERHORN_WORK_TOKEN": "<client-token>"
+           "MATTERHORN_WORK_TOKEN": "<client-token>",
+           "MATTERHORN_WORK_MCP_PROFILE": "full"
          }
        }
      }

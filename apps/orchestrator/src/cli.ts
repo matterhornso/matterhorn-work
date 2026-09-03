@@ -4134,7 +4134,7 @@ function printHelp(): void {
     "  --opencode-router-bin <path>     Path to opencodeRouter binary (requires --allow-external)",
     "  --opencode-router-health-port <p> Health server port for opencodeRouter (default: random)",
     "  --target <name>          MCP config target: codex | claude | claude-desktop | cursor | json | env",
-    "  --profile <name>         MCP config profile: server | full (default: full)",
+    "  --profile <name>         MCP config profile: guarded | server | full (default: full)",
     "  --server-url <url>       Matterhorn Desks server URL for MCP config",
     "  --token <token>          Matterhorn Desks client token for MCP config",
     "  --repo-path <path>       Trusted Matterhorn checkout for local MCP entrypoints",
@@ -10245,6 +10245,8 @@ type McpConfigEntry = {
   env?: Record<string, string>;
 };
 
+type McpConfigProfile = "guarded" | "server" | "full";
+
 const MCP_PACKAGE_NAMES = [
   "matterhorn-work-mcp",
   "matterhorn-work-ui-mcp",
@@ -10298,11 +10300,30 @@ function placeholder(value: string | undefined, fallback: string): string {
   return trimmed || fallback;
 }
 
-function buildMcpServersConfig(args: ParsedArgs): Record<string, McpConfigEntry> {
+function readMcpConfigProfile(args: ParsedArgs): McpConfigProfile {
   const profile = (readFlag(args.flags, "profile") ?? "full").trim().toLowerCase();
-  if (profile !== "server" && profile !== "full") {
-    throw new Error("mcp config --profile must be server or full");
+  if (profile !== "guarded" && profile !== "server" && profile !== "full") {
+    throw new Error("mcp config --profile must be guarded, server, or full");
   }
+  return profile;
+}
+
+function readMcpHostApprovalOptions(args: ParsedArgs, profile: McpConfigProfile) {
+  const includeHostApprovals = readBool(args.flags, "include-host-approvals", false);
+  const explicitHostToken = readFlag(args.flags, "host-token");
+  if (explicitHostToken && !includeHostApprovals) {
+    throw new Error("mcp config --host-token requires --include-host-approvals");
+  }
+  if (profile === "guarded" && includeHostApprovals) {
+    throw new Error(
+      "mcp config --include-host-approvals requires the server or full profile",
+    );
+  }
+  return { includeHostApprovals, explicitHostToken };
+}
+
+function buildMcpServersConfig(args: ParsedArgs): Record<string, McpConfigEntry> {
+  const profile = readMcpConfigProfile(args);
 
   const runner = mcpRunner(args);
   const serverUrl = placeholder(
@@ -10315,11 +10336,10 @@ function buildMcpServersConfig(args: ParsedArgs): Record<string, McpConfigEntry>
     readFlag(args.flags, "token") ?? readMatterhornEnv("OPENWORK_TOKEN"),
     "<client-token>",
   );
-  const includeHostApprovals = readBool(args.flags, "include-host-approvals", false);
-  const explicitHostToken = readFlag(args.flags, "host-token");
-  if (explicitHostToken && !includeHostApprovals) {
-    throw new Error("mcp config --host-token requires --include-host-approvals");
-  }
+  const { includeHostApprovals, explicitHostToken } = readMcpHostApprovalOptions(
+    args,
+    profile,
+  );
   const hostToken = includeHostApprovals
     ? placeholder(explicitHostToken ?? readMatterhornEnv("OPENWORK_HOST_TOKEN"), "<host-token>")
     : null;
@@ -10327,6 +10347,7 @@ function buildMcpServersConfig(args: ParsedArgs): Record<string, McpConfigEntry>
   const serverEnvironment: Record<string, string> = {
     MATTERHORN_WORK_SERVER_URL: serverUrl,
     MATTERHORN_WORK_TOKEN: clientToken,
+    MATTERHORN_WORK_MCP_PROFILE: profile === "guarded" ? "guarded_client" : "full",
   };
   if (hostToken) serverEnvironment.MATTERHORN_WORK_HOST_TOKEN = hostToken;
 
@@ -10361,6 +10382,7 @@ function buildMcpServersConfig(args: ParsedArgs): Record<string, McpConfigEntry>
 }
 
 function printMcpEnv(args: ParsedArgs) {
+  const profile = readMcpConfigProfile(args);
   const serverUrl = placeholder(
     readFlag(args.flags, "server-url") ??
       readMatterhornEnv("OPENWORK_URL") ??
@@ -10371,14 +10393,14 @@ function printMcpEnv(args: ParsedArgs) {
     readFlag(args.flags, "token") ?? readMatterhornEnv("OPENWORK_TOKEN"),
     "<client-token>",
   );
-  const includeHostApprovals = readBool(args.flags, "include-host-approvals", false);
-  const explicitHostToken = readFlag(args.flags, "host-token");
-  if (explicitHostToken && !includeHostApprovals) {
-    throw new Error("mcp config --host-token requires --include-host-approvals");
-  }
+  const { includeHostApprovals, explicitHostToken } = readMcpHostApprovalOptions(
+    args,
+    profile,
+  );
   const lines = [
     `export MATTERHORN_WORK_SERVER_URL=${JSON.stringify(serverUrl)}`,
     `export MATTERHORN_WORK_TOKEN=${JSON.stringify(clientToken)}`,
+    `export MATTERHORN_WORK_MCP_PROFILE=${JSON.stringify(profile === "guarded" ? "guarded_client" : "full")}`,
     `export MATTERHORN_SERVER_URL=${JSON.stringify(serverUrl)}`,
   ];
   if (includeHostApprovals) {

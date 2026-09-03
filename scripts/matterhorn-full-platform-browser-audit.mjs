@@ -631,7 +631,7 @@ async function run() {
   await inspectSurface(page, report, "workspace-home", workspaceUrl("session"), ["Open a desk", "Wallet readiness"], "desktop");
   await recordInteraction(report, "home-new-project-dialog", async () => {
     await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
-    await visibleMarker(page, ["Open a desk"]);
+    await visibleMarker(page, ["Open a desk", "Wallet readiness"]);
     const home = page.getByLabel("Workspace home");
     await clickUnique(home.getByRole("button", { name: "New project", exact: true }), "Workspace home New project");
     await visibleMarker(page, ["Create project", "Add a project", "New project"]);
@@ -640,7 +640,7 @@ async function run() {
   });
   await recordInteraction(report, "home-jot-note-dialog", async () => {
     await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
-    await visibleMarker(page, ["Open a desk"]);
+    await visibleMarker(page, ["Open a desk", "Wallet readiness"]);
     await clickUnique(page.getByRole("button", { name: "Jot a note", exact: true }), "Jot a note");
     await visibleMarker(page, ["Quick note", "Jot a note", "Save note"]);
     await page.keyboard.press("Escape");
@@ -653,7 +653,7 @@ async function run() {
   });
   await recordInteraction(report, "sidebar-collapse-expand", async () => {
     await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
-    await visibleMarker(page, ["Open a desk"]);
+    await visibleMarker(page, ["Open a desk", "Wallet readiness"]);
     const toggle = page.getByRole("button", { name: "Toggle Sidebar", exact: true });
     await clickUnique(toggle, "Toggle Sidebar");
     await clickUnique(toggle, "Toggle Sidebar");
@@ -695,7 +695,7 @@ async function run() {
       if (await hiddenModelPicker.isVisible().catch(() => false)) {
         throw new Error("Model picker stayed visible after being hidden.");
       }
-      const composer = page.getByRole("textbox", { name: /Ask Matterhorn/i });
+      const composer = page.getByRole("textbox", { name: /^Ask (Matterhorn|about)/i });
       const composerEditable = await composer.isEditable().catch(() => false);
       let composerUnavailable = !composerEditable;
       if (composerEditable) {
