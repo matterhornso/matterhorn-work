@@ -7,6 +7,12 @@ import {
 } from "../src/react-app/shell/session-panel-route";
 import { buildCoworkerAppConnectionDraft } from "../src/react-app/domains/coworkers/coworker-app-connection";
 import {
+  boundedCoworkerUnreadCount,
+  coworkerListQueryKey,
+  coworkerUnreadBadgeLabel,
+  coworkerUnreadStatusLabel,
+} from "../src/react-app/domains/coworkers/coworker-query";
+import {
   coworkerActivitySummary,
   coworkerUnreadSummaryLabel,
   coworkerPositionSource,
@@ -449,6 +455,30 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("ref={activitySectionRef}");
     expect(client).toContain("totalUnread: number");
     expect(client).toContain("byCoworker: MatterhornCoworkerInboxSummary[]");
+  });
+
+  test("surfaces a bounded content-free unread count in desktop and mobile workspace navigation", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const session = appSource("react-app/domains/session/chat/session-page.tsx");
+    expect(coworkerListQueryKey("workspace_one")).toEqual(["coworker-control", "workspace_one", "list"]);
+    expect(boundedCoworkerUnreadCount(undefined)).toBe(0);
+    expect(boundedCoworkerUnreadCount(-1)).toBe(0);
+    expect(boundedCoworkerUnreadCount(3.5)).toBe(0);
+    expect(boundedCoworkerUnreadCount(3)).toBe(3);
+    expect(boundedCoworkerUnreadCount(10_000)).toBe(100);
+    expect(coworkerUnreadBadgeLabel(0)).toBeNull();
+    expect(coworkerUnreadBadgeLabel(3)).toBe("3");
+    expect(coworkerUnreadBadgeLabel(100)).toBe("99+");
+    expect(coworkerUnreadStatusLabel(0)).toBe("No new coworker updates");
+    expect(coworkerUnreadStatusLabel(1)).toBe("1 new coworker update");
+    expect(coworkerUnreadStatusLabel(3)).toBe("3 new coworker updates");
+    expect(coworkerUnreadStatusLabel(100)).toBe("More than 99 new coworker updates");
+    expect(panel).toContain("coworkerListQueryKey(workspaceId)");
+    expect(session).toContain("coworkerListQueryKey(coworkerWorkspaceId)");
+    expect(session).toContain('refetchInterval: (query) => query.state.status === "error" ? false : 30_000');
+    expect(session).toContain("badge={coworkerUnreadBadge ? (");
+    expect(session.match(/<span className="sr-only">\{coworkerUnreadStatus\}<\/span>/g)?.length).toBe(2);
+    expect(session).toContain("title={coworkerNavigationTitle}");
   });
 
   test("lets the user approve an exact resource sandbox without privacy bypasses", () => {

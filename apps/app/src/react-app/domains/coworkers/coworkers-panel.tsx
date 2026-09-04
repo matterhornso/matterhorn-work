@@ -46,13 +46,13 @@ import {
   sortCoworkerWalletIntents,
 } from "./coworker-wallet-intent-view";
 import { buildCoworkerAppConnectionDraft } from "./coworker-app-connection";
+import { COWORKER_QUERY_PREFIX, coworkerListQueryKey } from "./coworker-query";
 import {
   parseCoworkerWatchParameters,
   resolveCoworkerWatchFields,
   resolveCoworkerWatchSources,
 } from "./coworker-watch-form";
 
-const QUERY_PREFIX = "coworker-control";
 const WATCH_INTERVALS = [
   { label: "Every 15 minutes", value: 15 * 60_000 },
   { label: "Every hour", value: 60 * 60_000 },
@@ -373,7 +373,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const queryClient = useQueryClient();
   const { onClose, onStartTask, selectedSessionId, selectedWorkspaceId } = props;
   const workspaceId = props.workspaceId?.trim() ?? "";
-  const listKey = useMemo(() => [QUERY_PREFIX, workspaceId, "list"], [workspaceId]);
+  const listKey = useMemo(() => coworkerListQueryKey(workspaceId), [workspaceId]);
   const [coworkerChoice, setCoworkerChoice] = useState("");
   const [pendingOutcome, setPendingOutcome] = useState("");
   const [creating, setCreating] = useState<MatterhornCoworkerTemplateId | null>(null);
@@ -418,7 +418,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const latestUnreadCoworker = coworkers.find((coworker) => coworker.id === latestUnreadCoworkerId) ?? null;
   const selectedCoworker = coworkers.find((item) => item.id === (coworkerChoice || boundCoworkerId)) ?? coworkers[0] ?? null;
   const detailKey = useMemo(
-    () => [QUERY_PREFIX, workspaceId, selectedCoworker?.id ?? "none", "detail"],
+    () => [COWORKER_QUERY_PREFIX, workspaceId, selectedCoworker?.id ?? "none", "detail"],
     [selectedCoworker?.id, workspaceId],
   );
   const detailQuery = useQuery({
@@ -437,7 +437,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     },
   });
   const resourceKey = useMemo(
-    () => [QUERY_PREFIX, workspaceId, selectedCoworker?.id ?? "none", selectedCoworker?.revision ?? 0, "resources"],
+    () => [COWORKER_QUERY_PREFIX, workspaceId, selectedCoworker?.id ?? "none", selectedCoworker?.revision ?? 0, "resources"],
     [selectedCoworker?.id, selectedCoworker?.revision, workspaceId],
   );
   const resourceQuery = useQuery({
@@ -552,7 +552,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const watchSource = watchSources.find((source) => source.id === watchSourceId) ?? null;
   const watchDetailQuery = useQuery({
     queryKey: [
-      QUERY_PREFIX,
+      COWORKER_QUERY_PREFIX,
       "watch-app",
       watchSource?.appId ?? "none",
       watchSource?.connectionId ?? "none",
