@@ -6,6 +6,8 @@
  */
 export const MATTERHORN_CRYPTO_APP_MANIFEST_VERSION:
   "matterhorn.crypto-app-manifest.v1" = "matterhorn.crypto-app-manifest.v1";
+export const MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION:
+  "matterhorn.openapi-action.v1" = "matterhorn.openapi-action.v1";
 
 export type MatterhornCryptoAppActionAccess =
   | "read"
@@ -26,6 +28,24 @@ export type MatterhornCryptoAppTransportKind =
   | "matterhorn_sdk";
 
 export type MatterhornCryptoAppNetworkEnvironment = "testnet" | "mainnet";
+
+export type MatterhornCryptoAppOpenApiOperation = {
+  actionId: string;
+  method: "POST";
+  path: string;
+};
+
+export type MatterhornCryptoAppTransport =
+  | {
+      kind: Exclude<MatterhornCryptoAppTransportKind, "openapi">;
+      endpoint: string;
+    }
+  | {
+      kind: "openapi";
+      endpoint: string;
+      profile?: typeof MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION;
+      operations?: MatterhornCryptoAppOpenApiOperation[];
+    };
 
 export type MatterhornCryptoAppOAuth = {
   type: "oauth2";
@@ -73,10 +93,7 @@ export type MatterhornCryptoAppManifest = {
     algorithm: "ed25519";
     signature: string;
   };
-  transport: {
-    kind: MatterhornCryptoAppTransportKind;
-    endpoint: string;
-  };
+  transport: MatterhornCryptoAppTransport;
   authentication: MatterhornCryptoAppAuthentication;
   networks: Array<{
     protocol: string;

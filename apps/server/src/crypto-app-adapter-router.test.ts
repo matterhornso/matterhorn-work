@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+  MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
   type MatterhornCryptoAppConnectionCredential,
   type MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
@@ -88,8 +89,17 @@ function fixture(options: {
   timeout?: ConstructorParameters<typeof MatterhornCryptoAppAdapterRouter>[0]["timeout"];
   circuitFailureThreshold?: number;
   operationalPolicy?: MatterhornCryptoAppOperationalPolicy;
+  transport?: MatterhornCryptoAppManifest["transport"];
 } = {}) {
   const value = manifest(options.authentication);
+  if (options.transport) {
+    value.transport = structuredClone(options.transport);
+    value.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(value)),
+      keys.privateKey,
+    ).toString("base64url");
+  }
   const registry = new MatterhornCryptoAppRegistry({
     publisherKeys: [{ publisherId: "matterhorn", keyId: "publisher-1", algorithm: "ed25519", publicKey: keys.publicKey }],
     policyVersion: "policy-1",
@@ -161,7 +171,7 @@ function fixture(options: {
     connections,
     authorization,
     validateCredential: options.validateCredential,
-    executors: { matterhorn_sdk: executor },
+    executors: { [value.transport.kind]: executor },
     resolveDns: options.resolveDns ?? (async () => [{ address: "93.184.216.34", family: 4 }]),
     now: () => new Date("2026-09-01T12:00:00.000Z"),
     timeout: options.timeout,
@@ -186,6 +196,23 @@ function request(overrides: Partial<Parameters<MatterhornCryptoAppAdapterRouter[
 }
 
 describe("certified crypto app adapter router", () => {
+  test("passes only the signed OpenAPI operation for the selected action", async () => {
+    const app = fixture({
+      transport: {
+        kind: "openapi",
+        endpoint: "https://gateway.matterhorn.so",
+        profile: MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
+        operations: [{ actionId: "read_market", method: "POST", path: "/v1/markets/read" }],
+      },
+    });
+    await app.router.execute(request());
+    expect(app.executorCalls).toHaveLength(1);
+    expect(app.executorCalls[0]).toEqual(expect.objectContaining({
+      openApiOperation: { actionId: "read_market", method: "POST", path: "/v1/markets/read" },
+    }));
+    app.store.close();
+  });
+
   test("authorizes exact arguments, pins egress and returns only quarantined typed output", async () => {
     const app = fixture();
     const result = await app.router.execute(request());

@@ -28,6 +28,7 @@ import {
 } from "./crypto-app-https-transport.js";
 import { createPinnedMcpHttpCryptoAppTransport } from "./crypto-app-mcp-http-transport.js";
 import { createPinnedJsonRpcCryptoAppTransport } from "./crypto-app-json-rpc-transport.js";
+import { createPinnedOpenApiCryptoAppTransport } from "./crypto-app-openapi-transport.js";
 import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 import {
   createPinnedSuiPublicTransactionVerifier,
@@ -254,6 +255,7 @@ export function createMatterhornCryptoAppRuntime(
       };
       const pinnedMcpHttpTransport = createPinnedMcpHttpCryptoAppTransport({ resolveCredentialHeaders });
       const pinnedJsonRpcTransport = createPinnedJsonRpcCryptoAppTransport({ resolveCredentialHeaders });
+      const pinnedOpenApiTransport = createPinnedOpenApiCryptoAppTransport({ resolveCredentialHeaders });
       router = new MatterhornCryptoAppAdapterRouter({
         registry,
         connections,
@@ -284,8 +286,7 @@ export function createMatterhornCryptoAppRuntime(
         executors: {
           matterhorn_sdk: createFirstPartyCryptoAppExecutor(),
           mcp_http: pinnedMcpHttpTransport,
-          // Manifest v1 cannot bind an OpenAPI operation path and method into
-          // the publisher signature, so OpenAPI deliberately has no executor.
+          openapi: pinnedOpenApiTransport,
           rpc: pinnedJsonRpcTransport,
         },
       });
