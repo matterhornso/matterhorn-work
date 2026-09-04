@@ -243,6 +243,81 @@ function compileBittensor(input: CertifiedCryptoIntentCompileInput, result: Reco
   };
 }
 
+function compilePolymarket(input: CertifiedCryptoIntentCompileInput, result: Record<string, unknown>): CompiledTerms {
+  if (input.result.app.id !== "matterhorn.polymarket-wallet-preview"
+    || input.result.action.id !== "polymarket_preview_order"
+    || input.result.action.access !== "prepare"
+    || input.result.action.network !== "polymarket:polygon") {
+    throw new Error("crypto_intent_action_unsupported");
+  }
+  const network = text(result.network);
+  const signer = text(result.signer).toLowerCase();
+  const marketId = text(result.marketId).toLowerCase();
+  const tokenId = text(result.tokenId);
+  const outcome = text(result.outcome);
+  const side = text(result.side);
+  const amountUsdc = result.amountUsdc === null ? null : canonicalDecimal(result.amountUsdc);
+  const amountShares = result.amountShares === null ? null : canonicalDecimal(result.amountShares);
+  const orderType = text(result.orderType);
+  const limitPrice = canonicalDecimal(result.limitPrice);
+  const maxSlippageBps = integer(result.maxSlippageBps, 1, 1_000);
+  const tickSize = canonicalDecimal(result.tickSize);
+  const minimumOrderSize = canonicalDecimal(result.minimumOrderSize);
+  const negativeRisk = boolean(result.negativeRisk);
+  const snapshotHash = text(result.snapshotHash);
+  const simulationReference = text(result.simulationReference);
+  const expiresAt = text(result.expiresAt);
+  if (network !== "polymarket:polygon"
+    || !/^0x[a-f0-9]{40}$/.test(signer)
+    || !/^0x[a-f0-9]{64}$/.test(marketId)
+    || !/^[1-9][0-9]{0,77}$/.test(tokenId)
+    || BigInt(tokenId) > ((1n << 256n) - 1n)
+    || (side !== "buy" && side !== "sell")
+    || orderType !== "FAK"
+    || (side === "buy" ? amountUsdc === null || amountShares !== null : amountShares === null || amountUsdc !== null)) {
+    throw new Error("crypto_intent_result_invalid");
+  }
+  for (const [key, expected] of Object.entries({
+    signer,
+    marketId,
+    tokenId,
+    outcome,
+    side,
+    maxSlippageBps,
+  })) assertRequestField(input.canonicalRequestArguments, key, expected);
+  if (side === "buy") assertRequestDecimal(input.canonicalRequestArguments, "amountUsdc", amountUsdc!);
+  else assertRequestDecimal(input.canonicalRequestArguments, "amountShares", amountShares!);
+  const canonicalArguments = {
+    signer,
+    marketId,
+    tokenId,
+    outcome,
+    side,
+    amountUsdc,
+    amountShares,
+    orderType,
+    limitPrice,
+    maxSlippageBps,
+    tickSize,
+    minimumOrderSize,
+    negativeRisk,
+    snapshotHash,
+  };
+  return {
+    protocol: "polymarket",
+    network,
+    signer,
+    operation: side,
+    asset: tokenId,
+    amount: side === "buy" ? amountUsdc! : amountShares!,
+    recipient: marketId,
+    slippageBps: maxSlippageBps,
+    canonicalArguments,
+    simulationReference,
+    expiresAt,
+  };
+}
+
 function intentMaterial(intent: Omit<MatterhornCryptoIntent, "id" | "intentHash">): unknown {
   return intent;
 }
@@ -289,6 +364,8 @@ export function compileCertifiedCryptoIntent(input: CertifiedCryptoIntentCompile
       ? compileHyperliquid(input, projected)
       : input.result.app.id === "matterhorn.bittensor-testnet"
         ? compileBittensor(input, projected)
+      : input.result.app.id === "matterhorn.polymarket-wallet-preview"
+        ? compilePolymarket(input, projected)
       : (() => { throw new Error("crypto_intent_action_unsupported"); })();
   const expiresAt = new Date(terms.expiresAt);
   if (!Number.isFinite(expiresAt.getTime())
@@ -441,6 +518,46 @@ export function cryptoIntentToReviewedActionHandoffV2(
             hotkey: text(intent.canonicalArguments.hotkey),
             netuid: integer(intent.canonicalArguments.netuid, 0, 65_535),
             amountTao: text(intent.canonicalArguments.amountTao),
+          },
+        };
+  } else if (intent.protocol === "polymarket"
+    && intent.appId === "matterhorn.polymarket-wallet-preview"
+    && intent.actionId === "polymarket_preview_order") {
+    const side = text(intent.canonicalArguments.side);
+    if (side !== "buy" && side !== "sell") throw new Error("crypto_intent_terms_invalid");
+    const common = {
+      marketId: text(intent.canonicalArguments.marketId),
+      tokenId: text(intent.canonicalArguments.tokenId),
+      outcome: text(intent.canonicalArguments.outcome),
+      orderType: "FAK" as const,
+      limitPrice: number(intent.canonicalArguments.limitPrice),
+      tickSize: text(intent.canonicalArguments.tickSize),
+      negativeRisk: boolean(intent.canonicalArguments.negativeRisk),
+      slippageTolerance: integer(intent.canonicalArguments.maxSlippageBps, 1, 1_000) / 100,
+      orderIds: [] as [],
+      cancelAll: false as const,
+    };
+    handoff = side === "buy"
+      ? {
+          version: "matterhorn.reviewed-action-handoff.v1",
+          protocol: "polymarket",
+          source: "agent-card",
+          draft: {
+            operation: "buy",
+            ...common,
+            amountUsdc: number(intent.canonicalArguments.amountUsdc),
+            amountShares: null,
+          },
+        }
+      : {
+          version: "matterhorn.reviewed-action-handoff.v1",
+          protocol: "polymarket",
+          source: "agent-card",
+          draft: {
+            operation: "sell",
+            ...common,
+            amountUsdc: null,
+            amountShares: number(intent.canonicalArguments.amountShares),
           },
         };
   } else {

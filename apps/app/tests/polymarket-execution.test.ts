@@ -38,7 +38,8 @@ function prepared(overrides: Partial<PolymarketPreparedOrder> = {}): PolymarketP
   return {
     tradeSide: "BUY",
     marketId: "condition-1",
-    tokenId: "token-yes",
+    tokenId: "123456789",
+    signerAddress: "0x1111111111111111111111111111111111111111",
     marketLabel: "Will the test pass?",
     outcome: "Yes",
     amountUsdc: 5,
@@ -47,6 +48,10 @@ function prepared(overrides: Partial<PolymarketPreparedOrder> = {}): PolymarketP
     estimatedShares: 9.09,
     estimatedProceedsUsdc: null,
     maxLossUsdc: 5,
+    orderType: "FAK",
+    limitPrice: 0.57,
+    tickSize: "0.01",
+    negativeRisk: false,
     previewSha256: "abc",
     expiresAt: "2030-01-01T00:00:00.000Z",
     compliance: { status: "allowed", reason: null },
@@ -182,6 +187,12 @@ describe("Polymarket reviewed execution", () => {
     expect(() => assertPolymarketPreparedOrder(prepared({ maxLossUsdc: 4 }))).toThrow("no longer matches");
   });
 
+  it("blocks missing or mutated exact CLOB execution terms", () => {
+    expect(() => assertPolymarketPreparedOrder(prepared({ limitPrice: 1 }))).toThrow("exact CLOB");
+    expect(() => assertPolymarketPreparedOrder(prepared({ tickSize: "1" }))).toThrow("exact CLOB");
+    expect(() => assertPolymarketPreparedOrder(prepared({ tokenId: "token-yes" }))).toThrow("missing its market");
+  });
+
   it("validates exact share quantity for sell orders", () => {
     expect(() => assertPolymarketPreparedOrder(prepared({
       tradeSide: "SELL",
@@ -216,6 +227,16 @@ describe("Polymarket reviewed execution", () => {
       walletClient: { account: { address: "0x1111111111111111111111111111111111111111" }, chain: { id: 1 } } as unknown as WalletClient,
       order: prepared(),
     })).rejects.toThrow("Switch the connected wallet to Polygon");
+  });
+
+  it("blocks a connected wallet that differs from the hash-bound signer", async () => {
+    await expect(submitPolymarketOrder({
+      walletClient: {
+        account: { address: "0x2222222222222222222222222222222222222222" },
+        chain: { id: POLYMARKET_CHAIN_ID },
+      } as unknown as WalletClient,
+      order: prepared(),
+    })).rejects.toThrow("exact wallet");
   });
 
   it("rechecks the user's current location immediately before loading the exchange client", async () => {
@@ -270,12 +291,12 @@ describe("Polymarket reviewed execution", () => {
     expect(options[0]).not.toHaveProperty("creds");
     expect(options[1]).toHaveProperty("creds", credentials);
     expect(orders).toEqual([{
-      tokenID: "token-yes",
+      tokenID: "123456789",
       amount: 5,
       side: "BUY",
-      orderType: "FAK",
+      price: 0.57,
     }]);
-    expect(orderOptions).toEqual([{ version: 2 }]);
+    expect(orderOptions).toEqual([{ version: 2, tickSize: "0.01", negRisk: false }]);
     expect(orderTypes).toEqual(["FAK"]);
     expect(credentials).toEqual({ key: "", secret: "", passphrase: "" });
   });

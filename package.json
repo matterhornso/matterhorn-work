@@ -71,6 +71,7 @@
     "certify:public-beta": "node scripts/public-beta-candidate-certifier.mjs",
     "certify:crypto-app": "bun scripts/certify-first-party-crypto-app.ts",
     "certify:crypto-app-readonly": "bun scripts/certify-first-party-crypto-app.ts --scope public-readonly",
+    "certify:crypto-app-polymarket-preview": "bun scripts/certify-first-party-crypto-app.ts --scope polymarket-wallet-preview",
     "create:crypto-app": "bun scripts/create-crypto-app-quickstart.ts",
     "invite:crypto-developer": "bun scripts/issue-crypto-developer-invite.ts",
     "invite:crypto-coworker": "bun scripts/issue-crypto-coworker-invite.ts",

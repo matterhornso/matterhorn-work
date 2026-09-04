@@ -21,6 +21,8 @@ export type PolymarketPreparedOrder = {
   tradeSide: "BUY" | "SELL";
   marketId: string;
   tokenId: string;
+  /** When present, only this exact reviewed wallet may authorize the order. */
+  signerAddress: string | null;
   marketLabel: string;
   outcome: string;
   amountUsdc: number | null;
@@ -29,6 +31,10 @@ export type PolymarketPreparedOrder = {
   estimatedShares: number | null;
   estimatedProceedsUsdc: number | null;
   maxLossUsdc: number | null;
+  orderType: "FAK";
+  limitPrice: number;
+  tickSize: string;
+  negativeRisk: boolean;
   previewSha256: string;
   expiresAt: string;
   compliance: { status: "allowed" | "blocked" | "unknown"; reason: string | null };
@@ -199,8 +205,16 @@ export async function assertPolymarketUserCanPlaceOrders(): Promise<PolymarketUs
 }
 
 export function assertPolymarketPreparedOrder(order: PolymarketPreparedOrder, now = Date.now()) {
-  if (!order.marketId || !order.tokenId || !order.outcome) {
+  if (!order.marketId || !/^[1-9][0-9]{0,77}$/.test(order.tokenId) || !order.outcome) {
     throw new Error("The prepared order is missing its market, outcome, or CLOB token.");
+  }
+  if (order.orderType !== "FAK"
+    || !Number.isFinite(order.limitPrice)
+    || !(order.limitPrice > 0 && order.limitPrice < 1)
+    || !/^0\.\d{1,10}$/.test(order.tickSize)
+    || !(Number(order.tickSize) > 0 && Number(order.tickSize) < 1)
+    || typeof order.negativeRisk !== "boolean") {
+    throw new Error("The prepared order is missing exact CLOB price, tick-size, or risk terms. Prepare it again.");
   }
   if (order.tradeSide === "BUY") {
     if (
@@ -238,6 +252,10 @@ export async function submitPolymarketOrder(args: {
   if (!args.walletClient.account) {
     throw new Error("Connect an EVM wallet before submitting.");
   }
+  if (args.order.signerAddress
+    && args.walletClient.account.address.toLowerCase() !== args.order.signerAddress.toLowerCase()) {
+    throw new Error("Connect the exact wallet named in the reviewed Polymarket action.");
+  }
   if (args.walletClient.chain?.id !== POLYMARKET_CHAIN_ID) {
     throw new Error("Switch the connected wallet to Polygon before submitting.");
   }
@@ -260,9 +278,13 @@ export async function submitPolymarketOrder(args: {
         tokenID: args.order.tokenId,
         amount: args.order.tradeSide === "BUY" ? args.order.amountUsdc ?? 0 : args.order.amountShares ?? 0,
         side: args.order.tradeSide === "BUY" ? runtime.sideBuy : runtime.sideSell,
-        orderType: runtime.orderTypeFak,
+        price: args.order.limitPrice,
       },
-      { version: 2 },
+      {
+        version: 2,
+        tickSize: args.order.tickSize,
+        negRisk: args.order.negativeRisk,
+      },
       runtime.orderTypeFak,
     );
 

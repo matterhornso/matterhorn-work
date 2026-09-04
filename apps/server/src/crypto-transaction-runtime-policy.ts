@@ -104,7 +104,10 @@ function supportedFirstPartyAction(input: Pick<PolicyInput, "appId" | "actionId"
       && input.network === "hyperliquid:testnet")
     || (input.appId === "matterhorn.bittensor-testnet"
       && BITTENSOR_TESTNET_PREPARE_ACTIONS.has(input.actionId)
-      && input.network === "bittensor:test");
+      && input.network === "bittensor:test")
+    || (input.appId === "matterhorn.polymarket-wallet-preview"
+      && input.actionId === "polymarket_preview_order"
+      && input.network === "polymarket:polygon");
 }
 
 function certifiedTestNetwork(input: Pick<PolicyInput, "appId" | "network">): boolean {
@@ -303,6 +306,29 @@ export function resolveMatterhornRuntimeTransactionFacts(input: FactsInput): Mat
         projectedReserveUsd = reportedReserve;
         leverage = reportedLeverage;
       }
+    }
+  } else if (result
+    && input.intent.appId === "matterhorn.polymarket-wallet-preview"
+    && input.intent.actionId === "polymarket_preview_order"
+    && input.intent.network === "polymarket:polygon") {
+    const side = result.side;
+    const maximumSpend = finiteNonNegative(result.maximumSpendUsdc);
+    const estimatedProceeds = finiteNonNegative(result.estimatedProceedsUsdc);
+    const requestedShares = finiteNonNegative(result.amountShares);
+    const requestedUsdc = finiteNonNegative(result.amountUsdc);
+    if (side === "buy"
+      && maximumSpend !== null
+      && requestedUsdc !== null
+      && approximatelyEqual(maximumSpend, requestedUsdc)) {
+      notionalUsd = maximumSpend;
+    } else if (side === "sell"
+      && estimatedProceeds !== null
+      && requestedShares !== null
+      && estimatedProceeds > 0) {
+      // Counting expected sale proceeds against the per-action and daily
+      // limits is conservative and avoids granting unbounded financial value
+      // to a sell action merely because it does not spend collateral.
+      notionalUsd = estimatedProceeds;
     }
   }
   const supported = supportedFirstPartyAction({

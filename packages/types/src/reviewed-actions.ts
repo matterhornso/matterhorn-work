@@ -127,7 +127,14 @@ export type ReviewedActionDraftHandoff =
         | {
             operation: "buy"
             marketId: string
+            /** Exact CLOB outcome token. Required for v2 wallet reviews. */
+            tokenId?: string | null
             outcome: string
+            /** Exact wallet execution terms. Required for v2 wallet reviews. */
+            orderType?: "FAK" | null
+            limitPrice?: number | null
+            tickSize?: string | null
+            negativeRisk?: boolean | null
             amountUsdc: number
             amountShares: null
             slippageTolerance: number
@@ -137,7 +144,14 @@ export type ReviewedActionDraftHandoff =
         | {
             operation: "sell"
             marketId: string
+            /** Exact CLOB outcome token. Required for v2 wallet reviews. */
+            tokenId?: string | null
             outcome: string
+            /** Exact wallet execution terms. Required for v2 wallet reviews. */
+            orderType?: "FAK" | null
+            limitPrice?: number | null
+            tickSize?: string | null
+            negativeRisk?: boolean | null
             amountUsdc: null
             amountShares: number
             slippageTolerance: number
@@ -321,6 +335,18 @@ export function isReviewedActionHandoffV2(value: unknown): value is ReviewedActi
     source: handoff.source,
     draft: handoff.draft,
   })
+  const certifiedPolymarketTermsBound = handoff.protocol !== "polymarket"
+    || (isRecordLike(handoff.draft)
+      && handoff.draft.operation === "cancel")
+    || (isRecordLike(handoff.draft)
+      && isNonEmptyPublicText(handoff.draft.tokenId, 78)
+      && /^[1-9][0-9]{0,77}$/.test(handoff.draft.tokenId)
+      && BigInt(handoff.draft.tokenId) <= ((1n << 256n) - 1n)
+      && handoff.draft.orderType === "FAK"
+      && isFiniteNumberInRange(handoff.draft.limitPrice, Number.MIN_VALUE, 1 - Number.EPSILON)
+      && isPositiveDecimalText(handoff.draft.tickSize)
+      && Number(handoff.draft.tickSize) < 1
+      && typeof handoff.draft.negativeRisk === "boolean")
   return /^[a-f0-9]{64}$/i.test(String(handoff.intentHash))
     && /^[a-f0-9]{64}$/i.test(String(handoff.policyHash))
     && Number.isFinite(Date.parse(String(handoff.expiresAt)))
@@ -330,6 +356,11 @@ export function isReviewedActionHandoffV2(value: unknown): value is ReviewedActi
     && Number.isFinite(Date.parse(String(simulation.simulatedAt)))
     && (simulation.block === null || isNonEmptyPublicText(simulation.block, 128))
     && draftValid
+    && certifiedPolymarketTermsBound
+}
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
 function isFiniteNumberInRange(value: unknown, minimum: number, maximum: number): value is number {
@@ -423,7 +454,17 @@ export function isReviewedActionDraftHandoff(value: unknown): value is ReviewedA
         && (draft.cancelAll || draft.orderIds.length > 0)
     }
     const hasMarketTerms = isNonEmptyPublicText(draft.marketId, 512)
+      && (draft.tokenId === undefined || draft.tokenId === null
+        || (isNonEmptyPublicText(draft.tokenId, 78)
+          && /^[1-9][0-9]{0,77}$/.test(draft.tokenId)
+          && BigInt(draft.tokenId) <= ((1n << 256n) - 1n)))
       && isNonEmptyPublicText(draft.outcome, 256)
+      && (draft.orderType === undefined || draft.orderType === null || draft.orderType === "FAK")
+      && (draft.limitPrice === undefined || draft.limitPrice === null
+        || isFiniteNumberInRange(draft.limitPrice, Number.MIN_VALUE, 1 - Number.EPSILON))
+      && (draft.tickSize === undefined || draft.tickSize === null
+        || (isPositiveDecimalText(draft.tickSize) && Number(draft.tickSize) < 1))
+      && (draft.negativeRisk === undefined || draft.negativeRisk === null || typeof draft.negativeRisk === "boolean")
       && isFiniteNumberInRange(draft.slippageTolerance, 0.01, 50)
       && Array.isArray(draft.orderIds)
       && draft.orderIds.length === 0

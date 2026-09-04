@@ -6,17 +6,20 @@ import type { MatterhornCryptoAppTransportExecutor } from "./crypto-app-adapter-
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
 import {
   createFirstPartyCryptoAppCertificationDriver,
+  createFirstPartyPolymarketWalletPreviewCertificationDriver,
   createFirstPartyPublicReadCryptoAppCertificationDriver,
   type MatterhornFirstPartyCertificationInputs,
 } from "./first-party-crypto-app-certification-driver.js";
 import {
   certifyMatterhornFirstPartyCryptoApp,
+  certifyMatterhornFirstPartyPolymarketWalletPreview,
   certifyMatterhornFirstPartyPublicReadCryptoApp,
 } from "./first-party-crypto-app-certifier.js";
 import {
   buildMatterhornFirstPartyBittensorTestnetManifest,
   buildMatterhornFirstPartyPolymarketClobResearchManifest,
   buildMatterhornFirstPartyPolymarketResearchManifest,
+  buildMatterhornFirstPartyPolymarketWalletPreviewManifest,
   buildMatterhornFirstPartyTestnetManifests,
 } from "./first-party-crypto-apps.js";
 import { runCryptoAppRuntimeCertificationHarness } from "./crypto-app-runtime-certification-harness.js";
@@ -69,6 +72,15 @@ const polymarketManifests = [
   }),
 ];
 
+const polymarketWalletPreviewManifest = buildMatterhornFirstPartyPolymarketWalletPreviewManifest({
+  publisherId: "matterhorn",
+  publisherKeyId: "certification-test",
+  sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
+  polymarketClobEndpoint: "https://clob.polymarket.com",
+  privacyPolicyUrl: "https://matterhorn.so/privacy",
+  securityContact: "security@matterhorn.so",
+});
+
 const inputs: MatterhornFirstPartyCertificationInputs = {
   sui_account_read: { address: SUI_ADDRESS },
   sui_transfer_preview: { sender: SUI_ADDRESS, recipient: SUI_RECIPIENT, amountSui: "0.01" },
@@ -91,6 +103,16 @@ const inputs: MatterhornFirstPartyCertificationInputs = {
   bittensor_prepare_unstake: { sender: BITTENSOR_SENDER, hotkey: BITTENSOR_HOTKEY, netuid: 14, amountTao: "0.1" },
   polymarket_market_search: { query: "SUI", limit: 2 },
   polymarket_orderbook_read: { tokenId: POLYMARKET_TOKEN_ID },
+  polymarket_preview_order: {
+    signer: `0x${"b".repeat(40)}`,
+    marketId: `0x${"a".repeat(64)}`,
+    tokenId: POLYMARKET_TOKEN_ID,
+    outcome: "Yes",
+    side: "buy",
+    amountUsdc: "25",
+    amountShares: null,
+    maxSlippageBps: 100,
+  },
 };
 
 function output(actionId: string): unknown {
@@ -250,6 +272,33 @@ function output(actionId: string): unknown {
     negativeRisk: false,
     lastTradePrice: "0.45",
     observedAt: NOW,
+  };
+  if (actionId === "polymarket_preview_order") return {
+    version: "matterhorn.polymarket-wallet-preview.v1",
+    network: "polymarket:polygon",
+    signer: `0x${"b".repeat(40)}`,
+    marketId: `0x${"a".repeat(64)}`,
+    tokenId: POLYMARKET_TOKEN_ID,
+    outcome: "Yes",
+    side: "buy",
+    amountUsdc: "25",
+    amountShares: null,
+    orderType: "FAK",
+    limitPrice: "0.47",
+    tickSize: "0.01",
+    negativeRisk: false,
+    maxSlippageBps: 100,
+    minimumOrderSize: "1",
+    bestPrice: "0.46",
+    estimatedAverageFillPrice: "0.46",
+    visibleDepthSufficient: true,
+    estimatedShares: "53.191489361702127659",
+    estimatedProceedsUsdc: null,
+    maximumSpendUsdc: "25",
+    snapshotHash: `0x${"b".repeat(64)}`,
+    simulationReference: `sha256:${"6".repeat(64)}`,
+    observedAt: NOW,
+    expiresAt: "2026-09-01T12:00:30.000Z",
   };
   if (actionId === "execute_transaction") {
     throw new Error("first_party_app_action_invalid");
@@ -452,5 +501,87 @@ describe("first-party crypto app certification driver", () => {
         driver: createFirstPartyPublicReadCryptoAppCertificationDriver({ actionInputs: inputs, executor }),
       })).rejects.toThrow("first_party_public_read_certification_scope_invalid");
     }
+  });
+
+  test("certifies only the sealed wallet-review-only Polymarket preview", async () => {
+    const previewStaticReport = runCryptoAppManifestConformance(polymarketWalletPreviewManifest, {
+      publisherKey: keys.publicKey,
+      policyVersion: "polymarket-wallet-preview-policy-1",
+      targetEnvironment: "mainnet",
+      now: () => new Date(NOW),
+    });
+    const previewRuntimeReport = await runCryptoAppRuntimeCertificationHarness({
+      manifest: polymarketWalletPreviewManifest,
+      staticReport: previewStaticReport,
+      driver: createFirstPartyPolymarketWalletPreviewCertificationDriver({
+        actionInputs: inputs,
+        executor,
+        resolveDns: async () => [{ address: PEER, family: 4 }],
+        now: () => new Date(NOW),
+      }),
+      now: () => new Date(NOW),
+    });
+    expect(previewRuntimeReport.passed).toBe(true);
+    const promotion = await certifyMatterhornFirstPartyPolymarketWalletPreview({
+      manifest: polymarketWalletPreviewManifest,
+      publisherPublicKey: keys.publicKey,
+      policyVersion: "polymarket-wallet-preview-policy-1",
+      actionInputs: inputs,
+      driver: createFirstPartyPolymarketWalletPreviewCertificationDriver({
+        actionInputs: inputs,
+        executor,
+        resolveDns: async () => [{ address: PEER, family: 4 }],
+        now: () => new Date(NOW),
+      }),
+      now: () => new Date(NOW),
+    });
+    expect(promotion.state).toBe("certified_mainnet");
+    expect(promotion.report.targetEnvironment).toBe("mainnet");
+    expect(promotion.report.passed).toBe(true);
+    expect(promotion.runtimeReport.passed).toBe(true);
+    expect(promotion.runtimeReport.requiredProbeIds).toContain("wallet_only_simulation");
+    const serialized = JSON.stringify(promotion);
+    expect(serialized).not.toContain(POLYMARKET_TOKEN_ID);
+    expect(serialized).not.toContain(`0x${"b".repeat(40)}`);
+    expect(serialized).not.toContain("limitPrice");
+  });
+
+  test("fails wallet-preview certification closed on authority or endpoint drift", async () => {
+    const signing = structuredClone(polymarketWalletPreviewManifest);
+    (signing.actions[0] as { agentMaySubmit: boolean }).agentMaySubmit = true;
+    const readable = structuredClone(polymarketWalletPreviewManifest);
+    readable.actions[0]!.access = "read";
+    const redirected = structuredClone(polymarketWalletPreviewManifest);
+    redirected.transport.endpoint = "https://attacker.invalid";
+    const authenticated = structuredClone(polymarketWalletPreviewManifest);
+    authenticated.authentication = { type: "api_key_vault", scopes: ["trade"] };
+    const extraAction = structuredClone(polymarketWalletPreviewManifest);
+    extraAction.actions.push({ ...extraAction.actions[0]!, id: "polymarket_submit_order" });
+    for (const manifest of [signing, readable, redirected, authenticated, extraAction]) {
+      await expect(certifyMatterhornFirstPartyPolymarketWalletPreview({
+        manifest,
+        publisherPublicKey: keys.publicKey,
+        policyVersion: "polymarket-wallet-preview-policy-1",
+        actionInputs: inputs,
+        driver: createFirstPartyPolymarketWalletPreviewCertificationDriver({ actionInputs: inputs, executor }),
+      })).rejects.toThrow("first_party_polymarket_preview_certification_scope_invalid");
+    }
+  });
+
+  test("does not promote the wallet preview through read-only or testnet certification", async () => {
+    await expect(certifyMatterhornFirstPartyPublicReadCryptoApp({
+      manifest: polymarketWalletPreviewManifest,
+      publisherPublicKey: keys.publicKey,
+      policyVersion: "public-read-policy-1",
+      actionInputs: inputs,
+      driver: createFirstPartyPublicReadCryptoAppCertificationDriver({ actionInputs: inputs, executor }),
+    })).rejects.toThrow("first_party_public_read_certification_scope_invalid");
+    await expect(certifyMatterhornFirstPartyCryptoApp({
+      manifest: polymarketWalletPreviewManifest,
+      publisherPublicKey: keys.publicKey,
+      policyVersion: "testnet-policy-1",
+      actionInputs: inputs,
+      driver: createFirstPartyCryptoAppCertificationDriver({ actionInputs: inputs, executor }),
+    })).rejects.toThrow("first_party_certification_scope_invalid");
   });
 });
