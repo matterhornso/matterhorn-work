@@ -119,6 +119,12 @@ import {
   workflowOutputReceiptsFromEvidence,
 } from "../artifacts/output-receipts";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
+import {
+  boundedCoworkerUnreadCount,
+  coworkerListQueryKey,
+  coworkerUnreadBadgeLabel,
+  coworkerUnreadStatusLabel,
+} from "../../coworkers/coworker-query";
 import { ProjectHistoryPage } from "../../recent-activity/project-history-page";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import { useStatusToasts } from "../../shell-feedback/status-toasts";
@@ -1713,6 +1719,20 @@ export function SessionPage(props: SessionPageProps) {
     () => customerWorkflowStarterCards.filter((card) => card.panel === "bittensor" || card.panel === "hyperliquid" || card.panel === "polymarket" || card.panel === "sui"),
     [customerWorkflowStarterCards],
   );
+  const coworkerWorkspaceId = (props.runtimeWorkspaceId ?? props.selectedWorkspaceId ?? "").trim();
+  const coworkerListQuery = useQuery({
+    queryKey: coworkerListQueryKey(coworkerWorkspaceId),
+    queryFn: () => props.matterhornServerClient!.listCoworkers(coworkerWorkspaceId),
+    enabled: Boolean(props.matterhornServerClient && coworkerWorkspaceId),
+    retry: false,
+    refetchInterval: (query) => query.state.status === "error" ? false : 30_000,
+  });
+  const coworkerUnreadCount = boundedCoworkerUnreadCount(coworkerListQuery.data?.inbox?.totalUnread);
+  const coworkerUnreadBadge = coworkerUnreadBadgeLabel(coworkerUnreadCount);
+  const coworkerUnreadStatus = coworkerUnreadStatusLabel(coworkerUnreadCount);
+  const coworkerNavigationTitle = coworkerUnreadCount > 0
+    ? `Coworkers · ${coworkerUnreadStatus}`
+    : "Coworkers";
   const [memorySuggestionUnreadCount, setMemorySuggestionUnreadCount] = useState(0);
   const refreshMemorySuggestionUnreadCount = useCallback(async () => {
     const client = props.matterhornServerClient;
@@ -2943,6 +2963,14 @@ export function SessionPage(props: SessionPageProps) {
                     <p className="px-3 pb-1 pt-2 text-xs font-medium text-dls-muted">Workspace</p>
                     <MobileWorkspaceMenuAction
                       active={coworkersRailActive}
+                      badge={coworkerUnreadBadge ? (
+                        <>
+                          <span className="sr-only">{coworkerUnreadStatus}</span>
+                          <span aria-hidden="true" className="rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-semibold text-dls-secondary">
+                            {coworkerUnreadBadge}
+                          </span>
+                        </>
+                      ) : null}
                       icon={<UsersRound className="size-4" />}
                       label="Coworkers"
                       onSelect={() => runMobileWorkspaceAction(openCoworkersRailPane)}
@@ -3776,16 +3804,23 @@ export function SessionPage(props: SessionPageProps) {
               variant="ghost"
               size="icon-sm"
               className={cn(
-                RAIL_BUTTON_CLASS,
+                `relative ${RAIL_BUTTON_CLASS}`,
                 coworkersRailActive && RAIL_ACTIVE_CLASS,
               )}
               onClick={openCoworkersRailPane}
-              title="Coworkers"
-              aria-label="Coworkers"
+              title={coworkerNavigationTitle}
               aria-pressed={coworkersRailActive}
             >
-              <UsersRound size={17} />
+              <UsersRound size={17} aria-hidden="true" />
               <span className={RAIL_LABEL_CLASS}>Coworkers</span>
+              {coworkerUnreadCount > 0 ? (
+                <>
+                  <span className="sr-only">{coworkerUnreadStatus}</span>
+                  <span aria-hidden="true" className="absolute right-1 top-1 flex min-w-3 items-center justify-center rounded-md bg-dls-hover px-1 text-[9px] font-semibold leading-3 text-dls-secondary ring-1 ring-dls-border/40">
+                    {coworkerUnreadBadge}
+                  </span>
+                </>
+              ) : null}
             </Button>
             <Button
               variant="ghost"
