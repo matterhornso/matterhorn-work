@@ -572,14 +572,12 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
       "matterhorn_hyperliquid_act_on_watch_alert",
       "matterhorn_hyperliquid_preview_order",
       "matterhorn_hyperliquid_prepare_handoff",
-      "matterhorn_hyperliquid_create_sign_request",
-      "matterhorn_hyperliquid_validate_external_artifact",
       "matterhorn_hyperliquid_verify_receipt",
     ],
     toolSummary:
-      "16 tools for markets, accounts, watches, handoffs, validation, and receipts.",
+      "14 tools for markets, accounts, watches, connected-wallet review, and receipts.",
     boundary:
-      "Prepare only. Matterhorn cannot submit the action; review and submit it with your own signer or client. Never paste API secrets, keys, signatures, signed payloads, or custody credentials.",
+      "Prepare only. Matterhorn cannot submit the action; review and submit it with your connected wallet. Never paste API secrets, keys, signatures, signed payloads, or custody credentials.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
     docs: mcpDocs(
       "hyperliquid",
@@ -639,12 +637,10 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
       "matterhorn_polymarket_act_on_watch_alert",
       "matterhorn_polymarket_preview_order",
       "matterhorn_polymarket_prepare_handoff",
-      "matterhorn_polymarket_create_sign_request",
-      "matterhorn_polymarket_validate_external_artifact",
       "matterhorn_polymarket_verify_receipt",
     ],
     toolSummary:
-      "15 tools for research, orderbooks, compliance, watches, handoffs, and receipts.",
+      "13 tools for research, orderbooks, compliance, connected-wallet review, and receipts.",
     boundary:
       "Compliance-gated handoff only. No live submit. Blocked flows hide executable price, size, and share fields.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],

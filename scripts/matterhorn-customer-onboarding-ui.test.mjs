@@ -922,7 +922,7 @@ for (const phrase of [
   "matterhorn-work mcp config --target cursor --profile full",
   "Public reads plus transfer, stake, and unstake drafts.",
   "Compliance-gated handoff only. No live submit.",
-  "review and submit it with your own signer or client.",
+  "review and submit it with your connected wallet.",
   "Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
   "Never paste API secrets, keys, signatures, signed payloads, or custody credentials.",
   "No hidden saves.",

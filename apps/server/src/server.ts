@@ -133,10 +133,8 @@ import {
   findForbiddenHyperliquidCredentialInput,
   hyperliquidProvider,
   isValidHyperliquidAddress,
-  prepareHyperliquidExternalSignRequestFromRequest,
   prepareHyperliquidHandoffFromRequest,
   prepareHyperliquidOrderPreview,
-  validateHyperliquidRedactedArtifactEnvelope,
   type HyperliquidWatchCheckResult,
   type HyperliquidWatchDescriptor,
   verifyHyperliquidReceipt,
@@ -164,11 +162,9 @@ import {
   findForbiddenPolymarketCredentialInput,
   buildPolymarketWatchDescriptor,
   polymarketProvider,
-  preparePolymarketExternalSignRequestFromRequest,
   preparePolymarketHandoffFromRequest,
   preparePolymarketOrderFromRequest,
   preparePolymarketSellPreviewFromRequest,
-  validatePolymarketRedactedArtifactEnvelope,
   type PolymarketWatchCheckResult,
   type PolymarketWatchDescriptor,
   verifyPolymarketReceipt,
@@ -3153,21 +3149,6 @@ function sanitizeProxyResponse(
     statusText: response.statusText,
     headers,
   });
-}
-
-function sanitizeMarketArtifactValidationInputForSecretScan(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sanitizeMarketArtifactValidationInputForSecretScan);
-  if (!value || typeof value !== "object") return value;
-  const output: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (key === "signingPayload") continue;
-    if (key === "unsignedPayloadSha256") {
-      output.payloadHash = child;
-      continue;
-    }
-    output[key] = sanitizeMarketArtifactValidationInputForSecretScan(child);
-  }
-  return output;
 }
 
 function jsonResponse(data: unknown, status = 200) {
@@ -17841,40 +17822,12 @@ function createRoutes(
     }
   });
 
-  addRoute(routes, "POST", "/api/hyperliquid/orders/external-sign-request", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    const forbidden = findForbiddenHyperliquidCredentialInput(body);
-    if (forbidden) {
-      throw new ApiError(400, "market_secret_rejected", `Hyperliquid sign-request input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
-    }
-    try {
-      const { preview, handoff, signRequest } = await prepareHyperliquidExternalSignRequestFromRequest({
-        asset: typeof body.asset === "string" ? body.asset : null,
-        side: typeof body.side === "string" ? body.side as never : null,
-        size: body.size === undefined ? null : body.size as never,
-        price: body.price === undefined ? null : body.price as never,
-        reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
-        slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as never,
-        executionMode: typeof body.executionMode === "string" ? body.executionMode : null,
-      });
-      return jsonResponse({ success: true, signRequest, handoff, preview });
-    } catch (err) {
-      throw new ApiError(400, "invalid_hyperliquid_sign_request", err instanceof Error ? err.message : "Could not prepare Hyperliquid external sign request");
-    }
+  addRoute(routes, "POST", "/api/hyperliquid/orders/external-sign-request", "client", async () => {
+    throw new ApiError(409, "wallet_airlock_required", "Legacy Hyperliquid external signing is disabled. Prepare the order, then review, sign, and submit the exact action in the connected-wallet ticket.");
   });
 
-  addRoute(routes, "POST", "/api/hyperliquid/orders/external-artifact/validate", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    const forbidden = findForbiddenHyperliquidCredentialInput(sanitizeMarketArtifactValidationInputForSecretScan(body));
-    if (forbidden) {
-      throw new ApiError(400, "market_secret_rejected", `Hyperliquid artifact validation input must contain only public/redacted metadata (${forbidden}).`);
-    }
-    try {
-      const validation = validateHyperliquidRedactedArtifactEnvelope(body.signRequest as never, body.artifact as never);
-      return jsonResponse({ success: validation.status === "accepted_public_metadata", validation, receiptCandidate: validation.publicAuditReceiptCandidate });
-    } catch (err) {
-      throw new ApiError(400, "invalid_hyperliquid_artifact_validation", err instanceof Error ? err.message : "Could not validate Hyperliquid public artifact metadata");
-    }
+  addRoute(routes, "POST", "/api/hyperliquid/orders/external-artifact/validate", "client", async () => {
+    throw new ApiError(409, "wallet_airlock_required", "Legacy Hyperliquid signed-artifact intake is disabled. Import only the public receipt produced by the connected-wallet ticket.");
   });
 
   addRoute(routes, "POST", "/api/hyperliquid/orders/receipt", "client", async (ctx) => {
@@ -18324,42 +18277,12 @@ function createRoutes(
     }
   });
 
-  addRoute(routes, "POST", "/api/polymarket/orders/external-sign-request", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    const forbidden = findForbiddenPolymarketCredentialInput(body);
-    if (forbidden) {
-      throw new ApiError(400, "market_secret_rejected", `Polymarket sign-request input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
-    }
-    try {
-      const { preview, handoff, signRequest, blocked } = await preparePolymarketExternalSignRequestFromRequest({
-        marketId: typeof body.marketId === "string" ? body.marketId : "",
-        outcome: typeof body.outcome === "string" ? body.outcome : null,
-        side: typeof body.side === "string" ? body.side as never : null,
-        amountUsdc: Number(body.amountUsdc),
-        slippageTolerance: body.slippageTolerance === undefined ? null : Number(body.slippageTolerance),
-        executionMode: typeof body.executionMode === "string" ? body.executionMode : null,
-      });
-      if (blocked) {
-        return jsonResponse({ success: true, blocked: true, preview, handoff: null, signRequest: null, cards: [buildPolymarketOrderPreviewCard(preview)] });
-      }
-      return jsonResponse({ success: true, signRequest, handoff, preview });
-    } catch (err) {
-      throw new ApiError(400, "invalid_polymarket_sign_request", err instanceof Error ? err.message : "Could not prepare Polymarket external sign request");
-    }
+  addRoute(routes, "POST", "/api/polymarket/orders/external-sign-request", "client", async () => {
+    throw new ApiError(409, "wallet_airlock_required", "Legacy Polymarket external signing is disabled. Prepare an eligible order, then review, authorize, and submit the exact action in the connected Polygon-wallet ticket.");
   });
 
-  addRoute(routes, "POST", "/api/polymarket/orders/external-artifact/validate", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    const forbidden = findForbiddenPolymarketCredentialInput(sanitizeMarketArtifactValidationInputForSecretScan(body));
-    if (forbidden) {
-      throw new ApiError(400, "market_secret_rejected", `Polymarket artifact validation input must contain only public/redacted metadata (${forbidden}).`);
-    }
-    try {
-      const validation = validatePolymarketRedactedArtifactEnvelope(body.signRequest as never, body.artifact as never);
-      return jsonResponse({ success: validation.status === "accepted_public_metadata", validation, receiptCandidate: validation.publicAuditReceiptCandidate });
-    } catch (err) {
-      throw new ApiError(400, "invalid_polymarket_artifact_validation", err instanceof Error ? err.message : "Could not validate Polymarket public artifact metadata");
-    }
+  addRoute(routes, "POST", "/api/polymarket/orders/external-artifact/validate", "client", async () => {
+    throw new ApiError(409, "wallet_airlock_required", "Legacy Polymarket signed-artifact intake is disabled. Import only the public receipt produced by the connected Polygon-wallet ticket.");
   });
 
   addRoute(routes, "POST", "/api/polymarket/orders/receipt", "client", async (ctx) => {
