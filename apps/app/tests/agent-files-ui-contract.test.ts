@@ -52,6 +52,9 @@ describe("coworker files UI", () => {
     expect(panel).toContain("This cloud copy has expired.");
     expect(panel).toContain("This file is being updated. Try again shortly.");
     expect(panel).toContain("This backup request expired or changed. Start it again.");
+    expect(panel).toContain('className="flex size-11 shrink-0 cursor-pointer items-start justify-center pt-1 sm:size-6"');
+    expect(panel).toContain('className="min-h-11 sm:min-h-6" size="xs"');
+    expect(panel).toContain("h-11 w-full");
     expect(panel).toContain("Download original");
     expect(panel).toContain("Matterhorn decrypted this copy only for your download.");
     expect(serverClient).toContain("acknowledgePublicCiphertext: true");

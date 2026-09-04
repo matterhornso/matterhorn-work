@@ -189,14 +189,16 @@ function FileRow(props: {
     : props.verification ? "Encrypted cloud copy checked" : "Encrypted cloud copy saved";
   return (
     <li className="border-b border-dls-border/70 py-4 last:border-b-0">
-      <div className="flex items-start gap-3">
-        <input
-          type="checkbox"
-          checked={props.selected}
-          onChange={props.onSelect}
-          aria-label={`Use ${props.item.file.name} in chat`}
-          className="mt-1 size-4 rounded border-dls-border accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
-        />
+      <div className="flex items-start gap-1 sm:gap-3">
+        <label className="flex size-11 shrink-0 cursor-pointer items-start justify-center pt-1 sm:size-6" title={`Use ${props.item.file.name} in chat`}>
+          <input
+            type="checkbox"
+            checked={props.selected}
+            onChange={props.onSelect}
+            aria-label={`Use ${props.item.file.name} in chat`}
+            className="size-4 rounded border-dls-border accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+          />
+        </label>
         <FileText aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-dls-text" title={props.item.file.name}>{props.item.file.name}</p>
@@ -224,10 +226,10 @@ function FileRow(props: {
             Only encrypted bytes will be copied to the public Walrus test network. The readable file and recovery key stay private in Matterhorn. Public encrypted bytes may remain after deletion; deleting the file destroys its recovery key.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" disabled={props.busy} onClick={props.onConfirmBackup}>
+            <Button className="min-h-11 sm:min-h-8" size="sm" disabled={props.busy} onClick={props.onConfirmBackup}>
               {props.busy ? "Backing up…" : "Back up encrypted copy"}
             </Button>
-            <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancelBackup}>Cancel</Button>
+            <Button className="min-h-11 sm:min-h-8" size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancelBackup}>Cancel</Button>
           </div>
         </div>
       ) : props.renewingBackup ? (
@@ -244,6 +246,7 @@ function FileRow(props: {
               {props.wallets.slice(0, 3).map((wallet) => (
                 <Button
                   key={`${wallet.name}-${wallet.version}`}
+                  className="min-h-11 sm:min-h-8"
                   size="sm"
                   variant="outline"
                   disabled={props.busy}
@@ -259,38 +262,38 @@ function FileRow(props: {
           )}
           <div className="mt-3 flex flex-wrap gap-2">
             {props.connectedWalletAddress ? (
-              <Button size="sm" disabled={props.busy} onClick={props.onConfirmRenewal}>
+              <Button className="min-h-11 sm:min-h-8" size="sm" disabled={props.busy} onClick={props.onConfirmRenewal}>
                 {props.busy ? "Opening wallet…" : "Review renewal in wallet"}
               </Button>
             ) : null}
-            <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancelRenewal}>Cancel</Button>
+            <Button className="min-h-11 sm:min-h-8" size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancelRenewal}>Cancel</Button>
           </div>
         </div>
       ) : (
-        <div className="mt-3 flex flex-wrap gap-1 pl-7">
+        <div className="mt-3 flex flex-wrap gap-1 sm:pl-9">
           {props.item.publication ? (
             <>
-              <Button size="xs" variant="ghost" disabled={props.busy} onClick={props.onVerify}>
+              <Button className="min-h-11 sm:min-h-6" size="xs" variant="ghost" disabled={props.busy} onClick={props.onVerify}>
                 <RefreshCw aria-hidden="true" className={cn("size-3.5", props.busy && "animate-spin motion-reduce:animate-none")} />
                 Check backup
               </Button>
               {props.renewalAvailable && props.verification?.lifecycle.status === "renewal_due" ? (
-                <Button size="xs" variant="outline" disabled={props.busy} onClick={props.onRenew}>
+                <Button className="min-h-11 sm:min-h-6" size="xs" variant="outline" disabled={props.busy} onClick={props.onRenew}>
                   Renew backup
                 </Button>
               ) : null}
             </>
           ) : props.backupAvailable ? (
-            <Button size="xs" variant="ghost" disabled={props.busy} onClick={props.onBackup}>
+            <Button className="min-h-11 sm:min-h-6" size="xs" variant="ghost" disabled={props.busy} onClick={props.onBackup}>
               <Cloud aria-hidden="true" className="size-3.5" />
               Back up
             </Button>
           ) : null}
-          <Button size="xs" variant="ghost" disabled={props.busy} onClick={props.onRecover}>
+          <Button className="min-h-11 sm:min-h-6" size="xs" variant="ghost" disabled={props.busy} onClick={props.onRecover}>
             <Download aria-hidden="true" className="size-3.5" />
             Download original
           </Button>
-          <Button size="xs" variant="ghost" disabled={props.busy} onClick={props.onDelete}>
+          <Button className="min-h-11 sm:min-h-6" size="xs" variant="ghost" disabled={props.busy} onClick={props.onDelete}>
             <Trash2 aria-hidden="true" className="size-3.5" />
             Delete
           </Button>
@@ -623,7 +626,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
             </p>
           </div>
           {selectedCoworker ? (
-            <Button size="sm" variant="outline" onClick={() => setUploadOpen((open) => !open)} aria-expanded={uploadOpen}>
+            <Button className="min-h-11 sm:min-h-8" size="sm" variant="outline" onClick={() => setUploadOpen((open) => !open)} aria-expanded={uploadOpen}>
               <FilePlus2 aria-hidden="true" />
               Add file
             </Button>
@@ -643,7 +646,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
           <div className="py-8" aria-live="polite">
             <h3 className="text-sm font-semibold text-dls-text">Coworker files are not ready</h3>
             <p className="mt-2 text-sm leading-6 text-dls-secondary">{agentFileErrorMessage(query.error)}</p>
-            <Button className="mt-4" size="sm" onClick={() => void query.refetch()}>Try again</Button>
+            <Button className="mt-4 min-h-11 sm:min-h-8" size="sm" onClick={() => void query.refetch()}>Try again</Button>
           </div>
         ) : !query.data.files.available ? (
           <div className="py-8">
@@ -656,10 +659,10 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
             <h3 className="mt-3 text-sm font-semibold text-dls-text">Add a coworker first</h3>
             <p className="mt-2 text-sm leading-6 text-dls-secondary">A coworker gives each file a clear, limited reader. Choose a starting role.</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button size="sm" disabled={creatingCoworker !== null} onClick={() => void createCoworker("market_analyst")}>
+              <Button className="min-h-11 sm:min-h-8" size="sm" disabled={creatingCoworker !== null} onClick={() => void createCoworker("market_analyst")}>
                 {creatingCoworker === "market_analyst" ? "Adding…" : "Add research coworker"}
               </Button>
-              <Button size="sm" variant="outline" disabled={creatingCoworker !== null} onClick={() => void createCoworker("risk_monitor")}>
+              <Button className="min-h-11 sm:min-h-8" size="sm" variant="outline" disabled={creatingCoworker !== null} onClick={() => void createCoworker("risk_monitor")}>
                 {creatingCoworker === "risk_monitor" ? "Adding…" : "Add risk monitor"}
               </Button>
             </div>
@@ -670,7 +673,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
               <label className="grid gap-1.5 text-xs font-medium text-dls-text">
                 Coworker
                 <select
-                  className="h-9 w-full rounded-md border border-dls-border bg-dls-surface px-3 text-sm text-dls-text outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
+                  className="h-11 w-full rounded-md border border-dls-border bg-dls-surface px-3 text-sm text-dls-text outline-none focus:border-ring focus:ring-2 focus:ring-ring/35 sm:h-9"
                   value={selectedCoworker?.id ?? ""}
                   onChange={(event) => {
                     setCoworkerChoice(event.currentTarget.value);
@@ -683,7 +686,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
               </label>
               <div className="mt-3 flex items-center justify-between gap-3">
                 <p className="text-xs text-dls-secondary">Select up to 8 files for one chat.</p>
-                <Button size="sm" disabled={selectedFiles.length === 0} onClick={useInChat}>
+                <Button className="min-h-11 sm:min-h-8" size="sm" disabled={selectedFiles.length === 0} onClick={useInChat}>
                   Use {selectedFiles.length || "files"} in chat
                 </Button>
               </div>
@@ -694,7 +697,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
                 <h3 className="text-sm font-semibold text-dls-text">Add a private file</h3>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">It will be encrypted for {selectedCoworker?.name}. Matterhorn scans it before storage.</p>
                 <div className="mt-3 grid gap-3">
-                  <label className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-fit cursor-pointer") }>
+                  <label className={cn(buttonVariants({ variant: "outline", size: "sm" }), "min-h-11 w-fit cursor-pointer sm:min-h-8") }>
                     Choose file
                     <input
                       ref={inputRef}
@@ -708,7 +711,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
                   <label className="grid gap-1.5 text-xs font-medium text-dls-text">
                     Keep this file
                     <select
-                      className="h-9 rounded-md border border-dls-border bg-dls-surface px-3 text-sm text-dls-text outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
+                      className="h-11 rounded-md border border-dls-border bg-dls-surface px-3 text-sm text-dls-text outline-none focus:border-ring focus:ring-2 focus:ring-ring/35 sm:h-9"
                       value={retention}
                       onChange={(event) => {
                         const value = event.currentTarget.value;
@@ -721,8 +724,8 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
                     </select>
                   </label>
                   <div className="flex gap-2">
-                    <Button size="sm" disabled={!draftFile || uploading} onClick={() => void addFile()}>{uploading ? "Encrypting…" : "Add file"}</Button>
-                    <Button size="sm" variant="ghost" disabled={uploading} onClick={() => {
+                    <Button className="min-h-11 sm:min-h-8" size="sm" disabled={!draftFile || uploading} onClick={() => void addFile()}>{uploading ? "Encrypting…" : "Add file"}</Button>
+                    <Button className="min-h-11 sm:min-h-8" size="sm" variant="ghost" disabled={uploading} onClick={() => {
                       setUploadOpen(false);
                       setDraftFile(null);
                       setError(null);
