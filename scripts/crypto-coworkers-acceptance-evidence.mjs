@@ -16,8 +16,8 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const INPUT_VERSION = "matterhorn.crypto-coworkers-acceptance-evidence.v1";
-const OUTPUT_VERSION = "matterhorn.crypto-coworkers-acceptance-readiness.v1";
+const INPUT_VERSION = "matterhorn.crypto-coworkers-acceptance-evidence.v2";
+const OUTPUT_VERSION = "matterhorn.crypto-coworkers-acceptance-readiness.v2";
 const MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
 const HASH_PATTERN = /^[a-f0-9]{64}$/i;
@@ -90,8 +90,22 @@ const CERTIFICATION_SCENARIOS = Object.freeze({
     required: ["pythonSdkSidecar", "liveRead", "transferPreview", "stakePreview", "unstakePreview", "sealedRuntimeReport", "promoted", "revisionPinned", "noSubmitAuthority"],
   },
   polymarket: {
-    network: "mainnet-public-readonly",
-    required: ["signedManifests", "liveDiscovery", "liveOrderbook", "sealedRuntimeReport", "promoted", "revisionPinned", "noCredentialAuthority", "noTransactionAuthority"],
+    network: "polymarket:polygon",
+    required: [
+      "signedReadManifests",
+      "signedWalletPreviewManifest",
+      "liveDiscovery",
+      "liveOrderbook",
+      "trustedJurisdiction",
+      "walletSimulation",
+      "sealedReadRuntimeReport",
+      "sealedWalletRuntimeReport",
+      "readPromoted",
+      "walletPreviewPromoted",
+      "revisionPinned",
+      "noCredentialAuthority",
+      "noSubmitAuthority",
+    ],
   },
 });
 
@@ -109,8 +123,24 @@ const TRANSACTION_SCENARIOS = Object.freeze({
     required: ["transferPreview", "stakePreview", "unstakePreview", "reject", "expire", "tamperBlocked", "refresh", "walletOnly", "receiptReconciled"],
   },
   polymarket: {
-    network: "mainnet-public-readonly",
-    required: ["discovery", "orderbook", "regionDisclosure", "transactionAuthorityAbsent", "safeDeferralVisible"],
+    network: "polymarket:polygon",
+    required: [
+      "discovery",
+      "orderbook",
+      "trustedJurisdiction",
+      "directVenueDenialRespected",
+      "prepare",
+      "simulate",
+      "exactTokenBound",
+      "exactSignerBound",
+      "exactFakTermsBound",
+      "reject",
+      "expire",
+      "tamperBlocked",
+      "refresh",
+      "walletOnly",
+      "receiptReconciled",
+    ],
   },
 });
 
@@ -688,7 +718,7 @@ function evaluate(input, config) {
       checks,
       `transaction_${id}`,
       `transactions.${id}_airlock`,
-      `${id} proves its supported exact-network transaction-airlock or explicit safe read-only boundary`,
+      `${id} proves its supported exact-network, connected-wallet-only transaction airlock`,
       item?.network === scenario.network && scenarioPass(item, scenario.required, config.evidence),
       item?.evidence,
     );

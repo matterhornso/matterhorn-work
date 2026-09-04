@@ -23,7 +23,7 @@ pnpm gate:crypto-coworkers-acceptance -- \
   --strict
 ```
 
-The input must use `matterhorn.crypto-coworkers-acceptance-evidence.v1`. Evidence is valid for 12 hours and must identify the same exact commit under test. The deployed runtime evidence must match the OpenWork, OpenCode, and OpenCode SDK versions and upstream commits pinned in `constants.json` and `upstream-compatibility.json`.
+The input must use `matterhorn.crypto-coworkers-acceptance-evidence.v2`. Evidence is valid for 12 hours and must identify the same exact commit under test. The deployed runtime evidence must match the OpenWork, OpenCode, and OpenCode SDK versions and upstream commits pinned in `constants.json` and `upstream-compatibility.json`.
 
 The manifest and every referenced report must be regular non-symlink files. Intermediate directory symlinks are rejected, canonical paths must remain inside the acceptance packet, and the gate verifies that the opened file still matches the checked path while it is hashed. Each evidence group and the SDK provenance check must use a distinct canonical report path and distinct content hash; one generic report cannot satisfy multiple independent outcomes. JSON readiness output is written owner-only and refuses to overwrite an existing path.
 
@@ -33,16 +33,16 @@ The gate requires 21 independent checks:
 
 1. exact commit, fresh capture, and deployed HTTPS origin;
 2. exact OpenWork/OpenCode runtime and deny-by-default permission proof;
-3. sealed and promoted live Sui, Hyperliquid, Bittensor, and public-read-only Polymarket certifications;
+3. sealed and promoted live Sui, Hyperliquid, Bittensor, and Polymarket certifications, with Polymarket reads and wallet preview proven separately;
 4. Market Analyst, Risk Monitor, Transaction Coordinator, and Treasury Coworker journeys, including explicit resource grants, receipts, budgets, pause/revoke, and cross-tenant denial;
-5. Sui, Hyperliquid, and Bittensor wallet-airlock journeys plus Polymarket's explicit safe read-only boundary;
+5. Sui, Hyperliquid, Bittensor, and Polymarket wallet-airlock journeys;
 6. opt-in encrypted Agent Files and run-evidence publication, exact Walrus readback, Sui certification, connected-wallet-only immutable anchor creation, exact anchor binding, mutation/replay rejection, renewal, expiry, deletion, key destruction, public-object scan, and restore drill;
 7. developer quickstart, conformance, certification outcomes, one-use invite, guarded Codex/Claude Code/MCP setup, tenant-safe metering, and published SDK provenance;
 8. three to five invite-only design-partner apps;
 9. an uninterrupted 48-hour shadow window with every bypass reviewed, no unexplained denial, sequential protocol review, and rollback proof; and
 10. hosted two-account, tenant export, host restore, deletion recovery, privacy, capability, accessibility, responsive, performance, and rollback acceptance.
 
-Polymarket transaction preparation is deliberately not represented as available. The release evidence must instead prove discovery, order-book access, region disclosure, absence of transaction authority, and a visible safe deferral. Preparation stays blocked until Matterhorn can bind venue eligibility to the user rather than the server egress location and prove a wallet-only simulation contract.
+Polymarket remains unavailable until two separate live certifications pass: bounded public discovery/order-book reads and the exact wallet-preview adapter. Acceptance must prove trusted user-jurisdiction enforcement, direct venue denials, a fresh public-book simulation, exact token and signer binding, exact FAK price/tick/negative-risk terms, reject/expiry/tamper/refresh behavior, connected-wallet-only submission, and receipt reconciliation. A v1 read-only packet cannot satisfy this gate. The feature stays dormant until the operator registers and promotes both sealed reports for the exact deployed revision.
 
 ## Evidence references
 
