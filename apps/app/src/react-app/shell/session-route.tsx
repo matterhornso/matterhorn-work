@@ -3993,6 +3993,7 @@ export function SessionRoute() {
                       : { providerId: "", modelId: "" },
                     agentId: agent || undefined,
                     executionMode: "work",
+                    ...(privateModeEnabled ? { privacyMode: "private_workspace" as const } : {}),
                     ...(executionModeTools ? { requestToolProfiles: [executionModeTools] } : {}),
                     ...(modelVariantValue ? { variant: modelVariantValue } : {}),
                   });
@@ -4002,6 +4003,7 @@ export function SessionRoute() {
                     parts: [{ type: "text", text: prompt }],
                     model: selectedPromptModel ?? undefined,
                     agent: agent || undefined,
+                    ...(privateModeEnabled ? { privacyMode: "private_workspace" as const } : {}),
                     ...(modelVariantValue ? { variant: modelVariantValue } : {}),
                     ...(systemContext ? { system: systemContext } : {}),
                   });
