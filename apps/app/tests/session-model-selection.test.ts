@@ -51,6 +51,23 @@ function workspaceSelection(
 }
 
 describe("session model selection resolver", () => {
+  test("session choice wins without changing the workspace or local default", () => {
+    const session: ModelRef = { providerID: "venice", modelID: "private-tools" };
+    const resolved = resolveSelectedPromptModel({
+      sessionModel: session,
+      localDefaultModel: { providerID: "anthropic", modelID: "claude-3-5-sonnet" },
+      workspaceModelSelection: workspaceSelection({
+        providerId: "openai",
+        modelId: "gpt-4.1",
+        source: "server_workspace_preference",
+      }),
+    });
+
+    expect(resolved.model).toEqual(session);
+    expect(resolved.source).toBe("session_override");
+    expect(resolved.workspaceDefaultModel).toEqual({ providerID: "openai", modelID: "gpt-4.1" });
+  });
+
   test("local picker override wins over the workspace default", () => {
     const local: ModelRef = { providerID: "anthropic", modelID: "claude-3-5-sonnet" };
     const resolved = resolveSelectedPromptModel({

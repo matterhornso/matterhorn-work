@@ -7,6 +7,7 @@ import type {
 import type { ModelRef } from "../../../app/types";
 
 export type SelectedPromptModelSource =
+  | "session_override"
   | "local_preferences"
   | Extract<MatterhornBackendModelSelectionSource, "server_workspace_preference" | "server_default">
   | "engine_fallback";
@@ -31,11 +32,20 @@ export function resolveWorkspaceDefaultModel(
 }
 
 export function resolveSelectedPromptModel(input: {
+  sessionModel?: ModelRef | null;
   localDefaultModel: ModelRef | null | undefined;
   workspaceModelSelection: MatterhornBackendModelSelectionResponse | null | undefined;
 }): SelectedPromptModelResolution {
+  const sessionModel = input.sessionModel ?? null;
   const localModel = input.localDefaultModel ?? null;
   const workspaceDefaultModel = resolveWorkspaceDefaultModel(input.workspaceModelSelection);
+  if (sessionModel) {
+    return {
+      model: sessionModel,
+      source: "session_override",
+      workspaceDefaultModel,
+    };
+  }
   if (localModel) {
     return {
       model: localModel,

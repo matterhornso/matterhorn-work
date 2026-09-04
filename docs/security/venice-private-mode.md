@@ -37,6 +37,10 @@ usage reservation or provider contact.
 - Turning it on selects the backend's preferred admitted private model and
   sends `privacyMode: private_workspace` through the authoritative message
   gateway.
+- The choice is stored only for the active workspace chat. Other chats keep
+  their own model; an explicit fork inherits the source choice, and deleting
+  the chat removes it. The user's default for new chats is not silently
+  replaced.
 - Turning it off restores the last connected non-Venice model, or opens the
   model picker when no standard model is available.
 - Selecting a Venice model directly also activates the private request mode.
