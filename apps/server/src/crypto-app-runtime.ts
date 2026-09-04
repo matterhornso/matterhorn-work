@@ -24,10 +24,10 @@ import { cryptoCoworkerFeatureConfig, type MatterhornCryptoAppGatewayMode } from
 import { createFirstPartyCryptoAppExecutor } from "./first-party-crypto-app-executor.js";
 import { firstPartyCryptoAppProxyTool } from "./first-party-crypto-apps.js";
 import {
-  createPinnedJsonCryptoAppTransport,
   type MatterhornCryptoAppCredentialResolver,
 } from "./crypto-app-https-transport.js";
 import { createPinnedMcpHttpCryptoAppTransport } from "./crypto-app-mcp-http-transport.js";
+import { createPinnedJsonRpcCryptoAppTransport } from "./crypto-app-json-rpc-transport.js";
 import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 import {
   createPinnedSuiPublicTransactionVerifier,
@@ -252,8 +252,8 @@ export function createMatterhornCryptoAppRuntime(
         }
         return managedCredentials.resolveHeaders(input);
       };
-      const pinnedJsonTransport = createPinnedJsonCryptoAppTransport({ resolveCredentialHeaders });
       const pinnedMcpHttpTransport = createPinnedMcpHttpCryptoAppTransport({ resolveCredentialHeaders });
+      const pinnedJsonRpcTransport = createPinnedJsonRpcCryptoAppTransport({ resolveCredentialHeaders });
       router = new MatterhornCryptoAppAdapterRouter({
         registry,
         connections,
@@ -284,8 +284,9 @@ export function createMatterhornCryptoAppRuntime(
         executors: {
           matterhorn_sdk: createFirstPartyCryptoAppExecutor(),
           mcp_http: pinnedMcpHttpTransport,
-          openapi: pinnedJsonTransport,
-          rpc: pinnedJsonTransport,
+          // Manifest v1 cannot bind an OpenAPI operation path and method into
+          // the publisher signature, so OpenAPI deliberately has no executor.
+          rpc: pinnedJsonRpcTransport,
         },
       });
       verifySuiTransaction = createPinnedSuiPublicTransactionVerifier({
