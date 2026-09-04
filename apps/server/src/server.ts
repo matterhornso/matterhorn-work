@@ -2887,7 +2887,10 @@ async function proxyOpencodeRequest(input: {
       const guardedInput: GuardedPromptInput = {
         workspaceId: workspace.id,
         sessionId,
-        parts: normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
+        parts: [
+          ...normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
+          ...rawPromptSystemPrivacyParts(payload.system),
+        ],
         providerId: modelResolution.model.providerID,
         modelId: modelResolution.model.modelID,
         agentId: agent,
@@ -20650,6 +20653,37 @@ type ResolvedCryptoRunContext = {
 
 function sha256Bytes(value: Uint8Array | string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+const RAW_SYSTEM_WALLET_CONTEXT_MARKERS = [
+  "## Connected Wallet Private Context",
+  // Older desktop clients used this heading even though an address linked to
+  // a Matterhorn account is private under the guarded-runtime policy.
+  "## Connected Wallet Public Context",
+] as const;
+
+function rawPromptSystemPrivacyParts(system: unknown): MatterhornAgentPrivacyPart[] {
+  if (typeof system !== "string" || !system) return [];
+
+  const hasWalletContext = RAW_SYSTEM_WALLET_CONTEXT_MARKERS.some((marker) => system.includes(marker));
+  const hasWorkspaceContext = system.includes("## Active Matterhorn Workflow Run")
+    || system.includes("Matterhorn Desks environment variables configured:");
+  const label: MatterhornAgentDataLabel = hasWalletContext
+    ? "wallet_private"
+    : hasWorkspaceContext
+      ? "workspace_private"
+      : "public";
+
+  return [{
+    type: "system",
+    name: "Exact trusted-runtime system context",
+    text: system,
+    source: hasWalletContext ? "wallet" : "system",
+    label,
+    contentHash: sha256Bytes(system),
+    sizeBytes: Buffer.byteLength(system, "utf8"),
+    version: "matterhorn.raw-system-context.v1",
+  }];
 }
 
 function sessionCompactionInspectionText(value: unknown): string {

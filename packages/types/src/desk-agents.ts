@@ -53,6 +53,7 @@ export interface MatterhornDeskCapabilityPolicy {
 export interface MatterhornDeskContextPolicy {
   includeEnvironmentVariableNames: true;
   includeWorkspaceOrientation: boolean;
+  /** Public-chain facts become private context once linked to a Matterhorn account. */
   includeWalletPublicContext: boolean;
   includeCryptoSafetyPolicy: boolean;
   selectedMemoryOnly: true;

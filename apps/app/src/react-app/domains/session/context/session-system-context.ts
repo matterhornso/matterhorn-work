@@ -3,7 +3,7 @@ export type MatterhornSessionContextBlockId =
   | "desk_contract"
   | "direct_response"
   | "environment_metadata"
-  | "wallet_public_metadata"
+  | "wallet_private_context"
   | "crypto_safety"
   | "workspace_orientation"
   | "workflow_run"
@@ -20,7 +20,7 @@ const CONTEXT_ORDER: MatterhornSessionContextBlockId[] = [
   "desk_contract",
   "direct_response",
   "environment_metadata",
-  "wallet_public_metadata",
+  "wallet_private_context",
   "crypto_safety",
   "workspace_orientation",
   "workflow_run",
@@ -117,7 +117,7 @@ export function compileMatterhornSessionSystemContext(
   return `${prefix}${prefix ? separator : ""}${omission}`.slice(0, maxChars);
 }
 
-export function buildMatterhornPublicWalletContext(input: {
+export function buildMatterhornWalletPrivateContext(input: {
   address: string | null | undefined;
   chainId: number | null | undefined;
   ethBalance: string | null | undefined;
@@ -128,12 +128,12 @@ export function buildMatterhornPublicWalletContext(input: {
   const ethBalance = sanitizeMatterhornSystemContextValue(input.ethBalance, { maxChars: 64 });
   const usdcBalance = sanitizeMatterhornSystemContextValue(input.usdcBalance, { maxChars: 64 });
   return [
-    "## Connected Wallet Public Context",
-    `Public address: ${address}`,
+    "## Connected Wallet Private Context",
+    `Linked wallet address: ${address}`,
     `Chain ID: ${chainId}`,
     `ETH balance: ${ethBalance}`,
     `USDC balance: ${usdcBalance}`,
-    "This is public account metadata only.",
+    "Matterhorn treats this account-linked wallet context as private.",
     "Never request signing material. Never sign or submit on the user's behalf.",
     "Any supported action still requires the user's explicit review and wallet approval.",
   ].join("\n");
