@@ -11758,9 +11758,15 @@ function createRoutes(
       }
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const ownerId = cryptoAppCreatedBy(ctx);
+      const coworkers = coworkerRuntime.coworkers.list(workspace.id, ownerId);
+      const inboxByCoworker = coworkerRuntime.coworkers.listInboxSummaries(workspace.id, ownerId);
       return noStoreJsonResponse({
         mode: coworkerRuntime.mode,
-        coworkers: coworkerRuntime.coworkers.list(workspace.id, ownerId).map(coworkerAccountView),
+        coworkers: coworkers.map(coworkerAccountView),
+        inbox: {
+          totalUnread: inboxByCoworker.reduce((total, item) => total + item.unreadCount, 0),
+          byCoworker: inboxByCoworker,
+        },
       });
     } catch (error) {
       throw coworkerApiError(error);

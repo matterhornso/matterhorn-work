@@ -549,6 +549,17 @@ export type MatterhornCoworkerInboxItem = {
   updatedAt: string;
 };
 
+/**
+ * Content-free unread metadata used to route a user to the coworker that needs
+ * attention. Alert titles, summaries, evidence, wallet data, and owner IDs are
+ * deliberately excluded.
+ */
+export type MatterhornCoworkerInboxSummary = {
+  coworkerId: string;
+  unreadCount: number;
+  latestUnreadAt: string;
+};
+
 export type MatterhornCryptoIntent = {
   version: typeof MATTERHORN_CRYPTO_INTENT_VERSION;
   id: string;

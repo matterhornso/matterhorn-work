@@ -836,6 +836,8 @@ describe("durable crypto coworkers", () => {
         .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
       expect(() => reopened.getInboxItem("ws_alpha", "account_alpha", profile.id, item.id))
         .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+      expect(() => reopened.listInboxSummaries("ws_alpha", "account_alpha"))
+        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
     } finally {
       reopened.close();
     }
@@ -896,6 +898,8 @@ describe("durable crypto coworkers", () => {
       expect(JSON.stringify(item)).not.toMatch(/sign|submit|relay|broadcast|private.?key/i);
       expect(coworkers.listInbox({ workspaceId: "ws_alpha", ownerId: "account_alpha", coworkerId: profile.id }))
         .toHaveLength(1);
+      expect(coworkers.listInboxSummaries("ws_alpha", "account_alpha"))
+        .toEqual([{ coworkerId: profile.id, unreadCount: 1, latestUnreadAt: NOW }]);
       expect(() => coworkers.listInbox({ workspaceId: "ws_alpha", ownerId: "account_beta", coworkerId: profile.id }))
         .toThrow(new MatterhornCoworkerError("coworker_not_found"));
       const read = coworkers.transitionInboxItem(
@@ -907,6 +911,7 @@ describe("durable crypto coworkers", () => {
         "unread",
       );
       expect(read.state).toBe("read");
+      expect(coworkers.listInboxSummaries("ws_alpha", "account_alpha")).toEqual([]);
       expect(() => coworkers.transitionInboxItem(
         "ws_alpha",
         "account_alpha",

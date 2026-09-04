@@ -2558,6 +2558,18 @@ describe("crypto coworker HTTP boundary", () => {
     expect(inbox.payload.items).toHaveLength(1);
     expect(inbox.payload.items[0]).toMatchObject({ id: "cinbox_route_alert", state: "unread", watchId });
     expect(inbox.payload.items[0].ownerId).toBeUndefined();
+    const unreadSummary = await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA });
+    expect(unreadSummary.payload.inbox).toEqual({
+      totalUnread: 1,
+      byCoworker: [{
+        coworkerId,
+        unreadCount: 1,
+        latestUnreadAt: "2026-09-01T12:05:00.000Z",
+      }],
+    });
+    expect(JSON.stringify(unreadSummary.payload.inbox)).not.toContain("Sui balance changed");
+    expect((await request(server.base, `/workspace/${workspaceB}/coworkers`, { cookie: cookieB })).payload.inbox)
+      .toEqual({ totalUnread: 0, byCoworker: [] });
     expect((await request(server.base, `/workspace/${workspaceB}/coworkers/${coworkerId}/inbox`, { cookie: cookieB })).response.status)
       .toBe(404);
     expect((await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/inbox`, {
@@ -2573,6 +2585,8 @@ describe("crypto coworker HTTP boundary", () => {
     });
     expect(read.response.status).toBe(200);
     expect(read.payload.item.state).toBe("read");
+    expect((await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA })).payload.inbox)
+      .toEqual({ totalUnread: 0, byCoworker: [] });
     const staleInbox = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/inbox/cinbox_route_alert`, {
       method: "PATCH",
       cookie: cookieA,

@@ -132,6 +132,7 @@ import type {
   MatterhornAgentFileWalrusRenewalPrepareResponse,
   MatterhornAgentFileWalrusVerification,
   MatterhornCoworkerInboxItem,
+  MatterhornCoworkerInboxSummary,
   MatterhornCoworkerProfile,
   MatterhornCoworkerResourceRecommendation,
   MatterhornCoworkerResourceScope,
@@ -1903,6 +1904,10 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     listCoworkers: (workspaceId: string) => requestJson<{
       mode: "off" | "internal" | "invite" | "public";
       coworkers: MatterhornCoworkerAccountProfile[];
+      inbox?: {
+        totalUnread: number;
+        byCoworker: MatterhornCoworkerInboxSummary[];
+      };
     }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers`, {
       token,
       timeoutMs: timeouts.status,

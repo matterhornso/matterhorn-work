@@ -8,8 +8,10 @@ import {
 import { buildCoworkerAppConnectionDraft } from "../src/react-app/domains/coworkers/coworker-app-connection";
 import {
   coworkerActivitySummary,
+  coworkerUnreadSummaryLabel,
   coworkerPositionSource,
   coworkerRememberedWorkSummary,
+  newestUnreadCoworkerId,
   resolveCoworkerNextStep,
 } from "../src/react-app/domains/coworkers/coworkers-panel";
 import {
@@ -428,6 +430,25 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("decisions: []");
     expect(panel).not.toContain("referenceHash}</");
     expect(client).toContain("setCoworkerState:");
+  });
+
+  test("routes unread updates to the coworker that most recently needs attention", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const client = appSource("app/lib/matterhorn-server.ts");
+    expect(coworkerUnreadSummaryLabel(1)).toBe("1 update needs your attention");
+    expect(coworkerUnreadSummaryLabel(3)).toBe("3 updates need your attention");
+    expect(newestUnreadCoworkerId([
+      { coworkerId: "coworker_older", unreadCount: 2, latestUnreadAt: "2026-09-04T11:00:00.000Z" },
+      { coworkerId: "coworker_newer", unreadCount: 1, latestUnreadAt: "2026-09-04T12:00:00.000Z" },
+      { coworkerId: "coworker_read", unreadCount: 0, latestUnreadAt: "2026-09-04T13:00:00.000Z" },
+    ])).toBe("coworker_newer");
+    expect(newestUnreadCoworkerId([])).toBeNull();
+    expect(panel).toContain("Latest from {latestUnreadCoworker.name}");
+    expect(panel).toContain("setPendingActivityCoworkerId(latestUnreadCoworker.id)");
+    expect(panel).toContain("prefers-reduced-motion: reduce");
+    expect(panel).toContain("ref={activitySectionRef}");
+    expect(client).toContain("totalUnread: number");
+    expect(client).toContain("byCoworker: MatterhornCoworkerInboxSummary[]");
   });
 
   test("lets the user approve an exact resource sandbox without privacy bypasses", () => {
