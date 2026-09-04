@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -82,6 +82,34 @@ async function createWorkspaceRoot(folderName?: string) {
 
 function auth(token: string) {
   return { Authorization: `Bearer ${token}` };
+}
+
+function trustedJurisdictionHeaders(input: {
+  country: string;
+  path: string;
+  secret: string;
+  clientIp?: string;
+}) {
+  const clientIp = input.clientIp ?? "203.0.113.9";
+  const issuedAtMs = Date.now();
+  const payload = {
+    version: "matterhorn.edge-jurisdiction.v1",
+    source: "vercel_ip_country",
+    country: input.country,
+    method: "POST",
+    path: input.path,
+    clientIpHash: createHash("sha256").update(clientIp).digest("hex"),
+    requestIdHash: createHash("sha256").update(`iad1::${input.path}`).digest("hex"),
+    issuedAtMs,
+    expiresAtMs: issuedAtMs + 60_000,
+  };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", input.secret).update(encoded).digest("base64url");
+  return {
+    "x-matterhorn-proxy-secret": input.secret,
+    "x-matterhorn-client-ip": clientIp,
+    "x-matterhorn-edge-jurisdiction": `${encoded}.${signature}`,
+  };
 }
 
 function privateMemoryRecord(overrides: Record<string, unknown> = {}) {
@@ -359,6 +387,7 @@ async function startOpenworkServer(input: {
   opencodeBaseUrl?: string;
   readOnly?: boolean;
   hardModelUsageLimit?: number;
+  trustedProxySecret?: string;
 }) {
   if (input.hardModelUsageLimit) {
     process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT = "hard";
@@ -394,6 +423,7 @@ async function startOpenworkServer(input: {
     logFormat: "pretty",
     logRequests: false,
     reloadWatchers: false,
+    ...(input.trustedProxySecret ? { trustedProxySecret: input.trustedProxySecret } : {}),
   };
   const server = await startServer(config) as Served;
   stops.push(() => server.stop(true));
@@ -1426,6 +1456,94 @@ describe("workspace session read APIs", () => {
     });
     expect(opaque.status).toBe(400);
     await expect(opaque.json()).resolves.toMatchObject({ code: "attachment_unverifiable" });
+  });
+
+  test("binds one-request consent to trusted edge jurisdiction and ignores raw country headers", async () => {
+    process.env.MATTERHORN_PROVIDER_PRIVACY_MODE = "verified-only";
+    const proxySecret = "trusted-jurisdiction-proxy-secret";
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+      trustedProxySecret: proxySecret,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const preflightPath = "/workspace/ws_1/sessions/ses_1/messages/preflight";
+    const messagePath = "/workspace/ws_1/sessions/ses_1/messages";
+    const requestBody = (privacyConsentToken?: string) => ({
+      parts: [
+        { type: "text", text: "Use this private note for public market research" },
+        {
+          type: "file",
+          filename: "market-note.txt",
+          mime: "text/plain",
+          url: `data:text/plain;base64,${Buffer.from("Prefer liquid markets.").toString("base64")}`,
+        },
+      ],
+      attachmentIds: ["att_market_note"],
+      model: { providerID: "openai", modelID: "gpt-4.1" },
+      ...(privacyConsentToken ? { privacyConsentToken } : {}),
+    });
+
+    const preflight = await fetch(`${base}${preflightPath}`, {
+      method: "POST",
+      headers: {
+        ...auth(openwork.token),
+        "Content-Type": "application/json",
+        ...trustedJurisdictionHeaders({ country: "GB", path: preflightPath, secret: proxySecret }),
+      },
+      body: JSON.stringify(requestBody()),
+    });
+    expect(preflight.status).toBe(200);
+    const privacy = await preflight.json();
+    const confirmed = await fetch(
+      `${base}/workspace/ws_1/privacy-consents/${encodeURIComponent(privacy.challenge.id)}/confirm`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: "ses_1", requestHash: privacy.requestHash }),
+      },
+    );
+    const consent = await confirmed.json();
+
+    const changedCountry = await fetch(`${base}${messagePath}`, {
+      method: "POST",
+      headers: {
+        ...auth(openwork.token),
+        "Content-Type": "application/json",
+        ...trustedJurisdictionHeaders({ country: "FR", path: messagePath, secret: proxySecret }),
+      },
+      body: JSON.stringify(requestBody(consent.consentToken)),
+    });
+    expect(changedCountry.status).toBe(409);
+    await expect(changedCountry.json()).resolves.toMatchObject({ code: "agent_privacy_consent_required" });
+
+    const rawHeaderOnly = await fetch(`${base}${messagePath}`, {
+      method: "POST",
+      headers: {
+        ...auth(openwork.token),
+        "Content-Type": "application/json",
+        "x-vercel-ip-country": "GB",
+      },
+      body: JSON.stringify(requestBody(consent.consentToken)),
+    });
+    expect(rawHeaderOnly.status).toBe(409);
+    await expect(rawHeaderOnly.json()).resolves.toMatchObject({ code: "agent_privacy_consent_required" });
+
+    const exact = await fetch(`${base}${messagePath}`, {
+      method: "POST",
+      headers: {
+        ...auth(openwork.token),
+        "Content-Type": "application/json",
+        ...trustedJurisdictionHeaders({ country: "GB", path: messagePath, secret: proxySecret }),
+      },
+      body: JSON.stringify(requestBody(consent.consentToken)),
+    });
+    expect(exact.status).toBe(202);
+    await expect(exact.json()).resolves.toMatchObject({ privacy: { consentUsed: true } });
+    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/prompt_async")).toHaveLength(1);
   });
 
   test("constructs Memory context server-side and records the exact selected version", async () => {

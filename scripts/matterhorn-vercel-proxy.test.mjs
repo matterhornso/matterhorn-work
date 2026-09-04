@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash, createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import {
@@ -44,6 +45,7 @@ assert.equal(
 
 const priorUrl = process.env.MATTERHORN_CONTROL_PLANE_URL;
 const priorSecret = process.env.MATTERHORN_PROXY_SECRET;
+const priorVercel = process.env.VERCEL;
 const priorFetch = globalThis.fetch;
 delete process.env.MATTERHORN_CONTROL_PLANE_URL;
 delete process.env.MATTERHORN_PROXY_SECRET;
@@ -89,6 +91,7 @@ try {
 let forwardedRequest;
 process.env.MATTERHORN_CONTROL_PLANE_URL = "https://control.example.com/";
 process.env.MATTERHORN_PROXY_SECRET = "test-proxy-secret";
+process.env.VERCEL = "1";
 globalThis.fetch = async (input, init) => {
   forwardedRequest = { url: String(input), init };
   return new Response(JSON.stringify({ ok: true }), {
@@ -104,12 +107,40 @@ try {
       host: "app.example.com",
       "x-forwarded-proto": "https",
       "x-vercel-forwarded-for": "203.0.113.9",
+      "x-vercel-id": "iad1::matterhorn-test-request",
+      "x-vercel-ip-country": "gb",
+      "x-vercel-ip-city": "spoof-me-not",
+      "x-matterhorn-edge-jurisdiction": "attacker-supplied",
     }),
   });
   assert.equal(response.status, 200);
   assert.equal(forwardedRequest.url, "https://control.example.com/workspaces?limit=5");
   assert.equal(forwardedRequest.init.headers.get("x-matterhorn-proxy-secret"), "test-proxy-secret");
   assert.equal(forwardedRequest.init.headers.get("x-matterhorn-client-ip"), "203.0.113.9");
+  const attestation = forwardedRequest.init.headers.get("x-matterhorn-edge-jurisdiction");
+  assert.ok(attestation && attestation !== "attacker-supplied");
+  const [encoded, signature] = attestation.split(".");
+  assert.equal(
+    signature,
+    createHmac("sha256", "test-proxy-secret").update(encoded).digest("base64url"),
+    "the jurisdiction proof must be authenticated by the same-origin proxy secret",
+  );
+  const attested = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+  assert.deepEqual(attested, {
+    version: "matterhorn.edge-jurisdiction.v1",
+    source: "vercel_ip_country",
+    country: "GB",
+    method: "GET",
+    path: "/workspaces",
+    clientIpHash: createHash("sha256").update("203.0.113.9").digest("hex"),
+    requestIdHash: createHash("sha256").update("iad1::matterhorn-test-request").digest("hex"),
+    issuedAtMs: attested.issuedAtMs,
+    expiresAtMs: attested.issuedAtMs + 60_000,
+  });
+  assert.equal(forwardedRequest.init.headers.get("x-vercel-ip-country"), null);
+  assert.equal(forwardedRequest.init.headers.get("x-vercel-ip-city"), null);
+  assert.equal(forwardedRequest.init.headers.get("x-vercel-id"), null);
+  assert.equal(forwardedRequest.init.headers.get("x-vercel-forwarded-for"), null);
   assert.equal(forwardedRequest.init.headers.get("x-forwarded-host"), "app.example.com");
   assert.equal(forwardedRequest.init.headers.get("x-forwarded-proto"), "https");
   assert.equal(response.headers.get("x-matterhorn-proxy"), "same-origin");
@@ -119,6 +150,8 @@ try {
   else process.env.MATTERHORN_CONTROL_PLANE_URL = priorUrl;
   if (priorSecret === undefined) delete process.env.MATTERHORN_PROXY_SECRET;
   else process.env.MATTERHORN_PROXY_SECRET = priorSecret;
+  if (priorVercel === undefined) delete process.env.VERCEL;
+  else process.env.VERCEL = priorVercel;
 }
 
 for (const configPath of ["vercel.json", "apps/app/vercel.json"]) {

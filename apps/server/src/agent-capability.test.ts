@@ -81,6 +81,39 @@ describe("agent capability broker", () => {
     expect(() => broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args })).toThrow("capability_replayed");
   });
 
+  test("binds capabilities to the server-owned jurisdiction evidence hash", () => {
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    const jurisdictionEvidenceHash = "a".repeat(64);
+    broker.createRunGrant({
+      runId: "run_jurisdiction",
+      workspaceId: "ws_1",
+      sessionId: "ses_jurisdiction",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      jurisdictionEvidenceHash,
+    });
+    const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
+    const capability = broker.issue({
+      runId: "run_jurisdiction",
+      workspaceId: "ws_1",
+      sessionId: "ses_jurisdiction",
+      callId: "call_jurisdiction",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    });
+    expect(capability.claims.jurisdictionEvidenceHash).toBe(jurisdictionEvidenceHash);
+    expect(broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args }))
+      .toMatchObject({ jurisdictionEvidenceHash });
+    expect(() => broker.createRunGrant({
+      runId: "run_bad_jurisdiction",
+      workspaceId: "ws_1",
+      sessionId: "ses_bad_jurisdiction",
+      executionMode: "work",
+      jurisdictionEvidenceHash: "not-a-digest",
+    })).toThrow("capability_jurisdiction_binding_invalid");
+  });
+
   test("fails closed for argument mutation, wrong tools and wrong sessions", () => {
     const broker = brokerWithRun();
     const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
