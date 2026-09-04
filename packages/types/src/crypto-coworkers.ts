@@ -6,6 +6,7 @@ export const MATTERHORN_CRYPTO_APP_OAUTH_FLOW_VERSION = "matterhorn.crypto-app-o
 export const MATTERHORN_CRYPTO_APP_RESULT_VERSION = "matterhorn.crypto-app-result.v1";
 export const MATTERHORN_CRYPTO_APP_CATALOG_VERSION = "matterhorn.crypto-app-catalog.v1";
 export const MATTERHORN_COWORKER_PROFILE_VERSION = "matterhorn.coworker-profile.v1";
+export const MATTERHORN_COWORKER_SESSION_BINDING_VERSION = "matterhorn.coworker-session-binding.v1";
 export const MATTERHORN_COWORKER_WORKING_STATE_VERSION = "matterhorn.coworker-working-state.v1";
 export const MATTERHORN_COWORKER_RESOURCE_SCOPE_VERSION = "matterhorn.coworker-resource-scope.v1";
 export const MATTERHORN_COWORKER_RESOURCE_RECOMMENDATION_VERSION =
@@ -320,6 +321,24 @@ export type MatterhornCoworkerProfile = {
     transactionRequiresWalletReview: true;
     walletSubmission: "connected_wallet_only";
   };
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Durable, tenant-scoped binding between one chat and one exact coworker and
+ * resource revision. It contains no prompt, Memory, file, credential, wallet,
+ * or transaction content.
+ */
+export type MatterhornCoworkerSessionBinding = {
+  version: typeof MATTERHORN_COWORKER_SESSION_BINDING_VERSION;
+  workspaceId: string;
+  ownerId: string;
+  sessionId: string;
+  coworkerId: string;
+  coworkerRevision: number;
+  resourceScopeHash: string;
+  revision: number;
   createdAt: string;
   updatedAt: string;
 };

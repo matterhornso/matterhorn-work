@@ -612,9 +612,16 @@ describe("chat-operated coworker UI", () => {
   test("binds the selected coworker through the authoritative privacy gateway", () => {
     const route = appSource("react-app/shell/session-route.tsx");
     const surface = appSource("react-app/domains/session/surface/session-surface.tsx");
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const client = appSource("app/lib/matterhorn-server.ts");
     const context = appSource("react-app/domains/session/surface/coworker-context-store.ts");
     expect(route.match(/coworkerId: draft\.privacy\.coworkerId/g)).toHaveLength(2);
     expect(surface).toContain("...(coworkerId ? { coworkerId } : {})");
+    expect(surface).toContain('"coworker-session-binding"');
+    expect(surface).toContain("getCoworkerSessionBinding");
+    expect(panel).toContain("bindCoworkerSession");
+    expect(client).toContain("bindCoworkerSession:");
+    expect(client).toContain("unbindCoworkerSession:");
     expect(context).not.toContain("mission:");
     expect(context).not.toContain("allowedActionIds");
   });

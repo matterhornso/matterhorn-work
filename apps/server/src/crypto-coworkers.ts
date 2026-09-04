@@ -4,6 +4,7 @@ import {
   MATTERHORN_COWORKER_INBOX_ITEM_VERSION,
   MATTERHORN_COWORKER_PROFILE_VERSION,
   MATTERHORN_COWORKER_RESOURCE_SCOPE_VERSION,
+  MATTERHORN_COWORKER_SESSION_BINDING_VERSION,
   MATTERHORN_COWORKER_WATCH_VERSION,
   MATTERHORN_COWORKER_WORKING_STATE_VERSION,
   type MatterhornCoworkerAuthority,
@@ -11,6 +12,7 @@ import {
   type MatterhornCoworkerInboxSummary,
   type MatterhornCoworkerProfile,
   type MatterhornCoworkerResourceScope,
+  type MatterhornCoworkerSessionBinding,
   type MatterhornCoworkerState,
   type MatterhornCoworkerWatch,
   type MatterhornCoworkerWatchCreateInput,
@@ -63,6 +65,12 @@ export type MatterhornCoworkerResourceScopeInput = Pick<
   MatterhornCoworkerResourceScope,
   "profileRevision" | "agentFiles" | "memories" | "connections"
 > & {
+  expectedRevision: number;
+};
+
+export type MatterhornCoworkerSessionBindingInput = {
+  coworkerId: string;
+  coworkerRevision: number;
   expectedRevision: number;
 };
 
@@ -120,6 +128,9 @@ export class MatterhornCoworkerError extends Error {
     | "coworker_not_found"
     | "coworker_revision_conflict"
     | "coworker_resource_scope_invalid"
+    | "coworker_session_binding_invalid"
+    | "coworker_session_binding_not_found"
+    | "coworker_session_binding_stale"
     | "coworker_working_state_invalid"
     | "coworker_watch_invalid"
     | "coworker_watch_not_found"
@@ -323,6 +334,116 @@ export class MatterhornCoworkers {
     if (!profile) return null;
     const scope = this.#store.getResourceScope(workspaceId, ownerId, coworkerId);
     return scope?.profileRevision === profile.revision ? scope : null;
+  }
+
+  getSessionBinding(
+    workspaceId: string,
+    ownerId: string,
+    sessionId: string,
+  ): MatterhornCoworkerSessionBinding | null {
+    this.#assertAccountAccess(ownerId);
+    if (!validIdentity(workspaceId) || !validIdentity(ownerId) || !validIdentity(sessionId)) {
+      throw new MatterhornCoworkerError("coworker_session_binding_invalid");
+    }
+    return this.#store.getSessionBinding(workspaceId, ownerId, sessionId);
+  }
+
+  /** Internal lookup used only to decide whether a chat is coworker-bound. */
+  lookupSessionBinding(
+    workspaceId: string,
+    ownerId: string,
+    sessionId: string,
+  ): MatterhornCoworkerSessionBinding | null {
+    if (!validIdentity(workspaceId) || !validIdentity(ownerId) || !validIdentity(sessionId)) {
+      throw new MatterhornCoworkerError("coworker_session_binding_invalid");
+    }
+    return this.#store.getSessionBinding(workspaceId, ownerId, sessionId);
+  }
+
+  resolveActiveSessionBinding(
+    workspaceId: string,
+    ownerId: string,
+    sessionId: string,
+  ): MatterhornCoworkerSessionBinding | null {
+    if (!this.#accountIsAllowed(ownerId)) return null;
+    const binding = this.#store.getSessionBinding(workspaceId, ownerId, sessionId);
+    if (!binding) return null;
+    const profile = this.resolveActive(workspaceId, ownerId, binding.coworkerId);
+    const resources = profile
+      ? this.resolveActiveResourceScope(workspaceId, ownerId, profile.id)
+      : null;
+    return profile
+      && resources
+      && resources.connections.length > 0
+      && binding.coworkerRevision === profile.revision
+      && binding.resourceScopeHash === resources.scopeHash
+      ? binding
+      : null;
+  }
+
+  bindSession(
+    workspaceId: string,
+    ownerId: string,
+    sessionId: string,
+    input: MatterhornCoworkerSessionBindingInput,
+  ): MatterhornCoworkerSessionBinding {
+    this.#assertAccountAccess(ownerId);
+    if (!validIdentity(workspaceId)
+      || !validIdentity(ownerId)
+      || !validIdentity(sessionId)
+      || !validIdentity(input.coworkerId)
+      || !Number.isSafeInteger(input.coworkerRevision)
+      || input.coworkerRevision < 1
+      || !Number.isSafeInteger(input.expectedRevision)
+      || input.expectedRevision < 0) {
+      throw new MatterhornCoworkerError("coworker_session_binding_invalid");
+    }
+    const profile = this.resolveActive(workspaceId, ownerId, input.coworkerId);
+    const resources = profile
+      ? this.resolveActiveResourceScope(workspaceId, ownerId, profile.id)
+      : null;
+    if (!profile
+      || profile.revision !== input.coworkerRevision
+      || !resources
+      || resources.connections.length === 0) {
+      throw new MatterhornCoworkerError("coworker_session_binding_stale");
+    }
+    const binding = this.#store.bindSession({
+      workspaceId,
+      ownerId,
+      sessionId,
+      coworkerId: profile.id,
+      coworkerRevision: profile.revision,
+      resourceScopeHash: resources.scopeHash,
+      expectedRevision: input.expectedRevision,
+      updatedAt: this.#now().toISOString(),
+    });
+    if (!binding || binding.version !== MATTERHORN_COWORKER_SESSION_BINDING_VERSION) {
+      throw new MatterhornCoworkerError("coworker_revision_conflict");
+    }
+    return binding;
+  }
+
+  unbindSession(
+    workspaceId: string,
+    ownerId: string,
+    sessionId: string,
+    expectedRevision: number,
+  ): void {
+    this.#assertAccountAccess(ownerId);
+    if (!validIdentity(workspaceId)
+      || !validIdentity(ownerId)
+      || !validIdentity(sessionId)
+      || !Number.isSafeInteger(expectedRevision)
+      || expectedRevision < 1) {
+      throw new MatterhornCoworkerError("coworker_session_binding_invalid");
+    }
+    if (!this.#store.deleteSessionBinding(workspaceId, ownerId, sessionId, expectedRevision)) {
+      const current = this.#store.getSessionBinding(workspaceId, ownerId, sessionId);
+      throw new MatterhornCoworkerError(
+        current ? "coworker_revision_conflict" : "coworker_session_binding_not_found",
+      );
+    }
   }
 
   setResourceScope(

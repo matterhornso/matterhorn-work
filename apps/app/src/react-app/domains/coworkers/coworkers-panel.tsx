@@ -233,6 +233,9 @@ function coworkerErrorMessage(error: unknown): string {
     if (error.code === "coworker_resource_scope_invalid") return "One of these files, memories, or apps is no longer available. Refresh and choose again.";
     if (error.code === "coworker_resource_recommendation_stale") return "The suggested access changed. Review the latest suggestion before saving.";
     if (error.code === "coworker_resources_stale") return "This access list changed. Review it again before starting work.";
+    if (error.code === "coworker_session_binding_required") return "Choose this coworker again to connect it to the chat.";
+    if (error.code === "coworker_session_binding_conflict") return "A different coworker is connected to this chat. Refresh and try again.";
+    if (error.code === "coworker_session_binding_stale") return "This coworker's app access changed. Review access before continuing.";
     if (error.code === "coworker_transition_invalid") return "That change is no longer available for this coworker.";
     if (error.code === "coworker_watch_invalid") return "This check no longer matches the app you chose. Check access and try again.";
     if (error.code === "coworker_watch_limit") return "This coworker has reached its active check limit. Pause or remove a check first.";
@@ -682,22 +685,42 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   }, [resourceQuery.data?.recommendation]);
 
   const startChat = useCallback((coworker: MatterhornCoworkerAccountProfile) => {
-    const context = {
-      id: coworker.id,
-      name: coworker.name,
-      role: coworker.role,
-      revision: coworker.revision,
-      updatedAt: new Date().toISOString(),
-    };
-    const sessionId = selectedSessionId?.trim() ?? "";
-    if (sessionId && !pendingOutcome) {
+    const bindCoworker = async (sessionId: string) => {
+      if (!props.client || !workspaceId) throw new Error("Coworker service is unavailable.");
+      const current = await props.client.getCoworkerSessionBinding(workspaceId, sessionId);
+      const response = await props.client.bindCoworkerSession(workspaceId, sessionId, {
+        coworkerId: coworker.id,
+        coworkerRevision: coworker.revision,
+        expectedRevision: current.binding?.revision ?? 0,
+      });
       const fileContext = useMatterhornSessionAgentFileContextStore.getState().contexts[sessionId];
       if (fileContext && fileContext.coworker.id !== coworker.id) {
         useMatterhornSessionAgentFileContextStore.getState().clearContext(sessionId);
       }
-      useMatterhornSessionCoworkerContextStore.getState().setContext(sessionId, context);
-      onClose();
-      showToast({ title: `${coworker.name} joined this chat`, description: "Your next request will use this coworker's limits.", tone: "success" });
+      useMatterhornSessionCoworkerContextStore.getState().setContext(sessionId, {
+        id: response.coworker.id,
+        name: response.coworker.name,
+        role: response.coworker.role,
+        revision: response.coworker.revision,
+        bindingRevision: response.binding.revision,
+        updatedAt: response.binding.updatedAt,
+      });
+    };
+    const sessionId = selectedSessionId?.trim() ?? "";
+    if (sessionId && !pendingOutcome) {
+      void (async () => {
+        setBusyAction(`start:${coworker.id}`);
+        setError(null);
+        try {
+          await bindCoworker(sessionId);
+          onClose();
+          showToast({ title: `${coworker.name} joined this chat`, description: "Your next request will use this coworker's limits.", tone: "success" });
+        } catch (cause) {
+          setError(coworkerErrorMessage(cause));
+        } finally {
+          setBusyAction(null);
+        }
+      })();
       return;
     }
     if (!onStartTask) {
@@ -711,9 +734,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
         {
           title: `${coworker.name} chat`,
           sendImmediately: false,
-          onSessionCreated: (createdSessionId) => {
-            useMatterhornSessionCoworkerContextStore.getState().setContext(createdSessionId, context);
-          },
+          onSessionCreated: bindCoworker,
         },
       );
       if (started === false) {
@@ -721,8 +742,8 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
         return;
       }
       setPendingOutcome("");
-    })();
-  }, [onClose, onStartTask, pendingOutcome, selectedSessionId, selectedWorkspaceId, showToast]);
+    })().catch((cause) => setError(coworkerErrorMessage(cause)));
+  }, [onClose, onStartTask, pendingOutcome, props.client, selectedSessionId, selectedWorkspaceId, showToast, workspaceId]);
 
   const saveResources = useCallback(async () => {
     if (!props.client || !workspaceId || !selectedCoworker) return;
