@@ -462,8 +462,12 @@ function cookie(response: Response): string {
   return value;
 }
 
-function startCoworkerSessionServer(sessionIds: string[]): Served {
+function startCoworkerSessionServer(
+  sessionIds: string[],
+  deleteFailureSessionIds: string[] = [],
+): Served {
   const allowed = new Set(sessionIds);
+  const deleteFailures = new Set(deleteFailureSessionIds);
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -471,7 +475,17 @@ function startCoworkerSessionServer(sessionIds: string[]): Served {
       const url = new URL(request.url);
       const match = /^\/session\/([^/]+)$/.exec(url.pathname);
       const sessionId = match ? decodeURIComponent(match[1] ?? "") : "";
-      if (request.method !== "GET" || !allowed.has(sessionId)) {
+      if (!allowed.has(sessionId)) {
+        return Response.json({ code: "not_found", message: "Not found" }, { status: 404 });
+      }
+      if (request.method === "DELETE") {
+        if (deleteFailures.has(sessionId)) {
+          return Response.json({ code: "delete_failed", message: "Delete failed" }, { status: 500 });
+        }
+        allowed.delete(sessionId);
+        return Response.json(true);
+      }
+      if (request.method !== "GET") {
         return Response.json({ code: "not_found", message: "Not found" }, { status: 404 });
       }
       return Response.json({
@@ -1525,7 +1539,7 @@ describe("crypto coworker HTTP boundary", () => {
       "ses_source",
       "ses_fork",
       "ses_injected",
-    ]);
+    ], ["ses_source"]);
     const server = await boot("invite", {
       opencodeBaseUrl: `http://127.0.0.1:${opencode.port}`,
       seedCryptoApps: true,
@@ -1641,6 +1655,59 @@ describe("crypto coworker HTTP boundary", () => {
     );
     expect(otherTenant.response.status).toBe(404);
     expect(otherTenant.payload.code).toBe("workspace_not_found");
+
+    const otherAccountDelete = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_fork`,
+      { method: "DELETE", cookie: cookieB },
+    );
+    expect(otherAccountDelete.response.status).toBe(404);
+    expect(otherAccountDelete.payload.code).toBe("workspace_not_found");
+    const failedUpstreamDelete = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_source`,
+      { method: "DELETE", cookie: cookieA },
+    );
+    expect(failedUpstreamDelete.response.status).toBe(502);
+    expect(failedUpstreamDelete.payload.code).toBe("opencode_request_failed");
+    const beforeDeleteStore = new MatterhornCoworkerStore(server.coworkerDb);
+    try {
+      expect(beforeDeleteStore.getSessionBinding(
+        workspaceA,
+        String(signupA.payload.user.id),
+        "ses_source",
+      )).toMatchObject({ coworkerId });
+      expect(beforeDeleteStore.getSessionBinding(
+        workspaceA,
+        String(signupA.payload.user.id),
+        "ses_fork",
+      )).toMatchObject({ coworkerId });
+    } finally {
+      beforeDeleteStore.close();
+    }
+
+    const deleted = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_fork`,
+      { method: "DELETE", cookie: cookieA },
+    );
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload).toEqual({ ok: true });
+    const store = new MatterhornCoworkerStore(server.coworkerDb);
+    try {
+      expect(store.getSessionBinding(workspaceA, String(signupA.payload.user.id), "ses_fork")).toBeNull();
+      expect(store.getSessionBinding(workspaceA, String(signupA.payload.user.id), "ses_source"))
+        .toMatchObject({ coworkerId });
+    } finally {
+      store.close();
+    }
+    const retried = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_fork`,
+      { method: "DELETE", cookie: cookieA },
+    );
+    expect(retried.response.status).toBe(200);
+    expect(retried.payload).toEqual({ ok: true });
   });
 
   test("publishes completed coworker evidence only after exact owner confirmation", async () => {

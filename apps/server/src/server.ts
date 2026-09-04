@@ -15011,9 +15011,18 @@ function createRoutes(
       throw new ApiError(400, "invalid_payload", "sessionId is required");
     }
 
-    // OpenCode session deletion via the upstream API.
+    // Treat deletion as idempotent so a retry can finish local lifecycle
+    // cleanup after OpenCode accepted an earlier request.
     const opencode = createWorkspaceOpencodeClient(config, workspace);
-    unwrapOpencodeResult(await opencode.session.delete({ sessionID: sessionId }), `/session/${encodeURIComponent(sessionId)}`);
+    const deleted = await opencode.session.delete({ sessionID: sessionId });
+    if (deleted.data == null && deleted.response?.status !== 404) {
+      unwrapOpencodeResult(deleted, `/session/${encodeURIComponent(sessionId)}`);
+    }
+    coworkerRuntime.coworkers?.purgeDeletedSessionBinding(
+      workspace.id,
+      cryptoAppCreatedBy(ctx),
+      sessionId,
+    );
 
     return jsonResponse({ ok: true });
   });
