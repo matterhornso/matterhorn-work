@@ -383,24 +383,12 @@ describe("Walrus encrypted evidence deletion airlock", () => {
       });
       if (!current) throw new Error("test_evidence_missing");
       if (current.revision === value.published.revision) {
-        const proof = current.walrusProof;
-        if (!proof) throw new Error("test_walrus_proof_missing");
-        value.store.renewVerifiedWalrusProof({
-          workspaceId: "workspace_alpha",
-          ownerId: "owner_alpha",
-          evidenceId: current.id,
-          expectedRevision: current.revision,
-          expectedBlobId: proof.blobId,
-          expectedSuiObjectId: proof.suiObjectId,
-          expectedCiphertextSha256: current.index.ciphertextHash,
-          expectedPreviousValidUntilEpoch: proof.validUntilEpoch,
-          proof: {
-            ...proof,
-            validUntilEpoch: proof.validUntilEpoch + 1,
-            renewalTransactionDigest: "concurrent-renewal-digest",
-            renewedAt: "2026-09-02T00:01:30.000Z",
-          },
-          now: new Date("2026-09-02T00:01:30.000Z"),
+        value.state.put({
+          kind: "crypto_evidence_record",
+          key: current.id,
+          workspaceId: current.workspaceId,
+          value: { ...current, revision: current.revision + 1 },
+          nowMs: Date.parse("2026-09-02T00:01:30.000Z"),
         });
       }
       await expect(value.service.confirm({

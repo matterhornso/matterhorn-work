@@ -33,6 +33,7 @@ const SUI_TESTNET_NETWORK = "sui:testnet" as const;
 type RenewalIntentRecord = {
   workspaceId: string;
   ownerId: string;
+  claimId: string;
   preview: MatterhornCryptoEvidenceWalrusRenewalPreview;
 };
 
@@ -196,116 +197,146 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
     const existing = this.stateStore.get<RenewalIntentRecord>(STATE_KIND, input.evidenceId, now.getTime());
     if (existing) {
       assertIntentTenant(existing, input);
-      if (existing.preview.evidenceRevision !== input.expectedRevision
-        || existing.preview.signer !== signer
-        || existing.preview.extensionEpochs !== this.extensionEpochs) {
-        fail("crypto_evidence_walrus_renewal_in_progress");
+      if (!this.store.hasWalrusRenewalClaim({
+        workspaceId: input.workspaceId,
+        evidenceId: input.evidenceId,
+        expectedRevision: existing.preview.evidenceRevision,
+        claimId: existing.claimId,
+        now,
+      })) {
+        this.stateStore.delete(STATE_KIND, input.evidenceId);
+      } else {
+        if (existing.preview.evidenceRevision !== input.expectedRevision
+          || existing.preview.signer !== signer
+          || existing.preview.extensionEpochs !== this.extensionEpochs) {
+          fail("crypto_evidence_walrus_renewal_in_progress");
+        }
+        return this.prepareResponse(existing.preview);
       }
-      return this.prepareResponse(existing.preview);
     }
     this.stateStore.delete(STATE_KIND, input.evidenceId);
-    const record = this.store.get(input);
-    const proof = record?.walrusProof;
-    if (!record) fail("crypto_evidence_not_found");
-    if (record.revision !== input.expectedRevision) fail("crypto_evidence_revision_conflict");
-    if (record.state !== "published" || !record.envelope || !proof) {
-      fail("crypto_evidence_walrus_renewal_state_invalid");
-    }
-    if (!record.walrusOwnerAddressHash
-      || record.walrusOwnerAddressHash !== matterhornWalrusOwnerAddressHash(signer)) {
-      fail("crypto_evidence_walrus_wallet_owner_required");
-    }
-    let certification;
+    const candidate = this.store.beginWalrusRenewal({
+      workspaceId: input.workspaceId,
+      ownerId: input.ownerId,
+      evidenceId: input.evidenceId,
+      expectedRevision: input.expectedRevision,
+      now,
+    });
+    let retainedClaim = false;
     try {
-      certification = await this.verifyCertification({
+      const record = candidate.record;
+      const proof = record.walrusProof;
+      if (!record.walrusOwnerAddressHash
+        || record.walrusOwnerAddressHash !== matterhornWalrusOwnerAddressHash(signer)) {
+        fail("crypto_evidence_walrus_wallet_owner_required");
+      }
+      let certification;
+      try {
+        certification = await this.verifyCertification({
+          network: "testnet",
+          blobId: proof.blobId,
+          suiObjectId: proof.suiObjectId,
+          signal: input.signal,
+        });
+      } catch (error) {
+        return translateDependencyError(error);
+      }
+      if (certification.network !== "testnet"
+        || proof.network !== "testnet"
+        || certification.blobId !== proof.blobId
+        || certification.suiObjectId !== proof.suiObjectId
+        || certification.certifiedEpoch !== proof.certifiedEpoch
+        || certification.validUntilEpoch !== proof.validUntilEpoch
+        || certification.suiTransactionDigest !== proof.suiTransactionDigest
+        || certification.ownerAddress !== signer) {
+        fail("crypto_evidence_walrus_certification_changed");
+      }
+      const lifecycle = assessMatterhornWalrusStorageLifecycle({
+        currentEpoch: certification.currentEpoch,
+        validUntilEpoch: certification.validUntilEpoch,
+      });
+      if (lifecycle.status === "expired") fail("crypto_evidence_walrus_certification_expired");
+      if (lifecycle.status !== "renewal_due") fail("crypto_evidence_walrus_renewal_not_due");
+      const targetValidUntilEpoch = certification.validUntilEpoch + this.extensionEpochs;
+      if (targetValidUntilEpoch - certification.currentEpoch > 53) {
+        fail("crypto_evidence_walrus_renewal_epochs_invalid");
+      }
+      let built;
+      try {
+        built = await this.buildTransaction({
+          network: SUI_TESTNET_NETWORK,
+          signer,
+          blobObjectId: proof.suiObjectId,
+          extensionEpochs: this.extensionEpochs,
+          signal: input.signal,
+        });
+      } catch (error) {
+        return translateDependencyError(error);
+      }
+      const transactionBytes = canonicalTransactionBytes(built.transactionBytesBase64);
+      try {
+        if (TransactionDataBuilder.getDigestFromBytes(transactionBytes)
+          !== transactionDigest(built.transactionDigest)) {
+          fail("crypto_evidence_walrus_renewal_transaction_invalid");
+        }
+      } finally {
+        transactionBytes.fill(0);
+      }
+      if (!/^[a-f0-9]{64}$/.test(built.simulationReference)
+        || !Number.isFinite(Date.parse(built.simulatedAt))
+        || Math.abs(Date.parse(built.simulatedAt) - now.getTime()) > 30_000) {
+        fail("crypto_evidence_walrus_renewal_simulation_invalid");
+      }
+      const previewWithoutHash: Omit<MatterhornCryptoEvidenceWalrusRenewalPreview, "intentHash"> = {
+        version: MATTERHORN_CRYPTO_EVIDENCE_WALRUS_RENEWAL_VERSION,
+        intentId: `crypto_evidence_renewal_${randomUUID().replaceAll("-", "")}`,
+        evidenceId: input.evidenceId,
+        evidenceRevision: input.expectedRevision,
         network: "testnet",
+        signer,
         blobId: proof.blobId,
         suiObjectId: proof.suiObjectId,
-        signal: input.signal,
-      });
-    } catch (error) {
-      return translateDependencyError(error);
-    }
-    if (certification.network !== "testnet"
-      || proof.network !== "testnet"
-      || certification.blobId !== proof.blobId
-      || certification.suiObjectId !== proof.suiObjectId
-      || certification.certifiedEpoch !== proof.certifiedEpoch
-      || certification.validUntilEpoch !== proof.validUntilEpoch
-      || certification.suiTransactionDigest !== proof.suiTransactionDigest
-      || certification.ownerAddress !== signer) {
-      fail("crypto_evidence_walrus_certification_changed");
-    }
-    const lifecycle = assessMatterhornWalrusStorageLifecycle({
-      currentEpoch: certification.currentEpoch,
-      validUntilEpoch: certification.validUntilEpoch,
-    });
-    if (lifecycle.status === "expired") fail("crypto_evidence_walrus_certification_expired");
-    if (lifecycle.status !== "renewal_due") fail("crypto_evidence_walrus_renewal_not_due");
-    const targetValidUntilEpoch = certification.validUntilEpoch + this.extensionEpochs;
-    if (targetValidUntilEpoch - certification.currentEpoch > 53) {
-      fail("crypto_evidence_walrus_renewal_epochs_invalid");
-    }
-    let built;
-    try {
-      built = await this.buildTransaction({
-        network: SUI_TESTNET_NETWORK,
-        signer,
-        blobObjectId: proof.suiObjectId,
+        currentEpoch: certification.currentEpoch,
+        previousValidUntilEpoch: certification.validUntilEpoch,
         extensionEpochs: this.extensionEpochs,
-        signal: input.signal,
-      });
-    } catch (error) {
-      return translateDependencyError(error);
-    }
-    const transactionBytes = canonicalTransactionBytes(built.transactionBytesBase64);
-    try {
-      if (TransactionDataBuilder.getDigestFromBytes(transactionBytes)
-        !== transactionDigest(built.transactionDigest)) {
-        fail("crypto_evidence_walrus_renewal_transaction_invalid");
-      }
+        targetValidUntilEpoch,
+        transactionBytesBase64: built.transactionBytesBase64,
+        transactionDigest: built.transactionDigest,
+        simulationReference: built.simulationReference,
+        simulatedAt: built.simulatedAt,
+        expiresAt: new Date(now.getTime() + INTENT_TTL_MS).toISOString(),
+        walletAuthority: "connected_wallet_only",
+      };
+      const preview: MatterhornCryptoEvidenceWalrusRenewalPreview = {
+        ...previewWithoutHash,
+        intentHash: sha256(intentHashPayload(previewWithoutHash)),
+      };
+      assertPreview(preview);
+      if (!this.stateStore.putIfAbsent({
+        kind: STATE_KIND,
+        key: input.evidenceId,
+        workspaceId: input.workspaceId,
+        value: {
+          workspaceId: input.workspaceId,
+          ownerId: input.ownerId,
+          claimId: candidate.claimId,
+          preview,
+        },
+        expiresAtMs: Date.parse(preview.expiresAt),
+        nowMs: now.getTime(),
+      })) fail("crypto_evidence_walrus_renewal_in_progress");
+      retainedClaim = true;
+      return this.prepareResponse(preview);
     } finally {
-      transactionBytes.fill(0);
+      if (!retainedClaim) {
+        this.store.endWalrusRenewal({
+          workspaceId: input.workspaceId,
+          evidenceId: input.evidenceId,
+          claimId: candidate.claimId,
+          now,
+        });
+      }
     }
-    if (!/^[a-f0-9]{64}$/.test(built.simulationReference)
-      || !Number.isFinite(Date.parse(built.simulatedAt))
-      || Math.abs(Date.parse(built.simulatedAt) - now.getTime()) > 30_000) {
-      fail("crypto_evidence_walrus_renewal_simulation_invalid");
-    }
-    const previewWithoutHash: Omit<MatterhornCryptoEvidenceWalrusRenewalPreview, "intentHash"> = {
-      version: MATTERHORN_CRYPTO_EVIDENCE_WALRUS_RENEWAL_VERSION,
-      intentId: `crypto_evidence_renewal_${randomUUID().replaceAll("-", "")}`,
-      evidenceId: input.evidenceId,
-      evidenceRevision: input.expectedRevision,
-      network: "testnet",
-      signer,
-      blobId: proof.blobId,
-      suiObjectId: proof.suiObjectId,
-      currentEpoch: certification.currentEpoch,
-      previousValidUntilEpoch: certification.validUntilEpoch,
-      extensionEpochs: this.extensionEpochs,
-      targetValidUntilEpoch,
-      transactionBytesBase64: built.transactionBytesBase64,
-      transactionDigest: built.transactionDigest,
-      simulationReference: built.simulationReference,
-      simulatedAt: built.simulatedAt,
-      expiresAt: new Date(now.getTime() + INTENT_TTL_MS).toISOString(),
-      walletAuthority: "connected_wallet_only",
-    };
-    const preview: MatterhornCryptoEvidenceWalrusRenewalPreview = {
-      ...previewWithoutHash,
-      intentHash: sha256(intentHashPayload(previewWithoutHash)),
-    };
-    assertPreview(preview);
-    if (!this.stateStore.putIfAbsent({
-      kind: STATE_KIND,
-      key: input.evidenceId,
-      workspaceId: input.workspaceId,
-      value: { workspaceId: input.workspaceId, ownerId: input.ownerId, preview },
-      expiresAtMs: Date.parse(preview.expiresAt),
-      nowMs: now.getTime(),
-    })) fail("crypto_evidence_walrus_renewal_in_progress");
-    return this.prepareResponse(preview);
   }
 
   async confirm(input: {
@@ -330,6 +361,13 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
       || preview.transactionDigest !== transactionDigest(input.transactionDigest)) {
       fail("crypto_evidence_walrus_renewal_intent_mismatch");
     }
+    if (!this.store.hasWalrusRenewalClaim({
+      workspaceId: input.workspaceId,
+      evidenceId: input.evidenceId,
+      expectedRevision: preview.evidenceRevision,
+      claimId: record.claimId,
+      now,
+    })) fail("crypto_evidence_walrus_renewal_expired_or_replayed");
     let transaction;
     try {
       transaction = await this.verifyTransaction({
@@ -371,6 +409,8 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
     if (current.walrusOwnerAddressHash !== matterhornWalrusOwnerAddressHash(preview.signer)) {
       fail("crypto_evidence_walrus_wallet_owner_required");
     }
+    const finalizedAt = input.now ?? new Date();
+    if (!Number.isFinite(finalizedAt.getTime())) fail("crypto_evidence_time_invalid");
     const renewedProof: MatterhornWalrusProof = {
       ...currentProof,
       validUntilEpoch: certification.validUntilEpoch,
@@ -379,7 +419,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
     };
     const verification: MatterhornEvidenceVerificationStatus = {
       status: "verified",
-      verifiedAt: now.toISOString(),
+      verifiedAt: finalizedAt.toISOString(),
       checks: {
         tenantScope: true,
         ciphertextHash: true,
@@ -391,7 +431,11 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
       reason: null,
     };
     const item = this.stateStore.transaction(() => {
-      const consumed = this.stateStore.take<RenewalIntentRecord>(STATE_KIND, input.evidenceId, now.getTime());
+      const consumed = this.stateStore.take<RenewalIntentRecord>(
+        STATE_KIND,
+        input.evidenceId,
+        finalizedAt.getTime(),
+      );
       if (!consumed) fail("crypto_evidence_walrus_renewal_expired_or_replayed");
       assertIntentTenant(consumed, input);
       if (canonicalJson(consumed.preview) !== canonicalJson(preview)) {
@@ -406,8 +450,9 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
         expectedSuiObjectId: preview.suiObjectId,
         expectedCiphertextSha256: current.index.ciphertextHash,
         expectedPreviousValidUntilEpoch: preview.previousValidUntilEpoch,
+        claimId: consumed.claimId,
         proof: renewedProof,
-        now,
+        now: finalizedAt,
       });
       this.store.recordVerificationStatus({
         workspaceId: input.workspaceId,

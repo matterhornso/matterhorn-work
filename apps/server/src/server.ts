@@ -4095,6 +4095,15 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
   if (code === "crypto_evidence_revision_conflict") {
     return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
   }
+  if (code === "crypto_evidence_walrus_renewal_in_progress") {
+    return new ApiError(409, code, "A wallet renewal is already waiting for this evidence.");
+  }
+  if (code === "crypto_evidence_walrus_renewal_claim_invalid") {
+    return new ApiError(409, code, "This renewal is no longer current. Prepare it again.");
+  }
+  if (code === "crypto_evidence_operation_in_progress") {
+    return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
+  }
   return new ApiError(
     503,
     "crypto_evidence_walrus_renewal_unavailable",
@@ -4137,7 +4146,8 @@ function cryptoEvidenceDeletionApiError(error: unknown): ApiError {
   if (code === "crypto_evidence_revision_conflict") {
     return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
   }
-  if (code === "crypto_evidence_operation_in_progress") {
+  if (code === "crypto_evidence_operation_in_progress"
+    || code === "crypto_evidence_walrus_renewal_in_progress") {
     return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
   }
   return new ApiError(
@@ -4184,7 +4194,8 @@ function cryptoEvidenceSuiAnchorApiError(error: unknown): ApiError {
   if (code === "crypto_evidence_revision_conflict") {
     return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
   }
-  if (code === "crypto_evidence_operation_in_progress") {
+  if (code === "crypto_evidence_operation_in_progress"
+    || code === "crypto_evidence_walrus_renewal_in_progress") {
     return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
   }
   if (code === "crypto_evidence_sui_anchor_exists") {
@@ -4209,7 +4220,8 @@ function cryptoEvidenceKeyDestructionApiError(error: unknown): ApiError {
     return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
   }
   if (code === "crypto_evidence_operation_in_progress"
-    || code === "crypto_evidence_walrus_publication_in_progress") {
+    || code === "crypto_evidence_walrus_publication_in_progress"
+    || code === "crypto_evidence_walrus_renewal_in_progress") {
     return new ApiError(409, "crypto_evidence_operation_in_progress", "This evidence record is being updated. Try again shortly.");
   }
   if (code === "crypto_evidence_key_destroyed") {

@@ -40,7 +40,7 @@ type MatterhornCryptoEvidenceOperationClaim = {
   claimId: string;
   evidenceId: string;
   expectedRevision: number;
-  operation: "publish" | "anchor" | "rotate_key" | "destroy_key";
+  operation: "publish" | "renew" | "anchor" | "rotate_key" | "destroy_key";
   createdAt: string;
   expiresAt: string;
 };
@@ -244,7 +244,9 @@ export class MatterhornCryptoEvidenceStore {
       if (legacyClaim) {
         throw new Error(input.operation === "publish"
           ? "crypto_evidence_walrus_publication_in_progress"
-          : "crypto_evidence_operation_in_progress");
+          : input.operation === "renew"
+            ? "crypto_evidence_walrus_renewal_in_progress"
+            : "crypto_evidence_operation_in_progress");
       }
       if (input.operation === "publish") {
         if (record.state !== "sealed" || !record.envelope || this.recoveryMaterialErased(record)) {
@@ -285,7 +287,9 @@ export class MatterhornCryptoEvidenceStore {
         );
         throw new Error(input.operation === "publish" && activeClaim?.operation === "publish"
           ? "crypto_evidence_walrus_publication_in_progress"
-          : "crypto_evidence_operation_in_progress");
+          : input.operation === "renew" && activeClaim?.operation === "renew"
+            ? "crypto_evidence_walrus_renewal_in_progress"
+            : "crypto_evidence_operation_in_progress");
       }
       return { record: clone(record), claimId };
     });
@@ -646,6 +650,64 @@ export class MatterhornCryptoEvidenceStore {
     };
   }
 
+  beginWalrusRenewal(input: {
+    workspaceId: string;
+    ownerId: string;
+    coworkerId?: string;
+    evidenceId: string;
+    expectedRevision: number;
+    now?: Date;
+  }): { record: MatterhornCryptoEvidenceRecord & { state: "published"; envelope: MatterhornEncryptedEvidenceEnvelope; walrusProof: MatterhornWalrusProof }; claimId: string } {
+    const claimed = this.beginExclusiveOperation({ ...input, operation: "renew" });
+    if (claimed.record.state !== "published" || !claimed.record.envelope || !claimed.record.walrusProof) {
+      this.endWalrusRenewal({
+        workspaceId: input.workspaceId,
+        evidenceId: input.evidenceId,
+        claimId: claimed.claimId,
+        now: input.now,
+      });
+      throw new Error("crypto_evidence_walrus_renewal_state_invalid");
+    }
+    return {
+      record: claimed.record as MatterhornCryptoEvidenceRecord & {
+        state: "published";
+        envelope: MatterhornEncryptedEvidenceEnvelope;
+        walrusProof: MatterhornWalrusProof;
+      },
+      claimId: claimed.claimId,
+    };
+  }
+
+  hasWalrusRenewalClaim(input: {
+    workspaceId: string;
+    evidenceId: string;
+    expectedRevision: number;
+    claimId: string;
+    now?: Date;
+  }): boolean {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    const claim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
+      OPERATION_CLAIM_KIND,
+      this.operationClaimKey(input),
+      now.getTime(),
+    );
+    return claim?.version === "matterhorn.crypto-evidence-operation-claim.v1"
+      && claim.claimId === input.claimId
+      && claim.evidenceId === input.evidenceId
+      && claim.expectedRevision === input.expectedRevision
+      && claim.operation === "renew";
+  }
+
+  endWalrusRenewal(input: {
+    workspaceId: string;
+    evidenceId: string;
+    claimId: string;
+    now?: Date;
+  }): boolean {
+    return this.endExclusiveOperation(input);
+  }
+
   beginSuiAnchor(input: {
     workspaceId: string;
     ownerId: string;
@@ -829,9 +891,15 @@ export class MatterhornCryptoEvidenceStore {
     expectedSuiObjectId: string;
     expectedCiphertextSha256: string;
     expectedPreviousValidUntilEpoch: number;
+    claimId: string;
     proof: MatterhornWalrusProof;
     now?: Date;
   }): MatterhornCryptoEvidenceRecord {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    if (!this.hasWalrusRenewalClaim({ ...input, now })) {
+      throw new Error("crypto_evidence_walrus_renewal_claim_invalid");
+    }
     const current = this.get(input);
     if (!current) throw new Error("crypto_evidence_not_found");
     if (current.state !== "published" || !current.envelope || !current.walrusProof) {
@@ -866,8 +934,6 @@ export class MatterhornCryptoEvidenceStore {
       root: input.proof.merkleRoot,
       proof: input.proof.merkleProof,
     })) throw new Error("crypto_evidence_merkle_proof_mismatch");
-    const now = input.now ?? new Date();
-    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
     const next: MatterhornCryptoEvidenceRecord = {
       ...current,
       revision: current.revision + 1,
@@ -883,6 +949,12 @@ export class MatterhornCryptoEvidenceStore {
     });
     this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
     this.recordAccess({ record: next, action: "renew_proof", outcome: "allowed", reason: "wallet_renewal_verified", now });
+    if (!this.endExclusiveOperationInTransaction({
+      workspaceId: input.workspaceId,
+      evidenceId: input.evidenceId,
+      claimId: input.claimId,
+      now,
+    })) throw new Error("crypto_evidence_walrus_renewal_claim_invalid");
     return clone(next);
   }
 
