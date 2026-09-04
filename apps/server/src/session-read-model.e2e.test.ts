@@ -2373,7 +2373,12 @@ describe("workspace session read APIs", () => {
       fetch(`http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/command`, {
         method: "POST",
         headers: { ...auth(openwork.token), "Content-Type": "application/json" },
-        body: JSON.stringify({ command: "review", arguments: "", messageID: "caller_supplied_command_id" }),
+        body: JSON.stringify({
+          command: "review",
+          arguments: "",
+          messageID: "caller_supplied_command_id",
+          model: "ollama/local-private",
+        }),
       }),
       // This guards against accidentally awaiting the unresolved upstream
       // command, not against normal CI scheduler latency.
@@ -2395,6 +2400,45 @@ describe("workspace session read APIs", () => {
       .not.toBe("caller_supplied_command_id");
   });
 
+  test("blocks opaque command expansion through an unverified provider before upstream dispatch", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+
+    const response = await fetch(
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/command`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: "review",
+          arguments: "private workspace state",
+          model: "openai/gpt-4.1",
+          privacyConsentToken: "consent_cannot_cover_opaque_expansion",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      code: "command_privacy_unverifiable",
+      message:
+        "This command may expand hidden workspace context that Matterhorn cannot bind to one exact privacy review. Use a local or verified private model, or send the instruction as a normal chat message.",
+      details: {
+        providerId: "openai",
+        privacyStatus: "unverified",
+        trainingUse: "unknown",
+      },
+    });
+    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/command"))
+      .toHaveLength(0);
+    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/abort"))
+      .toHaveLength(0);
+  });
+
   test("does not dispatch a trusted command when the previous response cannot be stopped", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     const mock = startMockOpencode({ abortStatus: 503 });
@@ -2408,7 +2452,11 @@ describe("workspace session read APIs", () => {
       {
         method: "POST",
         headers: { ...auth(openwork.token), "Content-Type": "application/json" },
-        body: JSON.stringify({ command: "review", arguments: "" }),
+        body: JSON.stringify({
+          command: "review",
+          arguments: "",
+          model: "ollama/local-private",
+        }),
       },
     );
 

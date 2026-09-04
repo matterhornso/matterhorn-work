@@ -32,6 +32,15 @@ tool access, reviewed transaction terms, retention, and security receipts.
 | `POST /workspace/:id/reviewed-actions/validate` | Revalidate a v2 handoff against current terms and simulation before wallet review or receipt import. |
 | `POST /workspace/:id/user-content/purge` | Owner-only purge of Matterhorn-managed content. Requires `confirm: purge:<workspaceId>`. |
 
+Raw OpenCode command dispatch is trusted/local-only. Because OpenCode expands a
+command's stored template and implicit runtime context after Matterhorn parses the
+request, Matterhorn cannot bind those final bytes to one exact consent challenge.
+Commands therefore require a local or currently verified no-training provider and
+fail before abort, allowance reservation, guarded-run creation, or upstream
+dispatch otherwise. Public research through a disclosed unverified provider must
+use the authoritative message endpoint, where the complete provider-bound request
+is hashable and preflighted.
+
 The internal capability and completion routes require
 `X-Matterhorn-Agent-Runtime-Secret`. They are not client APIs.
 

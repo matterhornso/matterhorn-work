@@ -549,7 +549,6 @@ import {
   writeWorkspaceModelSelection,
 } from "./backend-models.js";
 import {
-  providerPrivacyEnforcementMode,
   resolveModelProviderPrivacyPolicy,
   resolveProviderPrivacyPolicy,
 } from "./provider-privacy.js";
@@ -2937,9 +2936,10 @@ async function proxyOpencodeRequest(input: {
         workspace,
         parseSessionCommandModel(payload),
       );
-      if (input.guardedRuntime.capabilities.mode === "off" && providerPrivacyEnforcementMode() === "verified_only") {
-        assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
-      }
+      assertOpaqueCommandProviderPrivacy(
+        modelResolution.model.providerID,
+        modelResolution.model.modelID,
+      );
       const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
       const command = typeof payload.command === "string" ? payload.command.trim() : "";
       const commandArguments = typeof payload.arguments === "string" ? payload.arguments.trim() : "";
@@ -21403,6 +21403,21 @@ function assertPromptProviderPrivacy(providerId: string, modelId: string): void 
     403,
     "provider_privacy_unverified",
     `${policy.providerName} cannot receive prompts until its no-training and retention policy is verified. Choose a verified provider or ask the workspace owner to finish privacy setup.`,
+    {
+      providerId: policy.providerId,
+      privacyStatus: policy.status,
+      trainingUse: policy.trainingUse,
+    },
+  );
+}
+
+function assertOpaqueCommandProviderPrivacy(providerId: string, modelId: string): void {
+  const policy = resolveModelProviderPrivacyPolicy(providerId, modelId);
+  if (policy.status === "local_processing" || policy.status === "verified_no_training") return;
+  throw new ApiError(
+    403,
+    "command_privacy_unverifiable",
+    "This command may expand hidden workspace context that Matterhorn cannot bind to one exact privacy review. Use a local or verified private model, or send the instruction as a normal chat message.",
     {
       providerId: policy.providerId,
       privacyStatus: policy.status,
