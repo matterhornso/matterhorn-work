@@ -3597,7 +3597,7 @@ export default function BittensorPanel({
                   {[
                     ["Can submit", activeManifestCanSubmit],
                     ["Live submission", activeManifestLiveSubmission],
-                    ["External signer", activeManifestSigner],
+                    ["Wallet approval", activeManifestSigner],
                     ["Status", activeManifestStatus],
                   ].map(([label, value]) => (
                     <div key={label} className="flex items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.08] px-2 py-1.5">
@@ -4225,16 +4225,16 @@ export default function BittensorPanel({
                 <div className="grid grid-cols-2 gap-2">
                   <Metric label="Chain API" value={marketExecutionChainState} compact />
                   <Metric label="Stages" value={marketExecutionChainStageCount} compact />
-                  <Metric label="External signer" value={marketExecutionChainSignerState} compact />
+                  <Metric label="Wallet approval" value={marketExecutionChainSignerState} compact />
                   <Metric label="Can submit" value={marketExecutionChainSubmitState} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Testnet-only path: preview -&gt; external-signer request -&gt; redacted artifact validation -&gt; public receipt import. Each step is public/redacted and hash-bound before it can become customer evidence.
+                  Testnet-only validation path: preview -&gt; operator-owned wallet check -&gt; redacted artifact validation -&gt; public receipt import. Each step is public/redacted and hash-bound before it can become customer evidence.
                 </p>
                 <div className="grid grid-cols-1 gap-2">
                   {[
                     ["Preview / handoff", "Build a no-submit plan with Can submit: No and Live submission: Off."],
-                    ["External-signer request", "Create public metadata for an operator-owned testnet signer only."],
+                    ["Operator wallet check", "Create public metadata for an operator-owned testnet wallet only."],
                     ["Validate artifact", "Accept public/redacted metadata; reject raw signatures, signed payloads, secrets, and hash mismatches."],
                     ["Receipt import", "Attach public status or transaction evidence without private execution material."],
                   ].map(([label, description]) => (
@@ -4569,7 +4569,7 @@ export default function BittensorPanel({
         {venue === "bittensor" && tab === "actions" && (
           <div className="space-y-4">
             <Notice tone="info" icon={<Shield className="size-4" />} title="Reviewed Bittensor actions">
-              Transfer, stake, and unstake calls can be reviewed and submitted through a connected Bittensor wallet. Advanced calls remain external-signer handoffs until their runtime contracts are audited.
+              Transfer, stake, and unstake calls can be reviewed and submitted through a connected Bittensor wallet. Advanced calls stay unavailable until their runtime contracts are audited.
             </Notice>
             <Section title="Standard Bittensor actions" icon={<ListChecks className="size-4" />}>
               <div className="space-y-3">

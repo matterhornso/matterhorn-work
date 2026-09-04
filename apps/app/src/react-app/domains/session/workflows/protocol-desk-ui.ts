@@ -131,7 +131,7 @@ function capabilityBullets(manifest: ProtocolDeskManifest): string[] {
     .map((action) => compactActionLabel(action.label))
     .filter(Boolean);
   const walletBoundary = manifest.walletRequirements.includes("ss58_external_signer")
-    ? "External signer handoff"
+    ? "Wallet review required"
     : manifest.walletRequirements.includes("evm_read_only")
       ? "Public wallet context"
       : manifest.category === "wellness"

@@ -165,8 +165,8 @@ for (const required of [
 
 for (const required of [
   "Execution chain",
-  "Testnet-only path: preview",
-  "external-signer request",
+  "Testnet-only validation path: preview",
+  "operator-owned wallet check",
   "redacted artifact validation",
   "public receipt import",
   "hash-bound",

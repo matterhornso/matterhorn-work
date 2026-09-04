@@ -440,7 +440,7 @@ export const IDENTITY_PREVIEW_FIXTURES: DecentralizedServicePreview[] = [
     requiresCustomerConfirmation: true,
     warnings: [
       "This is a fixture preview. No provider is connected.",
-      "Ownership proof happens through an external signer handoff, never by sharing a private key.",
+      "Ownership proof happens through a connected-wallet request, never by sharing a private key.",
     ],
     canExecute: false,
   },

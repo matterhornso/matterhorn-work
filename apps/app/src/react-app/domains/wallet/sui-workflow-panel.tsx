@@ -771,7 +771,7 @@ export function SuiWorkflowPanel(props: {
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
             {directWalletAvailable
               ? "Connect to view your balance and prepare transfers."
-              : "Prepare a transfer handoff, sign externally, then import the public receipt as project evidence."}
+              : "Prepare the transfer here, then open this workspace in a supported web browser to review it in your connected wallet."}
           </p>
         </div>
       </div> : null}

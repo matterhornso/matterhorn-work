@@ -6228,7 +6228,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       desktop: {
         runtime: "desktop",
-        ...capability("preview", "Desktop external handoff", "Desktop uses public addresses and external signer handoffs; injected browser wallets are not available there."),
+        ...capability("preview", "Desktop wallet preview", "Desktop uses public addresses for previews. Open the same workspace in a supported web browser for connected-wallet review."),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -6237,7 +6237,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       electron: {
         runtime: "electron",
-        ...capability("preview", "Electron external handoff", "Electron builds use public addresses and external signer handoffs; injected browser wallets are not available there."),
+        ...capability("preview", "Desktop wallet preview", "Desktop uses public addresses for previews. Open the same workspace in a supported web browser for connected-wallet review."),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -6302,7 +6302,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const bittensorSidecarConfigured = Boolean(process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL?.trim());
   const bittensorCapabilityStatus: MatterhornCapabilityStatus = bittensorSidecarConfigured ? "working" : "preview";
   const bittensorCapabilityDescription = bittensorSidecarConfigured
-    ? "Bittensor uses live provider-backed public SS58 reads, unsigned previews, and external-signer handoffs."
+    ? "Bittensor uses live provider-backed public SS58 reads and prepares supported actions for exact connected-wallet review."
     : "Bittensor public workflows are available with clearly labeled fallback data. Configure the Subtensor sidecar for live-chain reads.";
   const bittensor = walletFamily({
     family: "bittensor",
@@ -6324,7 +6324,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     runtimeSupport: {
       web: {
         runtime: "web",
-        ...capability(bittensorCapabilityStatus, "Web external signer", bittensorCapabilityDescription),
+        ...capability(bittensorCapabilityStatus, "Web wallet approval", bittensorCapabilityDescription),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -6333,7 +6333,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       desktop: {
         runtime: "desktop",
-        ...capability(bittensorCapabilityStatus, "Desktop external signer", bittensorCapabilityDescription),
+        ...capability(bittensorCapabilityStatus, "Desktop wallet preview", bittensorCapabilityDescription),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -6342,7 +6342,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       electron: {
         runtime: "electron",
-        ...capability(bittensorCapabilityStatus, "Electron external signer", bittensorCapabilityDescription),
+        ...capability(bittensorCapabilityStatus, "Desktop wallet preview", bittensorCapabilityDescription),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -17703,7 +17703,7 @@ function createRoutes(
         kind: "readiness_report",
         title: "Crypto customer readiness",
         summary: ready
-          ? "Runtime crypto surfaces are ready within their stated boundaries: Hyperliquid uses wallet-approved execution, Polymarket supports an eligible reviewed wallet ticket, and Bittensor uses its stated external-signer routes."
+          ? "Runtime crypto surfaces are ready within their stated boundaries: Hyperliquid uses wallet-approved execution, Polymarket supports an eligible reviewed wallet ticket, and Bittensor supports reviewed transfer, stake, and unstake calls through the connected wallet."
           : "Resolve readiness blockers before production use.",
         tone: ready ? "good" : "danger",
         items: [
@@ -19699,7 +19699,7 @@ function createRoutes(
       status: status as BittensorSignedResult["status"],
       txHash: normalizeBittensorReceiptString(record.txHash),
       blockHash: normalizeBittensorReceiptString(record.blockHash),
-      message: normalizeBittensorReceiptString(record.message) ?? "External signer receipt evidence imported by Matterhorn.",
+      message: normalizeBittensorReceiptString(record.message) ?? "Public wallet receipt evidence imported by Matterhorn.",
       explorerUrl: normalizeBittensorReceiptString(record.explorerUrl),
     };
   }
@@ -19853,7 +19853,7 @@ function createRoutes(
       taskId,
       sessionSlug,
       outputPath,
-      summary: "Bittensor external-signer receipt saved",
+      summary: "Bittensor wallet receipt saved",
       auditAction: "workspace.bittensor.receipt.import",
       evidenceKind: "external_signer_receipt",
       workflowId: "bittensor_external_signer",

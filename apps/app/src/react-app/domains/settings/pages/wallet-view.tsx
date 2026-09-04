@@ -187,7 +187,7 @@ function WalletBoundaryList({
 }) {
   const items = [
     { label: "Public reads", body: safetyCopy.publicAddressLine },
-    { label: "External signer", body: safetyCopy.externalSignerLine },
+    { label: "Wallet approval", body: safetyCopy.externalSignerLine },
     { label: "Never paste", body: safetyCopy.forbiddenSecretsLine },
   ];
 
@@ -897,13 +897,13 @@ const RUNTIME_LABELS: Record<
     label: "Desktop app",
     icon: MonitorSmartphone,
     detail:
-      "Browser wallet extensions do not inject into desktop. Use external signing for on-chain actions.",
+      "Wallet extensions are unavailable in the desktop app. Open this workspace in a supported web browser to review and approve on-chain actions.",
   },
   electron: {
     label: "Desktop app",
     icon: MonitorSmartphone,
     detail:
-      "Electron builds do not support injected wallets. Use external signing for on-chain actions.",
+      "Wallet extensions are unavailable in the desktop app. Open this workspace in a supported web browser to review and approve on-chain actions.",
   },
   unknown: {
     label: "Unknown runtime",
