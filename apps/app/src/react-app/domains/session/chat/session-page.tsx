@@ -2461,6 +2461,7 @@ export function SessionPage(props: SessionPageProps) {
       workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
       selectedSessionId={props.selectedSessionId}
       selectedWorkspaceId={props.selectedWorkspaceId}
+      compactHeader={overlaySidePanelOpen}
       onClose={closeRightPane}
       onBrowseApps={() => navigate(`/workspace/${encodeURIComponent(props.selectedWorkspaceId)}/crypto-apps`)}
       onBrowseFiles={() => setCurrentSidePanel("files")}
@@ -3942,7 +3943,7 @@ export function SessionPage(props: SessionPageProps) {
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      className="size-8 rounded-md text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
+                      className="size-11 rounded-md text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
                       onClick={closeRightPane}
                       title="Back to workspace"
                       aria-label="Back to workspace"

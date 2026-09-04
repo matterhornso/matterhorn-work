@@ -87,6 +87,7 @@ describe("chat-operated coworker UI", () => {
 
   test("exposes lifecycle, alerts, checks, limits, and wallet reviews without signing controls", () => {
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const session = appSource("react-app/domains/session/chat/session-page.tsx");
     expect(panel).toContain("Start chat");
     expect(panel).toContain("Add coworker");
     expect(panel).toContain("Research markets");
@@ -96,6 +97,11 @@ describe("chat-operated coworker UI", () => {
     expect(panel).not.toContain('label: "Monitor risk"');
     expect(panel).not.toContain('label: "Prepare wallet actions"');
     expect(panel).not.toContain('label: "Track treasury"');
+    expect(session).toContain("compactHeader={overlaySidePanelOpen}");
+    expect(panel).toContain('props.compactHeader && "sr-only"');
+    expect(panel).toContain('props.compactHeader ? "py-3" : "py-4"');
+    expect(panel).toContain('props.compactHeader && "size-11"');
+    expect(session).toContain('className="size-11 rounded-md text-dls-secondary');
     expect(panel).toContain("Pause");
     expect(panel).toContain("Resume coworker");
     expect(panel).toContain("Disable permanently");
@@ -276,7 +282,7 @@ describe("chat-operated coworker UI", () => {
       loadFailed: false,
       connectionsAvailable: false,
       connectedAppCount: 0,
-    })).toMatchObject({ action: "none", label: null, message: "Apps are unavailable right now. Try again later." });
+    })).toMatchObject({ action: "none", label: null, message: "App connections aren't available here yet." });
     expect(resolveCoworkerNextStep({
       coworkerState: "active",
       ready: false,
@@ -318,7 +324,11 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain('onClick={props.onBrowseFiles}>Add file</Button>');
     expect(panel).toContain('onClick={props.onBrowseMemory}>Add memory</Button>');
     expect(panel).toContain('onClick={props.onBrowseApps}>Browse apps</Button>');
-    expect(panel.match(/onClick=\{props\.onBrowseApps\}>Browse apps<\/Button>/g)?.length).toBe(2);
+    expect(panel.match(/onClick=\{props\.onBrowseApps\}>Browse apps<\/Button>/g)?.length).toBe(1);
+    expect(panel).toContain("loadOptionalCoworkerResource(props.client.listAgentFiles(workspaceId))");
+    expect(panel).toContain("loadOptionalCoworkerResource(props.client.listWorkspaceMemory(workspaceId, { limit: 80 }))");
+    expect(panel).toContain("App connections aren't available here yet.");
+    expect(panel).toContain("Saved memory is unavailable right now.");
     expect(sessionPage).toContain('onBrowseFiles={() => setCurrentSidePanel("files")}');
     expect(sessionPage).toContain('onBrowseMemory={() => setCurrentSidePanel("memory")}');
     expect(panel).not.toContain("This invalidates the current intent.");
@@ -366,9 +376,9 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("Review");
     expect(panel).toContain("Save access");
     expect(panel).toContain("This coworker cannot change that.");
-    expect(panel).toContain("App connections are not enabled in this environment.");
+    expect(panel).toContain("App connections aren't available here yet.");
     expect(panel).toContain("Private files are not enabled in this environment.");
-    expect(panel).toContain('cause.code === "crypto_app_gateway_disabled"');
+    expect(panel).toContain("const cryptoAppsRequest = loadOptionalCoworkerResource(Promise.all([");
     expect(panel).toContain("Choose an app");
     expect(panel).toContain("Nothing is shared until you save access.");
     expect(panel).toContain("createCryptoAppConnection");
