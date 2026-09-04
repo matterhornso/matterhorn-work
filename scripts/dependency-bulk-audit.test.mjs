@@ -35,11 +35,27 @@ writeFileSync(lockfile, [
 ].join("\n"));
 
 let receivedBody = null;
+let retryRequests = 0;
+let unavailableRequests = 0;
 const server = createServer(async (request, response) => {
   let body = "";
   for await (const chunk of request) body += chunk;
   receivedBody = JSON.parse(body);
   response.setHeader("Content-Type", "application/json");
+  if (request.url?.includes("retry")) {
+    retryRequests += 1;
+    if (retryRequests === 1) {
+      response.statusCode = 503;
+      response.end(JSON.stringify({ error: "temporarily unavailable" }));
+      return;
+    }
+  }
+  if (request.url?.includes("unavailable")) {
+    unavailableRequests += 1;
+    response.statusCode = 503;
+    response.end(JSON.stringify({ error: "temporarily unavailable" }));
+    return;
+  }
   response.end(JSON.stringify(receivedBody["fixture-package"] ? {
     "fixture-package": [{
       id: 42,
@@ -89,6 +105,25 @@ try {
   assert.equal(productionReport.ready, true);
   assert.equal(productionReport.scope, "installed-production-graph");
   assert.ok(productionReport.versionCount > 500, "the production audit should cover transitive installed dependencies");
+
+  const retried = await run([
+    "--lockfile", lockfile,
+    "--registry-url", `${registryUrl}?retry=1`,
+    "--audit-level", "critical",
+    "--json",
+  ]);
+  assert.equal(retried.code, 0, retried.stderr || retried.stdout);
+  assert.equal(retryRequests, 2, "one transient registry failure should be retried once");
+
+  const unavailable = await run([
+    "--lockfile", lockfile,
+    "--registry-url", `${registryUrl}?unavailable=1`,
+    "--audit-level", "critical",
+    "--json",
+  ]);
+  assert.equal(unavailable.code, 1, unavailable.stderr || unavailable.stdout);
+  assert.equal(unavailableRequests, 3, "the registry gate should stop after its bounded attempt budget");
+  assert.match(unavailable.stderr, /npm bulk advisory API returned 503 after 3 attempts/);
 } finally {
   await new Promise((resolve) => server.close(resolve));
   rmSync(dir, { recursive: true, force: true });

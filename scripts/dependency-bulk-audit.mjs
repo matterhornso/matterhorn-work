@@ -5,6 +5,9 @@ import process from "node:process";
 
 const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org/-/npm/v1/security/advisories/bulk";
 const SEVERITY_ORDER = ["info", "low", "moderate", "high", "critical"];
+const AUDIT_REQUEST_TIMEOUT_MS = 30_000;
+const AUDIT_MAX_ATTEMPTS = 3;
+const AUDIT_RETRY_DELAYS_MS = [500, 1_500];
 
 function parseArgs(argv) {
   const config = {
@@ -154,27 +157,56 @@ function advisoryId(advisory) {
   return String(advisory?.id ?? advisory?.url?.match(/GHSA-[\w-]+/i)?.[0] ?? "unknown");
 }
 
+function retryableAuditError(error) {
+  return error?.retryable === true
+    || error?.name === "TimeoutError"
+    || error?.name === "AbortError"
+    || error instanceof TypeError;
+}
+
+async function fetchAdvisories(registryUrl, inventory) {
+  let lastError;
+  for (let attempt = 0; attempt < AUDIT_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(registryUrl, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "User-Agent": "matterhorn-work-dependency-audit/1",
+        },
+        body: JSON.stringify(inventory),
+        signal: AbortSignal.timeout(AUDIT_REQUEST_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        const error = new Error(`npm bulk advisory API returned ${response.status}`);
+        error.retryable = response.status === 408
+          || response.status === 425
+          || response.status === 429
+          || response.status >= 500;
+        throw error;
+      }
+      const payload = await response.json();
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        throw new Error("npm bulk advisory API returned an invalid response");
+      }
+      return payload;
+    } catch (error) {
+      lastError = error;
+      if (!retryableAuditError(error) || attempt === AUDIT_MAX_ATTEMPTS - 1) break;
+      await new Promise((resolve) => setTimeout(resolve, AUDIT_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`${message} after ${AUDIT_MAX_ATTEMPTS} attempts`);
+}
+
 async function audit(config) {
   const lockfile = config.lockfile ?? (config.productionOnly ? null : "pnpm-lock.yaml");
   const inventory = lockfile
     ? lockfileInventory(readFileSync(lockfile, "utf8"))
     : installedInventory(true);
-  const response = await fetch(config.registryUrl, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "User-Agent": "matterhorn-work-dependency-audit/1",
-    },
-    body: JSON.stringify(inventory),
-  });
-  if (!response.ok) {
-    throw new Error(`npm bulk advisory API returned ${response.status}`);
-  }
-  const payload = await response.json();
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new Error("npm bulk advisory API returned an invalid response");
-  }
+  const payload = await fetchAdvisories(config.registryUrl, inventory);
 
   const advisories = Object.entries(payload).flatMap(([packageName, entries]) =>
     (Array.isArray(entries) ? entries : []).map((advisory) => ({
