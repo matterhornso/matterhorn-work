@@ -150,6 +150,8 @@ export type MatterhornAgentCapabilityClaims = {
   expiresAt: string;
   policyVersion: string;
   registryVersion: string;
+  /** Hash-only proof that server-owned request policy context is unchanged. */
+  jurisdictionEvidenceHash?: string;
   coworker?: {
     id: string;
     ownerId: string;

@@ -46,6 +46,7 @@ import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-stor
 import type { MatterhornFinalizedCoworkerRun } from "./crypto-evidence-finalizer.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import type { MatterhornTrustedJurisdiction } from "./trusted-jurisdiction.js";
 import type {
   MatterhornRecoveryErasureLedger,
   MatterhornRecoveryErasureReconciliation,
@@ -80,6 +81,8 @@ export type GuardedPromptInput = {
   requestToolProfiles?: readonly Record<string, boolean>[];
   coworker?: MatterhornCoworkerRunBinding;
   authorizationContextHash?: string;
+  /** Trusted edge policy context. This is never added to provider messages. */
+  jurisdiction?: MatterhornTrustedJurisdiction;
 };
 
 export type GuardedPromptAcceptance = {
@@ -539,6 +542,7 @@ export class MatterhornGuardedAgentRuntime {
       executionMode: input.executionMode,
       requestToolProfiles: input.requestToolProfiles,
       coworker: input.coworker,
+      jurisdictionEvidenceHash: input.jurisdiction?.evidenceHash,
       expiresAtMs,
     });
     try {
@@ -975,6 +979,7 @@ export class MatterhornGuardedAgentRuntime {
     executionMode: MatterhornExecutionMode;
     requestToolProfiles?: readonly Record<string, boolean>[];
     coworker?: MatterhornCoworkerRunBinding;
+    jurisdictionEvidenceHash?: string;
     expiresAtMs: number;
   }): void {
     this.stateStore.deleteExpired();
@@ -985,7 +990,12 @@ export class MatterhornGuardedAgentRuntime {
           key: input.sessionId,
           workspaceId: input.workspaceId,
           sessionId: input.sessionId,
-          value: { runId: input.runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
+          value: {
+            runId: input.runId,
+            workspaceId: input.workspaceId,
+            sessionId: input.sessionId,
+            jurisdictionEvidenceHash: input.jurisdictionEvidenceHash ?? null,
+          },
           expiresAtMs: input.expiresAtMs,
         });
         if (!activeStored) throw new Error("agent_run_active_state_conflict");
@@ -994,7 +1004,12 @@ export class MatterhornGuardedAgentRuntime {
           key: input.runId,
           workspaceId: input.workspaceId,
           sessionId: input.sessionId,
-          value: { runId: input.runId, workspaceId: input.workspaceId, sessionId: input.sessionId },
+          value: {
+            runId: input.runId,
+            workspaceId: input.workspaceId,
+            sessionId: input.sessionId,
+            jurisdictionEvidenceHash: input.jurisdictionEvidenceHash ?? null,
+          },
           expiresAtMs: input.expiresAtMs,
         });
         if (!scopeStored) throw new Error("agent_run_scope_state_conflict");
@@ -1007,6 +1022,7 @@ export class MatterhornGuardedAgentRuntime {
             executionMode: input.executionMode,
             requestToolProfiles: input.requestToolProfiles,
             coworker: input.coworker,
+            jurisdictionEvidenceHash: input.jurisdictionEvidenceHash,
             expiresAtMs: input.expiresAtMs,
           });
         }

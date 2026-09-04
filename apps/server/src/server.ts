@@ -631,6 +631,7 @@ import {
   type GuardedPromptInput,
 } from "./guarded-agent-runtime.js";
 import { canonicalJson } from "./guarded-runtime-crypto.js";
+import { resolveTrustedRequestJurisdiction } from "./trusted-jurisdiction.js";
 import {
   awsKmsEvidenceKeyManagerFromEnv,
   evidenceKmsRotationDaysFromEnv,
@@ -14180,6 +14181,7 @@ function createRoutes(
       coworker: coworker?.binding,
       resourceScopeHash: coworker?.resourceScope?.scopeHash,
     });
+    const jurisdiction = resolveTrustedRequestJurisdiction(ctx.request, config.trustedProxySecret);
     const response = guardedRuntime.preflight({
       workspaceId: workspace.id,
       sessionId,
@@ -14193,6 +14195,7 @@ function createRoutes(
       privacyMode,
       coworker: coworker?.binding,
       authorizationContextHash,
+      ...(jurisdiction ? { jurisdiction } : {}),
     });
     const result = jsonResponse(response);
     result.headers.set("Cache-Control", "no-store");
@@ -14505,6 +14508,7 @@ function createRoutes(
       coworker: coworker?.binding,
       resourceScopeHash: coworker?.resourceScope?.scopeHash,
     });
+    const jurisdiction = resolveTrustedRequestJurisdiction(ctx.request, config.trustedProxySecret);
     const guardedInput = {
       workspaceId: workspace.id,
       sessionId,
@@ -14521,6 +14525,7 @@ function createRoutes(
       requestToolProfiles,
       coworker: coworker?.binding,
       authorizationContextHash,
+      ...(jurisdiction ? { jurisdiction } : {}),
     };
     let guardedAuthorization: ReturnType<typeof guardedRuntime.authorizePrompt>;
     try {

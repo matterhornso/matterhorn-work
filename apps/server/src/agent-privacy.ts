@@ -52,6 +52,8 @@ export type PrivacyInput = {
    * changes without putting the authority document in provider context.
    */
   authorizationContextHash?: string;
+  /** Server-verified, content-free proof of the request's edge jurisdiction. */
+  jurisdiction?: { evidenceHash: string };
 };
 
 type ChallengeRecord = {
@@ -214,6 +216,7 @@ export function agentPrivacyRequestHash(input: PrivacyInput): string {
     memoryIds: normalizedIds(input.memoryIds),
     privacyMode: requestedMode(input.privacyMode),
     authorizationContextHash: input.authorizationContextHash?.trim() || null,
+    jurisdictionEvidenceHash: input.jurisdiction?.evidenceHash?.trim() || null,
     parts: input.parts.map((part) => ({
       type: part.type,
       text: part.contentHash ? null : part.text ?? null,
