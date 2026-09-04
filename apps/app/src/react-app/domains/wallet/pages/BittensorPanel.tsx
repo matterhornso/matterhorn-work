@@ -79,7 +79,11 @@ import {
   takePendingReviewedActionHandoff,
   type CoworkerWalletIntentHandoffContext,
 } from "../reviewed-action-handoff";
-import { bittensorWalletNetworkMatches } from "../../coworkers/coworker-wallet-intent-view";
+import {
+  bittensorWalletNetworkMatches,
+  polymarketCoworkerWalletMismatchReason,
+  polymarketCoworkerWalletReceiptInput,
+} from "../../coworkers/coworker-wallet-intent-view";
 import {
   createHyperliquidReviewDraft,
   type HyperliquidReviewDraft,
@@ -1559,12 +1563,16 @@ function HyperliquidTradeExecution({
 function PolymarketTradeExecution({
   initialDraft,
   guardedHandoff: initialGuardedHandoff,
+  coworkerIntentContext: initialCoworkerIntentContext,
+  matterhornServerClient,
   initialOperation,
   workspaceId,
   sessionId,
 }: {
   initialDraft?: PolymarketDraftHandoff | null;
   guardedHandoff?: Extract<ReviewedActionHandoffV2, { protocol: "polymarket" }> | null;
+  coworkerIntentContext?: CoworkerWalletIntentHandoffContext | null;
+  matterhornServerClient?: MatterhornServerClient | null;
   initialOperation?: "buy" | "sell" | "cancel" | null;
   workspaceId?: string | null;
   sessionId?: string | null;
@@ -1591,7 +1599,13 @@ function PolymarketTradeExecution({
   const [busy, setBusy] = useState<"prepare" | "submit" | null>(null);
   const [tradeError, setTradeError] = useState<string | null>(null);
   const [guardedHandoff, setGuardedHandoff] = useState(initialGuardedHandoff ?? null);
+  const [coworkerIntentContext, setCoworkerIntentContext] = useState(initialCoworkerIntentContext ?? null);
+  const [coworkerReceiptWarning, setCoworkerReceiptWarning] = useState<string | null>(null);
   useEffect(() => setGuardedHandoff(initialGuardedHandoff ?? null), [initialGuardedHandoff]);
+  useEffect(() => {
+    setCoworkerIntentContext(initialCoworkerIntentContext ?? null);
+    setCoworkerReceiptWarning(null);
+  }, [initialCoworkerIntentContext]);
   const [marketQuery, setMarketQuery] = useState("");
   const [markets, setMarkets] = useState<PolymarketMarketSearchResult[]>([]);
   const [marketSearchBusy, setMarketSearchBusy] = useState(false);
@@ -1605,8 +1619,27 @@ function PolymarketTradeExecution({
     setReceipt(null);
     setEvidencePath(null);
     setEvidenceWarning(null);
+    setCoworkerReceiptWarning(null);
     setTradeError(null);
   }, []);
+
+  const reconcileCoworkerReceipt = useCallback(async (nextReceipt: PolymarketPublicReceipt) => {
+    if (!matterhornServerClient || !coworkerIntentContext) return;
+    try {
+      await matterhornServerClient.recordCoworkerWalletReceipt(
+        coworkerIntentContext.workspaceId,
+        coworkerIntentContext.coworkerId,
+        coworkerIntentContext.intentId,
+        polymarketCoworkerWalletReceiptInput(coworkerIntentContext, nextReceipt),
+      );
+      setCoworkerIntentContext(null);
+      setCoworkerReceiptWarning(null);
+    } catch {
+      setCoworkerReceiptWarning(
+        "The wallet action completed, but its result could not be linked to coworker history. Do not send it again; check Polymarket first.",
+      );
+    }
+  }, [coworkerIntentContext, matterhornServerClient]);
 
   useEffect(() => {
     if (initialDraft || !initialOperation) return;
@@ -1851,6 +1884,17 @@ function PolymarketTradeExecution({
 
   const signAndSubmit = useCallback(async () => {
     if ((!prepared && !cancelReview) || !walletClient || !address) return;
+    if (coworkerIntentContext) {
+      const mismatch = polymarketCoworkerWalletMismatchReason(coworkerIntentContext, {
+        chainId: walletClient.chain?.id ?? null,
+        address,
+        operation: tradeAction.toLowerCase() as "buy" | "sell" | "cancel",
+      });
+      if (mismatch) {
+        setTradeError(mismatch);
+        return;
+      }
+    }
     const requiredConfirmation = cancelReview
       ? cancelReview.cancelAll
         ? POLYMARKET_CANCEL_ALL_CONFIRMATION
@@ -1902,6 +1946,7 @@ function PolymarketTradeExecution({
             setEvidenceWarning("The cancellation succeeded, but its public receipt was not added to this workspace.");
           }
         }
+        await reconcileCoworkerReceipt(publicReceipt);
         return;
       }
       if (!prepared) return;
@@ -1948,12 +1993,13 @@ function PolymarketTradeExecution({
           setEvidenceWarning("The order succeeded, but its public receipt was not added to this workspace.");
         }
       }
+      await reconcileCoworkerReceipt(publicReceipt);
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "Wallet authorization or Polymarket submission failed.");
     } finally {
       setBusy(null);
     }
-  }, [address, cancelReview, confirmation, guardedHandoff, handoff, prepared, sessionId, walletClient, workspaceId]);
+  }, [address, cancelReview, confirmation, coworkerIntentContext, guardedHandoff, handoff, prepared, reconcileCoworkerReceipt, sessionId, tradeAction, walletClient, workspaceId]);
 
   const firstConnector = connectors.find((connector) => connector.id !== "injected") ?? connectors[0];
   const onPolygon = walletClient?.chain?.id === POLYMARKET_CHAIN_ID;
@@ -2247,6 +2293,7 @@ function PolymarketTradeExecution({
         </div>
       ) : null}
       {evidenceWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Receipt not saved">{evidenceWarning}</Notice> : null}
+      {coworkerReceiptWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Coworker history not updated">{coworkerReceiptWarning}</Notice> : null}
       {tradeError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Polymarket order">{tradeError}</Notice> : null}
       <p className="text-[11px] leading-5 text-dls-secondary">
         Browser-wallet EOA accounts are supported in this release. The temporary CLOB credential exists only in memory for this submission and is cleared immediately afterward.
@@ -3695,6 +3742,8 @@ export default function BittensorPanel({
                   <PolymarketTradeExecution
                     initialDraft={draftHandoff?.protocol === "polymarket" ? draftHandoff.draft : null}
                     guardedHandoff={guardedHandoff?.protocol === "polymarket" ? guardedHandoff : null}
+                    coworkerIntentContext={coworkerIntentContext?.protocol === "polymarket" ? coworkerIntentContext : null}
+                    matterhornServerClient={matterhornServerClient}
                     initialOperation={initialOperation === "buy" || initialOperation === "sell" || initialOperation === "cancel" ? initialOperation : null}
                     workspaceId={workspaceId}
                     sessionId={sessionId}
