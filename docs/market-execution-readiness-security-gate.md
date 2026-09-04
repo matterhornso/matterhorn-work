@@ -32,7 +32,7 @@ Market orders are implemented as IOC limit orders at the reviewed slippage bound
 ## Connected-Wallet Polymarket Ticket
 
 1. The agent or desk resolves public market context and prepares a non-submittable draft.
-2. The separate wallet ticket requests a fresh server preview and compliance result, including the exact market, outcome, CLOB token, USDC spend, maximum loss, public hash, and expiry.
+2. The separate wallet ticket requests a fresh server preview and compliance result, including the exact market, outcome, CLOB token, pUSD spend, maximum loss, public hash, and expiry.
 3. The ticket rejects missing or changed terms, invalid or expired reviews, non-finite values, maximum-loss mismatches, and any compliance result other than `allowed`.
 4. The connected EVM wallet must be on Polygon and the user must type `SUBMIT POLYMARKET ORDER`.
 5. The official Polymarket CLOB client creates temporary credentials and submits the exact reviewed buy, sell, or cancel action from the connected EOA wallet.

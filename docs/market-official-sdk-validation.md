@@ -5,7 +5,7 @@ Matterhorn Desks supports Hyperliquid and Polymarket reads, previews, external-s
 ## Scope
 
 - Hyperliquid: validate the L1 order-action template against Hyperliquid's official SDK (`hyperliquid-python-sdk`) on testnet. Hyperliquid's docs list TypeScript SDKs as community SDKs, so they can provide supplemental parity evidence but not replace official Python SDK evidence.
-- Polymarket: validate the EIP-712 order typed-data template against `@polymarket/clob-client-v2` / `@polymarket/clob-client` on Polygon Amoy or an official client fixture.
+- Polymarket: validate the CLOB V2 EIP-712 order typed-data template against `@polymarket/clob-client-v2` on Polygon Amoy or an official client fixture. Legacy V1 clients are not accepted.
 - Bittensor remains separate: Bittensor uses Subtensor/SDK read and unsigned-preview flows, with signing outside Matterhorn.
 
 ## Non-Negotiable Rules
@@ -41,18 +41,18 @@ Evidence to save:
 
 ## Polymarket Validation Checklist
 
-Validate with `@polymarket/clob-client-v2`, `@polymarket/clob-client`, or official CLOB client fixtures before any real-funds use:
+Validate with `@polymarket/clob-client-v2`, `py-clob-client-v2`, or official CLOB V2 client fixtures before any real-funds use:
 
 - EIP-712 domain name, version, chain id, and verifying contract.
 - `Order` type layout and field order.
-- Maker/taker amount rounding, token id, side, fee rate, expiration, nonce, salt, maker, signer, and signature type.
+- Maker/taker amount rounding, token id, side, timestamp, metadata, builder code, salt, maker, signer, and signature type. Expiration is validated separately as an unsigned `POST /order` wire field.
 - Outcome token handling for Yes/No markets.
 - Compliance/geoblock behavior before preview/handoff.
 - Confirmation that Matterhorn never fills wallet-owned fields, never signs, and never submits.
 
 Evidence to save:
 
-- `@polymarket/clob-client-v2` or `@polymarket/clob-client` version.
+- `@polymarket/clob-client-v2` or `py-clob-client-v2` version.
 - Exchange address and chain id used for validation.
 - Redacted Matterhorn typed-data template.
 - Official-client normalized typed-data/order with public fields: `domain.chainId`, `domain.verifyingContract`, `primaryType: "Order"`, `types.Order`, `message.makerAmount`, `message.takerAmount`, and `message.signatureType`.
@@ -92,7 +92,7 @@ Matterhorn records only redacted official-client/testnet evidence. The evidence 
         "requiresClientValidation": true,
         "canSubmit": false,
         "externalSignerOnly": true,
-        "walletMustSet": ["maker", "signer", "salt", "nonce", "expiration"]
+        "walletMustSet": ["maker", "signer", "salt", "timestamp", "signatureType"]
       }
     }
   ]

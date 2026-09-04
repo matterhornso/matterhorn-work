@@ -3,6 +3,7 @@ import type { WalletClient } from "viem";
 export const POLYMARKET_CHAIN_ID = 137;
 export const POLYMARKET_CLOB_HOST = "https://clob.polymarket.com";
 export const POLYMARKET_GEOBLOCK_URL = "https://polymarket.com/api/geoblock";
+export const POLYMARKET_COLLATERAL_SYMBOL = "pUSD";
 export const POLYMARKET_LIVE_CONFIRMATION = "SUBMIT POLYMARKET ORDER";
 export const POLYMARKET_CANCEL_CONFIRMATION = "CANCEL POLYMARKET ORDERS";
 export const POLYMARKET_CANCEL_ALL_CONFIRMATION = "CANCEL ALL POLYMARKET ORDERS";
@@ -54,6 +55,79 @@ type PolymarketOrderResponse = {
   takingAmount?: string;
   makingAmount?: string;
 };
+
+type PolymarketClobCredentials = {
+  key: string;
+  secret: string;
+  passphrase: string;
+};
+
+type PolymarketClobClient = {
+  createOrDeriveApiKey(): Promise<PolymarketClobCredentials>;
+  createAndPostMarketOrder(
+    order: Record<string, unknown>,
+    options?: Record<string, unknown>,
+    orderType?: string,
+  ): Promise<PolymarketOrderResponse>;
+  cancelAll(): Promise<unknown>;
+  cancelOrder(payload: { orderID: string }): Promise<unknown>;
+  cancelOrders(orderIds: string[]): Promise<unknown>;
+};
+
+type PolymarketClobClientOptions = {
+  host: typeof POLYMARKET_CLOB_HOST;
+  chain: number;
+  signer: WalletClient;
+  signatureType: number;
+  funderAddress: string;
+  creds?: PolymarketClobCredentials;
+  throwOnError: true;
+};
+
+/**
+ * Narrow seam around Polymarket's browser SDK. Tests replace only this loader;
+ * production always loads the pinned official CLOB V2 package at submit time.
+ */
+export type PolymarketClobV2Runtime = {
+  chainPolygon: number;
+  signatureTypeEoa: number;
+  orderTypeFak: string;
+  sideBuy: string;
+  sideSell: string;
+  createClient(options: PolymarketClobClientOptions): PolymarketClobClient;
+};
+
+type PolymarketClobV2RuntimeLoader = () => Promise<PolymarketClobV2Runtime>;
+
+const loadPolymarketClobV2Runtime: PolymarketClobV2RuntimeLoader = async () => {
+  const { Chain, ClobClient, OrderType, Side, SignatureTypeV2 } = await import("@polymarket/clob-client-v2");
+  return {
+    chainPolygon: Chain.POLYGON,
+    signatureTypeEoa: SignatureTypeV2.EOA,
+    orderTypeFak: OrderType.FAK,
+    sideBuy: Side.BUY,
+    sideSell: Side.SELL,
+    createClient: (options) => new ClobClient(options) as unknown as PolymarketClobClient,
+  };
+};
+
+function clobV2ClientOptions(args: {
+  runtime: PolymarketClobV2Runtime;
+  walletClient: WalletClient;
+  credentials?: PolymarketClobCredentials;
+}): PolymarketClobClientOptions {
+  const funderAddress = args.walletClient.account?.address;
+  if (!funderAddress) throw new Error("Connect an EVM wallet before submitting.");
+  return {
+    host: POLYMARKET_CLOB_HOST,
+    chain: args.runtime.chainPolygon,
+    signer: args.walletClient,
+    signatureType: args.runtime.signatureTypeEoa,
+    funderAddress,
+    ...(args.credentials ? { creds: args.credentials } : {}),
+    throwOnError: true,
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -159,7 +233,7 @@ export function assertPolymarketPreparedOrder(order: PolymarketPreparedOrder, no
 export async function submitPolymarketOrder(args: {
   walletClient: WalletClient;
   order: PolymarketPreparedOrder;
-}): Promise<PolymarketPublicReceipt> {
+}, loadRuntime: PolymarketClobV2RuntimeLoader = loadPolymarketClobV2Runtime): Promise<PolymarketPublicReceipt> {
   assertPolymarketPreparedOrder(args.order);
   if (!args.walletClient.account) {
     throw new Error("Connect an EVM wallet before submitting.");
@@ -169,33 +243,28 @@ export async function submitPolymarketOrder(args: {
   }
   await assertPolymarketUserCanPlaceOrders();
 
-  const { Chain, ClobClient, OrderType, Side } = await import("@polymarket/clob-client");
-  const unauthenticated = new ClobClient(
-    POLYMARKET_CLOB_HOST,
-    Chain.POLYGON,
-    args.walletClient,
-  );
+  const runtime = await loadRuntime();
+  const unauthenticated = runtime.createClient(clobV2ClientOptions({ runtime, walletClient: args.walletClient }));
   const credentials = await unauthenticated.createOrDeriveApiKey();
   try {
     if (!credentials?.key || !credentials.secret || !credentials.passphrase) {
       throw new Error("Polymarket did not return temporary order credentials.");
     }
-    const client = new ClobClient(
-      POLYMARKET_CLOB_HOST,
-      Chain.POLYGON,
-      args.walletClient,
+    const client = runtime.createClient(clobV2ClientOptions({
+      runtime,
+      walletClient: args.walletClient,
       credentials,
-    );
+    }));
     const response = await client.createAndPostMarketOrder(
       {
         tokenID: args.order.tokenId,
         amount: args.order.tradeSide === "BUY" ? args.order.amountUsdc ?? 0 : args.order.amountShares ?? 0,
-        side: args.order.tradeSide === "BUY" ? Side.BUY : Side.SELL,
-        orderType: OrderType.FAK,
+        side: args.order.tradeSide === "BUY" ? runtime.sideBuy : runtime.sideSell,
+        orderType: runtime.orderTypeFak,
       },
-      undefined,
-      OrderType.FAK,
-    ) as PolymarketOrderResponse;
+      { version: 2 },
+      runtime.orderTypeFak,
+    );
 
     if (!response.success) {
       throw new Error(response.errorMsg || "Polymarket rejected the order.");
@@ -236,7 +305,7 @@ export async function cancelPolymarketOrders(args: {
   walletClient: WalletClient;
   orderIds?: string[];
   cancelAll?: boolean;
-}): Promise<PolymarketPublicReceipt> {
+}, loadRuntime: PolymarketClobV2RuntimeLoader = loadPolymarketClobV2Runtime): Promise<PolymarketPublicReceipt> {
   if (!args.walletClient.account) throw new Error("Connect an EVM wallet before cancelling orders.");
   if (args.walletClient.chain?.id !== POLYMARKET_CHAIN_ID) {
     throw new Error("Switch the connected wallet to Polygon before cancelling orders.");
@@ -245,14 +314,18 @@ export async function cancelPolymarketOrders(args: {
   if (!args.cancelAll && ids.length === 0) throw new Error("Select one or more exact order IDs to cancel.");
   if (args.cancelAll && ids.length > 0) throw new Error("Cancel-all cannot be combined with individual order IDs.");
 
-  const { Chain, ClobClient } = await import("@polymarket/clob-client");
-  const unauthenticated = new ClobClient(POLYMARKET_CLOB_HOST, Chain.POLYGON, args.walletClient);
+  const runtime = await loadRuntime();
+  const unauthenticated = runtime.createClient(clobV2ClientOptions({ runtime, walletClient: args.walletClient }));
   const credentials = await unauthenticated.createOrDeriveApiKey();
   try {
     if (!credentials?.key || !credentials.secret || !credentials.passphrase) {
       throw new Error("Polymarket did not return temporary order credentials.");
     }
-    const client = new ClobClient(POLYMARKET_CLOB_HOST, Chain.POLYGON, args.walletClient, credentials);
+    const client = runtime.createClient(clobV2ClientOptions({
+      runtime,
+      walletClient: args.walletClient,
+      credentials,
+    }));
     const response = args.cancelAll
       ? await client.cancelAll()
       : ids.length === 1

@@ -169,7 +169,7 @@ export interface PolymarketOrderPreviewInput {
   marketId?: string | null;
   outcome?: string | null;
   side?: PolymarketSide | null;
-  /** USDC notional the user intends to spend */
+  /** Legacy API field name; represents the current Polymarket collateral notional. */
   amountUsdc?: number | string | null;
   /** optional slippage tolerance in percent */
   slippageTolerance?: number | string | null;
@@ -190,9 +190,9 @@ export interface PolymarketActionPreview {
   marketLabel: string | null;
   outcome: string | null;
   side: PolymarketSide | null;
-  /** USDC notional */
+  /** Current Polymarket collateral notional (pUSD on CLOB V2). */
   size: number | null;
-  sizeAsset: "USDC";
+  sizeAsset: "pUSD";
   /** expected average fill price as a probability (0..1) */
   price: number | null;
   priceAsset: "probability";
@@ -261,7 +261,7 @@ export interface PolymarketSigningHandoff {
   marketLabel: string;
   outcome: string;
   side: PolymarketSide;
-  /** USDC notional the user intends to spend */
+  /** Legacy field name; represents pUSD notional on CLOB V2. */
   sizeUsdc: number;
   /** expected average fill probability (0..1) */
   price: number | null;
@@ -370,13 +370,14 @@ export interface PolymarketArtifactValidationResult {
 /**
  * EIP-712 typed-data TEMPLATE for a Polymarket CLOB order. Matterhorn fills only
  * the economic terms it can know (token, amounts, side). The user's wallet/client
- * fills `walletMustSet` fields (maker, signer, salt, nonce, expiration) and
+ * fills `walletMustSet` fields (maker, signer, salt, timestamp, signatureType)
+ * and
  * produces the signature. No final digest is emitted because Matterhorn does not
  * know those wallet-supplied values — and it never holds a key.
  *
  * `requiresClientValidation` is always true: validate the domain, contract
- * address, types, and amount rounding against Polymarket's official CLOB client
- * (and on testnet) before signing with real funds.
+ * address, types, and amount rounding against Polymarket's official CLOB V2
+ * client before signing with real funds.
  */
 export interface PolymarketOrderTypedData {
   standard: "eip712";
@@ -388,15 +389,14 @@ export interface PolymarketOrderTypedData {
     salt: string;
     maker: string;
     signer: string;
-    taker: string;
     tokenId: string;
     makerAmount: string;
     takerAmount: string;
-    expiration: string;
-    nonce: string;
-    feeRateBps: string;
     side: number;
     signatureType: number;
+    timestamp: string;
+    metadata: string;
+    builder: string;
   };
   walletMustSet: string[];
   notes: string[];
@@ -984,7 +984,7 @@ export function buildBlockedPolymarketPreview(args: {
     outcome: args.outcome,
     side: args.side,
     size: null,
-    sizeAsset: "USDC",
+    sizeAsset: "pUSD",
     price: null,
     priceAsset: "probability",
     slippageTolerance: null,
@@ -1078,7 +1078,7 @@ export async function preparePolymarketOrderPreview(
     outcome,
     side,
     size: amountUsdc,
-    sizeAsset: "USDC",
+    sizeAsset: "pUSD",
     price,
     priceAsset: "probability",
     slippageTolerance,
@@ -1089,10 +1089,10 @@ export async function preparePolymarketOrderPreview(
     priceContext,
     liquidity,
     expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-    fees: [{ label: "Polymarket trading fee", amount: null, asset: "USDC" }],
+    fees: [{ label: "Polymarket trading fee", amount: null, asset: "pUSD" }],
     consequence:
-      "If executed outside Matterhorn, this would attempt to buy ~" + (estimatedShares ?? "?") + " '" + outcome + "' shares for $" + amountUsdc.toFixed(2) + " USDC at about " + formatProbability(price) + " on \"" + market.question + "\". " +
-      (risk.payoutIfWinUsdc !== null ? "If '" + outcome + "' resolves true, ~$" + risk.payoutIfWinUsdc.toFixed(2) + " USDC pays out (max profit ~$" + (risk.maxProfitUsdc ?? 0).toFixed(2) + "); otherwise the $" + amountUsdc.toFixed(2) + " stake is lost. " : "") +
+      "If executed outside Matterhorn, this would attempt to buy ~" + (estimatedShares ?? "?") + " '" + outcome + "' shares for " + amountUsdc.toFixed(2) + " pUSD at about " + formatProbability(price) + " on \"" + market.question + "\". " +
+      (risk.payoutIfWinUsdc !== null ? "If '" + outcome + "' resolves true, ~" + risk.payoutIfWinUsdc.toFixed(2) + " pUSD pays out (max profit ~" + (risk.maxProfitUsdc ?? 0).toFixed(2) + " pUSD); otherwise the " + amountUsdc.toFixed(2) + " pUSD stake is lost. " : "") +
       "Submitting requires a separate connected-wallet review.",
     confirmationText: "I reviewed the exact market, outcome, amount, estimated fill, and maximum loss. My connected wallet must authorize submission.",
     previewSha256,
@@ -1340,7 +1340,7 @@ export function buildPolymarketMarketContextSnapshot(
   };
 }
 
-/** Walk asks to estimate average fill probability and shares for a USDC buy. */
+/** Walk asks to estimate average fill probability and shares for a pUSD buy. */
 export function estimatePolymarketFill(asks: PolymarketBookLevel[], amountUsdc: number): PolymarketMarketabilityEstimate {
   const sorted = [...asks].sort((a, b) => a.price - b.price);
   if (sorted.length === 0) {
@@ -1371,7 +1371,7 @@ export function estimatePolymarketFill(asks: PolymarketBookLevel[], amountUsdc: 
   };
 }
 
-/** Walk bids from best to worst to estimate USDC proceeds for a share sale. */
+/** Walk bids from best to worst to estimate pUSD proceeds for a share sale. */
 export function estimatePolymarketSellFill(bids: PolymarketBookLevel[], shares: number): PolymarketSellMarketabilityEstimate {
   const sorted = [...bids].sort((a, b) => b.price - a.price);
   if (sorted.length === 0) {
@@ -1426,21 +1426,20 @@ const POLYGON_CHAIN_ID = 137;
 const HANDOFF_TTL_MS = 10 * 60 * 1000;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-/** EIP-712 type layout for a Polymarket CTF Exchange order. Validate against the official client. */
+/** Exact CLOB V2 EIP-712 order layout. Expiration remains a wire field and is not signed. */
 const POLYMARKET_ORDER_EIP712_TYPES: Record<string, Array<{ name: string; type: string }>> = {
   Order: [
     { name: "salt", type: "uint256" },
     { name: "maker", type: "address" },
     { name: "signer", type: "address" },
-    { name: "taker", type: "address" },
     { name: "tokenId", type: "uint256" },
     { name: "makerAmount", type: "uint256" },
     { name: "takerAmount", type: "uint256" },
-    { name: "expiration", type: "uint256" },
-    { name: "nonce", type: "uint256" },
-    { name: "feeRateBps", type: "uint256" },
     { name: "side", type: "uint8" },
     { name: "signatureType", type: "uint8" },
+    { name: "timestamp", type: "uint256" },
+    { name: "metadata", type: "bytes32" },
+    { name: "builder", type: "bytes32" },
   ],
 };
 
@@ -1456,22 +1455,33 @@ export function readPolymarketExchangeConfig(): PolymarketExchangeConfig | null 
   const verifyingContract = process.env.POLYMARKET_EXCHANGE_ADDRESS;
   if (!verifyingContract || !/^0x[a-fA-F0-9]{40}$/.test(verifyingContract)) return null;
   const chainId = Number(process.env.POLYMARKET_CHAIN_ID ?? POLYGON_CHAIN_ID);
+  const domainName = process.env.POLYMARKET_EXCHANGE_DOMAIN_NAME ?? "Polymarket CTF Exchange";
+  const domainVersion = process.env.POLYMARKET_EXCHANGE_DOMAIN_VERSION ?? "2";
+  // The pinned CLOB V2 client supports Polygon and Polygon Amoy only. Invalid,
+  // legacy, or experimental domain values must omit signing data rather than
+  // silently producing a wallet prompt for a different EIP-712 contract.
+  if ((chainId !== POLYGON_CHAIN_ID && chainId !== 80002)
+    || domainName !== "Polymarket CTF Exchange"
+    || domainVersion !== "2") {
+    return null;
+  }
   return {
-    chainId: Number.isFinite(chainId) ? chainId : POLYGON_CHAIN_ID,
+    chainId,
     verifyingContract,
-    domainName: process.env.POLYMARKET_EXCHANGE_DOMAIN_NAME ?? "Polymarket CTF Exchange",
-    domainVersion: process.env.POLYMARKET_EXCHANGE_DOMAIN_VERSION ?? "1",
+    domainName,
+    domainVersion,
   };
 }
 
 function toBaseUnits6(value: number): string {
-  // Polymarket USDC and outcome shares both use 6 decimals.
+  // Polymarket pUSD collateral and outcome shares both use 6 decimals.
   return parseUnits(value.toFixed(6), 6).toString();
 }
 
 /**
  * Build the EIP-712 order typed-data TEMPLATE. Matterhorn fills the economic
- * terms only; the wallet/client fills maker/signer/salt/nonce/expiration and
+ * terms only; the wallet/client fills maker/signer/salt/timestamp/signatureType
+ * and
  * signs. No final digest is emitted (Matterhorn does not know those values).
  * Always requiresClientValidation — confirm against Polymarket's CLOB client.
  */
@@ -1489,7 +1499,7 @@ export function buildPolymarketOrderTypedData(args: {
     requiresClientValidation: true,
     domain: {
       name: exchange.domainName ?? "Polymarket CTF Exchange",
-      version: exchange.domainVersion ?? "1",
+      version: exchange.domainVersion ?? "2",
       chainId: exchange.chainId,
       verifyingContract: exchange.verifyingContract,
     },
@@ -1499,22 +1509,22 @@ export function buildPolymarketOrderTypedData(args: {
       salt: "0",
       maker: ZERO_ADDRESS,
       signer: ZERO_ADDRESS,
-      taker: ZERO_ADDRESS,
       tokenId,
       makerAmount: toBaseUnits6(amountUsdc),
       takerAmount: toBaseUnits6(shares),
-      expiration: "0",
-      nonce: "0",
-      feeRateBps: "0",
       // buy_shares previews are always a BUY of the chosen outcome token; side=0=BUY. (yes/no selects the token, not the direction.)
       side: 0,
       signatureType: 0, // EOA
+      timestamp: "0",
+      metadata: `0x${"0".repeat(64)}`,
+      builder: `0x${"0".repeat(64)}`,
     },
-    walletMustSet: ["maker", "signer", "salt", "nonce", "expiration"],
+    walletMustSet: ["maker", "signer", "salt", "timestamp", "signatureType"],
     notes: [
-      "TEMPLATE ONLY — validate the domain, verifyingContract, types, and amount rounding against Polymarket's official CLOB client (@polymarket/clob-client) and on testnet before signing real funds.",
-      "Your wallet/client must set maker, signer, salt, nonce, and expiration; Matterhorn cannot and does not know them.",
-      "makerAmount/takerAmount use 6 decimals and are derived from the estimated fill price; the official client applies exact tick/rounding rules.",
+      "CLOB V2 TEMPLATE ONLY — validate the domain, verifyingContract, types, and amount rounding against Polymarket's official @polymarket/clob-client-v2 before signing real funds.",
+      "Your wallet/client must set maker, signer, salt, timestamp, and signatureType; Matterhorn cannot and does not know them.",
+      "makerAmount/takerAmount use 6 decimals and are derived from the estimated fill price; the official client applies exact tick, fee, and rounding rules.",
+      "Expiration is a CLOB V2 POST /order wire field and is intentionally not part of the signed EIP-712 Order struct.",
     ],
   };
 }
@@ -2149,7 +2159,7 @@ export async function executePolymarketChatWorkflow(
   const orderInput = extractPolymarketOrderInput(input);
   const amountUsdc = numberOrNull(orderInput.amountUsdc);
   if (amountUsdc === null || !(amountUsdc > 0)) {
-    return clarification("How much USDC should the preview use? For example, $10.", [], "clarification_required", "order_preview");
+    return clarification("How much Polymarket USD (pUSD) should the preview use? For example, 10 pUSD.", [], "clarification_required", "order_preview");
   }
 
   const resolved = await resolvePolymarketMarketFromChat({ ...input, marketId: orderInput.marketId }, provider);

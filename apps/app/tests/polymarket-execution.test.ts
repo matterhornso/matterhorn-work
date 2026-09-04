@@ -5,13 +5,16 @@ import {
   POLYMARKET_CHAIN_ID,
   POLYMARKET_CANCEL_ALL_CONFIRMATION,
   POLYMARKET_CANCEL_CONFIRMATION,
+  POLYMARKET_COLLATERAL_SYMBOL,
   POLYMARKET_GEOBLOCK_URL,
   POLYMARKET_LIVE_CONFIRMATION,
   assertPolymarketUserCanPlaceOrders,
   assertPolymarketPreparedOrder,
+  cancelPolymarketOrders,
   checkPolymarketUserEligibility,
   normalizePolymarketOrderIds,
   submitPolymarketOrder,
+  type PolymarketClobV2Runtime,
   type PolymarketPreparedOrder,
 } from "../src/react-app/domains/wallet/polymarket-execution";
 import type { WalletClient } from "viem";
@@ -49,6 +52,52 @@ function prepared(overrides: Partial<PolymarketPreparedOrder> = {}): PolymarketP
     compliance: { status: "allowed", reason: null },
     warnings: [],
     ...overrides,
+  };
+}
+
+function clobV2Runtime(args: {
+  credentials: { key: string; secret: string; passphrase: string };
+  options: Array<Record<string, unknown>>;
+  orders?: Array<Record<string, unknown>>;
+  orderOptions?: Array<Record<string, unknown> | undefined>;
+  orderTypes?: Array<string | undefined>;
+  cancellations?: string[][];
+}): PolymarketClobV2Runtime {
+  return {
+    chainPolygon: POLYMARKET_CHAIN_ID,
+    signatureTypeEoa: 0,
+    orderTypeFak: "FAK",
+    sideBuy: "BUY",
+    sideSell: "SELL",
+    createClient: (options) => {
+      args.options.push(options as unknown as Record<string, unknown>);
+      return {
+        createOrDeriveApiKey: async () => args.credentials,
+        createAndPostMarketOrder: async (order, options, orderType) => {
+          args.orders?.push(order);
+          args.orderOptions?.push(options);
+          args.orderTypes?.push(orderType);
+          return {
+            success: true,
+            orderID: "order-v2",
+            status: "live",
+            transactionsHashes: [],
+            tradeIDs: [],
+            takingAmount: "9000000",
+            makingAmount: "5000000",
+          };
+        },
+        cancelAll: async () => ({ status: "cancelled" }),
+        cancelOrder: async ({ orderID }) => {
+          args.cancellations?.push([orderID]);
+          return { status: "cancelled" };
+        },
+        cancelOrders: async (orderIds) => {
+          args.cancellations?.push(orderIds);
+          return { status: "cancelled" };
+        },
+      };
+    },
   };
 }
 
@@ -186,6 +235,77 @@ describe("Polymarket reviewed execution", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("uses the official CLOB V2 client with explicit EOA and funder bindings", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(geoblockResponse({
+      blocked: false,
+      ip: "203.0.113.11",
+      country: "CH",
+      region: "ZH",
+    }));
+    const credentials = { key: "temporary-key", secret: "temporary-secret", passphrase: "temporary-passphrase" };
+    const options: Array<Record<string, unknown>> = [];
+    const orders: Array<Record<string, unknown>> = [];
+    const orderOptions: Array<Record<string, unknown> | undefined> = [];
+    const orderTypes: Array<string | undefined> = [];
+    const walletClient = {
+      account: { address: "0x1111111111111111111111111111111111111111" },
+      chain: { id: POLYMARKET_CHAIN_ID },
+    } as unknown as WalletClient;
+
+    const receipt = await submitPolymarketOrder(
+      { walletClient, order: prepared() },
+      async () => clobV2Runtime({ credentials, options, orders, orderOptions, orderTypes }),
+    );
+
+    expect(receipt.orderId).toBe("order-v2");
+    expect(options).toHaveLength(2);
+    expect(options[0]).toMatchObject({
+      host: "https://clob.polymarket.com",
+      chain: POLYMARKET_CHAIN_ID,
+      signer: walletClient,
+      signatureType: 0,
+      funderAddress: walletClient.account?.address,
+      throwOnError: true,
+    });
+    expect(options[0]).not.toHaveProperty("creds");
+    expect(options[1]).toHaveProperty("creds", credentials);
+    expect(orders).toEqual([{
+      tokenID: "token-yes",
+      amount: 5,
+      side: "BUY",
+      orderType: "FAK",
+    }]);
+    expect(orderOptions).toEqual([{ version: 2 }]);
+    expect(orderTypes).toEqual(["FAK"]);
+    expect(credentials).toEqual({ key: "", secret: "", passphrase: "" });
+  });
+
+  it("uses the same V2 account binding for close-only cancellation without geoblock", async () => {
+    const fetcher = vi.spyOn(globalThis, "fetch");
+    const credentials = { key: "temporary-key", secret: "temporary-secret", passphrase: "temporary-passphrase" };
+    const options: Array<Record<string, unknown>> = [];
+    const cancellations: string[][] = [];
+    const walletClient = {
+      account: { address: "0x2222222222222222222222222222222222222222" },
+      chain: { id: POLYMARKET_CHAIN_ID },
+    } as unknown as WalletClient;
+
+    const receipt = await cancelPolymarketOrders(
+      { walletClient, orderIds: ["order_123"] },
+      async () => clobV2Runtime({ credentials, options, cancellations }),
+    );
+
+    expect(receipt.status).toBe("cancelled");
+    expect(cancellations).toEqual([["order_123"]]);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(options[1]).toMatchObject({
+      signatureType: 0,
+      funderAddress: walletClient.account?.address,
+      creds: credentials,
+    });
+    expect(credentials).toEqual({ key: "", secret: "", passphrase: "" });
+  });
+
   it("checks the user's browser location before asking Matterhorn to prepare new-order terms", () => {
     const source = readFileSync(
       resolve(import.meta.dir, "../src/react-app/domains/wallet/pages/BittensorPanel.tsx"),
@@ -206,5 +326,6 @@ describe("Polymarket reviewed execution", () => {
     expect(POLYMARKET_LIVE_CONFIRMATION).toBe("SUBMIT POLYMARKET ORDER");
     expect(POLYMARKET_CANCEL_CONFIRMATION).toBe("CANCEL POLYMARKET ORDERS");
     expect(POLYMARKET_CANCEL_ALL_CONFIRMATION).toBe("CANCEL ALL POLYMARKET ORDERS");
+    expect(POLYMARKET_COLLATERAL_SYMBOL).toBe("pUSD");
   });
 });

@@ -39,6 +39,13 @@ function mustNotContain(path, needles) {
 }
 
 const packageJson = JSON.parse(read("package.json"));
+const appPackageJson = JSON.parse(read("apps/app/package.json"));
+if (appPackageJson.dependencies?.["@polymarket/clob-client-v2"] === "1.1.0"
+  && !("@polymarket/clob-client" in (appPackageJson.dependencies ?? {}))) {
+  pass("web wallet pins CLOB V2 and excludes the legacy Polymarket client");
+} else {
+  fail("web wallet pins CLOB V2 and excludes the legacy Polymarket client");
+}
 if (packageJson.scripts?.["test:market-official-sdk-validation-track"] === "node scripts/market-official-sdk-validation-track.test.mjs") {
   pass("package.json exposes test:market-official-sdk-validation-track");
 } else {
@@ -94,7 +101,7 @@ mustContain("docs/market-official-sdk-validation.md", [
   "Hyperliquid's official SDK",
   "hyperliquid-python-sdk",
   "@polymarket/clob-client-v2",
-  "@polymarket/clob-client",
+  "Legacy V1 clients are not accepted",
   "requiresClientValidation: true",
   "canSubmit: false",
   "externalSignerOnly: true",
@@ -181,7 +188,7 @@ mustContain("scripts/market-official-sdk-validation-capture.mjs", [
   "canSubmit",
   "liveSubmissionEnabled",
   "hyperliquid-python-sdk",
-  "@polymarket/clob-client",
+  "@polymarket/clob-client-v2",
 ]);
 const captureSelfTest = spawnSync("node", ["scripts/market-official-sdk-validation-capture.mjs", "--self-test"], {
   cwd: root,
@@ -365,7 +372,7 @@ mustContain("docs/hyperliquid-read-preview.md", [
 
 mustContain("docs/polymarket-read-preview.md", [
   "requiresClientValidation",
-  "@polymarket/clob-client",
+  "@polymarket/clob-client-v2",
   "never fabricates or accepts a signature",
   "canSubmit: false",
 ]);
@@ -386,7 +393,7 @@ else pass("Hyperliquid payloads never enable canSubmit");
 const polymarketTool = mustContain("apps/server/src/tools/polymarket.ts", [
   "requiresClientValidation: true",
   "walletMustSet",
-  "@polymarket/clob-client",
+  "@polymarket/clob-client-v2",
   "POLYMARKET_EXCHANGE_ADDRESS",
   "canSubmit: false",
   "externalSignerOnly: true",

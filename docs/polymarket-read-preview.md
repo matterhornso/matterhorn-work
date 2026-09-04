@@ -35,9 +35,9 @@ Research, market detail, odds, and orderbook reads work regardless of compliance
 
 Each bet preview carries, alongside `canSubmit: false`:
 
-- `size` (USDC notional) and `price` (expected average fill as a probability, 0..1).
+- `size` (pUSD notional; legacy API field names may still say `Usdc`) and `price` (expected average fill as a probability, 0..1).
 - `estimatedShares` and a `marketability` estimate from the CLOB asks (`referencePrice`, `estimatedFillPrice`, `estimatedSlippagePct`, `depthSufficient`). A warning is added when depth is insufficient or estimated slippage exceeds a supplied tolerance.
-- `risk` — prediction-market payoff framing: `costUsdc`, `payoutIfWinUsdc` (each share pays $1 if the outcome resolves true), `maxProfitUsdc`, `maxLossUsdc` (the full stake), and `breakevenProbability`.
+- `risk` — prediction-market payoff framing: legacy compatibility fields `costUsdc`, `payoutIfWinUsdc`, `maxProfitUsdc`, and `maxLossUsdc` now represent pUSD; each winning share pays 1 pUSD.
 - `resolution` — `endDate` and `resolvesInDays`, with a warning when the market resolves within a day or the end date has already passed.
 - `priceContext` — headline (Gamma) `impliedProbability` vs `estimatedFillProbability` and `bookMidpoint`, with a `gapVsImpliedPct` and a warning when the live book diverges from the headline odds.
 - `liquidity` — market `liquidityUsd` and `volumeUsd`, with a thin-liquidity warning.
@@ -128,7 +128,7 @@ The web app also has a separate, explicitly reviewed ticket for eligible EOA BUY
 - A fresh server review must identify the exact action and its relevant market, outcome, CLOB token, amount, price/slippage, maximum loss, public hash, compliance result, and expiry.
 - Compliance must be `allowed`; blocked or unknown results fail closed.
 - The user connects an EOA wallet on Polygon and types `SUBMIT POLYMARKET ORDER`.
-- The official `@polymarket/clob-client` creates temporary browser-local credentials and submits only the exact reviewed buy, sell, or cancellation.
+- The pinned official `@polymarket/clob-client-v2` creates temporary browser-local credentials and submits only the exact reviewed buy, sell, or cancellation. Legacy V1 clients are not loaded.
 - Temporary credentials are cleared immediately after the attempt. Only a public receipt is sent back to Matterhorn's server.
 - Proxy accounts, agents, watches, automatic submission, unattended retries, and unsupported advanced actions are not supported.
 
@@ -136,9 +136,9 @@ The web app also has a separate, explicitly reviewed ticket for eligible EOA BUY
 
 When `POLYMARKET_EXCHANGE_ADDRESS` is configured (a validated CTF Exchange address), the handoff also carries `signingPayload` — an EIP-712 **order typed-data template** (`buildPolymarketOrderTypedData`) for the standard Polymarket CTF Exchange `Order` struct, computed with viem-compatible types.
 
-This is a **template, not a final signing digest**. Matterhorn fills only the economic terms it can know (`tokenId`, `makerAmount`, `takerAmount`, `side`); the user's wallet/client fills the `walletMustSet` fields (`maker`, `signer`, `salt`, `nonce`, `expiration`) and produces the signature. No digest is emitted because Matterhorn deliberately does not know those wallet-supplied values, and it never holds a key.
+This is a **template, not a final signing digest**. Matterhorn fills only the economic terms it can know (`tokenId`, `makerAmount`, `takerAmount`, `side`, zero metadata, and zero builder code); the user's wallet/client fills the `walletMustSet` fields (`maker`, `signer`, `salt`, `timestamp`, and `signatureType`) and produces the signature. CLOB V2 expiration remains a separate unsigned wire field. No digest is emitted because Matterhorn deliberately does not know those wallet-supplied values, and it never holds a key.
 
-`requiresClientValidation` is always `true`. **Validate the domain, `verifyingContract`, types, and amount rounding against Polymarket's official CLOB client (`@polymarket/clob-client`) and on testnet before signing with real funds.** When the exchange address is not configured, no typed-data is attached and the handoff stays purely descriptive.
+`requiresClientValidation` is always `true`. **Validate the domain, `verifyingContract`, CLOB V2 types, pUSD amount rounding, and separate wire expiration against Polymarket's official `@polymarket/clob-client-v2` before signing with real funds.** When the exchange address is not configured, no typed-data is attached and the handoff stays purely descriptive.
 
 Config: `POLYMARKET_EXCHANGE_ADDRESS` (required to emit typed-data), `POLYMARKET_CHAIN_ID` (default 137), `POLYMARKET_EXCHANGE_DOMAIN_NAME`, `POLYMARKET_EXCHANGE_DOMAIN_VERSION`.
 

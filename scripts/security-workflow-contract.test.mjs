@@ -21,6 +21,7 @@ for (const required of [
   "pnpm release:secret-scan",
   "pnpm --filter @matterhorn-work/crypto-app-sdk build",
   "pnpm test:dependency-bulk-audit",
+  "pnpm verify:elliptic-security-patch",
   "pnpm audit:dependencies",
   "request-rate-limit-store.test.ts",
 ]) {
