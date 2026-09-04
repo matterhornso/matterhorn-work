@@ -10,7 +10,10 @@ It places the coworker profile, approved structured state, selected Memory, and
 selected Agent Files inside explicitly marked data blocks. The complete
 server-owned execution, desk, coworker, and security policy is appended last and
 is never truncated. A data block can be bounded or omitted when the request hits
-the context budget; the immutable policy cannot.
+the context budget; the immutable policy cannot. Before framing, the compiler
+deterministically replaces any data line that imitates a reserved Matterhorn
+data delimiter or policy heading. Ordinary mentions remain unchanged, while
+private files or Memory cannot visually forge a second authoritative block.
 
 The compiler also hashes the exact final system context. Privacy preflight binds
 that digest and compiler version into the one-request consent challenge, without
@@ -55,5 +58,7 @@ Any prompt change must preserve the following tests:
 5. All financial work ends in the connected wallet.
 6. User-controlled or externally derived context precedes the complete,
    server-owned policy suffix and cannot occupy the final instruction position.
+7. Reserved Matterhorn policy headings and data delimiters inside user-controlled
+   context are escaped before the provider-bound system context is hashed.
 
 Prompt changes require the same server, UI, safety-gate, secret-scan, and production-build QA as a policy change.
