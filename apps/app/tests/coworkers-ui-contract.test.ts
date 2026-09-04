@@ -90,9 +90,12 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("Start chat");
     expect(panel).toContain("Add coworker");
     expect(panel).toContain("Research markets");
-    expect(panel).toContain("Monitor risk");
-    expect(panel).toContain("Prepare wallet actions");
-    expect(panel).toContain("Track treasury");
+    expect(panel).toContain("Watch risk");
+    expect(panel).toContain("Prepare a wallet review");
+    expect(panel).toContain("Track balances");
+    expect(panel).not.toContain('label: "Monitor risk"');
+    expect(panel).not.toContain('label: "Prepare wallet actions"');
+    expect(panel).not.toContain('label: "Track treasury"');
     expect(panel).toContain("Pause");
     expect(panel).toContain("Resume coworker");
     expect(panel).toContain("Disable permanently");

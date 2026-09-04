@@ -107,9 +107,9 @@ const COWORKER_CHOICES: ReadonlyArray<{
   summary: string;
 }> = [
   { id: "market_analyst", label: "Research markets", summary: "Finds and compares current market information." },
-  { id: "risk_monitor", label: "Monitor risk", summary: "Checks approved data and alerts you when it changes." },
-  { id: "transaction_coordinator", label: "Prepare wallet actions", summary: "Prepares exact wallet actions for you to review." },
-  { id: "treasury_coworker", label: "Track treasury", summary: "Tracks the balances and activity you approve." },
+  { id: "risk_monitor", label: "Watch risk", summary: "Checks approved data and alerts you when it changes." },
+  { id: "transaction_coordinator", label: "Prepare a wallet review", summary: "Prepares exact wallet actions for you to review." },
+  { id: "treasury_coworker", label: "Track balances", summary: "Tracks the balances and activity you approve." },
 ];
 
 function coworkerSummary(role: string): string {

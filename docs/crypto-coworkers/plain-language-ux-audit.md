@@ -26,11 +26,9 @@ The empty panel presents four job names as equal-width buttons, but hides the sh
 
 Recommended change: show the existing one-sentence explanation inside each choice, add a direct instruction to choose one, and remove the arbitrary visual preference for the first option. Preserve the immediate path into access review and the connected-wallet-only boundary.
 
-### P2 — Role language is not fully consistent across surfaces
+### Resolved — Role language is consistent across surfaces
 
-Home uses `Watch risk`, `Prepare a wallet review`, and `Track balances`; Coworkers uses `Monitor risk`, `Prepare wallet actions`, and `Track treasury`. Each phrase is understandable, but switching nouns makes the product feel more complicated than it is.
-
-Recommended follow-up: choose the Home wording as the user-facing vocabulary and keep internal template IDs unchanged. Do this separately so the first-run fix stays reviewable.
+Home and Coworkers now use `Research markets`, `Watch risk`, `Prepare a wallet review`, and `Track balances`. Internal template IDs and persisted coworker names remain unchanged.
 
 ### P2 — Technical storage and certification facts still need rendered browser verification
 
@@ -38,4 +36,4 @@ The source places Walrus, Sui, hashes, manifests, and certification detail behin
 
 ## Decision for this PR
 
-Fix the direct first-visit P1 issue only. The change is additive UI guidance: it does not alter coworker templates, permissions, app scopes, privacy classification, transaction preparation, wallet signing, or submission behavior.
+The direct first-visit P1 issue and the user-facing role terminology are resolved in separate reviewable changes. Neither change alters coworker templates, permissions, app scopes, privacy classification, transaction preparation, wallet signing, or submission behavior.
