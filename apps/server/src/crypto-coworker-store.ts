@@ -966,6 +966,86 @@ export class MatterhornCoworkerStore {
     }
   }
 
+  inheritSessionBinding(input: {
+    workspaceId: string;
+    ownerId: string;
+    sourceSessionId: string;
+    targetSessionId: string;
+    updatedAt: string;
+  }):
+    | { status: "created"; binding: MatterhornCoworkerSessionBinding }
+    | { status: "source_missing" | "source_stale" | "target_conflict" } {
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      const source = statement(this.#db, `
+        SELECT * FROM crypto_coworker_session_bindings
+        WHERE workspace_id = ? AND owner_id = ? AND session_id = ?
+        LIMIT 1
+      `).get(input.workspaceId, input.ownerId, input.sourceSessionId) as CoworkerSessionBindingRow | undefined;
+      if (!source) {
+        this.#db.exec("ROLLBACK;");
+        return { status: "source_missing" };
+      }
+      const target = statement(this.#db, `
+        SELECT 1 AS present FROM crypto_coworker_session_bindings
+        WHERE workspace_id = ? AND owner_id = ? AND session_id = ?
+        LIMIT 1
+      `).get(input.workspaceId, input.ownerId, input.targetSessionId) as { present: number } | undefined;
+      if (target) {
+        this.#db.exec("ROLLBACK;");
+        return { status: "target_conflict" };
+      }
+      const eligible = statement(this.#db, `
+        SELECT 1 AS eligible
+        FROM crypto_coworkers AS coworkers
+        INNER JOIN crypto_coworker_resource_scopes AS resources
+          ON resources.workspace_id = coworkers.workspace_id
+          AND resources.owner_id = coworkers.owner_id
+          AND resources.coworker_id = coworkers.coworker_id
+        WHERE coworkers.workspace_id = ?
+          AND coworkers.owner_id = ?
+          AND coworkers.coworker_id = ?
+          AND coworkers.revision = ?
+          AND coworkers.state = 'active'
+          AND resources.profile_revision = coworkers.revision
+          AND resources.scope_hash = ?
+        LIMIT 1
+      `).get(
+        input.workspaceId,
+        input.ownerId,
+        source.coworker_id,
+        source.coworker_revision,
+        source.resource_scope_hash,
+      ) as { eligible: number } | undefined;
+      if (!eligible) {
+        this.#db.exec("ROLLBACK;");
+        return { status: "source_stale" };
+      }
+      statement(this.#db, `
+        INSERT INTO crypto_coworker_session_bindings(
+          workspace_id, owner_id, session_id, coworker_id, coworker_revision,
+          resource_scope_hash, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+      `).run(
+        input.workspaceId,
+        input.ownerId,
+        input.targetSessionId,
+        source.coworker_id,
+        source.coworker_revision,
+        source.resource_scope_hash,
+        input.updatedAt,
+        input.updatedAt,
+      );
+      const binding = this.getSessionBinding(input.workspaceId, input.ownerId, input.targetSessionId);
+      if (!binding) throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+      this.#db.exec("COMMIT;");
+      return { status: "created", binding };
+    } catch (error) {
+      this.#db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
   deleteSessionBinding(
     workspaceId: string,
     ownerId: string,

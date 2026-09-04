@@ -129,6 +129,7 @@ export class MatterhornCoworkerError extends Error {
     | "coworker_revision_conflict"
     | "coworker_resource_scope_invalid"
     | "coworker_session_binding_invalid"
+    | "coworker_session_binding_conflict"
     | "coworker_session_binding_not_found"
     | "coworker_session_binding_stale"
     | "coworker_working_state_invalid"
@@ -422,6 +423,39 @@ export class MatterhornCoworkers {
       throw new MatterhornCoworkerError("coworker_revision_conflict");
     }
     return binding;
+  }
+
+  inheritSessionBinding(
+    workspaceId: string,
+    ownerId: string,
+    sourceSessionId: string,
+    targetSessionId: string,
+  ): MatterhornCoworkerSessionBinding {
+    this.#assertAccountAccess(ownerId);
+    if (!validIdentity(workspaceId)
+      || !validIdentity(ownerId)
+      || !validIdentity(sourceSessionId)
+      || !validIdentity(targetSessionId)
+      || sourceSessionId === targetSessionId) {
+      throw new MatterhornCoworkerError("coworker_session_binding_invalid");
+    }
+    const result = this.#store.inheritSessionBinding({
+      workspaceId,
+      ownerId,
+      sourceSessionId,
+      targetSessionId,
+      updatedAt: this.#now().toISOString(),
+    });
+    if (result.status !== "created") {
+      if (result.status === "source_missing") {
+        throw new MatterhornCoworkerError("coworker_session_binding_not_found");
+      }
+      if (result.status === "source_stale") {
+        throw new MatterhornCoworkerError("coworker_session_binding_stale");
+      }
+      throw new MatterhornCoworkerError("coworker_session_binding_conflict");
+    }
+    return result.binding;
   }
 
   unbindSession(

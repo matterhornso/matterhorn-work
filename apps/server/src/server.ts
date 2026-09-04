@@ -4183,6 +4183,7 @@ function coworkerApiError(error: unknown): ApiError {
         || error.code === "coworker_watch_transition_invalid"
         || error.code === "coworker_watch_limit"
         || error.code === "coworker_inbox_state_conflict"
+        || error.code === "coworker_session_binding_conflict"
         || error.code === "coworker_session_binding_stale"
         ? 409
         : 400;
@@ -4196,6 +4197,8 @@ function coworkerApiError(error: unknown): ApiError {
           ? "Coworker inbox item not found."
         : error.code === "coworker_session_binding_not_found"
           ? "This chat is not connected to a coworker."
+        : error.code === "coworker_session_binding_conflict"
+          ? "The new chat is already connected to a coworker."
         : error.code === "coworker_session_binding_stale"
           ? "This chat's coworker or app access changed. Review access before continuing."
       : error.code === "coworker_revision_conflict"
@@ -14260,6 +14263,67 @@ function createRoutes(
         binding: coworkerSessionBindingAccountView(binding),
         coworker: coworkerAccountView(coworker),
       });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/coworker/fork", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!coworkerRuntime.coworkers || coworkerRuntime.mode === "off") {
+      throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sourceSessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sourceSessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
+    await readWorkspaceSession(config, workspace, sourceSessionId);
+    const body = await readJsonBody(ctx.request, 4_096, "Forked coworker chat connection");
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => key !== "targetSessionId")
+      || typeof body.targetSessionId !== "string") {
+      throw new ApiError(400, "coworker_session_binding_invalid", "Forked chat connection is invalid.");
+    }
+    const targetSessionId = body.targetSessionId.trim();
+    if (!targetSessionId || targetSessionId === sourceSessionId) {
+      throw new ApiError(400, "coworker_session_binding_invalid", "Forked chat connection is invalid.");
+    }
+    await readWorkspaceSession(config, workspace, targetSessionId);
+    try {
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const sourceBinding = coworkerRuntime.coworkers.getSessionBinding(workspace.id, ownerId, sourceSessionId);
+      const activeBinding = coworkerRuntime.coworkers.resolveActiveSessionBinding(
+        workspace.id,
+        ownerId,
+        sourceSessionId,
+      );
+      const coworker = sourceBinding
+        ? coworkerRuntime.coworkers.get(workspace.id, ownerId, sourceBinding.coworkerId)
+        : null;
+      const resources = coworker
+        ? coworkerRuntime.coworkers.getResourceScope(workspace.id, ownerId, coworker.id)
+        : null;
+      if (!sourceBinding) {
+        throw new MatterhornCoworkerError("coworker_session_binding_not_found");
+      }
+      if (!activeBinding
+        || !coworker
+        || !resources
+        || !coworkerResourceConnectionsAreActive(cryptoAppRuntime, resources)) {
+        throw new MatterhornCoworkerError("coworker_session_binding_stale");
+      }
+      const binding = coworkerRuntime.coworkers.inheritSessionBinding(
+        workspace.id,
+        ownerId,
+        sourceSessionId,
+        targetSessionId,
+      );
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        active: true,
+        binding: coworkerSessionBindingAccountView(binding),
+        coworker: coworkerAccountView(coworker),
+      }, 201);
     } catch (error) {
       throw coworkerApiError(error);
     }

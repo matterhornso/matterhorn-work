@@ -1938,6 +1938,21 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       body: input,
       timeoutMs: timeouts.config,
     }),
+    inheritCoworkerSessionBinding: (
+      workspaceId: string,
+      sourceSessionId: string,
+      targetSessionId: string,
+    ) => requestJson<{
+      mode: "internal" | "invite" | "public";
+      active: true;
+      binding: MatterhornCoworkerAccountSessionBinding;
+      coworker: MatterhornCoworkerAccountProfile;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sourceSessionId)}/coworker/fork`, {
+      token,
+      method: "POST",
+      body: { targetSessionId },
+      timeoutMs: timeouts.config,
+    }),
     unbindCoworkerSession: (workspaceId: string, sessionId: string, expectedRevision: number) => requestJson<{
       deleted: true;
     }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/coworker`, {

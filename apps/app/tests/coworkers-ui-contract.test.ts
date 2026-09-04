@@ -621,7 +621,17 @@ describe("chat-operated coworker UI", () => {
     expect(surface).toContain("getCoworkerSessionBinding");
     expect(panel).toContain("bindCoworkerSession");
     expect(client).toContain("bindCoworkerSession:");
+    expect(client).toContain("inheritCoworkerSessionBinding:");
     expect(client).toContain("unbindCoworkerSession:");
+    expect(route).toContain("getCoworkerSessionBinding");
+    expect(route).toContain("inheritCoworkerSessionBinding");
+    expect(route).toContain("Chat forked without its coworker");
+    expect(route.indexOf("const forked = await forkSession")).toBeLessThan(
+      route.indexOf("inheritCoworkerSessionBinding"),
+    );
+    expect(route.indexOf("inheritCoworkerSessionBinding")).toBeLessThan(
+      route.indexOf("navigateToWorkspaceSession(selectedWorkspaceId, forked.id)"),
+    );
     expect(context).not.toContain("mission:");
     expect(context).not.toContain("allowedActionIds");
   });
