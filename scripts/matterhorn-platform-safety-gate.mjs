@@ -42,6 +42,8 @@ const STAGES = [
       "bun",
       "test",
       "apps/server/src/transaction-simulation-safety.test.ts",
+      "apps/server/src/crypto-app-https-transport.test.ts",
+      "apps/server/src/crypto-app-mcp-http-transport.test.ts",
       "apps/server/src/wallet-safety-policy-routes.e2e.test.ts",
       "apps/server/src/backend-security.e2e.test.ts",
       "apps/server/src/notes-routes.e2e.test.ts",

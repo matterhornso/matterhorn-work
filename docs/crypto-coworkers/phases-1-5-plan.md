@@ -417,6 +417,6 @@ The first-party testnet contracts and backend-only executors cover Sui balance r
 The next Phase 1 work must:
 
 - Add a dedicated Polymarket compliance boundary only after the venue's region signal can be bound to the user rather than the server egress location. Order preparation remains out of scope until that distinction and a wallet-only simulation contract are proven.
-- Extend the trusted transport boundary to future MCP/OpenAPI/RPC protocols without allowing redirects, destination overrides, arbitrary methods, or raw upstream cost claims. The first-party JSON and Sui gRPC transports are complete for the current testnet actions.
+- The restricted MCP Streamable HTTP `2025-11-25` transport profile is implemented behind the certified gateway boundary. It performs only initialize, initialized notification, and one exact signed `tools/call`; requires a closed `structuredContent` evidence envelope; and excludes discovery, SSE, prompts, resources, sampling, elicitation, tasks, destination overrides, arbitrary methods, and upstream cost claims. Live sealed certification and operator promotion remain pending. OpenAPI and generic RPC still use the existing closed Matterhorn JSON envelope and require separate protocol-specific designs before broader certification.
 - Complete the operator-controlled Sui financial-simulation and Hyperliquid order-preview probes, then promote only their sealed runtime reports.
 - Keep the gateway and coworker modes off outside internal acceptance until those operator probes and hosted two-account acceptance pass.
