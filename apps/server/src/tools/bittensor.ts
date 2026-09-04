@@ -617,7 +617,7 @@ export interface BittensorExtrinsicPreview {
 }
 
 export interface BittensorSignedResult {
-  status: "submitted" | "sidecar_unavailable" | "rejected" | "invalid_signature";
+  status: "submitted" | "sidecar_unavailable" | "rejected" | "invalid_signature" | "wallet_airlock_required";
   txHash: string | null;
   blockHash: string | null;
   message: string;
@@ -1156,7 +1156,7 @@ export interface BittensorChatCardItem {
 
 export interface BittensorChatCardAction {
   label: string;
-  kind: "copy_payload" | "open_url" | "sign_externally" | "send_to_chat";
+  kind: "copy_payload" | "copy_for_wallet" | "open_url" | "sign_externally" | "send_to_chat";
   href?: string | null;
   payload?: Record<string, unknown> | null;
 }
@@ -2177,7 +2177,7 @@ export function getSubtensorSidecarStatus(): BittensorSubtensorSidecarStatus {
     canPrepare: configured,
     canSubmit: false,
     message: configured
-      ? "Subtensor sidecar is configured. Matterhorn can request live chain reads and unsigned payload preparation while keeping signing external; submission remains disabled for this TAO milestone."
+      ? "Subtensor sidecar is configured. Matterhorn can request live chain reads and unsigned payload preparation; signing and submission stay in the connected wallet."
       : "Subtensor sidecar is not configured. Matterhorn will use TAO.app analytics and local safe fallbacks.",
   };
 }
@@ -2223,7 +2223,7 @@ export async function checkSubtensorSidecarHealth(): Promise<BittensorSubtensorS
     canPrepare: reachable && payload?.["canPrepare"] !== false,
     canSubmit: reachable && payload?.["canSubmit"] === true,
     message: reachable
-      ? "Subtensor sidecar is configured and reachable. Matterhorn can use it for live chain reads and unsigned payload preparation while keeping signing external."
+      ? "Subtensor sidecar is configured and reachable. Matterhorn can use it for live chain reads and unsigned payload preparation; signing and submission stay in the connected wallet."
       : "Subtensor sidecar is configured but not reachable. Matterhorn will fall back to TAO.app analytics and local safe behavior.",
   };
 }
@@ -4454,7 +4454,7 @@ function validateSubnetAdapterAuth(
     warnings.push("Adapter declares no auth requirement but still configures an auth env.");
   }
   if (requiredAuth === "external_wallet") {
-    errors.push("Subnet service adapters cannot require wallet signing material; use the external signer flow for Bittensor extrinsics.");
+    errors.push("Subnet service adapters cannot require wallet signing material; use the connected-wallet review flow for Bittensor extrinsics.");
   }
   return {
     auth: {
@@ -5798,7 +5798,7 @@ function risksFor(summary: BittensorSubnetSummary): string[] {
   const risks = [
     "Subnet utility and participants can change quickly; verify live metadata.",
     "Staking and unstaking are subnet-local and can involve alpha-token slippage.",
-    "The agent prepares unsigned transactions; a connected Bittensor wallet or external signer must review, sign, and submit.",
+    "The agent prepares unsigned transactions; the connected Bittensor wallet must review, sign, and submit.",
   ];
   if (summary.source === "curated-fallback") {
     risks.unshift("Live provider data is unavailable; this summary may be incomplete.");
@@ -5852,7 +5852,7 @@ export function buildBittensorQuote(input: BittensorActionQuoteInput, subnet?: B
   const netuid = typeof input.netuid === "number" && Number.isFinite(input.netuid) ? input.netuid : null;
   const warnings: string[] = [
     "Quote only. The agent does not sign or submit transactions automatically.",
-    "Continue in a connected Bittensor wallet or external signer to review, sign, and submit.",
+    "Continue in the connected Bittensor wallet to review, sign, and submit.",
   ];
 
   if (input.action === "stake" || input.action === "unstake") {
@@ -5971,7 +5971,7 @@ function stepsForIntent(intent: BittensorChatIntent): string[] {
     case "wallet":
       return ["Validate the SS58 public address", "Read wallet allocation and stake positions", "Summarize exposure and provider freshness"];
     case "stake_plan":
-      return ["Identify action, netuid, hotkey or recipient, and amount", "Build a non-custodial extrinsic preview", "Show fee, slippage, warnings, and external signing requirement"];
+      return ["Identify action, netuid, hotkey or recipient, and amount", "Build a non-custodial extrinsic preview", "Show fee, slippage, warnings, and connected-wallet review requirement"];
     case "subnet_use":
       return ["Check subnet capability manifest", "Call a supported adapter if one exists", "Otherwise explain what Matterhorn can do today and what adapter is missing"];
     case "monitor":
@@ -6000,7 +6000,7 @@ export function planBittensorChat(input: { message: string; ss58Address?: string
     suggestedToolNames: toolsForIntent(intent),
     safetyNotes: [
       "Matterhorn never asks for seed phrases, private keys, or mnemonics.",
-      "Bittensor signed actions require an external signer.",
+      "Bittensor actions require review, signing, and submission in the connected wallet.",
       "Subnet staking is Dynamic TAO exposure; alpha price and slippage can change the final TAO outcome.",
     ],
     responseCards: cardsForIntent(intent),
@@ -7336,7 +7336,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     });
     return {
       plan: { ...answeredPlan, intent: "stake_plan", responseCards: ["intelligence_report", "signed_action_review"] },
-      responseText: `Drafted a ${stakingPlan.strategy} Bittensor staking plan for ${formatMetric(stakingPlan.totalAmountTao)} TAO across ${stakingPlan.steps.length} subnet candidate(s). All previews are unsigned and require external signing.`,
+      responseText: `Drafted a ${stakingPlan.strategy} Bittensor staking plan for ${formatMetric(stakingPlan.totalAmountTao)} TAO across ${stakingPlan.steps.length} subnet candidate(s). All previews are unsigned and require connected-wallet review.`,
       cards: [
         buildBittensorStakingPlanCard(stakingPlan),
         ...stakingPlan.unsignedPreviews.slice(0, 2).map(buildBittensorExtrinsicPreviewCard),
@@ -7364,7 +7364,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
         responseText: `${titleCase(action)} is not enabled in the general chat executor yet. I can explain the action and risks, but I will not build a payload until it is explicitly enabled.`,
         cards: buildBittensorPlanCards(plan),
         data: { action },
-        warnings: uniqueWarnings(warnings, [`${titleCase(action)} requires explicit product enablement and external signing review.`]),
+        warnings: uniqueWarnings(warnings, [`${titleCase(action)} requires explicit product enablement and connected-wallet review.`]),
         requiresClarification: false,
         clarificationQuestion: null,
         execution: "unsupported",
@@ -7411,7 +7411,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     const signingSafety = buildBittensorSigningSafetyChecklist(preview);
     return {
       plan: { ...answeredPlan, intent: "stake_plan", responseCards: ["signed_action_review"] },
-      responseText: `${preview.consequenceSummary} This is unsigned and requires external signing before anything can move.`,
+      responseText: `${preview.consequenceSummary} This is unsigned and requires connected-wallet review before anything can move.`,
       cards: [buildBittensorExtrinsicPreviewCard(preview), buildBittensorSigningSafetyChecklistCard(signingSafety)],
       data: { preview, signingSafety },
       warnings: uniqueWarnings(warnings, preview.warnings, signingSafety.warnings),
@@ -7861,7 +7861,7 @@ export function capabilityFromSubnet(subnet: BittensorSubnetSummary): BittensorC
     "Universal support covers explanation, metagraph, staking guidance, wallet context, and monitoring.",
     adapterStatus.message,
     ...(configuredAdapter?.safetyNotes ?? []),
-    "Signed Bittensor actions require an external signer.",
+    "Bittensor actions require review, signing, and submission in the connected wallet.",
   ];
   const capabilityLevel = capabilityLevelFor(adapter, configuredAdapter);
   const adapterContract = buildBittensorSubnetServiceAdapterContract({
@@ -8379,7 +8379,7 @@ export function getBittensorSignerStatus(address?: string | null): BittensorSign
       canSubmit: false,
       network: bittensorNetwork(),
       address: address && isValidSs58Address(address) ? address : null,
-      message: "Subtensor sidecar is configured for live reads and unsigned payload preparation. Submission stays disabled until signed-payload verification is tested.",
+      message: "Subtensor sidecar is configured for live reads and unsigned payload preparation. Matterhorn submission is permanently disabled; the connected wallet signs and submits.",
     };
   }
   return {
@@ -8389,7 +8389,7 @@ export function getBittensorSignerStatus(address?: string | null): BittensorSign
     canSubmit: false,
     network: bittensorNetwork(),
     address: address && isValidSs58Address(address) ? address : null,
-    message: "Matterhorn prepares the unsigned action. Continue in a connected Bittensor wallet or external signer to review, sign, and submit.",
+    message: "Matterhorn prepares the unsigned action. Continue in the connected Bittensor wallet to review, sign, and submit.",
   };
 }
 
@@ -8412,7 +8412,7 @@ function consequenceForPreview(input: BittensorExtrinsicPrepareInput, quote: Bit
     case "transfer":
       return `If signed, this will transfer ${amount} to ${input.destination ?? "the requested recipient"}.`;
     case "set_child_hotkey":
-      return "If signed, this will change child/hotkey settings for the selected coldkey. Review this carefully in your external signer.";
+      return "If signed, this will change child/hotkey settings for the selected coldkey. Review this carefully in the connected wallet.";
     case "register":
       return "If signed, this will attempt a Bittensor registration action that may burn or lock TAO.";
     case "serve":
@@ -8435,7 +8435,7 @@ export async function prepareBittensorExtrinsic(input: BittensorExtrinsicPrepare
   const signer = getBittensorSignerStatus(coldkey);
   const warnings = [
     ...quote.warnings,
-    "Unsigned preview. Review, sign, and submit it in a connected Bittensor wallet or external signer.",
+    "Unsigned preview. Review, sign, and submit it in the connected Bittensor wallet.",
   ];
   if (input.coldkey && !coldkey) warnings.push("Coldkey does not look like a valid SS58 address.");
   if (input.hotkey && !hotkey) warnings.push("Hotkey does not look like a valid SS58 address.");
@@ -8546,13 +8546,13 @@ export function createBittensorSigningHandoff(preview: BittensorExtrinsicPreview
     expiresAt,
     instructions: [
       "Review the action, network, netuid, amount, destination, fee, and slippage in Matterhorn.",
-      "Open the payload in the connected Bittensor wallet, another compatible signer, or a CLI flow.",
-      "Confirm the signer shows the same payload SHA-256 before signing.",
-      "Return only the signed payload or signature to Matterhorn for optional sidecar submission.",
+      "Open the reviewed action in the connected Bittensor wallet.",
+      "Confirm the wallet shows the same payload SHA-256 before signing and broadcasting.",
+      "After broadcast, return only the public transaction hash or public receipt evidence to Matterhorn.",
     ],
     warnings: [
       ...preview.warnings,
-      "Matterhorn does not sign this payload automatically. Your connected wallet or external signer is the final authority.",
+      "Matterhorn cannot sign or broadcast this payload. Your connected wallet is the final authority.",
       "If the signer displays different action details, cancel and rebuild the preview.",
     ],
     consequenceSummary: preview.consequenceSummary,
@@ -8583,8 +8583,8 @@ export function createBittensorSigningReceipt(input: {
   const explorerUrl = input.result?.explorerUrl ?? null;
   const message = input.result?.message ?? (
     status === "signed_payload_received"
-      ? "External signature was received by Matterhorn. Broadcast still requires a configured and verified Subtensor sidecar."
-      : "External signature is still required before this Bittensor action can be submitted."
+      ? "Legacy signature evidence was received, but Matterhorn cannot broadcast it. Regenerate the action and use the connected wallet."
+      : "Connected-wallet review is required before this Bittensor action can be signed and broadcast."
   );
   const nextActions =
     status === "submitted" ? [
@@ -8592,20 +8592,25 @@ export function createBittensorSigningReceipt(input: {
       "Refresh the watch-only wallet after finality to compare the before and after state.",
     ] :
     status === "sidecar_unavailable" ? [
-      "Keep this receipt with the payload hash and external signature hash.",
-      "Configure a verified Subtensor sidecar or submit the signed payload through the external wallet/CLI flow.",
-      "Refresh the unsigned preview if the payload expires or market/slippage context changes.",
+      "Regenerate this legacy action as a current reviewed wallet action.",
+      "Review, sign, and broadcast only through the connected Bittensor wallet.",
+      "Import only the public transaction receipt after broadcast.",
     ] :
     status === "rejected" || status === "invalid_signature" ? [
       "Do not retry the stale signed payload without understanding the rejection.",
       "Rebuild a fresh unsigned preview and compare the payload hash before signing again.",
     ] :
     status === "signed_payload_received" ? [
-      "Submit only through a configured Subtensor sidecar or complete broadcast in the external signer.",
-      "Keep the receipt hash pair for post-action audit.",
+      "Do not send the signature to another Matterhorn endpoint.",
+      "Regenerate the action and complete it in the connected wallet.",
+    ] :
+    status === "wallet_airlock_required" ? [
+      "Open or regenerate the reviewed action in the connected Bittensor wallet.",
+      "Sign and broadcast only after the wallet shows the exact reviewed terms.",
+      "Import only the public transaction receipt after broadcast.",
     ] : [
-      "Sign externally only after matching the payload SHA-256 in the external signer.",
-      "Return only the signed payload or signature, never seed phrases or private keys.",
+      "Sign only after matching the payload SHA-256 in the connected wallet.",
+      "Return only public receipt evidence, never signatures, seed phrases, or private keys.",
     ];
 
   return {
@@ -8654,11 +8659,11 @@ export function buildBittensorSigningSafetyChecklist(preview: BittensorExtrinsic
   const needsDestination = preview.action === "transfer";
   const checks: BittensorSigningSafetyCheck[] = [
     signingCheck(
-      "External signature",
+      "Connected-wallet authority",
       preview.requiresExternalSignature && preview.signer.canSign === false ? "pass" : "fail",
       preview.requiresExternalSignature
-        ? "Matterhorn will not sign this payload; the user must sign externally."
-        : "Preview did not require external signing.",
+        ? "Matterhorn will not sign or submit this payload; the connected wallet must do both."
+        : "Preview did not require connected-wallet review.",
     ),
     signingCheck(
       "No key material",
@@ -8693,7 +8698,7 @@ export function buildBittensorSigningSafetyChecklist(preview: BittensorExtrinsic
       preview.feeTao === null && preview.slippageBps === null ? "warning" : "pass",
       preview.feeTao === null && preview.slippageBps === null
         ? "Fee and slippage are unavailable; refresh with a live provider before signing."
-        : "Fee or slippage context is present; still refresh immediately before external signing.",
+        : "Fee or slippage context is present; still refresh immediately before connected-wallet review.",
     ),
   ];
   const status = signingChecklistStatus(checks);
@@ -8706,68 +8711,28 @@ export function buildBittensorSigningSafetyChecklist(preview: BittensorExtrinsic
     warnings: uniqueWarnings(
       preview.warnings,
       checks.filter((check) => check.status !== "pass").map((check) => `${check.label}: ${check.summary}`),
-      ["Final signing must happen in your connected Bittensor wallet or another compatible signer."],
+      ["Final signing and submission must happen in your connected Bittensor wallet."],
     ),
     nextActions: status === "fail"
       ? ["Do not sign. Rebuild the preview after removing blocker fields."]
       : [
-        "Compare the action, amount, subnet, validator/destination, and payload hash in your wallet or signer.",
+        "Compare the action, amount, subnet, validator/destination, and payload hash in the connected wallet.",
         "Refresh the quote if fee, Dynamic TAO price, slippage, or provider freshness is stale.",
-        "Sign only after the wallet or signer shows the consequence you expect.",
+        "Sign only after the connected wallet shows the consequence you expect.",
       ],
     consequenceSummary: preview.consequenceSummary,
   };
 }
 
-export async function submitSignedBittensorExtrinsic(input: BittensorSignedSubmitInput): Promise<BittensorSignedResult> {
-  if (!input.signature || input.signature.trim().length < 16) {
-    return {
-      status: "invalid_signature",
-      txHash: null,
-      blockHash: null,
-      message: "A valid external signature is required before submission.",
-      explorerUrl: null,
-    };
-  }
-
-  const sidecar = readEnv("BITTENSOR_SUBTENSOR_SIDECAR_URL");
-  if (!sidecar) {
-    return {
-      status: "sidecar_unavailable",
-      txHash: null,
-      blockHash: null,
-      message: "Signed payload accepted by Matterhorn, but no Subtensor sidecar is configured to broadcast it.",
-      explorerUrl: null,
-    };
-  }
-
-  try {
-    const res = await fetch(`${sidecar.replace(/\/$/, "")}/submit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = asRecord(await res.json());
-    const txHash = firstString(data, ["txHash", "hash", "extrinsicHash"]);
-    const blockHash = firstString(data, ["blockHash", "block"]);
-    return {
-      status: "submitted",
-      txHash,
-      blockHash,
-      message: "Signed Bittensor extrinsic submitted through the configured sidecar.",
-      explorerUrl: txHash ? `https://taostats.io/extrinsic/${txHash}` : null,
-    };
-  } catch (err) {
-    return {
-      status: "rejected",
-      txHash: null,
-      blockHash: null,
-      message: err instanceof Error ? err.message : "Subtensor sidecar rejected the signed payload.",
-      explorerUrl: null,
-    };
-  }
+/** Deprecated compatibility stub. Matterhorn never forwards signature material or broadcasts. */
+export async function submitSignedBittensorExtrinsic(_input: BittensorSignedSubmitInput): Promise<BittensorSignedResult> {
+  return {
+    status: "wallet_airlock_required",
+    txHash: null,
+    blockHash: null,
+    message: "Matterhorn cannot accept or broadcast signed Bittensor payloads. Review, sign, and submit only in the connected wallet.",
+    explorerUrl: null,
+  };
 }
 
 function buildSubnetInvocationReviewRequest(
@@ -8879,7 +8844,7 @@ export async function invokeBittensorSubnet(netuid: number, input: BittensorSubn
       adapter: "universal",
       supported: true,
       result: { subnet: detail, risks: detail.risks, priceTao: detail.priceTao },
-      message: `Stake planning guidance for ${detail.name}. Signed staking still requires an external signer.`,
+      message: `Stake planning guidance for ${detail.name}. Staking still requires review, signing, and submission in the connected wallet.`,
       warnings,
     };
   }
@@ -9182,7 +9147,7 @@ export async function analyzeBittensorValidatorIntelligence(input: {
     copilotAction(
       "Prepare preview later",
       `Prepare staking 1 TAO on subnet ${netuid} to validator ${validatorHotkey}.`,
-      "Unsigned previews require an explicit amount and external signing.",
+      "Unsigned previews require an explicit amount and connected-wallet review.",
       "medium",
     ),
   ];
@@ -9295,13 +9260,13 @@ export async function buildBittensorStakingPlan(input: {
     copilotAction(
       "Create plan watches",
       "Create watches for this Bittensor staking plan.",
-      "Watches keep the plan current before any external signing.",
+      "Watches keep the plan current before connected-wallet review.",
       "low",
     ),
     copilotAction(
       "Review signer handoff",
       "Create signing handoff for the first unsigned Bittensor preview.",
-      "Handoff converts one preview into canonical JSON for external signing.",
+      "Handoff converts one preview into canonical JSON for exact connected-wallet review.",
       "medium",
     ),
   ];
@@ -9436,7 +9401,7 @@ export async function buildBittensorDecisionBrief(input: {
       assumptions: [
         "Public SS58 wallet reads are enough for exposure analysis.",
         "Watches should be created before preparing or signing any transaction-like action.",
-        "Quotes and validator samples should be refreshed immediately before external signing.",
+        "Quotes and validator samples should be refreshed immediately before connected-wallet review.",
       ],
       signals: wallet.signals,
       options,
@@ -11163,7 +11128,7 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
         ? "Use the configured Subtensor sidecar for live metagraph, wallet, quote, and signed-payload submission checks."
         : "Configure BITTENSOR_SUBTENSOR_SIDECAR_URL to upgrade fallback warnings into live-chain checks.",
       "Add subnet service adapters only behind explicit capability manifests and unsupported-adapter fallbacks.",
-      "Keep external signing mandatory until a separate custody/security review is complete.",
+      "Keep connected-wallet signing and submission mandatory.",
     ],
   };
 }
@@ -11303,13 +11268,13 @@ function buildBittensorCustomerGuidanceCard(result: BittensorChatExecutionResult
   } else if (cardKinds.has("validator_selection") || intent === "stake_plan") {
     title = result.execution === "unsigned_preview" ? "Unsigned action review next steps" : "Validator copilot next steps";
     summary = result.execution === "unsigned_preview"
-      ? "This preview is still non-custodial. Matterhorn prepared information only; an external signer is required before anything can move."
+      ? "This preview is still non-custodial. Matterhorn prepared information only; the connected wallet must review, sign, and submit before anything can move."
       : "Matterhorn can compare visible validator candidates, explain tradeoffs, and prepare an unsigned preview only after you choose a validator hotkey.";
     firstStep = result.execution === "unsigned_preview"
-      ? "Verify coldkey, hotkey, netuid, amount, rate tolerance, fee/slippage notes, and consequence text in your external signer."
+      ? "Verify coldkey, hotkey, netuid, amount, rate tolerance, fee/slippage notes, and consequence text in the connected wallet."
       : "Choose a validator hotkey only after reviewing live, recent, or reference-only data labels and concentration risk.";
     followUpPrompt = result.execution === "unsigned_preview"
-      ? "Review this unsigned Bittensor action preview for safety before external signing."
+      ? "Review this unsigned Bittensor action preview for safety in the connected wallet."
       : "Explain the validator shortlist tradeoffs and what to monitor next.";
   } else if (cardKinds.has("watchlist") || intent === "monitor") {
     title = "Watch and alert next steps";
@@ -11338,7 +11303,7 @@ function buildBittensorCustomerGuidanceCard(result: BittensorChatExecutionResult
     tone: result.execution === "unsupported" ? "warning" : "default",
     items: [
       cardItem("First safe step", firstStep),
-      cardItem("Matterhorn can", "Explain, compare, monitor, prepare unsigned previews, and hand off to external signing."),
+      cardItem("Matterhorn can", "Explain, compare, monitor, prepare unsigned previews, and hand off to the connected wallet."),
       cardItem("Matterhorn will not", "Ask for seeds/private keys, custody wallets, sign, broadcast, or provide financial advice.", "warning"),
     ],
     actions: [{
@@ -11346,7 +11311,7 @@ function buildBittensorCustomerGuidanceCard(result: BittensorChatExecutionResult
       kind: "send_to_chat",
       payload: { prompt: followUpPrompt },
     }],
-    warnings: ["Educational guidance only; verify live data and use your own judgment before any external signing."],
+    warnings: ["Educational guidance only; verify live data and use your own judgment before connected-wallet approval."],
     data: {
       intent,
       execution: result.execution,
@@ -11689,7 +11654,7 @@ export function buildBittensorQuoteCard(quote: BittensorActionQuote): BittensorC
     actions: [{
       label: "Review in chat",
       kind: "send_to_chat",
-      payload: { prompt: `Review this Bittensor ${quote.action} quote before external signing.` },
+      payload: { prompt: `Review this Bittensor ${quote.action} quote before connected-wallet approval.` },
     }],
     warnings: quote.warnings,
     data: { quote },
@@ -11711,8 +11676,8 @@ export function buildBittensorExtrinsicPreviewCard(preview: BittensorExtrinsicPr
       cardItem("Slippage", formatPercentFromBps(preview.slippageBps), preview.slippageBps && preview.slippageBps > 100 ? "warning" : "default"),
     ],
     actions: [{
-      label: "Sign externally",
-      kind: "sign_externally",
+      label: "Copy for wallet",
+      kind: "copy_for_wallet",
       payload: preview.unsignedPayload,
     }],
     warnings: preview.warnings,
@@ -11726,7 +11691,7 @@ export function buildBittensorSigningSafetyChecklistCard(checklist: BittensorSig
   const failed = checklist.checks.filter((check) => check.status === "fail").length;
   return {
     kind: "signed_action_review",
-    title: "External signing safety checklist",
+    title: "Connected-wallet safety checklist",
     subtitle: `${titleCase(checklist.previewAction)} · ${checklist.network}`,
     summary: checklist.consequenceSummary,
     tone: checklist.status === "pass" ? "good" : checklist.status === "warning" ? "warning" : "danger",
@@ -11734,7 +11699,7 @@ export function buildBittensorSigningSafetyChecklistCard(checklist: BittensorSig
       cardItem("Passed", passed, passed ? "good" : "muted"),
       cardItem("Warnings", warnings, warnings ? "warning" : "muted"),
       cardItem("Failed", failed, failed ? "danger" : "muted"),
-      cardItem("External signer", "Required", "warning"),
+      cardItem("Connected wallet", "Required", "warning"),
       cardItem("First check", checklist.checks[0]?.summary ?? "Unavailable", checklist.checks[0]?.status === "pass" ? "good" : checklist.checks[0]?.status === "fail" ? "danger" : checklist.checks[0]?.status ?? "muted"),
     ],
     actions: [{
@@ -11755,7 +11720,7 @@ export function buildBittensorSigningSafetyChecklistCard(checklist: BittensorSig
 export function buildBittensorSigningHandoffCard(handoff: BittensorSigningHandoff): BittensorChatCard {
   return {
     kind: "signing_handoff",
-    title: "External signing handoff",
+    title: "Connected-wallet handoff",
     subtitle: `${titleCase(handoff.action)} · ${handoff.network}`,
     summary: handoff.consequenceSummary,
     tone: handoff.warnings.length ? "warning" : "default",
@@ -11765,22 +11730,15 @@ export function buildBittensorSigningHandoffCard(handoff: BittensorSigningHandof
       cardItem("Expires", handoff.expiresAt, "muted"),
       cardItem("Signer mode", titleCase(handoff.signerMode)),
     ],
-    actions: [
-      {
-        label: "Copy payload",
-        kind: "copy_payload",
-        payload: {
-          filename: handoff.suggestedFilename,
-          payload: handoff.payload,
-          payloadSha256: handoff.payloadSha256,
-        },
-      },
-      {
-        label: "Sign externally",
-        kind: "sign_externally",
+    actions: [{
+      label: "Copy for wallet",
+      kind: "copy_for_wallet",
+      payload: {
+        filename: handoff.suggestedFilename,
         payload: handoff.payload,
+        payloadSha256: handoff.payloadSha256,
       },
-    ],
+    }],
     warnings: handoff.warnings,
     data: { handoff },
   };
@@ -11839,7 +11797,7 @@ export function buildBittensorSignerCard(signer: BittensorSignerStatus): Bittens
       cardItem("Can submit", signer.canSubmit ? "Yes" : "No", signer.canSubmit ? "good" : "warning"),
       cardItem("Address", shortSs58(signer.address)),
     ],
-    warnings: signer.canSign ? [] : ["Matterhorn does not hold signing authority. Use a connected Bittensor wallet or another compatible signer."],
+    warnings: signer.canSign ? [] : ["Matterhorn does not hold signing authority. Use the connected Bittensor wallet to review, sign, and submit."],
     data: { signer },
   };
 }
