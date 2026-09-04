@@ -107,6 +107,8 @@ function agentFileErrorMessage(error: unknown): string {
     if (error.code === "agent_file_not_found") return "This file no longer exists or is not available in this workspace.";
     if (error.code === "agent_file_already_published") return "This file already has an encrypted cloud copy.";
     if (error.code === "agent_file_walrus_publication_in_progress") return "This file is already being backed up.";
+    if (error.code === "agent_file_operation_in_progress") return "This file is being updated. Try again shortly.";
+    if (error.code === "agent_file_walrus_publication_claim_invalid") return "This backup request expired or changed. Start it again.";
     if (error.code === "agent_file_walrus_unavailable") return "Encrypted cloud backup is temporarily unavailable.";
     if (error.code === "agent_file_walrus_certification_expired") {
       return "This cloud copy has expired. The encrypted workspace file is still available, but the public backup cannot be used.";

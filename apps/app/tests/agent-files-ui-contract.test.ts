@@ -50,6 +50,8 @@ describe("coworker files UI", () => {
     expect(panel).toContain("your connected wallet is the only signer and submitter.");
     expect(panel).toContain("Review renewal in wallet");
     expect(panel).toContain("This cloud copy has expired.");
+    expect(panel).toContain("This file is being updated. Try again shortly.");
+    expect(panel).toContain("This backup request expired or changed. Start it again.");
     expect(panel).toContain("Download original");
     expect(panel).toContain("Matterhorn decrypted this copy only for your download.");
     expect(serverClient).toContain("acknowledgePublicCiphertext: true");

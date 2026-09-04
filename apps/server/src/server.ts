@@ -4241,6 +4241,12 @@ function agentFileApiError(error: unknown): ApiError {
   if (error.code === "agent_file_walrus_publication_in_progress") {
     return new ApiError(409, error.code, "This file is already being backed up.");
   }
+  if (error.code === "agent_file_operation_in_progress") {
+    return new ApiError(409, error.code, "This file is being updated. Try again shortly.");
+  }
+  if (error.code === "agent_file_walrus_publication_claim_invalid") {
+    return new ApiError(409, error.code, "This backup request expired or changed. Start it again.");
+  }
   if (error.code === "agent_file_blocked") {
     return new ApiError(
       400,
