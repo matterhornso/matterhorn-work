@@ -166,9 +166,9 @@ export const DESKTOP_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
   },
   safetyCopy: {
     publicAddressLine:
-      "Desktop uses external-signer handoffs. Provide public addresses for reads and complete signing in your own wallet or protocol client.",
+      "Desktop supports public-address reads. Open the same workspace in a supported web browser for connected-wallet review.",
     externalSignerLine:
-      "All on-chain writes are signed outside Matterhorn. Desktop Sui and Bittensor actions use external signer or wallet handoffs.",
+      "The desktop app cannot approve on-chain actions. Open the same workspace in a supported web browser and use your connected wallet.",
     forbiddenSecretsLine:
       "Never paste a private key, seed phrase, API secret, raw signature, signed payload, or wallet export into Matterhorn.",
   },
@@ -224,9 +224,9 @@ export const ELECTRON_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
   },
   safetyCopy: {
     publicAddressLine:
-      "Electron previews use public addresses only. Connect an external signer for writes.",
+      "Desktop previews use public addresses only. Open the same workspace in a supported web browser for wallet approval.",
     externalSignerLine:
-      "Electron builds do not support injected wallets. Use external-signer or wallet handoffs for any on-chain action.",
+      "Wallet extensions are unavailable in the desktop app. Review and approve on-chain actions in the web app with your connected wallet.",
     forbiddenSecretsLine:
       "Never paste a private key, seed phrase, API secret, raw signature, signed payload, or wallet export into Matterhorn.",
   },
@@ -282,7 +282,7 @@ export const UNKNOWN_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
   },
   safetyCopy: {
     publicAddressLine: "Wallet capabilities are unknown for this runtime. Use the web or desktop app.",
-    externalSignerLine: "External signer support is unavailable until the runtime is identified.",
+    externalSignerLine: "Wallet approval is unavailable until Matterhorn identifies this runtime. Open the web app to use a connected wallet.",
     forbiddenSecretsLine:
       "Never paste a private key, seed phrase, API secret, raw signature, signed payload, or wallet export into Matterhorn.",
   },

@@ -93,7 +93,7 @@ for (const rendererPhrase of [
   "sharedCardHighlightedStep",
   "sharedCardDetailItems",
   "sharedCardSdkValidationItems",
-  "External signer",
+  "Connected wallet",
   "Focused step",
   "Step command",
   "SDK doctor",

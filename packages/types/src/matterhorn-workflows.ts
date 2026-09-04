@@ -563,7 +563,7 @@ export const BITTENSOR_OPERATOR_WORKFLOW: MatterhornWorkflowManifest = {
     checklist: [
       "Wallet address is public only",
       "Private keys and seed phrases are never accepted",
-      "All on-chain actions use external-signer handoffs",
+      "All on-chain actions require connected-wallet review",
       "All seven stages are visible and ordered",
     ],
     requiredTests: ["scripts/bittensor-operator-playbook.test.mjs"],
@@ -583,7 +583,7 @@ export const MARKET_READ_PREVIEW_WORKFLOW: MatterhornWorkflowManifest = {
   category: "markets",
   targetUserPersona: "trader or market watcher",
   description:
-    "Provides read-only market data, previews, and external-signer handoffs for Hyperliquid and Polymarket without live submission.",
+    "Provides read-only market data, previews, and connected-wallet review for Hyperliquid and Polymarket. Agents cannot submit.",
   status: "preview_only",
   inputPrompts: [
     {
@@ -631,7 +631,7 @@ export const MARKET_READ_PREVIEW_WORKFLOW: MatterhornWorkflowManifest = {
     {
       id: "prepare_handoff",
       name: "Prepare Signing Handoff",
-      description: "Build an external-signer handoff packet for any action that leaves read-only mode.",
+      description: "Build an exact wallet-review packet for any action that leaves read-only mode.",
       inputPromptIds: ["venue", "market_id"],
       outputArtifactIds: ["signing_handoff"],
       status: "external_handoff_required",
@@ -1422,7 +1422,7 @@ export const BITTENSOR_BETA_WORKFLOW_EVIDENCE_BUNDLE: MatterhornWorkflowEvidence
     },
     {
       id: "external_signer_required",
-      label: "External signer required",
+      label: "Wallet review required",
       value: true,
       mimeType: "text/plain",
       public: true,
@@ -1757,7 +1757,7 @@ export const BITTENSOR_BETA_OPERATOR_WORKFLOW_TEMPLATE: MatterhornWorkflowTempla
     "Show my Bittensor staking preview",
     "Prepare a delegation handoff for subnet 1",
     "What is my current TAO balance?",
-    "Generate an external signer packet for staking",
+    "Generate a connected-wallet review for staking",
   ],
   requiredPublicInputs: [
     {
@@ -2138,7 +2138,7 @@ export const BITTENSOR_OPERATOR_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
   id: "bittensor_operator",
   name: "Use Bittensor",
   summary:
-    "Read TAO balances, compare subnets and validators, and prepare external-signer staking handoffs.",
+    "Read TAO balances, compare subnets and validators, and prepare staking actions for connected-wallet review.",
   promise:
     "You stay non-custodial. Matterhorn never holds your private key or submits a transaction.",
   category: "bittensor",
@@ -2225,7 +2225,7 @@ export const BITTENSOR_OPERATOR_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
     supported: true,
     types: ["external_signer_handoff", "stake_preview_receipt"],
     description:
-      "Produces an external-signer handoff and a public stake preview receipt.",
+      "Produces a connected-wallet handoff and a public stake preview receipt.",
   },
   serviceHooks: [{ hook: "bittensor", status: "live_local" }],
   chatMode: "crypto chat",
@@ -2240,7 +2240,7 @@ export const BITTENSOR_OPERATOR_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
     iconHint: "bittensor",
     accent: "matterhorn_blue",
     shortDescription:
-      "Read TAO balances and prepare external-signer staking handoffs.",
+      "Read TAO balances and prepare staking actions for connected-wallet review.",
   },
   routing: {
     chatMode: "bittensor",
@@ -2441,7 +2441,7 @@ export const POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflow
     supported: true,
     types: ["market_preview", "signing_handoff"],
     description:
-      "Produces a read-only market preview and an external-signer handoff.",
+      "Produces a read-only market preview and a connected-wallet handoff.",
   },
   serviceHooks: [{ hook: "polymarket", status: "preview_only" }],
   chatMode: "crypto chat",
@@ -3344,7 +3344,7 @@ export const BITTENSOR_TAO_STAKING_PREVIEW_DEMO_SCENARIO: CustomerBetaDemoScenar
     allowsRealFunds: false,
   },
   forbiddenClaims: [
-    "Matterhorn can stake without your external signer",
+    "Matterhorn can stake without your connected-wallet approval",
     "Matterhorn holds your private key",
     "Matterhorn submits transactions",
     "Matterhorn can move your TAO",
@@ -3432,13 +3432,13 @@ export const HYPERLIQUID_ORDER_PREVIEW_DEMO_SCENARIO: CustomerBetaDemoScenario =
     pass: [
       "Orderbook and account context are read-only",
       "Preview shows sizing and price estimates without binding execution",
-      "External signer handoff is produced and contains no signing material",
+      "Wallet-review handoff is produced and contains no signing material",
     ],
     fail: [
       "Requests an API secret or private key",
       "Submits an order to Hyperliquid",
       "Produces a signed order or signature",
-      "Claims Matterhorn can trade without external signer",
+      "Claims Matterhorn can trade without connected-wallet approval",
     ],
   },
   evidenceOutputPath: "docs/evidence/monday-beta/hyperliquid/{customer}-scenario-evidence.json",
@@ -3503,13 +3503,13 @@ export const POLYMARKET_MARKET_RESEARCH_DEMO_SCENARIO: CustomerBetaDemoScenario 
     pass: [
       "Market summary includes odds, liquidity, and outcome analysis",
       "Compliance block is shown before any handoff",
-      "External signer handoff is produced and contains no signing material",
+      "Wallet-review handoff is produced and contains no signing material",
     ],
     fail: [
       "Requests a private key or API secret",
       "Places a live Polymarket trade",
       "Produces a signed transaction or signature",
-      "Claims Matterhorn can trade without external signer",
+      "Claims Matterhorn can trade without connected-wallet approval",
     ],
   },
   evidenceOutputPath: "docs/evidence/monday-beta/polymarket/{customer}-scenario-evidence.json",
@@ -5045,7 +5045,7 @@ export function getDeskSafetySummary(id: string): string | undefined {
   if (!manifest) return undefined;
 
   if (manifest.safetyBoundaries.requiresExternalSigner) {
-    return "External signer required. Matterhorn never holds your keys.";
+    return "Connected-wallet approval required. Matterhorn never holds your keys.";
   }
   if (manifest.walletRailMode === "evm_connect") {
     return "Connected-wallet approval required for every order. Matterhorn never holds keys or API secrets.";
@@ -5071,7 +5071,7 @@ export function getDeskWalletRequirementSummary(id: string): string | undefined 
 
   switch (manifest.walletRailMode) {
     case "external_signer":
-      return "SS58 address + external signer";
+      return "Public SS58 address + connected wallet";
     case "evm_preview":
       return "EVM address for reads and handoffs";
     case "evm_connect":
@@ -5251,7 +5251,7 @@ export const BITTENSOR_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
     { name: "bittensor_list_subnets", description: "List subnets and validators.", isReadOnly: true },
     { name: "bittensor_compare_validators", description: "Compare validator yields.", isReadOnly: true },
     { name: "bittensor_preview_stake", description: "Preview a stake action without signing.", isReadOnly: true },
-    { name: "bittensor_prepare_stake_handoff", description: "Build an external-signer handoff packet.", isReadOnly: false },
+    { name: "bittensor_prepare_stake_handoff", description: "Build an exact connected-wallet review packet.", isReadOnly: false },
     { name: "bittensor_import_receipt", description: "Import a signed receipt for record-keeping.", isReadOnly: false },
   ],
   safetyBoundary: {
@@ -5281,14 +5281,14 @@ export const HYPERLIQUID_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
   displayName: "Matterhorn Hyperliquid",
   deskId: "hyperliquid",
   description:
-    "Read Hyperliquid market data and preview trades. Prepare external-signer handoffs and verify receipts. No live submission or signing.",
+    "Read Hyperliquid market data and preview trades. Prepare wallet reviews and verify public receipts. Agents cannot sign or submit.",
   installCommand: "matterhorn-work mcp install matterhorn-hyperliquid",
   supportedTools: [
     { name: "hyperliquid_read_market", description: "Read perp market metadata.", isReadOnly: true },
     { name: "hyperliquid_read_orderbook", description: "Read the orderbook.", isReadOnly: true },
     { name: "hyperliquid_read_exposure", description: "Read account exposure for a public address.", isReadOnly: true },
     { name: "hyperliquid_preview_order", description: "Preview an order without signing.", isReadOnly: true },
-    { name: "hyperliquid_prepare_handoff", description: "Build an external-signer handoff packet.", isReadOnly: false },
+    { name: "hyperliquid_prepare_handoff", description: "Build an exact connected-wallet review packet.", isReadOnly: false },
     { name: "hyperliquid_import_receipt", description: "Import a signed receipt for record-keeping.", isReadOnly: false },
   ],
   safetyBoundary: {
@@ -5325,7 +5325,7 @@ export const POLYMARKET_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
     { name: "polymarket_read_probabilities", description: "Read outcome probabilities.", isReadOnly: true },
     { name: "polymarket_read_orderbook", description: "Read market orderbook.", isReadOnly: true },
     { name: "polymarket_preview_trade", description: "Preview a trade without signing.", isReadOnly: true },
-    { name: "polymarket_prepare_handoff", description: "Build an external-signer handoff packet.", isReadOnly: false },
+    { name: "polymarket_prepare_handoff", description: "Build an exact connected-wallet review packet.", isReadOnly: false },
     { name: "polymarket_import_receipt", description: "Import a signed receipt for record-keeping.", isReadOnly: false },
   ],
   safetyBoundary: {
@@ -5542,7 +5542,7 @@ export const SURFACE_READINESS_REGISTRY: Record<string, MatterhornSurfaceReadine
       custody: false,
       secretInputsAllowed: false,
     },
-    notes: "Read previews and external-signer handoffs only. External signer required.",
+    notes: "Read previews and wallet-review handoffs only. Connected-wallet approval is required.",
   },
   hyperliquid_desk: {
     version: "matterhorn.surface.readiness.v1",
@@ -5646,7 +5646,7 @@ export const SURFACE_READINESS_REGISTRY: Record<string, MatterhornSurfaceReadine
     kind: "wallet",
     status: "needs_setup",
     routeOrPanelId: "/settings/wallet",
-    backendRouteOrTool: "Wallet rail state + external signer adapter config",
+    backendRouteOrTool: "Wallet rail state + connected-wallet adapter config",
     mcpEquivalent: undefined,
     cliEquivalent: "matterhorn-work config wallet",
     owner: "customer",
@@ -5656,7 +5656,7 @@ export const SURFACE_READINESS_REGISTRY: Record<string, MatterhornSurfaceReadine
       custody: false,
       secretInputsAllowed: false,
     },
-    notes: "Matterhorn never holds keys. User connects external signer or read-only address.",
+    notes: "Matterhorn never holds keys. The user connects a wallet or supplies a read-only public address.",
   },
   profile_settings: {
     version: "matterhorn.surface.readiness.v1",

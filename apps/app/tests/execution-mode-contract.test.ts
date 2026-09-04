@@ -45,7 +45,7 @@ describe("Matterhorn execution modes", () => {
     expect(buildMatterhornExecutionModeSystemPrompt("work")).toContain("Act before narrating");
     for (const option of MATTERHORN_EXECUTION_MODE_OPTIONS) {
       expect(buildMatterhornExecutionModeSystemPrompt(option.value)).toContain("never weakens desk allowlists");
-      expect(buildMatterhornExecutionModeSystemPrompt(option.value)).toContain("wallet review");
+      expect(buildMatterhornExecutionModeSystemPrompt(option.value)).toContain("connected-wallet boundaries");
       expect(buildMatterhornExecutionModeSystemPrompt(option.value)).toContain("transaction safety");
     }
   });

@@ -107,7 +107,7 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
             Matterhorn account. The same applies to balances, positions, and
             trade intent. An agent can research, read, prepare, and simulate an
             action, but it cannot sign, relay, or submit it. Signing, approval,
-            and submission stay in the connected wallet or external signer.
+            and submission stay in the connected wallet.
           </p>
         ),
       },
@@ -204,7 +204,7 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
         body: (
           <>
             <p>
-              You control connected wallets and external signers. Matterhorn
+              You control your connected wallets. Matterhorn
               prepares an exact action with its protocol, network, signer,
               asset, destination, amount, slippage, expiry, and simulation. Any
               change to a reviewed field invalidates the review and requires a
@@ -297,7 +297,7 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
         title: "Wallet safeguards",
         body: (
           <p>
-            Matterhorn Desks keeps signing in your wallet or external signer.
+            Matterhorn Desks keeps signing and submission in your connected wallet.
             Transaction previews bind exact terms, policy, expiry, signer,
             network, and a fresh simulation to one reviewed intent. Changing a
             reviewed field or allowing the simulation to become stale requires
@@ -404,7 +404,7 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
             Installation, workspace, desk, wallet, recovery, and operator
             guidance is available in the public documentation. Public beta
             limitations are called out where a workflow is preview-only,
-            external-signer-only, or unavailable.
+            requires wallet review, or is unavailable.
           </p>
         ),
       },

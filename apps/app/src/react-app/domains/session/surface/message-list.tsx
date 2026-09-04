@@ -1258,7 +1258,7 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
     items.push({ label: "Wallet ticket", value: walletTicket, tone: "warning" });
   }
   if (sharedCardNeedsExternalSigner(kind, originalKind, venue)) {
-    items.push({ label: "External signer", value: "Required", tone: "warning" });
+    items.push({ label: "Connected wallet", value: "Required", tone: "warning" });
   }
   if (highlightedStep) {
     items.push({ label: "Focused step", value: highlightedStep.label, tone: "default" });

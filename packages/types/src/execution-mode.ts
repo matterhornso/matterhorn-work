@@ -108,6 +108,6 @@ export function buildMatterhornExecutionModeSystemPrompt(mode: MatterhornExecuti
     `Mode: ${mode}`,
     ...behavior,
     "Never expose hidden chain-of-thought or internal deliberation. Provide conclusions, concise rationale, and verifiable evidence instead.",
-    "This mode never weakens desk allowlists, authorized workspace roots, wallet review, external-signer boundaries, billing controls, secret handling, or transaction safety.",
+    "This mode never weakens desk allowlists, authorized workspace roots, connected-wallet boundaries, billing controls, secret handling, or transaction safety.",
   ].join("\n");
 }

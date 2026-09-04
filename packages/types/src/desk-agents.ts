@@ -818,7 +818,7 @@ export function isMatterhornDeskAgentId(agentId: string | null | undefined): boo
 function completionSurfaceLabel(surface: MatterhornDeskCompletionSurface): string {
   switch (surface) {
     case "external_signer":
-      return "The user reviews, signs, and submits in an external signer.";
+      return "The user reviews, signs, and submits in the connected wallet.";
     case "connected_wallet":
       return "The user reviews, signs, and submits in the connected wallet.";
     case "external_client":

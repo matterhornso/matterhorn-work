@@ -76,10 +76,12 @@ describe("WorkflowStageCard — render contract", () => {
     expect(pageSource).toContain('actionPlacement="below"');
   });
 
-  test("shows external signer lock indicator when required", () => {
+  test("shows a wallet-review lock indicator when required", () => {
     const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
     expect(source).toContain("requiresExternalSigner?:");
     expect(source).toContain("Lock");
+    expect(source).toContain("Wallet review required");
+    expect(source).not.toContain("External signer required");
   });
 
   test("shows current stage highlight when isCurrent is true", () => {

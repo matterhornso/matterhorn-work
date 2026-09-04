@@ -24,7 +24,7 @@ describe("Matterhorn response perspectives", () => {
       const prompt = buildResponsePerspectiveSystemPrompt(perspective);
       expect(prompt).toContain("This changes framing only.");
       expect(prompt).toContain("Never remove, weaken, delay, or hide safety constraints");
-      expect(prompt).toContain("external-signer requirements");
+      expect(prompt).toContain("connected-wallet requirements");
       expect(prompt).toContain("wellness disclaimers");
     }
   });
