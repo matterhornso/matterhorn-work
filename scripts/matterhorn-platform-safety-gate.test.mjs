@@ -38,6 +38,8 @@ assert.equal(
 const source = readFileSync(scriptPath, "utf8");
 for (const required of [
   "matterhorn.platform-safety-gate.v1",
+  "workspace.artifacts",
+  "@matterhorn-work/crypto-app-sdk",
   "T1 approval surface as control",
   "T2 two-codebase seam",
   "T3 behavioral wallet QA",
@@ -166,6 +168,12 @@ const dryRun = await run(["--dry-run", "--json"]);
 assert.equal(dryRun.code, 0, dryRun.stderr || dryRun.stdout);
 const report = JSON.parse(dryRun.stdout);
 assert.equal(report.version, "matterhorn.platform-safety-gate.v1");
+assert.deepEqual(report.preparation, {
+  id: "workspace.artifacts",
+  label: "Workspace artifacts",
+  summary: "Builds generated workspace packages required by backend safety tests.",
+  command: ["pnpm", "--filter", "@matterhorn-work/crypto-app-sdk", "build"],
+});
 assert.equal(report.stageCount, 10);
 assert.deepEqual(report.stages.map((stage) => stage.id), [
   "wallet.approval.behavior",

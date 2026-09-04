@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 
+const PREPARATION = {
+  id: "workspace.artifacts",
+  label: "Workspace artifacts",
+  summary: "Builds generated workspace packages required by backend safety tests.",
+  command: ["pnpm", "--filter", "@matterhorn-work/crypto-app-sdk", "build"],
+};
+
 const STAGES = [
   {
     id: "wallet.approval.behavior",
@@ -444,6 +451,12 @@ function commandText(stage) {
 function dryRunReport(stages) {
   return {
     version: "matterhorn.platform-safety-gate.v1",
+    preparation: {
+      id: PREPARATION.id,
+      label: PREPARATION.label,
+      summary: PREPARATION.summary,
+      command: PREPARATION.command,
+    },
     stageCount: stages.length,
     stages: stages.map((stage) => ({
       id: stage.id,
@@ -513,6 +526,17 @@ if (options.dryRun) {
 }
 
 console.log(`Matterhorn platform safety gate: ${stages.length} stages`);
+console.log("");
+console.log(`[prepare] ${PREPARATION.label}`);
+console.log(PREPARATION.summary);
+console.log(`$ ${commandText(PREPARATION)}`);
+const preparationCode = await runStage(PREPARATION);
+if (preparationCode !== 0) {
+  console.error("");
+  console.error(`Matterhorn platform safety gate failed at ${PREPARATION.id} with exit code ${preparationCode}.`);
+  process.exit(preparationCode);
+}
+
 for (const [index, stage] of stages.entries()) {
   console.log("");
   console.log(`[${index + 1}/${stages.length}] ${stage.label}`);
