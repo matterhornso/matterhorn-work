@@ -32,6 +32,4 @@ The response must match the request ID and contain exactly one `result` using Ma
 
 The gateway projects `data` through the signed output schema and quarantines instruction-like external content before model use. JSON-RPC error messages and data are not copied into Matterhorn errors, receipts, or model context.
 
-## OpenAPI status
-
-The v1 manifest does not bind an OpenAPI operation path and HTTP method into the publisher signature. Matterhorn therefore leaves `openapi` without a runtime executor. It fails closed as `adapter_transport_unavailable` until a versioned manifest contract can sign the exact operation binding and certification can prove it.
+OpenAPI integrations use a separate [signed action profile](./openapi-certified-profile.md); JSON-RPC semantics are never inferred from an OpenAPI document.

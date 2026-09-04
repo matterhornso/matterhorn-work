@@ -2,6 +2,7 @@ import {
   MATTERHORN_CRYPTO_APP_RESULT_VERSION,
   type MatterhornCryptoAppAction,
   type MatterhornCryptoAppConnectionCredential,
+  type MatterhornCryptoAppOpenApiOperation,
   type MatterhornCryptoAppResult,
   type MatterhornCryptoAppTransportKind,
 } from "@matterhorn-work/types/crypto-coworkers";
@@ -81,6 +82,7 @@ export type MatterhornCryptoAppTransportExecutor = (input: {
   network: string;
   arguments: Record<string, unknown>;
   credential: MatterhornCryptoAppConnectionCredential;
+  openApiOperation?: MatterhornCryptoAppOpenApiOperation;
   signal: AbortSignal;
 }) => Promise<MatterhornCryptoAppAdapterExecution>;
 
@@ -337,6 +339,9 @@ export class MatterhornCryptoAppAdapterRouter {
           network: request.network,
           arguments: canonicalArguments,
           credential: transportCredential,
+          openApiOperation: registryEntry.manifest.transport.kind === "openapi"
+            ? structuredClone(registryEntry.manifest.transport.operations?.find((operation) => operation.actionId === action.id))
+            : undefined,
           signal: controller.signal,
         }),
         timeout.promise,

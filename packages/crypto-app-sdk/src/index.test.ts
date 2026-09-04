@@ -18,7 +18,12 @@ function draft(): MatterhornUnsignedCryptoAppManifest {
     description: "Public Sui reads and wallet-reviewed testnet transfer preparation.",
     manifestRevision: "1.0.0",
     publisher: { id: "acme.crypto", keyId: "publisher-1", algorithm: "ed25519" },
-    transport: { kind: "openapi", endpoint: "https://adapter.acme.example/v1" },
+    transport: {
+      kind: "openapi",
+      endpoint: "https://adapter.acme.example",
+      profile: "matterhorn.openapi-action.v1",
+      operations: [{ actionId: "sui_balance_read", method: "POST", path: "/v1/sui/balance" }],
+    },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "sui", chainId: "sui:testnet", environment: "testnet" }],
     actions: [{

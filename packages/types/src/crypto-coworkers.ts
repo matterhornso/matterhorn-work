@@ -1,4 +1,5 @@
 export const MATTERHORN_CRYPTO_APP_MANIFEST_VERSION = "matterhorn.crypto-app-manifest.v1";
+export const MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION = "matterhorn.openapi-action.v1";
 export const MATTERHORN_CRYPTO_APP_CONNECTION_VERSION = "matterhorn.crypto-app-connection.v1";
 export const MATTERHORN_CRYPTO_APP_WALLET_CHALLENGE_VERSION = "matterhorn.crypto-app-wallet-challenge.v1";
 export const MATTERHORN_CRYPTO_APP_OAUTH_FLOW_VERSION = "matterhorn.crypto-app-oauth-flow.v1";
@@ -23,6 +24,23 @@ export type MatterhornCryptoAppActionAccess = "read" | "watch" | "prepare" | "si
 export type MatterhornCryptoAppActionRisk = "informational" | "private_data" | "financial_low" | "financial_high";
 export type MatterhornCryptoAppTransportKind = "mcp_http" | "openapi" | "rpc" | "matterhorn_sdk";
 export type MatterhornCryptoAppNetworkEnvironment = "testnet" | "mainnet";
+
+export type MatterhornCryptoAppOpenApiOperation = {
+  actionId: string;
+  method: "POST";
+  path: string;
+};
+
+export type MatterhornCryptoAppTransport = {
+  kind: Exclude<MatterhornCryptoAppTransportKind, "openapi">;
+  endpoint: string;
+} | {
+  kind: "openapi";
+  endpoint: string;
+  /** Missing profiles remain parseable for v1 compatibility but cannot be certified or executed. */
+  profile?: typeof MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION;
+  operations?: MatterhornCryptoAppOpenApiOperation[];
+};
 
 export type MatterhornCryptoAppOAuth = {
   type: "oauth2";
@@ -68,10 +86,7 @@ export type MatterhornCryptoAppManifest = {
     algorithm: "ed25519";
     signature: string;
   };
-  transport: {
-    kind: MatterhornCryptoAppTransportKind;
-    endpoint: string;
-  };
+  transport: MatterhornCryptoAppTransport;
   authentication: MatterhornCryptoAppAuthentication;
   networks: Array<{
     protocol: string;
@@ -1093,6 +1108,12 @@ function canonicalPublicHttpsUrl(value: unknown): boolean {
   }
 }
 
+function canonicalPublicHttpsOrigin(value: unknown): boolean {
+  if (!canonicalPublicHttpsUrl(value)) return false;
+  const parsed = new URL(value as string);
+  return parsed.pathname === "/" && !parsed.search && !parsed.hash;
+}
+
 const SAFE_ACTION_ACCESS: readonly string[] = ["read", "watch", "prepare", "simulate"];
 const SAFE_ACTION_RISK: readonly string[] = ["informational", "private_data", "financial_low", "financial_high"];
 const SAFE_TRANSPORTS: readonly string[] = ["mcp_http", "openapi", "rpc", "matterhorn_sdk"];
@@ -1112,6 +1133,8 @@ const MANIFEST_KEYS: readonly string[] = [
 ];
 const PUBLISHER_KEYS: readonly string[] = ["id", "keyId", "algorithm", "signature"];
 const TRANSPORT_KEYS: readonly string[] = ["kind", "endpoint"];
+const OPENAPI_TRANSPORT_KEYS: readonly string[] = ["kind", "endpoint", "profile", "operations"];
+const OPENAPI_OPERATION_KEYS: readonly string[] = ["actionId", "method", "path"];
 const AUTHENTICATION_KEYS: readonly string[] = ["type", "scopes"];
 const OAUTH_AUTHENTICATION_KEYS: readonly string[] = [
   "type",
@@ -1198,6 +1221,7 @@ function hasForbiddenActionAuthority(actionId: string): boolean {
 
 export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
   const issues: string[] = [];
+  const openApiOperationIds = new Set<string>();
   if (!isRecord(value)) return ["manifest_not_object"];
   if (!hasOnlyKeys(value, MANIFEST_KEYS)) issues.push("manifest_unknown_field");
   if (value.version !== MATTERHORN_CRYPTO_APP_MANIFEST_VERSION) issues.push("manifest_version_invalid");
@@ -1220,9 +1244,40 @@ export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
 
   if (!isRecord(value.transport)) issues.push("transport_required");
   else {
-    if (!hasOnlyKeys(value.transport, TRANSPORT_KEYS)) issues.push("transport_unknown_field");
+    const openApi = value.transport.kind === "openapi";
+    if (!hasOnlyKeys(value.transport, openApi ? OPENAPI_TRANSPORT_KEYS : TRANSPORT_KEYS)) issues.push("transport_unknown_field");
     if (!isNonEmptyString(value.transport.kind) || !SAFE_TRANSPORTS.includes(value.transport.kind)) issues.push("transport_kind_invalid");
     if (!canonicalPublicHttpsUrl(value.transport.endpoint)) issues.push("transport_https_required");
+    if (openApi && (value.transport.profile !== undefined || value.transport.operations !== undefined)) {
+      if (value.transport.profile !== MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION) {
+        issues.push("openapi_profile_invalid");
+      }
+      if (!canonicalPublicHttpsOrigin(value.transport.endpoint)) {
+        issues.push("openapi_endpoint_origin_required");
+      }
+      if (!Array.isArray(value.transport.operations)
+        || value.transport.operations.length < 1
+        || value.transport.operations.length > 128) {
+        issues.push("openapi_operations_invalid");
+      } else {
+        for (const operation of value.transport.operations) {
+          if (!isRecord(operation)
+            || !hasOnlyKeys(operation, OPENAPI_OPERATION_KEYS)
+            || !isNonEmptyString(operation.actionId)
+            || !/^[a-z0-9][a-z0-9_]{2,127}$/.test(operation.actionId)
+            || operation.method !== "POST"
+            || !isNonEmptyString(operation.path)
+            || operation.path.length > 512
+            || !/^\/(?:[A-Za-z0-9._~!$&'()*+,;=:@-]+\/)*[A-Za-z0-9._~!$&'()*+,;=:@-]+$/.test(operation.path)
+            || operation.path.split("/").some((segment) => segment === "." || segment === "..")) {
+            issues.push("openapi_operation_invalid");
+            continue;
+          }
+          if (openApiOperationIds.has(operation.actionId)) issues.push("openapi_operation_duplicate");
+          openApiOperationIds.add(operation.actionId);
+        }
+      }
+    }
   }
 
   if (!isRecord(value.authentication)) issues.push("authentication_required");
@@ -1299,6 +1354,15 @@ export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
       if (action.walletSubmissionOnly !== true) issues.push("wallet_submission_only_required");
       if (action.agentMaySubmit !== false) issues.push("agent_submit_forbidden");
     }
+  }
+
+  if (isRecord(value.transport)
+    && value.transport.kind === "openapi"
+    && value.transport.profile === MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION
+    && Array.isArray(value.transport.operations)
+    && (openApiOperationIds.size !== actionIds.size
+      || [...actionIds].some((actionId) => !openApiOperationIds.has(actionId)))) {
+    issues.push("openapi_operation_coverage_invalid");
   }
 
   if (!isRecord(value.support)) issues.push("support_required");

@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+  MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
   type MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
 
@@ -76,6 +77,33 @@ describe("crypto app manifest conformance", () => {
       code: "runtime_dns_revalidation_required",
     })]);
     expect(report.reportHash).toHaveLength(64);
+  });
+
+  test("requires the signed operation profile before certifying OpenAPI", () => {
+    const value = manifest();
+    value.transport = { kind: "openapi", endpoint: "https://api.matterhorn.so" };
+    value.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(value), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    expect(conformance(value).findings).toContainEqual(expect.objectContaining({
+      severity: "error",
+      code: "openapi_signed_operation_profile_required",
+    }));
+
+    value.transport = {
+      kind: "openapi",
+      endpoint: "https://api.matterhorn.so",
+      profile: MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
+      operations: [{ actionId: "prepare_order", method: "POST", path: "/v1/orders/prepare" }],
+    };
+    value.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(value), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    expect(conformance(value).passed).toBe(true);
   });
 
   test("rejects private and loopback transport endpoints", () => {

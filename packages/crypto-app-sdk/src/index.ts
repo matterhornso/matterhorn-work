@@ -4,6 +4,7 @@ import {
 
 import {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+  MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
   type MatterhornCryptoAppAction,
   type MatterhornCryptoAppManifest,
 } from "./manifest-contract.js";
@@ -84,14 +85,17 @@ export {
 
 export {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+  MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
   type MatterhornCryptoAppAction,
   type MatterhornCryptoAppActionAccess,
   type MatterhornCryptoAppActionRisk,
   type MatterhornCryptoAppAuthentication,
   type MatterhornCryptoAppManifest,
   type MatterhornCryptoAppNetworkEnvironment,
+  type MatterhornCryptoAppOpenApiOperation,
   type MatterhornCryptoAppOAuth,
   type MatterhornCryptoAppTransportKind,
+  type MatterhornCryptoAppTransport,
 } from "./manifest-contract.js";
 
 type CanonicalValue = null | boolean | number | string | CanonicalValue[] | { [key: string]: CanonicalValue };
@@ -374,6 +378,11 @@ export function emulateCryptoAppPolicy(
     addFinding(findings, "error", "network", "transport_public_https_required");
   } else {
     addFinding(findings, "warning", "network", "server_dns_revalidation_required");
+  }
+  if (manifest.transport.kind === "openapi"
+    && (manifest.transport.profile !== MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION
+      || !manifest.transport.operations)) {
+    addFinding(findings, "error", "manifest", "openapi_signed_operation_profile_required");
   }
   if (manifest.authentication.type === "oauth2"
     && !publicHttpsShape(manifest.authentication.authorizationServer)) {
