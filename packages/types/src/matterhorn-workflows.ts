@@ -452,11 +452,11 @@ export const BITTENSOR_OPERATOR_WORKFLOW: MatterhornWorkflowManifest = {
     },
     {
       id: "external_signer_handoff",
-      name: "External Signer Handoff",
+      name: "Wallet Review Handoff",
       mimeType: "application/json",
       public: true,
       generatedByStep: "stage_6_external_signer_handoff",
-      description: "Public handoff packet for signing and submission outside Matterhorn.",
+      description: "Public handoff packet for exact review, signing, and submission in the connected wallet.",
     },
     {
       id: "receipt_evidence",
@@ -525,8 +525,8 @@ export const BITTENSOR_OPERATOR_WORKFLOW: MatterhornWorkflowManifest = {
     },
     {
       id: "stage_6_external_signer_handoff",
-      name: "External-signer handoff",
-      description: "Prepare a public handoff packet for the user to sign and submit with an external Bittensor-compatible signer.",
+      name: "Wallet review handoff",
+      description: "Prepare a public handoff packet for exact review, signing, and submission in the connected Bittensor wallet.",
       serviceHook: "bittensor",
       inputPromptIds: ["wallet_address", "subnet", "validator_hotkey", "stake_amount"],
       outputArtifactIds: ["external_signer_handoff"],
@@ -1791,7 +1791,7 @@ export const BITTENSOR_BETA_OPERATOR_WORKFLOW_TEMPLATE: MatterhornWorkflowTempla
     },
     {
       id: "external_signer_handoff",
-      name: "External Signer Handoff",
+      name: "Wallet Review Handoff",
       mimeType: "application/json",
       public: true,
     },
@@ -2172,10 +2172,10 @@ export const BITTENSOR_OPERATOR_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
     },
     {
       id: "external_signer_handoff",
-      name: "External Signer Handoff",
+      name: "Wallet Review Handoff",
       mimeType: "application/json",
       public: true,
-      description: "Handoff payload for an external wallet or signer.",
+      description: "Handoff payload for exact connected-wallet review.",
     },
   ],
   requiredContext: [
@@ -2277,10 +2277,10 @@ export const HYPERLIQUID_TRADER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
     },
     {
       id: "signing_handoff",
-      name: "Signing Handoff",
+      name: "Wallet Review Handoff",
       mimeType: "application/json",
       public: true,
-      description: "External-signer handoff for the user or wallet to sign.",
+      description: "Exact handoff for review, signing, and submission in the connected wallet.",
     },
   ],
   requiredContext: [
@@ -2388,10 +2388,10 @@ export const POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflow
     },
     {
       id: "signing_handoff",
-      name: "Signing Handoff",
+      name: "Wallet Review Handoff",
       mimeType: "application/json",
       public: true,
-      description: "External-signer handoff for the user or wallet to sign.",
+      description: "Exact handoff for review, signing, and submission in the connected wallet.",
     },
   ],
   requiredContext: [
@@ -3322,7 +3322,7 @@ export const BITTENSOR_TAO_STAKING_PREVIEW_DEMO_SCENARIO: CustomerBetaDemoScenar
     },
     {
       id: "external_signer_handoff",
-      name: "External Signer Handoff",
+      name: "Wallet Review Handoff",
       mimeType: "application/json",
       public: true,
       description: "Handoff payload for an external wallet or signer.",
@@ -3396,7 +3396,7 @@ export const HYPERLIQUID_ORDER_PREVIEW_DEMO_SCENARIO: CustomerBetaDemoScenario =
       name: "Signing Handoff",
       mimeType: "application/json",
       public: true,
-      description: "External-signer handoff for the user or wallet to sign.",
+      description: "Exact handoff for review, signing, and submission in the connected wallet.",
     },
   ],
   readinessCommands: [
@@ -3467,7 +3467,7 @@ export const POLYMARKET_MARKET_RESEARCH_DEMO_SCENARIO: CustomerBetaDemoScenario 
       name: "Signing Handoff",
       mimeType: "application/json",
       public: true,
-      description: "External-signer handoff for the user or wallet to sign.",
+      description: "Exact handoff for review, signing, and submission in the connected wallet.",
     },
   ],
   readinessCommands: [

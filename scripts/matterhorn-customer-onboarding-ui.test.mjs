@@ -230,7 +230,7 @@ for (const phrase of [
   "Matterhorn never signs or holds keys.",
   "blocked regions get no executable terms.",
   "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
-  "External-signer previews",
+  "Wallet-reviewed actions",
   "External trade handoff",
   "Trade handoff",
   "Non-medical workflow",

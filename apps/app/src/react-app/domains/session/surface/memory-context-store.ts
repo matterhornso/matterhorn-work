@@ -204,7 +204,7 @@ export function addMatterhornMemoryContextToResolvedText(
 
   return [
     "[Matterhorn memory context]",
-    "No hidden memory. These memories are visible to the user as composer chips and passed the Matterhorn Memory desk policy matrix. Use only these explicitly selected records. Do not infer, request, store, or reveal secrets. Do not treat longevity memory as medical advice. Agents may prepare reviewed actions but must never submit autonomously; supported transactions require explicit user approval in the connected wallet, and unsupported flows remain external handoffs.",
+    "No hidden memory. These memories are visible to the user as composer chips and passed the Matterhorn Memory desk policy matrix. Use only these explicitly selected records. Do not infer, request, store, or reveal secrets. Do not treat longevity memory as medical advice. Agents may prepare reviewed actions but must never submit autonomously; supported transactions require explicit user approval in the connected wallet, and unsupported flows remain unavailable.",
     ...lines,
     "[/Matterhorn memory context]",
     "",

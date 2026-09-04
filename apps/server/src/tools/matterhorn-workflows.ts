@@ -345,7 +345,7 @@ const WORKFLOWS: MatterhornWorkflowCatalogItem[] = [
     source: "typed_fixture",
     targetUserPersona: "TAO operator or delegator",
     summary:
-      "Guides TAO wallet reads, subnet monitoring, staking previews, and external-signer handoffs without taking custody or submitting transactions.",
+      "Guides TAO wallet reads, subnet monitoring, staking previews, and connected-wallet reviews without taking custody or submitting transactions.",
     localArtifactsAvailable: true,
     canExecuteLocalWorkflow: true,
     canExecuteProviderActions: false,
@@ -378,7 +378,7 @@ const WORKFLOWS: MatterhornWorkflowCatalogItem[] = [
     source: "typed_fixture",
     targetUserPersona: "trader or market watcher",
     summary:
-      "Reads Hyperliquid and Polymarket data, builds non-submittable previews, and prepares external-signer handoffs without live market submission.",
+      "Reads Hyperliquid and Polymarket data, builds non-submittable previews, and prepares exact wallet reviews without agent-driven market submission.",
     localArtifactsAvailable: true,
     canExecuteLocalWorkflow: true,
     canExecuteProviderActions: false,
@@ -449,7 +449,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
   {
     id: "bittensor_operator",
     name: "Use Bittensor",
-    summary: "Read TAO balances, compare subnets and validators, and prepare external-signer staking handoffs.",
+    summary: "Read TAO balances, compare subnets and validators, and prepare staking actions for connected-wallet review.",
     promise: "You stay non-custodial. Matterhorn never holds your private key or submits a transaction.",
     category: "bittensor",
     examplePrompts: [
@@ -462,7 +462,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
       { id: "balance_card", name: "TAO Balance Card", mimeType: "application/json", public: true },
       { id: "subnet_comparison", name: "Subnet Comparison", mimeType: "text/markdown", public: true },
       { id: "stake_preview", name: "Stake Preview", mimeType: "application/json", public: true },
-      { id: "external_signer_handoff", name: "External Signer Handoff", mimeType: "application/json", public: true },
+      { id: "external_signer_handoff", name: "Wallet Review Handoff", mimeType: "application/json", public: true },
     ],
     requiredContext: [
       {
@@ -488,7 +488,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     handoffReceiptSupport: {
       supported: true,
       types: ["external_signer_handoff", "stake_preview_receipt"],
-      description: "Produces an external-signer handoff and a public stake preview receipt.",
+      description: "Produces a connected-wallet handoff and a public stake preview receipt.",
     },
     serviceHooks: [{ hook: "bittensor", status: "live_local" }],
     chatMode: "crypto chat",
@@ -502,7 +502,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "bittensor",
       accent: "matterhorn_blue",
-      shortDescription: "Read TAO balances and prepare external-signer staking handoffs.",
+      shortDescription: "Read TAO balances and prepare staking actions for connected-wallet review.",
     },
     routing: {
       chatMode: "bittensor",
@@ -517,17 +517,17 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
   {
     id: "hyperliquid_trader",
     name: "Trade on Hyperliquid",
-    summary: "Preview Hyperliquid orders, check positions, and generate external-signer handoffs without live submission.",
-    promise: "Preview-only. No live submission, no custody, and no signing by Matterhorn.",
+    summary: "Read Hyperliquid markets, check positions, and prepare exact orders for connected-wallet review.",
+    promise: "Matterhorn prepares the order. You review, approve, and submit it from the separate wallet ticket.",
     category: "markets",
     examplePrompts: [
       "Preview a Hyperliquid BTC-PERP trade",
       "Show my Hyperliquid exposure",
-      "Generate a Hyperliquid signing handoff",
+      "Prepare a Hyperliquid wallet review",
     ],
     expectedArtifacts: [
       { id: "market_preview", name: "Market Preview", mimeType: "application/json", public: true },
-      { id: "signing_handoff", name: "Signing Handoff", mimeType: "application/json", public: true },
+      { id: "signing_handoff", name: "Wallet Review Handoff", mimeType: "application/json", public: true },
     ],
     requiredContext: [
       {
@@ -554,7 +554,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     handoffReceiptSupport: {
       supported: true,
       types: ["market_preview", "signing_handoff"],
-      description: "Produces a read-only market preview and an external-signer handoff.",
+      description: "Produces a read-only market preview and an exact connected-wallet review handoff.",
     },
     serviceHooks: [{ hook: "hyperliquid", status: "preview_only" }],
     chatMode: "crypto chat",
@@ -568,7 +568,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "hyperliquid",
       accent: "matterhorn_blue",
-      shortDescription: "Preview Hyperliquid trades and generate external-signer handoffs.",
+      shortDescription: "Review Hyperliquid markets and prepare exact wallet-approved orders.",
     },
     routing: {
       chatMode: "hyperliquid",
@@ -590,7 +590,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     examplePrompts: ["Summarize this Polymarket market", "Preview a Polymarket trade", "Show my Polymarket positions"],
     expectedArtifacts: [
       { id: "market_preview", name: "Market Preview", mimeType: "application/json", public: true },
-      { id: "signing_handoff", name: "Signing Handoff", mimeType: "application/json", public: true },
+      { id: "signing_handoff", name: "Wallet Review Handoff", mimeType: "application/json", public: true },
     ],
     requiredContext: [
       {
@@ -616,7 +616,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     handoffReceiptSupport: {
       supported: true,
       types: ["market_preview", "signing_handoff"],
-      description: "Produces a read-only market preview and an external-signer handoff.",
+      description: "Produces a read-only market preview and an exact connected-wallet review handoff.",
     },
     serviceHooks: [{ hook: "polymarket", status: "preview_only" }],
     chatMode: "crypto chat",
@@ -630,7 +630,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "polymarket",
       accent: "matterhorn_blue",
-      shortDescription: "Research Polymarket markets and prepare signing handoffs.",
+      shortDescription: "Research Polymarket markets and prepare eligible actions for wallet review.",
     },
     routing: {
       chatMode: "polymarket",

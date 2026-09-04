@@ -622,7 +622,7 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
     return item.protocolDesk.capabilityBullets;
   }
   if (item.panel === "bittensor") {
-    return ["TAO wallet reads", "Subnet discovery", "External-signer previews"];
+    return ["TAO wallet reads", "Subnet discovery", "Wallet-reviewed actions"];
   }
   if (item.panel === "hyperliquid") {
     return ["Orderbook reads", "Exposure context", "External trade handoff"];
