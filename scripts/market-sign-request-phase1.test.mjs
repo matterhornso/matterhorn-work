@@ -74,9 +74,7 @@ for (const required of [
 for (const required of [
   "/api/hyperliquid/orders/external-sign-request",
   "/api/polymarket/orders/external-sign-request",
-  "invalid_hyperliquid_sign_request",
-  "invalid_polymarket_sign_request",
-  "market_secret_rejected",
+  "wallet_airlock_required",
 ]) {
   assert.ok(server.includes(required), `server missing ${required}`);
 }
@@ -88,17 +86,14 @@ const polymarketRouteStart = server.indexOf('"/api/polymarket/orders/external-si
 const polymarketRouteEnd = server.indexOf('"/api/polymarket/orders/external-artifact/validate"', polymarketRouteStart);
 const polymarketRoute = polymarketRouteStart >= 0 ? server.slice(polymarketRouteStart, polymarketRouteEnd > polymarketRouteStart ? polymarketRouteEnd : server.length) : "";
 
-for (const [label, route, forbiddenScanner, invalidError] of [
-  ["Hyperliquid", hyperliquidRoute, "findForbiddenHyperliquidCredentialInput(body)", "invalid_hyperliquid_sign_request"],
-  ["Polymarket", polymarketRoute, "findForbiddenPolymarketCredentialInput(body)", "invalid_polymarket_sign_request"],
+for (const [label, route] of [
+  ["Hyperliquid", hyperliquidRoute],
+  ["Polymarket", polymarketRoute],
 ]) {
-  assert.ok(route.includes(forbiddenScanner), `${label} sign-request route should scan the raw request body for secrets`);
-  assert.ok(route.includes("market_secret_rejected"), `${label} sign-request route should reject secret-shaped input`);
-  assert.ok(route.includes("API secrets, private keys, signatures, or signed payloads"), `${label} sign-request route should explain rejected credential material`);
-  assert.ok(route.includes("executionMode: typeof body.executionMode === \"string\""), `${label} sign-request route should forward only explicit executionMode`);
-  assert.ok(route.includes("return jsonResponse({ success: true, signRequest, handoff, preview })"), `${label} sign-request route should return public signRequest/handoff/preview only`);
-  assert.ok(route.includes(invalidError), `${label} sign-request route should use the venue-specific invalid sign-request error`);
-  for (const forbidden of ["/orders/submit", "/orders/sign", "/exchange/submit", "signedArtifact", "rawSignature"]) {
+  assert.ok(route.includes('"client", async () =>'), `${label} legacy route must not read or process the request body`);
+  assert.ok(route.includes('ApiError(409, "wallet_airlock_required"'), `${label} legacy route must fail closed behind the wallet airlock`);
+  assert.match(route, /connected[^.]*wallet/i, `${label} legacy route should direct users to connected-wallet review`);
+  for (const forbidden of ["readJsonBody", "prepareHyperliquidExternalSignRequestFromRequest", "preparePolymarketExternalSignRequestFromRequest", "/orders/submit", "/orders/sign", "/exchange/submit", "signedArtifact", "rawSignature"]) {
     assert.ok(!route.includes(forbidden), `${label} sign-request route must not include ${forbidden}`);
   }
 }
@@ -106,10 +101,16 @@ for (const [label, route, forbiddenScanner, invalidError] of [
 for (const required of [
   "matterhorn_hyperliquid_create_sign_request",
   "matterhorn_polymarket_create_sign_request",
-  "/api/hyperliquid/orders/external-sign-request",
-  "/api/polymarket/orders/external-sign-request",
+  "wallet_airlock_required",
+  "connected-wallet ticket",
 ]) {
-  assert.ok(mcp.includes(required), `MCP missing ${required}`);
+  assert.ok(mcp.includes(required), `MCP compatibility stub missing ${required}`);
+}
+for (const retired of [
+  "matterhorn_hyperliquid_create_sign_request",
+  "matterhorn_polymarket_create_sign_request",
+]) {
+  assert.equal(mcp.split(retired).length - 1, 1, `${retired} must exist only as an unadvertised compatibility switch case`);
 }
 
 for (const required of [

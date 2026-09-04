@@ -80,10 +80,7 @@ for (const required of [
 for (const required of [
   "/api/hyperliquid/orders/external-artifact/validate",
   "/api/polymarket/orders/external-artifact/validate",
-  "invalid_hyperliquid_artifact_validation",
-  "invalid_polymarket_artifact_validation",
-  "market_secret_rejected",
-  "receiptCandidate",
+  "wallet_airlock_required",
 ]) {
   assert.ok(server.includes(required), `server missing ${required}`);
 }
@@ -95,17 +92,14 @@ const polymarketRouteStart = server.indexOf('"/api/polymarket/orders/external-ar
 const polymarketRouteEnd = server.indexOf('"/api/polymarket/orders/receipt"', polymarketRouteStart);
 const polymarketRoute = polymarketRouteStart >= 0 ? server.slice(polymarketRouteStart, polymarketRouteEnd > polymarketRouteStart ? polymarketRouteEnd : server.length) : "";
 
-for (const [label, route, validator, invalidError] of [
-  ["Hyperliquid", hyperliquidRoute, "validateHyperliquidRedactedArtifactEnvelope", "invalid_hyperliquid_artifact_validation"],
-  ["Polymarket", polymarketRoute, "validatePolymarketRedactedArtifactEnvelope", "invalid_polymarket_artifact_validation"],
+for (const [label, route] of [
+  ["Hyperliquid", hyperliquidRoute],
+  ["Polymarket", polymarketRoute],
 ]) {
-  assert.ok(route.includes("sanitizeMarketArtifactValidationInputForSecretScan(body)"), `${label} artifact route should sanitize hash metadata before secret scanning`);
-  assert.ok(route.includes("market_secret_rejected"), `${label} artifact route should reject secret-shaped artifact validation input`);
-  assert.ok(route.includes("only public/redacted metadata"), `${label} artifact route should explain public/redacted-only input`);
-  assert.ok(route.includes(validator), `${label} artifact route should use the venue artifact validator`);
-  assert.ok(route.includes("receiptCandidate: validation.publicAuditReceiptCandidate"), `${label} artifact route should return only a public receipt candidate`);
-  assert.ok(route.includes(invalidError), `${label} artifact route should use the venue-specific invalid artifact validation error`);
-  for (const forbidden of ["/orders/submit", "/orders/sign", "/exchange/submit", "rawSignature", "signedPayload", "submitSigned"]) {
+  assert.ok(route.includes('"client", async () =>'), `${label} retired artifact route must not read or process the request body`);
+  assert.ok(route.includes('ApiError(409, "wallet_airlock_required"'), `${label} retired artifact route must fail closed behind the wallet airlock`);
+  assert.match(route, /connected[- ](?:Polygon-)?wallet ticket/i, `${label} retired route should direct users to connected-wallet receipt import`);
+  for (const forbidden of ["readJsonBody", "sanitizeMarketArtifactValidationInputForSecretScan", "validateHyperliquidRedactedArtifactEnvelope", "validatePolymarketRedactedArtifactEnvelope", "/orders/submit", "/orders/sign", "/exchange/submit", "rawSignature", "signedPayload", "submitSigned"]) {
     assert.ok(!route.includes(forbidden), `${label} artifact route must not include ${forbidden}`);
   }
 }
@@ -113,11 +107,16 @@ for (const [label, route, validator, invalidError] of [
 for (const required of [
   "matterhorn_hyperliquid_validate_external_artifact",
   "matterhorn_polymarket_validate_external_artifact",
-  "/api/hyperliquid/orders/external-artifact/validate",
-  "/api/polymarket/orders/external-artifact/validate",
+  "wallet_airlock_required",
 ]) {
-  assert.ok(mcp.includes(required), `MCP missing ${required}`);
+  assert.ok(mcp.includes(required), `MCP compatibility stub missing ${required}`);
   assert.ok(mcpSmoke.includes(required), `MCP smoke missing ${required}`);
+}
+for (const retired of [
+  "matterhorn_hyperliquid_validate_external_artifact",
+  "matterhorn_polymarket_validate_external_artifact",
+]) {
+  assert.equal(mcp.split(retired).length - 1, 1, `${retired} must exist only as an unadvertised compatibility switch case`);
 }
 
 for (const required of [

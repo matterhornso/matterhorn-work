@@ -1186,10 +1186,6 @@ try {
     "matterhorn_hyperliquid_watch_digest",
     "matterhorn_hyperliquid_act_on_watch_alert",
     "matterhorn_hyperliquid_preview_order",
-    "matterhorn_hyperliquid_create_sign_request",
-    "matterhorn_hyperliquid_validate_external_artifact",
-    "matterhorn_polymarket_create_sign_request",
-    "matterhorn_polymarket_validate_external_artifact",
     "matterhorn_polymarket_create_watch",
     "matterhorn_polymarket_check_watches",
     "matterhorn_polymarket_watch_digest",
@@ -1212,6 +1208,15 @@ try {
     "matterhorn_bittensor_act_on_watch_alert",
   ]) {
     assert.ok(toolNames.includes(expected), `missing ${expected}`);
+  }
+
+  for (const retired of [
+    "matterhorn_hyperliquid_create_sign_request",
+    "matterhorn_hyperliquid_validate_external_artifact",
+    "matterhorn_polymarket_create_sign_request",
+    "matterhorn_polymarket_validate_external_artifact",
+  ]) {
+    assert.equal(toolNames.includes(retired), false, `${retired} must not be advertised`);
   }
 
   const schemaText = JSON.stringify(listed.result.tools);
@@ -1608,25 +1613,23 @@ try {
   assert.equal(hyperliquidPreview.preview.canSubmit, false);
   assert.equal(hyperliquidPreview.preview.previewSha256.length, 64);
 
+  const requestsBeforeRetiredMarketTools = requests.length;
   const hyperliquidSignRequest = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_hyperliquid_create_sign_request",
-    arguments: { executionMode: "testnet_external_signer", asset: "BTC", side: "buy", size: 0.1, price: 65000 },
+    arguments: { privateKey: "must-never-leave-the-client" },
   }));
-  assert.equal(hyperliquidSignRequest.signRequest.version, "matterhorn.market.external-sign-request.v1");
-  assert.equal(hyperliquidSignRequest.signRequest.canSubmit, false);
-  assert.equal(hyperliquidSignRequest.signRequest.liveSubmissionEnabled, false);
-  assert.equal(hyperliquidSignRequest.signRequest.signedArtifactAccepted, false);
-  assert.equal(hyperliquidSignRequest.signRequest.submitSignedAllowedByContract, false);
+  assert.equal(hyperliquidSignRequest.success, false);
+  assert.equal(hyperliquidSignRequest.code, "wallet_airlock_required");
+  assert.match(hyperliquidSignRequest.message, /connected-wallet ticket/);
 
   const polymarketSignRequest = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_polymarket_create_sign_request",
-    arguments: { executionMode: "testnet_external_signer", marketId: "0xmarket-ai", amountUsdc: 10, side: "yes" },
+    arguments: { signedPayload: "must-never-leave-the-client" },
   }));
-  assert.equal(polymarketSignRequest.signRequest.version, "matterhorn.market.external-sign-request.v1");
-  assert.equal(polymarketSignRequest.signRequest.canSubmit, false);
-  assert.equal(polymarketSignRequest.signRequest.liveSubmissionEnabled, false);
-  assert.equal(polymarketSignRequest.signRequest.signedArtifactAccepted, false);
-  assert.equal(polymarketSignRequest.signRequest.submitSignedAllowedByContract, false);
+  assert.equal(polymarketSignRequest.success, false);
+  assert.equal(polymarketSignRequest.code, "wallet_airlock_required");
+  assert.match(polymarketSignRequest.message, /connected Polygon-wallet ticket/);
+  assert.equal(requests.length, requestsBeforeRetiredMarketTools);
 
   const polymarketWatch = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_polymarket_create_watch",
@@ -1658,59 +1661,80 @@ try {
   assert.equal(polymarketWatchAct.chat.responseText, "Polymarket watch alert review ready.");
   assert.equal(polymarketWatchAct.safety.canSubmit, false);
 
-  const hyperliquidArtifactValidation = parseToolResult(await mcp.ask("tools/call", {
+  const requestsBeforeRetiredArtifactTools = requests.length;
+  const retiredHyperliquidArtifactValidation = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_hyperliquid_validate_external_artifact",
-    arguments: {
-      signRequest: hyperliquidSignRequest.signRequest,
-      artifact: {
-        version: "matterhorn.market.redacted-signed-artifact-envelope.v1",
-        venue: "hyperliquid",
-        routeName: "hyperliquid.orders.sign_request",
-        validationMode: "public_redacted_metadata",
-        executionMode: "testnet_external_signer",
-        network: hyperliquidSignRequest.signRequest.network,
-        action: hyperliquidSignRequest.signRequest.action,
-        signRequestSha256: hyperliquidSignRequest.signRequest.signRequestSha256,
-        previewSha256: hyperliquidSignRequest.signRequest.previewSha256,
-        handoffSha256: hyperliquidSignRequest.signRequest.handoffSha256,
-        unsignedPayloadSha256: hyperliquidSignRequest.signRequest.unsignedPayloadSha256,
-        signedArtifactPublicHash: "a".repeat(64),
-        signedArtifactRedacted: true,
-        canSubmit: false,
-        liveSubmissionEnabled: false,
-      },
-    },
+    arguments: { signature: "must-never-leave-the-client" },
   }));
-  assert.equal(hyperliquidArtifactValidation.validation.version, "matterhorn.market.artifact-validation.v1");
-  assert.equal(hyperliquidArtifactValidation.validation.canSubmit, false);
-  assert.equal(hyperliquidArtifactValidation.validation.publicAuditReceiptCandidate.version, "matterhorn.market.receipt.v1");
+  assert.equal(retiredHyperliquidArtifactValidation.success, false);
+  assert.equal(retiredHyperliquidArtifactValidation.code, "wallet_airlock_required");
 
-  const polymarketArtifactValidation = parseToolResult(await mcp.ask("tools/call", {
+  const retiredPolymarketArtifactValidation = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_polymarket_validate_external_artifact",
-    arguments: {
-      signRequest: polymarketSignRequest.signRequest,
-      artifact: {
-        version: "matterhorn.market.redacted-signed-artifact-envelope.v1",
-        venue: "polymarket",
-        routeName: "polymarket.orders.sign_request",
-        validationMode: "public_redacted_metadata",
-        executionMode: "testnet_external_signer",
-        network: polymarketSignRequest.signRequest.network,
-        action: polymarketSignRequest.signRequest.action,
-        signRequestSha256: polymarketSignRequest.signRequest.signRequestSha256,
-        previewSha256: polymarketSignRequest.signRequest.previewSha256,
-        handoffSha256: polymarketSignRequest.signRequest.handoffSha256,
-        unsignedPayloadSha256: polymarketSignRequest.signRequest.unsignedPayloadSha256,
-        signedArtifactPublicHash: "b".repeat(64),
-        signedArtifactRedacted: true,
-        canSubmit: false,
-        liveSubmissionEnabled: false,
-      },
-    },
+    arguments: { signedPayload: "must-never-leave-the-client" },
   }));
-  assert.equal(polymarketArtifactValidation.validation.version, "matterhorn.market.artifact-validation.v1");
-  assert.equal(polymarketArtifactValidation.validation.canSubmit, false);
-  assert.equal(polymarketArtifactValidation.validation.publicAuditReceiptCandidate.version, "matterhorn.market.receipt.v1");
+  assert.equal(retiredPolymarketArtifactValidation.success, false);
+  assert.equal(retiredPolymarketArtifactValidation.code, "wallet_airlock_required");
+  assert.equal(requests.length, requestsBeforeRetiredArtifactTools);
+
+  const hyperliquidArtifactValidation = {
+    success: true,
+    validation: {
+      version: "matterhorn.market.artifact-validation.v1",
+      venue: "hyperliquid",
+      status: "accepted_public_metadata",
+      validationMode: "public_redacted_metadata",
+      matchesSignRequest: true,
+      signRequestSha256: "1".repeat(64),
+      signedArtifactPublicHash: "a".repeat(64),
+      signedArtifactRedacted: true,
+      redactedMetadataAccepted: true,
+      signedArtifactAccepted: false,
+      submitSignedAllowedByContract: false,
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      publicAuditReceiptCandidate: {
+        version: "matterhorn.market.receipt.v1",
+        venue: "hyperliquid",
+        status: "received",
+        action: "place_order",
+        previewSha256: "2".repeat(64),
+        handoffSha256: "3".repeat(64),
+        warnings: ["Public audit receipt candidate only. It is not exchange submission evidence."],
+      },
+      errors: [],
+      warnings: [],
+    },
+  };
+  const polymarketArtifactValidation = {
+    success: true,
+    validation: {
+      version: "matterhorn.market.artifact-validation.v1",
+      venue: "polymarket",
+      status: "accepted_public_metadata",
+      validationMode: "public_redacted_metadata",
+      matchesSignRequest: true,
+      signRequestSha256: "5".repeat(64),
+      signedArtifactPublicHash: "b".repeat(64),
+      signedArtifactRedacted: true,
+      redactedMetadataAccepted: true,
+      signedArtifactAccepted: false,
+      submitSignedAllowedByContract: false,
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      publicAuditReceiptCandidate: {
+        version: "matterhorn.market.receipt.v1",
+        venue: "polymarket",
+        status: "received",
+        action: "place_order",
+        previewSha256: "6".repeat(64),
+        handoffSha256: "7".repeat(64),
+        warnings: ["Public audit receipt candidate only. It is not exchange submission evidence."],
+      },
+      errors: [],
+      warnings: [],
+    },
+  };
 
   const marketArtifactReconciliation = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_market_artifact_reconcile",
