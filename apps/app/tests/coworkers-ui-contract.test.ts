@@ -47,12 +47,12 @@ describe("chat-operated coworker UI", () => {
     const start = appSource("react-app/domains/session/chat/workspace-coworker-start.tsx");
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
     expect(start).toContain("What should Matterhorn help you do?");
-    expect(start).toContain("Describe the outcome in one sentence.");
+    expect(start).toContain("Describe your goal in one sentence.");
     expect(start).toContain('role="group" aria-label="Coworker role"');
     expect(start).toContain("aria-pressed={selected}");
     expect(start).toContain("Suggested");
     expect(start).toContain('type="submit"');
-    expect(start).toContain("Continue");
+    expect(start).toContain("Choose access");
     expect(start).toContain("Research markets");
     expect(start).toContain("Watch risk");
     expect(start).toContain("Prepare a wallet review");
@@ -64,7 +64,7 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("void createCoworker(templateId)");
     expect(panel).toContain("setPendingOutcome(props.initialOutcome?.trim() ?? \"\")");
     expect(panel).toContain('pendingOutcome || "Ask what outcome I want, then help me take the safest next step."');
-    expect(panel).toContain("Your outcome");
+    expect(panel).toContain("Your goal");
   });
 
   test("suggests a coworker deterministically without sending the outcome anywhere", () => {
@@ -98,7 +98,7 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("Disable permanently");
     expect(panel).toContain("Wallet activity");
     expect(panel).toContain("Wallet reviews per request");
-    expect(panel).toContain("Apps this role can use");
+    expect(panel).toContain("Apps allowed");
     expect(panel).toContain("Only your connected wallet can approve and send.");
     expect(panel).toContain("Transaction details");
     expect(panel).toContain("Safety checks:");
@@ -255,14 +255,14 @@ describe("chat-operated coworker UI", () => {
       loading: true,
       loadFailed: false,
       connectedAppCount: 0,
-    })).toMatchObject({ action: "wait", label: "Checking setup…" });
+    })).toMatchObject({ action: "wait", label: "Checking…" });
     expect(resolveCoworkerNextStep({
       coworkerState: "active",
       ready: false,
       loading: false,
       loadFailed: true,
       connectedAppCount: 0,
-    })).toMatchObject({ action: "reload", label: "Reload setup" });
+    })).toMatchObject({ action: "reload", label: "Try again" });
     expect(resolveCoworkerNextStep({
       coworkerState: "active",
       ready: false,
@@ -270,7 +270,7 @@ describe("chat-operated coworker UI", () => {
       loadFailed: false,
       connectionsAvailable: false,
       connectedAppCount: 0,
-    })).toMatchObject({ action: "none", label: null, message: "App connections are currently unavailable." });
+    })).toMatchObject({ action: "none", label: null, message: "Apps are unavailable right now. Try again later." });
     expect(resolveCoworkerNextStep({
       coworkerState: "active",
       ready: false,
@@ -278,7 +278,7 @@ describe("chat-operated coworker UI", () => {
       loadFailed: false,
       connectionsAvailable: true,
       connectedAppCount: 0,
-    })).toMatchObject({ action: "connect", label: "Connect an app" });
+    })).toMatchObject({ action: "connect", label: "Choose an app" });
     expect(resolveCoworkerNextStep({
       coworkerState: "active",
       ready: false,
@@ -286,7 +286,7 @@ describe("chat-operated coworker UI", () => {
       loadFailed: false,
       connectionsAvailable: true,
       connectedAppCount: 1,
-    })).toMatchObject({ action: "review", label: "Review access" });
+    })).toMatchObject({ action: "review", label: "Choose access" });
     expect(resolveCoworkerNextStep({
       coworkerState: "paused",
       ready: false,
@@ -308,7 +308,7 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("setResourcesOpen(true)");
     expect(panel).not.toContain("is ready`, description: \"Start a chat whenever you have an outcome in mind.");
     expect(panel).toContain("Safety and wallet control");
-    expect(panel).toContain("About this coworker");
+    expect(panel).toContain("What it does");
     expect(panel).toContain('onClick={props.onBrowseFiles}>Add file</Button>');
     expect(panel).toContain('onClick={props.onBrowseMemory}>Add memory</Button>');
     expect(panel).toContain('onClick={props.onBrowseApps}>Browse apps</Button>');
@@ -317,7 +317,7 @@ describe("chat-operated coworker UI", () => {
     expect(sessionPage).toContain('onBrowseMemory={() => setCurrentSidePanel("memory")}');
     expect(panel).not.toContain("This invalidates the current intent.");
     expect(panel).toContain("Your wallet will no longer be able to approve or send this review.");
-    expect(panel).toContain("Safety limits");
+    expect(panel).toContain("Limits");
     expect(panel).toContain("<details className=\"border-b border-dls-border/70 py-4\">");
   });
 
@@ -331,26 +331,26 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain(">Activity</span>");
     expect(panel).toContain("Pause or disable");
     expect(panel).not.toContain("Stop this coworker");
-    expect(panel).toContain("App lookups per request");
-    expect(panel).not.toContain("Reads per request");
+    expect(panel).toContain("App reads per request");
+    expect(panel).not.toContain("App lookups per request");
   });
 
   test("lets the user approve an exact resource sandbox without privacy bypasses", () => {
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
     const client = appSource("app/lib/matterhorn-server.ts");
-    expect(panel).toContain("What this coworker can use");
+    expect(panel).toContain("Apps and information");
     expect(panel).toContain("Nothing is shared until you choose.");
     expect(panel).toContain("Connect at least one app before starting chat.");
     expect(panel).toContain("ready: canStartCoworker");
-    expect(panel).toContain("Suggested items");
+    expect(panel).toContain("Suggested access");
     expect(panel).toContain("Nothing changes until you review and save.");
     expect(panel).toContain("Review");
     expect(panel).toContain("Save access");
-    expect(panel).toContain("This coworker cannot bypass that rule.");
+    expect(panel).toContain("This coworker cannot change that.");
     expect(panel).toContain("App connections are not enabled in this environment.");
     expect(panel).toContain("Private files are not enabled in this environment.");
     expect(panel).toContain('cause.code === "crypto_app_gateway_disabled"');
-    expect(panel).toContain("Connect an app");
+    expect(panel).toContain("Choose an app");
     expect(panel).toContain("Nothing is shared until you save access.");
     expect(panel).toContain("createCryptoAppConnection");
     expect(panel).toContain("transitionCryptoAppConnection");

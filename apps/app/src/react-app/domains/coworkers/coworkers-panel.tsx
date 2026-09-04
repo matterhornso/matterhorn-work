@@ -137,18 +137,18 @@ export function resolveCoworkerNextStep(input: {
     return { action: "start", label: "Start chat", message: "Ready. Start a chat and describe what you need." };
   }
   if (input.loadFailed) {
-    return { action: "reload", label: "Reload setup", message: "Reload this coworker's setup." };
+    return { action: "reload", label: "Try again", message: "We couldn't check this coworker's access." };
   }
   if (input.loading || input.connectionsAvailable === undefined) {
-    return { action: "wait", label: "Checking setup…", message: "Checking what this coworker can use…" };
+    return { action: "wait", label: "Checking…", message: "Checking what this coworker can use…" };
   }
   if (!input.connectionsAvailable) {
-    return { action: "none", label: null, message: "App connections are currently unavailable." };
+    return { action: "none", label: null, message: "Apps are unavailable right now. Try again later." };
   }
   if (input.connectedAppCount === 0) {
-    return { action: "connect", label: "Connect an app", message: "Connect one app for this coworker." };
+    return { action: "connect", label: "Choose an app", message: "Choose an app for this coworker." };
   }
-  return { action: "review", label: "Review access", message: "Choose what this coworker can use, then save." };
+  return { action: "review", label: "Choose access", message: "Choose its apps, files, and saved memory, then save." };
 }
 
 export function coworkerActivitySummary(input: {
@@ -173,7 +173,7 @@ export function coworkerActivitySummary(input: {
 function coworkerErrorMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
     if (error.code === "coworker_runtime_disabled" || error.code === "coworker_execution_not_ready") {
-      return "Coworkers are not enabled in this environment yet.";
+      return "Coworkers aren't available here yet.";
     }
     if (error.code === "coworker_not_found") return "This coworker no longer exists.";
     if (error.code === "coworker_revision_conflict") return "This coworker changed. Refresh and try again.";
@@ -181,7 +181,7 @@ function coworkerErrorMessage(error: unknown): string {
     if (error.code === "coworker_resource_recommendation_stale") return "The suggested access changed. Review the latest suggestion before saving.";
     if (error.code === "coworker_resources_stale") return "This access list changed. Review it again before starting work.";
     if (error.code === "coworker_transition_invalid") return "That change is no longer available for this coworker.";
-    if (error.code === "coworker_watch_invalid") return "This check no longer matches the app access you approved. Review access and try again.";
+    if (error.code === "coworker_watch_invalid") return "This check no longer matches the app you chose. Check access and try again.";
     if (error.code === "coworker_watch_limit") return "This coworker has reached its active check limit. Pause or remove a check first.";
     if (error.code === "coworker_watch_not_found") return "This check is no longer available. Refresh and try again.";
     if (error.code === "coworker_watch_transition_invalid") return "This check cannot be resumed with its current app access.";
@@ -979,7 +979,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
           </div>
         ) : listQuery.isError || !listQuery.data ? (
           <div className="py-8" aria-live="polite">
-            <h3 className="text-sm font-semibold text-dls-text">Coworkers are not ready</h3>
+            <h3 className="text-sm font-semibold text-dls-text">Couldn't load coworkers</h3>
             <p className="mt-2 text-sm leading-6 text-dls-secondary">{coworkerErrorMessage(listQuery.error)}</p>
             <Button className="mt-4" size="sm" onClick={() => void listQuery.refetch()}>Try again</Button>
           </div>
@@ -1056,12 +1056,12 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   </div>
                   <p className="mt-2 text-sm leading-6 text-dls-secondary">{coworkerSummary(selectedCoworker.role)}</p>
                   <details className="mt-2">
-                    <summary className="min-h-8 cursor-pointer text-xs text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">About this coworker</summary>
+                    <summary className="min-h-8 cursor-pointer text-xs text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">What it does</summary>
                     <p className="mt-1 border-l border-dls-border/70 pl-3 text-xs leading-5 text-dls-secondary">{selectedCoworker.mission}</p>
                   </details>
                   {pendingOutcome ? (
                     <div className="mt-4 border-y border-dls-border/70 py-3">
-                      <p className="text-xs font-medium text-dls-text">Your outcome</p>
+                      <p className="text-xs font-medium text-dls-text">Your goal</p>
                       <p className="mt-1 line-clamp-3 text-xs leading-5 text-dls-secondary">{pendingOutcome}</p>
                     </div>
                   ) : null}
@@ -1108,7 +1108,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
             <section className="border-b border-dls-border/70 py-4" aria-labelledby="coworker-resources-title">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 id="coworker-resources-title" className="text-sm font-semibold text-dls-text">What this coworker can use</h3>
+                  <h3 id="coworker-resources-title" className="text-sm font-semibold text-dls-text">Apps and information</h3>
                   <p className="mt-1 text-xs leading-5 text-dls-secondary">
                     {resourceQuery.isLoading
                       ? "Loading access…"
@@ -1130,14 +1130,14 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   aria-expanded={resourcesOpen}
                   onClick={() => setResourcesOpen((open) => !open)}
                 >
-                  {resourcesOpen ? "Close" : "Choose"}
+                  {resourcesOpen ? "Close" : resourceQuery.data?.scope.resources ? "Change" : "Choose"}
                 </Button>
               </div>
 
               {resourceSuggestionAvailable && resourceQuery.data ? (
                 <div className="mt-4 flex items-start justify-between gap-3 border-t border-dls-border/70 pt-4">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-dls-text">Suggested items</p>
+                    <p className="text-xs font-medium text-dls-text">Suggested access</p>
                     <p className="mt-1 text-xs leading-5 text-dls-secondary">
                       Matterhorn found {
                         resourceQuery.data.recommendation.agentFiles.length
@@ -1154,11 +1154,11 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                 <div className="mt-4 grid gap-4 border-t border-dls-border/70 pt-4">
                   {resourceRecommendationHash ? (
                     <p className="text-xs leading-5 text-dls-secondary">
-                      Suggested items are selected below. Uncheck anything you do not want to share, then save.
+                      The suggestions are selected below. Uncheck anything you do not want to share, then save.
                     </p>
                   ) : null}
                   <fieldset>
-                    <legend className="text-xs font-medium text-dls-text">Connected apps</legend>
+                    <legend className="text-xs font-medium text-dls-text">Apps</legend>
                     {!resourceQuery.data.connectionsAvailable ? (
                       <div className="mt-2 flex items-center justify-between gap-3">
                         <p className="text-xs leading-5 text-dls-secondary">App connections are not enabled in this environment.</p>
@@ -1180,7 +1180,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       </div>
                     ) : (
                       <div className="mt-2 flex items-center justify-between gap-3">
-                        <p className="text-xs leading-5 text-dls-secondary">No approved apps are connected for this coworker.</p>
+                        <p className="text-xs leading-5 text-dls-secondary">No apps are connected yet.</p>
                         <Button size="xs" variant="outline" onClick={props.onBrowseApps}>Browse apps</Button>
                       </div>
                     )}
@@ -1259,7 +1259,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   </fieldset>
 
                   <fieldset>
-                    <legend className="text-xs font-medium text-dls-text">Private files</legend>
+                    <legend className="text-xs font-medium text-dls-text">Files</legend>
                     {!resourceQuery.data.filesAvailable ? (
                       <p className="mt-2 text-xs leading-5 text-dls-secondary">Private files are not enabled in this environment.</p>
                     ) : resourceQuery.data.files.length ? (
@@ -1285,7 +1285,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   </fieldset>
 
                   <fieldset>
-                    <legend className="text-xs font-medium text-dls-text">Memory</legend>
+                    <legend className="text-xs font-medium text-dls-text">Saved memory</legend>
                     {resourceQuery.data.memories.length ? (
                       <div className="mt-2 grid gap-2">
                         {resourceQuery.data.memories.map((record) => (
@@ -1302,14 +1302,14 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       </div>
                     ) : (
                       <div className="mt-2 flex items-center justify-between gap-3">
-                        <p className="text-xs leading-5 text-dls-secondary">No saved Memory is available yet.</p>
+                        <p className="text-xs leading-5 text-dls-secondary">No saved memory is available yet.</p>
                         <Button size="xs" variant="outline" onClick={props.onBrowseMemory}>Add memory</Button>
                       </div>
                     )}
                   </fieldset>
 
                   <p className="text-xs leading-5 text-dls-secondary">
-                    Private files and saved Memory are sent only through a model approved for private data. This coworker cannot bypass that rule.
+                    Files and saved memory only go to a model approved for private data. This coworker cannot change that.
                   </p>
                   <div className="flex gap-2">
                     <Button
@@ -1327,16 +1327,16 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
 
             <details className="border-b border-dls-border/70 py-4">
               <summary className="min-h-8 cursor-pointer text-sm font-semibold text-dls-text outline-none focus-visible:ring-2 focus-visible:ring-ring/35">
-                Safety limits
+                Limits
               </summary>
-              <p className="mt-1 text-xs leading-5 text-dls-secondary">See how often this coworker may read data, run checks, or prepare a wallet review.</p>
+              <p className="mt-1 text-xs leading-5 text-dls-secondary">See how many app reads, recurring checks, and wallet reviews this coworker can make.</p>
               <dl className="mt-3 grid gap-2 text-xs leading-5">
-                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Apps this role can use</dt><dd className="text-right text-dls-text">{selectedCoworker.allowedAppIds.map(humanizeId).join(", ") || "None"}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">App lookups per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxReadCallsPerRun}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Apps allowed</dt><dd className="text-right text-dls-text">{selectedCoworker.allowedAppIds.map(humanizeId).join(", ") || "None"}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">App reads per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxReadCallsPerRun}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Wallet reviews per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxPrepareCallsPerFamily > 0 ? selectedCoworker.limits.maxPrepareCallsPerFamily : "Not available"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Active checks</dt><dd className="text-dls-text">{selectedCoworker.limits.maxActiveWatches > 0 ? `${detailQuery.data?.watches.filter((watch) => watch.state === "active").length ?? 0} of ${selectedCoworker.limits.maxActiveWatches}` : "Not available"}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Per wallet action</dt><dd className="text-dls-text">{selectedCoworker.limits.perActionUsd > 0 ? `Up to $${selectedCoworker.limits.perActionUsd.toLocaleString()}` : "Not allowed"}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Daily wallet actions</dt><dd className="text-dls-text">{selectedCoworker.limits.dailyUsd > 0 ? `Up to $${selectedCoworker.limits.dailyUsd.toLocaleString()}` : "Not allowed"}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Maximum per wallet action</dt><dd className="text-dls-text">{selectedCoworker.limits.perActionUsd > 0 ? `Up to $${selectedCoworker.limits.perActionUsd.toLocaleString()}` : "Not allowed"}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Maximum per day</dt><dd className="text-dls-text">{selectedCoworker.limits.dailyUsd > 0 ? `Up to $${selectedCoworker.limits.dailyUsd.toLocaleString()}` : "Not allowed"}</dd></div>
               </dl>
             </details>
 
@@ -1400,9 +1400,9 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                               <dl className="mt-2 grid gap-1.5 border-y border-dls-border/70 py-2 text-dls-secondary">
                                 <div><dt className="inline font-medium text-dls-text">Wallet: </dt><dd className="inline break-all">{item.reviewedAction.signer ?? "Chosen in wallet"}</dd></div>
                                 <div><dt className="inline font-medium text-dls-text">Recipient: </dt><dd className="inline break-all">{item.reviewedAction.recipient ?? "Set by the connected app"}</dd></div>
-                                <div><dt className="inline font-medium text-dls-text">Safety preview: </dt><dd className="inline break-all">{item.reviewedAction.simulation.reference}</dd></div>
+                                <div><dt className="inline font-medium text-dls-text">Preview reference: </dt><dd className="inline break-all">{item.reviewedAction.simulation.reference}</dd></div>
                                 <div><dt className="inline font-medium text-dls-text">Checked: </dt><dd className="inline">{shortDate(item.reviewedAction.simulation.simulatedAt)}</dd></div>
-                                <div><dt className="inline font-medium text-dls-text">Safety checks: </dt><dd className="inline">{item.policy.limits.length ? `${item.policy.limits.filter((limit) => limit.passed).length} of ${item.policy.limits.length} passed` : "No numeric limits applied"}</dd></div>
+                                <div><dt className="inline font-medium text-dls-text">Safety checks: </dt><dd className="inline">{item.policy.limits.length ? `${item.policy.limits.filter((limit) => limit.passed).length} of ${item.policy.limits.length} passed` : "No amount limits apply"}</dd></div>
                                 {item.receipt ? <div><dt className="inline font-medium text-dls-text">Public receipt: </dt><dd className="inline break-all">{item.receipt.publicId}</dd></div> : null}
                               </dl>
                             </details>
@@ -1423,7 +1423,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       })}
                     </ul>
                   ) : <p className="mt-3 text-xs leading-5 text-dls-secondary">No wallet actions yet. Ask this coworker to prepare one when you are ready.</p>}
-                  {activeIntents.length > 4 ? <p className="mt-2 text-xs text-dls-secondary">{activeIntents.length - 4} more pending in wallet history.</p> : null}
+                  {activeIntents.length > 4 ? <p className="mt-2 text-xs text-dls-secondary">{activeIntents.length - 4} more wallet reviews in history.</p> : null}
                   </section>
 
                   <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-watches-title">
@@ -1564,7 +1564,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       </div>
                     </div>
                   ) : !canAddWatch && watchSources.length === 0 && selectedCoworker.automaticAuthorities.includes("watch") ? (
-                    <p className="mt-3 text-xs leading-5 text-dls-secondary">Give this coworker access to a read-only app before adding a check.</p>
+                    <p className="mt-3 text-xs leading-5 text-dls-secondary">Choose an app that can read data before adding a check.</p>
                   ) : activeWatchCount >= selectedCoworker.limits.maxActiveWatches && selectedCoworker.limits.maxActiveWatches > 0 ? (
                     <p className="mt-3 text-xs leading-5 text-dls-secondary">Pause or remove a check before adding another.</p>
                   ) : null}

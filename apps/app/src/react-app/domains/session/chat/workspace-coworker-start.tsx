@@ -60,7 +60,7 @@ export function WorkspaceCoworkerStart({
     <section className="border-y border-dls-border/55 py-4" aria-labelledby="workspace-coworker-start-title">
       <h3 id="workspace-coworker-start-title" className="text-base font-semibold text-dls-text">What should Matterhorn help you do?</h3>
       <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-        Describe the outcome in one sentence. Matterhorn will suggest the right coworker before anything starts.
+        Describe your goal in one sentence. Matterhorn will suggest the best fit, and you can change it.
       </p>
       <form
         className="mt-4"
@@ -122,12 +122,12 @@ export function WorkspaceCoworkerStart({
             className="inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-dls-text px-4 text-sm font-medium text-dls-background transition-colors hover:bg-dls-text/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-45"
             disabled={disabled || !trimmedOutcome}
           >
-            Continue
+            Choose access
           </button>
         </div>
       </form>
       <p id="workspace-coworker-safety" className="mt-3 text-xs leading-5 text-dls-secondary">
-        You choose what it can access next. It cannot see private keys or send funds on its own.
+        Next, you choose the apps and information it can use. It cannot see private keys or send funds on its own.
       </p>
     </section>
   );
