@@ -184,7 +184,12 @@ function routeTestCertification(): MatterhornWalrusCertification {
 
 async function boot(
   mode: "off" | "internal" | "invite",
-  options: { agentFiles?: boolean; walrus?: boolean; anchor?: boolean } = {},
+  options: {
+    agentFiles?: boolean;
+    walrus?: boolean;
+    anchor?: boolean;
+    anchorVerificationFailure?: boolean;
+  } = {},
 ) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-routes-"));
   roots.push(root);
@@ -316,6 +321,17 @@ async function boot(
       observedAt: new Date().toISOString(),
     });
     if (options.anchor) {
+      dependencies.cryptoEvidenceSuiAnchorPackageVerifier = async () => {
+        if (options.anchorVerificationFailure) {
+          throw new Error("simulated package substitution");
+        }
+        return {
+          network: "testnet",
+          moduleName: "evidence_anchor",
+          moduleSha256: "539ced005bc0305c990729c8f0c7f29db271fde69ed043e68e03cb5930735ce2",
+          verifiedAt: new Date().toISOString(),
+        };
+      };
       dependencies.cryptoEvidenceSuiAnchorTransactionBuilder = async (input) => {
         expect(input.network).toBe("sui:testnet");
         expect(input.signer).toBe(signer);
@@ -1367,6 +1383,7 @@ describe("crypto coworker HTTP boundary", () => {
       renewalAvailable: false,
       deletionAvailable: false,
       anchorAvailable: false,
+      anchorPackageStatus: "disabled",
       items: [],
     });
   });
@@ -1602,8 +1619,63 @@ describe("crypto coworker HTTP boundary", () => {
     expect(publishAfterDeletion.payload.code).toBe("crypto_evidence_walrus_publish_state_invalid");
   });
 
+  test("fails readiness and keeps anchoring unavailable when configured package provenance fails", async () => {
+    const server = await boot("internal", {
+      agentFiles: true,
+      walrus: true,
+      anchor: true,
+      anchorVerificationFailure: true,
+    });
+    const readiness = await request(server.base, "/health/ready");
+    expect(readiness.response.status).toBe(503);
+    expect(readiness.payload.checks).toMatchObject({
+      cryptoEvidenceSuiAnchorPackageConfigured: true,
+      cryptoEvidenceSuiAnchorPackageVerified: false,
+      cryptoEvidenceSuiAnchorPackageStatus: "verification_failed",
+      cryptoEvidenceSuiAnchorPackageReady: false,
+    });
+
+    const signup = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "evidence-anchor-failed@example.com", password: PASSWORD },
+    });
+    const sessionCookie = cookie(signup.response);
+    const workspaceId = String(
+      (await request(server.base, "/workspaces", { cookie: sessionCookie })).payload.items[0].id,
+    );
+    const listed = await request(
+      server.base,
+      `/workspace/${workspaceId}/crypto-evidence`,
+      { cookie: sessionCookie },
+    );
+    expect(listed.payload.anchorAvailable).toBe(false);
+    expect(listed.payload.anchorPackageStatus).toBe("verification_failed");
+    const unavailable = await request(
+      server.base,
+      `/workspace/${workspaceId}/crypto-evidence/evidence_valid_test_id/anchor`,
+      {
+        cookie: sessionCookie,
+        body: {
+          expectedRevision: 1,
+          network: "testnet",
+          signer: ROUTE_SIGNER,
+          acknowledgePermanentPublicAnchor: true,
+        },
+      },
+    );
+    expect(unavailable.response.status).toBe(503);
+    expect(unavailable.payload.code).toBe("crypto_evidence_sui_anchor_unavailable");
+  });
+
   test("anchors published evidence only through one exact connected-wallet transaction", async () => {
     const server = await boot("internal", { agentFiles: true, walrus: true, anchor: true });
+    const readiness = await request(server.base, "/health/ready");
+    expect(readiness.response.status).toBe(200);
+    expect(readiness.payload.checks).toMatchObject({
+      cryptoEvidenceSuiAnchorPackageConfigured: true,
+      cryptoEvidenceSuiAnchorPackageVerified: true,
+      cryptoEvidenceSuiAnchorPackageStatus: "verified",
+      cryptoEvidenceSuiAnchorPackageReady: true,
+    });
     const signupA = await request(server.base, "/api/auth/sign-up/email", {
       body: { email: "evidence-anchor-a@example.com", password: PASSWORD },
     });
@@ -1643,6 +1715,7 @@ describe("crypto coworker HTTP boundary", () => {
 
     const listed = await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieA });
     expect(listed.payload.anchorAvailable).toBe(true);
+    expect(listed.payload.anchorPackageStatus).toBe("verified");
     expect(listed.payload.items[0].anchor).toBeNull();
 
     const missingAcknowledgement = await request(
@@ -2133,6 +2206,7 @@ describe("crypto coworker HTTP boundary", () => {
       renewalAvailable: false,
       deletionAvailable: false,
       anchorAvailable: false,
+      anchorPackageStatus: "disabled",
       items: [],
     });
     expect((await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieB })).response.status)

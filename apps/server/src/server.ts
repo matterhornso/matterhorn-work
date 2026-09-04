@@ -414,6 +414,12 @@ import {
   type MatterhornSuiEvidenceAnchorTransactionBuilder,
   type MatterhornSuiEvidenceAnchorTransactionVerifier,
 } from "./crypto-evidence-sui-anchor.js";
+import {
+  createPinnedSuiEvidenceAnchorPackageVerifier,
+  MatterhornSuiEvidenceAnchorPackageError,
+  type MatterhornSuiEvidenceAnchorPackageVerification,
+  type MatterhornSuiEvidenceAnchorPackageVerifier,
+} from "./crypto-evidence-sui-anchor-package.js";
 import { cryptoCoworkerFeatureConfig } from "./crypto-coworker-config.js";
 import type { MatterhornPendingCryptoIntent } from "./crypto-pending-intent-store.js";
 import type { MatterhornSuiVerifiedPublicTransaction } from "./sui-public-transaction-verifier.js";
@@ -1379,6 +1385,12 @@ type ClientAccess = {
   workspace?: WorkspaceInfo;
 };
 
+type MatterhornSuiEvidenceAnchorPackageState = {
+  configured: boolean;
+  verified: boolean;
+  status: "disabled" | "verified" | "verification_failed";
+};
+
 export type MatterhornServerDependencies = {
   evidenceKeyManager?: MatterhornEvidenceKeyManager | null;
   cryptoEvidenceWalrusTransport?: MatterhornWalrusEvidenceTransport;
@@ -1389,6 +1401,7 @@ export type MatterhornServerDependencies = {
   cryptoEvidenceWalrusDeletionTransactionBuilder?: MatterhornWalrusDeletionTransactionBuilder;
   cryptoEvidenceSuiAnchorTransactionBuilder?: MatterhornSuiEvidenceAnchorTransactionBuilder;
   cryptoEvidenceSuiAnchorTransactionVerifier?: MatterhornSuiEvidenceAnchorTransactionVerifier;
+  cryptoEvidenceSuiAnchorPackageVerifier?: MatterhornSuiEvidenceAnchorPackageVerifier;
   agentFileWalrusTransactionStatusVerifier?: MatterhornSuiTransactionStatusVerifier;
   reviewedActionProtocolRefresh?: ReviewedActionRefreshAdapter;
 };
@@ -1564,10 +1577,38 @@ export async function startServer(
     })
     : null;
   const cryptoEvidenceSuiAnchorPackageId = process.env.MATTERHORN_EVIDENCE_ANCHOR_PACKAGE_ID?.trim() || null;
+  let cryptoEvidenceSuiAnchorPackageVerification: MatterhornSuiEvidenceAnchorPackageVerification | null = null;
+  if (cryptoEvidenceSuiAnchorPackageId) {
+    const packageVerifier = dependencies.cryptoEvidenceSuiAnchorPackageVerifier
+      ?? createPinnedSuiEvidenceAnchorPackageVerifier({ endpoint: new URL(SUI_GRPC_URLS.testnet) });
+    try {
+      cryptoEvidenceSuiAnchorPackageVerification = await packageVerifier({
+        network: "sui:testnet",
+        packageId: cryptoEvidenceSuiAnchorPackageId,
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (error) {
+      logger.log("error", "Configured Sui evidence-anchor package failed provenance verification", {
+        code: error instanceof MatterhornSuiEvidenceAnchorPackageError
+          ? error.code
+          : "crypto_evidence_sui_anchor_package_verification_failed",
+      });
+    }
+  }
+  const cryptoEvidenceSuiAnchorPackageState = {
+    configured: Boolean(cryptoEvidenceSuiAnchorPackageId),
+    verified: Boolean(cryptoEvidenceSuiAnchorPackageVerification),
+    status: !cryptoEvidenceSuiAnchorPackageId
+      ? "disabled"
+      : cryptoEvidenceSuiAnchorPackageVerification
+        ? "verified"
+        : "verification_failed",
+  } as const;
   const cryptoEvidenceSuiAnchor: MatterhornCryptoEvidenceSuiAnchorService | null = cryptoEvidenceStore
     && cryptoEvidenceRuntime.mode === "testnet"
     && cryptoEvidenceRuntime.certificationVerifier
     && cryptoEvidenceSuiAnchorPackageId
+    && cryptoEvidenceSuiAnchorPackageVerification
     ? guardedRuntime.createCryptoEvidenceSuiAnchorService({
       store: cryptoEvidenceStore,
       packageId: cryptoEvidenceSuiAnchorPackageId,
@@ -1791,6 +1832,7 @@ export async function startServer(
     cryptoEvidenceWalrusRenewal,
     cryptoEvidenceWalrusDeletion,
     cryptoEvidenceSuiAnchor,
+    cryptoEvidenceSuiAnchorPackageState,
     agentFileStore,
     agentFileWalrusPublisher,
     agentFileWalrusRenewal,
@@ -2117,6 +2159,11 @@ function operationalReadiness(
   agentFileStore?: MatterhornAgentFileStore | null,
   agentFileWalrusPublisher?: MatterhornAgentFileWalrusPublisher | null,
   recoveryErasureLedger?: MatterhornRecoveryErasureLedger | null,
+  cryptoEvidenceSuiAnchorPackageState: MatterhornSuiEvidenceAnchorPackageState = {
+    configured: false,
+    verified: false,
+    status: "disabled",
+  },
 ) {
   const workspaceConfigured = config.workspaces.length > 0;
   const workspaceStorageAvailable = config.workspaces.every((workspace) =>
@@ -2152,6 +2199,8 @@ function operationalReadiness(
     || process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED === "1";
   const hostBackupRequired = process.env.MATTERHORN_HOST_BACKUP_REQUIRED === "1";
   const hostBackupFreshCheck = !hostBackupRequired || hostBackupFresh();
+  const cryptoEvidenceSuiAnchorPackageReady = !cryptoEvidenceSuiAnchorPackageState.configured
+    || cryptoEvidenceSuiAnchorPackageState.verified;
   return {
     ready: workspaceConfigured
       && workspaceStorageAvailable
@@ -2167,7 +2216,8 @@ function operationalReadiness(
       && recoveryErasureLedgerReady
       && hostedBrowserOpencodePolicyReady
       && accountMessageGatewayReady
-      && hostBackupFreshCheck,
+      && hostBackupFreshCheck
+      && cryptoEvidenceSuiAnchorPackageReady,
     checks: {
       workspaceConfigured,
       workspaceStorageAvailable,
@@ -2194,6 +2244,10 @@ function operationalReadiness(
       accountMessageGatewayReady,
       hostBackupRequired,
       hostBackupFresh: hostBackupFreshCheck,
+      cryptoEvidenceSuiAnchorPackageConfigured: cryptoEvidenceSuiAnchorPackageState.configured,
+      cryptoEvidenceSuiAnchorPackageVerified: cryptoEvidenceSuiAnchorPackageState.verified,
+      cryptoEvidenceSuiAnchorPackageStatus: cryptoEvidenceSuiAnchorPackageState.status,
+      cryptoEvidenceSuiAnchorPackageReady,
     },
   };
 }
@@ -9261,6 +9315,7 @@ function createRoutes(
   cryptoEvidenceWalrusRenewal: MatterhornCryptoEvidenceWalrusRenewalService | null,
   cryptoEvidenceWalrusDeletion: MatterhornCryptoEvidenceWalrusDeletionService | null,
   cryptoEvidenceSuiAnchor: MatterhornCryptoEvidenceSuiAnchorService | null,
+  cryptoEvidenceSuiAnchorPackageState: MatterhornSuiEvidenceAnchorPackageState,
   agentFileStore: MatterhornAgentFileStore | null,
   agentFileWalrusPublisher: MatterhornAgentFileWalrusPublisher | null,
   agentFileWalrusRenewal: MatterhornAgentFileWalrusRenewalService | null,
@@ -9871,6 +9926,7 @@ function createRoutes(
       agentFileStore,
       agentFileWalrusPublisher,
       recoveryErasureLedger,
+      cryptoEvidenceSuiAnchorPackageState,
     );
     const response = jsonResponse({
       ok: readiness.ready,
@@ -9912,6 +9968,7 @@ function createRoutes(
       agentFileStore,
       agentFileWalrusPublisher,
       recoveryErasureLedger,
+      cryptoEvidenceSuiAnchorPackageState,
     );
     const launch = matterhornLaunchReadiness(authStore);
     const ok = infrastructure.ready && launch.ready;
@@ -9937,6 +9994,7 @@ function createRoutes(
       agentFileStore,
       agentFileWalrusPublisher,
       recoveryErasureLedger,
+      cryptoEvidenceSuiAnchorPackageState,
     );
     return new Response(operationalMetrics.renderPrometheus({
       ready: readiness.ready,
@@ -10707,6 +10765,7 @@ function createRoutes(
       renewalAvailable: Boolean(cryptoEvidenceWalrusRenewal),
       deletionAvailable: Boolean(cryptoEvidenceWalrusDeletion),
       anchorAvailable: Boolean(cryptoEvidenceSuiAnchor),
+      anchorPackageStatus: cryptoEvidenceSuiAnchorPackageState.status,
       items,
     });
   });
