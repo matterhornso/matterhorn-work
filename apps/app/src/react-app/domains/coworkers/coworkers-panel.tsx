@@ -1396,15 +1396,20 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                               <p className="mt-1 text-amber-12 dark:text-amber-11" role="status">{reviewUnavailableReason}</p>
                             ) : null}
                             <details className="mt-2">
-                              <summary className="min-h-8 cursor-pointer text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Transaction details</summary>
+                              <summary className="min-h-8 cursor-pointer text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Wallet review details</summary>
                               <dl className="mt-2 grid gap-1.5 border-y border-dls-border/70 py-2 text-dls-secondary">
                                 <div><dt className="inline font-medium text-dls-text">Wallet: </dt><dd className="inline break-all">{item.reviewedAction.signer ?? "Chosen in wallet"}</dd></div>
                                 <div><dt className="inline font-medium text-dls-text">Recipient: </dt><dd className="inline break-all">{item.reviewedAction.recipient ?? "Set by the connected app"}</dd></div>
-                                <div><dt className="inline font-medium text-dls-text">Preview reference: </dt><dd className="inline break-all">{item.reviewedAction.simulation.reference}</dd></div>
                                 <div><dt className="inline font-medium text-dls-text">Checked: </dt><dd className="inline">{shortDate(item.reviewedAction.simulation.simulatedAt)}</dd></div>
                                 <div><dt className="inline font-medium text-dls-text">Safety checks: </dt><dd className="inline">{item.policy.limits.length ? `${item.policy.limits.filter((limit) => limit.passed).length} of ${item.policy.limits.length} passed` : "No amount limits apply"}</dd></div>
-                                {item.receipt ? <div><dt className="inline font-medium text-dls-text">Public receipt: </dt><dd className="inline break-all">{item.receipt.publicId}</dd></div> : null}
                               </dl>
+                              <details className="mt-2 text-dls-secondary">
+                                <summary className="min-h-7 cursor-pointer outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Technical proof</summary>
+                                <dl className="mt-1 grid gap-1.5 border-l border-dls-border/70 pl-3">
+                                  <div><dt className="inline font-medium text-dls-text">Network check ID: </dt><dd className="inline break-all">{item.reviewedAction.simulation.reference}</dd></div>
+                                  {item.receipt ? <div><dt className="inline font-medium text-dls-text">Public receipt ID: </dt><dd className="inline break-all">{item.receipt.publicId}</dd></div> : null}
+                                </dl>
+                              </details>
                             </details>
                             <div className="mt-2 flex flex-wrap gap-1">
                               {canOpenCoworkerWalletIntent(item) ? (

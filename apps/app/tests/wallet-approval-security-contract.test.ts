@@ -66,8 +66,22 @@ describe("Wallet approval security contract", () => {
 
     expect(source).toContain("analyzeWalletTransaction");
     expect(source).toContain("analysis.displayValue");
-    expect(source).toContain("Decoded Token Action");
+    expect(source).toContain('label="Token action"');
     expect(source).not.toContain("{pending.value} ETH");
+  });
+
+  test("wallet review keeps plain terms primary and technical contract data collapsed", () => {
+    const source = readAppSource("domains/wallet/TransactionApproval.tsx");
+
+    expect(source).toContain("Review wallet action");
+    expect(source).toContain("Nothing moves until you continue in your wallet");
+    expect(source).toContain('label="Recipient"');
+    expect(source).toContain('label="Safety check"');
+    expect(source).toContain('label="Network fee estimate"');
+    expect(source).toContain("Show technical data");
+    expect(source).toContain("Continue in wallet");
+    expect(source).not.toContain('label="Calldata"');
+    expect(source).not.toContain('label="Simulation"');
   });
 
   test("approval modal uses one calm status summary and a dominant reviewed value", () => {
