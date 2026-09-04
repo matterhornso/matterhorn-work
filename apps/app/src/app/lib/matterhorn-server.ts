@@ -1927,6 +1927,28 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       token,
       timeoutMs: timeouts.status,
     }),
+    setCoworkerState: (
+      workspaceId: string,
+      coworkerId: string,
+      input: {
+        expectedRevision: number;
+        profileRevision: number;
+        decisions: MatterhornCoworkerAccountState["decisions"];
+        positions: MatterhornCoworkerAccountState["positions"];
+        unresolvedRisks: MatterhornCoworkerAccountState["unresolvedRisks"];
+        pendingActions: MatterhornCoworkerAccountState["pendingActions"];
+        evidenceReferences: MatterhornCoworkerAccountState["evidenceReferences"];
+        approvedMemoryIds: MatterhornCoworkerAccountState["approvedMemoryIds"];
+      },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      state: MatterhornCoworkerAccountState;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/state`, {
+      token,
+      method: "PUT",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
     getCoworkerResources: (workspaceId: string, coworkerId: string) => requestJson<{
       mode: "off" | "internal" | "invite" | "public";
       active: boolean;

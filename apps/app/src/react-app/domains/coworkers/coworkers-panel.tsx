@@ -22,6 +22,7 @@ import {
   MatterhornServerError,
   type MatterhornCoworkerAccountInboxItem,
   type MatterhornCoworkerAccountProfile,
+  type MatterhornCoworkerAccountState,
   type MatterhornCoworkerAccountWatch,
   type MatterhornCoworkerWalletIntentView,
   type MatterhornServerClient,
@@ -88,6 +89,7 @@ export type SessionCoworkersPanelProps = {
 type ConfirmAction =
   | { kind: "revoke"; coworker: MatterhornCoworkerAccountProfile }
   | { kind: "delete"; coworker: MatterhornCoworkerAccountProfile }
+  | { kind: "clear-memory"; coworker: MatterhornCoworkerAccountProfile; state: MatterhornCoworkerAccountState }
   | null;
 
 type CoworkerResourceDraft = {
@@ -183,6 +185,26 @@ export function coworkerActivitySummary(input: {
   return parts.length ? parts.join(" · ") : "No activity yet";
 }
 
+export function coworkerRememberedWorkSummary(state: MatterhornCoworkerAccountState | null | undefined): string {
+  if (!state) return "Nothing remembered from earlier chats yet";
+  const activeDecisions = state.decisions.filter((decision) => decision.status === "active").length;
+  const openActions = state.pendingActions.filter((action) => (
+    action.status === "needs_context" || action.status === "wallet_review"
+  )).length;
+  const parts = [
+    activeDecisions > 0 ? `${activeDecisions} ${activeDecisions === 1 ? "decision" : "decisions"}` : null,
+    state.positions.length > 0 ? `${state.positions.length} ${state.positions.length === 1 ? "position" : "positions"}` : null,
+    state.unresolvedRisks.length > 0 ? `${state.unresolvedRisks.length} open ${state.unresolvedRisks.length === 1 ? "risk" : "risks"}` : null,
+    openActions > 0 ? `${openActions} pending ${openActions === 1 ? "action" : "actions"}` : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length ? parts.join(" · ") : "Nothing remembered from earlier chats yet";
+}
+
+export function coworkerPositionSource(appId: string, network: string): string {
+  const labels = [humanizeId(appId), humanizeId(network)];
+  return labels.filter((label, index) => labels.indexOf(label) === index).join(" · ");
+}
+
 function coworkerErrorMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
     if (error.code === "coworker_runtime_disabled" || error.code === "coworker_execution_not_ready") {
@@ -190,6 +212,7 @@ function coworkerErrorMessage(error: unknown): string {
     }
     if (error.code === "coworker_not_found") return "This coworker no longer exists.";
     if (error.code === "coworker_revision_conflict") return "This coworker changed. Refresh and try again.";
+    if (error.code === "coworker_working_state_invalid") return "This coworker's remembered work changed. Refresh and try again.";
     if (error.code === "coworker_resource_scope_invalid") return "One of these files, memories, or apps is no longer available. Refresh and choose again.";
     if (error.code === "coworker_resource_recommendation_stale") return "The suggested access changed. Review the latest suggestion before saving.";
     if (error.code === "coworker_resources_stale") return "This access list changed. Review it again before starting work.";
@@ -529,6 +552,22 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     checkCount: detailQuery.data?.watches.length ?? 0,
     updateCount: detailQuery.data?.inbox.length ?? 0,
   });
+  const rememberedState = detailQuery.data?.state ?? null;
+  const activeDecisions = rememberedState?.decisions.filter((decision) => decision.status === "active") ?? [];
+  const rememberedPositions = rememberedState?.positions ?? [];
+  const rememberedRisks = rememberedState?.unresolvedRisks ?? [];
+  const rememberedEvidence = rememberedState?.evidenceReferences ?? [];
+  const approvedMemoryIds = rememberedState?.approvedMemoryIds ?? [];
+  const openActions = rememberedState?.pendingActions.filter((action) => (
+    action.status === "needs_context" || action.status === "wallet_review"
+  )) ?? [];
+  const rememberedWorkSummary = coworkerRememberedWorkSummary(rememberedState);
+  const hasRememberedWork = activeDecisions.length > 0
+    || rememberedPositions.length > 0
+    || rememberedRisks.length > 0
+    || openActions.length > 0
+    || rememberedEvidence.length > 0
+    || approvedMemoryIds.length > 0;
   const hasCoworkerActivity = activitySummary !== "No activity yet";
   const canAddWatch = Boolean(
     selectedCoworker?.state === "active"
@@ -798,6 +837,39 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       setBusyAction(null);
     }
   }, [props.client, refresh, showToast, workspaceId]);
+
+  const clearRememberedWork = useCallback(async (
+    coworker: MatterhornCoworkerAccountProfile,
+    state: MatterhornCoworkerAccountState,
+  ) => {
+    if (!props.client || !workspaceId) return;
+    setBusyAction(`memory:${coworker.id}`);
+    setError(null);
+    try {
+      await props.client.setCoworkerState(workspaceId, coworker.id, {
+        expectedRevision: state.revision,
+        profileRevision: coworker.revision,
+        decisions: [],
+        positions: [],
+        unresolvedRisks: [],
+        pendingActions: [],
+        evidenceReferences: [],
+        approvedMemoryIds: [],
+      });
+      setConfirmAction(null);
+      await queryClient.invalidateQueries({ queryKey: detailKey });
+      showToast({
+        title: "Remembered work cleared",
+        description: "Future chats will start without this coworker's saved decisions, positions, risks, or evidence.",
+        tone: "success",
+      });
+    } catch (cause) {
+      setConfirmAction(null);
+      setError(coworkerErrorMessage(cause));
+    } finally {
+      setBusyAction(null);
+    }
+  }, [detailKey, props.client, queryClient, showToast, workspaceId]);
 
   const toggleWatch = useCallback(async (watch: MatterhornCoworkerAccountWatch) => {
     if (!props.client || !workspaceId || !selectedCoworker) return;
@@ -1347,6 +1419,111 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
               ) : null}
             </section>
 
+            {detailQuery.data ? (
+              <details className="border-b border-dls-border/70 py-4">
+                <summary className="min-h-8 cursor-pointer list-none outline-none focus-visible:ring-2 focus-visible:ring-ring/35 [&::-webkit-details-marker]:hidden">
+                  <span className="block text-sm font-semibold text-dls-text">What it remembers</span>
+                  <span className="mt-1 block text-xs leading-5 text-dls-secondary">{rememberedWorkSummary}</span>
+                </summary>
+                <div className="mt-3 border-t border-dls-border/60 pt-3">
+                  <p className="text-xs leading-5 text-dls-secondary">
+                    This short list helps with future chats. Matterhorn does not replay the full conversation.
+                  </p>
+
+                  {activeDecisions.length ? (
+                    <section className="mt-4" aria-labelledby="coworker-remembered-decisions-title">
+                      <h4 id="coworker-remembered-decisions-title" className="text-xs font-medium text-dls-text">Decisions</h4>
+                      <ul className="mt-1 divide-y divide-dls-border/60">
+                        {activeDecisions.map((decision) => (
+                          <li key={decision.id} className="py-2 text-xs leading-5">
+                            <p className="text-dls-text">{decision.summary}</p>
+                            <p className="text-dls-secondary">Saved {shortDate(decision.decidedAt)}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+
+                  {rememberedPositions.length ? (
+                    <section className="mt-4" aria-labelledby="coworker-remembered-positions-title">
+                      <h4 id="coworker-remembered-positions-title" className="text-xs font-medium text-dls-text">Positions</h4>
+                      <ul className="mt-1 divide-y divide-dls-border/60">
+                        {rememberedPositions.map((position) => (
+                          <li key={position.id} className="py-2 text-xs leading-5">
+                            <p className="text-dls-text">
+                              {position.asset} · {humanizeId(position.side)}{position.size ? ` ${position.size}` : ""}
+                            </p>
+                            <p className="text-dls-secondary">
+                              {coworkerPositionSource(position.appId, position.network)} · Checked {shortDate(position.observedAt)}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+
+                  {rememberedRisks.length ? (
+                    <section className="mt-4" aria-labelledby="coworker-remembered-risks-title">
+                      <h4 id="coworker-remembered-risks-title" className="text-xs font-medium text-dls-text">Open risks</h4>
+                      <ul className="mt-1 divide-y divide-dls-border/60">
+                        {rememberedRisks.map((risk) => (
+                          <li key={risk.id} className="py-2 text-xs leading-5">
+                            <p className={cn(
+                              risk.severity === "critical" || risk.severity === "high"
+                                ? "text-destructive"
+                                : "text-dls-text",
+                            )}>
+                              {humanizeId(risk.severity)} · {risk.summary}
+                            </p>
+                            <p className="text-dls-secondary">Open since {shortDate(risk.openedAt)}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+
+                  {openActions.length ? (
+                    <section className="mt-4" aria-labelledby="coworker-remembered-actions-title">
+                      <h4 id="coworker-remembered-actions-title" className="text-xs font-medium text-dls-text">Pending actions</h4>
+                      <ul className="mt-1 divide-y divide-dls-border/60">
+                        {openActions.map((action) => (
+                          <li key={action.id} className="flex items-start justify-between gap-3 py-2 text-xs leading-5">
+                            <span className="text-dls-text">
+                              {action.status === "wallet_review" ? "Waiting for wallet review" : "Needs more information"}
+                            </span>
+                            <span className="shrink-0 text-right text-dls-secondary">Until {shortDate(action.expiresAt)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+
+                  {!hasRememberedWork || !rememberedState ? (
+                    <p className="mt-4 text-xs leading-5 text-dls-secondary">
+                      Decisions, positions, risks, and source checks will appear here as you work.
+                    </p>
+                  ) : (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-dls-border/60 pt-3">
+                      <p className="text-xs leading-5 text-dls-secondary">
+                        {rememberedEvidence.length} source {rememberedEvidence.length === 1 ? "check" : "checks"}
+                        {approvedMemoryIds.length
+                          ? ` · ${approvedMemoryIds.length} saved ${approvedMemoryIds.length === 1 ? "memory item" : "memory items"}`
+                          : ""}
+                      </p>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        disabled={busyAction !== null}
+                        onClick={() => setConfirmAction({ kind: "clear-memory", coworker: selectedCoworker, state: rememberedState })}
+                      >
+                        Clear remembered work
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </details>
+            ) : null}
+
             <details className="border-b border-dls-border/70 py-4">
               <summary className="min-h-8 cursor-pointer text-sm font-semibold text-dls-text outline-none focus-visible:ring-2 focus-visible:ring-ring/35">
                 Limits
@@ -1658,16 +1835,30 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
 
       <ConfirmModal
         open={Boolean(confirmAction)}
-        title={confirmAction?.kind === "delete" ? "Delete this coworker?" : "Disable this coworker permanently?"}
+        title={confirmAction?.kind === "delete"
+          ? "Delete this coworker?"
+          : confirmAction?.kind === "clear-memory"
+            ? "Clear remembered work?"
+            : "Disable this coworker permanently?"}
         message={confirmAction?.kind === "delete"
           ? "This removes the saved coworker profile. It cannot be undone."
-          : "This cannot be undone. New chats and checks stop, connected apps are blocked, and unfinished wallet reviews are cancelled."}
-        confirmLabel={busyAction ? "Working…" : confirmAction?.kind === "delete" ? "Delete coworker" : "Disable coworker"}
-        cancelLabel="Keep coworker"
-        variant="danger"
+          : confirmAction?.kind === "clear-memory"
+            ? "This clears its saved decisions, positions, risks, pending actions, and source checks. Chats, files, saved Memory, app access, and wallet history stay in place."
+            : "This cannot be undone. New chats and checks stop, connected apps are blocked, and unfinished wallet reviews are cancelled."}
+        confirmLabel={busyAction
+          ? "Working…"
+          : confirmAction?.kind === "delete"
+            ? "Delete coworker"
+            : confirmAction?.kind === "clear-memory"
+              ? "Clear remembered work"
+              : "Disable coworker"}
+        cancelLabel={confirmAction?.kind === "clear-memory" ? "Keep remembered work" : "Keep coworker"}
+        variant={confirmAction?.kind === "clear-memory" ? "warning" : "danger"}
+        confirmButtonVariant={confirmAction?.kind === "clear-memory" ? "outline" : undefined}
         onConfirm={() => {
           if (!confirmAction) return;
           if (confirmAction.kind === "delete") void deleteCoworker(confirmAction.coworker);
+          else if (confirmAction.kind === "clear-memory") void clearRememberedWork(confirmAction.coworker, confirmAction.state);
           else void transitionCoworker(confirmAction.coworker, "revoked");
         }}
         onCancel={() => {
