@@ -18,7 +18,6 @@ export const DESK_TRANSACTION_SUPPORT_LEVELS = [
 export type DeskTransactionSupportLevel = (typeof DESK_TRANSACTION_SUPPORT_LEVELS)[number];
 
 export const DESK_TRANSACTION_SUBMISSION_AUTHORITIES = [
-  "matterhorn_after_signature",
   "connected_wallet",
   "external_signer",
   "external_client",
@@ -130,10 +129,18 @@ type DeskActionTransactionContractInput = Omit<
 export function defineDeskTransactionContract(
   input: DeskActionTransactionContractInput,
 ): DeskActionTransactionContract {
+  const expectedAuthority: Record<DeskTransactionSupportLevel, DeskTransactionSubmissionAuthority> = {
+    connected_wallet: "connected_wallet",
+    external_signer: "external_signer",
+    external_client: "external_client",
+    not_supported: "none",
+  };
+  if (input.submissionAuthority !== expectedAuthority[input.supportLevel]) {
+    throw new Error("desk_transaction_submission_authority_invalid");
+  }
   const availableInsideMatterhorn =
     input.supportLevel === "connected_wallet"
-    && (input.submissionAuthority === "matterhorn_after_signature"
-      || input.submissionAuthority === "connected_wallet");
+    && input.submissionAuthority === "connected_wallet";
   const userCanComplete = input.supportLevel !== "not_supported";
 
   return {
