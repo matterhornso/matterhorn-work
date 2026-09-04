@@ -149,41 +149,184 @@ export const FORBIDDEN_MEMORY_SECRET_PATTERNS = [
   /\b[A-Za-z0-9_]+_(API_KEY|SECRET)\s*=/i,
 ];
 
-function deepStringify(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  if (Array.isArray(value)) return value.map(deepStringify).join(" ");
-  if (typeof value === "object") {
-    return (
-      Object.entries(value as Record<string, unknown>)
-        .map(([key, val]) => `${key} ${deepStringify(val)}`)
-        .join(" ") + " "
-    );
+const CRYPTO_SECRET_TEXT_PATTERNS = [
+  /-----BEGIN (?:EC |ENCRYPTED |OPENSSH |RSA )?PRIVATE KEY-----/i,
+  /\bsuiprivkey1[0-9a-z]{40,}\b/i,
+  /\b(?:xprv|tprv|yprv|zprv|uprv|vprv|Yprv|Zprv|Uprv|Vprv)[1-9A-HJ-NP-Za-km-z]{60,}\b/,
+  /\b(?:5[1-9A-HJ-NP-Za-km-z]{50}|9[1-9A-HJ-NP-Za-km-z]{50}|[KLc][1-9A-HJ-NP-Za-km-z]{51})\b/,
+];
+const CRYPTO_32_BYTE_TOKEN = /\b(?:0x)?[a-f0-9]{64}\b/gi;
+const PUBLIC_CRYPTO_TEXT_CONTEXT = /"?(?:transaction|tx|block|object|receipt|content)?[ _-]*(?:hash|digest|address|account|checksum|sha-?256|public[ _-]?key|transaction[ _-]?signature)"?\s*[:=]\s*["']?\s*$/i;
+const PUBLIC_CRYPTO_FIELD = /(?:hash|digest|address|account|checksum|sha256|publickey|transactionsignature)$/;
+const MAX_MEMORY_SECRET_SCAN_CONTAINERS = 4_096;
+const MAX_MEMORY_SECRET_SCAN_NODES = 16_384;
+const MAX_MEMORY_SECRET_SCAN_CHARACTERS = 1_000_000;
+const MEMORY_SECRET_SCAN_LIMIT_PATH = "body.__scan_limit_exceeded__";
+
+function isMemoryRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPublicCryptoEvidenceField(fieldName: string | null): boolean {
+  if (!fieldName) return false;
+  const normalized = fieldName.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  return PUBLIC_CRYPTO_FIELD.test(normalized);
+}
+
+function containsUnlabelledCryptoKey(value: string, fieldName: string | null): boolean {
+  if (isPublicCryptoEvidenceField(fieldName)) return false;
+  for (const match of value.matchAll(CRYPTO_32_BYTE_TOKEN)) {
+    const start = match.index ?? 0;
+    const context = value.slice(Math.max(0, start - 80), start);
+    if (!PUBLIC_CRYPTO_TEXT_CONTEXT.test(context)) return true;
   }
-  return "";
+  return false;
+}
+
+function isPrivateJwk(value: Record<string, unknown>): boolean {
+  return typeof value.kty === "string" && typeof value.d === "string" && value.d.length > 0;
+}
+
+function isEthereumKeyStore(value: Record<string, unknown>): boolean {
+  if ((value.version !== 3 && value.version !== "3") || typeof value.address !== "string") return false;
+  const crypto = isMemoryRecordValue(value.crypto)
+    ? value.crypto
+    : isMemoryRecordValue(value.Crypto)
+      ? value.Crypto
+      : null;
+  return Boolean(crypto)
+    && typeof crypto?.cipher === "string"
+    && typeof crypto.ciphertext === "string"
+    && typeof crypto.kdf === "string"
+    && typeof crypto.mac === "string";
+}
+
+function containsCryptoSecretFormat(value: unknown): boolean {
+  const pending: Array<{ value: unknown; fieldName: string | null }> = [{ value, fieldName: null }];
+  const seen = new WeakSet<object>();
+  let containersInspected = 0;
+  let nodesInspected = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) continue;
+    nodesInspected += 1;
+    if (nodesInspected > MAX_MEMORY_SECRET_SCAN_NODES) return true;
+    if (typeof current.value === "string") {
+      const text = current.value;
+      if (CRYPTO_SECRET_TEXT_PATTERNS.some((pattern) => pattern.test(text))) return true;
+      if (containsUnlabelledCryptoKey(text, current.fieldName)) return true;
+      continue;
+    }
+    if (Array.isArray(current.value)) {
+      if (seen.has(current.value)) return true;
+      seen.add(current.value);
+      containersInspected += 1;
+      if (containersInspected > MAX_MEMORY_SECRET_SCAN_CONTAINERS) return true;
+      if (pending.length + current.value.length > MAX_MEMORY_SECRET_SCAN_NODES) return true;
+      if (current.value.length === 64
+        && current.value.every((entry) => Number.isInteger(entry) && entry >= 0 && entry <= 255)) {
+        return true;
+      }
+      if (current.value.some((entry) => typeof entry === "string" && /^[A-Za-z0-9+/]{44}$/.test(entry))) {
+        return true;
+      }
+      for (const entry of current.value) pending.push({ value: entry, fieldName: null });
+      continue;
+    }
+    if (!isMemoryRecordValue(current.value)) continue;
+    if (seen.has(current.value)) return true;
+    seen.add(current.value);
+    containersInspected += 1;
+    if (containersInspected > MAX_MEMORY_SECRET_SCAN_CONTAINERS) return true;
+    if (isPrivateJwk(current.value) || isEthereumKeyStore(current.value)) return true;
+    const entries = Object.entries(current.value);
+    if (pending.length + entries.length > MAX_MEMORY_SECRET_SCAN_NODES) return true;
+    for (const [fieldName, entry] of entries) {
+      pending.push({ value: entry, fieldName });
+    }
+  }
+  return false;
+}
+
+function deepStringify(value: unknown): string {
+  const pending: unknown[] = [value];
+  const seen = new WeakSet<object>();
+  const parts: string[] = [];
+  let containersInspected = 0;
+  let nodesInspected = 0;
+  let charactersInspected = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    nodesInspected += 1;
+    if (nodesInspected > MAX_MEMORY_SECRET_SCAN_NODES) return MEMORY_SECRET_SCAN_LIMIT_PATH;
+    if (current === null || current === undefined) continue;
+    if (typeof current === "string" || typeof current === "number" || typeof current === "boolean") {
+      const text = String(current);
+      charactersInspected += text.length;
+      if (charactersInspected > MAX_MEMORY_SECRET_SCAN_CHARACTERS) return MEMORY_SECRET_SCAN_LIMIT_PATH;
+      parts.push(text);
+      continue;
+    }
+    if (typeof current !== "object") continue;
+    if (seen.has(current)) return MEMORY_SECRET_SCAN_LIMIT_PATH;
+    seen.add(current);
+    containersInspected += 1;
+    if (containersInspected > MAX_MEMORY_SECRET_SCAN_CONTAINERS) return MEMORY_SECRET_SCAN_LIMIT_PATH;
+    if (Array.isArray(current)) {
+      if (pending.length + current.length > MAX_MEMORY_SECRET_SCAN_NODES) return MEMORY_SECRET_SCAN_LIMIT_PATH;
+      for (let index = current.length - 1; index >= 0; index -= 1) pending.push(current[index]);
+      continue;
+    }
+    const entries = Object.entries(current as Record<string, unknown>);
+    if (pending.length + entries.length > MAX_MEMORY_SECRET_SCAN_NODES) return MEMORY_SECRET_SCAN_LIMIT_PATH;
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index];
+      if (!entry) continue;
+      charactersInspected += entry[0].length;
+      if (charactersInspected > MAX_MEMORY_SECRET_SCAN_CHARACTERS) return MEMORY_SECRET_SCAN_LIMIT_PATH;
+      parts.push(entry[0]);
+      pending.push(entry[1]);
+    }
+  }
+  return parts.join(" ");
 }
 
 export function findForbiddenMemorySecretFields(body: Record<string, unknown>): string[] {
   const found: string[] = [];
-  function scan(obj: Record<string, unknown>, prefix = "body") {
-    for (const [key, value] of Object.entries(obj)) {
-      const path = `${prefix}.${key}`;
+  const pending: Array<{ value: Record<string, unknown>; prefix: string }> = [{ value: body, prefix: "body" }];
+  const seen = new WeakSet<object>();
+  let containersInspected = 0;
+  let nodesScheduled = 1;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) continue;
+    if (seen.has(current.value)) return [...found, MEMORY_SECRET_SCAN_LIMIT_PATH];
+    seen.add(current.value);
+    containersInspected += 1;
+    if (containersInspected > MAX_MEMORY_SECRET_SCAN_CONTAINERS) {
+      return [...found, MEMORY_SECRET_SCAN_LIMIT_PATH];
+    }
+    const entries = Object.entries(current.value);
+    nodesScheduled += entries.length;
+    if (nodesScheduled > MAX_MEMORY_SECRET_SCAN_NODES) {
+      return [...found, MEMORY_SECRET_SCAN_LIMIT_PATH];
+    }
+    for (const [key, entry] of entries) {
+      const path = `${current.prefix}.${key}`;
       const keyLower = key.toLowerCase();
       if (FORBIDDEN_MEMORY_SECRET_FIELD_NAMES.some((forbidden) => keyLower === forbidden.toLowerCase())) {
         found.push(path);
       }
-      if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-        scan(value as Record<string, unknown>, path);
-      }
+      if (isMemoryRecordValue(entry)) pending.push({ value: entry, prefix: path });
     }
   }
-  scan(body);
   return found;
 }
 
 export function containsForbiddenMemorySecretMaterial(value: unknown): boolean {
+  if (containsCryptoSecretFormat(value)) return true;
   const haystack = deepStringify(value);
+  if (haystack === MEMORY_SECRET_SCAN_LIMIT_PATH) return true;
   return FORBIDDEN_MEMORY_SECRET_PATTERNS.some((pattern) => pattern.test(haystack));
 }
 
@@ -191,6 +334,16 @@ export function isForbiddenMemorySecretBody(body: Record<string, unknown>): bool
   return (
     findForbiddenMemorySecretFields(body).length > 0 || containsForbiddenMemorySecretMaterial(body)
   );
+}
+
+export function containsForbiddenMemoryRecordMaterial(
+  record: Pick<MatterhornMemoryRecord, "title" | "summary" | "body">,
+): boolean {
+  return isForbiddenMemorySecretBody(record.body)
+    || containsForbiddenMemorySecretMaterial({
+      title: record.title,
+      summary: record.summary,
+    });
 }
 
 export interface MatterhornMemoryValidationResult {
@@ -242,8 +395,8 @@ export function validateMemoryRecord(record: MatterhornMemoryRecord): Matterhorn
     errors.push(`sensitivity must be one of ${MATTERHORN_MEMORY_SENSITIVITIES.join(", ")}`);
   }
 
-  if (isForbiddenMemorySecretBody(record.body)) {
-    errors.push("body contains forbidden secret material");
+  if (containsForbiddenMemoryRecordMaterial(record)) {
+    errors.push("record contains forbidden secret material");
   }
 
   return { ok: errors.length === 0, errors };
@@ -252,11 +405,11 @@ export function validateMemoryRecord(record: MatterhornMemoryRecord): Matterhorn
 export function redactForbiddenMemorySecrets(
   record: MatterhornMemoryRecord,
 ): MatterhornMemoryRedactionResult {
-  if (isForbiddenMemorySecretBody(record.body)) {
+  if (containsForbiddenMemoryRecordMaterial(record)) {
     return {
       recordId: record.id,
       redacted: true,
-      reason: "Record body contains forbidden secret material and cannot be remembered.",
+      reason: "Record contains forbidden secret material and cannot be remembered.",
       redactedFields: findForbiddenMemorySecretFields(record.body),
     };
   }

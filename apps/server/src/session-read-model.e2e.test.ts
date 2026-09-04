@@ -1695,6 +1695,57 @@ describe("workspace session read APIs", () => {
     )).toHaveLength(1);
   });
 
+  test("rescans legacy Memory before preflight or provider dispatch", async () => {
+    process.env.MATTERHORN_WORK_MEMORY_SCOPE = "workspace";
+    const workspaceRoot = await createWorkspaceRoot();
+    const memoryRoot = join(workspaceRoot, ".matterhorn-work", "memory");
+    await mkdir(memoryRoot, { recursive: true });
+    const secret = `suiprivkey1${"s".repeat(58)}`;
+    const legacyRecord = privateMemoryRecord({
+      summary: secret,
+      tags: ["bittensor", "workspace:ws_1"],
+    });
+    await writeFile(join(memoryRoot, "memory-index.json"), JSON.stringify({
+      version: "matterhorn.memory.index.v1",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+      entries: {
+        [legacyRecord.id]: {
+          record: legacyRecord,
+          markdownPath: join(memoryRoot, "legacy-memory.md"),
+          deleted: false,
+        },
+      },
+    }));
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const requestBody = {
+      parts: [{ type: "text", text: "Use my saved preference" }],
+      memoryIds: [legacyRecord.id],
+      agentId: "matterhorn-bittensor",
+      model: { providerID: "openai", modelID: "gpt-4.1-mini" },
+    };
+
+    for (const suffix of ["messages/preflight", "messages"]) {
+      const response = await fetch(`${base}/workspace/ws_1/sessions/ses_1/${suffix}`, {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      expect(response.status).toBe(400);
+      const payload = await response.json();
+      expect(payload).toMatchObject({ code: "memory_safety_rejected" });
+      expect(JSON.stringify(payload)).not.toContain(secret);
+    }
+    expect(mock.requests.filter(
+      (request) => request.pathname === "/session/ses_1/prompt_async",
+    )).toHaveLength(0);
+  });
+
   test("rejects client-authored system context before provider dispatch", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     const mock = startMockOpencode();

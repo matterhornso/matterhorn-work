@@ -268,6 +268,7 @@ import {
 import {
   MATTERHORN_MEMORY_SUGGESTION_VERSION,
   MATTERHORN_MEMORY_DESK_POLICY_MATRIX,
+  containsForbiddenMemoryRecordMaterial,
   detectMemoryDeskFromRecord,
   validateMemoryRecordAgainstDeskPolicy,
   type MatterhornMemoryDesk,
@@ -20584,6 +20585,13 @@ async function resolveSelectedMemoryContext(input: {
   const workspaceVault = memoryVaultForWorkspace(input.memoryVault, input.workspace);
   const records = await Promise.all(input.memoryIds.map(async (id) => {
     const record = assertWorkspaceMemoryRecord(await workspaceVault.getRecord(id), input.workspace);
+    if (containsForbiddenMemoryRecordMaterial(record)) {
+      throw new ApiError(
+        400,
+        "memory_safety_rejected",
+        "A selected Memory record contains content Matterhorn cannot send to a model. Remove it from Memory and try again.",
+      );
+    }
     if (!record.canUseInChat) {
       throw new ApiError(403, "memory_not_available_in_chat", "A selected Memory record is not approved for chat use.");
     }
