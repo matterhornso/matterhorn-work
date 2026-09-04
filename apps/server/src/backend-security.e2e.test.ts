@@ -24,6 +24,7 @@ import { auditLogPath } from "./audit.js";
 import {
   findForbiddenMemorySecretFields,
   containsForbiddenMemorySecretMaterial,
+  isForbiddenMemorySecretBody,
 } from "@matterhorn-work/types/memory";
 
 type Served = {
@@ -1430,6 +1431,100 @@ describe("Data-map contract: must not leak secrets", () => {
       const result = containsForbiddenMemorySecretMaterial({ value: input });
       expect(result).toBe(expectForbidden);
     }
+  });
+
+  test("unlabelled crypto private-key and wallet-export formats are rejected by Memory", () => {
+    const secretValues: unknown[] = [
+      `0x${"a".repeat(64)}`,
+      `suiprivkey1${"q".repeat(58)}`,
+      `K${"A".repeat(51)}`,
+      `xprv${"B".repeat(60)}`,
+      Array.from({ length: 64 }, (_, index) => index),
+      [`${"C".repeat(44)}`],
+      { account: { jwk: { kty: "EC", crv: "secp256k1", x: "public-x", y: "public-y", d: "private-d" } } },
+      {
+        version: 3,
+        address: "1".repeat(40),
+        crypto: {
+          cipher: "aes-128-ctr",
+          ciphertext: "a".repeat(64),
+          kdf: "scrypt",
+          mac: "b".repeat(64),
+        },
+      },
+    ];
+
+    for (const value of secretValues) {
+      expect(containsForbiddenMemorySecretMaterial({ value })).toBe(true);
+    }
+  });
+
+  test("Memory preserves explicitly identified public crypto evidence", () => {
+    const publicEvidence = {
+      transactionHash: `0x${"a".repeat(64)}`,
+      objectDigest: `0x${"b".repeat(64)}`,
+      suiAddress: `0x${"c".repeat(64)}`,
+      publicKey: `0x${"d".repeat(64)}`,
+    };
+
+    expect(containsForbiddenMemorySecretMaterial(publicEvidence)).toBe(false);
+  });
+
+  test("Memory fails closed when secret-format traversal exceeds its bounded scan", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+
+    expect(containsForbiddenMemorySecretMaterial(cyclic)).toBe(true);
+    expect(findForbiddenMemorySecretFields(cyclic)).toContain("body.__scan_limit_exceeded__");
+    expect(isForbiddenMemorySecretBody(cyclic)).toBe(true);
+
+    const overWide = { values: Array.from({ length: 16_385 }, (_, index) => `public-${index}`) };
+    expect(containsForbiddenMemorySecretMaterial(overWide)).toBe(true);
+    expect(isForbiddenMemorySecretBody(overWide)).toBe(true);
+  });
+
+  test("workspace Memory capture rejects an unlabelled crypto private key", async () => {
+    const { base, ownerToken } = await boot();
+    const result = await jsonFetch(base, "/workspace/ws_security/memory/capture", ownerToken, {
+      method: "POST",
+      body: JSON.stringify({
+        record: record({
+          kind: "project_fact",
+          title: "Imported account data",
+          summary: "Imported account material.",
+          body: { value: `suiprivkey1${"q".repeat(58)}` },
+          tags: ["security-test"],
+          sensitivity: "private",
+          canExport: false,
+        }),
+      }),
+    });
+
+    expect(result.response.status).toBe(400);
+    expect(result.payload.code).toBe("memory_safety_rejected");
+    expect(JSON.stringify(result.payload)).not.toContain(`suiprivkey1${"q".repeat(58)}`);
+  });
+
+  test("workspace Memory capture rejects secret material outside the record body", async () => {
+    const { base, ownerToken } = await boot();
+    const secret = `suiprivkey1${"r".repeat(58)}`;
+    const result = await jsonFetch(base, "/workspace/ws_security/memory/capture", ownerToken, {
+      method: "POST",
+      body: JSON.stringify({
+        record: record({
+          title: "Imported account data",
+          summary: secret,
+          body: { purpose: "Account import" },
+          tags: ["security-test"],
+          sensitivity: "private",
+          canExport: false,
+        }),
+      }),
+    });
+
+    expect(result.response.status).toBe(400);
+    expect(result.payload.code).toBe("memory_safety_rejected");
+    expect(JSON.stringify(result.payload)).not.toContain(secret);
   });
 
   test("workspace evidence serializes to JSON without leaking raw secrets", async () => {
