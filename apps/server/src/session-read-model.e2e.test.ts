@@ -1939,7 +1939,9 @@ describe("workspace session read APIs", () => {
         headers: { ...auth(openwork.token), "Content-Type": "application/json" },
         body: JSON.stringify({ command: "review", arguments: "" }),
       }),
-      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 100)),
+      // This guards against accidentally awaiting the unresolved upstream
+      // command, not against normal CI scheduler latency.
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 2_000)),
     ]);
 
     expect(response).not.toBe("timeout");
