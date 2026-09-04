@@ -2,9 +2,19 @@ import type { WalletClient } from "viem";
 
 export const POLYMARKET_CHAIN_ID = 137;
 export const POLYMARKET_CLOB_HOST = "https://clob.polymarket.com";
+export const POLYMARKET_GEOBLOCK_URL = "https://polymarket.com/api/geoblock";
 export const POLYMARKET_LIVE_CONFIRMATION = "SUBMIT POLYMARKET ORDER";
 export const POLYMARKET_CANCEL_CONFIRMATION = "CANCEL POLYMARKET ORDERS";
 export const POLYMARKET_CANCEL_ALL_CONFIRMATION = "CANCEL ALL POLYMARKET ORDERS";
+
+const POLYMARKET_GEOBLOCK_TIMEOUT_MS = 5_000;
+const POLYMARKET_GEOBLOCK_MAX_BYTES = 2_048;
+
+export type PolymarketUserEligibility = {
+  status: "allowed" | "blocked";
+  country: string;
+  region: string;
+};
 
 export type PolymarketPreparedOrder = {
   tradeSide: "BUY" | "SELL";
@@ -44,6 +54,75 @@ type PolymarketOrderResponse = {
   takingAmount?: string;
   makingAmount?: string;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * Polymarket's geoblock endpoint evaluates the requesting IP. This check must
+ * therefore run in the user's browser, not through Matterhorn's backend. The
+ * returned IP is deliberately validated and discarded rather than exposed to
+ * application state, telemetry, or receipts.
+ */
+export async function checkPolymarketUserEligibility(): Promise<PolymarketUserEligibility> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), POLYMARKET_GEOBLOCK_TIMEOUT_MS);
+  try {
+    const response = await globalThis.fetch(POLYMARKET_GEOBLOCK_URL, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "omit",
+      redirect: "error",
+      referrerPolicy: "no-referrer",
+      signal: controller.signal,
+    });
+    const contentLength = response.headers.get("content-length");
+    if (!response.ok
+      || response.url !== POLYMARKET_GEOBLOCK_URL
+      || !response.headers.get("content-type")?.toLowerCase().startsWith("application/json")
+      || (contentLength !== null
+        && (!/^\d+$/.test(contentLength) || Number(contentLength) > POLYMARKET_GEOBLOCK_MAX_BYTES))) {
+      throw new Error("polymarket_user_eligibility_unverified");
+    }
+    const raw = await response.text();
+    if (new TextEncoder().encode(raw).byteLength > POLYMARKET_GEOBLOCK_MAX_BYTES) {
+      throw new Error("polymarket_user_eligibility_unverified");
+    }
+    const payload: unknown = JSON.parse(raw);
+    if (!isRecord(payload)
+      || typeof payload.blocked !== "boolean"
+      || typeof payload.ip !== "string"
+      || payload.ip.length < 3
+      || payload.ip.length > 64
+      || typeof payload.country !== "string"
+      || !/^[A-Z]{2}$/.test(payload.country)
+      || typeof payload.region !== "string"
+      || payload.region.length > 32) {
+      throw new Error("polymarket_user_eligibility_unverified");
+    }
+    return {
+      status: payload.blocked ? "blocked" : "allowed",
+      country: payload.country,
+      region: payload.region,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message === "polymarket_user_eligibility_unverified") {
+      throw new Error("Matterhorn could not verify your location directly with Polymarket. No order was sent.");
+    }
+    throw new Error("Matterhorn could not verify your location directly with Polymarket. No order was sent.");
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
+export async function assertPolymarketUserCanPlaceOrders(): Promise<PolymarketUserEligibility> {
+  const eligibility = await checkPolymarketUserEligibility();
+  if (eligibility.status === "blocked") {
+    throw new Error("Polymarket reports that trading is unavailable from your current location. No order was sent.");
+  }
+  return eligibility;
+}
 
 export function assertPolymarketPreparedOrder(order: PolymarketPreparedOrder, now = Date.now()) {
   if (!order.marketId || !order.tokenId || !order.outcome) {
@@ -88,6 +167,7 @@ export async function submitPolymarketOrder(args: {
   if (args.walletClient.chain?.id !== POLYMARKET_CHAIN_ID) {
     throw new Error("Switch the connected wallet to Polygon before submitting.");
   }
+  await assertPolymarketUserCanPlaceOrders();
 
   const { Chain, ClobClient, OrderType, Side } = await import("@polymarket/clob-client");
   const unauthenticated = new ClobClient(

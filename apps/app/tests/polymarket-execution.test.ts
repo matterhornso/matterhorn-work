@@ -1,15 +1,35 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   POLYMARKET_CHAIN_ID,
   POLYMARKET_CANCEL_ALL_CONFIRMATION,
   POLYMARKET_CANCEL_CONFIRMATION,
+  POLYMARKET_GEOBLOCK_URL,
   POLYMARKET_LIVE_CONFIRMATION,
+  assertPolymarketUserCanPlaceOrders,
   assertPolymarketPreparedOrder,
+  checkPolymarketUserEligibility,
   normalizePolymarketOrderIds,
   submitPolymarketOrder,
   type PolymarketPreparedOrder,
 } from "../src/react-app/domains/wallet/polymarket-execution";
 import type { WalletClient } from "viem";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+function geoblockResponse(payload: unknown, overrides: Partial<Response> = {}): Response {
+  const raw = JSON.stringify(payload);
+  return {
+    ok: true,
+    url: POLYMARKET_GEOBLOCK_URL,
+    headers: new Headers({ "content-type": "application/json", "content-length": String(raw.length) }),
+    text: async () => raw,
+    ...overrides,
+  } as Response;
+}
 
 function prepared(overrides: Partial<PolymarketPreparedOrder> = {}): PolymarketPreparedOrder {
   return {
@@ -33,6 +53,63 @@ function prepared(overrides: Partial<PolymarketPreparedOrder> = {}): PolymarketP
 }
 
 describe("Polymarket reviewed execution", () => {
+  it("checks eligibility from the user's browser without credentials or referrer data", async () => {
+    const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(geoblockResponse({
+      blocked: false,
+      ip: "203.0.113.7",
+      country: "CH",
+      region: "ZH",
+    }));
+    const result = await checkPolymarketUserEligibility();
+    expect(result).toEqual({ status: "allowed", country: "CH", region: "ZH" });
+    expect(JSON.stringify(result)).not.toContain("203.0.113.7");
+    expect(fetcher).toHaveBeenCalledWith(POLYMARKET_GEOBLOCK_URL, expect.objectContaining({
+      method: "GET",
+      cache: "no-store",
+      credentials: "omit",
+      redirect: "error",
+      referrerPolicy: "no-referrer",
+    }));
+  });
+
+  it("fails closed when the user's location is blocked or cannot be verified", async () => {
+    const fetcher = vi.spyOn(globalThis, "fetch");
+    fetcher.mockResolvedValueOnce(geoblockResponse({
+      blocked: true,
+      ip: "203.0.113.8",
+      country: "US",
+      region: "NY",
+    }));
+    await expect(assertPolymarketUserCanPlaceOrders()).rejects.toThrow("unavailable from your current location");
+
+    fetcher.mockResolvedValueOnce(geoblockResponse({
+      blocked: false,
+      ip: "203.0.113.8",
+      country: "US",
+      region: "NY",
+    }, { url: "https://example.com/api/geoblock" }));
+    await expect(assertPolymarketUserCanPlaceOrders()).rejects.toThrow("could not verify your location directly");
+  });
+
+  it("rejects malformed or oversized eligibility responses without retaining the reported IP", async () => {
+    const fetcher = vi.spyOn(globalThis, "fetch");
+    fetcher.mockResolvedValueOnce(geoblockResponse({
+      blocked: false,
+      ip: "203.0.113.9",
+      country: "Switzerland",
+      region: "ZH",
+    }));
+    await expect(checkPolymarketUserEligibility()).rejects.toThrow("could not verify your location directly");
+
+    fetcher.mockResolvedValueOnce(geoblockResponse({
+      blocked: false,
+      ip: "203.0.113.9",
+      country: "CH",
+      region: "ZH",
+    }, { headers: new Headers({ "content-type": "application/json", "content-length": "2049" }) }));
+    await expect(checkPolymarketUserEligibility()).rejects.toThrow("could not verify your location directly");
+  });
+
   it("accepts an unexpired, compliance-allowed exact order", () => {
     expect(() => assertPolymarketPreparedOrder(prepared(), Date.parse("2029-01-01"))).not.toThrow();
   });
@@ -90,6 +167,39 @@ describe("Polymarket reviewed execution", () => {
       walletClient: { account: { address: "0x1111111111111111111111111111111111111111" }, chain: { id: 1 } } as unknown as WalletClient,
       order: prepared(),
     })).rejects.toThrow("Switch the connected wallet to Polygon");
+  });
+
+  it("rechecks the user's current location immediately before loading the exchange client", async () => {
+    const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(geoblockResponse({
+      blocked: true,
+      ip: "203.0.113.10",
+      country: "US",
+      region: "NY",
+    }));
+    await expect(submitPolymarketOrder({
+      walletClient: {
+        account: { address: "0x1111111111111111111111111111111111111111" },
+        chain: { id: POLYMARKET_CHAIN_ID },
+      } as unknown as WalletClient,
+      order: prepared(),
+    })).rejects.toThrow("unavailable from your current location");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("checks the user's browser location before asking Matterhorn to prepare new-order terms", () => {
+    const source = readFileSync(
+      resolve(import.meta.dir, "../src/react-app/domains/wallet/pages/BittensorPanel.tsx"),
+      "utf8",
+    );
+    const prepareOrderStart = source.indexOf("const prepareOrder = useCallback");
+    const prepareOrder = source.slice(
+      prepareOrderStart,
+      source.indexOf("const signAndSubmit = useCallback", prepareOrderStart),
+    );
+    expect(prepareOrder).toContain('if (tradeAction !== "CANCEL")');
+    expect(prepareOrder).toContain("await assertPolymarketUserCanPlaceOrders()");
+    expect(prepareOrder.indexOf("await assertPolymarketUserCanPlaceOrders()"))
+      .toBeLessThan(prepareOrder.indexOf("fetchMatterhornApiJson<PolymarketSellPreviewResponse>"));
   });
 
   it("uses an explicit live-order confirmation phrase", () => {
