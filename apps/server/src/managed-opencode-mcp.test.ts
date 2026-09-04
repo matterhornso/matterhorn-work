@@ -14,6 +14,7 @@ import {
   buildManagedOpencodeRuntimeConfig,
   MANAGED_OPENCODE_PERMISSION_POLICY,
 } from "./managed-opencode-runtime-config.js";
+import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
 import { ensureWorkspaceFiles } from "./workspace-init.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -65,6 +66,34 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(content).not.toContain("apiKey");
   });
 
+  test("registers only verified Venice private models without embedding its API key", () => {
+    const content = buildManagedOpencodeRuntimeConfig({
+      serverUrl: "http://127.0.0.1:4130/",
+      clientToken: "test-client-token",
+      venicePrivateModels: [
+        { id: "z-ai-glm-5-3-flash", name: "GLM 5.3 Flash" },
+        { id: "private-tools", name: "Private Tools" },
+      ],
+    });
+    const config = JSON.parse(content);
+
+    expect(config.provider.venice).toMatchObject({
+      npm: "@ai-sdk/openai-compatible",
+      name: "Venice Private",
+      env: ["VENICE_API_KEY"],
+      options: {
+        baseURL: "https://api.venice.ai/api/v1",
+      },
+    });
+    expect(Object.keys(config.provider.venice.models)).toEqual([
+      "z-ai-glm-5-3-flash",
+      "private-tools",
+    ]);
+    const providerContent = JSON.stringify(config.provider.venice);
+    expect(providerContent).not.toContain("apiKey");
+    expect(providerContent).not.toContain("Bearer");
+  });
+
   test("keeps the authenticated MCP config out of workspace files", async () => {
     const root = await mkdtemp(join(tmpdir(), "matterhorn-managed-mcp-"));
     try {
@@ -97,6 +126,7 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_hyperliquid_get_orderbook");
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_bittensor_prepare_action");
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_prediction_markets_search");
+    expect(managedOpencodeMcpToolNames()).toContain("matterhorn_polymarket_get_orderbook");
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_polymarket_check_compliance");
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_sui_preview_transfer");
   });
@@ -286,6 +316,211 @@ describe("managed OpenCode Matterhorn MCP", () => {
       },
       observation: { freshnessRequired: true },
       result: { success: true, orderbook: { asset: "BTC" } },
+    });
+  });
+
+  test("allows only an exact uint256 Polymarket token ID on the legacy read route", async () => {
+    const tokenId = String((1n << 256n) - 1n);
+    let observedUrl = "";
+    const valid = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: "polymarket-book-valid",
+        method: "tools/call",
+        params: { name: "matterhorn_polymarket_get_orderbook", arguments: { tokenId } },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      fetchImpl: Object.assign(async (url: string | URL | Request) => {
+        observedUrl = String(url);
+        return Response.json({ success: true, tokenId, bids: [], asks: [] });
+      }, { preconnect: fetch.preconnect }),
+    });
+    expect(valid.status).toBe(200);
+    expect(observedUrl).toBe(`http://127.0.0.1:4130/api/polymarket/orderbook/${tokenId}`);
+
+    let invalidRequests = 0;
+    for (const invalidTokenId of [
+      "1?redirect=https://attacker.invalid",
+      String(1n << 256n),
+      "01",
+    ]) {
+      const invalid = await handleManagedOpencodeMcp({
+        payload: {
+          jsonrpc: "2.0",
+          id: `polymarket-book-invalid-${invalidRequests}`,
+          method: "tools/call",
+          params: {
+            name: "matterhorn_polymarket_get_orderbook",
+            arguments: { tokenId: invalidTokenId },
+          },
+        },
+        serverUrl: "http://127.0.0.1:4130",
+        clientToken: "test-client-token",
+        fetchImpl: Object.assign(async () => {
+          invalidRequests += 1;
+          throw new Error("invalid_token_must_not_reach_backend");
+        }, { preconnect: fetch.preconnect }),
+      });
+      expect(invalid.body).toMatchObject({
+        error: { code: -32603, message: "polymarket_token_id_invalid" },
+      });
+    }
+    expect(invalidRequests).toBe(0);
+  });
+
+  test("routes a bound coworker read through the certified executor without touching legacy routes", async () => {
+    let legacyCalls = 0;
+    const certifiedCalls: unknown[] = [];
+    const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: "certified-coworker-read",
+        method: "tools/call",
+        params: { name: "matterhorn_sui_get_balance", arguments: args },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      authorizeToolCall: () => ({
+        args,
+        runId: "run_coworker",
+        callId: "call_coworker",
+        workspaceId: "ws_coworker",
+        sessionId: "ses_coworker",
+        coworker: {
+          id: "cw_sui",
+          ownerId: "account_sui",
+          revision: 1,
+          policyVersion: "coworker-policy-1",
+          connectionId: "cxc_sui",
+          appId: "matterhorn.sui-testnet",
+          manifestRevision: "1.0.0",
+          actionId: "sui_account_read",
+          network: "sui:testnet",
+        },
+      }),
+      executeCertifiedTool: async (input) => {
+        certifiedCalls.push(input);
+        return {
+          version: "matterhorn.crypto-app-result.v1",
+          data: { balanceAtomic: "1000000000", symbol: "SUI" },
+          source: "crypto_app:matterhorn.sui-testnet",
+          observedAt: "2026-08-20T00:00:00.000Z",
+        };
+      },
+      fetchImpl: Object.assign(async () => {
+        legacyCalls += 1;
+        throw new Error("legacy_route_must_not_run");
+      }, { preconnect: fetch.preconnect }),
+    });
+    expect(legacyCalls).toBe(0);
+    expect(certifiedCalls).toHaveLength(1);
+    expect(certifiedCalls[0]).toMatchObject({
+      toolName: "matterhorn_sui_get_balance",
+      args,
+      authorization: {
+        runId: "run_coworker",
+        coworker: { connectionId: "cxc_sui", actionId: "sui_account_read" },
+      },
+    });
+    expect(result).toMatchObject({
+      status: 200,
+      body: { result: { structuredContent: { status: "success" } } },
+    });
+  });
+
+  test("surfaces only the transaction-airlock handoff from a certified coworker prepare call", async () => {
+    const args = {
+      network: "testnet",
+      sender: `0x${"1".repeat(64)}`,
+      recipient: `0x${"2".repeat(64)}`,
+      amountSui: "0.01",
+    };
+    const reviewedAction = buildReviewedActionHandoffV2({
+      handoff: {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "sui",
+        source: "agent-card",
+        draft: {
+          operation: "transfer_sui",
+          network: "testnet",
+          sender: args.sender,
+          recipient: args.recipient,
+          amount: args.amountSui,
+          coinType: null,
+          objectId: null,
+          transfers: [],
+        },
+      },
+      runId: "run_certified_prepare",
+      signer: args.sender,
+      simulation: {
+        reference: `sha256:${"a".repeat(64)}`,
+        block: "checkpoint:101",
+        simulatedAt: new Date("2026-09-01T12:00:00.000Z"),
+      },
+      preparedAt: new Date("2026-09-01T12:00:00.000Z"),
+    });
+    const metrics: ManagedMcpToolCallMetric[] = [];
+    let legacyCalls = 0;
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: "certified-coworker-prepare",
+        method: "tools/call",
+        params: { name: "matterhorn_sui_preview_transfer", arguments: args },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      authorizeToolCall: () => ({
+        args,
+        runId: "run_certified_prepare",
+        callId: "call_certified_prepare",
+        workspaceId: "ws_coworker",
+        sessionId: "ses_coworker",
+        coworker: {
+          id: "cw_sui",
+          ownerId: "account_sui",
+          revision: 1,
+          policyVersion: "coworker-policy-1",
+          connectionId: "cxc_sui",
+          appId: "matterhorn.sui-testnet",
+          manifestRevision: "1.0.0",
+          actionId: "sui_transfer_preview",
+          network: "sui:testnet",
+        },
+      }),
+      executeCertifiedTool: async () => ({
+        version: "matterhorn.crypto-wallet-review-result.v1",
+        status: "wallet_review_required",
+        reviewedAction,
+        pendingIntent: { id: "cpending_sui", revision: 1, state: "wallet_review" },
+      }),
+      fetchImpl: Object.assign(async () => {
+        legacyCalls += 1;
+        throw new Error("legacy_route_must_not_run");
+      }, { preconnect: fetch.preconnect }),
+      onToolCall: (metric) => metrics.push(metric),
+    });
+    expect(legacyCalls).toBe(0);
+    expect(result).toMatchObject({
+      status: 200,
+      body: {
+        result: {
+          structuredContent: {
+            status: "success",
+            reviewedAction: { intentHash: reviewedAction.intentHash },
+          },
+        },
+      },
+    });
+    expect(metrics).toHaveLength(1);
+    expect(metrics[0]).toMatchObject({
+      tool: "matterhorn_sui_preview_transfer",
+      access: "prepare",
+      outcome: "success",
+      reviewedAction: { intentHash: reviewedAction.intentHash },
     });
   });
 

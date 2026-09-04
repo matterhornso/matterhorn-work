@@ -1,0 +1,215 @@
+import { timingSafeEqual } from "node:crypto";
+
+import {
+  MATTERHORN_AGENT_FILE_WALRUS_PUBLICATION_VERSION,
+  type MatterhornAgentFileWalrusPublication,
+  type MatterhornAgentFileWalrusVerification,
+  type MatterhornStoredAgentFile,
+} from "@matterhorn-work/types/crypto-coworkers";
+
+import type { MatterhornAgentFileStore } from "./agent-file-store.js";
+import type {
+  MatterhornWalrusCertification,
+  MatterhornWalrusCertificationVerifier,
+  MatterhornWalrusEvidenceTransport,
+} from "./crypto-evidence-walrus-publisher.js";
+import { assessMatterhornWalrusStorageLifecycle } from "./walrus-storage-lifecycle.js";
+
+const DEFAULT_STORAGE_EPOCHS = 5;
+
+function validEpochs(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+function validateCertification(input: {
+  certification: MatterhornWalrusCertification;
+  blobId: string;
+  suiObjectId: string;
+  declaredEndEpoch: number;
+}): void {
+  const value = input.certification;
+  if (value.network !== "testnet"
+    || value.blobId !== input.blobId
+    || value.suiObjectId !== input.suiObjectId
+    || value.validUntilEpoch !== input.declaredEndEpoch
+    || !validEpochs(value.certifiedEpoch)
+    || !validEpochs(value.currentEpoch)
+    || !validEpochs(value.validUntilEpoch)
+    || value.certifiedEpoch > value.currentEpoch) {
+    throw new Error("agent_file_walrus_certification_invalid");
+  }
+  const lifecycle = assessMatterhornWalrusStorageLifecycle({
+    currentEpoch: value.currentEpoch,
+    validUntilEpoch: value.validUntilEpoch,
+  });
+  if (lifecycle.status === "expired") throw new Error("agent_file_walrus_certification_expired");
+}
+
+function verification(
+  publication: MatterhornAgentFileWalrusPublication,
+  certification: MatterhornWalrusCertification,
+  now: Date,
+): MatterhornAgentFileWalrusVerification {
+  return {
+    verified: true,
+    network: "testnet",
+    blobId: publication.blobId,
+    suiObjectId: publication.suiObjectId,
+    ciphertextSha256: publication.ciphertextSha256,
+    certifiedEpoch: certification.certifiedEpoch,
+    currentEpoch: certification.currentEpoch,
+    validUntilEpoch: certification.validUntilEpoch,
+    verifiedAt: now.toISOString(),
+    lifecycle: assessMatterhornWalrusStorageLifecycle({
+      currentEpoch: certification.currentEpoch,
+      validUntilEpoch: certification.validUntilEpoch,
+    }),
+  };
+}
+
+/**
+ * User-confirmed testnet backup boundary. The transport receives only the
+ * public AES-GCM envelope; file metadata, tenant identity, wrapped keys, and
+ * plaintext never cross this class.
+ */
+export class MatterhornAgentFileWalrusPublisher {
+  constructor(
+    private readonly store: MatterhornAgentFileStore,
+    private readonly transport: MatterhornWalrusEvidenceTransport,
+    private readonly verifyCertification: MatterhornWalrusCertificationVerifier,
+    private readonly storageEpochs = DEFAULT_STORAGE_EPOCHS,
+    private readonly now: () => Date = () => new Date(),
+  ) {
+    if (!Number.isSafeInteger(storageEpochs) || storageEpochs < 1 || storageEpochs > 53) {
+      throw new Error("agent_file_walrus_epochs_invalid");
+    }
+  }
+
+  async publish(input: {
+    workspaceId: string;
+    ownerId: string;
+    fileId: string;
+    expectedRevision: number;
+    signal: AbortSignal;
+    now?: Date;
+  }): Promise<MatterhornStoredAgentFile> {
+    if (input.signal.aborted) throw new Error("agent_file_walrus_aborted");
+    const startedAt = input.now ?? this.now();
+    if (!Number.isFinite(startedAt.getTime())) throw new Error("agent_file_time_invalid");
+    let candidate: ReturnType<MatterhornAgentFileStore["publicationCandidate"]> | null = null;
+    let claimId: string | null = null;
+    try {
+      const claimed = this.store.beginWalrusPublication({ ...input, now: startedAt });
+      candidate = claimed;
+      claimId = claimed.claimId;
+      if (candidate.item.publication) throw new Error("agent_file_already_published");
+      const upload = await this.transport.publish({
+        bytes: candidate.bytes,
+        ciphertextHash: candidate.ciphertextSha256,
+        storageEpochs: this.storageEpochs,
+        signal: input.signal,
+      });
+      const certification = await this.verifyCertification({
+        network: "testnet",
+        blobId: upload.blobId,
+        suiObjectId: upload.suiObjectId,
+        signal: input.signal,
+      });
+      validateCertification({
+        certification,
+        blobId: upload.blobId,
+        suiObjectId: upload.suiObjectId,
+        declaredEndEpoch: upload.declaredEndEpoch,
+      });
+      const readback = await this.transport.readByObjectId({
+        suiObjectId: upload.suiObjectId,
+        signal: input.signal,
+      });
+      try {
+        if (readback.length !== candidate.bytes.length || !timingSafeEqual(readback, candidate.bytes)) {
+          throw new Error("agent_file_walrus_readback_mismatch");
+        }
+      } finally {
+        readback.fill(0);
+      }
+      // The claim is short-lived. Re-read time after all external work so a
+      // stalled publisher cannot commit after its lease expires.
+      const finalizedAt = this.now();
+      if (!Number.isFinite(finalizedAt.getTime())) throw new Error("agent_file_time_invalid");
+      const publication: MatterhornAgentFileWalrusPublication = {
+        version: MATTERHORN_AGENT_FILE_WALRUS_PUBLICATION_VERSION,
+        network: "testnet",
+        blobId: upload.blobId,
+        suiObjectId: upload.suiObjectId,
+        ciphertextSha256: candidate.ciphertextSha256,
+        certifiedEpoch: certification.certifiedEpoch,
+        validUntilEpoch: certification.validUntilEpoch,
+        suiTransactionDigest: certification.suiTransactionDigest,
+        publishedAt: finalizedAt.toISOString(),
+        verifiedAt: finalizedAt.toISOString(),
+      };
+      return this.store.attachWalrusPublication({ ...input, claimId, publication, now: finalizedAt });
+    } finally {
+      candidate?.bytes.fill(0);
+      if (claimId) {
+        const finalizedAt = this.now();
+        this.store.endWalrusPublication({
+          workspaceId: input.workspaceId,
+          fileId: input.fileId,
+          claimId,
+          ...(Number.isFinite(finalizedAt.getTime()) ? { now: finalizedAt } : {}),
+        });
+      }
+    }
+  }
+
+  async verify(input: {
+    workspaceId: string;
+    ownerId: string;
+    fileId: string;
+    signal: AbortSignal;
+    now?: Date;
+  }): Promise<MatterhornAgentFileWalrusVerification> {
+    if (input.signal.aborted) throw new Error("agent_file_walrus_aborted");
+    const candidate = this.store.publicationCandidate(input);
+    try {
+      const publication = candidate.item.publication;
+      if (!publication) throw new Error("agent_file_walrus_not_published");
+      if (candidate.ciphertextSha256 !== publication.ciphertextSha256) {
+        throw new Error("agent_file_walrus_ciphertext_mismatch");
+      }
+      const certification = await this.verifyCertification({
+        network: "testnet",
+        blobId: publication.blobId,
+        suiObjectId: publication.suiObjectId,
+        signal: input.signal,
+      });
+      validateCertification({
+        certification,
+        blobId: publication.blobId,
+        suiObjectId: publication.suiObjectId,
+        declaredEndEpoch: publication.validUntilEpoch,
+      });
+      if (certification.certifiedEpoch !== publication.certifiedEpoch
+        || certification.suiTransactionDigest !== publication.suiTransactionDigest) {
+        throw new Error("agent_file_walrus_certification_changed");
+      }
+      const readback = await this.transport.readByObjectId({
+        suiObjectId: publication.suiObjectId,
+        signal: input.signal,
+      });
+      try {
+        if (readback.length !== candidate.bytes.length || !timingSafeEqual(readback, candidate.bytes)) {
+          throw new Error("agent_file_walrus_readback_mismatch");
+        }
+      } finally {
+        readback.fill(0);
+      }
+      const now = input.now ?? new Date();
+      if (!Number.isFinite(now.getTime())) throw new Error("agent_file_time_invalid");
+      return verification(publication, certification, now);
+    } finally {
+      candidate.bytes.fill(0);
+    }
+  }
+}

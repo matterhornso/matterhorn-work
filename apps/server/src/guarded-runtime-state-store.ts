@@ -27,6 +27,22 @@ export type GuardedRuntimeStateKind =
   | "agent_run_scope"
   | "user_message_binding"
   | "assistant_message_binding"
+  | "crypto_app_reservation"
+  | "crypto_app_consumed_dispatch"
+  | "crypto_pending_intent"
+  | "crypto_evidence_record"
+  | "crypto_evidence_run_index"
+  | "crypto_evidence_publication_claim"
+  | "crypto_evidence_operation_claim"
+  | "crypto_evidence_finalization"
+  | "crypto_evidence_audit"
+  | "crypto_evidence_verification_status"
+  | "crypto_evidence_renewal_intent"
+  | "crypto_evidence_deletion_intent"
+  | "crypto_evidence_sui_anchor_intent"
+  | "agent_file_record"
+  | "agent_file_operation_claim"
+  | "agent_file_renewal_intent"
   | "receipt_index";
 
 type StateRow = {
@@ -77,7 +93,7 @@ export class MatterhornGuardedRuntimeStateStore {
   constructor(readonly path = guardedRuntimeStatePath()) {
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     this.db = openSqliteDatabase(path);
-    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;");
+    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA secure_delete = ON; PRAGMA busy_timeout = 5000;");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS guarded_state (
         kind TEXT NOT NULL,
@@ -109,6 +125,34 @@ export class MatterhornGuardedRuntimeStateStore {
     chmodSync(path, 0o600);
   }
 
+  /**
+   * Runs a synchronous group of state mutations under one immediate SQLite
+   * transaction. Callers use this for security records that must never become
+   * partially visible (for example, one Walrus Quilt proof attached to several
+   * encrypted evidence records).
+   */
+  transaction<T>(callback: () => T): T {
+    this.db.exec("BEGIN IMMEDIATE;");
+    try {
+      const result = callback();
+      if (result !== null
+        && typeof result === "object"
+        && typeof (result as { then?: unknown }).then === "function") {
+        throw new Error("guarded_runtime_async_transaction_forbidden");
+      }
+      this.db.exec("COMMIT;");
+      return result;
+    } catch (error) {
+      try {
+        this.db.exec("ROLLBACK;");
+      } catch {
+        // Preserve the original failure. A failed rollback leaves this store
+        // unusable, and the next database operation will fail closed.
+      }
+      throw error;
+    }
+  }
+
   put(input: {
     kind: GuardedRuntimeStateKind;
     key: string;
@@ -136,6 +180,32 @@ export class MatterhornGuardedRuntimeStateStore {
       input.expiresAtMs ?? null,
       input.nowMs ?? Date.now(),
     );
+  }
+
+  /** Insert one immutable, expiring state marker and fail if it already exists. */
+  putIfAbsent(input: {
+    kind: GuardedRuntimeStateKind;
+    key: string;
+    workspaceId: string;
+    sessionId?: string | null;
+    value: unknown;
+    expiresAtMs?: number | null;
+    nowMs?: number;
+  }): boolean {
+    const result = statement(this.db, `
+      INSERT OR IGNORE INTO guarded_state(
+        kind, state_key, workspace_id, session_id, payload_json, expires_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      input.kind,
+      input.key,
+      input.workspaceId,
+      input.sessionId ?? null,
+      JSON.stringify(input.value),
+      input.expiresAtMs ?? null,
+      input.nowMs ?? Date.now(),
+    );
+    return (result.changes ?? 0) === 1;
   }
 
   get<T>(kind: GuardedRuntimeStateKind, key: string, nowMs = Date.now()): T | null {
@@ -257,6 +327,11 @@ export class MatterhornGuardedRuntimeStateStore {
     const states = statement(this.db, "DELETE FROM guarded_state WHERE expires_at IS NOT NULL AND expires_at <= ?").run(nowMs).changes ?? 0;
     const capabilities = statement(this.db, "DELETE FROM consumed_capabilities WHERE expires_at <= ?").run(nowMs).changes ?? 0;
     return { states, capabilities };
+  }
+
+  /** Removes stale WAL pages after deleting wrapped encryption keys. */
+  secureCheckpoint(): void {
+    this.db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
   }
 
   close(): void {

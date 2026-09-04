@@ -63,9 +63,7 @@ describe("AI provider UI contract", () => {
 
     expect(viewSource).toContain("modelReadiness.providerPrivacy");
     expect(viewSource).toContain("Review provider policy");
-    expect(surfaceSource).toContain(
-      "Matterhorn does not use prompts to train models.",
-    );
+    expect(surfaceSource).toContain("Matterhorn does not train on your chats");
     expect(surfaceSource).toContain("Privacy details");
     expect(surfaceSource).toContain("props.onOpenPrivacyDetails");
     expect(surfaceSource).not.toContain('href="/privacy"');

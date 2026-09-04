@@ -49,6 +49,8 @@ export type StartAgentRunReceiptInput = {
   preflight: MatterhornAgentPrivacyPreflightResponse;
   consentUsed: boolean;
   memoryReadIds?: string[];
+  context?: MatterhornAgentRunReceipt["context"];
+  toolCallBudget?: MatterhornAgentRunReceipt["usage"]["toolCallBudget"];
   now?: Date;
 };
 
@@ -110,12 +112,20 @@ export class MatterhornAgentRunReceiptStore {
         policyUrl: input.preflight.provider.policyUrl,
       },
       privacy: {
+        requestHash: input.preflight.requestHash,
         mode: input.preflight.effectiveMode,
         dataCategories: input.preflight.detectedData.categories,
         redactionCount: input.preflight.detectedData.redactionCount,
         consent: input.consentUsed ? "single_request" : "not_required",
         dataLeavesMatterhorn: input.preflight.provider.dataLeavesMatterhorn,
       },
+      ...(input.context ? {
+        context: {
+          chatFiles: Math.max(0, Math.floor(input.context.chatFiles)),
+          coworkerFiles: Math.max(0, Math.floor(input.context.coworkerFiles)),
+          savedMemories: Math.max(0, Math.floor(input.context.savedMemories)),
+        },
+      } : {}),
       usage: {
         inputTokens: 0,
         outputTokens: 0,
@@ -123,7 +133,9 @@ export class MatterhornAgentRunReceiptStore {
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
         estimatedCostUsd: 0,
-        toolCallBudget: { reads: 12, preparesPerFamily: 1, submits: 0 },
+        toolCallBudget: input.toolCallBudget
+          ? { ...input.toolCallBudget, submits: 0 }
+          : { reads: 12, preparesPerFamily: 1, submits: 0 },
       },
       tools: [],
       memory: { readIds: [...new Set(input.memoryReadIds ?? [])].sort(), writtenIds: [] },
@@ -328,6 +340,8 @@ export class MatterhornAgentRunReceiptStore {
         sessionId: snapshot.sessionId,
         value: {
           runId: snapshot.runId,
+          workspaceId: snapshot.workspaceId,
+          sessionId: snapshot.sessionId,
           receiptId: snapshot.id,
           status: snapshot.status,
           recordHash: snapshot.integrity.recordHash,

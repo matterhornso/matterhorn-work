@@ -123,6 +123,15 @@ export async function refreshReviewedActionHandoffV2(input: {
       handoff: input.currentDraft,
       runId: input.handoff.runId,
       signer: input.handoff.signer,
+      exactTerms: {
+        network: input.handoff.network,
+        operation: input.handoff.operation,
+        amount: input.handoff.amount,
+        asset: input.handoff.asset,
+        recipient: input.handoff.recipient,
+        slippage: input.handoff.slippage,
+        signer: input.handoff.signer,
+      },
       simulation: {
         reference,
         block: evidence.block ?? null,

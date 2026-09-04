@@ -52,7 +52,10 @@ export type MatterhornAgentPrivacyPreflightRequest = {
   parts: MatterhornAgentMessagePart[];
   model: { providerId: string; modelId: string };
   agentId?: string | null;
+  coworkerId?: string | null;
   attachmentIds?: string[];
+  /** Server-owned encrypted files selected for this exact coworker request. */
+  agentFileIds?: string[];
   memoryIds?: string[];
   privacyMode?: MatterhornAgentPrivacyMode;
   executionMode?: "discuss" | "plan" | "work";
@@ -76,6 +79,12 @@ export type MatterhornAgentMessageResponse = {
     requestHash: string;
     decision: MatterhornAgentPrivacyDecision;
     consentUsed: boolean;
+  };
+  coworker?: {
+    id: string;
+    name: string;
+    revision: number;
+    policyVersion: string;
   };
 };
 
@@ -141,6 +150,17 @@ export type MatterhornAgentCapabilityClaims = {
   expiresAt: string;
   policyVersion: string;
   registryVersion: string;
+  coworker?: {
+    id: string;
+    ownerId: string;
+    revision: number;
+    policyVersion: string;
+    connectionId: string;
+    appId: string;
+    manifestRevision: string;
+    actionId: string;
+    network: string;
+  };
 };
 
 export type MatterhornAgentCapabilityToken = {
@@ -189,11 +209,25 @@ export type MatterhornAgentRunReceipt = {
     policyUrl: string | null;
   };
   privacy: {
+    /**
+     * Digest of the complete privacy-preflight request, including the exact
+     * compiled provider context. Legacy v1 receipts may omit this field.
+     */
+    requestHash?: string;
     mode: MatterhornAgentPrivacyMode;
     dataCategories: string[];
     redactionCount: number;
     consent: "not_required" | "single_request";
     dataLeavesMatterhorn: boolean;
+  };
+  /**
+   * Content-free counts of the user-selected context compiled for this run.
+   * Legacy v1 receipts may omit this field.
+   */
+  context?: {
+    chatFiles: number;
+    coworkerFiles: number;
+    savedMemories: number;
   };
   usage: {
     inputTokens: number;

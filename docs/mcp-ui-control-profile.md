@@ -40,14 +40,13 @@ That's it. HandsFree can now list your sessions, read transcripts, type into the
 
 ## Install
 
-```bash
-npm install -g matterhorn-work-ui-mcp
-```
+The MCP packages are not published to npm yet. Clone the Matterhorn repository,
+run `pnpm install`, and use the absolute checked-out entrypoint shown below.
 
-Or run without installing:
+Run the checked-out entrypoint:
 
 ```bash
-npx matterhorn-work-ui-mcp
+node /absolute/path/to/matterhorn-work/packages/matterhorn-work-ui-mcp/index.mjs
 ```
 
 > The package is `matterhorn-work-ui-mcp`. Legacy `openwork-ui-mcp` package names may still appear in older installs as compatibility shims.
@@ -61,7 +60,7 @@ Add the MCP server to your workspace or global `opencode.json`. This is the unde
   "mcp": {
     "matterhorn-work-ui": {
       "type": "local",
-      "command": ["npx", "-y", "matterhorn-work-ui-mcp"],
+      "command": ["node", "/absolute/path/to/matterhorn-work/packages/matterhorn-work-ui-mcp/index.mjs"],
       "enabled": true
     }
   }
@@ -82,8 +81,8 @@ Both use the same MCP config shape. Add to your `claude_desktop_config.json` or 
 {
   "mcpServers": {
     "matterhorn-work-ui": {
-      "command": "npx",
-      "args": ["-y", "matterhorn-work-ui-mcp"]
+      "command": "node",
+      "args": ["/absolute/path/to/matterhorn-work/packages/matterhorn-work-ui-mcp/index.mjs"]
     }
   }
 }
@@ -100,8 +99,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const transport = new StdioClientTransport({
-  command: "npx",
-  args: ["-y", "matterhorn-work-ui-mcp"],
+  command: "node",
+  args: ["/absolute/path/to/matterhorn-work/packages/matterhorn-work-ui-mcp/index.mjs"],
 });
 const client = new Client({ name: "my-app", version: "1.0.0" });
 await client.connect(transport);

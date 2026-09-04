@@ -20,6 +20,21 @@ function mismatch(condition: boolean, message: string): string[] {
   return condition ? [message] : [];
 }
 
+type BittensorRuntimeNetwork = "finney" | "test" | "local";
+
+function normalizeBittensorNetwork(value: string): BittensorRuntimeNetwork | null {
+  const normalized = value.trim().toLowerCase().replace(/^bittensor:/, "");
+  if (normalized === "finney" || normalized === "test" || normalized === "local") return normalized;
+  return null;
+}
+
+export function bittensorReviewedNetworkMatches(
+  reviewedNetwork: string,
+  observedNetwork: BittensorRuntimeNetwork,
+): boolean {
+  return normalizeBittensorNetwork(reviewedNetwork) === observedNetwork;
+}
+
 async function refreshHyperliquid(
   handoff: Extract<ReviewedActionHandoffV2, { protocol: "hyperliquid" }>,
   currentDraft: Extract<ReviewedActionDraftHandoff, { protocol: "hyperliquid" }>,
@@ -154,7 +169,10 @@ async function refreshBittensor(
     netuid: draft.netuid,
   });
   const reasons = [
-    ...mismatch(preview.network !== "finney", "The Bittensor network is no longer Finney."),
+    ...mismatch(
+      !bittensorReviewedNetworkMatches(handoff.network, preview.network),
+      `The Bittensor preview resolved ${preview.network}, not the reviewed ${handoff.network} network.`,
+    ),
     ...mismatch(Boolean(handoff.signer && preview.coldkey && handoff.signer !== preview.coldkey), "The Bittensor signer changed."),
     ...mismatch(Boolean(draft.destination && preview.destination !== draft.destination), "The Bittensor destination changed."),
     ...mismatch(Boolean(draft.hotkey && preview.hotkey !== draft.hotkey), "The Bittensor validator hotkey changed."),

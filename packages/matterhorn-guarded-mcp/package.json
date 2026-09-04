@@ -1,0 +1,27 @@
+{
+  "name": "@matterhorn-work/guarded-mcp",
+  "version": "0.1.0",
+  "description": "Guarded Matterhorn workspace and chat MCP for external AI clients",
+  "type": "module",
+  "bin": {
+    "matterhorn-guarded-mcp": "index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/matterhornso/matterhorn-work.git",
+    "directory": "packages/matterhorn-guarded-mcp"
+  },
+  "license": "MIT"
+}

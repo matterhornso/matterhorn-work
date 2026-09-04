@@ -1,13 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync(
-  new URL("../src/react-app/domains/session/surface/session-surface.tsx", import.meta.url),
-  "utf8",
-);
+const source = ["session-surface.tsx", "agent-run-receipt-disclosure.tsx"]
+  .map((fileName) => readFileSync(
+    new URL(`../src/react-app/domains/session/surface/${fileName}`, import.meta.url),
+    "utf8",
+  ))
+  .join("\n");
 
 describe("guarded runtime receipt UI contract", () => {
   test("exposes privacy, usage, tool, capability, and reviewed-action facts", () => {
+    expect(source).toContain('lazy(() => import("./agent-run-receipt-disclosure")');
     expect(source).toContain(">Privacy<");
     expect(source).toContain("provider.policyUrl");
     expect(source).toContain("input ·");
@@ -17,6 +20,11 @@ describe("guarded runtime receipt UI contract", () => {
     expect(source).toContain(">Wallet review<");
     expect(source).toContain("simulationReference");
     expect(source).toContain("publicReceipt");
+    expect(source).toContain("receipt.privacy.requestHash");
+    expect(source).toContain("request proof");
+    expect(source).toContain("Used for this run:");
+    expect(source).toContain("coworkerFiles");
+    expect(source).toContain("savedMemories");
   });
 
   test("does not render raw prompt or capability bearer fields", () => {

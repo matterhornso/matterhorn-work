@@ -523,7 +523,19 @@ export async function buildProjectDataLedger(options: BuildProjectDataLedgerOpti
 }
 
 function safeExportFilePart(value: string): string {
-  return value.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "workspace";
+  const sanitized = Array.from(value, (character) => {
+    const code = character.charCodeAt(0);
+    const isAsciiLetter = (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+    const isDigit = code >= 48 && code <= 57;
+    return isAsciiLetter || isDigit || character === "." || character === "_" || character === "-"
+      ? character
+      : "-";
+  }).join("");
+  let start = 0;
+  let end = sanitized.length;
+  while (start < end && sanitized[start] === "-") start += 1;
+  while (end > start && sanitized[end - 1] === "-") end -= 1;
+  return sanitized.slice(start, end).slice(0, 80) || "workspace";
 }
 
 export async function buildProjectDataLedgerExport(

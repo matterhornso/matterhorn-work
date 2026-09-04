@@ -3,7 +3,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentPrivacyRequestHash, MatterhornPrivacyFirewall } from "./agent-privacy.js";
+import {
+  MATTERHORN_COWORKER_CONTEXT_COMPILER_VERSION,
+  compileMatterhornCoworkerSystemContext,
+} from "./crypto-coworker-context-compiler.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import { configureVenicePrivateModelRegistry } from "./venice-provider.js";
 
 function baseInput() {
   return {
@@ -115,6 +120,7 @@ describe("agent privacy firewall", () => {
       agentId: "matterhorn-bittensor",
       attachmentIds: ["attachment_1"],
       memoryIds: ["memory_1"],
+      authorizationContextHash: "f".repeat(64),
       parts: [
         { type: "text", text: "Compare validators", source: "composer" as const },
         {
@@ -153,6 +159,7 @@ describe("agent privacy firewall", () => {
       { ...request, agentId: "matterhorn-sui" },
       { ...request, attachmentIds: ["attachment_2"] },
       { ...request, memoryIds: ["memory_2"] },
+      { ...request, authorizationContextHash: "0".repeat(64) },
       { ...request, parts: request.parts.map((part, index) => index === 1 ? { ...part, text: "Changed server policy" } : part) },
       { ...request, parts: request.parts.map((part, index) => index === 2 ? { ...part, contentHash: "d".repeat(64) } : part) },
       { ...request, parts: request.parts.map((part, index) => index === 3 ? { ...part, version: "2026-08-20T00:01:00.000Z" } : part) },
@@ -161,6 +168,63 @@ describe("agent privacy firewall", () => {
     for (const mutation of mutations) {
       expect(agentPrivacyRequestHash(mutation)).not.toBe(hash);
     }
+  });
+
+  test("binds one-request consent to the exact compiled provider system context", () => {
+    const firewall = new MatterhornPrivacyFirewall();
+    const compile = (policy: string) => compileMatterhornCoworkerSystemContext({
+      dataSections: [{
+        id: "selected_memory",
+        label: "Selected Memory",
+        text: "Prefer testnet validators.",
+        maxChars: 1_000,
+      }],
+      policySections: [policy],
+    });
+    const baseline = compile("Only the connected wallet may approve.");
+    const request = {
+      ...baseInput(),
+      memoryIds: ["memory_1"],
+      parts: [
+        ...baseInput().parts,
+        {
+          type: "compiled_system_context",
+          source: "system" as const,
+          label: "public" as const,
+          contentHash: baseline.systemHash,
+          sizeBytes: Buffer.byteLength(baseline.system, "utf8"),
+          version: MATTERHORN_COWORKER_CONTEXT_COMPILER_VERSION,
+        },
+      ],
+    };
+    const preflight = firewall.preflight(request);
+    const consent = firewall.confirm({
+      challengeId: preflight.response.challenge?.id ?? "",
+      requestHash: preflight.response.requestHash,
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+    });
+    const changed = compile("Only the connected wallet may review and approve.");
+    const changedHash = agentPrivacyRequestHash({
+      ...request,
+      parts: request.parts.map((part) => part.type === "compiled_system_context"
+        ? { ...part, contentHash: changed.systemHash, sizeBytes: Buffer.byteLength(changed.system, "utf8") }
+        : part),
+    });
+
+    expect(changedHash).not.toBe(preflight.response.requestHash);
+    expect(firewall.consumeConsent({
+      token: consent.consentToken,
+      requestHash: changedHash,
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+    })).toBe(false);
+    expect(firewall.consumeConsent({
+      token: consent.consentToken,
+      requestHash: preflight.response.requestHash,
+      workspaceId: request.workspaceId,
+      sessionId: request.sessionId,
+    })).toBe(true);
   });
 
   test("allows private context through a local provider without consent", () => {
@@ -209,6 +273,75 @@ describe("agent privacy firewall", () => {
         if (value === undefined) delete process.env[key];
         else process.env[key] = value;
       }
+    }
+  });
+
+  test("allows private mode only for an exact runtime-verified Venice model", () => {
+    configureVenicePrivateModelRegistry([
+      { id: "private-tools", name: "Private Tools" },
+    ]);
+    try {
+      const firewall = new MatterhornPrivacyFirewall();
+      const approved = firewall.preflight({
+        ...baseInput(),
+        providerId: "venice",
+        modelId: "private-tools",
+        privacyMode: "private_workspace",
+      });
+      const rejected = firewall.preflight({
+        ...baseInput(),
+        providerId: "venice",
+        modelId: "anonymized-tools",
+        privacyMode: "private_workspace",
+      });
+
+      expect(approved.response).toMatchObject({
+        decision: "allow",
+        effectiveMode: "private_workspace",
+        provider: {
+          privacyStatus: "verified_no_training",
+          retentionDays: 0,
+        },
+      });
+      expect(rejected.response).toMatchObject({
+        decision: "blocked",
+        provider: {
+          privacyStatus: "unverified",
+        },
+      });
+    } finally {
+      configureVenicePrivateModelRegistry([]);
+    }
+  });
+
+  test("uses one exact clock for Venice policy and model-proof validation", () => {
+    const now = new Date("2026-09-02T12:00:00.000Z");
+    configureVenicePrivateModelRegistry(
+      [{ id: "private-tools", name: "Private Tools" }],
+      { now, ttlMs: 60_000 },
+    );
+    try {
+      const firewall = new MatterhornPrivacyFirewall();
+      const approved = firewall.preflight({
+        ...baseInput(),
+        providerId: "venice",
+        modelId: "private-tools",
+        privacyMode: "private_workspace",
+      }, { now: new Date("2026-09-02T12:00:59.999Z") });
+      const expired = firewall.preflight({
+        ...baseInput(),
+        providerId: "venice",
+        modelId: "private-tools",
+        privacyMode: "private_workspace",
+      }, { now: new Date("2026-09-02T12:01:00.000Z") });
+
+      expect(approved.response.decision).toBe("allow");
+      expect(expired.response).toMatchObject({
+        decision: "blocked",
+        provider: { privacyStatus: "unverified" },
+      });
+    } finally {
+      configureVenicePrivateModelRegistry([]);
     }
   });
 
@@ -274,6 +407,70 @@ describe("agent privacy firewall", () => {
     })).toBe(false);
     secondStore.close();
     competingStore.close();
+  });
+
+  test("restores a privacy challenge when consent persistence fails", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-privacy-confirm-rollback-"));
+    const path = join(root, "state.db");
+    const request = { ...baseInput(), memoryIds: ["memory_private"] };
+    const firstStore = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornPrivacyFirewall(firstStore);
+    const preflight = first.preflight(request).response;
+    const originalPutIfAbsent = firstStore.putIfAbsent.bind(firstStore);
+    let failNextConsentWrite = true;
+    Object.defineProperty(firstStore, "putIfAbsent", {
+      configurable: true,
+      value: (putInput: Parameters<MatterhornGuardedRuntimeStateStore["putIfAbsent"]>[0]) => {
+        if (failNextConsentWrite && putInput.kind === "privacy_consent") {
+          failNextConsentWrite = false;
+          throw new Error("injected_privacy_consent_write_failure");
+        }
+        return originalPutIfAbsent(putInput);
+      },
+    });
+    try {
+      expect(() => first.confirm({
+        challengeId: preflight.challenge?.id ?? "",
+        requestHash: preflight.requestHash,
+        workspaceId: "ws_other",
+        sessionId: request.sessionId,
+      })).toThrow("privacy_consent_challenge_invalid");
+      expect(() => first.confirm({
+        challengeId: preflight.challenge?.id ?? "",
+        requestHash: preflight.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+      })).toThrow("injected_privacy_consent_write_failure");
+    } finally {
+      Object.defineProperty(firstStore, "putIfAbsent", { configurable: true, value: originalPutIfAbsent });
+      firstStore.close();
+    }
+
+    const retryStore = new MatterhornGuardedRuntimeStateStore(path);
+    try {
+      const retry = new MatterhornPrivacyFirewall(retryStore);
+      const consent = retry.confirm({
+        challengeId: preflight.challenge?.id ?? "",
+        requestHash: preflight.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+      });
+      expect(retry.consumeConsent({
+        token: consent.consentToken,
+        requestHash: consent.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+      })).toBe(true);
+      expect(() => retry.confirm({
+        challengeId: preflight.challenge?.id ?? "",
+        requestHash: preflight.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+      })).toThrow("privacy_consent_challenge_invalid");
+    } finally {
+      retryStore.close();
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("does not consume exact-request consent when a mutated request is rejected", () => {

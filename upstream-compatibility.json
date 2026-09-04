@@ -1,10 +1,10 @@
 {
   "version": "matterhorn.upstream-compatibility.v1",
-  "reviewedAt": "2026-08-26",
+  "reviewedAt": "2026-09-03",
   "openwork": {
     "repository": "https://github.com/different-ai/openwork",
-    "version": "v0.18.35",
-    "commit": "13504969eeafb4657e555b52e49587c6a7d21072",
+    "version": "v0.18.42",
+    "commit": "1785d362d304ffab5d8ee5db9963335f5076ad2f",
     "integrationStrategy": "compatibility_port",
     "adoptedContracts": [
       "untimed_web_opencode_event_streams",
@@ -13,7 +13,11 @@
       "current_opencode_session_message_response_types",
       "bounded_workspace_archive_imports",
       "managed_engine_process_lifecycle",
-      "visible_invalid_frontmatter_errors"
+      "visible_invalid_frontmatter_errors",
+      "truthful_terminal_session_status",
+      "admission_aware_queued_message_drain",
+      "bounded_session_hydration_and_coalescing",
+      "provider_sync_context_isolation"
     ],
     "preservedMatterhornBoundaries": [
       "hosted_account_and_workspace_isolation",
@@ -24,8 +28,8 @@
   },
   "opencode": {
     "repository": "https://github.com/anomalyco/opencode",
-    "version": "v1.18.23",
-    "commit": "ef2880f379129aa048be9e9353e30aa168d42c17",
-    "sdkVersion": "1.18.23"
+    "version": "v1.18.27",
+    "commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
+    "sdkVersion": "1.18.27"
   }
 }

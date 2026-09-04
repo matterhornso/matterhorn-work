@@ -10,6 +10,21 @@ const REVIEWED_ACTION_HANDOFF_EVENT = "matterhorn:reviewed-action-handoff";
 
 let pendingHandoff: ReviewedActionDraftHandoff | null = null;
 let pendingGuardedHandoff: ReviewedActionHandoffV2 | null = null;
+let pendingCoworkerWalletIntentContext: CoworkerWalletIntentHandoffContext | null = null;
+
+export type CoworkerWalletIntentHandoffContext = {
+  version: "matterhorn.coworker-wallet-intent-handoff.v1";
+  workspaceId: string;
+  sessionId: string;
+  coworkerId: string;
+  intentId: string;
+  expectedRevision: number;
+  protocol: ReviewedActionHandoffV2["protocol"];
+  network: string;
+  signer: string | null;
+  operation: string;
+  authorizedArgumentsHash: string;
+};
 
 type SharedActionCard = {
   kind?: string;
@@ -35,6 +50,28 @@ function finiteInteger(value: unknown): number | null {
 
 function nonEmptyText(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function validCoworkerWalletIntentContext(
+  value: unknown,
+  handoff: ReviewedActionHandoffV2,
+): value is CoworkerWalletIntentHandoffContext {
+  if (!isRecord(value)) return false;
+  const networkMatches = value.network === handoff.network
+    || value.network === `${handoff.protocol}:${handoff.network}`;
+  return value.version === "matterhorn.coworker-wallet-intent-handoff.v1"
+    && nonEmptyText(value.workspaceId) !== null
+    && nonEmptyText(value.sessionId) !== null
+    && nonEmptyText(value.coworkerId) !== null
+    && nonEmptyText(value.intentId) !== null
+    && Number.isSafeInteger(value.expectedRevision)
+    && Number(value.expectedRevision) >= 1
+    && value.protocol === handoff.protocol
+    && networkMatches
+    && value.signer === handoff.signer
+    && value.operation === handoff.operation
+    && typeof value.authorizedArgumentsHash === "string"
+    && /^[a-f0-9]{64}$/.test(value.authorizedArgumentsHash);
 }
 
 function safeSlippageBps(value: unknown): number {
@@ -367,14 +404,25 @@ export function reviewedActionHandoffFromCard(card: SharedActionCard): ReviewedA
   return candidate && isReviewedActionDraftHandoff(candidate) ? candidate : null;
 }
 
-export function stageReviewedActionHandoff(handoff: ReviewedActionWalletHandoff): boolean {
+export function stageReviewedActionHandoff(
+  handoff: ReviewedActionWalletHandoff,
+  coworkerContext?: CoworkerWalletIntentHandoffContext | null,
+): boolean {
   if (!isReviewedActionDraftHandoff(handoff) && !isReviewedActionHandoffV2(handoff)) return false;
   if (isReviewedActionHandoffV2(handoff)) {
     const nowMs = Date.now();
-    if (Date.parse(handoff.expiresAt) <= nowMs || nowMs - Date.parse(handoff.simulation.simulatedAt) > 60_000) return false;
+    const expiresAtMs = Date.parse(handoff.expiresAt);
+    // A stale simulation may enter the wallet surface because that surface
+    // refreshes server-owned protocol state before enabling signing. Expired
+    // handoffs still fail here and cannot be revived by the browser.
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= nowMs) return false;
+    if (coworkerContext && !validCoworkerWalletIntentContext(coworkerContext, handoff)) return false;
     pendingGuardedHandoff = structuredClone(handoff);
+    pendingCoworkerWalletIntentContext = coworkerContext ? structuredClone(coworkerContext) : null;
   } else {
+    if (coworkerContext) return false;
     pendingGuardedHandoff = null;
+    pendingCoworkerWalletIntentContext = null;
   }
   const nextHandoff = {
     version: "matterhorn.reviewed-action-handoff.v1" as const,
@@ -400,6 +448,19 @@ export function takePendingReviewedActionGuard(): ReviewedActionHandoffV2 | null
   const handoff = pendingGuardedHandoff;
   pendingGuardedHandoff = null;
   return handoff;
+}
+
+/**
+ * Coworker receipt binding is kept out of editable wallet form state and is
+ * consumed once by the matching protocol panel.
+ */
+export function takePendingCoworkerWalletIntentContext(
+  protocol: ReviewedActionHandoffV2["protocol"],
+): CoworkerWalletIntentHandoffContext | null {
+  if (pendingCoworkerWalletIntentContext?.protocol !== protocol) return null;
+  const context = pendingCoworkerWalletIntentContext;
+  pendingCoworkerWalletIntentContext = null;
+  return context;
 }
 
 export function subscribeReviewedActionHandoff(

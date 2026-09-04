@@ -26,7 +26,7 @@ tool access, reviewed transaction terms, retention, and security receipts.
 |---|---|
 | `POST /workspace/:id/sessions/:sessionId/messages/preflight` | Classify the exact prompt, attachments, memories, provider, model, agent, and requested mode. |
 | `POST /workspace/:id/sessions/:sessionId/messages` | Authoritative provider gateway: classify, consent, reserve usage, create a run, and dispatch one server-built request. |
-| `POST /workspace/:id/sessions/:sessionId/compact` | Compact through the same privacy and usage boundary without exposing raw OpenCode summarize access. |
+| `POST /workspace/:id/sessions/:sessionId/compact` | Hash and classify the exact stored transcript, require one-request consent when needed, reserve usage, compact, and write a content-free run receipt without exposing raw OpenCode summarize access. |
 | `POST /workspace/:id/privacy-consents/:challengeId/confirm` | Issue a five-minute, single-use token for the exact request hash. |
 | `GET /workspace/:id/agent-run-receipts` | Read content-free, hash-chained run receipts and the 365-day retention contract. |
 | `POST /workspace/:id/reviewed-actions/validate` | Revalidate a v2 handoff against current terms and simulation before wallet review or receipt import. |
@@ -35,12 +35,20 @@ tool access, reviewed transaction terms, retention, and security receipts.
 The internal capability and completion routes require
 `X-Matterhorn-Agent-Runtime-Secret`. They are not client APIs.
 
+Stored chats are private workspace context during compaction even when the
+original turn began as public research. Secret-shaped content in any stored
+message or tool result blocks compaction before allowance reservation or model
+contact. Consent is bound to every canonical stored message hash, provider,
+model, workspace, and session; a concurrent message, edit, tool result, revert,
+provider change, or token replay fails closed.
+
 ## Retention and deletion
 
-Run receipts contain provider policy, categories, counts, bounded tool outcomes,
-usage, memory ids, capability decisions, action hashes, and public chain receipt
-references. They never contain raw prompts, unrestricted tool output, secrets,
-signatures, private keys, wallet exports, or bearer capabilities.
+Run receipts contain provider policy, categories, content-free counts of chat files,
+coworker files, and saved memories used for that run, bounded tool outcomes, usage,
+memory ids, capability decisions, action hashes, and public chain receipt references.
+They never contain raw prompts, file names, file identifiers, unrestricted tool output,
+secrets, signatures, private keys, wallet exports, or bearer capabilities.
 
 Receipts are created in every guarded mode, including `off`, then written to
 date-segmented, hash-chained workspace storage and expired by the daily retention

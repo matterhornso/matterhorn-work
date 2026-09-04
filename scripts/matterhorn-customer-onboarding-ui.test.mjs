@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(path, "utf8");
+const sourceStringLiterals = (source) => new Set(source.split(/["'`]/u));
 
 const packageJson = JSON.parse(read("package.json"));
 assert.equal(
@@ -15,6 +16,7 @@ const welcome = read("apps/app/src/react-app/domains/onboarding/welcome-page.tsx
 const english = read("apps/app/src/i18n/locales/en.ts");
 const appCss = read("apps/app/src/app/index.css");
 const sessionPage = read("apps/app/src/react-app/domains/session/chat/session-page.tsx");
+const workspaceCoworkerStart = read("apps/app/src/react-app/domains/session/chat/workspace-coworker-start.tsx");
 const sessionSurface = read("apps/app/src/react-app/domains/session/surface/session-surface.tsx");
 const composer = read("apps/app/src/react-app/domains/session/surface/composer/composer.tsx");
 const statusBar = read("apps/app/src/react-app/domains/session/chat/status-bar.tsx");
@@ -84,7 +86,7 @@ assert.equal(
 
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
-  "Ask Matterhorn about Bittensor, markets, longevity, files, or workflows...",
+  "Ask about a market, wallet, transaction, or risk...",
   "Matterhorn saves chats, artifacts, receipts, QA evidence, and workflow files.",
   "Matterhorn never holds your keys.",
   '"composer.assistant_identity": "Matterhorn"',
@@ -167,7 +169,7 @@ assert.equal(
 );
 
 for (const phrase of [
-  "Continue active work, start a focused desk task, or create something new.",
+  "Describe an outcome, continue your work, or open a protocol desk.",
   "New project",
   "New chat",
   "Open Bittensor desk",
@@ -241,7 +243,7 @@ for (const phrase of [
   "Check Polymarket compliance",
   "Build the full 7-stage Longevity workflow for my clients",
   "MCPs & Connectors",
-  "Start with a Matterhorn workflow",
+  "Choose a desk to begin",
   "Longevity: standalone service workflows, program packets, progress check-ins, and client handoffs",
   "Intake, goals, training, nutrition education, schedule, handouts, and service packaging.",
   "The Agent draft cannot submit.",
@@ -269,7 +271,7 @@ for (const phrase of [
   "CUSTOMER_VISIBLE_DEMO_TEMPLATE_IDS",
 ]) {
   assert.ok(
-    `${sessionPage}\n${sessionSurface}\n${workflowTemplates}\n${deskTaskStarters}\n${protocolDeskUi}`.includes(phrase),
+    `${sessionPage}\n${workspaceCoworkerStart}\n${sessionSurface}\n${workflowTemplates}\n${deskTaskStarters}\n${protocolDeskUi}`.includes(phrase),
     `starter UI should expose Matterhorn task: ${phrase}`,
   );
 }
@@ -910,6 +912,10 @@ for (const phrase of [
   "Memory MCP",
   "Workflow MCP",
   "UI Control MCP",
+  "matterhorn-work mcp config --target codex --profile guarded",
+  "matterhorn-work mcp config --target claude --profile guarded",
+  "matterhorn-work mcp config --target claude-desktop --profile guarded",
+  "matterhorn-work mcp config --target cursor --profile guarded",
   "matterhorn-work mcp config --target codex --profile full",
   "matterhorn-work mcp config --target claude --profile full",
   "matterhorn-work mcp config --target claude-desktop --profile full",
@@ -1067,7 +1073,7 @@ for (const phrase of [
 ]) {
   assert.ok(feedback.includes(phrase), `feedback URLs should be Matterhorn-first: ${phrase}`);
 }
-assert.equal(feedback.includes("https://openworklabs.com/feedback"), false, "feedback default must not send customers to OpenWork Labs");
+assert.equal(sourceStringLiterals(feedback).has("https://openworklabs.com/feedback"), false, "feedback default must not send customers to OpenWork Labs");
 assert.ok(denHelpLink.includes("updates@matterhorn.so"), "remote worker help dialog should use Matterhorn support email");
 assert.ok(remoteWorkspaceDiagnostics.includes("updates@matterhorn.so"), "remote workspace diagnostics should use Matterhorn support email");
 assert.equal(denHelpLink.includes("team@openworklabs.com"), false, "remote worker help dialog must not send customers to OpenWork Labs");
@@ -1083,9 +1089,9 @@ for (const phrase of [
 ]) {
   assert.ok(den.includes(phrase), `cloud auth should expose Matterhorn-native config: ${phrase}`);
 }
-assert.equal(den.includes("https://app.openworklabs.com"), false, "cloud auth default must not open OpenWork Labs");
-assert.ok(constants.includes("https://app.matterhorn.work/mcp"), "Matterhorn Cloud MCP quick-connect fallback should be Matterhorn-owned");
-assert.equal(constants.includes("https://app.openworklabs.com/mcp"), false, "Matterhorn Cloud MCP fallback must not open OpenWork Labs");
+assert.equal(sourceStringLiterals(den).has("https://app.openworklabs.com"), false, "cloud auth default must not open OpenWork Labs");
+assert.ok(sourceStringLiterals(constants).has("https://app.matterhorn.work/mcp"), "Matterhorn Cloud MCP quick-connect fallback should be Matterhorn-owned");
+assert.equal(sourceStringLiterals(constants).has("https://app.openworklabs.com/mcp"), false, "Matterhorn Cloud MCP fallback must not open OpenWork Labs");
 
 for (const phrase of [
   "Parallel Web Systems web search",

@@ -34,6 +34,36 @@ function brokerWithRun() {
 }
 
 describe("agent capability broker", () => {
+  test("bounds persisted run-grant expiry to the exact accepted run", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-expiry-"));
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
+    const broker = new MatterhornAgentCapabilityBroker("enforce", state);
+    const now = new Date("2026-09-02T12:00:00.000Z");
+    const expiresAtMs = now.getTime() + 10 * 60_000;
+    broker.createRunGrant({
+      runId: "run_short_lived",
+      workspaceId: "ws_short_lived",
+      sessionId: "ses_short_lived",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      expiresAtMs,
+      now,
+    });
+    expect(state.list<{ expiresAtMs: number }>("run_grant", { nowMs: now.getTime() })).toEqual([
+      expect.objectContaining({ expiresAtMs }),
+    ]);
+    expect(() => broker.createRunGrant({
+      runId: "run_too_long",
+      workspaceId: "ws_short_lived",
+      sessionId: "ses_too_long",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      expiresAtMs: now.getTime() + 6 * 60 * 60 * 1_000 + 1,
+      now,
+    })).toThrow("capability_run_expiry_invalid");
+    state.close();
+  });
+
   test("binds a single-use capability to scope, tool and canonical arguments", () => {
     const broker = brokerWithRun();
     const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
@@ -122,6 +152,196 @@ describe("agent capability broker", () => {
       toolName: "matterhorn_hyperliquid_preview_order",
       args: { asset: "BTC", side: "buy", size: 1 },
     })).toThrow("capability_tool_not_in_run_grant");
+  });
+
+  test("binds coworker authority to its exact active revision, app, action, network and budget", () => {
+    let active = true;
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    broker.setCoworkerResolver((binding) => active
+      && binding.id === "cw_sui"
+      && binding.revision === 4
+      && binding.policyVersion === "coworker-policy-2");
+    broker.createRunGrant({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker: {
+        id: "cw_sui",
+        workspaceId: "ws_1",
+        ownerId: "account_1",
+        revision: 4,
+        policyVersion: "coworker-policy-2",
+        allowedAppIds: ["matterhorn.sui-testnet"],
+        allowedActionIds: ["sui_account_read"],
+        allowedNetworks: ["sui:testnet"],
+        automaticAuthorities: ["read"],
+        actionBindings: [{
+          connectionId: "cxc_sui",
+          appId: "matterhorn.sui-testnet",
+          manifestRevision: "1.0.0",
+          actionId: "sui_account_read",
+          network: "sui:testnet",
+          proxyToolName: "matterhorn_sui_get_balance",
+          access: "read",
+        }],
+        allowedDataLabels: ["public", "workspace_private", "untrusted_external"],
+        allowUnverifiedProviderConsent: false,
+        maxReadCallsPerRun: 1,
+        maxPrepareCallsPerFamily: 0,
+      },
+    });
+    const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
+    const capability = broker.issue({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_coworker",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    });
+    expect(capability.claims.coworker).toEqual({
+      id: "cw_sui",
+      ownerId: "account_1",
+      revision: 4,
+      policyVersion: "coworker-policy-2",
+      connectionId: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+    });
+    expect(broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args }).runId)
+      .toBe("run_coworker");
+    expect(broker.consumedCapabilityProof({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_coworker",
+      coworkerId: "cw_sui",
+      connectionId: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    })).toMatchObject({ access: "read" });
+    expect(broker.consumedCapabilityProof({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_coworker",
+      coworkerId: "cw_sui",
+      connectionId: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+      toolName: "matterhorn_sui_get_balance",
+      args: { ...args, network: "sui:mainnet" },
+    })).toBeNull();
+    expect(broker.consumedCapabilityProof({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_coworker",
+      coworkerId: "cw_sui",
+      connectionId: "cxc_other",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    })).toBeNull();
+    expect(() => broker.issue({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_budget",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    })).toThrow("capability_read_budget_exhausted");
+    expect(broker.runIdsForCoworker({ workspaceId: "ws_1", ownerId: "account_1", coworkerId: "cw_sui" }))
+      .toEqual(["run_coworker"]);
+    expect(broker.runIdsForConnection({ workspaceId: "ws_1", connectionId: "cxc_sui" }))
+      .toEqual(["run_coworker"]);
+    expect(broker.runIdsForConnection({ workspaceId: "ws_other", connectionId: "cxc_sui" }))
+      .toEqual([]);
+    expect(broker.runIdsForConnection({ workspaceId: "ws_1", connectionId: "cxc_other" }))
+      .toEqual([]);
+
+    active = false;
+    expect(() => broker.issue({
+      runId: "run_coworker",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker",
+      callId: "call_inactive",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    })).toThrow("capability_coworker_inactive");
+  });
+
+  test("refuses coworker capabilities on legacy direct tools or broadened app scopes", () => {
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    broker.setCoworkerResolver(() => true);
+    broker.createRunGrant({
+      runId: "run_coworker_scope",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker_scope",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker: {
+        id: "cw_scope",
+        workspaceId: "ws_1",
+        ownerId: "account_1",
+        revision: 1,
+        policyVersion: "coworker-policy-1",
+        allowedAppIds: ["matterhorn.sui-testnet"],
+        allowedActionIds: ["sui_account_read"],
+        allowedNetworks: ["sui:testnet"],
+        automaticAuthorities: ["read"],
+        actionBindings: [{
+          connectionId: "cxc_sui",
+          appId: "matterhorn.sui-testnet",
+          manifestRevision: "1.0.0",
+          actionId: "sui_account_read",
+          network: "sui:testnet",
+          proxyToolName: "matterhorn_sui_get_balance",
+          access: "read",
+        }],
+        allowedDataLabels: ["public", "workspace_private", "untrusted_external"],
+        allowUnverifiedProviderConsent: false,
+        maxReadCallsPerRun: 4,
+        maxPrepareCallsPerFamily: 0,
+      },
+    });
+    const derived = broker.issue({
+      runId: "run_coworker_scope",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker_scope",
+      callId: "call_legacy",
+      toolName: "matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}`, network: "testnet" },
+    });
+    expect(derived.claims.coworker?.connectionId).toBe("cxc_sui");
+    expect(() => broker.issue({
+      runId: "run_coworker_scope",
+      workspaceId: "ws_1",
+      sessionId: "ses_coworker_scope",
+      callId: "call_broadened",
+      toolName: "matterhorn_sui_get_balance",
+      args: {
+        appId: "malicious.app",
+        actionId: "sui_account_read",
+        access: "read",
+        network: "sui:testnet",
+      },
+    })).toThrow("capability_coworker_connection_resolution_required");
   });
 
   test("workspace purge revokes grants and already-issued capabilities", () => {

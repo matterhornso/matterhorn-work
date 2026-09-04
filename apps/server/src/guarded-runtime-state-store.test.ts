@@ -5,6 +5,23 @@ import { join } from "node:path";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 describe("durable guarded runtime state", () => {
+  test("commits or rolls back multi-record security mutations atomically", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-guarded-transaction-"));
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
+    state.transaction(() => {
+      state.put({ kind: "crypto_evidence_record", key: "kept", workspaceId: "ws_a", value: { state: "kept" } });
+    });
+    expect(state.get<{ state: string }>("crypto_evidence_record", "kept")).toEqual({ state: "kept" });
+    expect(() => state.transaction(() => {
+      state.put({ kind: "crypto_evidence_record", key: "rolled_back", workspaceId: "ws_a", value: { state: "bad" } });
+      throw new Error("stop");
+    })).toThrow("stop");
+    expect(state.get("crypto_evidence_record", "rolled_back")).toBeNull();
+    expect(() => state.transaction(() => Promise.resolve("unsafe")))
+      .toThrow("guarded_runtime_async_transaction_forbidden");
+    state.close();
+  });
+
   test("persists tenant-scoped state across store restarts", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-guarded-state-"));
     const path = join(root, "state.db");

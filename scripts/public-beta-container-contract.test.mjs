@@ -16,6 +16,7 @@ for (const required of [
   "MATTERHORN_WORK_APPROVAL_MODE=manual",
   "MATTERHORN_HOSTED_PUBLIC_BETA=1",
   "MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED=1",
+  "pnpm --dir packages/crypto-app-sdk build",
   "gosu",
   "/health/live",
 ]) {

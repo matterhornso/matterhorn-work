@@ -21,7 +21,20 @@ import { workspaceSessionRoute } from "./workspace-routes";
 import { AppErrorBoundary } from "./app-error-boundary";
 import { RemoteConnectDeepLinkHandler } from "./remote-connect-deep-links";
 import { isPublicTrustPath } from "../domains/public/public-trust-content";
+import {
+  capturePendingDeveloperInviteFromBrowser,
+  hasPendingDeveloperInvite,
+} from "../domains/developer/developer-invite-fragment";
+import {
+  capturePendingCoworkerInviteFromBrowser,
+  hasPendingCoworkerInvite,
+} from "../domains/coworkers/coworker-invite-fragment";
 import { UnknownRouteRecovery } from "./route-recovery";
+
+// Strip one-time invite fragments before the app shell, route
+// controls, or telemetry can inspect the initial browser location.
+capturePendingDeveloperInviteFromBrowser();
+capturePendingCoworkerInviteFromBrowser();
 
 const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboarding-page").then((module) => ({
   default: module.OrgOnboardingPage,
@@ -31,6 +44,18 @@ const SettingsRoute = lazy(() => import("./settings-route").then((module) => ({ 
 const WelcomeRoute = lazy(() => import("./welcome-route").then((module) => ({ default: module.WelcomeRoute })));
 const PublicTrustRoute = lazy(() => import("../domains/public/public-trust-route").then((module) => ({
   default: module.PublicTrustRoute,
+})));
+const CryptoAppDeveloperRoute = lazy(() => import("../domains/developer/crypto-app-developer-route").then((module) => ({
+  default: module.CryptoAppDeveloperRoute,
+})));
+const CryptoAppCatalogRoute = lazy(() => import("../domains/crypto-apps/crypto-app-catalog-route").then((module) => ({
+  default: module.CryptoAppCatalogRoute,
+})));
+const CryptoEvidenceRoute = lazy(() => import("../domains/crypto-apps/crypto-evidence-route").then((module) => ({
+  default: module.CryptoEvidenceRoute,
+})));
+const CoworkerAccessRoute = lazy(() => import("../domains/coworkers/coworker-access-route").then((module) => ({
+  default: module.CoworkerAccessRoute,
 })));
 type DenSigninGateProps = {
   children: ReactNode;
@@ -104,6 +129,10 @@ function DenSigninGate({ children }: DenSigninGateProps) {
   );
 
   useEffect(() => {
+    // Also capture links opened through client-side navigation after boot.
+    capturePendingDeveloperInviteFromBrowser();
+    capturePendingCoworkerInviteFromBrowser();
+
     // Wait for the first auth check so we don't bounce the user between
     // `/session` and `/signin` every navigation while we figure out if
     // their cached token is still valid.
@@ -115,9 +144,18 @@ function DenSigninGate({ children }: DenSigninGateProps) {
     const explicitCloudSignin = onSignin && isExplicitCloudSignin(location.search);
 
     const onOnboarding = path === "/onboarding" || path.startsWith("/onboarding/");
+    const onDeveloperPortal = path === "/developer/crypto-apps" || path.startsWith("/developer/crypto-apps/");
+    const onCoworkerAccess = path === "/coworker-access" || path.startsWith("/coworker-access/");
     const hasActiveOrganization = Boolean(
       readDenSettings().activeOrgId?.trim(),
     );
+    const pendingDeveloperInvite = hasPendingDeveloperInvite();
+    const pendingCoworkerInvite = hasPendingCoworkerInvite();
+    const pendingInvitePath = pendingCoworkerInvite
+      ? "/coworker-access"
+      : pendingDeveloperInvite
+        ? "/developer/crypto-apps"
+        : null;
 
     if (explicitCloudSignin) return;
 
@@ -125,17 +163,42 @@ function DenSigninGate({ children }: DenSigninGateProps) {
       if (!denAuth.isSignedIn && !onSignin) {
         navigate("/signin", { replace: true });
       } else if (denAuth.isSignedIn && onSignin) {
-        // Signed in — route to onboarding so the user sees their org resources.
-        navigate("/onboarding", { replace: true });
+        navigate(
+          pendingInvitePath && hasActiveOrganization
+            ? pendingInvitePath
+            : "/onboarding",
+          { replace: true },
+        );
       } else if (
         denAuth.isSignedIn &&
         !onOnboarding &&
         !hasActiveOrganization
       ) {
         navigate("/onboarding", { replace: true });
+      } else if (
+        denAuth.isSignedIn &&
+        hasActiveOrganization &&
+        pendingInvitePath &&
+        !onDeveloperPortal &&
+        !onCoworkerAccess
+      ) {
+        navigate(pendingInvitePath, { replace: true });
       }
     } else if (onSignin) {
-      navigate("/session", { replace: true });
+      navigate(
+        denAuth.isSignedIn && hasActiveOrganization && pendingInvitePath
+          ? pendingInvitePath
+          : "/session",
+        { replace: true },
+      );
+    } else if (
+      denAuth.isSignedIn &&
+      hasActiveOrganization &&
+      pendingInvitePath &&
+      !onDeveloperPortal &&
+      !onCoworkerAccess
+    ) {
+      navigate(pendingInvitePath, { replace: true });
     }
 
     // If on /onboarding but not signed in, bounce to signin or session
@@ -158,7 +221,17 @@ function DenSigninGate({ children }: DenSigninGateProps) {
     const handler = (event: WindowEventMap[typeof denSessionUpdatedEvent]) => {
       if (event.detail?.status !== "success") return;
       if (publicBetaWeb) {
-        navigate("/onboarding", { replace: true });
+        const pendingInvitePath = hasPendingCoworkerInvite()
+          ? "/coworker-access"
+          : hasPendingDeveloperInvite()
+            ? "/developer/crypto-apps"
+            : null;
+        navigate(
+          pendingInvitePath && Boolean(readDenSettings().activeOrgId?.trim())
+            ? pendingInvitePath
+            : "/onboarding",
+          { replace: true },
+        );
         return;
       }
       let attempts = 0;
@@ -166,7 +239,17 @@ function DenSigninGate({ children }: DenSigninGateProps) {
         attempts++;
         const settings = readDenSettings();
         if (settings.authToken?.trim()) {
-          navigate("/onboarding", { replace: true });
+          const pendingInvitePath = hasPendingCoworkerInvite()
+            ? "/coworker-access"
+            : hasPendingDeveloperInvite()
+              ? "/developer/crypto-apps"
+              : null;
+          navigate(
+            pendingInvitePath && Boolean(settings.activeOrgId?.trim())
+              ? pendingInvitePath
+              : "/onboarding",
+            { replace: true },
+          );
         } else if (attempts < 10) {
           // Auth persistence has not settled yet — retry (max ~5 seconds).
           setTimeout(check, 500);
@@ -272,6 +355,38 @@ export function AppRoot() {
                       <WelcomeRoute />
                     </Suspense>
                   </DevProfiler>
+                }
+              />
+              <Route
+                path="/developer/crypto-apps"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <CryptoAppDeveloperRoute />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/coworker-access"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <CoworkerAccessRoute />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/workspace/:workspaceId/crypto-apps"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <CryptoAppCatalogRoute />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/workspace/:workspaceId/evidence-proofs"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <CryptoEvidenceRoute />
+                  </Suspense>
                 }
               />
               <Route

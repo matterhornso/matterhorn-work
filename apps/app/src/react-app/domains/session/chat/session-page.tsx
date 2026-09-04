@@ -12,7 +12,9 @@ import {
   ChevronRight,
   Copy,
   Dumbbell,
+  Ellipsis,
   FileText,
+  Files,
   FolderOpen,
   Globe,
   Home,
@@ -24,6 +26,7 @@ import {
   Settings2,
   ShieldCheck,
   CircleUserRound,
+  UsersRound,
   Wallet as WalletIcon,
 } from "lucide-react";
 
@@ -32,6 +35,7 @@ import { OPENWORK_EXTENSION_CATALOG } from "../../../../app/constants";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import {
+  type MatterhornCoworkerWalletIntentView,
   type MatterhornServerClient,
   type MatterhornServerStatus,
   type MatterhornWalletTransactionSimulationInput,
@@ -43,6 +47,7 @@ import type {
   BittensorSubtensorSidecarHealth,
   MatterhornBackendCapabilitiesResponse,
   MatterhornCapabilityStatus,
+  MatterhornCoworkerTemplateId,
   MatterhornMemoryRecord,
   MatterhornWalletRuntime,
   MatterhornWalletRuntimeSupport,
@@ -118,7 +123,10 @@ import { ProjectHistoryPage } from "../../recent-activity/project-history-page";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import { useWallet } from "../../wallet/WalletProvider";
-import { subscribeReviewedActionHandoff } from "../../wallet/reviewed-action-handoff";
+import {
+  stageReviewedActionHandoff,
+  subscribeReviewedActionHandoff,
+} from "../../wallet/reviewed-action-handoff";
 import { configureSecurityLogReporter } from "../../wallet/state/security-log";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
@@ -200,8 +208,17 @@ const MemoryPanel = lazy(() => import("../../memory/memory-panel").then((module)
 const NotesPanel = lazy(() => import("../../notes/notes-page").then((module) => ({
   default: module.NotesPage,
 })));
+const SessionAgentFilesPanel = lazy(() => import("../../agent-files/agent-files-panel").then((module) => ({
+  default: module.SessionAgentFilesPanel,
+})));
+const SessionCoworkersPanel = lazy(() => import("../../coworkers/coworkers-panel").then((module) => ({
+  default: module.SessionCoworkersPanel,
+})));
 const WorkspaceMissionOverview = lazy(() => import("./workspace-mission-overview").then((module) => ({
   default: module.WorkspaceMissionOverview,
+})));
+const WorkspaceCoworkerStart = lazy(() => import("./workspace-coworker-start").then((module) => ({
+  default: module.WorkspaceCoworkerStart,
 })));
 const STARTUP_SKELETON_ROWS = [
   { id: "intro", titleWidth: "42%", bodyWidth: "88%" },
@@ -493,19 +510,61 @@ function DeskBrandMark({
   return <Icon className="size-4" />;
 }
 
+function MobileWorkspaceMenuAction({
+  active = false,
+  badge,
+  icon,
+  label,
+  onSelect,
+  style,
+}: {
+  active?: boolean;
+  badge?: ReactNode;
+  icon: ReactNode;
+  label: string;
+  onSelect: () => void;
+  style?: CSSProperties;
+}) {
+  return (
+    <button
+      type="button"
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium text-dls-secondary transition-colors hover:bg-dls-hover hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/35",
+        active && "bg-dls-hover text-dls-text",
+      )}
+      onClick={onSelect}
+      style={style}
+    >
+      <span className="flex size-7 shrink-0 items-center justify-center" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge}
+    </button>
+  );
+}
+
 function HomeCapabilityOverview({
   onOpenCapability,
 }: {
   onOpenCapability?: (id: CustomerWorkflowIconHint) => void;
 }) {
   return (
-    <section
-      className="matterhorn-capability-overview space-y-2"
+    <details
+      className="matterhorn-capability-overview group border-y border-dls-border/55 py-3"
       style={{ contentVisibility: "auto", containIntrinsicSize: "360px" } as CSSProperties}
-      aria-label="Desk capability overview"
     >
-      <div className="flex items-center gap-2">
-        <h3 className="text-sm font-semibold text-dls-text">Open a desk</h3>
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1 text-left marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/35">
+        <span>
+          <span className="block text-sm font-semibold text-dls-text">Browse protocol desks</span>
+          <span className="mt-0.5 block text-xs text-dls-secondary">Open Bittensor, Hyperliquid, Polymarket, or Sui directly.</span>
+        </span>
+        <ChevronRight className="size-4 shrink-0 text-dls-secondary" aria-hidden="true" />
+      </summary>
+      <section className="mt-3 space-y-2" aria-label="Desk capability overview">
+        <div className="flex items-center gap-2">
+          <h3 className="text-xs font-medium text-dls-secondary">Available desks</h3>
         <Popover>
           <PopoverTrigger
             render={
@@ -528,8 +587,8 @@ function HomeCapabilityOverview({
             <span>Outputs and receipts stay with this project.</span>
           </PopoverContent>
         </Popover>
-      </div>
-      <div className="overflow-hidden rounded-lg bg-dls-canvas/35 ring-1 ring-inset ring-dls-border/45">
+        </div>
+        <div className="overflow-hidden rounded-lg bg-dls-canvas/35 ring-1 ring-inset ring-dls-border/45">
         {homeCapabilityStatusItems().map((item) => {
           return (
             <article
@@ -540,7 +599,7 @@ function HomeCapabilityOverview({
               <button
                 type="button"
                 data-testid={`open-${item.id}-desk`}
-                className="grid min-h-16 w-full min-w-0 grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-l-2 border-l-[rgb(var(--matterhorn-desk-rgb)/0.72)] bg-transparent px-3 py-2.5 pr-10 text-left transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--matterhorn-desk-color)]"
+                className="grid min-h-16 w-full min-w-0 grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 bg-transparent px-3 py-2.5 pr-10 text-left transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--matterhorn-desk-color)]"
                 onClick={() => onOpenCapability?.(item.id)}
               >
                 <span className="flex size-8 items-center justify-center rounded-md bg-[rgb(var(--matterhorn-desk-rgb)/0.10)] text-[var(--matterhorn-desk-color)]">
@@ -552,7 +611,7 @@ function HomeCapabilityOverview({
                 </div>
                 <span className="hidden items-center gap-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:inline-flex">
                   {item.id === "wellness" ? "Start workflow" : "Open desk"}
-                  <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                  <ChevronRight className="size-3.5" aria-hidden="true" />
                 </span>
               </button>
               <Popover>
@@ -579,8 +638,9 @@ function HomeCapabilityOverview({
             </article>
           );
         })}
-      </div>
-    </section>
+        </div>
+      </section>
+    </details>
   );
 }
 
@@ -1576,6 +1636,8 @@ export function SessionPage(props: SessionPageProps) {
   const extensionsRailActive = activeSidePanel === "extensions";
   const voiceRailActive = activeSidePanel === "voice";
   const profileRailActive = activeSidePanel === "profile";
+  const coworkersRailActive = activeSidePanel === "coworkers";
+  const filesRailActive = activeSidePanel === "files";
   const memoryRailActive = activeSidePanel === "memory";
   const notesRailActive = activeSidePanel === "notes";
   const walletRailActive = activeSidePanel === "wallet";
@@ -1601,6 +1663,10 @@ export function SessionPage(props: SessionPageProps) {
           : "MCPs & Tools"
         : visibleSidePanel === "memory"
           ? "Memory"
+          : visibleSidePanel === "coworkers"
+            ? "Coworkers"
+          : visibleSidePanel === "files"
+            ? "Coworker files"
           : visibleSidePanel === "notes"
             ? "Notes"
             : visibleSidePanel === "artifacts"
@@ -1709,6 +1775,11 @@ export function SessionPage(props: SessionPageProps) {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [sessionActionId, setSessionActionId] = useState<string | null>(null);
   const [homePathCopyLabel, setHomePathCopyLabel] = useState<string | null>(null);
+  const [mobileWorkspaceMenuOpen, setMobileWorkspaceMenuOpen] = useState(false);
+  const [homeCoworkerStart, setHomeCoworkerStart] = useState<{
+    templateId: MatterhornCoworkerTemplateId;
+    outcome: string;
+  } | null>(null);
   const activeWorkflowDeskId: WorkflowDeskId | null = routeWorkflowDesk;
   const [workflowLaunchState, setWorkflowLaunchState] = useState<WorkflowDeskLaunchState | null>(null);
   const homeSurfaceTitle = activeWorkflowDeskId
@@ -1800,6 +1871,22 @@ export function SessionPage(props: SessionPageProps) {
       { replace: transition.replace },
     );
   }, [navigate, props.selectedWorkspaceId, setSidePanelState, sidePanelScopeId]);
+
+  const openCoworkerWalletIntent = useCallback((item: MatterhornCoworkerWalletIntentView) => (
+    stageReviewedActionHandoff(item.reviewedAction, {
+      version: "matterhorn.coworker-wallet-intent-handoff.v1",
+      workspaceId: item.workspaceId,
+      sessionId: item.sessionId,
+      coworkerId: item.coworkerId,
+      intentId: item.id,
+      expectedRevision: item.revision,
+      protocol: item.reviewedAction.protocol,
+      network: item.intent.network,
+      signer: item.intent.signer,
+      operation: item.intent.operation,
+      authorizedArgumentsHash: item.intent.authorizedArgumentsHash,
+    })
+  ), []);
 
   useEffect(
     () => subscribeReviewedActionHandoff((handoff) => {
@@ -2223,6 +2310,22 @@ export function SessionPage(props: SessionPageProps) {
   const openMemoryRailPane = useCallback(() => {
     toggleCurrentSidePanel("memory");
   }, [toggleCurrentSidePanel]);
+  const openCoworkersRailPane = useCallback(() => {
+    toggleCurrentSidePanel("coworkers");
+  }, [toggleCurrentSidePanel]);
+  const startCoworkerFromHome = useCallback((request: {
+    templateId: MatterhornCoworkerTemplateId;
+    outcome: string;
+  }) => {
+    setHomeCoworkerStart(request);
+    setCurrentSidePanel("coworkers");
+  }, [setCurrentSidePanel]);
+  const clearHomeCoworkerTemplate = useCallback(() => {
+    setHomeCoworkerStart(null);
+  }, []);
+  const openAgentFilesRailPane = useCallback(() => {
+    toggleCurrentSidePanel("files");
+  }, [toggleCurrentSidePanel]);
   const startMemoryChatFromHome = useCallback((records: MatterhornMemoryRecord[]) => {
     const startTask = props.sidebar.onCreateTaskWithPrompt;
     if (!startTask) {
@@ -2321,6 +2424,10 @@ export function SessionPage(props: SessionPageProps) {
     }
     if (options?.primePrompt) primeProtocolRailPrompt(panel, options);
   }, [navigate, primeProtocolRailPrompt, props.selectedSessionId, props.selectedWorkspaceId, props.surface, setCurrentSidePanel]);
+  const runMobileWorkspaceAction = useCallback((action: () => void) => {
+    setMobileWorkspaceMenuOpen(false);
+    action();
+  }, []);
   const removeAccessibleTarget = useCallback((target: OpenTarget) => {
     setHiddenAccessibleTargetIds((current) => new Set(current).add(target.id));
     setArtifactTarget((current) => current?.id === target.id ? null : current);
@@ -2344,6 +2451,31 @@ export function SessionPage(props: SessionPageProps) {
       workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
       onClose={closeRightPane}
       onUseInChat={props.selectedSessionId && props.surface ? undefined : startMemoryChatFromHome}
+    />
+  ) : visibleSidePanel === "coworkers" ? (
+    <SessionCoworkersPanel
+      client={props.matterhornServerClient}
+      initialTemplateId={homeCoworkerStart?.templateId}
+      initialOutcome={homeCoworkerStart?.outcome}
+      onInitialTemplateHandled={clearHomeCoworkerTemplate}
+      workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+      selectedSessionId={props.selectedSessionId}
+      selectedWorkspaceId={props.selectedWorkspaceId}
+      onClose={closeRightPane}
+      onBrowseApps={() => navigate(`/workspace/${encodeURIComponent(props.selectedWorkspaceId)}/crypto-apps`)}
+      onBrowseFiles={() => setCurrentSidePanel("files")}
+      onBrowseMemory={() => setCurrentSidePanel("memory")}
+      onOpenWallet={openCoworkerWalletIntent}
+      onStartTask={props.sidebar.onCreateTaskWithPrompt}
+    />
+  ) : visibleSidePanel === "files" ? (
+    <SessionAgentFilesPanel
+      client={props.matterhornServerClient}
+      workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+      selectedSessionId={props.selectedSessionId}
+      selectedWorkspaceId={props.selectedWorkspaceId}
+      onClose={closeRightPane}
+      onStartTask={props.sidebar.onCreateTaskWithPrompt}
     />
   ) : visibleSidePanel === "notes" ? (
     <NotesPanel
@@ -2407,6 +2539,7 @@ export function SessionPage(props: SessionPageProps) {
         initialVenue={visibleSidePanel}
         openReviewedAction={reviewedActionEntryProtocol === visibleSidePanel}
         initialReviewedActionOperation={reviewedActionEntryOperation}
+        matterhornServerClient={props.matterhornServerClient}
         workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
         sessionId={props.selectedSessionId}
       />
@@ -2618,9 +2751,6 @@ export function SessionPage(props: SessionPageProps) {
   const homeResumeStatus = homeResumeSession
     ? props.sidebar.sessionStatusById[homeResumeSession.id]
     : null;
-  const recommendedHomeStarter = MATTERHORN_DESK_TASK_STARTERS.bittensor.find(
-    (starter) => starter.id === "discover-subnets",
-  ) ?? MATTERHORN_DESK_TASK_STARTERS.bittensor[0];
   const homePrimaryAction = props.modelUnavailable
     ? {
         eyebrow: "Setup required",
@@ -2651,15 +2781,7 @@ export function SessionPage(props: SessionPageProps) {
           disabled: false,
           onAction: () => props.sidebar.onOpenSession(props.selectedWorkspaceId, homeResumeSession.id),
         }
-      : {
-          eyebrow: "Recommended safe start",
-          title: recommendedHomeStarter.title,
-          description: recommendedHomeStarter.detail,
-          meta: "Read-only research · public evidence · no wallet action",
-          actionLabel: "Open Bittensor desk",
-          disabled: props.sidebar.newTaskDisabled,
-          onAction: () => openVenueRailPane("bittensor"),
-        };
+      : null;
 
   return (
     <div className="fixed inset-0 flex min-h-0 w-full flex-col overflow-hidden bg-dls-background text-dls-text mac:bg-transparent">
@@ -2795,6 +2917,124 @@ export function SessionPage(props: SessionPageProps) {
                   <NotebookPen className="size-3.5" />
                 </Button>
               ) : null}
+              <Popover open={mobileWorkspaceMenuOpen} onOpenChange={setMobileWorkspaceMenuOpen}>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-11 text-dls-secondary hover:bg-dls-hover hover:text-dls-text md:size-8 lg:hidden"
+                      title="Open workspace menu"
+                      aria-label="Open workspace menu"
+                      aria-expanded={mobileWorkspaceMenuOpen}
+                    >
+                      <Ellipsis className="size-4" aria-hidden="true" />
+                    </Button>
+                  }
+                />
+                <PopoverContent
+                  side="bottom"
+                  align="end"
+                  sideOffset={6}
+                  className="max-h-[calc(100dvh-4rem)] w-[min(20rem,calc(100vw-1rem))] gap-0 overflow-y-auto rounded-lg border border-dls-border bg-dls-surface p-1.5 shadow-lg lg:hidden"
+                >
+                  <nav aria-label="Workspace menu" className="grid gap-0.5">
+                    <p className="px-3 pb-1 pt-2 text-xs font-medium text-dls-muted">Workspace</p>
+                    <MobileWorkspaceMenuAction
+                      active={coworkersRailActive}
+                      icon={<UsersRound className="size-4" />}
+                      label="Coworkers"
+                      onSelect={() => runMobileWorkspaceAction(openCoworkersRailPane)}
+                    />
+                    <MobileWorkspaceMenuAction
+                      active={filesRailActive}
+                      icon={<Files className="size-4" />}
+                      label="Coworker files"
+                      onSelect={() => runMobileWorkspaceAction(openAgentFilesRailPane)}
+                    />
+                    <MobileWorkspaceMenuAction
+                      active={extensionsRailActive}
+                      icon={<Settings2 className="size-4" />}
+                      label={hostedManagedTools ? "Tools & MCPs" : "MCPs & connectors"}
+                      onSelect={() => runMobileWorkspaceAction(props.settingsSlot ? openExtensionsRailPane : props.onOpenSettings)}
+                    />
+                    <MobileWorkspaceMenuAction
+                      active={memoryRailActive}
+                      badge={memorySuggestionUnreadCount > 0 ? (
+                        <span className="rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-semibold text-dls-secondary">
+                          {memorySuggestionUnreadCount > 99 ? "99+" : memorySuggestionUnreadCount}
+                        </span>
+                      ) : null}
+                      icon={<Brain className="size-4" />}
+                      label="Memory"
+                      onSelect={() => runMobileWorkspaceAction(openMemoryRailPane)}
+                    />
+                    {workspaceNotesAvailable ? (
+                      <MobileWorkspaceMenuAction
+                        active={notesRailActive}
+                        icon={<NotebookPen className="size-4" />}
+                        label="Notes"
+                        onSelect={() => runMobileWorkspaceAction(openNotesRailPane)}
+                      />
+                    ) : null}
+                    {showArtifactRailItem ? (
+                      <MobileWorkspaceMenuAction
+                        active={artifactRailActive}
+                        badge={artifactTargetCount > 0 ? (
+                          <span className="text-xs tabular-nums text-dls-muted">{artifactTargetCount}</span>
+                        ) : null}
+                        icon={<FileText className="size-4" />}
+                        label="Outputs"
+                        onSelect={() => runMobileWorkspaceAction(openArtifactRailPane)}
+                      />
+                    ) : null}
+                    <MobileWorkspaceMenuAction
+                      active={walletRailActive}
+                      icon={<WalletIcon className="size-4" />}
+                      label="Wallet"
+                      onSelect={() => runMobileWorkspaceAction(() => setCurrentSidePanel("wallet"))}
+                    />
+                    <MobileWorkspaceMenuAction
+                      active={profileRailActive}
+                      icon={<CircleUserRound className="size-4" />}
+                      label="Profile & account"
+                      onSelect={() => runMobileWorkspaceAction(() => setCurrentSidePanel("profile"))}
+                    />
+
+                    <div className="my-1 h-px bg-dls-border" aria-hidden="true" />
+                    <p className="px-3 pb-1 pt-2 text-xs font-medium text-dls-muted">Desks</p>
+                    {VENUE_SIDE_PANELS.map((panel) => {
+                      const visual = getCustomerProtocolDeskVisualForLaunch(
+                        panel,
+                        MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+                      );
+                      return (
+                        <MobileWorkspaceMenuAction
+                          key={panel}
+                          active={activeSidePanel === panel}
+                          icon={<ProtocolLogo venue={panel} size={20} />}
+                          label={visual?.displayName ?? panel}
+                          onSelect={() => runMobileWorkspaceAction(() => openVenueRailPane(panel))}
+                          style={deskToneStyle(panel)}
+                        />
+                      );
+                    })}
+                    {!hostedManagedTools && wellnessRailLauncher ? (
+                      <MobileWorkspaceMenuAction
+                        icon={<Dumbbell className="size-4" />}
+                        label={getCustomerProtocolDeskVisual("wellness")?.displayName ?? "Longevity"}
+                        onSelect={() => runMobileWorkspaceAction(() => {
+                          openWorkflowDesk("wellness", wellnessRailLauncher.prompt, {
+                            title: wellnessRailLauncher.title,
+                            sourceId: "wellness-mobile-menu-launcher",
+                          });
+                        })}
+                        style={deskToneStyle("wellness")}
+                      />
+                    ) : null}
+                  </nav>
+                </PopoverContent>
+              </Popover>
               {/* Revert/redo moved to per-message actions */}
               {props.developerMode ? (
                 <Button
@@ -3051,11 +3291,18 @@ export function SessionPage(props: SessionPageProps) {
                               {homeProjectName}
                             </h2>
                             <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-                              Continue active work, start a focused desk task, or create something new.
+                              Describe an outcome, continue your work, or open a protocol desk.
                             </p>
                           </div>
 
-                          <WorkspaceHomePrimaryAction {...homePrimaryAction} />
+                          {homePrimaryAction ? <WorkspaceHomePrimaryAction {...homePrimaryAction} /> : (
+                            <Suspense fallback={<div className="h-48 border-y border-dls-border/55" aria-hidden="true" />}>
+                              <WorkspaceCoworkerStart
+                                disabled={props.sidebar.newTaskDisabled || !props.matterhornServerClient || !props.runtimeWorkspaceId}
+                                onChoose={startCoworkerFromHome}
+                              />
+                            </Suspense>
+                          )}
 
                           <div
                             className="flex flex-wrap items-center gap-1.5 border-t border-dls-border/40 pt-3"
@@ -3414,9 +3661,9 @@ export function SessionPage(props: SessionPageProps) {
                 />
                 <ResizablePanel
                   panelRef={browserPanelRef}
-                  defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
-                  minSize={visibleSidePanel === "extensions" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
-                  maxSize={protocolSidePanelOpen || visibleSidePanel === "memory" || visibleSidePanel === "notes" || visibleSidePanel === "extensions" ? "500px" : "70%"}
+                  defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "coworkers" || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
+                  minSize={visibleSidePanel === "extensions" || visibleSidePanel === "coworkers" || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
+                  maxSize={protocolSidePanelOpen || visibleSidePanel === "coworkers" || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" || visibleSidePanel === "extensions" ? "500px" : "70%"}
                   className="matterhorn-side-panel hidden h-full min-h-0 overflow-hidden bg-dls-background lg:flex lg:flex-col"
                 >
                   <Suspense fallback={<LazyPanelFallback />}>
@@ -3524,6 +3771,36 @@ export function SessionPage(props: SessionPageProps) {
                 <span className={RAIL_LABEL_CLASS}>Outputs</span>
               </Button>
             ) : null}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(
+                RAIL_BUTTON_CLASS,
+                coworkersRailActive && RAIL_ACTIVE_CLASS,
+              )}
+              onClick={openCoworkersRailPane}
+              title="Coworkers"
+              aria-label="Coworkers"
+              aria-pressed={coworkersRailActive}
+            >
+              <UsersRound size={17} />
+              <span className={RAIL_LABEL_CLASS}>Coworkers</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(
+                RAIL_BUTTON_CLASS,
+                filesRailActive && RAIL_ACTIVE_CLASS,
+              )}
+              onClick={openAgentFilesRailPane}
+              title="Files for your coworker"
+              aria-label="Files for your coworker"
+              aria-pressed={filesRailActive}
+            >
+              <Files size={17} />
+              <span className={RAIL_LABEL_CLASS}>Files</span>
+            </Button>
             <Button
               variant="ghost"
               size="icon-sm"

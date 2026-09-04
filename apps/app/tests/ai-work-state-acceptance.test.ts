@@ -7,6 +7,7 @@ function source(path: string) {
 
 describe("Milestone 3 AI work-state acceptance", () => {
   const surface = source("domains/session/surface/session-surface.tsx");
+  const receipt = source("domains/session/surface/agent-run-receipt-disclosure.tsx");
   const messages = source("domains/session/surface/message-list.tsx");
   const route = source("shell/session-route.tsx");
 
@@ -68,14 +69,14 @@ describe("Milestone 3 AI work-state acceptance", () => {
 
   test("completed runs disclose privacy, usage, tools, Memory, and wallet reconciliation", () => {
     expect(surface).toContain("AgentRunReceiptDisclosure");
-    expect(surface).toContain("receipt.privacy.dataCategories.join");
-    expect(surface).toContain("receipt.privacy.redactionCount");
-    expect(surface).toContain("receipt.memory.readIds.length");
-    expect(surface).toContain("receipt.memory.writtenIds.length");
-    expect(surface).toContain("receiptToolLabel");
-    expect(surface).toContain("tool.latencyMs");
-    expect(surface).toContain("tool.freshness");
-    expect(surface).toContain("receipt.usage.cacheWriteTokens");
-    expect(surface).toContain("action.publicReceipt");
+    expect(receipt).toContain("receipt.privacy.dataCategories.join");
+    expect(receipt).toContain("receipt.privacy.redactionCount");
+    expect(receipt).toContain("receipt.memory.readIds.length");
+    expect(receipt).toContain("receipt.memory.writtenIds.length");
+    expect(receipt).toContain("receiptToolLabel");
+    expect(receipt).toContain("tool.latencyMs");
+    expect(receipt).toContain("tool.freshness");
+    expect(receipt).toContain("receipt.usage.cacheWriteTokens");
+    expect(receipt).toContain("action.publicReceipt");
   });
 });

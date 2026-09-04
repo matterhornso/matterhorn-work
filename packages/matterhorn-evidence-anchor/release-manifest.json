@@ -1,0 +1,15 @@
+{
+  "version": "matterhorn.sui-evidence-anchor-release.v1",
+  "network": "testnet",
+  "compiler": "sui 1.73.0-homebrew",
+  "frameworkRevision": "718ae563a42fb4ba0d055588f81c704dcef58c25",
+  "modules": {
+    "evidence_anchor": "539ced005bc0305c990729c8f0c7f29db271fde69ed043e68e03cb5930735ce2"
+  },
+  "files": {
+    "Move.toml": "fdac996f079e3fa68a1546f1a548ea3332da191c5733eb936cfbd4466e1efd50",
+    "Move.lock": "668e854fb0eb7142b6ef7df6b1de097ed5d9d2f575cc7887857f633300122d3b",
+    "sources/evidence_anchor.move": "d5b55f0ef4918706c7b07cb04160f2a94ebc1d265918e16caf432a6f919a8361",
+    "tests/evidence_anchor_tests.move": "9c6eada9b8680aa2136c2cffdb546bf42b33c020f5231cc2980b057f1cc11774"
+  }
+}

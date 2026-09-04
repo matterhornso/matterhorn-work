@@ -11,6 +11,10 @@ import {
 import { createServerLogger, startServer } from "./server.js";
 import { ensureWorkspaceFiles } from "./workspace-init.js";
 import { buildManagedOpencodeRuntimeConfig } from "./managed-opencode-runtime-config.js";
+import {
+  resolveManagedVenicePrivateModels,
+  startManagedVenicePrivateModelRegistryRefresh,
+} from "./venice-provider.js";
 import pkg from "../package.json" with { type: "json" };
 
 const args = parseCliArgs(process.argv.slice(2));
@@ -29,6 +33,7 @@ const config = await resolveServerConfig(args);
 const logger = createServerLogger(config);
 const serverUrl = `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`;
 let managedOpencode: ManagedOpencodeServer | null = null;
+let stopVenicePrivateModelRefresh: () => void = () => undefined;
 
 function logManagedOpencodeEvent(event: ManagedOpencodeEvent) {
   if (event.type === "health_failure" && event.consecutiveFailures < event.threshold) return;
@@ -56,10 +61,13 @@ if (!config.readOnly) {
 if (!config.opencodeBaseUrl && process.env.OPENWORK_MANAGE_OPENCODE === "1") {
   const workspace = config.workspaces[0];
   if (workspace?.path) {
+    const venicePrivateModels = await resolveManagedVenicePrivateModels();
+    stopVenicePrivateModelRefresh = startManagedVenicePrivateModelRegistryRefresh().stop;
     const managedRuntimeConfig = buildManagedOpencodeRuntimeConfig({
       serverUrl,
       clientToken: config.token,
       enableCudosProvider: Boolean(process.env.CUDOS_API_KEY?.trim()),
+      venicePrivateModels,
     });
     const managedOpencodeCwd = process.env.OPENWORK_MANAGED_OPENCODE_CWD?.trim() || workspace.path;
     await mkdir(managedOpencodeCwd, { recursive: true });
@@ -121,6 +129,7 @@ if (args.verbose) {
 }
 
 const shutdown = async () => {
+  stopVenicePrivateModelRefresh();
   await managedOpencode?.close();
   (server as { stop?: (closeActiveConnections?: boolean) => void }).stop?.(true);
 };

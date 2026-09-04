@@ -378,7 +378,7 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
   const fetchImpl = isDesktopRuntime()
     ? createDesktopFetch(auth)
     : (input: RequestInfo | URL, init?: RequestInit) => {
-        // OpenWork v0.18.35 keeps web event streams outside the ordinary
+        // OpenWork v0.18.42 keeps web event streams outside the ordinary
         // request timeout. The subscription owner remains responsible for
         // cancellation through its AbortSignal.
         const timeoutMs = resolveOpencodeRequestTimeoutMs(input, init);

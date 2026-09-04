@@ -329,6 +329,22 @@ describe("Dev observability log safety", () => {
       message: "Dev log payload is too large",
     });
   });
+
+  test("POST /dev/log does not expose filesystem errors when the sink cannot be written", async () => {
+    const { base, dir } = await boot();
+    process.env.OPENWORK_DEV_LOG_FILE = dir;
+
+    const response = await fetch(`${base}/dev/log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Connection: "close" },
+      body: JSON.stringify({ message: "safe diagnostic" }),
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(payload).toEqual({ ok: false, reason: "dev_log_write_failed" });
+    expect(JSON.stringify(payload)).not.toContain(dir);
+  });
 });
 
 // ---------------------------------------------------------------------------

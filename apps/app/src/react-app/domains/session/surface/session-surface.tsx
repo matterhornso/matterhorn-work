@@ -8,7 +8,6 @@ import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-m
 import type { MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
 import type {
   MatterhornAgentPrivacyPreflightResponse,
-  MatterhornAgentRunReceipt,
 } from "@matterhorn-work/types/guarded-agent-runtime";
 import {
   AlertCircle,
@@ -20,9 +19,11 @@ import {
   Database,
   Dumbbell,
   FileText,
+  Files,
   Info,
   Minimize2,
   ShieldCheck,
+  UserRound,
   Wallet as WalletIcon,
 } from "lucide-react";
 
@@ -82,15 +83,12 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { ReactComposerNotice } from "./composer/notice";
-import { SessionDebugPanel } from "./debug-panel";
 import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from "./session-render-state";
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
 import { resolveAssistantResponseRetryTurn, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
 import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionActivityStatus } from "../status/session-activity-store";
-import { PermissionApprovalPanel } from "../chat/permission-approval-modal";
-import { QuestionPanel } from "../modals/question-modal";
 import { deriveOpenTargets, selectAutoOpenTarget, type OpenTarget } from "../artifacts/open-target";
 import {
   seedSessionState,
@@ -105,6 +103,17 @@ import {
   getComposerPasteParts,
   useComposerStateStore,
 } from "./composer-state-store";
+import {
+  describeMatterhornAgentFileContext,
+  getMatterhornSessionAgentFileContext,
+  useMatterhornSessionAgentFileContextStore,
+  type MatterhornSessionAgentFileContext,
+} from "./agent-file-context-store";
+import {
+  getMatterhornSessionCoworkerContext,
+  useMatterhornSessionCoworkerContextStore,
+  type MatterhornSessionCoworkerContext,
+} from "./coworker-context-store";
 
 // These project-local tools are maintained for the Matterhorn Desks team, not
 // workspace users. The server marks them as non-invocable; this list protects
@@ -147,9 +156,27 @@ import { buildResultCardMemoryRecord } from "./result-card-memory";
 const SessionTranscript = lazy(() => import("./message-list").then((module) => ({
   default: module.SessionTranscript,
 })));
+const AgentRunReceiptDisclosure = lazy(() => import("./agent-run-receipt-disclosure").then((module) => ({
+  default: module.AgentRunReceiptDisclosure,
+})));
 const SessionImageGenerationPanel = lazy(() =>
   import("../media/session-image-generation-panel").then((module) => ({
     default: module.SessionImageGenerationPanel,
+  })),
+);
+const PermissionApprovalPanel = lazy(() =>
+  import("../chat/permission-approval-modal").then((module) => ({
+    default: module.PermissionApprovalPanel,
+  })),
+);
+const QuestionPanel = lazy(() =>
+  import("../modals/question-modal").then((module) => ({
+    default: module.QuestionPanel,
+  })),
+);
+const SessionDebugPanel = lazy(() =>
+  import("./debug-panel").then((module) => ({
+    default: module.SessionDebugPanel,
   })),
 );
 import {
@@ -637,6 +664,10 @@ export type SessionSurfaceProps = {
   modelUnavailable?: boolean;
   selectedModel: ModelRef;
   providerPrivacyPolicy?: MatterhornProviderPrivacyPolicy | null;
+  privateModeAvailable?: boolean;
+  privateModeEnabled?: boolean;
+  privateModeUnavailableReason?: string | null;
+  onPrivateModeChange?: (enabled: boolean) => void;
   onModelPickerOpenChange: (open: boolean) => void;
   onModelChange: (model: ModelRef) => void;
   onSendDraft: (draft: ComposerDraft) => Promise<void> | void;
@@ -892,134 +923,6 @@ function AssistantStatusSpacer() {
         trackElapsed={false}
       />
     </div>
-  );
-}
-
-function receiptDuration(receipt: MatterhornAgentRunReceipt): string {
-  const durationMs = receipt.responseDurationMs ?? 0;
-  if (durationMs < 1_000) return `${durationMs}ms`;
-  return `${(durationMs / 1_000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
-}
-
-function receiptToolLabel(tool: MatterhornAgentRunReceipt["tools"][number]): string {
-  return [
-    `${tool.name} · ${tool.outcome}`,
-    `${tool.latencyMs}ms`,
-    tool.source ? `source ${tool.source}` : null,
-    tool.freshness ? `freshness ${tool.freshness}` : null,
-  ].filter(Boolean).join(" · ");
-}
-
-function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgentRunReceipt }) {
-  const totalTokens = receipt.usage.inputTokens + receipt.usage.outputTokens + receipt.usage.reasoningTokens;
-  const capabilityDenials = receipt.capabilities.filter((decision) => decision.decision === "denied").length;
-  const trainingLabel = receipt.provider.trainingUse === "none"
-    ? "No training"
-    : receipt.provider.trainingUse === "opt_in_only"
-      ? "Training only if provider account opts in"
-      : "Training policy unverified";
-  const retentionLabel = receipt.provider.retentionDays === null
-    ? receipt.provider.privacyStatus === "local_processing" ? "Local processing" : "Retention period not verified"
-    : `${receipt.provider.retentionDays}-day provider retention`;
-  const status = receipt.status === "success"
-    ? "Completed"
-    : receipt.status === "partial"
-      ? "Partially completed"
-      : receipt.status === "cancelled"
-        ? "Cancelled"
-        : "Failed";
-  return (
-    <details className="mt-3 rounded-lg border border-dls-border bg-dls-surface/45 text-xs text-dls-secondary">
-      <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dls-text/25">
-        <span className="font-medium text-dls-text">Run receipt</span>
-        <span className="flex flex-wrap justify-end gap-x-3 gap-y-1 tabular-nums">
-          <span>{status}</span>
-          <span>{receiptDuration(receipt)}</span>
-          <span>{totalTokens.toLocaleString()} tokens</span>
-          <span>{receipt.tools.length} tool{receipt.tools.length === 1 ? "" : "s"}</span>
-        </span>
-      </summary>
-      <div className="grid gap-3 border-t border-dls-border px-3 py-3 sm:grid-cols-2">
-        <div>
-          <div className="font-medium text-dls-text">Privacy</div>
-          <div className="mt-1 leading-5">
-            {receipt.provider.name || receipt.provider.id}/{receipt.provider.modelId} · {receipt.privacy.mode.replaceAll("_", " ")}
-            <br />
-            {receipt.privacy.dataLeavesMatterhorn ? "Data left Matterhorn" : "Processed inside Matterhorn"}
-            {receipt.privacy.consent === "single_request" ? " · one-request consent" : ""}
-            <br />
-            {trainingLabel} · {retentionLabel}
-            {receipt.privacy.dataCategories.length > 0 ? (
-              <>
-                <br />
-                Sent: {receipt.privacy.dataCategories.join(", ")}
-                {receipt.privacy.redactionCount > 0 ? ` · ${receipt.privacy.redactionCount} redacted` : ""}
-              </>
-            ) : null}
-            {receipt.memory.readIds.length > 0 || receipt.memory.writtenIds.length > 0 ? (
-              <>
-                <br />
-                Memory: {receipt.memory.readIds.length} read · {receipt.memory.writtenIds.length} written
-              </>
-            ) : null}
-            {receipt.provider.policyUrl ? (
-              <>
-                <br />
-                <a
-                  href={receipt.provider.policyUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline decoration-dls-border underline-offset-2 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/25"
-                >
-                  Provider privacy policy
-                </a>
-              </>
-            ) : null}
-          </div>
-        </div>
-        <div>
-          <div className="font-medium text-dls-text">Usage</div>
-          <div className="mt-1 leading-5 tabular-nums">
-            {receipt.usage.inputTokens.toLocaleString()} input · {receipt.usage.outputTokens.toLocaleString()} output
-            <br />
-            {receipt.usage.reasoningTokens.toLocaleString()} reasoning · {receipt.usage.cacheReadTokens.toLocaleString()} cache reads
-            {receipt.usage.cacheWriteTokens > 0 ? ` · ${receipt.usage.cacheWriteTokens.toLocaleString()} cache writes` : ""}
-            <br />
-            Estimated cost: ${receipt.usage.estimatedCostUsd.toFixed(4)}
-            <br />
-            Budget: {receipt.usage.toolCallBudget.reads} reads · {receipt.usage.toolCallBudget.preparesPerFamily} prepare · 0 submits
-          </div>
-        </div>
-        <div>
-          <div className="font-medium text-dls-text">Tools</div>
-          <div className="mt-1 leading-5">
-            {receipt.tools.length > 0
-              ? receipt.tools.map(receiptToolLabel).join("; ")
-              : "No crypto tools used."}
-            {receipt.capabilities.length > 0 ? (
-              <>
-                <br />
-                {receipt.capabilities.length} capability decision{receipt.capabilities.length === 1 ? "" : "s"}
-                {capabilityDenials > 0 ? ` · ${capabilityDenials} denied` : " · none denied"}
-              </>
-            ) : null}
-          </div>
-        </div>
-        <div>
-          <div className="font-medium text-dls-text">Wallet review</div>
-          <div className="mt-1 leading-5">
-            {receipt.reviewedActions.length > 0
-              ? receipt.reviewedActions.map((action) => (
-                  <span key={action.intentHash} className="block break-all">
-                    Intent {action.intentHash.slice(0, 12)}… · simulation {action.simulationReference.slice(0, 18)}…
-                    {action.publicReceipt ? ` · receipt ${action.publicReceipt}` : " · not submitted"}
-                  </span>
-                ))
-              : "No transaction prepared or submitted."}
-          </div>
-        </div>
-      </div>
-    </details>
   );
 }
 
@@ -1473,6 +1376,54 @@ function MemoryContextStrip(props: { context: MatterhornSessionMemoryContext; on
   );
 }
 
+function AgentFileContextStrip(props: { context: MatterhornSessionAgentFileContext; onClear: () => void }) {
+  return (
+    <div className="border-b border-dls-border bg-dls-surface/70 px-4 py-2">
+      <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 font-medium text-dls-text">
+            <Files aria-hidden="true" size={13} />
+            <span>Coworker files</span>
+          </div>
+          <div className="truncate text-dls-secondary">{describeMatterhornAgentFileContext(props.context)}</div>
+        </div>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-dls-border px-2 py-1 font-medium text-dls-secondary transition-colors hover:border-primary/35 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+          onClick={props.onClear}
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CoworkerContextStrip(props: { context: MatterhornSessionCoworkerContext; onClear: () => void }) {
+  return (
+    <div className="border-b border-dls-border bg-dls-surface/70 px-4 py-2">
+      <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 font-medium text-dls-text">
+            <UserRound aria-hidden="true" size={13} />
+            <span>Working with {props.context.name}</span>
+          </div>
+          <div className="truncate text-dls-secondary">
+            <span className="capitalize">{props.context.role.replaceAll("_", " ")}</span> · requests follow this coworker&apos;s limits
+          </div>
+        </div>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-dls-border px-2 py-1 font-medium text-dls-secondary transition-colors hover:border-primary/35 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+          onClick={props.onClear}
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function revokeAttachmentPreview(attachment: { previewUrl?: string | undefined }) {
   if (!attachment.previewUrl) return;
   URL.revokeObjectURL(attachment.previewUrl);
@@ -1506,6 +1457,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const memoryContext = useMatterhornSessionMemoryContextStore((state) => getMatterhornSessionMemoryContext(state, props.sessionId));
   const setMemoryContext = useMatterhornSessionMemoryContextStore((state) => state.setContext);
   const clearMemoryContext = useMatterhornSessionMemoryContextStore((state) => state.clearContext);
+  const agentFileContext = useMatterhornSessionAgentFileContextStore((state) => getMatterhornSessionAgentFileContext(state, props.sessionId));
+  const clearAgentFileContext = useMatterhornSessionAgentFileContextStore((state) => state.clearContext);
+  const coworkerContext = useMatterhornSessionCoworkerContextStore((state) => getMatterhornSessionCoworkerContext(state, props.sessionId));
+  const clearCoworkerContext = useMatterhornSessionCoworkerContextStore((state) => state.clearContext);
   const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [error, setError] = useState<SessionError | null>(null);
   const [sending, setSending] = useState(false);
@@ -2044,6 +1999,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
     const resolvedSlashMatch = resolved.trim().match(/^\/([^\s]+)\s*(.*)$/);
     const attachmentIds = nextAttachments.map((attachment) => attachment.id).filter(Boolean).sort();
     const memoryIds = (memoryContext?.records ?? []).map((record) => record.id).filter(Boolean).sort();
+    const agentFileIds = (agentFileContext?.files ?? []).map((file) => file.id).filter(Boolean).sort();
+    const coworkerId = agentFileContext?.coworker.id ?? coworkerContext?.id;
     return {
       mode: "prompt",
       parts,
@@ -2052,18 +2009,21 @@ export function SessionSurface(props: SessionSurfaceProps) {
       resolvedText: resolved,
       command: resolvedSlashMatch ? { name: resolvedSlashMatch[1] ?? "", arguments: resolvedSlashMatch[2] ?? "" } : undefined,
       ...(
-        options?.privacyConsentToken || attachmentIds.length > 0 || memoryIds.length > 0
+        props.privateModeEnabled || options?.privacyConsentToken || attachmentIds.length > 0 || memoryIds.length > 0 || agentFileIds.length > 0 || coworkerId
           ? {
               privacy: {
+                ...(props.privateModeEnabled ? { mode: "private_workspace" as const } : {}),
                 ...(options?.privacyConsentToken ? { consentToken: options.privacyConsentToken } : {}),
                 ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
+                ...(coworkerId ? { coworkerId } : {}),
+                ...(agentFileIds.length > 0 ? { agentFileIds } : {}),
                 ...(memoryIds.length > 0 ? { memoryIds } : {}),
               },
             }
           : {}
       ),
     };
-  }, [memoryContext?.records, mentions, pasteParts]);
+  }, [agentFileContext, coworkerContext?.id, memoryContext?.records, mentions, pasteParts, props.privateModeEnabled]);
 
   const handleComposerDraftChange = useCallback((value: string) => {
     setComposerDraft(props.sessionId, value);
@@ -3191,6 +3151,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
       props.activePermission ||
       activeDeskMode ||
       bittensorContext ||
+      agentFileContext ||
+      coworkerContext ||
       memoryContext,
   );
 
@@ -3319,8 +3281,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   <div className="w-full max-w-[880px]">
                     <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                       <div>
-                        <p className="text-base font-semibold tracking-[-0.01em] text-dls-text">Start with a Matterhorn workflow</p>
-                        <p className="text-xs leading-5 text-dls-secondary">Choose a desk task. Matterhorn starts it in a new chat.</p>
+                        <p className="text-base font-semibold tracking-[-0.01em] text-dls-text">Choose a desk to begin</p>
+                        <p className="text-xs leading-5 text-dls-secondary">
+                          Start with research or prepare an action. Nothing moves without your wallet approval.
+                        </p>
                       </div>
                     </div>
                     <div className="matterhorn-session-start-list grid grid-cols-1 gap-1.5 lg:grid-cols-2">
@@ -3445,22 +3409,22 @@ export function SessionSurface(props: SessionSurfaceProps) {
         >
           <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
           <p className="min-w-0">
-              {props.providerPrivacyPolicy ? (
+              {props.privateModeEnabled ? (
+                <>
+                  Private mode · Venice does not retain this prompt or response.
+                </>
+              ) : props.providerPrivacyPolicy ? (
                 props.providerPrivacyPolicy.allowed ? (
                   <>
-                    Matterhorn does not use prompts to train models.{" "}
-                    {props.providerPrivacyPolicy.providerName} processes this
-                    prompt. {props.providerPrivacyPolicy.label}.
+                    Matterhorn does not train on your chats · {props.providerPrivacyPolicy.providerName} processes this chat · {props.providerPrivacyPolicy.label}.
                   </>
                 ) : (
                   <>
-                    Sending is blocked because{" "}
-                    {props.providerPrivacyPolicy.providerName}&apos;s training and
-                    retention terms are not verified.
+                    Sending blocked · {props.providerPrivacyPolicy.providerName}&apos;s training and retention terms are not verified.
                   </>
                 )
               ) : (
-                <>Checking how the selected provider handles prompts.</>
+                <>Checking model privacy.</>
               )}{" "}
               <button
                 type="button"
@@ -3492,6 +3456,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
         showModelPicker={shellConfig.modelPicker && !props.modelUnavailable}
         modelPickerOpen={props.modelPickerOpen}
         selectedModel={props.selectedModel}
+        privateModeAvailable={Boolean(props.privateModeAvailable)}
+        privateModeEnabled={Boolean(props.privateModeEnabled)}
+        privateModeUnavailableReason={props.privateModeUnavailableReason}
+        onPrivateModeChange={props.onPrivateModeChange}
         onModelPickerOpenChange={props.onModelPickerOpenChange}
         onModelChange={props.onModelChange}
         attachments={attachments}
@@ -3551,25 +3519,29 @@ export function SessionSurface(props: SessionSurfaceProps) {
             hasComposerTopAccessory ? (
               <div className="space-y-2">
                 {props.activeQuestion ? (
-                  <QuestionPanel
-                    questions={props.activeQuestion.questions}
-                    busy={props.questionReplyBusy ?? false}
-                    onReply={(answers) => {
-                      if (props.activeQuestion) {
-                        props.respondQuestion?.(props.activeQuestion.id, answers);
-                      }
-                    }}
-                  />
+                  <Suspense fallback={<div className="px-4 py-3 text-xs text-dls-secondary" role="status">Loading question…</div>}>
+                    <QuestionPanel
+                      questions={props.activeQuestion.questions}
+                      busy={props.questionReplyBusy ?? false}
+                      onReply={(answers) => {
+                        if (props.activeQuestion) {
+                          props.respondQuestion?.(props.activeQuestion.id, answers);
+                        }
+                      }}
+                    />
+                  </Suspense>
                 ) : (
                   <TodoPanel todos={props.todos ?? []} />
                 )}
                 {props.activePermission ? (
-                  <PermissionApprovalPanel
-                    permission={props.activePermission}
-                    busy={props.permissionReplyBusy}
-                    respondPermission={props.respondPermission}
-                    safeStringify={props.safeStringify}
-                  />
+                  <Suspense fallback={<div className="px-4 py-3 text-xs text-dls-secondary" role="status">Loading review…</div>}>
+                    <PermissionApprovalPanel
+                      permission={props.activePermission}
+                      busy={props.permissionReplyBusy}
+                      respondPermission={props.respondPermission}
+                      safeStringify={props.safeStringify}
+                    />
+                  </Suspense>
                 ) : null}
                 {activeDeskMode ? (
                   <MatterhornDeskSessionStrip mode={activeDeskMode} />
@@ -3604,6 +3576,25 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     }}
                   />
                 ) : null}
+                {coworkerContext ? (
+                  <CoworkerContextStrip
+                    context={coworkerContext}
+                    onClear={() => {
+                      clearCoworkerContext(props.sessionId);
+                      clearAgentFileContext(props.sessionId);
+                      setNotice({ title: "Coworker cleared", tone: "info" });
+                    }}
+                  />
+                ) : null}
+                {agentFileContext ? (
+                  <AgentFileContextStrip
+                    context={agentFileContext}
+                    onClear={() => {
+                      clearAgentFileContext(props.sessionId);
+                      setNotice({ title: "Coworker files cleared", tone: "info" });
+                    }}
+                  />
+                ) : null}
                 {showImageGenerationPanel ? (
                   <SessionImageGenerationPanel
                     client={props.client}
@@ -3620,7 +3611,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
         </DevProfiler>
       </div>
       {/* Error display moved inline into the session conversation area */}
-      {props.developerMode ? <SessionDebugPanel model={model} snapshot={snapshot} /> : null}
+      {props.developerMode ? (
+        <Suspense fallback={null}>
+          <SessionDebugPanel model={model} snapshot={snapshot} />
+        </Suspense>
+      ) : null}
     </div>
     </DevProfiler>
   );

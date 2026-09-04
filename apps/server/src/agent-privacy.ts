@@ -6,9 +6,13 @@ import type {
   MatterhornAgentPrivacyPart,
   MatterhornAgentPrivacyPreflightResponse,
 } from "@matterhorn-work/types/guarded-agent-runtime";
-import { resolveProviderPrivacyPolicy } from "./provider-privacy.js";
+import { resolveModelProviderPrivacyPolicy } from "./provider-privacy.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import {
+  isRegisteredVenicePrivateModel,
+  VENICE_PROVIDER_ID,
+} from "./venice-provider.js";
 
 const CONSENT_TTL_MS = 5 * 60 * 1_000;
 const MAX_TRACKED_CHALLENGES = 2_000;
@@ -41,6 +45,13 @@ export type PrivacyInput = {
   attachmentIds?: string[];
   memoryIds?: string[];
   privacyMode?: MatterhornAgentPrivacyMode;
+  /**
+   * Server-computed hash of the exact tool, coworker, and connected-app
+   * authority that will accompany this request. Clients cannot provide this
+   * value directly; it makes one-request consent invalid when authority
+   * changes without putting the authority document in provider context.
+   */
+  authorizationContextHash?: string;
 };
 
 type ChallengeRecord = {
@@ -62,6 +73,25 @@ type ConsentRecord = {
   expiresAtMs: number;
   consumed: boolean;
 };
+
+function challengeMatches(
+  challenge: ChallengeRecord | null | undefined,
+  input: {
+    requestHash: string;
+    workspaceId: string;
+    sessionId: string;
+    nowMs: number;
+  },
+): challenge is ChallengeRecord {
+  return Boolean(
+    challenge
+    && !challenge.confirmed
+    && challenge.expiresAtMs > input.nowMs
+    && challenge.workspaceId === input.workspaceId
+    && challenge.sessionId === input.sessionId
+    && equalDigest(challenge.requestHash, input.requestHash),
+  );
+}
 
 export type MatterhornPrivacyEvaluation = {
   response: MatterhornAgentPrivacyPreflightResponse;
@@ -183,6 +213,7 @@ export function agentPrivacyRequestHash(input: PrivacyInput): string {
     attachmentIds: normalizedIds(input.attachmentIds),
     memoryIds: normalizedIds(input.memoryIds),
     privacyMode: requestedMode(input.privacyMode),
+    authorizationContextHash: input.authorizationContextHash?.trim() || null,
     parts: input.parts.map((part) => ({
       type: part.type,
       text: part.contentHash ? null : part.text ?? null,
@@ -208,15 +239,27 @@ export class MatterhornPrivacyFirewall {
     this.cleanup(now.getTime());
     const requestHash = agentPrivacyRequestHash(input);
     const classified = classify(input);
-    const policy = resolveProviderPrivacyPolicy(input.providerId, input.providerName, process.env, now);
+    const policy = resolveModelProviderPrivacyPolicy(
+      input.providerId,
+      input.modelId,
+      input.providerName,
+      process.env,
+      now,
+    );
     const dataLeavesMatterhorn = policy.status !== "local_processing";
     const providerVerified = policy.status === "local_processing" || policy.status === "verified_no_training";
+    const invalidVeniceModel =
+      input.providerId.trim().toLowerCase() === VENICE_PROVIDER_ID &&
+      !isRegisteredVenicePrivateModel(input.modelId, now);
     let decision: MatterhornAgentPrivacyPreflightResponse["decision"] = "allow";
     let reason = classified.effectiveMode === "public_research"
       ? "Public research can use the disclosed provider without private workspace context."
       : "The selected provider is approved for this private context.";
 
-    if (classified.labels.includes("secret")) {
+    if (invalidVeniceModel) {
+      decision = "blocked";
+      reason = "Matterhorn could not verify this model in Venice's current private-model catalog. Choose an available private model and try again.";
+    } else if (classified.labels.includes("secret")) {
       decision = "blocked";
       reason = "Matterhorn blocked secret material before any provider or runtime dispatch. Remove the secret and try again.";
     } else if (classified.effectiveMode !== "public_research" && !providerVerified) {
@@ -290,53 +333,49 @@ export class MatterhornPrivacyFirewall {
   }): MatterhornAgentPrivacyConsentResponse {
     const nowMs = (input.now ?? new Date()).getTime();
     this.cleanup(nowMs);
-    const candidate = this.stateStore
-      ? this.stateStore.get<ChallengeRecord>("privacy_challenge", input.challengeId, nowMs)
-      : this.challenges.get(input.challengeId);
-    if (
-      !candidate
-      || candidate.confirmed
-      || candidate.expiresAtMs <= nowMs
-      || candidate.workspaceId !== input.workspaceId
-      || candidate.sessionId !== input.sessionId
-      || !equalDigest(candidate.requestHash, input.requestHash)
-    ) {
-      throw new Error("privacy_consent_challenge_invalid");
-    }
-    const challenge = this.stateStore
-      ? this.stateStore.take<ChallengeRecord>("privacy_challenge", input.challengeId, nowMs)
-      : candidate;
-    this.challenges.delete(input.challengeId);
-    if (
-      !challenge
-      || challenge.confirmed
-      || challenge.expiresAtMs <= nowMs
-      || challenge.workspaceId !== input.workspaceId
-      || challenge.sessionId !== input.sessionId
-      || !equalDigest(challenge.requestHash, input.requestHash)
-    ) throw new Error("privacy_consent_challenge_invalid");
-    challenge.confirmed = true;
-    const token = randomBytes(32).toString("base64url");
-    const tokenHash = sha256(token);
-    const consent: ConsentRecord = {
-      tokenHash,
-      workspaceId: challenge.workspaceId,
-      sessionId: challenge.sessionId,
-      requestHash: challenge.requestHash,
-      categories: challenge.categories,
-      expiresAtMs: challenge.expiresAtMs,
-      consumed: false,
+    const convertChallenge = (challenge: ChallengeRecord | null | undefined) => {
+      if (!challengeMatches(challenge, {
+        requestHash: input.requestHash,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        nowMs,
+      })) throw new Error("privacy_consent_challenge_invalid");
+      challenge.confirmed = true;
+      const token = randomBytes(32).toString("base64url");
+      const tokenHash = sha256(token);
+      const consent: ConsentRecord = {
+        tokenHash,
+        workspaceId: challenge.workspaceId,
+        sessionId: challenge.sessionId,
+        requestHash: challenge.requestHash,
+        categories: challenge.categories,
+        expiresAtMs: challenge.expiresAtMs,
+        consumed: false,
+      };
+      return { challenge, consent, token };
     };
+    const stateStore = this.stateStore;
+    const converted = stateStore
+      ? stateStore.transaction(() => {
+          const challenge = stateStore.take<ChallengeRecord>("privacy_challenge", input.challengeId, nowMs);
+          const result = convertChallenge(challenge);
+          const stored = stateStore.putIfAbsent({
+            kind: "privacy_consent",
+            key: result.consent.tokenHash,
+            workspaceId: result.challenge.workspaceId,
+            sessionId: result.challenge.sessionId,
+            value: result.consent,
+            expiresAtMs: result.challenge.expiresAtMs,
+            nowMs,
+          });
+          if (!stored) throw new Error("privacy_consent_token_collision");
+          return result;
+        })
+      : convertChallenge(this.challenges.get(input.challengeId));
+    this.challenges.delete(input.challengeId);
+    const { challenge, consent, token } = converted;
+    const tokenHash = consent.tokenHash;
     this.consents.set(tokenHash, consent);
-    this.stateStore?.put({
-      kind: "privacy_consent",
-      key: tokenHash,
-      workspaceId: challenge.workspaceId,
-      sessionId: challenge.sessionId,
-      value: consent,
-      expiresAtMs: challenge.expiresAtMs,
-      nowMs,
-    });
     return {
       version: "matterhorn.agent-privacy-preflight.v1",
       consentToken: token,

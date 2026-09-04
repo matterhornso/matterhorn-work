@@ -88,7 +88,7 @@ const STATUS_LABELS: Record<ProtocolDeskVisualStatus, string> = {
 
 const DESK_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
   bittensor: "Transfer, stake & unstake",
-  hyperliquid: "Review & submit",
+  hyperliquid: "Review in wallet",
   polymarket: "Buy, sell & cancel",
   sui: "Transfer in wallet",
 };

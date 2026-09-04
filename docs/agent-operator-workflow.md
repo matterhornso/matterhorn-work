@@ -32,6 +32,7 @@ Copy the server URL, client token, and host token from the startup output. Put t
 export MATTERHORN_WORK_SERVER_URL="http://127.0.0.1:8787"
 export MATTERHORN_WORK_TOKEN="<client-token>"
 export MATTERHORN_WORK_HOST_TOKEN="<host-token>"
+export MATTERHORN_REPO="/absolute/path/to/matterhorn-work"
 ```
 
 The client token is for normal server tools. The host token is only for approval inspection and approval replies. Omit the host token from untrusted clients.
@@ -67,7 +68,8 @@ codex mcp add matterhorn-work \
   --env MATTERHORN_WORK_SERVER_URL="$MATTERHORN_WORK_SERVER_URL" \
   --env MATTERHORN_WORK_TOKEN="$MATTERHORN_WORK_TOKEN" \
   --env MATTERHORN_WORK_HOST_TOKEN="$MATTERHORN_WORK_HOST_TOKEN" \
-  -- npx -y matterhorn-work-mcp
+  --env MATTERHORN_WORK_MCP_PROFILE=full \
+  -- node "$MATTERHORN_REPO/packages/matterhorn-work-mcp/index.mjs"
 ```
 
 Claude Code:
@@ -77,8 +79,9 @@ claude mcp add --transport stdio \
   --env MATTERHORN_WORK_SERVER_URL="$MATTERHORN_WORK_SERVER_URL" \
   --env MATTERHORN_WORK_TOKEN="$MATTERHORN_WORK_TOKEN" \
   --env MATTERHORN_WORK_HOST_TOKEN="$MATTERHORN_WORK_HOST_TOKEN" \
+  --env MATTERHORN_WORK_MCP_PROFILE=full \
   matterhorn-work \
-  -- npx -y matterhorn-work-mcp
+  -- node "$MATTERHORN_REPO/packages/matterhorn-work-mcp/index.mjs"
 ```
 
 Generic JSON config:
@@ -87,8 +90,10 @@ Generic JSON config:
 matterhorn-work mcp config \
   --target json \
   --profile server \
+  --repo-path "$MATTERHORN_REPO" \
   --server-url "$MATTERHORN_WORK_SERVER_URL" \
   --token "$MATTERHORN_WORK_TOKEN" \
+  --include-host-approvals \
   --host-token "$MATTERHORN_WORK_HOST_TOKEN"
 ```
 

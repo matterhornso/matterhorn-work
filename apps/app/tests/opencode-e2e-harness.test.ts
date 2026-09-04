@@ -12,7 +12,9 @@ const aggregateScripts = [
 describe("OpenCode E2E harness", () => {
   test("isolates core engine tests from repository plugins and MCP configuration", () => {
     expect(utilSource).toContain("isolatedOpencodeTestConfig");
+    expect(utilSource).toContain("plugin: []");
     expect(utilSource).toContain("OPENCODE_CONFIG_CONTENT: serializedConfig");
+    expect(utilSource).toContain('OPENCODE_DISABLE_PROJECT_CONFIG: "true"');
     for (const script of aggregateScripts) {
       expect(script).toContain("configContent: isolatedOpencodeTestConfig");
     }

@@ -114,6 +114,13 @@ import {
   type MatterhornExecutionMode,
 } from "../domains/session/modes/execution-mode";
 import { buildMatterhornPromptTools } from "../domains/session/modes/prompt-tool-policy";
+import {
+  isPrivateModeModel,
+  isVerifiedPrivateModePolicy,
+  MATTERHORN_PRIVATE_MODEL_PROVIDER_ID,
+  privateModeModelFromProviders,
+  standardModeModelFromProviders,
+} from "../domains/session/private-model-mode";
 import { buildOpenworkEnvSystemContext } from "../domains/session/sync/env-context";
 import {
   permissionKey as reactPermissionKey,
@@ -1932,16 +1939,72 @@ export function SessionRoute() {
     workspaceModelSelection,
   }), [local.prefs.defaultModel, workspaceModelSelection]);
   const selectedPromptModel = selectedPromptModelResolution.model;
-  const selectedProviderPrivacyPolicy: MatterhornProviderPrivacyPolicy | null =
+  const privateModeModel = useMemo(
+    () => privateModeModelFromProviders(providers, providerConnectedIds),
+    [providerConnectedIds, providers],
+  );
+  const standardModeModel = useMemo(
+    () => standardModeModelFromProviders(providers, providerConnectedIds),
+    [providerConnectedIds, providers],
+  );
+  const privateModePrivacyPolicy = workspaceModelSelection?.privacy?.providers?.find(
+    (policy) => policy.providerId.trim().toLowerCase() === MATTERHORN_PRIVATE_MODEL_PROVIDER_ID,
+  ) ?? null;
+  const privateModeVerified = Boolean(
+    privateModeModel && isVerifiedPrivateModePolicy(privateModePrivacyPolicy, privateModeModel),
+  );
+  const selectedPrivateModeVerified = Boolean(
+    selectedPromptModel
+      && isVerifiedPrivateModePolicy(privateModePrivacyPolicy, selectedPromptModel),
+  );
+  const privateModeEnabled = Boolean(
+    selectedPrivateModeVerified &&
+    selectedPromptModel &&
+    isPrivateModeModel(selectedPromptModel) &&
+    providerListQuery.data &&
+    isModelAvailableInConnectedProviders(providerListQuery.data, selectedPromptModel),
+  );
+  const lastNonPrivateModelRef = useRef<ModelRef | null>(null);
+  useEffect(() => {
+    if (selectedPromptModel && !isPrivateModeModel(selectedPromptModel)) {
+      lastNonPrivateModelRef.current = selectedPromptModel;
+    }
+  }, [selectedPromptModel]);
+  useEffect(() => {
+    const expiresAtMs = Date.parse(privateModePrivacyPolicy?.verificationExpiresAt ?? "");
+    if (!Number.isFinite(expiresAtMs)) return undefined;
+    const delayMs = Math.max(0, expiresAtMs - Date.now() + 25);
+    const timer = window.setTimeout(() => refreshWorkspaceModelSelection(), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [privateModePrivacyPolicy?.verificationExpiresAt, refreshWorkspaceModelSelection]);
+  const rawSelectedProviderPrivacyPolicy: MatterhornProviderPrivacyPolicy | null =
     workspaceModelSelection?.privacy?.providers?.find(
       (policy) => policy.providerId === selectedPromptModel?.providerID,
     ) ?? null;
+  const selectedProviderPrivacyPolicy: MatterhornProviderPrivacyPolicy | null =
+    rawSelectedProviderPrivacyPolicy
+      && isPrivateModeModel(selectedPromptModel)
+      && !selectedPrivateModeVerified
+      ? {
+          ...rawSelectedProviderPrivacyPolicy,
+          status: "unverified",
+          trainingUse: "unknown",
+          retentionDays: null,
+          verifiedAt: null,
+          verificationExpiresAt: null,
+          verifiedModelIds: [],
+          allowed: false,
+          label: "Model privacy not verified",
+          description: "This Venice model is not covered by Matterhorn's current private-model proof.",
+        }
+      : rawSelectedProviderPrivacyPolicy;
   const promptProviderReady = hasConnectedPromptProvider(providerListQuery.data);
   const selectedModelUnavailable = Boolean(
     !selectedPromptModel ||
       providerListQuery.isLoading ||
       providerListQuery.isError ||
       !promptProviderReady ||
+      (isPrivateModeModel(selectedPromptModel) && !selectedPrivateModeVerified) ||
       isDesktopProviderBlocked({
         providerId: selectedPromptModel.providerID,
         checkRestriction: checkDesktopRestriction,
@@ -2635,6 +2698,41 @@ export function SessionRoute() {
       modelUnavailable: selectedModelUnavailable,
       selectedModel: selectedPromptModel ?? { providerID: "", modelID: "" },
       providerPrivacyPolicy: selectedProviderPrivacyPolicy,
+      privateModeAvailable: privateModeVerified,
+      privateModeEnabled,
+      privateModeUnavailableReason: privateModeModel && !privateModeVerified
+        ? "Matterhorn could not verify Venice's current private-model list. Open model settings and try again."
+        : null,
+      onPrivateModeChange: (enabled: boolean) => {
+        if (enabled) {
+          if (!privateModeModel || !privateModeVerified) {
+            handleOpenSettings("/settings/ai");
+            return;
+          }
+          local.setPrefs((previous) => ({
+            ...previous,
+            defaultModel: privateModeModel,
+            modelVariant: null,
+          }));
+          setCompactModelPickerOpen(false);
+          return;
+        }
+        const fallback = lastNonPrivateModelRef.current ?? standardModeModel;
+        if (
+          fallback &&
+          providerListQuery.data &&
+          isModelAvailableInConnectedProviders(providerListQuery.data, fallback)
+        ) {
+          local.setPrefs((previous) => ({
+            ...previous,
+            defaultModel: fallback,
+            modelVariant: null,
+          }));
+          return;
+        }
+        setModelPickerQuery("");
+        setModelPickerOpen(true);
+      },
       onModelPickerOpenChange: setCompactModelPickerOpen,
       onModelChange: (model: ModelRef) => {
         local.setPrefs((previous) => ({
@@ -2674,6 +2772,10 @@ export function SessionRoute() {
               selectedWorkspaceId,
               selectedSessionId,
               selectedPromptModel ?? undefined,
+              {
+                ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
+                ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
+              },
             );
             return;
           }
@@ -2745,6 +2847,10 @@ export function SessionRoute() {
             ...(executionModeTools ? { requestToolProfiles: [executionModeTools] } : {}),
             ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
             ...(draft.privacy?.attachmentIds?.length ? { attachmentIds: draft.privacy.attachmentIds } : {}),
+            ...(draft.privacy?.coworkerId ? { coworkerId: draft.privacy.coworkerId } : {}),
+            ...(draft.privacy?.agentFileIds?.length ? {
+              agentFileIds: draft.privacy.agentFileIds,
+            } : {}),
             ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
           });
           if (privacyPreflight.decision !== "allow") {
@@ -2784,6 +2890,10 @@ export function SessionRoute() {
               ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
               ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
               ...(draft.privacy?.attachmentIds?.length ? { attachmentIds: draft.privacy.attachmentIds } : {}),
+              ...(draft.privacy?.coworkerId ? { coworkerId: draft.privacy.coworkerId } : {}),
+              ...(draft.privacy?.agentFileIds?.length ? {
+                agentFileIds: draft.privacy.agentFileIds,
+              } : {}),
               ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
             });
           } else {
@@ -2965,6 +3075,10 @@ export function SessionRoute() {
     navigate,
     opencodeBaseUrl,
     opencodeClient,
+    privateModeEnabled,
+    privateModeModel,
+    privateModeVerified,
+    providerListQuery.data,
     recoverMissingSession,
     responsePerspective,
     selectedAgent,
@@ -2973,7 +3087,9 @@ export function SessionRoute() {
     selectedSessionPending,
     selectedModelUnavailable,
     selectedProviderPrivacyPolicy,
+    selectedPrivateModeVerified,
     selectedPromptModel,
+    standardModeModel,
     selectedWorkspace,
     selectedWorkspaceEndpoint,
     selectedWorkspaceId,

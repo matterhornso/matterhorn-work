@@ -7,7 +7,7 @@ The customer experience is organized around desks rather than raw tools:
 - **Bittensor:** public TAO wallet reads, subnet and validator research, watches, unsigned action previews, and external-signer handoffs.
 - **Hyperliquid:** market, funding, orderbook, account, and position research with preview and handoff boundaries.
 - **Polymarket:** market discovery, outcome and liquidity research, compliance-aware previews, and receipts.
-- **Sui:** wallet-standard connection, public account reads, transfer previews, and NFT/receipt evidence.
+- **Sui:** wallet-standard connection, public account reads, transfer previews, NFT/receipt evidence, and optional wallet-created non-content testnet anchors for encrypted Walrus records.
 - **Longevity:** non-medical service workflows for trainers, yoga instructors, dieticians, coaches, and client packet creation.
 - **Memory, Notes, and Outputs:** project-owned context, explicit memory review, and readable evidence rather than hidden persistence.
 

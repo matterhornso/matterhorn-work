@@ -106,6 +106,7 @@ export function buildReviewedActionHandoffV2(input: {
   handoff: ReviewedActionDraftHandoff;
   runId: string;
   signer?: string | null;
+  exactTerms?: ExactTerms;
   simulation: { reference: string; block?: string | null; simulatedAt?: Date };
   preparedAt?: Date;
   expiresAt?: Date;
@@ -126,7 +127,7 @@ export function buildReviewedActionHandoffV2(input: {
     policyVersion: MATTERHORN_REVIEWED_ACTION_POLICY_VERSION,
     ...(input.policy && Object.keys(input.policy).length > 0 ? { extra: input.policy } : {}),
   };
-  const terms = exactTerms(input.handoff, input.signer);
+  const terms = input.exactTerms ?? exactTerms(input.handoff, input.signer);
   const withoutHash = {
     protocol: input.handoff.protocol,
     source: input.handoff.source,

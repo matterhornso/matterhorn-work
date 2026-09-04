@@ -61,4 +61,40 @@ describe("reviewed action transaction airlock", () => {
     expect(() => assertReviewedActionReceiptBinding({ handoff, receiptIntentHash: "wrong" }))
       .toThrow("reviewed_action_receipt_intent_mismatch");
   });
+
+  test("preserves certified exact terms when a legacy draft cannot express network or slippage", () => {
+    const bittensorDraft: ReviewedActionDraftHandoff = {
+      version: "matterhorn.reviewed-action-handoff.v1",
+      protocol: "bittensor",
+      source: "agent-card",
+      draft: {
+        operation: "stake",
+        sender: `5${"C".repeat(47)}`,
+        destination: null,
+        hotkey: `5${"E".repeat(47)}`,
+        netuid: 14,
+        amountTao: "0.1",
+      },
+    };
+    const handoff = buildReviewedActionHandoffV2({
+      handoff: bittensorDraft,
+      runId: "run_bittensor_exact_terms",
+      exactTerms: {
+        signer: bittensorDraft.draft.sender,
+        network: "bittensor:test",
+        operation: "stake",
+        amount: "0.1",
+        asset: "TAO",
+        recipient: bittensorDraft.draft.hotkey,
+        slippage: "25bps",
+      },
+      simulation: { reference: "sha256:testnet-stake", block: "123", simulatedAt: preparedAt },
+      preparedAt,
+    });
+    expect(handoff).toMatchObject({
+      network: "bittensor:test",
+      amount: "0.1",
+      slippage: "25bps",
+    });
+  });
 });

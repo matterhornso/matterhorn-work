@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -105,5 +105,27 @@ describe("artifact file routes", () => {
     const xlsxDownload = await fetch(`${base}/workspace/ws_1/files/raw?path=${encodeURIComponent("reports/artifact-eval.xlsx")}`, { headers: auth(token) });
     expect(xlsxDownload.status).toBe(200);
     expect(Array.from(new Uint8Array(await xlsxDownload.arrayBuffer()))).toEqual([80, 75, 9, 9]);
+  });
+
+  test("does not follow workspace file symlinks while reading content", async () => {
+    if (process.platform === "win32") return;
+    const root = await createWorkspaceRoot();
+    const outside = join(root, "..", `matterhorn-outside-${Date.now()}.md`);
+    roots.push(outside);
+    await writeFile(outside, "must not leave the workspace\n", "utf8");
+    await symlink(outside, join(root, "reports", "outside.md"));
+    const { base, token } = await startOpenworkServer(root);
+
+    const inline = await fetch(`${base}/workspace/ws_1/files/content?path=${encodeURIComponent("reports/outside.md")}`, {
+      headers: auth(token),
+    });
+    expect(inline.status).toBe(400);
+    expect(await inline.json()).toMatchObject({ code: "invalid_path" });
+
+    const raw = await fetch(`${base}/workspace/ws_1/files/raw?path=${encodeURIComponent("reports/outside.md")}`, {
+      headers: auth(token),
+    });
+    expect(raw.status).toBe(400);
+    expect(await raw.json()).toMatchObject({ code: "invalid_path" });
   });
 });

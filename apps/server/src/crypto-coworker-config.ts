@@ -1,0 +1,119 @@
+export type MatterhornCryptoAppGatewayMode = "off" | "shadow" | "enforce";
+export type MatterhornCoworkerMode = "off" | "internal" | "invite" | "public";
+export type MatterhornWalrusEvidenceMode = "off" | "testnet" | "mainnet";
+export type MatterhornAgentFilesMode = "off" | "encrypted";
+
+export type MatterhornCryptoCoworkerFeatureConfig = {
+  cryptoAppGatewayMode: MatterhornCryptoAppGatewayMode;
+  coworkerMode: MatterhornCoworkerMode;
+  walrusEvidenceMode: MatterhornWalrusEvidenceMode;
+  agentFilesMode: MatterhornAgentFilesMode;
+  ready: boolean;
+  issues: string[];
+};
+
+function normalized(value: string | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function cryptoAppGatewayMode(value: string | undefined, issues: string[]): MatterhornCryptoAppGatewayMode {
+  const mode = normalized(value);
+  if (!mode || mode === "off") return "off";
+  if (mode === "shadow" || mode === "enforce") return mode;
+  issues.push("crypto_app_gateway_mode_invalid");
+  return "off";
+}
+
+function coworkerMode(value: string | undefined, issues: string[]): MatterhornCoworkerMode {
+  const mode = normalized(value);
+  if (!mode || mode === "off") return "off";
+  if (mode === "internal" || mode === "invite" || mode === "public") return mode;
+  issues.push("coworker_mode_invalid");
+  return "off";
+}
+
+function walrusEvidenceMode(value: string | undefined, issues: string[]): MatterhornWalrusEvidenceMode {
+  const mode = normalized(value);
+  if (!mode || mode === "off") return "off";
+  if (mode === "testnet" || mode === "mainnet") return mode;
+  issues.push("walrus_evidence_mode_invalid");
+  return "off";
+}
+
+function agentFilesMode(value: string | undefined, issues: string[]): MatterhornAgentFilesMode {
+  const mode = normalized(value);
+  if (!mode || mode === "off") return "off";
+  if (mode === "encrypted") return mode;
+  issues.push("agent_files_mode_invalid");
+  return "off";
+}
+
+function isHttpsOrigin(value: string | undefined): boolean {
+  const origin = value?.trim() ?? "";
+  if (!origin) return false;
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === "https:" && parsed.username === "" && parsed.password === "";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fail-closed rollout configuration. Unknown values resolve to `off` and make
+ * readiness false so no partially configured security boundary is enabled.
+ */
+export function cryptoCoworkerFeatureConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): MatterhornCryptoCoworkerFeatureConfig {
+  const issues: string[] = [];
+  const gatewayMode = cryptoAppGatewayMode(env.MATTERHORN_CRYPTO_APP_GATEWAY_MODE, issues);
+  const runtimeMode = normalized(env.MATTERHORN_GUARDED_RUNTIME_MODE) || "off";
+  const workers = coworkerMode(env.MATTERHORN_COWORKER_MODE, issues);
+  const evidence = walrusEvidenceMode(env.MATTERHORN_WALRUS_EVIDENCE_MODE, issues);
+  const files = agentFilesMode(env.MATTERHORN_AGENT_FILES_MODE, issues);
+
+  if (gatewayMode === "enforce" && runtimeMode !== "enforce") {
+    issues.push("crypto_app_gateway_requires_guarded_enforcement");
+  }
+  if ((workers === "invite" || workers === "public") && gatewayMode !== "enforce") {
+    issues.push("coworker_rollout_requires_enforced_gateway");
+  }
+  if (workers === "public" && normalized(env.MATTERHORN_SIGNUPS_ENABLED) !== "true") {
+    issues.push("public_coworkers_require_signups");
+  }
+  if (evidence !== "off") {
+    if (!isHttpsOrigin(env.MATTERHORN_WALRUS_PUBLISHER_URL)) issues.push("walrus_publisher_https_required");
+    if (!isHttpsOrigin(env.MATTERHORN_WALRUS_AGGREGATOR_URL)) issues.push("walrus_aggregator_https_required");
+    if (!env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN?.trim()) issues.push("walrus_publisher_auth_required");
+    if (!env.MATTERHORN_EVIDENCE_KMS_REGION?.trim()) issues.push("evidence_kms_region_required");
+    if (!env.MATTERHORN_EVIDENCE_KMS_KEY_ID?.trim()) issues.push("evidence_kms_key_id_required");
+    if ((env.MATTERHORN_ERASURE_LEDGER_SIGNING_SECRET?.trim().length ?? 0) < 32) {
+      issues.push("recovery_erasure_ledger_required");
+    }
+  }
+  if (files === "encrypted") {
+    if (workers === "off") issues.push("agent_files_require_coworkers");
+    if (!env.MATTERHORN_EVIDENCE_KMS_REGION?.trim()) issues.push("agent_files_kms_region_required");
+    if (!env.MATTERHORN_EVIDENCE_KMS_KEY_ID?.trim()) issues.push("agent_files_kms_key_id_required");
+    if ((env.MATTERHORN_ERASURE_LEDGER_SIGNING_SECRET?.trim().length ?? 0) < 32) {
+      issues.push("recovery_erasure_ledger_required");
+    }
+    const instanceCount = Number(env.MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT ?? "1");
+    if (evidence === "testnet" && (!Number.isSafeInteger(instanceCount) || instanceCount !== 1)) {
+      issues.push("agent_file_walrus_requires_single_instance");
+    }
+  }
+  if (evidence === "mainnet" && normalized(env.MATTERHORN_WALRUS_MAINNET_ACKNOWLEDGED) !== "true") {
+    issues.push("walrus_mainnet_acknowledgement_required");
+  }
+
+  return {
+    cryptoAppGatewayMode: gatewayMode,
+    coworkerMode: workers,
+    walrusEvidenceMode: evidence,
+    agentFilesMode: files,
+    ready: issues.length === 0,
+    issues: [...new Set(issues)],
+  };
+}

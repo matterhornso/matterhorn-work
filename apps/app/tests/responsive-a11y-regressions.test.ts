@@ -46,6 +46,23 @@ describe("responsive accessibility regressions", () => {
     expect(settingsShell).toContain('className="flex size-11 items-center');
   });
 
+  test("mobile sessions expose the workspace tools and every crypto desk hidden by the desktop rail", () => {
+    const sessionPage = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(sessionPage).toContain('title="Open workspace menu"');
+    expect(sessionPage).toContain('className="size-11 text-dls-secondary');
+    expect(sessionPage).toContain("lg:hidden");
+    expect(sessionPage).toContain('<nav aria-label="Workspace menu"');
+    expect(sessionPage).toContain('label="Coworkers"');
+    expect(sessionPage).toContain('label="Coworker files"');
+    expect(sessionPage).toContain('"Tools & MCPs"');
+    expect(sessionPage).toContain('label="Memory"');
+    expect(sessionPage).toContain('label="Wallet"');
+    expect(sessionPage).toContain('label="Profile & account"');
+    expect(sessionPage).toContain("VENUE_SIDE_PANELS.map((panel)");
+    expect(sessionPage).toContain("runMobileWorkspaceAction(() => openVenueRailPane(panel))");
+  });
+
   test("desk information and compact composer controls meet minimum target sizing", () => {
     const surface = readAppSource("domains/session/surface/session-surface.tsx");
     const workflowPanel = readAppSource("domains/session/workflows/desk-workflow-stage-panel.tsx");

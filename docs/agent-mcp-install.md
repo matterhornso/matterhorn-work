@@ -2,7 +2,10 @@
 
 This guide shows how to connect Matterhorn Desks to Codex, Claude Code, Claude Desktop, Cursor, and other MCP-capable clients.
 
-The default setup uses local stdio MCP servers launched by the client. The server-control MCP (`matterhorn-work-mcp`) talks to a running Matterhorn Desks server over `MATTERHORN_WORK_SERVER_URL`.
+The default setup uses a local stdio MCP server launched by the client. The
+standalone guarded MCP (`@matterhorn-work/guarded-mcp`) talks to a running
+Matterhorn Desks server over `MATTERHORN_WORK_SERVER_URL`. Its release artifact
+physically contains only the 11 account-scoped workspace and session tools.
 
 > **Current distribution:** the MCP packages are not published to npm yet. Clone
 > this repository and run `pnpm install` once, then use the absolute `index.mjs`
@@ -10,7 +13,7 @@ The default setup uses local stdio MCP servers launched by the client. The serve
 > do not use the older `npx -y matterhorn-work-*-mcp` examples until that release
 > is published.
 
-After setup, use [Matterhorn Desks Agent Operator Workflow](./agent-operator-workflow.md) for the copy-paste Codex/Claude loop: doctor, session, prompt, event watch, file reads/writes, approvals, and Bittensor chat.
+The recommended guarded setup gives external agents only the Matterhorn chat tools they need. Trusted local operators can opt into the broader workflow in [Matterhorn Desks Agent Operator Workflow](./agent-operator-workflow.md).
 
 ## What “Connected” Means
 
@@ -26,7 +29,7 @@ The product UI should say **MCP server active** rather than **app connected** wh
 
 ## Prerequisites
 
-Start Matterhorn Desks locally and copy the client and host tokens from the startup output:
+Start Matterhorn Desks locally and copy the client token from the startup output:
 
 ```bash
 matterhorn-work start \
@@ -38,7 +41,7 @@ You need:
 
 - `MATTERHORN_WORK_SERVER_URL`, usually `http://127.0.0.1:8787`
 - `MATTERHORN_WORK_TOKEN`, the client token used for normal server tools
-- `MATTERHORN_WORK_HOST_TOKEN`, the host token used only for approval tools
+- Optional `MATTERHORN_WORK_HOST_TOKEN`, used only when a trusted local operator deliberately enables approval tools
 
 You also need a local checkout:
 
@@ -51,7 +54,7 @@ pnpm install
 In the commands below, replace `<matterhorn-repo>` with that checkout's
 absolute path.
 
-Use the host token only in a trusted local MCP client. Leave it out if the client should not be able to list or answer host approval requests.
+The commands below use the guarded client profile. Host approval authority is unavailable in this profile. Use `server` or `full` only for a trusted local operator, then add `--include-host-approvals --host-token <host-token>` when that client must list or answer host approval requests.
 
 ## Profiles
 
@@ -60,16 +63,25 @@ Generate config with the Matterhorn Desks CLI:
 ```bash
 matterhorn-work mcp config \
   --target json \
-  --profile full \
+  --profile guarded \
+  --repo-path <matterhorn-repo> \
   --server-url http://127.0.0.1:8787 \
-  --token <client-token> \
-  --host-token <host-token>
+  --token <client-token>
 ```
 
 Profiles:
 
-- `server`: only `matterhorn-work-mcp`, for server status, workspaces, chat sessions, approvals, file sessions, and Bittensor chat.
-- `full`: `server` plus UI, crypto, and wallet MCP servers.
+- `guarded` (recommended): only the focused Matterhorn status, workspace, and chat-session tools. Other tools are hidden before any request reaches the server.
+- `server`: the broad `matterhorn-work-mcp` toolset for a trusted local operator. Approval tools still require the explicit host-authority opt-in.
+- `full`: `server` plus UI, crypto, and wallet MCP servers for trusted local development.
+
+The CLI and server-control MCP both default to `guarded`. Select `server` or
+`full` explicitly only for a trusted local operator.
+
+The guarded prompt tool cannot supply system instructions, tool overrides, or
+privacy-consent bearer values. Matterhorn builds the effective system and tool
+policy on the server. If an unverified provider requires one-request consent,
+complete that disclosure in the Matterhorn account UI before continuing.
 
 Targets:
 
@@ -81,10 +93,10 @@ Targets:
 
 Codex supports local stdio MCP servers with environment variables through `codex mcp add` or `~/.codex/config.toml`.
 
-Generate the complete Codex TOML profile:
+Generate the guarded Codex TOML profile:
 
 ```bash
-matterhorn-work mcp config --target codex --profile full
+matterhorn-work mcp config --target codex --profile guarded --repo-path <matterhorn-repo>
 ```
 
 Append the generated sections to `~/.codex/config.toml`, then restart or refresh Codex.
@@ -95,11 +107,11 @@ Add the server-control MCP:
 codex mcp add matterhorn-work \
   --env MATTERHORN_WORK_SERVER_URL=http://127.0.0.1:8787 \
   --env MATTERHORN_WORK_TOKEN=<client-token> \
-  --env MATTERHORN_WORK_HOST_TOKEN=<host-token> \
-  -- node <matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs
+  --env MATTERHORN_WORK_MCP_PROFILE=guarded_client \
+  -- node <matterhorn-repo>/packages/matterhorn-guarded-mcp/index.mjs
 ```
 
-Add the full profile one server at a time:
+Trusted local operator only: add the remaining full-profile servers one at a time when you deliberately need protocol, UI, or wallet development tools:
 
 ```bash
 codex mcp add matterhorn-work-ui -- node <matterhorn-repo>/packages/matterhorn-work-ui-mcp/index.mjs
@@ -119,12 +131,12 @@ Equivalent `config.toml` entry for the server-control MCP:
 ```toml
 [mcp_servers.matterhorn-work]
 command = "node"
-args = ["<matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs"]
+args = ["<matterhorn-repo>/packages/matterhorn-guarded-mcp/index.mjs"]
 
 [mcp_servers.matterhorn-work.env]
 MATTERHORN_WORK_SERVER_URL = "http://127.0.0.1:8787"
 MATTERHORN_WORK_TOKEN = "<client-token>"
-MATTERHORN_WORK_HOST_TOKEN = "<host-token>"
+MATTERHORN_WORK_MCP_PROFILE = "guarded_client"
 ```
 
 ## Claude Code
@@ -137,9 +149,9 @@ Add the server-control MCP:
 claude mcp add --transport stdio \
   --env MATTERHORN_WORK_SERVER_URL=http://127.0.0.1:8787 \
   --env MATTERHORN_WORK_TOKEN=<client-token> \
-  --env MATTERHORN_WORK_HOST_TOKEN=<host-token> \
+  --env MATTERHORN_WORK_MCP_PROFILE=guarded_client \
   matterhorn-work \
-  -- node <matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs
+  -- node <matterhorn-repo>/packages/matterhorn-guarded-mcp/index.mjs
 ```
 
 For a project-shared setup, generate the JSON and place it in a project `.mcp.json`:
@@ -147,10 +159,10 @@ For a project-shared setup, generate the JSON and place it in a project `.mcp.js
 ```bash
 matterhorn-work mcp config \
   --target claude \
-  --profile full \
+  --profile guarded \
+  --repo-path <matterhorn-repo> \
   --server-url http://127.0.0.1:8787 \
-  --token <client-token> \
-  --host-token <host-token>
+  --token <client-token>
 ```
 
 Verify with `claude mcp list` or `/mcp`, then ask Claude Code to call `matterhorn_status`.
@@ -162,10 +174,10 @@ Generate the common MCP JSON:
 ```bash
 matterhorn-work mcp config \
   --target claude-desktop \
-  --profile server \
+  --profile guarded \
+  --repo-path <matterhorn-repo> \
   --server-url http://127.0.0.1:8787 \
-  --token <client-token> \
-  --host-token <host-token>
+  --token <client-token>
 ```
 
 Paste the generated `mcpServers` object into Claude Desktop's config file, then restart Claude Desktop.
@@ -184,10 +196,10 @@ Generate the common MCP JSON:
 ```bash
 matterhorn-work mcp config \
   --target cursor \
-  --profile full \
+  --profile guarded \
+  --repo-path <matterhorn-repo> \
   --server-url http://127.0.0.1:8787 \
-  --token <client-token> \
-  --host-token <host-token>
+  --token <client-token>
 ```
 
 Paste the generated `mcpServers` object into Cursor's MCP configuration UI or MCP JSON file, then reload Cursor's MCP servers. Confirm the `matterhorn-work` server appears in Cursor's MCP tools and call `matterhorn_status`.
@@ -201,11 +213,11 @@ Use this minimal stdio config when a client accepts the common `mcpServers` shap
   "mcpServers": {
     "matterhorn-work": {
       "command": "node",
-      "args": ["<matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs"],
+      "args": ["<matterhorn-repo>/packages/matterhorn-guarded-mcp/index.mjs"],
       "env": {
         "MATTERHORN_WORK_SERVER_URL": "http://127.0.0.1:8787",
         "MATTERHORN_WORK_TOKEN": "<client-token>",
-        "MATTERHORN_WORK_HOST_TOKEN": "<host-token>"
+        "MATTERHORN_WORK_MCP_PROFILE": "guarded_client"
       }
     }
   }
@@ -220,8 +232,8 @@ After connecting any client:
 2. Call `matterhorn_list_workspaces`.
 3. Call `matterhorn_list_sessions` with a workspace id.
 4. For chat control, call `matterhorn_create_session`, `matterhorn_submit_session_prompt`, then use `matterhorn_watch_session_events` for bounded progress updates or `matterhorn_get_session_status` for simple polling.
-5. For Bittensor, call `matterhorn_bittensor_chat` with a read-only prompt such as `show my TAO`.
-6. For upstream OpenWork intake, call `matterhorn_upstream_openwork_check` to get the reviewed sync branch name, conflict zones, and verification commands.
+
+These checks cover the guarded profile. A trusted local operator using `server` or `full` can additionally call `matterhorn_doctor`, `matterhorn_bittensor_chat`, file-session tools, and `matterhorn_upstream_openwork_check`.
 
 If the MCP client is unavailable, the CLI fallback for chat control is `matterhorn-work sessions create`, `matterhorn-work sessions prompt`, `matterhorn-work sessions status`, `matterhorn-work sessions snapshot`, and `matterhorn-work sessions events`.
 
@@ -231,9 +243,9 @@ For upstream OpenWork checks without MCP, use `matterhorn-work upstream openwork
 
 ## Troubleshooting
 
-- If the server does not start, run `node <matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs` manually with the same environment variables.
+- If the server does not start, run `node <matterhorn-repo>/packages/matterhorn-guarded-mcp/index.mjs` manually with the same environment variables.
 - If tools return `MATTERHORN_WORK_TOKEN is required`, check that the MCP client passes environment variables to stdio servers.
-- If approval tools fail, check `MATTERHORN_WORK_HOST_TOKEN`; normal read/chat tools only need `MATTERHORN_WORK_TOKEN`.
+- If approval tools are intentionally required, regenerate with `--profile server` or `--profile full` plus `--include-host-approvals --host-token <host-token>`. The guarded profile never accepts host approval authority.
 - If Claude Desktop does not show the server, restart the app and check MCP logs.
 - If Codex does not show the server, run `/mcp` or `codex mcp --help`, then re-check `~/.codex/config.toml`.
 - If Bittensor tools are unavailable, first verify `matterhorn_status`, then call `matterhorn_bittensor_readiness`.

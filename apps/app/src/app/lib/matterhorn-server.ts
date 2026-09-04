@@ -101,6 +101,7 @@ import type {
   MatterhornAgentPrivacyConsentResponse,
   MatterhornAgentMessageRequest,
   MatterhornAgentMessageResponse,
+  MatterhornAgentPrivacyMode,
   MatterhornAgentPrivacyPreflightRequest,
   MatterhornAgentPrivacyPreflightResponse,
   MatterhornAgentRunReceipt,
@@ -112,6 +113,46 @@ import type {
   ReviewedActionValidationResponse,
 } from "@matterhorn-work/types/reviewed-actions";
 import type {
+  MatterhornCryptoAppActionAccess,
+  MatterhornCryptoAppActionRisk,
+  MatterhornCryptoAppCatalogDetail,
+  MatterhornCryptoAppCatalogSummary,
+  MatterhornCryptoAppConnectionState,
+  MatterhornCryptoAppConnectionView,
+  MatterhornCryptoAppOAuthAuthorization,
+  MatterhornCryptoAppOAuthAuthorizationRequest,
+  MatterhornCryptoAppOAuthFlowStatus,
+  MatterhornCryptoAppWalletChallenge,
+  MatterhornCryptoAppWalletChallengeConfirmation,
+  MatterhornCryptoAppWalletChallengeRequest,
+  MatterhornCryptoIntent,
+  MatterhornCryptoPublicReceipt,
+  MatterhornAgentFileListResponse,
+  MatterhornAgentFileWalrusRenewalConfirmResponse,
+  MatterhornAgentFileWalrusRenewalPrepareResponse,
+  MatterhornAgentFileWalrusVerification,
+  MatterhornCoworkerInboxItem,
+  MatterhornCoworkerProfile,
+  MatterhornCoworkerResourceRecommendation,
+  MatterhornCoworkerResourceScope,
+  MatterhornCoworkerState,
+  MatterhornCoworkerTemplateId,
+  MatterhornCoworkerWatch,
+  MatterhornCoworkerWatchCreateInput,
+  MatterhornCoworkerWorkingState,
+  MatterhornEvidenceVerificationListResponse,
+  MatterhornEvidencePublicationResponse,
+  MatterhornEvidenceRecoveryKeyDeletionResponse,
+  MatterhornEvidenceVerificationResult,
+  MatterhornCryptoEvidenceWalrusDeletionConfirmResponse,
+  MatterhornCryptoEvidenceWalrusDeletionPrepareResponse,
+  MatterhornCryptoEvidenceWalrusRenewalConfirmResponse,
+  MatterhornCryptoEvidenceWalrusRenewalPrepareResponse,
+  MatterhornCryptoEvidenceSuiAnchorConfirmResponse,
+  MatterhornCryptoEvidenceSuiAnchorPrepareResponse,
+  MatterhornStoredAgentFile,
+} from "@matterhorn-work/types/crypto-coworkers";
+import type {
   MatterhornWorkflowRun,
   MatterhornWorkflowRunListItem,
   MatterhornWorkflowRunStageInput,
@@ -120,6 +161,67 @@ import { desktopFetch } from "./desktop";
 import { isPublicBetaWebDeployment } from "./matterhorn-deployment";
 import { isDesktopRuntime } from "../utils";
 import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } from "./desktop";
+
+export type MatterhornCoworkerAccountProfile = Omit<MatterhornCoworkerProfile, "ownerId">;
+export type MatterhornCoworkerAccountState = Omit<MatterhornCoworkerWorkingState, "ownerId">;
+export type MatterhornCoworkerAccountResourceScope = Omit<MatterhornCoworkerResourceScope, "ownerId">;
+export type MatterhornCoworkerAccountResourceRecommendation = MatterhornCoworkerResourceRecommendation;
+export type MatterhornCoworkerAccountWatch = Omit<MatterhornCoworkerWatch, "ownerId">;
+export type MatterhornCoworkerAccountInboxItem = Omit<MatterhornCoworkerInboxItem, "ownerId">;
+export type MatterhornCoworkerAccessStatus = {
+  version: "matterhorn.coworker-access-status.v1";
+  allowed: boolean;
+  acceptedAt: string | null;
+};
+
+export type MatterhornCoworkerWalletIntentView = {
+  version: "matterhorn.pending-crypto-intent.v1";
+  id: string;
+  workspaceId: string;
+  sessionId: string;
+  coworkerId: string;
+  revision: number;
+  state:
+    | "wallet_review"
+    | "refreshing"
+    | "regeneration_required"
+    | "cancelled"
+    | "expired"
+    | "wallet_approved"
+    | "submitted"
+    | "confirmed"
+    | "failed";
+  intent: MatterhornCryptoIntent;
+  reviewedAction: ReviewedActionHandoffV2;
+  receipt: MatterhornCryptoPublicReceipt | null;
+  previousIntentHash: string | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+  policy: {
+    decision: "allow_prepare" | "wallet_review_required" | "deny";
+    reasonCodes: string[];
+    limits: Array<{
+      name: string;
+      configured: string;
+      observed: string;
+      passed: boolean;
+    }>;
+    evaluatedAt: string;
+  };
+};
+
+export type MatterhornCoworkerWalletReceiptInput = {
+  expectedRevision: number;
+  status: "submitted" | "failed";
+  publicId: string;
+  transactionHash: string | null;
+  blockHash: string | null;
+  network: string;
+  signer: string | null;
+  operation: string;
+  authorizedArgumentsHash: string;
+};
 
 export type MatterhornServerCapabilities = {
   skills: {
@@ -1568,7 +1670,7 @@ async function requestMultipartRaw(
 async function requestBinary(
   baseUrl: string,
   path: string,
-  options: { method?: string; token?: string; hostToken?: string; timeoutMs?: number } = {},
+  options: { method?: string; token?: string; hostToken?: string; body?: unknown; timeoutMs?: number } = {},
 ): Promise<{ data: ArrayBuffer; contentType: string | null; filename: string | null }>{
   const url = `${baseUrl}${path}`;
   const fetchImpl = resolveFetch(url);
@@ -1577,7 +1679,11 @@ async function requestBinary(
     url,
     {
       method: options.method ?? "GET",
-      headers: buildAuthHeaders(options.token, options.hostToken),
+      headers: options.body === undefined
+        ? buildAuthHeaders(options.token, options.hostToken)
+        : buildHeaders(options.token, options.hostToken),
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      credentials: "same-origin",
     },
     options.timeoutMs ?? DEFAULT_OPENWORK_SERVER_TIMEOUT_MS,
   );
@@ -1663,6 +1769,404 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         { token, hostToken, timeoutMs: timeouts.capabilities },
       );
     },
+    listCryptoApps: (filters?: {
+      query?: string;
+      environment?: "testnet" | "mainnet";
+      access?: MatterhornCryptoAppActionAccess;
+      risk?: MatterhornCryptoAppActionRisk;
+    }) => {
+      const params = new URLSearchParams();
+      if (filters?.query?.trim()) params.set("query", filters.query.trim());
+      if (filters?.environment) params.set("environment", filters.environment);
+      if (filters?.access) params.set("access", filters.access);
+      if (filters?.risk) params.set("risk", filters.risk);
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return requestJson<{ mode: "shadow" | "enforce"; apps: MatterhornCryptoAppCatalogSummary[] }>(
+        baseUrl,
+        `/crypto-apps${suffix}`,
+        { token, timeoutMs: timeouts.capabilities },
+      );
+    },
+    getCryptoApp: (appId: string) => requestJson<{
+      mode: "shadow" | "enforce";
+      app: MatterhornCryptoAppCatalogDetail;
+    }>(baseUrl, `/crypto-apps/${encodeURIComponent(appId)}`, {
+      token,
+      timeoutMs: timeouts.capabilities,
+    }),
+    listCryptoAppConnections: (workspaceId: string) => requestJson<{
+      mode: "shadow" | "enforce";
+      connections: MatterhornCryptoAppConnectionView[];
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections`, {
+      token,
+      timeoutMs: timeouts.capabilities,
+    }),
+    createCryptoAppConnection: (workspaceId: string, input: {
+      appId: string;
+      grantedActionIds: string[];
+      grantedScopes: string[];
+      grantedNetworks: string[];
+    }) => requestJson<{ connection: MatterhornCryptoAppConnectionView }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections`,
+      {
+        token,
+        method: "POST",
+        body: input,
+        timeoutMs: timeouts.config,
+      },
+    ),
+    startCryptoAppOAuth: (
+      workspaceId: string,
+      input: MatterhornCryptoAppOAuthAuthorizationRequest,
+    ) => requestJson<{ authorization: MatterhornCryptoAppOAuthAuthorization }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/oauth/authorize`,
+      {
+        token,
+        method: "POST",
+        body: input,
+        timeoutMs: timeouts.config,
+      },
+    ),
+    getCryptoAppOAuthStatus: (workspaceId: string, flowId: string) => requestJson<{
+      status: MatterhornCryptoAppOAuthFlowStatus;
+    }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/oauth/${encodeURIComponent(flowId)}`,
+      { token, timeoutMs: timeouts.status },
+    ),
+    issueCryptoAppWalletChallenge: (
+      workspaceId: string,
+      input: MatterhornCryptoAppWalletChallengeRequest,
+    ) => requestJson<{ challenge: MatterhornCryptoAppWalletChallenge }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/wallet/challenges`,
+      {
+        token,
+        method: "POST",
+        body: input,
+        timeoutMs: timeouts.config,
+      },
+    ),
+    confirmCryptoAppWalletChallenge: (
+      workspaceId: string,
+      challengeId: string,
+      input: MatterhornCryptoAppWalletChallengeConfirmation,
+    ) => requestJson<{ connection: MatterhornCryptoAppConnectionView }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/wallet/challenges/${encodeURIComponent(challengeId)}/confirm`,
+      {
+        token,
+        method: "POST",
+        body: input,
+        timeoutMs: timeouts.config,
+      },
+    ),
+    transitionCryptoAppConnection: (
+      workspaceId: string,
+      connectionId: string,
+      state: Exclude<MatterhornCryptoAppConnectionState, "revoked">,
+    ) => requestJson<{ connection: MatterhornCryptoAppConnectionView }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/${encodeURIComponent(connectionId)}`,
+      {
+        token,
+        method: "PATCH",
+        body: { state },
+        timeoutMs: timeouts.config,
+      },
+    ),
+    revokeCryptoAppConnection: (workspaceId: string, connectionId: string) => requestJson<{
+      connection: MatterhornCryptoAppConnectionView;
+    }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-app-connections/${encodeURIComponent(connectionId)}`,
+      { token, method: "DELETE", timeoutMs: timeouts.config },
+    ),
+    getCoworkerAccess: () => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      status: MatterhornCoworkerAccessStatus;
+    }>(baseUrl, "/coworker-access", {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    acceptCoworkerInvite: (inviteToken: string) => requestJson<{
+      mode: "invite";
+      status: MatterhornCoworkerAccessStatus;
+    }>(baseUrl, "/coworker-access/accept", {
+      token,
+      method: "POST",
+      body: { inviteToken },
+      timeoutMs: timeouts.config,
+    }),
+    listCoworkers: (workspaceId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      coworkers: MatterhornCoworkerAccountProfile[];
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    createCoworkerFromTemplate: (
+      workspaceId: string,
+      input: { templateId: MatterhornCoworkerTemplateId; name?: string; mission?: string },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      templateId: MatterhornCoworkerTemplateId;
+      coworker: MatterhornCoworkerAccountProfile;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/from-template`, {
+      token,
+      method: "POST",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    getCoworkerState: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      state: MatterhornCoworkerAccountState | null;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/state`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    getCoworkerResources: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      active: boolean;
+      resources: MatterhornCoworkerAccountResourceScope | null;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/resources`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    getCoworkerResourceRecommendation: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      recommendation: MatterhornCoworkerAccountResourceRecommendation;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/resources/recommendation`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    setCoworkerResources: (
+      workspaceId: string,
+      coworkerId: string,
+      input: {
+        expectedRevision: number;
+        profileRevision: number;
+        agentFileIds: string[];
+        memoryIds: string[];
+        connectionIds: string[];
+        recommendationHash?: string;
+      },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      active: true;
+      resources: MatterhornCoworkerAccountResourceScope;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/resources`, {
+      token,
+      method: "PUT",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    listCoworkerWatches: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      watches: MatterhornCoworkerAccountWatch[];
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/watches`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    createCoworkerWatch: (
+      workspaceId: string,
+      coworkerId: string,
+      input: MatterhornCoworkerWatchCreateInput,
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      watch: MatterhornCoworkerAccountWatch;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/watches`, {
+      token,
+      method: "POST",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    transitionCoworkerWatch: (
+      workspaceId: string,
+      coworkerId: string,
+      watchId: string,
+      input: { state: "active" | "paused"; expectedRevision: number },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      watch: MatterhornCoworkerAccountWatch;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/watches/${encodeURIComponent(watchId)}`, {
+      token,
+      method: "PATCH",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    deleteCoworkerWatch: (
+      workspaceId: string,
+      coworkerId: string,
+      watchId: string,
+      expectedRevision: number,
+    ) => requestJson<{ deleted: true }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/watches/${encodeURIComponent(watchId)}`, {
+      token,
+      method: "DELETE",
+      body: { expectedRevision },
+      timeoutMs: timeouts.config,
+    }),
+    listCoworkerInbox: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      items: MatterhornCoworkerAccountInboxItem[];
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/inbox?limit=50`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    transitionCoworkerInboxItem: (
+      workspaceId: string,
+      coworkerId: string,
+      itemId: string,
+      input: {
+        state: "read" | "dismissed";
+        expectedState: "unread" | "read" | "dismissed";
+      },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      item: MatterhornCoworkerAccountInboxItem;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/inbox/${encodeURIComponent(itemId)}`, {
+      token,
+      method: "PATCH",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    listCoworkerWalletIntents: (workspaceId: string, coworkerId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      items: MatterhornCoworkerWalletIntentView[];
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/wallet-intents`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    cancelCoworkerWalletIntent: (
+      workspaceId: string,
+      coworkerId: string,
+      intentId: string,
+      expectedRevision: number,
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      item: MatterhornCoworkerWalletIntentView;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/wallet-intents/${encodeURIComponent(intentId)}/cancel`, {
+      token,
+      method: "POST",
+      body: { expectedRevision },
+      timeoutMs: timeouts.config,
+    }),
+    recordCoworkerWalletReceipt: (
+      workspaceId: string,
+      coworkerId: string,
+      intentId: string,
+      input: MatterhornCoworkerWalletReceiptInput,
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      item: MatterhornCoworkerWalletIntentView;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/wallet-intents/${encodeURIComponent(intentId)}/receipt`, {
+      token,
+      method: "POST",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    transitionCoworker: (
+      workspaceId: string,
+      coworkerId: string,
+      input: { state: MatterhornCoworkerState; expectedRevision: number },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      coworker: MatterhornCoworkerAccountProfile;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}`, {
+      token,
+      method: "PATCH",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    deleteCoworker: (workspaceId: string, coworkerId: string, expectedRevision: number) => requestJson<{ deleted: true }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}`,
+      { token, method: "DELETE", body: { expectedRevision }, timeoutMs: timeouts.config },
+    ),
+    listAgentFiles: (workspaceId: string) => requestJson<MatterhornAgentFileListResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files`,
+      { token, timeoutMs: timeouts.status },
+    ),
+    createAgentFile: (workspaceId: string, input: {
+      name: string;
+      mimeType: "text/plain" | "text/markdown" | "text/csv" | "application/json";
+      coworkerIds: string[];
+      expiresAt: string | null;
+      contentBase64: string;
+    }) => requestJson<{ mode: "encrypted"; item: MatterhornStoredAgentFile }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files`,
+      { token, method: "POST", body: input, timeoutMs: timeouts.binary },
+    ),
+    publishAgentFile: (workspaceId: string, fileId: string, expectedRevision: number) => requestJson<{
+      item: MatterhornStoredAgentFile;
+      disclosure: {
+        network: "testnet";
+        stored: "encrypted_bytes_only";
+        publicBytesMayRemainAfterDeletion: true;
+        deletionDestroysRecoveryKey: true;
+      };
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/publish`, {
+      token,
+      method: "POST",
+      body: {
+        expectedRevision,
+        network: "testnet",
+        acknowledgePublicCiphertext: true,
+      },
+      timeoutMs: timeouts.binary,
+    }),
+    verifyAgentFile: (workspaceId: string, fileId: string) => requestJson<MatterhornAgentFileWalrusVerification>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/verify`,
+      { token, method: "POST", timeoutMs: timeouts.binary },
+    ),
+    renewAgentFile: (
+      workspaceId: string,
+      fileId: string,
+      input: { expectedRevision: number; signer: string },
+    ) => requestJson<MatterhornAgentFileWalrusRenewalPrepareResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/renew`,
+      {
+        token,
+        method: "POST",
+        body: {
+          expectedRevision: input.expectedRevision,
+          network: "testnet",
+          signer: input.signer,
+          acknowledgeWalletPayment: true,
+        },
+        timeoutMs: timeouts.binary,
+      },
+    ),
+    confirmAgentFileRenewal: (
+      workspaceId: string,
+      fileId: string,
+      input: { intentId: string; intentHash: string; transactionDigest: string },
+    ) => requestJson<MatterhornAgentFileWalrusRenewalConfirmResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/renew/confirm`,
+      { token, method: "POST", body: input, timeoutMs: timeouts.binary },
+    ),
+    recoverAgentFile: (workspaceId: string, fileId: string, expectedRevision: number) => requestBinary(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}/recover`,
+      {
+        token,
+        method: "POST",
+        body: { expectedRevision },
+        timeoutMs: timeouts.binary,
+      },
+    ),
+    deleteAgentFile: (workspaceId: string, fileId: string, expectedRevision: number) => requestJson<{ deleted: true }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/agent-files/${encodeURIComponent(fileId)}`,
+      { token, method: "DELETE", body: { expectedRevision }, timeoutMs: timeouts.config },
+    ),
     backendModels: () =>
       requestJson<MatterhornBackendModelsResponse>(baseUrl, "/api/backend/models", {
         token,
@@ -1819,14 +2323,25 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       workspaceId: string,
       sessionId: string,
       model?: { providerID: string; modelID: string },
-    ) => requestJson<{ ok: true; accepted: true; sessionId: string }>(
+      options?: { privacyMode?: MatterhornAgentPrivacyMode; privacyConsentToken?: string },
+    ) => requestJson<{
+      ok: true;
+      accepted: true;
+      sessionId: string;
+      runId: string;
+      privacy: { requestHash: string; decision: string; consentUsed: boolean };
+    }>(
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/compact`,
       {
         token,
         hostToken,
         method: "POST",
-        body: model ? { model } : {},
+        body: {
+          ...(model ? { model } : {}),
+          ...(options?.privacyMode ? { privacyMode: options.privacyMode } : {}),
+          ...(options?.privacyConsentToken ? { privacyConsentToken: options.privacyConsentToken } : {}),
+        },
         timeoutMs: timeouts.sessionRead,
       },
     ),
@@ -1878,6 +2393,142 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/agent-run-receipts/${encodeURIComponent(runId)}`,
       { token, hostToken, timeoutMs: timeouts.sessionRead },
+    ),
+    listCryptoEvidence: (workspaceId: string, limit = 50) => requestJson<MatterhornEvidenceVerificationListResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence?limit=${encodeURIComponent(String(limit))}`,
+      { token, hostToken, timeoutMs: timeouts.sessionRead },
+    ),
+    publishCryptoEvidence: (
+      workspaceId: string,
+      evidenceId: string,
+      expectedRevision: number,
+      ownerAddress: string,
+    ) => requestJson<MatterhornEvidencePublicationResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/publish`,
+      {
+        token,
+        hostToken,
+        method: "POST",
+        body: {
+          expectedRevision,
+          network: "testnet",
+          ownerAddress,
+          acknowledgePublicCiphertext: true,
+        },
+        timeoutMs: timeouts.binary,
+      },
+    ),
+    renewCryptoEvidence: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { expectedRevision: number; signer: string },
+    ) => requestJson<MatterhornCryptoEvidenceWalrusRenewalPrepareResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/renew`,
+      {
+        token,
+        hostToken,
+        method: "POST",
+        body: {
+          expectedRevision: input.expectedRevision,
+          network: "testnet",
+          signer: input.signer,
+          acknowledgeWalletPayment: true,
+        },
+        timeoutMs: timeouts.binary,
+      },
+    ),
+    confirmCryptoEvidenceRenewal: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { intentId: string; intentHash: string; transactionDigest: string },
+    ) => requestJson<MatterhornCryptoEvidenceWalrusRenewalConfirmResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/renew/confirm`,
+      { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.binary },
+    ),
+    deleteCryptoEvidenceWalrusCopy: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { expectedRevision: number; signer: string },
+    ) => requestJson<MatterhornCryptoEvidenceWalrusDeletionPrepareResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/delete`,
+      {
+        token,
+        hostToken,
+        method: "POST",
+        body: {
+          expectedRevision: input.expectedRevision,
+          network: "testnet",
+          signer: input.signer,
+          confirm: `delete-walrus-copy:${evidenceId}`,
+        },
+        timeoutMs: timeouts.binary,
+      },
+    ),
+    confirmCryptoEvidenceWalrusDeletion: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { intentId: string; intentHash: string; transactionDigest: string },
+    ) => requestJson<MatterhornCryptoEvidenceWalrusDeletionConfirmResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/delete/confirm`,
+      { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.binary },
+    ),
+    anchorCryptoEvidenceOnSui: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { expectedRevision: number; signer: string },
+    ) => requestJson<MatterhornCryptoEvidenceSuiAnchorPrepareResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/anchor`,
+      {
+        token,
+        hostToken,
+        method: "POST",
+        body: {
+          expectedRevision: input.expectedRevision,
+          network: "testnet",
+          signer: input.signer,
+          acknowledgePermanentPublicAnchor: true,
+        },
+        timeoutMs: timeouts.binary,
+      },
+    ),
+    confirmCryptoEvidenceSuiAnchor: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { intentId: string; intentHash: string; transactionDigest: string },
+    ) => requestJson<MatterhornCryptoEvidenceSuiAnchorConfirmResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/anchor/confirm`,
+      { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.binary },
+    ),
+    destroyCryptoEvidenceRecoveryKey: (
+      workspaceId: string,
+      evidenceId: string,
+      expectedRevision: number,
+    ) => requestJson<MatterhornEvidenceRecoveryKeyDeletionResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/recovery-key`,
+      {
+        token,
+        hostToken,
+        method: "DELETE",
+        body: {
+          expectedRevision,
+          confirm: `destroy-recovery-key:${evidenceId}`,
+        },
+        timeoutMs: timeouts.status,
+      },
+    ),
+    verifyCryptoEvidence: (workspaceId: string, evidenceId: string) => requestJson<MatterhornEvidenceVerificationResult>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/verify`,
+      { token, hostToken, method: "POST", timeoutMs: timeouts.status },
     ),
     validateReviewedAction: (workspaceId: string, request: ReviewedActionValidationRequest) =>
       requestJson<ReviewedActionValidationResponse>(

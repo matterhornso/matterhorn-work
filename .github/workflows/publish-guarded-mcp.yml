@@ -1,0 +1,203 @@
+name: Publish Guarded MCP
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact guarded MCP version already recorded in packages/matterhorn-guarded-mcp/package.json
+        required: true
+        type: string
+      source_commit:
+        description: Exact 40-character lowercase commit currently at the head of dev
+        required: true
+        type: string
+      confirmation:
+        description: Type "publish @matterhorn-work/guarded-mcp@<version>"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-guarded-mcp
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Verify, approve, publish, and attest exact guarded MCP artifact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: npm-guarded-mcp
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      MCP_PACKAGE: "@matterhorn-work/guarded-mcp"
+      MCP_VERSION: ${{ inputs.version }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      PUBLISH_CONFIRMATION: ${{ inputs.confirmation }}
+      DISPATCH_COMMIT: ${{ github.sha }}
+      DISPATCH_REF: ${{ github.ref }}
+      NPM_REGISTRY: https://registry.npmjs.org/
+    steps:
+      - name: Checkout exact requested commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.source_commit }}
+
+      - name: Validate immutable release request
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "source_commit must be a 40-character lowercase Git commit." >&2
+            exit 1
+          fi
+          if [[ ! "$MCP_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "version must be an exact SemVer value without a build suffix." >&2
+            exit 1
+          fi
+          if [ "$DISPATCH_REF" != "refs/heads/dev" ]; then
+            echo "Guarded MCP publication must be dispatched from the protected dev branch." >&2
+            exit 1
+          fi
+          if [ "$SOURCE_COMMIT" != "$DISPATCH_COMMIT" ]; then
+            echo "source_commit must equal the exact commit that supplied this workflow." >&2
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$SOURCE_COMMIT" ]; then
+            echo "The checked-out commit does not match source_commit." >&2
+            exit 1
+          fi
+
+          expected_confirmation="publish ${MCP_PACKAGE}@${MCP_VERSION}"
+          if [ "$PUBLISH_CONFIRMATION" != "$expected_confirmation" ]; then
+            echo "The explicit publication confirmation does not match the package and version." >&2
+            exit 1
+          fi
+
+          package_name="$(node -p "require('./packages/matterhorn-guarded-mcp/package.json').name")"
+          package_version="$(node -p "require('./packages/matterhorn-guarded-mcp/package.json').version")"
+          if [ "$package_name" != "$MCP_PACKAGE" ] || [ "$package_version" != "$MCP_VERSION" ]; then
+            echo "The guarded MCP package metadata does not match the approved release request." >&2
+            exit 1
+          fi
+
+          release_tag="guarded-mcp-v${MCP_VERSION}"
+          git fetch --no-tags origin "refs/tags/${release_tag}:refs/tags/${release_tag}"
+          if [ "$(git rev-list -n 1 "$release_tag")" != "$SOURCE_COMMIT" ]; then
+            echo "The immutable guarded MCP release tag does not resolve to source_commit." >&2
+            exit 1
+          fi
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
+        with:
+          version: 10.27.0
+
+      - name: Setup Node
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Require trusted-publishing-capable npm
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm_version="$(npm --version)"
+          node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number);
+            if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
+              console.error("npm 11.5.1 or newer is required for trusted publishing.");
+              process.exit(1);
+            }
+          ' "$npm_version"
+
+      - name: Install exact dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Test the release package and security boundary
+        run: |
+          set -euo pipefail
+          pnpm test:guarded-mcp
+          pnpm test:guarded-mcp-package
+          pnpm test:guarded-mcp-provenance
+          pnpm test:guarded-mcp-publish-workflow
+
+      - name: Pack the exact tested artifact
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          release_dir="$RUNNER_TEMP/matterhorn-guarded-mcp-release"
+          mkdir -p "$release_dir"
+          pnpm --dir packages/matterhorn-guarded-mcp pack --pack-destination "$release_dir"
+          mapfile -t archives < <(find "$release_dir" -maxdepth 1 -type f -name '*.tgz' -print)
+          if [ "${#archives[@]}" -ne 1 ]; then
+            echo "Expected exactly one packed guarded MCP archive." >&2
+            exit 1
+          fi
+          printf 'archive=%s\n' "${archives[0]}" >> "$GITHUB_OUTPUT"
+          sha512sum "${archives[0]}" | cut -d ' ' -f 1 > "$release_dir/archive.sha512"
+
+      - name: Publish with npm trusted publishing and provenance
+        shell: bash
+        env:
+          MCP_ARCHIVE: ${{ steps.pack.outputs.archive }}
+        run: |
+          set -euo pipefail
+          if [ -n "${NODE_AUTH_TOKEN:-}" ] || [ -n "${NPM_TOKEN:-}" ]; then
+            echo "Long-lived npm tokens are forbidden for this workflow." >&2
+            exit 1
+          fi
+          if npm view "${MCP_PACKAGE}@${MCP_VERSION}" version \
+            --registry "$NPM_REGISTRY" >/dev/null 2>&1; then
+            echo "The exact version already exists; proceeding to immutable provenance verification."
+            exit 0
+          fi
+          npm publish "$MCP_ARCHIVE" \
+            --access public \
+            --ignore-scripts \
+            --provenance \
+            --registry "$NPM_REGISTRY"
+
+      - name: Verify registry signatures and exact provenance
+        id: provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          report="$RUNNER_TEMP/guarded-mcp-provenance.json"
+          verified=false
+          for attempt in 1 2 3 4 5; do
+            if node scripts/guarded-mcp-provenance.mjs \
+              --version "$MCP_VERSION" \
+              --expected-commit "$SOURCE_COMMIT" \
+              --json > "$report"; then
+              verified=true
+              break
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              sleep 10
+            fi
+          done
+          if [ "$verified" != true ]; then
+            echo "The published package did not pass exact provenance verification." >&2
+            exit 1
+          fi
+          printf 'report=%s\n' "$report" >> "$GITHUB_OUTPUT"
+
+      - name: Upload bounded provenance report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: guarded-mcp-provenance-${{ inputs.version }}
+          path: ${{ steps.provenance.outputs.report }}
+          if-no-files-found: error
+          retention-days: 30

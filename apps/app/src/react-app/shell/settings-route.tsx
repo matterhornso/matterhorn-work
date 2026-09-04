@@ -1495,7 +1495,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           path: ".opencode/package.json",
           data: encoder.encode(
             JSON.stringify(
-              { dependencies: { "@opencode-ai/plugin": "1.18.23" } },
+              { dependencies: { "@opencode-ai/plugin": "1.18.27" } },
               null,
               2,
             ),
@@ -3187,6 +3187,12 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                     selectedWorkspaceId
                       ? workspaceSettingsRoute(selectedWorkspaceId, "extensions")
                       : "/settings/extensions",
+                    { state: location.state },
+                  );
+                } : undefined}
+                onBrowseCryptoApps={selectedWorkspaceId ? () => {
+                  navigate(
+                    `/workspace/${encodeURIComponent(selectedWorkspaceId)}/crypto-apps`,
                     { state: location.state },
                   );
                 } : undefined}

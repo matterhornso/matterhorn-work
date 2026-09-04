@@ -2,6 +2,11 @@
 
 Unified MCP server for controlling a running Matterhorn Desks server from Claude Code, Codex, Cursor, Claude Desktop, or another MCP-capable agent.
 
+This is the broad trusted-operator implementation. External agents should use
+the standalone `@matterhorn-work/guarded-mcp` package. That artifact physically
+contains only the 11 account-scoped workspace/session tools rather than relying
+on a runtime filter over this broader source file.
+
 This package is the server/control complement to:
 
 - `matterhorn-work-ui-mcp` for desktop UI control
@@ -10,15 +15,15 @@ This package is the server/control complement to:
 
 ## Install
 
-```bash
-npm install -g matterhorn-work-mcp
-```
-
-Or run it without installing:
+The MCP packages are not published to npm yet. Clone the Matterhorn repository,
+run `pnpm install`, and launch the checked-out entrypoint with Node:
 
 ```bash
-npx matterhorn-work-mcp
+node /absolute/path/to/matterhorn-work/packages/matterhorn-work-mcp/index.mjs
 ```
+
+Do not use older `npm install -g matterhorn-work-mcp` or
+`npx matterhorn-work-mcp` examples until a release is published.
 
 ## Configure
 
@@ -27,6 +32,7 @@ Point the MCP server at a running Matterhorn Desks server:
 ```bash
 export MATTERHORN_WORK_SERVER_URL="http://127.0.0.1:8787"
 export MATTERHORN_WORK_TOKEN="<client-token>"
+export MATTERHORN_WORK_MCP_PROFILE="guarded_client" # optional; this is the safe default
 export MATTERHORN_WORK_HOST_TOKEN="<host-token>" # only needed for approval tools
 ```
 
@@ -44,17 +50,39 @@ For app-specific setup in Codex, Claude Code, Claude Desktop, Cursor, and generi
 {
   "mcpServers": {
     "matterhorn-work": {
-      "command": "npx",
-      "args": ["-y", "matterhorn-work-mcp"],
+      "command": "node",
+      "args": ["/absolute/path/to/matterhorn-work/packages/matterhorn-work-mcp/index.mjs"],
       "env": {
         "MATTERHORN_WORK_SERVER_URL": "http://127.0.0.1:8787",
         "MATTERHORN_WORK_TOKEN": "<client-token>",
-        "MATTERHORN_WORK_HOST_TOKEN": "<host-token>"
+        "MATTERHORN_WORK_MCP_PROFILE": "guarded_client"
       }
     }
   }
 }
 ```
+
+This default is client-scoped and cannot answer host approval requests. Add
+`MATTERHORN_WORK_HOST_TOKEN` only to a trusted local operator client that is
+intentionally allowed to review approvals.
+
+### Tool profiles
+
+Set `MATTERHORN_WORK_MCP_PROFILE=guarded_client` for Codex, Claude Code,
+Claude Desktop, Cursor, and other external agents. This profile exposes only
+the authoritative workspace session workflow: status, visible workspaces,
+session lifecycle, message submission, progress, snapshots, and deletion. It
+hides host approval, local-file, Memory-write, direct protocol, operator, and
+QA tools from the model and rejects hidden calls before any server request. Its
+prompt tool also omits legacy system/tool overrides and consent bearer values;
+Matterhorn constructs authority on the server, and one-request consent is
+completed in the account UI.
+
+If the profile variable is omitted, the MCP selects `guarded_client`. The
+legacy `full` profile is available only for trusted operator setups and must be
+selected explicitly. Approval tools additionally require host authority.
+Generated external-client setup always chooses `guarded_client`. Unknown
+profiles fail closed during process startup.
 
 ## Tools
 

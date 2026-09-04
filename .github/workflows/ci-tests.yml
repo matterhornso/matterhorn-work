@@ -101,6 +101,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
 
+      - name: Build Crypto App SDK
+        run: pnpm --filter @matterhorn-work/crypto-app-sdk build
+
       - name: Validate customer crypto smoke wiring
         run: pnpm test:customer-ready-crypto-smoke
 

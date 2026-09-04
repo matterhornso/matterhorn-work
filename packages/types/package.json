@@ -1,5 +1,6 @@
 {
   "name": "@matterhorn-work/types",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -167,6 +168,11 @@
       "types": "./src/guarded-agent-runtime.ts",
       "development": "./src/guarded-agent-runtime.ts",
       "default": "./src/guarded-agent-runtime.ts"
+    },
+    "./crypto-coworkers": {
+      "types": "./src/crypto-coworkers.ts",
+      "development": "./src/crypto-coworkers.ts",
+      "default": "./src/crypto-coworkers.ts"
     }
   },
   "files": [

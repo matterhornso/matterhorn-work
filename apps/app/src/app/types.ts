@@ -134,6 +134,8 @@ export type ComposerDraft = {
     mode?: "public_research" | "private_workspace" | "transaction";
     consentToken?: string;
     attachmentIds?: string[];
+    agentFileIds?: string[];
+    coworkerId?: string;
     memoryIds?: string[];
   };
 };

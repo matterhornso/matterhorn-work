@@ -100,6 +100,15 @@ export interface MatterhornProviderPrivacyPolicy {
   retentionDays: number | null;
   policyUrl: string | null;
   verifiedAt: string | null;
+  /**
+   * Time-bounded provider proofs, such as the verified Venice private-model
+   * catalog, stop authorizing UI trust claims at this instant. Older servers
+   * may omit this additive field; clients must treat a missing Venice expiry
+   * as unverified rather than guessing the server's TTL.
+   */
+  verificationExpiresAt?: string | null;
+  /** Exact model ids covered by a time-bounded provider proof. */
+  verifiedModelIds?: string[];
   allowed: boolean;
   label: string;
   description: string;

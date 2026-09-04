@@ -23,6 +23,7 @@ type HostedMcpSummaryProps = {
   showHeader?: boolean;
   connections: HostedMcpConnection[];
   onViewTools?: () => void;
+  onBrowseCryptoApps?: () => void;
 };
 
 const MANAGED_TOOL_GROUPS = [
@@ -49,6 +50,7 @@ const MANAGED_TOOL_GROUPS = [
 function HostedMcpCompactSummary({
   connections,
   onViewTools,
+  onBrowseCryptoApps,
 }: HostedMcpSummaryProps) {
   const readyCount = connections.filter(
     (connection) => connection.ready,
@@ -109,6 +111,16 @@ function HostedMcpCompactSummary({
           onClick={onViewTools}
         >
           View managed tools
+        </Button>
+      ) : null}
+      {onBrowseCryptoApps ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 w-full justify-center"
+          onClick={onBrowseCryptoApps}
+        >
+          Browse certified crypto apps
         </Button>
       ) : null}
     </section>
@@ -264,6 +276,30 @@ export function HostedMcpSummary(props: HostedMcpSummaryProps) {
           packages are not available yet.
         </p>
       </section>
+
+      {props.onBrowseCryptoApps ? (
+        <section aria-labelledby="certified-crypto-apps-heading">
+          <SectionHeading
+            id="certified-crypto-apps-heading"
+            className="text-base font-semibold text-dls-text"
+          >
+            Certified crypto apps
+          </SectionHeading>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
+            Give a coworker narrow testnet access to certified reads, watches,
+            simulations, and wallet previews. Credentials never belong in chat,
+            and your connected wallet remains the only signer.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-4 h-11"
+            onClick={props.onBrowseCryptoApps}
+          >
+            Browse certified apps
+          </Button>
+        </section>
+      ) : null}
     </section>
   );
 }

@@ -204,7 +204,7 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
       slippageTolerance: numberOrStringSchema,
       address: { type: "string" },
       message: { type: "string" },
-    }, ["asset", "side", "size"]),
+    }, ["address", "asset", "side", "size"]),
     deskIds: ["hyperliquid"],
     actionIds: ["hyperliquid_preview_order"],
     access: "prepare",
@@ -248,6 +248,19 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
     actionIds: ["polymarket_market_discovery", "polymarket_outcome_probabilities"],
     access: "read",
     timeoutMs: 15_000,
+    requiresFreshness: true,
+  },
+  {
+    name: "matterhorn_polymarket_get_orderbook",
+    title: "Polymarket public order book",
+    description: "Read one bounded public Polymarket order book by its exact outcome token ID. Never accesses an account or places an order.",
+    inputSchema: objectSchema({
+      tokenId: { type: "string", description: "Exact public outcome token ID returned by Polymarket market discovery." },
+    }, ["tokenId"]),
+    deskIds: ["polymarket"],
+    actionIds: ["polymarket_liquidity_orderbook"],
+    access: "read",
+    timeoutMs: 10_000,
     requiresFreshness: true,
   },
   {
