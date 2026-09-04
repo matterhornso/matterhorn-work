@@ -226,6 +226,18 @@ describe("durable crypto coworkers", () => {
     }
   });
 
+  test("rejects crypto secret formats in model-facing profile text", () => {
+    const { store, coworkers } = fixture();
+    const secret = `suiprivkey1${"p".repeat(58)}`;
+    try {
+      expect(() => coworkers.create("ws_alpha", "account_alpha", input({ mission: secret })))
+        .toThrow(new MatterhornCoworkerError("coworker_input_invalid"));
+      expect(coworkers.list("ws_alpha", "account_alpha")).toEqual([]);
+    } finally {
+      store.close();
+    }
+  });
+
   test("isolates identical coworker ids by both workspace and owner", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-isolation-"));
     roots.push(root);
@@ -570,7 +582,7 @@ describe("durable crypto coworkers", () => {
         expectedRevision: created.revision,
         decisions: [{
           ...workingStateInput().decisions[0]!,
-          summary: "Store this private key in the coworker state.",
+          summary: `suiprivkey1${"q".repeat(58)}`,
         }],
       }))).toThrow(new MatterhornCoworkerError("coworker_working_state_invalid"));
       expect(() => coworkers.setWorkingState("ws_alpha", "account_alpha", profile.id, workingStateInput({
@@ -735,6 +747,7 @@ describe("durable crypto coworkers", () => {
         watchInput({ budgets: { ...watchInput().budgets, maxReadCallsPerCheck: 13 } }),
         watchInput({ schedule: { intervalMs: 1_000, maxChecksPerDay: 1_000 } }),
         watchInput({ parameters: { privateKey: "secret material" } }),
+        watchInput({ parameters: { note: `suiprivkey1${"r".repeat(58)}` } }),
         watchInput({
           conditions: [{ id: "unsafe_hash", metric: "matterhorn_result_hash", operator: "eq", value: "attacker" }],
         }),
@@ -746,6 +759,85 @@ describe("durable crypto coworkers", () => {
       expect(coworkers.listWatches("ws_alpha", "account_alpha", profile.id)).toEqual([]);
     } finally {
       store.close();
+    }
+  });
+
+  test("rejects secret-shaped values returned by a scheduled check", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      const [claimed] = coworkers.claimDueWatches(new Date("2026-09-01T12:05:00.000Z"));
+
+      expect(() => coworkers.completeWatchCheck(claimed!, {
+        checkedAt: new Date("2026-09-01T12:05:01.000Z"),
+        resultHash: "f".repeat(64),
+        conditionValues: { balance_changed: `suiprivkey1${"s".repeat(58)}` },
+        inboxItem: null,
+      })).toThrow(new MatterhornCoworkerError("coworker_watch_invalid"));
+    } finally {
+      store.close();
+    }
+  });
+
+  test("rescans restored profile, state, watch, and inbox rows before use", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-secret-rescan-"));
+    roots.push(root);
+    const path = join(root, "coworkers.db");
+    const store = new MatterhornCoworkerStore(path);
+    const coworkers = new MatterhornCoworkers({
+      store,
+      policyVersion: "coworker-policy-1",
+      now: () => new Date(NOW),
+      id: () => "cw_secret_rescan",
+      watchId: () => "cwatch_secret_rescan",
+      inboxItemId: () => "cinbox_secret_rescan",
+    });
+    const profile = coworkers.create("ws_alpha", "account_alpha", input({
+      automaticAuthorities: ["read", "watch"],
+      limits: { ...input().limits, maxActiveWatches: 1 },
+    }));
+    coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+    coworkers.setWorkingState("ws_alpha", "account_alpha", profile.id, workingStateInput());
+    const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+    const item = coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
+    store.close();
+
+    const secret = `suiprivkey1${"t".repeat(58)}`;
+    const database = new Database(path);
+    const mutations = [
+      ["crypto_coworkers", "profile_json", "mission"],
+      ["crypto_coworker_working_state", "state_json", "decisions"],
+      ["crypto_coworker_watches", "watch_json", "parameters"],
+      ["crypto_coworker_inbox", "item_json", "summary"],
+    ] as const;
+    for (const [table, column, field] of mutations) {
+      const row = database.query(`SELECT ${column} AS payload FROM ${table} LIMIT 1`)
+        .get() as { payload: string };
+      const payload = JSON.parse(row.payload) as Record<string, any>;
+      if (field === "decisions") payload.decisions[0].summary = secret;
+      else if (field === "parameters") payload.parameters.note = secret;
+      else payload[field] = secret;
+      database.query(`UPDATE ${table} SET ${column} = ?`).run(JSON.stringify(payload));
+    }
+    database.close();
+
+    const reopened = new MatterhornCoworkerStore(path);
+    try {
+      expect(() => reopened.get("ws_alpha", "account_alpha", profile.id))
+        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+      expect(() => reopened.getWorkingState("ws_alpha", "account_alpha", profile.id))
+        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+      expect(() => reopened.getWatch("ws_alpha", "account_alpha", profile.id, watch.id))
+        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+      expect(() => reopened.getInboxItem("ws_alpha", "account_alpha", profile.id, item.id))
+        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+    } finally {
+      reopened.close();
     }
   });
 
@@ -824,7 +916,7 @@ describe("durable crypto coworkers", () => {
         "unread",
       )).toThrow(new MatterhornCoworkerError("coworker_inbox_state_conflict"));
       expect(() => coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id, {
-        summary: "Store this private key in the alert.",
+        summary: `suiprivkey1${"u".repeat(58)}`,
       }))).toThrow(new MatterhornCoworkerError("coworker_inbox_item_invalid"));
       expect(() => coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id, {
         budgetImpact: { readCallsConsumed: 2, modelTokensConsumed: 0, costMicros: 1_000 },

@@ -20,7 +20,13 @@ import {
   validateMatterhornCoworkerWatch,
   validateMatterhornCoworkerWorkingState,
 } from "@matterhorn-work/types/crypto-coworkers";
-import { containsForbiddenMemorySecretMaterial } from "@matterhorn-work/types/memory";
+import {
+  containsForbiddenCoworkerInboxMaterial,
+  containsForbiddenCoworkerProfileMaterial,
+  containsForbiddenCoworkerWatchConditionValues,
+  containsForbiddenCoworkerWatchMaterial,
+  containsForbiddenCoworkerWorkingStateMaterial,
+} from "./crypto-coworker-secret-boundary.js";
 
 import {
   MatterhornCoworkerStore,
@@ -158,7 +164,9 @@ function policyRelationshipsValid(profile: MatterhornCoworkerProfile): boolean {
 }
 
 function assertProfile(profile: MatterhornCoworkerProfile): void {
-  if (validateMatterhornCoworkerProfile(profile).length > 0 || !policyRelationshipsValid(profile)) {
+  if (validateMatterhornCoworkerProfile(profile).length > 0
+    || containsForbiddenCoworkerProfileMaterial(profile)
+    || !policyRelationshipsValid(profile)) {
     throw new MatterhornCoworkerError("coworker_input_invalid");
   }
 }
@@ -394,7 +402,7 @@ export class MatterhornCoworkers {
       approvedMemoryIds: input.approvedMemoryIds,
     });
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0
-      || containsForbiddenMemorySecretMaterial(content)) {
+      || containsForbiddenCoworkerWorkingStateMaterial(content)) {
       throw new MatterhornCoworkerError("coworker_working_state_invalid");
     }
     const current = this.#store.getWorkingState(workspaceId, ownerId, coworkerId);
@@ -494,7 +502,7 @@ export class MatterhornCoworkers {
       || !profile.allowedActionIds.includes(normalized.actionId)
       || !profile.allowedNetworks.includes(normalized.network)
       || normalized.budgets.maxReadCallsPerCheck > profile.limits.maxReadCallsPerRun
-      || containsForbiddenMemorySecretMaterial(normalized)) {
+      || containsForbiddenCoworkerWatchMaterial(normalized)) {
       throw new MatterhornCoworkerError("coworker_watch_invalid");
     }
     const now = this.#now();
@@ -562,19 +570,21 @@ export class MatterhornCoworkers {
     if (!this.#accountIsAllowed(claimed.ownerId)) return null;
     const conditionIds = new Set(claimed.conditions.map((condition) => condition.id));
     if (validateMatterhornCoworkerWatch(claimed).length > 0
+      || containsForbiddenCoworkerWatchMaterial(claimed)
       || !Number.isFinite(result.checkedAt.getTime())
       || (result.resultHash !== null && !/^[a-f0-9]{64}$/.test(result.resultHash))
       || (result.conditionValues !== null && (Object.keys(result.conditionValues).length > 8
         || Object.entries(result.conditionValues).some(([key, value]) => !conditionIds.has(key)
           || (value !== null && (typeof value !== "string"
             || value.length > 160
-            || /[\u0000-\u001f\u007f]/.test(value))))))) {
+            || /[\u0000-\u001f\u007f]/.test(value))))
+        || containsForbiddenCoworkerWatchConditionValues(claimed, result.conditionValues)))) {
       throw new MatterhornCoworkerError("coworker_watch_invalid");
     }
     let inboxItem: MatterhornCoworkerInboxItem | null = null;
     if (result.inboxItem) {
       const content = structuredClone(result.inboxItem);
-      if (containsForbiddenMemorySecretMaterial(content)
+      if (containsForbiddenCoworkerInboxMaterial(content)
         || content.watchId !== claimed.id
         || (content.source !== null && (content.source.appId !== claimed.appId
           || content.source.actionId !== claimed.actionId))
@@ -721,7 +731,7 @@ export class MatterhornCoworkers {
       throw new MatterhornCoworkerError("coworker_inbox_item_invalid");
     }
     const content = structuredClone(input);
-    if (containsForbiddenMemorySecretMaterial(content)) {
+    if (containsForbiddenCoworkerInboxMaterial(content)) {
       throw new MatterhornCoworkerError("coworker_inbox_item_invalid");
     }
     const now = this.#now().toISOString();
