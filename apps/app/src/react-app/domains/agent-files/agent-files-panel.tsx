@@ -213,10 +213,9 @@ function FileRow(props: {
           </p>
           {props.item.publication ? (
             <details className="mt-1 text-xs leading-5 text-dls-secondary">
-              <summary className="min-h-6 cursor-pointer outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Backup details</summary>
+              <summary className="min-h-6 cursor-pointer outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Where the backup is stored</summary>
               <p className="mt-1">
-                Walrus storage period {props.item.publication.validUntilEpoch}
-                {props.verification ? ` · ${props.verification.lifecycle.remainingEpochs} remaining` : ""}
+                Stored as encrypted data on Walrus's public Sui test network through network storage period {props.item.publication.validUntilEpoch}.
               </p>
             </details>
           ) : null}
@@ -472,8 +471,8 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
       showToast({
         title: renewalDue ? "Backup needs renewal soon" : "Backup checked",
         description: renewalDue
-          ? `The copy matches, with ${result.lifecycle.remainingEpochs} storage periods remaining. Renew it with your Sui wallet.`
-          : `The encrypted public copy matches, with ${result.lifecycle.remainingEpochs} storage periods remaining.`,
+          ? "The encrypted backup matches this file. Renew it with your Sui wallet to keep it available."
+          : "The encrypted backup matches the file in your workspace.",
         tone: renewalDue ? "warning" : "success",
       });
     } catch (cause) {
@@ -538,7 +537,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
       await refresh();
       showToast({
         title: "Cloud copy renewed",
-        description: `Sui confirmed storage through period ${confirmed.verification.validUntilEpoch}.`,
+        description: "Sui confirmed the renewed encrypted backup.",
         tone: "success",
       });
     } catch (cause) {

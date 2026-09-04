@@ -100,8 +100,11 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("Wallet reviews per request");
     expect(panel).toContain("Apps allowed");
     expect(panel).toContain("Only your connected wallet can approve and send.");
-    expect(panel).toContain("Transaction details");
+    expect(panel).toContain("Wallet review details");
     expect(panel).toContain("Safety checks:");
+    expect(panel).toContain("Technical proof");
+    expect(panel).toContain("Network check ID:");
+    expect(panel).not.toContain("Preview reference:");
     expect(panel).toContain("Review in wallet");
     expect(panel).toContain("openWalletReview(item)");
     expect(panel).toContain("Cancel review");

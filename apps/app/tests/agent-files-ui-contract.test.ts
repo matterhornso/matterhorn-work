@@ -45,10 +45,15 @@ describe("coworker files UI", () => {
     expect(panel).toContain("Only the encrypted copy is uploaded.");
     expect(panel).toContain("Encrypted bytes may remain after deletion");
     expect(panel).toContain("Encrypted backup expires soon");
+    expect(panel).toContain("Where the backup is stored");
+    expect(panel).toContain("Stored as encrypted data on Walrus's public Sui test network");
+    expect(panel).not.toContain("remainingEpochs} remaining");
     expect(panel).toContain("Renew backup");
     expect(panel).toContain("The storage fee is paid in WAL on Sui testnet.");
     expect(panel).toContain("Only your connected wallet can approve, sign, and send it.");
     expect(panel).toContain("Review renewal in wallet");
+    expect(panel).toContain("The encrypted backup matches the file in your workspace.");
+    expect(panel).toContain("Sui confirmed the renewed encrypted backup.");
     expect(panel).toContain("This backup has expired.");
     expect(panel).toContain("This file is being updated. Try again shortly.");
     expect(panel).toContain("This backup request expired or changed. Start it again.");
