@@ -7,6 +7,10 @@ import { realpathSync, statSync } from "node:fs";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 
 export const isolatedOpencodeTestConfig = Object.freeze({
+  // OPENCODE_CONFIG_CONTENT is merged with project configuration. Replace the
+  // repository plugin list so core e2e coverage never depends on installing or
+  // initializing an external plugin before the first project-scoped request.
+  plugin: [],
   permission: {
     "*": "deny",
     read: "allow",
