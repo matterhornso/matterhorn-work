@@ -103,6 +103,16 @@ describe("Agent File server client", () => {
 
     await client.listCoworkers("workspace one");
     await client.getCoworkerState("workspace one", "coworker one");
+    await client.setCoworkerState("workspace one", "coworker one", {
+      expectedRevision: 4,
+      profileRevision: 3,
+      decisions: [],
+      positions: [],
+      unresolvedRisks: [],
+      pendingActions: [],
+      evidenceReferences: [],
+      approvedMemoryIds: [],
+    });
     await client.getCoworkerResources("workspace one", "coworker one");
     await client.getCoworkerResourceRecommendation("workspace one", "coworker one");
     await client.setCoworkerResources("workspace one", "coworker one", {
@@ -149,6 +159,7 @@ describe("Agent File server client", () => {
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://control.example/workspace/workspace%20one/coworkers",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/state",
+      "PUT https://control.example/workspace/workspace%20one/coworkers/coworker%20one/state",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/resources",
       "GET https://control.example/workspace/workspace%20one/coworkers/coworker%20one/resources/recommendation",
       "PUT https://control.example/workspace/workspace%20one/coworkers/coworker%20one/resources",
@@ -164,7 +175,17 @@ describe("Agent File server client", () => {
       "PATCH https://control.example/workspace/workspace%20one/coworkers/coworker%20one",
       "DELETE https://control.example/workspace/workspace%20one/coworkers/coworker%20one",
     ]);
-    expect(requests[4]?.body).toEqual({
+    expect(requests[2]?.body).toEqual({
+      expectedRevision: 4,
+      profileRevision: 3,
+      decisions: [],
+      positions: [],
+      unresolvedRisks: [],
+      pendingActions: [],
+      evidenceReferences: [],
+      approvedMemoryIds: [],
+    });
+    expect(requests[5]?.body).toEqual({
       expectedRevision: 2,
       profileRevision: 3,
       agentFileIds: ["file one"],
@@ -172,7 +193,7 @@ describe("Agent File server client", () => {
       connectionIds: ["connection one"],
       recommendationHash: "a".repeat(64),
     });
-    expect(requests[6]?.body).toEqual({
+    expect(requests[7]?.body).toEqual({
       profileRevision: 3,
       connectionId: "connection one",
       name: "Watch balance",
@@ -184,9 +205,9 @@ describe("Agent File server client", () => {
       budgets: { maxReadCallsPerCheck: 1, maxModelTokensPerCheck: 0, maxCostMicrosPerCheck: 10_000 },
       conditions: [{ id: "result_changed", metric: "matterhorn_result_hash", operator: "changed", value: null }],
     });
-    expect(requests[8]?.body).toEqual({ expectedRevision: 3 });
-    expect(requests[12]?.body).toEqual({ expectedRevision: 5 });
-    expect(requests[13]?.body).toEqual({
+    expect(requests[9]?.body).toEqual({ expectedRevision: 3 });
+    expect(requests[13]?.body).toEqual({ expectedRevision: 5 });
+    expect(requests[14]?.body).toEqual({
       expectedRevision: 5,
       status: "submitted",
       publicId: "public-transaction-id",

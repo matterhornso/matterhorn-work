@@ -8,6 +8,8 @@ import {
 import { buildCoworkerAppConnectionDraft } from "../src/react-app/domains/coworkers/coworker-app-connection";
 import {
   coworkerActivitySummary,
+  coworkerPositionSource,
+  coworkerRememberedWorkSummary,
   resolveCoworkerNextStep,
 } from "../src/react-app/domains/coworkers/coworkers-panel";
 import {
@@ -362,6 +364,70 @@ describe("chat-operated coworker UI", () => {
     expect(panel).not.toContain("Stop this coworker");
     expect(panel).toContain("App reads per request");
     expect(panel).not.toContain("App lookups per request");
+  });
+
+  test("shows and lets the user clear the bounded state carried into future chats", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const client = appSource("app/lib/matterhorn-server.ts");
+    expect(coworkerRememberedWorkSummary(null)).toBe("Nothing remembered from earlier chats yet");
+    expect(coworkerRememberedWorkSummary({
+      version: "matterhorn.coworker-working-state.v1",
+      workspaceId: "workspace_one",
+      coworkerId: "coworker_one",
+      revision: 2,
+      profileRevision: 3,
+      decisions: [
+        { id: "decision_active", summary: "Keep a testnet reserve.", status: "active", evidenceReferenceIds: [], decidedAt: "2026-09-04T12:00:00.000Z" },
+        { id: "decision_old", summary: "Use the first quote.", status: "superseded", evidenceReferenceIds: [], decidedAt: "2026-09-03T12:00:00.000Z" },
+      ],
+      positions: [{
+        id: "position_one",
+        appId: "matterhorn.sui-testnet",
+        network: "sui:testnet",
+        asset: "SUI",
+        side: "long",
+        size: "10",
+        evidenceReferenceId: "evidence_one",
+        observedAt: "2026-09-04T12:00:00.000Z",
+      }],
+      unresolvedRisks: [{
+        id: "risk_one",
+        severity: "high",
+        summary: "Reserve is below the chosen floor.",
+        evidenceReferenceIds: ["evidence_one"],
+        openedAt: "2026-09-04T12:00:00.000Z",
+      }],
+      pendingActions: [
+        { id: "action_one", intentHash: "a".repeat(64), status: "wallet_review", expiresAt: "2026-09-04T12:05:00.000Z" },
+        { id: "action_old", intentHash: "b".repeat(64), status: "expired", expiresAt: "2026-09-04T11:00:00.000Z" },
+      ],
+      evidenceReferences: [{
+        id: "evidence_one",
+        appId: "matterhorn.sui-testnet",
+        actionId: "sui_account_read",
+        referenceHash: "c".repeat(64),
+        freshness: "fresh",
+        observedAt: "2026-09-04T12:00:00.000Z",
+      }],
+      approvedMemoryIds: ["memory_one"],
+      createdAt: "2026-09-04T11:00:00.000Z",
+      updatedAt: "2026-09-04T12:00:00.000Z",
+    })).toBe("1 decision · 1 position · 1 open risk · 1 pending action");
+    expect(coworkerPositionSource("matterhorn.sui-testnet", "sui:testnet")).toBe("Sui Testnet");
+    expect(coworkerPositionSource("matterhorn.hyperliquid-testnet", "hyperliquid:testnet-us"))
+      .toBe("Hyperliquid Testnet · Hyperliquid Testnet Us");
+    expect(panel).toContain("What it remembers");
+    expect(panel).toContain("Matterhorn does not replay the full conversation.");
+    expect(panel).toContain("Decisions");
+    expect(panel).toContain("Positions");
+    expect(panel).toContain("Open risks");
+    expect(panel).toContain("Pending actions");
+    expect(panel).toContain("Clear remembered work");
+    expect(panel).toContain("saved ${approvedMemoryIds.length === 1 ? \"memory item\" : \"memory items\"}");
+    expect(panel).toContain("Chats, files, saved Memory, app access, and wallet history stay in place.");
+    expect(panel).toContain("decisions: []");
+    expect(panel).not.toContain("referenceHash}</");
+    expect(client).toContain("setCoworkerState:");
   });
 
   test("lets the user approve an exact resource sandbox without privacy bypasses", () => {
