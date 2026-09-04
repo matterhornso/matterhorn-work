@@ -396,20 +396,16 @@ async function main() {
         if (payload.safety?.canSubmit !== false) throw new Error("expected execution-chain canSubmit=false");
         if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected execution-chain liveSubmissionEnabled=false");
         if (payload.safety?.acceptsSecrets !== false) throw new Error("expected execution-chain acceptsSecrets=false");
-        if (!Array.isArray(payload.stages) || payload.stages.length < 5) throw new Error("expected all execution-chain stages");
-        const commandText = payload.stages.flatMap((stage) => stage.commands ?? []).join("\n");
-        for (const required of [
-          "matterhorn-work hyperliquid sign-request",
-          "matterhorn-work polymarket sign-request",
-          "matterhorn-work hyperliquid validate-artifact",
-          "matterhorn-work polymarket validate-artifact",
-          "matterhorn-work crypto artifact-reconcile",
-          "matterhorn-work hyperliquid receipt",
-          "matterhorn-work polymarket receipt",
-        ]) {
-          if (!commandText.includes(required)) throw new Error(`execution-chain guide missing ${required}`);
+        if (payload.safety?.connectedWalletRequired !== true) throw new Error("expected connected wallet to be required");
+        if (!Array.isArray(payload.stages) || payload.stages.length !== 5) throw new Error("expected all execution-chain stages");
+        const stageIds = payload.stages.map((stage) => stage.id);
+        const expectedStageIds = ["agent_draft", "policy_and_simulation", "wallet_review", "wallet_submission", "receipt_reconciliation"];
+        if (JSON.stringify(stageIds) !== JSON.stringify(expectedStageIds)) {
+          throw new Error(`unexpected execution-chain stages: ${stageIds.join(", ")}`);
         }
-        for (const forbidden of ["/orders/submit", "/orders/sign", "/exchange/submit", "privateKey", "apiSecret", "rawSignature", "signedPayload"]) {
+        const commandText = payload.stages.flatMap((stage) => stage.commands ?? []).join("\n");
+        if (commandText.length !== 0) throw new Error("execution-chain guide must not advertise executable commands");
+        for (const forbidden of ["sign-request", "validate-artifact", "/orders/submit", "/orders/sign", "/exchange/submit", "privateKey", "apiSecret", "rawSignature", "signedPayload"]) {
           if (commandText.includes(forbidden)) throw new Error(`execution-chain guide includes forbidden string ${forbidden}`);
         }
       },

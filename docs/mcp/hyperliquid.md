@@ -1,13 +1,13 @@
 # Hyperliquid MCP
 
-Use the Hyperliquid MCP when an agent needs market, orderbook, funding, exposure, watch, handoff, artifact validation, or receipt context.
+Use the Hyperliquid MCP when an agent needs market, orderbook, funding, exposure, watch, handoff, or receipt context.
 
 ## What It Does
 
 - Reads market lists, funding, open interest, L2 orderbooks, accounts, positions, and open orders.
 - Creates read-only market, funding, orderbook, and account watches.
-- Builds non-submittable order previews and external trade handoffs.
-- Validates external artifacts and verifies receipts after the user acts outside Matterhorn.
+- Builds non-submittable order previews and prepares exact connected-wallet handoffs.
+- Verifies public receipts after the connected wallet acts.
 
 ## Tools
 
@@ -24,8 +24,6 @@ Use the Hyperliquid MCP when an agent needs market, orderbook, funding, exposure
 - `matterhorn_hyperliquid_act_on_watch_alert`
 - `matterhorn_hyperliquid_preview_order`
 - `matterhorn_hyperliquid_prepare_handoff`
-- `matterhorn_hyperliquid_create_sign_request`
-- `matterhorn_hyperliquid_validate_external_artifact`
 - `matterhorn_hyperliquid_verify_receipt`
 
 ## Setup
@@ -41,13 +39,13 @@ After installing, restart the client and confirm `matterhorn_hyperliquid_chat`, 
 
 ## Safety Boundary
 
-- No live order submission inside Matterhorn.
+- The MCP and agent cannot approve, sign, relay, or submit an order.
 - No custody, hidden signing, exchange API secret storage, raw signatures, or signed payloads.
-- Users execute trades only in their own external Hyperliquid client after reviewing the handoff.
+- Supported actions continue only through a separate, exact connected-wallet ticket in the Matterhorn web app.
 - Receipt tools are verification and evidence tools, not a submission path.
 
 ## Example Prompts
 
 - Show BTC-PERP funding, open interest, and the current orderbook.
 - Summarize exposure for this public account and flag liquidation-sensitive positions.
-- Prepare a BTC-PERP long handoff for review without submitting anything.
+- Draft a BTC-PERP long and prepare its connected-wallet review without submitting anything.

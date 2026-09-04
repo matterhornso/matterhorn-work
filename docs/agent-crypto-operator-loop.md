@@ -2,7 +2,7 @@
 
 Use this after the general [Agent Operator Workflow](./agent-operator-workflow.md) is healthy. It is the copy-paste path for Codex, Claude Code, Hermes, Cursor, Claude Desktop, or another MCP-capable agent to operate the crypto surfaces without scraping the UI.
 
-This loop is non-custodial. Do not paste seed phrases, mnemonics, private keys, API secrets, wallet exports, raw signatures, signed payloads, or signed extrinsics into prompts, CLI flags, HTTP bodies, or MCP tool arguments.
+This loop is non-custodial. Agents can research and draft but cannot approve, sign, relay, or submit. Supported actions continue only through exact connected-wallet tickets. Do not paste seed phrases, mnemonics, private keys, API secrets, wallet exports, raw signatures, signed payloads, or signed extrinsics into prompts, CLI flags, HTTP bodies, or MCP tool arguments.
 
 ## 1. Prove The Local Agent Surface
 
@@ -78,7 +78,7 @@ Expected result:
 
 - Bittensor, Hyperliquid, or Polymarket routing happens server-side.
 - Responses may include both venue `cards` and customer-readable `sharedCards`.
-- Hyperliquid and Polymarket remain read/preview/external-signer only.
+- Hyperliquid and Polymarket agents remain read/draft only; supported actions require a separate connected-wallet ticket.
 
 ## 4. Run Venue Chat Through MCP
 
@@ -255,7 +255,7 @@ These MCP tools are offline-only. They reject credential-shaped fields such as
 seed phrases, private keys, API secrets, raw signatures, signed payloads, and
 wallet exports.
 
-When a Hyperliquid or Polymarket demo includes an external-signer public
+When a Hyperliquid or Polymarket demo includes a connected-wallet public
 receipt, validate it with `matterhorn-work crypto receipt-check` and add the
 result to the bundle:
 

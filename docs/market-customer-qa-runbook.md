@@ -5,9 +5,9 @@ This runbook is for Hermes, Claude Code, Codex, or a human tester validating the
 Scope:
 
 - Bittensor remains the mature flow: wallet reads, validator/subnet intelligence, watch/autopilot, unsigned previews, external-signer handoff, and receipt evidence.
-- Hyperliquid provides read/preview/external-signer flows plus a separate web-only, wallet-approved execution ticket. Polymarket remains read/preview/external-signer only.
+- Hyperliquid and Polymarket agents provide read, research, and non-submitting drafts. Supported actions continue only through separate exact connected-wallet tickets in the web app.
 - Matterhorn Desks must never ask for, store, log, or transmit private keys, seed phrases, API secrets, raw signatures, or signed payloads.
-- No chat, MCP, CLI, watch, workflow, or agent prompt may submit an order. Hyperliquid submission is allowed only through the guarded web ticket after the connected wallet signs an exact, expiring server intent; Polymarket submission is unavailable.
+- No chat, MCP, CLI, watch, workflow, or agent prompt may submit an order. Hyperliquid and eligible Polymarket buy, sell, and cancel actions require a guarded browser-wallet ticket; unsupported and proxy-account flows remain unavailable.
 
 ## 1. Static Safety Gates
 
@@ -102,12 +102,13 @@ Expected result:
 - Hyperliquid handoff includes `externalSignerOnly: true`, `canSubmit: false`, `previewSha256`, `handoffSha256`, and validation-gated signing payload metadata where available.
 - Polymarket market search returns active read-only markets. Pick one market id before previewing a Polymarket order.
 
-## 5. Testnet Sign-Request And Redacted Artifact Validation Smoke
+## 5. Retired Sign-Request And Artifact Routes Fail Closed
 
-This step demonstrates the future external-signer chain without giving
-Matterhorn a signature or a submit path. Use testnet/operator-owned examples
-only. Do not paste raw signatures, signed payloads, API secrets, private keys,
-or real customer funds.
+These commands exercise compatibility routes only. Each must return
+`wallet_airlock_required`; it must not create a sign request, accept an
+artifact, contact a provider, or expose the retired MCP names in `tools/list`.
+Do not paste raw signatures, signed payloads, API secrets, private keys, or
+real customer funds.
 
 ```bash
 matterhorn-work hyperliquid sign-request \
@@ -141,17 +142,12 @@ matterhorn-work polymarket validate-artifact \
 
 Expected result:
 
-- Sign requests use `matterhorn.market.external-sign-request.v1`,
-  `executionMode: testnet_external_signer`, `canSubmit: false`,
-  `liveSubmissionEnabled: false`, and `submitSignedAllowedByContract: false`.
-- Artifact validation accepts only
-  `matterhorn.market.redacted-signed-artifact-envelope.v1` public/redacted
-  metadata and returns `matterhorn.market.artifact-validation.v1`.
-- Accepted artifact validation may emit a public audit receipt candidate, but it
-  is not exchange submission evidence.
-- hash mismatches between the artifact and sign request fail.
-- Any raw `signature`, `rawSignature`, `signedPayload`, `privateKey`, or
-  `apiSecret` field fails immediately.
+- Every command returns `409 wallet_airlock_required`.
+- The response provides no sign request, signing payload, artifact-validation
+  result, executable order fields, or submission authority.
+- The server rejects the request before reading its body or contacting a venue.
+- The supported transaction path remains agent draft, policy and simulation,
+  wallet review, connected-wallet submission, and receipt reconciliation.
 
 ## 6. Receipt Evidence Smoke
 
@@ -192,7 +188,7 @@ matterhorn-work crypto evidence-bundle \
   --strict
 ```
 
-If no external-signer receipt is part of the demo, omit `--receipt-check` and
+If no connected-wallet receipt is part of the demo, omit `--receipt-check` and
 `--require-receipt-check`.
 
 ## 7. UI/UX Checks
@@ -205,7 +201,7 @@ Use the desktop app or web UI and capture screenshots for:
   response; then separately inspect the web order ticket without signing or
   submitting during automated QA.
 - Polymarket chat: search/events/market detail and geoblock/compliance response.
-- Handoff cards: show external-signer language, hashes, expiry, and `canSubmit: false`.
+- Transaction cards: show exact terms, hashes, expiry, and that only the connected wallet can authorize the unchanged action.
 - Error states: missing parameters ask one clear clarification question; secret-shaped input is rejected without echoing the secret value.
 
 ## 8. Security Red Lines
@@ -220,10 +216,8 @@ Fail the QA run if any of these happen:
   mismatched-signer intents, bypasses the deployment kill switch, skips the
   exact mainnet confirmation phrase, or persists a wallet signature.
 - A preview or handoff reports `canSubmit: true`.
-- A sign request or artifact validation reports `canSubmit: true` or
-  `submitSignedAllowedByContract: true`.
-- A redacted artifact validation accepts raw signatures, signed payloads, API
-  secrets, private keys, or a hash mismatch.
+- A retired sign-request or artifact-validation route does anything except fail
+  locally with `wallet_airlock_required`, or contacts a venue.
 - A Polymarket compliance-blocked preview includes executable price/size/share fields.
 - A receipt mismatch is accepted as matching the original handoff.
 

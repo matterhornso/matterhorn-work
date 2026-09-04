@@ -5,7 +5,7 @@ This QA pack builds a customer-safe evidence bundle for a demo that uses only pu
 The pack is intentionally non-custodial:
 
 - Do not use seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or real customer funds.
-- Hyperliquid and Polymarket remain read/preview/external-signer handoff only.
+- Hyperliquid and Polymarket agents remain read/draft only; supported actions require a separate connected-wallet ticket.
 - Bittensor actions remain unsigned previews and external-signer handoffs only.
 - Missing live public inputs produce `SKIPPED_WITH_FIXTURE_FALLBACK`, not a failure.
 

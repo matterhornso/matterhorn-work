@@ -366,7 +366,7 @@ mustContain("docs/hyperliquid-read-preview.md", [
 mustContain("docs/polymarket-read-preview.md", [
   "requiresClientValidation",
   "@polymarket/clob-client",
-  "never the signature, API key, or submission",
+  "never fabricates or accepts a signature",
   "canSubmit: false",
 ]);
 

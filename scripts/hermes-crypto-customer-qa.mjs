@@ -148,10 +148,10 @@ function buildPlan() {
     ),
     command(
       "markets.execution_chain",
-      "Print the safe market execution-chain command plan",
+      "Print the connected-wallet transaction boundary",
       "matterhorn-work crypto execution-chain --json",
-      "Market sign-request and artifact validation QA",
-      "Shows preview/handoff, testnet external sign-request, redacted artifact validation, artifact reconciliation, and public receipt import commands without contacting a server.",
+      "Connected-wallet transaction QA",
+      "Shows agent draft, policy and simulation, wallet review, wallet authorization, and receipt reconciliation without contacting a server.",
     ),
     command(
       "markets.sign_artifact_routes",
@@ -230,12 +230,12 @@ function buildPlan() {
     },
     {
       id: "market_sign_artifact_qa",
-      title: "Market sign-request and artifact validation QA",
+      title: "Connected-wallet transaction QA",
       checklist: [
-        "Run the execution-chain helper and confirm it prints preview, sign-request, redacted artifact validation, artifact reconciliation, and public receipt steps.",
-        "Run the route-contract test and confirm sign requests use testnet external signer mode only.",
-        "Confirm accepted artifacts are hash-bound to their sign request and hash mismatches fail closed.",
-        "Confirm raw signatures, signed payloads, private keys, API secrets, wallet exports, and submit routes are rejected or absent.",
+        "Run the execution-chain helper and confirm it prints agent draft, policy and simulation, wallet review, wallet authorization, and receipt reconciliation.",
+        "Run the route-contract test and confirm retired sign-request and artifact routes fail closed before provider traffic.",
+        "Confirm changing a reviewed network, signer, amount, price, slippage, or expiry invalidates the ticket.",
+        "Confirm agents, MCP, CLI, chats, and watches cannot approve, sign, submit, relay, or accept signed wallet artifacts.",
       ],
     },
     {
@@ -287,7 +287,7 @@ function buildPlan() {
       signsOrSubmits: false,
       canSubmit: false,
       liveSubmissionEnabled: false,
-      externalSignerRequired: true,
+      connectedWalletRequired: true,
     },
     commands,
     sections,

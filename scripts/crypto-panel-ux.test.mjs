@@ -218,13 +218,12 @@ for (const phrase of [
 for (const phrase of [
   "Wallet-authorized execution",
   "Execution boundary",
-  "external-signer request",
   "Transaction status",
   "Wallet approval required",
   "Compliance gated",
   "Eligible EOA buy, sell, and cancel actions",
-  "Copy signer examples",
-  "Signer request",
+  "The agent drafts exact terms.",
+  "Only the connected wallet can authorize the unchanged action.",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should include reviewed market execution copy: ${phrase}`);
 }
@@ -242,6 +241,9 @@ for (const forbidden of [
   'title="Try in chat"',
   'title="Try prompts"',
   "Copy sign-request examples",
+  "Copy signer examples",
+  "Signer request",
+  "external-signer request",
   ">Sign request<",
   "External sign request",
   "Services: Workflow/future hooks",

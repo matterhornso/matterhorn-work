@@ -1970,8 +1970,16 @@ try {
   assert.equal(marketExecutionChain.safety.canSubmit, false);
   assert.equal(marketExecutionChain.safety.liveSubmissionEnabled, false);
   assert.equal(marketExecutionChain.safety.acceptsSecrets, false);
-  assert.ok(marketExecutionChain.stages.some((stage) => stage.id === "external_sign_request"));
-  assert.ok(JSON.stringify(marketExecutionChain.stages).includes("matterhorn-work crypto artifact-reconcile"));
+  assert.deepEqual(marketExecutionChain.stages.map((stage) => stage.id), [
+    "agent_draft",
+    "policy_and_simulation",
+    "wallet_review",
+    "wallet_submission",
+    "receipt_reconciliation",
+  ]);
+  assert.equal(marketExecutionChain.safety.connectedWalletRequired, true);
+  assert.equal(JSON.stringify(marketExecutionChain.stages).includes("sign-request"), false);
+  assert.equal(JSON.stringify(marketExecutionChain.stages).includes("validate-artifact"), false);
 
   const marketSdkValidation = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_market_sdk_validation",

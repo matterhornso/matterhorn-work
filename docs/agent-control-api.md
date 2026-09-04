@@ -89,8 +89,8 @@ Common status codes:
 | `matterhorn_hyperliquid_watch_digest` | `GET /api/hyperliquid/watches/digest` |
 | `matterhorn_hyperliquid_act_on_watch_alert` | `POST /api/hyperliquid/watches/act` |
 | `matterhorn_hyperliquid_preview_order` | `POST /api/hyperliquid/orders/preview` |
-| `matterhorn_hyperliquid_create_sign_request` | `POST /api/hyperliquid/orders/external-sign-request` |
-| `matterhorn_hyperliquid_validate_external_artifact` | `POST /api/hyperliquid/orders/external-artifact/validate` |
+| `matterhorn_hyperliquid_prepare_handoff` | `POST /api/hyperliquid/orders/handoff` |
+| `matterhorn_hyperliquid_verify_receipt` | `POST /api/hyperliquid/orders/receipt` |
 | `matterhorn_polymarket_chat` | `POST /api/polymarket/chat/execute` |
 | `matterhorn_polymarket_search_markets` | `GET /api/polymarket/markets` |
 | `matterhorn_polymarket_search_events` | `GET /api/polymarket/events` |
@@ -102,8 +102,8 @@ Common status codes:
 | `matterhorn_polymarket_watch_digest` | `GET /api/polymarket/watches/digest` |
 | `matterhorn_polymarket_act_on_watch_alert` | `POST /api/polymarket/watches/act` |
 | `matterhorn_polymarket_preview_order` | `POST /api/polymarket/orders/preview` |
-| `matterhorn_polymarket_create_sign_request` | `POST /api/polymarket/orders/external-sign-request` |
-| `matterhorn_polymarket_validate_external_artifact` | `POST /api/polymarket/orders/external-artifact/validate` |
+| `matterhorn_polymarket_prepare_handoff` | `POST /api/polymarket/orders/handoff` |
+| `matterhorn_polymarket_verify_receipt` | `POST /api/polymarket/orders/receipt` |
 | `matterhorn_bittensor_chat` | `POST /api/bittensor/chat/execute` |
 | `matterhorn_bittensor_readiness` | `GET /api/bittensor/readiness` |
 | `matterhorn_bittensor_list_capabilities` | `GET /api/bittensor/capabilities` |
@@ -112,6 +112,8 @@ Common status codes:
 | `matterhorn_bittensor_create_signing_handoff` | `POST /api/bittensor/extrinsics/handoff` |
 | `matterhorn_bittensor_import_receipt` | `POST /api/bittensor/extrinsics/receipt` |
 | `matterhorn_bittensor_submit_signed_extrinsic` | Deprecated hidden compatibility stub; returns `wallet_airlock_required` without network traffic |
+
+The former Hyperliquid and Polymarket external sign-request and artifact-validation MCP names are not advertised. Their direct HTTP compatibility routes fail closed with `409 wallet_airlock_required` before reading a request body or contacting a provider. Supported market actions continue only through an exact connected-wallet ticket; agents, MCP clients, CLI clients, chats, and watches cannot approve or submit them.
 
 ## Additional Crypto Read Routes
 
@@ -122,7 +124,7 @@ Common status codes:
 | `GET /api/workflows/templates` | Returns `matterhorn.customer.workflow.template.v1`, the customer-facing template registry for Bittensor, Hyperliquid, Polymarket, wellness creator workflows, decentralized services, and blank chat. Optional `customerTemplate`, `category`, and `status` filters are supported. Each template includes launch CTA, default prompt, UI hint, and routing metadata for app entrypoints and agent launchers. This route is read-only and rejects credential-shaped query fields. |
 | `GET /api/services/capabilities` | Returns `matterhorn.services.capability-catalog.v1`, the future-contract catalog for hosting, storage, email, payments, and identity/access. Optional `capability` filter is supported. This route is read-only, accepts no secrets, and keeps every capability `status: "future_contract"`, `canExecute: false`, and `liveExecutionEnabled: false`. |
 | `POST /api/services/chat/plan` | Returns `matterhorn.services.chat-plan.v1`, a deterministic future-contract plan from a plain-language service prompt. The route accepts `message` and optional `capability`; it rejects secret-shaped fields and keeps every card `canExecute: false` and `liveExecutionEnabled: false`. |
-| `GET /api/crypto/market-execution-chain` | Returns `matterhorn.market.execution-chain-guide.v1`, the no-submit Hyperliquid/Polymarket preview, external sign request, public/redacted artifact validation, artifact reconciliation, and public receipt import guide. This route is read-only and keeps `canSubmit: false` plus `liveSubmissionEnabled: false`. |
+| `GET /api/crypto/market-execution-chain` | Returns `matterhorn.market.execution-chain-guide.v1`, the connected-wallet transaction path for Hyperliquid and Polymarket: agent draft, policy and simulation, wallet review, wallet submission, and receipt reconciliation. This route is read-only, exposes no signing or submission command to agents, and keeps `canSubmit: false` plus `liveSubmissionEnabled: false`. |
 | `GET /api/crypto/market-sdk-validation` | Returns `matterhorn.market.sdk-validation-guide.v1`, the fixture/operator-owned testnet official SDK validation guide for Hyperliquid and Polymarket. This route is read-only, accepts no artifacts or secrets, and keeps `canSubmit: false` plus `liveSubmissionEnabled: false`. |
 | `matterhorn_bittensor_preview_subnet_invocation` | `POST /api/bittensor/subnets/:netuid/preview` |
 | `matterhorn_bittensor_invoke_subnet` | `POST /api/bittensor/subnets/:netuid/invoke` |
