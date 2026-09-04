@@ -314,6 +314,37 @@ describe("agent privacy firewall", () => {
     }
   });
 
+  test("uses one exact clock for Venice policy and model-proof validation", () => {
+    const now = new Date("2026-09-02T12:00:00.000Z");
+    configureVenicePrivateModelRegistry(
+      [{ id: "private-tools", name: "Private Tools" }],
+      { now, ttlMs: 60_000 },
+    );
+    try {
+      const firewall = new MatterhornPrivacyFirewall();
+      const approved = firewall.preflight({
+        ...baseInput(),
+        providerId: "venice",
+        modelId: "private-tools",
+        privacyMode: "private_workspace",
+      }, { now: new Date("2026-09-02T12:00:59.999Z") });
+      const expired = firewall.preflight({
+        ...baseInput(),
+        providerId: "venice",
+        modelId: "private-tools",
+        privacyMode: "private_workspace",
+      }, { now: new Date("2026-09-02T12:01:00.000Z") });
+
+      expect(approved.response.decision).toBe("allow");
+      expect(expired.response).toMatchObject({
+        decision: "blocked",
+        provider: { privacyStatus: "unverified" },
+      });
+    } finally {
+      configureVenicePrivateModelRegistry([]);
+    }
+  });
+
   test("keeps deterministic text-only policy overhead below 100ms p95", () => {
     const firewall = new MatterhornPrivacyFirewall();
     const durations: number[] = [];

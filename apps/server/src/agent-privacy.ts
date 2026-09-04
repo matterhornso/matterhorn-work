@@ -250,7 +250,7 @@ export class MatterhornPrivacyFirewall {
     const providerVerified = policy.status === "local_processing" || policy.status === "verified_no_training";
     const invalidVeniceModel =
       input.providerId.trim().toLowerCase() === VENICE_PROVIDER_ID &&
-      !isRegisteredVenicePrivateModel(input.modelId);
+      !isRegisteredVenicePrivateModel(input.modelId, now);
     let decision: MatterhornAgentPrivacyPreflightResponse["decision"] = "allow";
     let reason = classified.effectiveMode === "public_research"
       ? "Public research can use the disclosed provider without private workspace context."

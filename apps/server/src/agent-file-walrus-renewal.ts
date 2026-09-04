@@ -541,26 +541,27 @@ export class MatterhornAgentFileWalrusRenewalService {
       renewedAt: transaction.observedAt,
       verifiedAt: finalizedAt.toISOString(),
     };
-    const item = this.stateStore.transaction(() => {
-      const consumed = this.stateStore.take<RenewalIntentRecord>(STATE_KIND, input.fileId, finalizedAt.getTime());
-      if (!consumed) fail("agent_file_walrus_renewal_expired_or_replayed");
-      assertIntentTenant(consumed, input);
-      if (canonicalJson(consumed.preview) !== canonicalJson(preview)) {
-        fail("agent_file_walrus_renewal_intent_mismatch");
-      }
-      return this.store.renewWalrusPublication({
-        workspaceId: input.workspaceId,
-        ownerId: input.ownerId,
-        fileId: input.fileId,
-        expectedRevision: preview.fileRevision,
-        expectedBlobId: preview.blobId,
-        expectedSuiObjectId: preview.suiObjectId,
-        expectedCiphertextSha256: currentPublication.ciphertextSha256,
-        expectedPreviousValidUntilEpoch: preview.previousValidUntilEpoch,
-        claimId: consumed.claimId,
-        publication: renewedPublication,
-        now: finalizedAt,
-      });
+    const item = this.store.renewWalrusPublication({
+      workspaceId: input.workspaceId,
+      ownerId: input.ownerId,
+      fileId: input.fileId,
+      expectedRevision: preview.fileRevision,
+      expectedBlobId: preview.blobId,
+      expectedSuiObjectId: preview.suiObjectId,
+      expectedCiphertextSha256: currentPublication.ciphertextSha256,
+      expectedPreviousValidUntilEpoch: preview.previousValidUntilEpoch,
+      claimId: record.claimId,
+      publication: renewedPublication,
+      now: finalizedAt,
+      consumePendingIntent: () => {
+        const consumed = this.stateStore.take<RenewalIntentRecord>(STATE_KIND, input.fileId, finalizedAt.getTime());
+        if (!consumed) fail("agent_file_walrus_renewal_expired_or_replayed");
+        assertIntentTenant(consumed, input);
+        if (consumed.claimId !== record.claimId
+          || canonicalJson(consumed.preview) !== canonicalJson(preview)) {
+          fail("agent_file_walrus_renewal_intent_mismatch");
+        }
+      },
     });
     return {
       item,

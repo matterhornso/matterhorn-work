@@ -14,7 +14,10 @@ import type {
   MatterhornEvidenceDataKeyLease,
   MatterhornEvidenceKeyManager,
 } from "./crypto-evidence-sealer.js";
-import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import {
+  MatterhornGuardedRuntimeStateStore,
+  type GuardedRuntimeStateKind,
+} from "./guarded-runtime-state-store.js";
 
 const encoder = new TextEncoder();
 
@@ -48,6 +51,18 @@ class TestKeyManager implements MatterhornEvidenceKeyManager {
   async destroyKey(input: { keyReference: string }): Promise<void> {
     this.keys.delete(input.keyReference);
     this.destroyed.push(input.keyReference);
+  }
+}
+
+class FailingClaimDeleteStateStore extends MatterhornGuardedRuntimeStateStore {
+  failNextOperationClaimDelete = false;
+
+  override delete(kind: GuardedRuntimeStateKind, key: string): boolean {
+    if (kind === "agent_file_operation_claim" && this.failNextOperationClaimDelete) {
+      this.failNextOperationClaimDelete = false;
+      return false;
+    }
+    return super.delete(kind, key);
   }
 }
 
@@ -384,6 +399,112 @@ describe("encrypted Agent Files store", () => {
     } finally {
       stateB.close();
       stateA.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rolls back a Walrus renewal if its single-use claim cannot be consumed", async () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-agent-file-renewal-atomic-"));
+    const state = new FailingClaimDeleteStateStore(join(root, "state.db"));
+    const keys = new TestKeyManager();
+    const store = new MatterhornAgentFileStore(state, keys);
+    try {
+      const created = await store.create({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        request: uploadRequest({ expiresAt: null }),
+        bytes: encoder.encode("Atomic encrypted cloud renewal."),
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      });
+      const publicationCandidate = store.beginWalrusPublication({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision,
+        now: new Date("2026-09-02T00:01:00.000Z"),
+      });
+      const published = store.attachWalrusPublication({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision,
+        claimId: publicationCandidate.claimId,
+        publication: {
+          version: "matterhorn.agent-file-walrus-publication.v1",
+          network: "testnet",
+          blobId: "atomic-renewal-blob",
+          suiObjectId: "0x1234",
+          ciphertextSha256: publicationCandidate.ciphertextSha256,
+          certifiedEpoch: 10,
+          validUntilEpoch: 15,
+          suiTransactionDigest: null,
+          publishedAt: "2026-09-02T00:01:00.000Z",
+          verifiedAt: "2026-09-02T00:01:00.000Z",
+        },
+        now: new Date("2026-09-02T00:01:00.000Z"),
+      });
+      publicationCandidate.bytes.fill(0);
+      const renewalCandidate = store.beginWalrusRenewal({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: published.id,
+        expectedRevision: published.revision,
+        now: new Date("2026-09-02T00:02:00.000Z"),
+      });
+      const renewal = {
+        ...published.publication!,
+        validUntilEpoch: 20,
+        renewalTransactionDigest: "renewal-digest",
+        renewedAt: "2026-09-02T00:02:00.000Z",
+        verifiedAt: "2026-09-02T00:02:00.000Z",
+      };
+
+      state.failNextOperationClaimDelete = true;
+      expect(() => store.renewWalrusPublication({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: published.id,
+        expectedRevision: published.revision,
+        expectedBlobId: published.publication!.blobId,
+        expectedSuiObjectId: published.publication!.suiObjectId,
+        expectedCiphertextSha256: published.publication!.ciphertextSha256,
+        expectedPreviousValidUntilEpoch: published.publication!.validUntilEpoch,
+        claimId: renewalCandidate.claimId,
+        publication: renewal,
+        now: new Date("2026-09-02T00:02:00.000Z"),
+      })).toThrow("agent_file_walrus_renewal_claim_invalid");
+
+      expect(store.get({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: published.id,
+        now: new Date("2026-09-02T00:02:00.000Z"),
+      })).toEqual(published);
+      expect(store.hasWalrusRenewalClaim({
+        workspaceId: "ws_alpha",
+        fileId: published.id,
+        expectedRevision: published.revision,
+        claimId: renewalCandidate.claimId,
+        now: new Date("2026-09-02T00:02:00.000Z"),
+      })).toBe(true);
+
+      const renewed = store.renewWalrusPublication({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: published.id,
+        expectedRevision: published.revision,
+        expectedBlobId: published.publication!.blobId,
+        expectedSuiObjectId: published.publication!.suiObjectId,
+        expectedCiphertextSha256: published.publication!.ciphertextSha256,
+        expectedPreviousValidUntilEpoch: published.publication!.validUntilEpoch,
+        claimId: renewalCandidate.claimId,
+        publication: renewal,
+        now: new Date("2026-09-02T00:02:00.000Z"),
+      });
+      expect(renewed).toMatchObject({ revision: published.revision + 1, publication: renewal });
+      renewalCandidate.bytes.fill(0);
+    } finally {
+      state.close();
       rmSync(root, { recursive: true, force: true });
     }
   });
