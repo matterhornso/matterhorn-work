@@ -86,11 +86,11 @@ for (const stageId of [
 
 for (const visibleText of [
   "Workspace home",
-  "Continue active work, start a focused desk task, or create something new.",
+  "Describe an outcome, continue your work, or open a protocol desk.",
   "New chat",
   "New note",
-  "Open a desk",
-  "Jot a note",
+  "Browse protocol desks",
+  "Files and saved outputs",
   "Wallet readiness",
   "Wallet readiness details",
   "review and sign every transaction in your wallet",
@@ -167,6 +167,14 @@ for (const visibleText of [
     `product browser smoke should exercise ${visibleText}`,
   );
 }
+
+assert.ok(
+  script.includes("openProtocolDeskLauncher") &&
+    script.includes('getByRole("region", {') &&
+    script.includes('name: "Desk capability overview"') &&
+    script.includes("await openProtocolDeskLauncher(page)"),
+  "product browser smoke should expand the progressive protocol-desk launcher before choosing a desk",
+);
 
 assert.equal(
   script.includes("Describe market"),

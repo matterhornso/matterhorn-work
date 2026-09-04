@@ -380,6 +380,17 @@ async function ensureWorkspaceHomeVisible(page, timeoutMs = 20_000) {
   await home.waitFor({ state: "visible", timeout: timeoutMs });
 }
 
+async function openProtocolDeskLauncher(page, timeoutMs = 20_000) {
+  const trigger = page.getByText("Browse protocol desks", { exact: true });
+  await trigger.waitFor({ state: "visible", timeout: timeoutMs });
+  const deskOverview = page.getByRole("region", {
+    name: "Desk capability overview",
+    exact: true,
+  });
+  if (!(await deskOverview.isVisible())) await trigger.click();
+  await deskOverview.waitFor({ state: "visible", timeout: timeoutMs });
+}
+
 async function waitForDeskPromptSentEvent(page, taskTitle, timeoutMs = 30_000) {
   const eventHandle = await page.waitForFunction(
     (title) => {
@@ -580,9 +591,7 @@ async function startPrimaryDeskTask(page, config, desk) {
     timeout: 30_000,
   });
   await ensureWorkspaceHomeVisible(page);
-  await page
-    .getByText("Open a desk", { exact: true })
-    .waitFor({ state: "visible", timeout: 20_000 });
+  await openProtocolDeskLauncher(page);
   await clickFirstVisible(
     page.getByTestId(`open-${desk.id}-desk`),
     `${desk.openLabel} desk card`,
@@ -741,6 +750,7 @@ async function verifyReviewedActionChatHandoff(page, config) {
     timeout: 30_000,
   });
   await ensureWorkspaceHomeVisible(page);
+  await openProtocolDeskLauncher(page);
   await clickFirstVisible(
     page.getByTestId("open-hyperliquid-desk"),
     "Open Hyperliquid desk card",
@@ -786,9 +796,10 @@ async function verifyReviewedActionChatHandoff(page, config) {
     throw new Error("Reviewed action did not create a concrete chat id.");
   const composer = page.getByTestId("session-composer-shell");
   await composer.waitFor({ state: "visible", timeout: 20_000 });
-  const editor = composer.getByRole("textbox", {
-    name: /Ask Matterhorn about Bittensor, markets, longevity, files, or workflows/,
-  });
+  // The product copy for the composer is intentionally free to evolve. Scope the
+  // semantic textbox lookup to the stable composer shell instead of coupling the
+  // acceptance test to its current placeholder text.
+  const editor = composer.getByRole("textbox");
   await editor.waitFor({ state: "visible", timeout: 15_000 });
   const savedDraft = (await editor.innerText()).trim();
   if (savedDraft !== draft) {
@@ -996,7 +1007,7 @@ async function runSmoke(config) {
       async () => {
         await page
           .getByText(
-            "Continue active work, start a focused desk task, or create something new.",
+            "Describe an outcome, continue your work, or open a protocol desk.",
             { exact: true },
           )
           .waitFor({ state: "visible", timeout: 15_000 });
@@ -1007,10 +1018,10 @@ async function runSmoke(config) {
           .getByRole("button", { name: "New note", exact: true })
           .waitFor({ state: "visible", timeout: 15_000 });
         await page
-          .getByText("Open a desk", { exact: true })
+          .getByText("Browse protocol desks", { exact: true })
           .waitFor({ state: "visible", timeout: 15_000 });
         await page
-          .getByLabel("Jot a note", { exact: true })
+          .getByText("Files and saved outputs", { exact: true })
           .waitFor({ state: "visible", timeout: 15_000 });
         if (await page.getByLabel("Copy project path").count()) {
           throw new Error(
@@ -1193,9 +1204,7 @@ async function runSmoke(config) {
           timeout: 30_000,
         });
         await ensureWorkspaceHomeVisible(page);
-        await page
-          .getByText("Open a desk", { exact: true })
-          .waitFor({ state: "visible", timeout: 20_000 });
+        await openProtocolDeskLauncher(page);
         const longevityCard = page.getByTestId("open-wellness-desk");
         if (await longevityCard.count() === 0) {
           report.artifacts.longevityPrimaryNavigation = "hidden_for_crypto_public_beta";
