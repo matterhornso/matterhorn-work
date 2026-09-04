@@ -19,10 +19,10 @@ export function buildMarketExecutionReadinessReport(checkedAt = new Date().toISO
         canSubmit: hyperliquidExecution,
         supportedNow: hyperliquidExecution
           ? ["read", "preview", "connected_wallet_sign", "intent_bound_live_submit", "public_receipt"]
-          : ["read", "preview", "external_sign_request", "redacted_artifact_validation", "public_receipt_import"],
+          : ["read", "preview", "public_receipt_import"],
         blockedNow: hyperliquidExecution
           ? ["agent_auto_submit", "custodial_signing", "exchange_secret_storage", "unbound_signature_submit"]
-          : ["live_submit", "custodial_signing", "exchange_secret_storage"],
+          : ["connected_wallet_submit", "agent_auto_submit", "custodial_signing", "exchange_secret_storage"],
         missingBeforeLiveSubmit: hyperliquidExecution ? [] : ["enable deployment execution kill switch"],
       },
       {
@@ -38,8 +38,6 @@ export function buildMarketExecutionReadinessReport(checkedAt = new Date().toISO
           "eligible_eoa_buy_wallet_ticket",
           "eligible_eoa_sell_wallet_ticket",
           "exact_order_cancellation",
-          "external_sign_request",
-          "redacted_artifact_validation",
           "public_receipt",
         ],
         blockedNow: [
@@ -60,7 +58,7 @@ export function buildMarketExecutionReadinessReport(checkedAt = new Date().toISO
       },
       polymarket: {
         available: true,
-        scope: "Compliance-allowed EOA buy and sell orders plus exact-order cancellation on Polygon. Proxy-account and advanced flows remain external handoffs.",
+        scope: "Compliance-allowed EOA buy and sell orders plus exact-order cancellation on Polygon. Proxy-account and advanced flows remain unavailable.",
       },
       bittensor: {
         available: true,
@@ -68,9 +66,9 @@ export function buildMarketExecutionReadinessReport(checkedAt = new Date().toISO
       },
     },
     controls: [
-      { id: "preview_hash_binding", status: "pass", summary: "Hyperliquid submission signs an exact, expiring server intent; legacy handoffs retain stable public hashes." },
-      { id: "external_signer_only", status: "pass", summary: "The connected wallet signs each Hyperliquid intent. Matterhorn never signs or custodies keys." },
-      { id: "redacted_artifact_validation", status: "pass", summary: "Only public/redacted signed-artifact metadata can be validated." },
+      { id: "preview_hash_binding", status: "pass", summary: "Every supported submission is bound to one exact, expiring reviewed intent." },
+      { id: "connected_wallet_only", status: "pass", summary: "The connected wallet authorizes each supported action. Matterhorn never signs or custodies keys." },
+      { id: "policy_and_simulation", status: "pass", summary: "Policy and fresh protocol checks run before wallet review; changed terms require a new ticket." },
       { id: "public_receipt_import", status: "pass", summary: "Receipt evidence is public status only and not treated as exchange submission authority." },
       { id: "route_level_kill_switch", status: "pass", summary: hyperliquidExecution ? "The deployment kill switch enables Hyperliquid execution." : "The deployment kill switch currently disables Hyperliquid execution." },
       {
@@ -89,7 +87,7 @@ export function buildMarketExecutionReadinessReport(checkedAt = new Date().toISO
         ]
       : [
           "Enable MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED only after deployment review.",
-          "Keep using read/preview/external-signer/public-receipt flows while execution is disabled.",
+          "Keep using Hyperliquid research and previews until connected-wallet execution is enabled.",
         ],
     safety: {
       nonCustodial: true,
@@ -125,7 +123,7 @@ export function buildMarketExecutionReadinessCard(report = buildMarketExecutionR
     ],
     warnings: [
       "Every order requires exact-term review and connected-wallet authorization. Agents and watches cannot submit orders.",
-      "Polymarket proxy-account and advanced order flows remain external handoffs in this release.",
+      "Polymarket proxy-account and advanced order flows remain unavailable in this release.",
     ],
     data: { report },
   } as const;
@@ -144,66 +142,52 @@ export function buildMarketExecutionChainGuide() {
   return {
     success: true,
     version: "matterhorn.market.execution-chain-guide.v1",
-    title: "Legacy market evidence chain",
-    summary: "Optional public/redacted evidence path for operators who finish unsupported or advanced actions outside Matterhorn.",
+    title: "Connected-wallet transaction path",
+    summary: "The agent drafts exact terms; deterministic checks and a separate connected-wallet ticket control every supported submission.",
     safety: {
       canSubmit: false,
       liveSubmissionEnabled: false,
       nonCustodial: true,
-      externalSignerRequired: true,
+      connectedWalletRequired: true,
       acceptsSecrets: false,
       acceptsRawSignatures: false,
       acceptsSignedPayloads: false,
     },
     stages: [
       {
-        id: "preview_handoff",
-        label: "Preview / handoff",
-        purpose: "Build a no-submit plan from public context.",
-        commands: [
-          "matterhorn-work hyperliquid handoff --asset BTC --side buy --size 0.001 --price <testnet-price> --json",
-          "matterhorn-work polymarket handoff --market-id <testnet-market-id> --side yes --amount-usdc 1 --json",
-        ],
-        output: "Public handoff with canSubmit:false and liveSubmissionEnabled:false.",
+        id: "agent_draft",
+        label: "Agent draft",
+        purpose: "Turn the request into exact proposed terms without submission authority.",
+        commands: [],
+        output: "A non-submitting draft that clearly identifies the venue, action, amount, limits, and unresolved inputs.",
       },
       {
-        id: "external_sign_request",
-        label: "External sign request",
-        purpose: "Create public metadata for an operator-owned testnet signer only.",
-        commands: [
-          "matterhorn-work hyperliquid sign-request BTC --side buy --size 0.001 --price <testnet-price> --execution-mode testnet_external_signer --json",
-          "matterhorn-work polymarket sign-request <testnet-market-id> --side yes --amount-usdc 1 --execution-mode testnet_external_signer --json",
-        ],
-        output: "matterhorn.market.external-sign-request.v1 with submitSignedAllowedByContract:false.",
+        id: "policy_and_simulation",
+        label: "Safety checks",
+        purpose: "Apply workspace limits, compliance, network checks, and a fresh protocol simulation.",
+        commands: [],
+        output: "A hash-bound reviewed action or a clear block. Any material change requires regeneration.",
       },
       {
-        id: "redacted_artifact_validation",
-        label: "Redacted artifact validation",
-        purpose: "Validate public/redacted official-client metadata against the sign request hash.",
-        commands: [
-          "matterhorn-work hyperliquid validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
-          "matterhorn-work polymarket validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
-        ],
-        output: "matterhorn.market.artifact-validation.v1 plus a public audit receipt candidate.",
+        id: "wallet_review",
+        label: "Wallet review",
+        purpose: "Show the exact action, risks, expiry, network, signer, fees, and simulation before approval.",
+        commands: [],
+        output: "A short-lived ticket that cannot be edited after review.",
       },
       {
-        id: "artifact_reconciliation",
-        label: "Artifact reconciliation",
-        purpose: "Turn accepted public artifact validations into customer evidence.",
-        commands: [
-          "matterhorn-work crypto artifact-reconcile --hyperliquid-artifact-validation <hyperliquid-artifact-validation.json> --polymarket-artifact-validation <polymarket-artifact-validation.json> --strict --json",
-        ],
-        output: "matterhorn.market.artifact-reconciliation.v1.",
+        id: "wallet_submission",
+        label: "Wallet authorization",
+        purpose: "Let the connected wallet authorize the unchanged reviewed action.",
+        commands: [],
+        output: "The wallet either rejects the ticket or submits the exact supported action. Agents and watches cannot do this.",
       },
       {
-        id: "public_receipt_import",
-        label: "Public receipt import",
-        purpose: "Verify public status evidence against the original handoff.",
-        commands: [
-          "matterhorn-work hyperliquid receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
-          "matterhorn-work polymarket receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
-        ],
-        output: "matterhorn.market.receipt.v1 public receipt evidence only.",
+        id: "receipt_reconciliation",
+        label: "Receipt",
+        purpose: "Match public protocol evidence back to the reviewed intent hash.",
+        commands: [],
+        output: "A public status receipt that never contains secrets, signatures, or raw wallet material.",
       },
     ],
     forbidden: [
@@ -213,7 +197,7 @@ export function buildMarketExecutionChainGuide() {
       "raw signature",
       "signed payload",
       "wallet export",
-      "live submit route",
+      "agent or watch submission",
     ],
   } as const;
 }
@@ -227,23 +211,23 @@ export function buildMarketExecutionChainCard(
     : null;
   return {
     kind: "market_execution_chain",
-    title: highlightedStep ? `Legacy evidence chain: ${highlightedStep.label}` : "Legacy evidence chain",
+    title: highlightedStep ? `Transaction path: ${highlightedStep.label}` : "Connected-wallet transaction path",
     summary: highlightedStep
       ? `${highlightedStep.label}: ${highlightedStep.purpose} ${highlightedStep.output}`
-      : "Optional evidence chain for unsupported or advanced Hyperliquid and Polymarket actions completed outside Matterhorn.",
+      : "Supported Hyperliquid and Polymarket actions move from an agent draft into deterministic checks and a separate connected-wallet ticket.",
     tone: "info",
     source: { source: "matterhorn.execution-chain", freshness: "live" },
     items: [
       { label: "Can submit", value: "No", tone: "good" },
       { label: "Live submission", value: "Off", tone: "good" },
-      { label: "External signer", value: "Required", tone: "warning" },
+      { label: "Connected wallet", value: "Required", tone: "warning" },
       { label: "Secret intake", value: "Never", tone: "good" },
       { label: "Stages", value: String(guide.stages.length), tone: "info" },
       ...(highlightedStep ? [{ label: "Focus", value: highlightedStep.label, tone: "info" }] : []),
     ],
     warnings: [
-      "This is an optional external-client evidence path. Supported connected-wallet actions use the reviewed wallet ticket instead.",
-      "Signed artifacts must be public/redacted metadata, never raw signatures or signed payloads.",
+      "The agent can draft and explain, but it cannot approve or submit a transaction.",
+      "Changing any reviewed term invalidates the ticket and requires fresh checks.",
     ],
     data: { guide, highlightedStep },
   } as const;

@@ -169,11 +169,11 @@ USDC balance: ${publicUsdcBalance}
 - Delegation and advanced Bittensor calls stay unavailable until their adapter and review contract are audited. Never imply custody or seed import.
 
 **Hyperliquid**
-- Use the unified crypto chat path for account, positions, funding, orderbook, watch, sign-request, validation, and receipt questions.
+- Use the unified crypto chat path for account, positions, funding, orderbook, watch, draft, wallet-review, and receipt questions.
 - Hyperliquid execution is available only through a server-issued, short-lived order intent signed by the connected wallet. Never claim that an Agent response, watch, or preview submitted an order.
 
 **Polymarket**
-- Use the unified crypto chat path for market discovery, market context, orderbook, compliance, preview, watch, sign-request, validation, and receipt questions.
+- Use the unified crypto chat path for market discovery, market context, orderbook, compliance, draft, watch, wallet-review, and receipt questions.
 - Resolve natural-language requests to the exact public market before preparing terms. If several markets match, offer at most three choices and ask the person to select one.
 - Eligible EOA buy, sell, and cancel actions continue in the separate Polymarket trade ticket after exact review, compliance checks, and connected Polygon-wallet authorization. Proxy accounts, watch-triggered orders, and unattended execution are not supported in this release.
 - If compliance is blocked, do not expose executable price, size, or share fields. Explain the block and offer read-only context.

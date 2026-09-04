@@ -252,18 +252,6 @@ const CUSTOMER_DEMO_COMMANDS = {
   executionChain: "matterhorn-work crypto execution-chain --json",
   executionChainApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-execution-chain\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
   sdkValidationApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-sdk-validation\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
-  executionChainSignRequest: [
-    "matterhorn-work hyperliquid sign-request BTC --side buy --size 0.001 --price <testnet-price> --execution-mode testnet_external_signer --json",
-    "matterhorn-work polymarket sign-request <testnet-market-id> --side yes --amount-usdc 1 --execution-mode testnet_external_signer --json",
-  ].join("\n"),
-  executionChainArtifact: [
-    "matterhorn-work hyperliquid validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
-    "matterhorn-work polymarket validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
-  ].join("\n"),
-  executionChainReceipt: [
-    "matterhorn-work hyperliquid receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
-    "matterhorn-work polymarket receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
-  ].join("\n"),
   sdkDoctor: "matterhorn-work crypto sdk-doctor --strict --json",
   sdkValidateFixture: [
     "matterhorn-work crypto sdk-validate-public",
@@ -408,7 +396,7 @@ const CUSTOMER_DEMO_PROMPTS = [
   },
   {
     id: "external-signer-preview",
-    label: "Signer preview",
+    label: "Wallet boundary",
     betaVisible: true,
     prompt: "Matterhorn protocol task: Explain the signing boundary across Bittensor, Hyperliquid, and Polymarket. A connected wallet can review and submit Bittensor transfer/stake/unstake calls, Hyperliquid place/cancel/modify/close actions, and eligible Polymarket buy/sell/cancel actions from separate tickets. Unsupported advanced calls stay unavailable. Matterhorn never signs, custodies keys, or auto-executes.",
   },
@@ -3337,7 +3325,7 @@ export default function BittensorPanel({
   };
 
   const askAgentAboutMarketExecutionReadiness = async () => {
-    const prompt = "Matterhorn protocol task: Review the current Hyperliquid and Polymarket execution contract. Explain which agent/server controls are passing, how the separate connected-wallet tickets submit exact reviewed terms, which Polymarket buy, sell, and cancel actions are eligible, which cases remain external handoffs, and the next safe operator action. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
+    const prompt = "Matterhorn protocol task: Review the current Hyperliquid and Polymarket execution contract. Explain which agent/server controls are passing, how the separate connected-wallet tickets submit exact reviewed terms, which Polymarket buy, sell, and cancel actions are eligible, which actions remain unavailable, and the next safe operator action. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
     await sendToChat(prompt, { marketExecutionReadiness }, { mode: "crypto", source: "market-execution-readiness-panel" });
   };
 
@@ -3474,7 +3462,7 @@ export default function BittensorPanel({
   const marketExecutionChainStages = marketExecutionChain?.stages ?? [];
   const marketExecutionChainStageCount = marketExecutionChainStages.length ? String(marketExecutionChainStages.length) : CHECK_PENDING_LABEL;
   const marketExecutionChainSubmitState = marketExecutionChain?.safety?.canSubmit === false ? "No" : CHECK_PENDING_LABEL;
-  const marketExecutionChainSignerState = marketExecutionChain?.safety?.externalSignerRequired === true ? "Required" : CHECK_PENDING_LABEL;
+  const marketExecutionChainSignerState = marketExecutionChain?.safety?.connectedWalletRequired === true ? "Required" : CHECK_PENDING_LABEL;
   const marketExecutionChainState = marketExecutionChain
     ? marketExecutionChain.safety?.liveSubmissionEnabled === false && marketExecutionChain.safety?.canSubmit === false
       ? "Safe"
@@ -3772,10 +3760,6 @@ export default function BittensorPanel({
                     <Button variant="ghost" size="sm" className="h-8 justify-start gap-1.5 px-2 text-xs text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate")}>
                       <Copy className="size-3.5" />
                       {copiedCustomerCommand === (venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate") ? "Copied" : "Copy watch setup command"}
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-8 justify-start gap-1.5 px-2 text-xs text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text" onClick={() => void copyCustomerDemoCommand("executionChainSignRequest")}>
-                      <Copy className="size-3.5" />
-                      {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Copy signer examples"}
                     </Button>
                     <Button variant="ghost" size="sm" className="h-8 justify-start gap-1.5 px-2 text-xs text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchDigest" : "polymarketWatchDigest")}>
                       <Copy className="size-3.5" />
@@ -4225,18 +4209,19 @@ export default function BittensorPanel({
                 <div className="grid grid-cols-2 gap-2">
                   <Metric label="Chain API" value={marketExecutionChainState} compact />
                   <Metric label="Stages" value={marketExecutionChainStageCount} compact />
-                  <Metric label="Wallet approval" value={marketExecutionChainSignerState} compact />
+                  <Metric label="Connected wallet" value={marketExecutionChainSignerState} compact />
                   <Metric label="Can submit" value={marketExecutionChainSubmitState} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Testnet-only validation path: preview -&gt; operator-owned wallet check -&gt; redacted artifact validation -&gt; public receipt import. Each step is public/redacted and hash-bound before it can become customer evidence.
+                  The agent drafts exact terms. Matterhorn checks policy, compliance, network state, and simulation before opening a short-lived wallet ticket. Only the connected wallet can authorize the unchanged action.
                 </p>
                 <div className="grid grid-cols-1 gap-2">
                   {[
-                    ["Preview / handoff", "Build a no-submit plan with Can submit: No and Live submission: Off."],
-                    ["Operator wallet check", "Create public metadata for an operator-owned testnet wallet only."],
-                    ["Validate artifact", "Accept public/redacted metadata; reject raw signatures, signed payloads, secrets, and hash mismatches."],
-                    ["Receipt import", "Attach public status or transaction evidence without private execution material."],
+                    ["Agent draft", "Turn the request into exact proposed terms without submission authority."],
+                    ["Safety checks", "Apply limits, compliance, network checks, and a fresh simulation."],
+                    ["Wallet review", "Show the exact action, fees, risks, expiry, and signer before approval."],
+                    ["Wallet authorization", "The connected wallet rejects or submits the unchanged supported action."],
+                    ["Receipt", "Match public protocol evidence back to the reviewed intent."],
                   ].map(([label, description]) => (
                     <div key={label} className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                       <p className="text-xs font-semibold text-dls-text">{label}</p>
@@ -4247,21 +4232,6 @@ export default function BittensorPanel({
                 <div className="grid grid-cols-1 gap-2">
                   <Button variant="ghost" size="icon-sm" className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" onClick={loadMarketExecutionChain} disabled={marketExecutionChainLoading} aria-label="Refresh execution chain" title="Refresh execution chain">
                     {marketExecutionChainLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChain")}>
-                    {copiedCustomerCommand === "executionChain" ? "Copied" : "Chain CLI"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainApi")}>
-                    {copiedCustomerCommand === "executionChainApi" ? "Copied" : "Chain API"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainSignRequest")}>
-                    {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Signer request"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainArtifact")}>
-                    {copiedCustomerCommand === "executionChainArtifact" ? "Copied" : "Validate artifact"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainReceipt")}>
-                    {copiedCustomerCommand === "executionChainReceipt" ? "Copied" : "Receipt import"}
                   </Button>
                 </div>
               </div>

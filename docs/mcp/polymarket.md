@@ -1,6 +1,6 @@
 # Polymarket MCP
 
-Use the Polymarket MCP when an agent needs market discovery, outcome context, compliance checks, liquidity, orderbooks, watches, handoffs, external artifact validation, or receipt verification.
+Use the Polymarket MCP when an agent needs market discovery, outcome context, compliance checks, liquidity, orderbooks, watches, handoffs, or receipt verification.
 
 ## What It Does
 
@@ -8,7 +8,7 @@ Use the Polymarket MCP when an agent needs market discovery, outcome context, co
 - Reads market details, outcome context, liquidity, and orderbooks.
 - Runs compliance checks before any handoff is prepared.
 - Creates read-only watches for probability, liquidity, and compliance changes.
-- Builds compliance-gated external handoffs and verifies receipts.
+- Builds compliance-gated connected-wallet handoffs and verifies public receipts.
 
 ## Tools
 
@@ -24,8 +24,6 @@ Use the Polymarket MCP when an agent needs market discovery, outcome context, co
 - `matterhorn_polymarket_act_on_watch_alert`
 - `matterhorn_polymarket_preview_order`
 - `matterhorn_polymarket_prepare_handoff`
-- `matterhorn_polymarket_create_sign_request`
-- `matterhorn_polymarket_validate_external_artifact`
 - `matterhorn_polymarket_verify_receipt`
 
 ## Setup
@@ -41,9 +39,10 @@ After installing, restart the client and confirm `matterhorn_polymarket_chat`, `
 
 ## Safety Boundary
 
-- No live bet placement inside Matterhorn.
+- The MCP and agent cannot approve, sign, relay, or submit an order.
 - No hidden wallet connection, custody, signing, raw signature storage, or signed payload storage.
 - Compliance-blocked flows must not expose executable price, size, or share fields.
+- Supported buy, sell, and cancel actions continue only through a separate, exact connected-wallet ticket in the Matterhorn web app.
 - Receipt checks are evidence tools, not a Matterhorn submission path.
 
 ## Example Prompts

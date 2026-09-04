@@ -110,27 +110,27 @@ matterhorn-work polymarket watch act \
 
 `watch act` only converts a triggered/degraded watch into a deterministic read-only crypto-chat review. It does not sign, submit, broadcast, auto-execute, or accept API secrets, private keys, raw signatures, or signed payloads.
 
-## Agent And External-Handoff Execution (non-custodial)
+## Agent Draft And Wallet Handoff (non-custodial)
 
-Agent, MCP, CLI, watch, and server routes never submit. Their flow mirrors the shared `external_signer_required` / `MarketReceipt` contract:
+Agent, MCP, CLI, watch, and chat routes never submit. They can prepare public terms and a hash-bound handoff:
 
 1. **Preview** → an `unsigned_preview` (`canSubmit: false`).
-2. **Signing handoff** — `buildPolymarketSigningHandoff(preview)` produces a `PolymarketSigningHandoff`: the public order terms, the EIP-712 signing scheme (Polymarket CLOB on Polygon, chain 137), a `previewSha256` binding, a `handoffSha256`, and an expiry. `externalSignerOnly: true`, `canSubmit: false`. It refuses a compliance-blocked preview and never fabricates a signature.
-3. **The user signs and submits with their own wallet**, either in an eligible browser-wallet ticket described below or outside Matterhorn. The tool layer produces economic terms only — never the signature, API key, or submission.
+2. **Wallet handoff** — `buildPolymarketSigningHandoff(preview)` produces public order terms, `previewSha256`, `handoffSha256`, and an expiry. It refuses a compliance-blocked preview and never fabricates or accepts a signature.
+3. **The user opens the separate connected-wallet ticket** for an eligible action. The agent handoff itself cannot become an order.
 4. **Receipt verification** — `verifyPolymarketReceipt(handoff, receipt)` validates a returned **public** receipt (order id / tx hash / status) against the handoff hashes, market, outcome, and side, and emits a `MarketReceipt`-shaped result. It **rejects any signing material** in the receipt (raw signatures / signed payloads are never accepted).
 
 Matterhorn stays non-custodial end to end: no key import, no server-side API-secret storage, no server signing, and no acceptance of signing material on the way back in. `liveSubmissionEnabled` for the agent/tool artifact remains `false`.
 
-### Separate browser-wallet BUY ticket
+### Separate browser-wallet buy, sell, and cancel ticket
 
 The web app also has a separate, explicitly reviewed ticket for eligible EOA BUY orders. It is not an agent, MCP, CLI, watch, or server submit capability.
 
-- A fresh server preview must identify the exact market, outcome, CLOB token, USDC spend, maximum loss, public hash, compliance result, and expiry.
+- A fresh server review must identify the exact action and its relevant market, outcome, CLOB token, amount, price/slippage, maximum loss, public hash, compliance result, and expiry.
 - Compliance must be `allowed`; blocked or unknown results fail closed.
 - The user connects an EOA wallet on Polygon and types `SUBMIT POLYMARKET ORDER`.
-- The official `@polymarket/clob-client` creates temporary browser-local credentials and submits a BUY FAK market order.
+- The official `@polymarket/clob-client` creates temporary browser-local credentials and submits only the exact reviewed buy, sell, or cancellation.
 - Temporary credentials are cleared immediately after the attempt. Only a public receipt is sent back to Matterhorn's server.
-- Sell orders, proxy accounts, agents, watches, automatic submission, and unattended retries are not supported.
+- Proxy accounts, agents, watches, automatic submission, unattended retries, and unsupported advanced actions are not supported.
 
 ### EIP-712 order typed-data (opt-in, validation-gated)
 
@@ -172,7 +172,7 @@ The QA harness self-test runs offline with mocked Gamma/CLOB/geoblock endpoints;
 
 ## Scope Notes
 
-This stream is the read/preview/watch tool layer plus QA harness and readiness gate. Server routes (`/api/polymarket/...`), MCP tools, and CLI commands are available for read-only market data, preview-only orders, external-signer handoffs, public receipts, and watch checks.
+This stream is the read/draft/watch tool layer plus QA harness and readiness gate. Server routes (`/api/polymarket/...`), MCP tools, and CLI commands are available for read-only market data, non-submitting previews and handoffs, public receipts, and watch checks. Eligible buy, sell, and cancel actions continue only through the separate connected-wallet web ticket.
 
 References:
 

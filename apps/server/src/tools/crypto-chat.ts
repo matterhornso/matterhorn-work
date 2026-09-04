@@ -313,7 +313,7 @@ function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCrypto
       return "More context is needed before Matterhorn can continue safely.";
     case "readiness_report":
       if (originalKind === "market_execution_chain") {
-        return "Optional legacy evidence chain for unsupported or advanced actions completed outside Matterhorn. Supported actions use the separate reviewed wallet ticket.";
+        return "Supported actions move from an agent draft through safety checks into a separate connected-wallet ticket.";
       }
       return "Cross-venue execution readiness for Hyperliquid and Polymarket. This is a readiness contract, not execution permission.";
     case "discovery":
@@ -332,7 +332,7 @@ function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCrypto
     case "compliance_block":
       return `Compliance status from ${venue}; blocked previews must not contain executable order terms.`;
     case "external_signer_handoff":
-      return `External signer handoff from ${venue}; signing stays outside Matterhorn.`;
+      return `Connected-wallet handoff from ${venue}; the agent cannot approve or submit it.`;
     case "receipt_status":
       return `Public receipt/status evidence from ${venue}.`;
     case "watch_alert":
@@ -430,7 +430,7 @@ function isMarketExecutionChainRequest(input: UnifiedCryptoChatInput, message: s
   const selectedMarketVenue = input.venue === "hyperliquid" || input.venue === "polymarket";
   const mentionsMarketVenue = selectedMarketVenue
     || textIncludes(text, /\b(hyperliquid|polymarket|market|markets|venue|venues|order|orders)\b/i);
-  const mentionsChain = textIncludes(text, /\b(execution chain|safe execution chain|preview[- ]?to[- ]?receipt|preview to receipt|sign[- ]?request.*receipt|receipt.*sign[- ]?request|artifact validation|validate artifact|artifact reconciliation|redacted artifact|external sign request|sign[- ]?request|receipt import|import receipt|operator path|safe operator path)\b/i);
+  const mentionsChain = textIncludes(text, /\b(execution chain|safe execution chain|transaction path|preview[- ]?to[- ]?receipt|preview to receipt|wallet review|wallet authorization|connected wallet.*authoriz|review.*connected wallet|policy and simulation|safety checks|sign[- ]?request.*receipt|receipt.*sign[- ]?request|artifact validation|validate artifact|artifact reconciliation|redacted artifact|external sign request|sign[- ]?request|receipt import|import receipt|operator path|safe operator path)\b/i);
   return mentionsMarketVenue && mentionsChain;
 }
 
@@ -446,11 +446,11 @@ function isMarketSdkValidationRequest(input: UnifiedCryptoChatInput, message: st
 function marketExecutionChainStepId(message: string): string | null {
   const text = message.toLowerCase();
   if (textIncludes(text, /\b(execution chain|safe execution chain|preview[- ]?to[- ]?receipt|preview to receipt|sign[- ]?request.*receipt|receipt.*sign[- ]?request)\b/i)) return null;
-  if (textIncludes(text, /\b(receipt import|import receipt|public receipt|receipt)\b/i)) return "public_receipt_import";
-  if (textIncludes(text, /\b(artifact reconciliation|reconcile artifact|evidence bundle)\b/i)) return "artifact_reconciliation";
-  if (textIncludes(text, /\b(artifact validation|validate artifact|redacted artifact|signed artifact)\b/i)) return "redacted_artifact_validation";
-  if (textIncludes(text, /\b(sign[- ]?request|external sign request|signing request)\b/i)) return "external_sign_request";
-  if (textIncludes(text, /\b(preview|handoff)\b/i)) return "preview_handoff";
+  if (textIncludes(text, /\b(receipt import|import receipt|public receipt|receipt|artifact reconciliation|reconcile artifact|evidence bundle|artifact validation|validate artifact|redacted artifact|signed artifact)\b/i)) return "receipt_reconciliation";
+  if (textIncludes(text, /\b(submit|submission|broadcast)\b/i)) return "wallet_submission";
+  if (textIncludes(text, /\b(sign[- ]?request|external sign request|signing request|wallet review|review.*connected wallet|connected wallet.*review|what will i review|approve|approval)\b/i)) return "wallet_review";
+  if (textIncludes(text, /\b(policy|simulation|compliance|limit|slippage)\b/i)) return "policy_and_simulation";
+  if (textIncludes(text, /\b(preview|handoff|draft)\b/i)) return "agent_draft";
   return null;
 }
 
@@ -565,8 +565,8 @@ function marketExecutionChainResult(input: UnifiedCryptoChatInput, message: stri
     : null;
   const cards = [buildMarketExecutionChainCard(guide, highlightedStepId)];
   const warnings = [
-    "This is a safe execution-chain guide, not execution permission.",
-    "Matterhorn accepts only public/redacted artifact metadata and public receipt evidence.",
+    "This guide explains the transaction path; it does not grant execution permission.",
+    "Only the connected wallet can authorize a supported action after exact review.",
   ];
   const route: UnifiedCryptoRoutePlan = {
     requestedVenue: normalizeVenue(input.venue),
@@ -583,8 +583,8 @@ function marketExecutionChainResult(input: UnifiedCryptoChatInput, message: stri
     intent: highlightedStep ? "market_execution_step_guidance" : "market_execution_chain",
     execution: "read_only",
     responseText: highlightedStep
-      ? `This evidence artifact cannot submit. ${highlightedStep.label}: ${highlightedStep.purpose} Use only public/redacted inputs and fail closed on hash mismatches. Supported actions use the separate exact-term connected-wallet ticket. Matterhorn never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.`
-      : "The agent prepares exact terms, the user reviews them, and a connected wallet authorizes each supported submission. The legacy evidence chain remains available for unsupported or advanced actions completed outside Matterhorn. Reviewed terms are immutable, watches cannot execute, and Matterhorn never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.",
+      ? `${highlightedStep.label}: ${highlightedStep.purpose} The agent cannot approve or submit. Any material change invalidates the ticket and triggers fresh checks. Matterhorn never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.`
+      : "The agent drafts exact terms, deterministic checks create a short-lived review, and the connected wallet authorizes each supported action. Unsupported actions remain unavailable. Reviewed terms cannot be changed, watches cannot execute, and Matterhorn never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.",
     cards,
     sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
     data: { guide, highlightedStep },

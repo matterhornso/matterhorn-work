@@ -1,5 +1,7 @@
 # Market Sign Request Phase 1
 
+> **Retired compatibility design.** This document records an earlier testnet-only design. The tools are no longer advertised, and the direct routes return `409 wallet_airlock_required` without provider traffic. New work must use the connected-wallet transaction path in [Market Execution-Readiness Security Gate](./market-execution-readiness-security-gate.md).
+
 Phase 1 adds disabled-by-default external sign-request generation for Hyperliquid and Polymarket. This flow still does not perform live submission, Matterhorn signing, signed-payload intake, custody, API-secret storage, or exchange broadcast. Hyperliquid's separate web execution ticket is governed by its own exact-intent, connected-wallet, expiry, replay, notional-limit, and deployment-kill-switch contract.
 
 Official references:

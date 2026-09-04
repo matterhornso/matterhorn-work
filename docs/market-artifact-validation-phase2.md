@@ -1,5 +1,7 @@
 # Market Artifact Validation Phase 2
 
+> **Retired compatibility design.** This document records an earlier public-artifact design. The tools are no longer advertised, and the direct routes return `409 wallet_airlock_required` without provider traffic. New work must use the connected-wallet transaction path in [Market Execution-Readiness Security Gate](./market-execution-readiness-security-gate.md).
+
 Phase 2 validates public/redacted signed-artifact metadata produced outside Matterhorn after a Phase 1 external sign request. It still does not add live submission, Matterhorn signing, raw signature intake, signed payload intake, API-secret storage, custody, or exchange broadcast.
 
 ## What Phase 2 Adds

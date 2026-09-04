@@ -65,10 +65,9 @@ for (const required of [
 for (const required of [
   "market_execution_chain",
   "matterhorn.market.execution-chain-guide.v1",
-  "connected wallet authorizes each supported submission",
-  "legacy evidence chain",
-  "exact-term connected-wallet ticket",
-  "public/redacted inputs",
+  "connected wallet authorizes each supported action",
+  "Unsupported actions remain unavailable",
+  "Any material change invalidates the ticket",
 ]) {
   assert.ok(cryptoChat.includes(required) || cryptoChatTest.includes(required), `unified crypto chat should expose safe execution-chain context: ${required}`);
 }
@@ -85,6 +84,7 @@ for (const required of [
   "export interface MarketExecutionChainResponse",
   "canSubmit: false",
   "liveSubmissionEnabled: false",
+  "connectedWalletRequired: true",
   "acceptsRawSignatures: false",
   "acceptsSignedPayloads: false",
 ]) {
@@ -93,38 +93,27 @@ for (const required of [
 
 for (const required of [
   "matterhorn_market_execution_chain",
-  "matterhorn_hyperliquid_create_sign_request",
-  "matterhorn_polymarket_create_sign_request",
-  "matterhorn_hyperliquid_validate_external_artifact",
-  "matterhorn_polymarket_validate_external_artifact",
-  "matterhorn_market_artifact_reconcile",
+  "matterhorn_hyperliquid_prepare_handoff",
+  "matterhorn_polymarket_prepare_handoff",
   "matterhorn_hyperliquid_verify_receipt",
   "matterhorn_polymarket_verify_receipt",
 ]) {
-  assert.ok(mcp.includes(required), `MCP should expose public/redacted chain tool ${required}`);
+  assert.ok(mcp.includes(required), `MCP should expose connected-wallet chain tool ${required}`);
 }
 
 for (const required of [
   "matterhorn-work crypto execution-chain",
   "/api/crypto/market-execution-chain",
-  "matterhorn-work hyperliquid sign-request",
-  "matterhorn-work polymarket sign-request",
-  "matterhorn-work hyperliquid validate-artifact",
-  "matterhorn-work polymarket validate-artifact",
-  "matterhorn-work hyperliquid receipt",
-  "matterhorn-work polymarket receipt",
-  "testnet_external_signer",
 ]) {
-  assert.ok(cli.includes(required) || panel.includes(required), `CLI or demo UI should expose safe chain command ${required}`);
+  assert.ok(cli.includes(required) || panel.includes(required), `CLI or demo UI should expose safe chain status ${required}`);
 }
 
 for (const required of [
   "Market execution chain gate",
-  "preview/handoff",
-  "explicit testnet external sign-request",
-  "public/redacted artifact validation",
-  "artifact reconciliation",
-  "public receipt import",
+  "agent draft",
+  "policy and simulation",
+  "connected-wallet review",
+  "receipt reconciliation",
   "test:market-execution-chain-gate",
   "GET /api/crypto/market-execution-chain",
   "test:agent-control-mcp",
@@ -135,12 +124,12 @@ for (const required of [
 
 for (const required of [
   "Connected-Wallet Hyperliquid Execution",
-  "Legacy Preview And Evidence Chain",
-  "matterhorn.market.external-sign-request.v1",
+  "Connected-Wallet Transaction Path",
   "matterhorn.market.execution-chain-guide.v1",
-  "matterhorn.market.redacted-signed-artifact-envelope.v1",
-  "matterhorn.market.artifact-validation.v1",
-  "This legacy chain remains deliberately incomplete for agent and operator automation",
+  "Agent draft",
+  "Policy and simulation",
+  "Wallet review",
+  "Receipt reconciliation",
 ]) {
   assert.ok(readinessDoc.includes(required), `security gate doc should describe safe chain: ${required}`);
 }
@@ -165,14 +154,13 @@ for (const required of [
 
 for (const required of [
   "Execution chain",
-  "Testnet-only validation path: preview",
-  "operator-owned wallet check",
-  "redacted artifact validation",
-  "public receipt import",
-  "hash-bound",
-  "Can submit: No",
-  "Live submission: Off",
-  "Chain API",
+  "The agent drafts exact terms.",
+  "Only the connected wallet can authorize the unchanged action.",
+  "Agent draft",
+  "Safety checks",
+  "Wallet review",
+  "Wallet authorization",
+  "Receipt",
 ]) {
   assert.ok(panel.includes(required), `Demo tab should explain safe execution chain: ${required}`);
 }
@@ -186,6 +174,8 @@ for (const forbidden of [
   "apiSecret:",
   "rawSignature:",
   "signedPayload:",
+  "Copy signer examples",
+  "Signer request",
 ]) {
   for (const [label, surface] of [
     ["server", server],
@@ -194,6 +184,9 @@ for (const forbidden of [
   ]) {
     assert.equal(surface.includes(forbidden), false, `${label} must not expose forbidden chain surface ${forbidden}`);
   }
+}
+for (const retiredCustomerCopy of ["Copy signer examples", "Signer request", "testnet_external_signer", "validate-artifact"]) {
+  assert.equal(panel.includes(retiredCustomerCopy), false, `Demo panel must not expose retired market signing copy: ${retiredCustomerCopy}`);
 }
 
 for (const forbidden of [
