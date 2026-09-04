@@ -7,9 +7,8 @@ import { realpathSync, statSync } from "node:fs";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 
 export const isolatedOpencodeTestConfig = Object.freeze({
-  // OPENCODE_CONFIG_CONTENT is merged with project configuration. Replace the
-  // repository plugin list so core e2e coverage never depends on installing or
-  // initializing an external plugin before the first project-scoped request.
+  // Defense in depth alongside OPENCODE_DISABLE_PROJECT_CONFIG below: core e2e
+  // coverage never opts into an external plugin.
   plugin: [],
   permission: {
     "*": "deny",
@@ -107,7 +106,14 @@ export async function spawnOpencodeServe({
       ...process.env,
       // Make it explicit we're a non-TUI client.
       OPENCODE_CLIENT: "matterhorn-work-test",
-      ...(serializedConfig ? { OPENCODE_CONFIG_CONTENT: serializedConfig } : {}),
+      ...(serializedConfig
+        ? {
+            OPENCODE_CONFIG_CONTENT: serializedConfig,
+            // OpenCode merges config content after project discovery; an empty
+            // plugin array cannot remove an already discovered project plugin.
+            OPENCODE_DISABLE_PROJECT_CONFIG: "true",
+          }
+        : {}),
     },
   });
 

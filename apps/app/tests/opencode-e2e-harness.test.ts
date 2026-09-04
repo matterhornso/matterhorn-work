@@ -14,6 +14,7 @@ describe("OpenCode E2E harness", () => {
     expect(utilSource).toContain("isolatedOpencodeTestConfig");
     expect(utilSource).toContain("plugin: []");
     expect(utilSource).toContain("OPENCODE_CONFIG_CONTENT: serializedConfig");
+    expect(utilSource).toContain('OPENCODE_DISABLE_PROJECT_CONFIG: "true"');
     for (const script of aggregateScripts) {
       expect(script).toContain("configContent: isolatedOpencodeTestConfig");
     }
