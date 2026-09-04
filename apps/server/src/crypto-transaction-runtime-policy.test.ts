@@ -71,8 +71,9 @@ function hyperliquidResult(overrides: Record<string, unknown> = {}): MatterhornC
   };
 }
 
-function intent(app: "sui" | "hyperliquid" = "hyperliquid"): MatterhornCryptoIntent {
+function intent(app: "sui" | "hyperliquid" | "bittensor" = "hyperliquid"): MatterhornCryptoIntent {
   const hyperliquid = app === "hyperliquid";
+  const bittensor = app === "bittensor";
   return {
     version: "matterhorn.crypto-intent.v1",
     id: "cintent_test",
@@ -80,16 +81,20 @@ function intent(app: "sui" | "hyperliquid" = "hyperliquid"): MatterhornCryptoInt
     runId: "run_policy",
     coworkerId: "cw_policy",
     workspaceId: "ws_policy",
-    appId: hyperliquid ? "matterhorn.hyperliquid-testnet" : "matterhorn.sui-testnet",
-    connectionId: hyperliquid ? "cxc_hyperliquid" : "cxc_sui",
-    actionId: hyperliquid ? "hyperliquid_preview_order" : "sui_transfer_preview",
+    appId: hyperliquid
+      ? "matterhorn.hyperliquid-testnet"
+      : bittensor ? "matterhorn.bittensor-testnet" : "matterhorn.sui-testnet",
+    connectionId: hyperliquid ? "cxc_hyperliquid" : bittensor ? "cxc_bittensor" : "cxc_sui",
+    actionId: hyperliquid
+      ? "hyperliquid_preview_order"
+      : bittensor ? "bittensor_prepare_stake" : "sui_transfer_preview",
     protocol: app,
-    network: hyperliquid ? "hyperliquid:testnet" : "sui:testnet",
-    signer: "0x1234",
-    operation: hyperliquid ? "place_order" : "transfer_sui",
-    asset: hyperliquid ? "ETH" : "SUI",
-    amount: "0.01",
-    recipient: null,
+    network: hyperliquid ? "hyperliquid:testnet" : bittensor ? "bittensor:test" : "sui:testnet",
+    signer: bittensor ? "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF" : "0x1234",
+    operation: hyperliquid ? "place_order" : bittensor ? "stake" : "transfer_sui",
+    asset: hyperliquid ? "ETH" : bittensor ? "TAO" : "SUI",
+    amount: bittensor ? "0.1" : "0.01",
+    recipient: bittensor ? "5FHneW46xGXgs5mUiveU4sbTyGBzmtoW4h4KYxqsdXw4nq8Z" : null,
     slippageBps: hyperliquid ? 50 : null,
     canonicalArguments: {},
     authorizedArgumentsHash: "b".repeat(64),
@@ -172,6 +177,51 @@ describe("production transaction runtime policy", () => {
     }
   });
 
+  test("admits only the certified Bittensor testnet preparation matrix", () => {
+    for (const actionId of [
+      "bittensor_prepare_transfer",
+      "bittensor_prepare_stake",
+      "bittensor_prepare_unstake",
+    ]) {
+      const layers = buildMatterhornRuntimeTransactionPolicyLayers({
+        workspaceId: "ws_policy",
+        ownerId: "account_policy",
+        organizationId: null,
+        appId: "matterhorn.bittensor-testnet",
+        actionId,
+        network: "bittensor:test",
+        runId: "run_policy",
+        callId: `call_${actionId}`,
+        walletPolicy: walletPolicy(),
+        now: NOW,
+      });
+      expect(layers.platform).toMatchObject({
+        state: "active",
+        allowedAssets: ["TAO"],
+        allowedActionIds: [actionId],
+        allowedNetworks: ["bittensor:test"],
+        walletSubmissionOnly: true,
+      });
+    }
+
+    for (const candidate of [
+      { appId: "matterhorn.bittensor-testnet", actionId: "bittensor_submit_transfer", network: "bittensor:test" },
+      { appId: "matterhorn.bittensor-testnet", actionId: "bittensor_prepare_stake", network: "bittensor:main" },
+      { appId: "malicious.app", actionId: "bittensor_prepare_stake", network: "malicious:testnet" },
+    ]) {
+      expect(buildMatterhornRuntimeTransactionPolicyLayers({
+        workspaceId: "ws_policy",
+        ownerId: "account_policy",
+        organizationId: null,
+        ...candidate,
+        runId: "run_policy",
+        callId: "call_policy",
+        walletPolicy: walletPolicy(),
+        now: NOW,
+      }).platform.state).toBe("deny");
+    }
+  });
+
   test("derives Hyperliquid facts only when adapter economics reconcile exactly", () => {
     const facts = resolveMatterhornRuntimeTransactionFacts({
       adapterResult: hyperliquidResult(),
@@ -227,5 +277,32 @@ describe("production transaction runtime policy", () => {
       leverage: null,
       complianceAllowed: true,
     });
+  });
+
+  test("treats every certified Bittensor testnet preview as zero USD value", () => {
+    for (const [actionId, action] of [
+      ["bittensor_prepare_transfer", "transfer"],
+      ["bittensor_prepare_stake", "stake"],
+      ["bittensor_prepare_unstake", "unstake"],
+    ] as const) {
+      const baseIntent = intent("bittensor");
+      const facts = resolveMatterhornRuntimeTransactionFacts({
+        adapterResult: {
+          ...hyperliquidResult(),
+          app: { id: "matterhorn.bittensor-testnet", manifestRevision: "1.1.0", connectionId: "cxc_bittensor" },
+          action: { id: actionId, access: "prepare", network: "bittensor:test" },
+          result: { action, amountTao: "0.1" },
+        },
+        intent: { ...baseIntent, actionId, operation: action },
+        existingIntents: [],
+        now: NOW,
+      });
+      expect(facts).toMatchObject({
+        notionalUsd: 0,
+        projectedReserveUsd: null,
+        leverage: null,
+        complianceAllowed: true,
+      });
+    }
   });
 });
