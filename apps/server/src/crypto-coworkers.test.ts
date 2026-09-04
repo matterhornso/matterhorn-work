@@ -445,7 +445,7 @@ describe("durable crypto coworkers", () => {
         "ws_shared",
         "account_alpha",
         alpha.id,
-        resourceScopeInput(),
+        watchResourceScopeInput(),
       );
       expect(scope).toMatchObject({
         revision: 1,
@@ -527,6 +527,92 @@ describe("durable crypto coworkers", () => {
         .toBe(privateProfile.revision);
       coworkers.delete("ws_alpha", "account_alpha", privateProfile.id, revised.revision);
       expect(store.getResourceScope("ws_alpha", "account_alpha", privateProfile.id)).toBeNull();
+    } finally {
+      store.close();
+    }
+  });
+
+  test("persists an exact chat-to-coworker binding and isolates it by tenant and session", () => {
+    const { root, store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      const resources = coworkers.setResourceScope(
+        "ws_alpha",
+        "account_alpha",
+        profile.id,
+        watchResourceScopeInput(),
+      );
+      const binding = coworkers.bindSession("ws_alpha", "account_alpha", "ses_alpha", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      });
+      expect(binding).toMatchObject({
+        workspaceId: "ws_alpha",
+        ownerId: "account_alpha",
+        sessionId: "ses_alpha",
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        resourceScopeHash: resources.scopeHash,
+        revision: 1,
+      });
+      expect(coworkers.getSessionBinding("ws_alpha", "account_alpha", "ses_other")).toBeNull();
+      expect(coworkers.getSessionBinding("ws_other", "account_alpha", "ses_alpha")).toBeNull();
+      expect(coworkers.getSessionBinding("ws_alpha", "account_beta", "ses_alpha")).toBeNull();
+      store.close();
+
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+      try {
+        const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
+        expect(reopened.resolveActiveSessionBinding("ws_alpha", "account_alpha", "ses_alpha"))
+          .toEqual(binding);
+        reopened.unbindSession("ws_alpha", "account_alpha", "ses_alpha", binding.revision);
+        expect(reopened.getSessionBinding("ws_alpha", "account_alpha", "ses_alpha")).toBeNull();
+      } finally {
+        reopenedStore.close();
+      }
+    } finally {
+      try { store.close(); } catch { /* already closed for reopen coverage */ }
+    }
+  });
+
+  test("rejects stale or replayed chat bindings after profile and resource changes", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      const binding = coworkers.bindSession("ws_alpha", "account_alpha", "ses_alpha", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      });
+      expect(() => coworkers.bindSession("ws_alpha", "account_alpha", "ses_alpha", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      })).toThrow(new MatterhornCoworkerError("coworker_revision_conflict"));
+      const updated = coworkers.update("ws_alpha", "account_alpha", profile.id, {
+        expectedRevision: profile.revision,
+        mission: "Use the same app only after its access is reviewed again.",
+      });
+      expect(coworkers.resolveActiveSessionBinding("ws_alpha", "account_alpha", "ses_alpha")).toBeNull();
+      expect(() => coworkers.bindSession("ws_alpha", "account_alpha", "ses_alpha", {
+        coworkerId: profile.id,
+        coworkerRevision: updated.revision,
+        expectedRevision: binding.revision,
+      })).toThrow(new MatterhornCoworkerError("coworker_session_binding_stale"));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput({
+        expectedRevision: 1,
+        profileRevision: updated.revision,
+      }));
+      const rebound = coworkers.bindSession("ws_alpha", "account_alpha", "ses_alpha", {
+        coworkerId: profile.id,
+        coworkerRevision: updated.revision,
+        expectedRevision: binding.revision,
+      });
+      expect(rebound.revision).toBe(binding.revision + 1);
+      expect(() => coworkers.unbindSession("ws_alpha", "account_alpha", "ses_alpha", binding.revision))
+        .toThrow(new MatterhornCoworkerError("coworker_revision_conflict"));
     } finally {
       store.close();
     }

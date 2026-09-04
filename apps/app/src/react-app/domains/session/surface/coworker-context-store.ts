@@ -5,6 +5,7 @@ export type MatterhornSessionCoworkerContext = {
   name: string;
   role: string;
   revision: number;
+  bindingRevision?: number;
   updatedAt: string;
 };
 
@@ -42,17 +43,19 @@ export function sanitizeMatterhornCoworkerContext(
   const name = typeof value.name === "string" ? value.name.trim() : "";
   const role = typeof value.role === "string" ? value.role.trim() : "";
   const revision = typeof value.revision === "number" ? value.revision : 0;
+  const bindingRevision = typeof value.bindingRevision === "number" ? value.bindingRevision : undefined;
   if (!SAFE_ID.test(id)
     || !name
     || name.length > 80
     || !role
     || role.length > 80
     || !Number.isSafeInteger(revision)
-    || revision < 1) return null;
+    || revision < 1
+    || (bindingRevision !== undefined && (!Number.isSafeInteger(bindingRevision) || bindingRevision < 1))) return null;
   const updatedAt = typeof value.updatedAt === "string" && Number.isFinite(Date.parse(value.updatedAt))
     ? new Date(value.updatedAt).toISOString()
     : new Date().toISOString();
-  return { id, name, role, revision, updatedAt };
+  return { id, name, role, revision, ...(bindingRevision ? { bindingRevision } : {}), updatedAt };
 }
 
 function sanitizedEntries(

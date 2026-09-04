@@ -784,6 +784,55 @@ describe("crypto coworker HTTP boundary", () => {
     expect(created.response.status).toBe(201);
     const coworkerId = String(created.payload.coworker.id);
 
+    const directStore = new MatterhornCoworkerStore(server.coworkerDb);
+    try {
+      const directCoworkers = new MatterhornCoworkers({
+        store: directStore,
+        policyVersion: "coworker-policy-1",
+      });
+      const resources = directCoworkers.setResourceScope(
+        workspaceA,
+        String(signupA.payload.user.id),
+        coworkerId,
+        {
+          expectedRevision: 0,
+          profileRevision: 1,
+          agentFiles: [],
+          memories: [],
+          connections: [{
+            id: "cxc_sui_bound_route",
+            appId: "matterhorn.sui-testnet",
+            manifestRevision: "1.0.0",
+            actionIds: ["sui_account_read"],
+            networks: ["sui:testnet"],
+          }],
+        },
+      );
+      const binding = directCoworkers.bindSession(
+        workspaceA,
+        String(signupA.payload.user.id),
+        "ses_bound_coworker",
+        { coworkerId, coworkerRevision: 1, expectedRevision: 0 },
+      );
+      expect(binding.resourceScopeHash).toBe(resources.scopeHash);
+    } finally {
+      directStore.close();
+    }
+    const substituted = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_bound_coworker/messages/preflight`,
+      {
+        cookie: cookieA,
+        body: {
+          coworkerId: "cw_substitution_attempt",
+          parts: [{ type: "text", text: "Read approved Sui testnet state." }],
+          executionMode: "work",
+        },
+      },
+    );
+    expect(substituted.response.status).toBe(409);
+    expect(substituted.payload.code).toBe("coworker_session_binding_conflict");
+
     const replay = await request(server.base, "/coworker-access/accept", {
       cookie: cookieB,
       body: { inviteToken: invite },

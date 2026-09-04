@@ -136,6 +136,7 @@ import type {
   MatterhornCoworkerProfile,
   MatterhornCoworkerResourceRecommendation,
   MatterhornCoworkerResourceScope,
+  MatterhornCoworkerSessionBinding,
   MatterhornCoworkerState,
   MatterhornCoworkerTemplateId,
   MatterhornCoworkerWatch,
@@ -166,6 +167,7 @@ import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } fro
 export type MatterhornCoworkerAccountProfile = Omit<MatterhornCoworkerProfile, "ownerId">;
 export type MatterhornCoworkerAccountState = Omit<MatterhornCoworkerWorkingState, "ownerId">;
 export type MatterhornCoworkerAccountResourceScope = Omit<MatterhornCoworkerResourceScope, "ownerId">;
+export type MatterhornCoworkerAccountSessionBinding = Omit<MatterhornCoworkerSessionBinding, "ownerId" | "workspaceId">;
 export type MatterhornCoworkerAccountResourceRecommendation = MatterhornCoworkerResourceRecommendation;
 export type MatterhornCoworkerAccountWatch = Omit<MatterhornCoworkerWatch, "ownerId">;
 export type MatterhornCoworkerAccountInboxItem = Omit<MatterhornCoworkerInboxItem, "ownerId">;
@@ -1911,6 +1913,38 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers`, {
       token,
       timeoutMs: timeouts.status,
+    }),
+    getCoworkerSessionBinding: (workspaceId: string, sessionId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      active: boolean;
+      binding: MatterhornCoworkerAccountSessionBinding | null;
+      coworker: MatterhornCoworkerAccountProfile | null;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/coworker`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    bindCoworkerSession: (
+      workspaceId: string,
+      sessionId: string,
+      input: { coworkerId: string; coworkerRevision: number; expectedRevision: number },
+    ) => requestJson<{
+      mode: "internal" | "invite" | "public";
+      active: true;
+      binding: MatterhornCoworkerAccountSessionBinding;
+      coworker: MatterhornCoworkerAccountProfile;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/coworker`, {
+      token,
+      method: "PUT",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    unbindCoworkerSession: (workspaceId: string, sessionId: string, expectedRevision: number) => requestJson<{
+      deleted: true;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/coworker`, {
+      token,
+      method: "DELETE",
+      body: { expectedRevision },
+      timeoutMs: timeouts.config,
     }),
     createCoworkerFromTemplate: (
       workspaceId: string,

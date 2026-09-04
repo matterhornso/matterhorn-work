@@ -457,6 +457,7 @@ import type {
   MatterhornCryptoAppManifest,
   MatterhornCoworkerProfile,
   MatterhornCoworkerResourceScope,
+  MatterhornCoworkerSessionBinding,
   MatterhornCoworkerState,
   MatterhornCoworkerWatch,
   MatterhornCoworkerInboxItem,
@@ -3642,6 +3643,11 @@ function coworkerResourceScopeAccountView(scope: MatterhornCoworkerResourceScope
   return view;
 }
 
+function coworkerSessionBindingAccountView(binding: MatterhornCoworkerSessionBinding) {
+  const { ownerId: _ownerId, workspaceId: _workspaceId, ...view } = structuredClone(binding);
+  return view;
+}
+
 function coworkerWatchAccountView(watch: MatterhornCoworkerWatch) {
   const { ownerId: _ownerId, ...view } = structuredClone(watch);
   return view;
@@ -4053,23 +4059,41 @@ type ResolvedMessageCoworker = {
 
 function resolveMessageCoworker(input: {
   body: Record<string, unknown>;
+  sessionId: string;
   workspace: WorkspaceInfo;
   ctx: RequestContext;
   coworkerRuntime: MatterhornCoworkerRuntimeServices;
   cryptoAppRuntime: MatterhornCryptoAppRuntimeServices;
   guardedRuntime: MatterhornGuardedAgentRuntime;
 }): ResolvedMessageCoworker | undefined {
-  if (input.body.coworkerId == null) return undefined;
-  const coworkerId = typeof input.body.coworkerId === "string" ? input.body.coworkerId.trim() : "";
-  if (!coworkerId || coworkerId.length > 256) {
+  const requestedCoworkerId = input.body.coworkerId == null
+    ? null
+    : typeof input.body.coworkerId === "string" ? input.body.coworkerId.trim() : "";
+  if (requestedCoworkerId !== null && (!requestedCoworkerId || requestedCoworkerId.length > 256)) {
     throw new ApiError(400, "coworker_input_invalid", "coworkerId is invalid.");
   }
   const ownerId = cryptoAppCreatedBy(input.ctx);
+  if (!input.coworkerRuntime.coworkers) {
+    if (requestedCoworkerId === null) return undefined;
+    throw new ApiError(503, "coworker_execution_not_ready", "Crypto coworker execution is unavailable.");
+  }
+  const storedBinding = input.coworkerRuntime.coworkers.lookupSessionBinding(
+    input.workspace.id,
+    ownerId,
+    input.sessionId,
+  );
+  if (!storedBinding && requestedCoworkerId === null) return undefined;
   if (input.coworkerRuntime.mode === "invite" && !input.coworkerRuntime.accountIsAllowed(ownerId)) {
     throw new ApiError(403, "coworker_access_required", "Accept a valid Matterhorn invite to use Crypto Coworkers.");
   }
-  if (!input.coworkerRuntime.coworkers
-    || input.cryptoAppRuntime.mode !== "enforce"
+  if (storedBinding && requestedCoworkerId !== null && requestedCoworkerId !== storedBinding.coworkerId) {
+    throw new ApiError(
+      409,
+      "coworker_session_binding_conflict",
+      "The selected coworker does not match this chat.",
+    );
+  }
+  if (input.cryptoAppRuntime.mode !== "enforce"
     || input.guardedRuntime.capabilities.mode !== "enforce"
     || !input.guardedRuntime.ready()) {
     throw new ApiError(
@@ -4078,6 +4102,25 @@ function resolveMessageCoworker(input: {
       "Crypto coworker execution is unavailable until the gateway and guarded runtime are enforced.",
     );
   }
+  if (!storedBinding) {
+    throw new ApiError(
+      409,
+      "coworker_session_binding_required",
+      "Connect this coworker to the chat before sending a request.",
+    );
+  }
+  if (!input.coworkerRuntime.coworkers.resolveActiveSessionBinding(
+    input.workspace.id,
+    ownerId,
+    input.sessionId,
+  )) {
+    throw new ApiError(
+      409,
+      "coworker_session_binding_stale",
+      "This chat's coworker or app access changed. Review access before continuing.",
+    );
+  }
+  const coworkerId = storedBinding.coworkerId;
   const profile = input.coworkerRuntime.coworkers.resolveActive(
     input.workspace.id,
     ownerId,
@@ -4111,6 +4154,14 @@ function resolveMessageCoworker(input: {
       "Connect an approved crypto app for this coworker before starting chat.",
     );
   }
+  if (storedBinding.coworkerRevision !== profile.revision
+    || storedBinding.resourceScopeHash !== storedResourceScope?.scopeHash) {
+    throw new ApiError(
+      409,
+      "coworker_session_binding_stale",
+      "This chat's coworker or app access changed. Review access before continuing.",
+    );
+  }
   return {
     profile,
     binding,
@@ -4125,12 +4176,14 @@ function coworkerApiError(error: unknown): ApiError {
       : error.code === "coworker_not_found"
       || error.code === "coworker_watch_not_found"
       || error.code === "coworker_inbox_item_not_found"
+      || error.code === "coworker_session_binding_not_found"
       ? 404
       : error.code === "coworker_revision_conflict"
         || error.code === "coworker_transition_invalid"
         || error.code === "coworker_watch_transition_invalid"
         || error.code === "coworker_watch_limit"
         || error.code === "coworker_inbox_state_conflict"
+        || error.code === "coworker_session_binding_stale"
         ? 409
         : 400;
     const message = error.code === "coworker_access_required"
@@ -4141,6 +4194,10 @@ function coworkerApiError(error: unknown): ApiError {
         ? "Coworker watch not found."
         : error.code === "coworker_inbox_item_not_found"
           ? "Coworker inbox item not found."
+        : error.code === "coworker_session_binding_not_found"
+          ? "This chat is not connected to a coworker."
+        : error.code === "coworker_session_binding_stale"
+          ? "This chat's coworker or app access changed. Review access before continuing."
       : error.code === "coworker_revision_conflict"
         ? "Coworker state changed; retry with the latest revision."
         : error.code === "coworker_watch_limit"
@@ -4155,6 +4212,8 @@ function coworkerApiError(error: unknown): ApiError {
             ? "Coworker working state is invalid or contains forbidden secret material."
             : error.code === "coworker_resource_scope_invalid"
               ? "Choose only current files, Memory, and connected apps allowed for this coworker."
+            : error.code === "coworker_session_binding_invalid"
+              ? "The coworker chat connection is invalid."
             : error.code === "coworker_watch_invalid"
               ? "Coworker watch is outside the active profile, schedule, budget, or privacy boundary."
               : error.code === "coworker_inbox_item_invalid"
@@ -14126,6 +14185,115 @@ function createRoutes(
     return jsonResponse({ item });
   });
 
+  addRoute(routes, "GET", "/workspace/:id/sessions/:sessionId/coworker", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
+    await readWorkspaceSession(config, workspace, sessionId);
+    if (!coworkerRuntime.coworkers || coworkerRuntime.mode === "off") {
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, active: false, binding: null, coworker: null });
+    }
+    try {
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const binding = coworkerRuntime.coworkers.getSessionBinding(workspace.id, ownerId, sessionId);
+      if (!binding) {
+        return noStoreJsonResponse({ mode: coworkerRuntime.mode, active: false, binding: null, coworker: null });
+      }
+      const activeBinding = coworkerRuntime.coworkers.resolveActiveSessionBinding(workspace.id, ownerId, sessionId);
+      const coworker = coworkerRuntime.coworkers.get(workspace.id, ownerId, binding.coworkerId);
+      const resources = coworker
+        ? coworkerRuntime.coworkers.getResourceScope(workspace.id, ownerId, coworker.id)
+        : null;
+      const active = Boolean(activeBinding
+        && coworker
+        && resources
+        && resources.profileRevision === coworker.revision
+        && coworkerResourceConnectionsAreActive(cryptoAppRuntime, resources));
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        active,
+        binding: coworkerSessionBindingAccountView(binding),
+        coworker: coworker ? coworkerAccountView(coworker) : null,
+      });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "PUT", "/workspace/:id/sessions/:sessionId/coworker", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!coworkerRuntime.coworkers || coworkerRuntime.mode === "off") {
+      throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
+    await readWorkspaceSession(config, workspace, sessionId);
+    const body = await readJsonBody(ctx.request, 4_096, "Coworker chat connection");
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => !["coworkerId", "coworkerRevision", "expectedRevision"].includes(key))
+      || typeof body.coworkerId !== "string"
+      || !Number.isSafeInteger(body.coworkerRevision)
+      || !Number.isSafeInteger(body.expectedRevision)) {
+      throw new ApiError(400, "coworker_session_binding_invalid", "Coworker chat connection is invalid.");
+    }
+    try {
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const coworker = coworkerRuntime.coworkers.resolveActive(workspace.id, ownerId, body.coworkerId.trim());
+      const resources = coworker
+        ? coworkerRuntime.coworkers.resolveActiveResourceScope(workspace.id, ownerId, coworker.id)
+        : null;
+      if (!coworker
+        || !resources
+        || !coworkerResourceConnectionsAreActive(cryptoAppRuntime, resources)) {
+        throw new MatterhornCoworkerError("coworker_session_binding_stale");
+      }
+      const binding = coworkerRuntime.coworkers.bindSession(workspace.id, ownerId, sessionId, {
+        coworkerId: body.coworkerId.trim(),
+        coworkerRevision: body.coworkerRevision as number,
+        expectedRevision: body.expectedRevision as number,
+      });
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        active: true,
+        binding: coworkerSessionBindingAccountView(binding),
+        coworker: coworkerAccountView(coworker),
+      });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/sessions/:sessionId/coworker", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!coworkerRuntime.coworkers || coworkerRuntime.mode === "off") {
+      throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
+    await readWorkspaceSession(config, workspace, sessionId);
+    const body = await readJsonBody(ctx.request, 4_096, "Coworker chat disconnection");
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => key !== "expectedRevision")
+      || !Number.isSafeInteger(body.expectedRevision)) {
+      throw new ApiError(400, "coworker_session_binding_invalid", "Coworker chat connection is invalid.");
+    }
+    try {
+      coworkerRuntime.coworkers.unbindSession(
+        workspace.id,
+        cryptoAppCreatedBy(ctx),
+        sessionId,
+        body.expectedRevision as number,
+      );
+      return noStoreJsonResponse({ deleted: true });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
   addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages/preflight", "client", async (ctx) => {
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
@@ -14151,6 +14319,7 @@ function createRoutes(
       : typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
     const coworker = resolveMessageCoworker({
       body,
+      sessionId,
       workspace,
       ctx,
       coworkerRuntime,
@@ -14476,6 +14645,7 @@ function createRoutes(
       : typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
     const coworker = resolveMessageCoworker({
       body,
+      sessionId,
       workspace,
       ctx,
       coworkerRuntime,

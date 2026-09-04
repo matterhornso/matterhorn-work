@@ -1399,7 +1399,7 @@ function AgentFileContextStrip(props: { context: MatterhornSessionAgentFileConte
   );
 }
 
-function CoworkerContextStrip(props: { context: MatterhornSessionCoworkerContext; onClear: () => void }) {
+function CoworkerContextStrip(props: { context: MatterhornSessionCoworkerContext; clearing?: boolean; onClear: () => void }) {
   return (
     <div className="border-b border-dls-border bg-dls-surface/70 px-4 py-2">
       <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
@@ -1416,8 +1416,9 @@ function CoworkerContextStrip(props: { context: MatterhornSessionCoworkerContext
           type="button"
           className="shrink-0 rounded-md border border-dls-border px-2 py-1 font-medium text-dls-secondary transition-colors hover:border-primary/35 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
           onClick={props.onClear}
+          disabled={props.clearing}
         >
-          Clear
+          {props.clearing ? "Clearing…" : "Clear"}
         </button>
       </div>
     </div>
@@ -1460,11 +1461,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const agentFileContext = useMatterhornSessionAgentFileContextStore((state) => getMatterhornSessionAgentFileContext(state, props.sessionId));
   const clearAgentFileContext = useMatterhornSessionAgentFileContextStore((state) => state.clearContext);
   const coworkerContext = useMatterhornSessionCoworkerContextStore((state) => getMatterhornSessionCoworkerContext(state, props.sessionId));
+  const setCoworkerContext = useMatterhornSessionCoworkerContextStore((state) => state.setContext);
   const clearCoworkerContext = useMatterhornSessionCoworkerContextStore((state) => state.clearContext);
   const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [error, setError] = useState<SessionError | null>(null);
   const [sending, setSending] = useState(false);
   const [confirmingPrivacy, setConfirmingPrivacy] = useState(false);
+  const [clearingCoworker, setClearingCoworker] = useState(false);
   const [showDelayedLoading, setShowDelayedLoading] = useState(false);
   const [awaitingAssistantBaseline, setAwaitingAssistantBaseline] = useState<number | null>(null);
   const [noVisibleAssistantOutputBaseline, setNoVisibleAssistantOutputBaseline] = useState<number | null>(null);
@@ -1511,6 +1514,32 @@ export function SessionSurface(props: SessionSurfaceProps) {
     staleTime: 500,
     retry: (failureCount, error) => !(error instanceof MatterhornServerError && error.status === 404) && failureCount < 2,
   });
+  const coworkerBindingQuery = useQuery({
+    queryKey: ["coworker-session-binding", props.workspaceId, props.sessionId],
+    queryFn: async () => props.client.getCoworkerSessionBinding(props.workspaceId, props.sessionId),
+    staleTime: 2_000,
+    retry: (failureCount, queryError) => (
+      !(queryError instanceof MatterhornServerError && [403, 404, 503].includes(queryError.status))
+      && failureCount < 1
+    ),
+  });
+  useEffect(() => {
+    const response = coworkerBindingQuery.data;
+    if (!response) return;
+    if (response.active && response.binding && response.coworker) {
+      setCoworkerContext(props.sessionId, {
+        id: response.coworker.id,
+        name: response.coworker.name,
+        role: response.coworker.role,
+        revision: response.coworker.revision,
+        bindingRevision: response.binding.revision,
+        updatedAt: response.binding.updatedAt,
+      });
+      return;
+    }
+    clearCoworkerContext(props.sessionId);
+    clearAgentFileContext(props.sessionId);
+  }, [clearAgentFileContext, clearCoworkerContext, coworkerBindingQuery.data, props.sessionId, setCoworkerContext]);
   const runReceiptsQuery = useQuery({
     queryKey: ["agent-run-receipts", props.workspaceId, props.sessionId],
     queryFn: async () => props.client.listAgentRunReceipts(
@@ -3577,10 +3606,36 @@ export function SessionSurface(props: SessionSurfaceProps) {
                 {coworkerContext ? (
                   <CoworkerContextStrip
                     context={coworkerContext}
+                    clearing={clearingCoworker}
                     onClear={() => {
-                      clearCoworkerContext(props.sessionId);
-                      clearAgentFileContext(props.sessionId);
-                      setNotice({ title: "Coworker cleared", tone: "info" });
+                      if (clearingCoworker) return;
+                      void (async () => {
+                        setClearingCoworker(true);
+                        try {
+                          const latest = await props.client.getCoworkerSessionBinding(props.workspaceId, props.sessionId);
+                          if (latest.binding) {
+                            await props.client.unbindCoworkerSession(
+                              props.workspaceId,
+                              props.sessionId,
+                              latest.binding.revision,
+                            );
+                          }
+                          clearCoworkerContext(props.sessionId);
+                          clearAgentFileContext(props.sessionId);
+                          setNotice({ title: "Coworker cleared", tone: "info" });
+                          await coworkerBindingQuery.refetch();
+                        } catch (cause) {
+                          setNotice({
+                            title: "Coworker was not cleared",
+                            description: cause instanceof MatterhornServerError
+                              ? cause.message
+                              : "Refresh the chat and try again.",
+                            tone: "error",
+                          });
+                        } finally {
+                          setClearingCoworker(false);
+                        }
+                      })();
                     }}
                   />
                 ) : null}

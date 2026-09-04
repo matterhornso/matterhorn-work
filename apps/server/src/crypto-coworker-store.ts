@@ -5,10 +5,12 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
+  MATTERHORN_COWORKER_SESSION_BINDING_VERSION,
   type MatterhornCoworkerResourceScope,
   type MatterhornCoworkerInboxItem,
   type MatterhornCoworkerInboxSummary,
   type MatterhornCoworkerProfile,
+  type MatterhornCoworkerSessionBinding,
   type MatterhornCoworkerWatch,
   type MatterhornCoworkerWorkingState,
   validateMatterhornCoworkerInboxItem,
@@ -69,6 +71,18 @@ type CoworkerResourceScopeRow = {
   profile_revision: number;
   scope_hash: string;
   scope_json: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type CoworkerSessionBindingRow = {
+  workspace_id: string;
+  owner_id: string;
+  session_id: string;
+  coworker_id: string;
+  coworker_revision: number;
+  resource_scope_hash: string;
+  revision: number;
   created_at: string;
   updated_at: string;
 };
@@ -225,6 +239,34 @@ function resourceScopeFromRow(row: CoworkerResourceScopeRow): MatterhornCoworker
     throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   }
   return structuredClone(result);
+}
+
+function sessionBindingFromRow(row: CoworkerSessionBindingRow): MatterhornCoworkerSessionBinding {
+  if (!row.workspace_id
+    || !row.owner_id
+    || !row.session_id
+    || !row.coworker_id
+    || !Number.isSafeInteger(row.coworker_revision)
+    || row.coworker_revision < 1
+    || !/^[a-f0-9]{64}$/.test(row.resource_scope_hash)
+    || !Number.isSafeInteger(row.revision)
+    || row.revision < 1
+    || !Number.isFinite(Date.parse(row.created_at))
+    || !Number.isFinite(Date.parse(row.updated_at))) {
+    throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+  }
+  return {
+    version: MATTERHORN_COWORKER_SESSION_BINDING_VERSION,
+    workspaceId: row.workspace_id,
+    ownerId: row.owner_id,
+    sessionId: row.session_id,
+    coworkerId: row.coworker_id,
+    coworkerRevision: row.coworker_revision,
+    resourceScopeHash: row.resource_scope_hash,
+    revision: row.revision,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
+  };
 }
 
 function watchFromRow(row: CoworkerWatchRow): MatterhornCoworkerWatch {
@@ -397,6 +439,26 @@ export class MatterhornCoworkerStore {
           REFERENCES crypto_coworkers(workspace_id, owner_id, coworker_id)
           ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS crypto_coworker_session_bindings (
+        workspace_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        coworker_id TEXT NOT NULL,
+        coworker_revision INTEGER NOT NULL,
+        resource_scope_hash TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, owner_id, session_id),
+        CHECK (coworker_revision >= 1),
+        CHECK (revision >= 1),
+        CHECK (length(resource_scope_hash) = 64),
+        FOREIGN KEY (workspace_id, owner_id, coworker_id)
+          REFERENCES crypto_coworkers(workspace_id, owner_id, coworker_id)
+          ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS crypto_coworker_session_bindings_coworker_idx
+        ON crypto_coworker_session_bindings(workspace_id, owner_id, coworker_id, updated_at DESC);
       CREATE TABLE IF NOT EXISTS crypto_coworker_watches (
         workspace_id TEXT NOT NULL,
         owner_id TEXT NOT NULL,
@@ -808,6 +870,112 @@ export class MatterhornCoworkerStore {
       expectedRevision,
     ) as CoworkerResourceScopeRow | undefined;
     return row ? resourceScopeFromRow(row) : null;
+  }
+
+  getSessionBinding(
+    workspaceId: string,
+    ownerId: string,
+    sessionId: string,
+  ): MatterhornCoworkerSessionBinding | null {
+    const row = statement(this.#db, `
+      SELECT * FROM crypto_coworker_session_bindings
+      WHERE workspace_id = ? AND owner_id = ? AND session_id = ?
+      LIMIT 1
+    `).get(workspaceId, ownerId, sessionId) as CoworkerSessionBindingRow | undefined;
+    return row ? sessionBindingFromRow(row) : null;
+  }
+
+  bindSession(input: {
+    workspaceId: string;
+    ownerId: string;
+    sessionId: string;
+    coworkerId: string;
+    coworkerRevision: number;
+    resourceScopeHash: string;
+    expectedRevision: number;
+    updatedAt: string;
+  }): MatterhornCoworkerSessionBinding | null {
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      const current = statement(this.#db, `
+        SELECT * FROM crypto_coworker_session_bindings
+        WHERE workspace_id = ? AND owner_id = ? AND session_id = ?
+        LIMIT 1
+      `).get(input.workspaceId, input.ownerId, input.sessionId) as CoworkerSessionBindingRow | undefined;
+      if ((current?.revision ?? 0) !== input.expectedRevision) {
+        this.#db.exec("ROLLBACK;");
+        return null;
+      }
+      const eligible = statement(this.#db, `
+        SELECT 1 AS eligible
+        FROM crypto_coworkers AS coworkers
+        INNER JOIN crypto_coworker_resource_scopes AS resources
+          ON resources.workspace_id = coworkers.workspace_id
+          AND resources.owner_id = coworkers.owner_id
+          AND resources.coworker_id = coworkers.coworker_id
+        WHERE coworkers.workspace_id = ?
+          AND coworkers.owner_id = ?
+          AND coworkers.coworker_id = ?
+          AND coworkers.revision = ?
+          AND coworkers.state = 'active'
+          AND resources.profile_revision = coworkers.revision
+          AND resources.scope_hash = ?
+        LIMIT 1
+      `).get(
+        input.workspaceId,
+        input.ownerId,
+        input.coworkerId,
+        input.coworkerRevision,
+        input.resourceScopeHash,
+      ) as { eligible: number } | undefined;
+      if (!eligible) {
+        this.#db.exec("ROLLBACK;");
+        return null;
+      }
+      const createdAt = current?.created_at ?? input.updatedAt;
+      const revision = (current?.revision ?? 0) + 1;
+      statement(this.#db, `
+        INSERT INTO crypto_coworker_session_bindings(
+          workspace_id, owner_id, session_id, coworker_id, coworker_revision,
+          resource_scope_hash, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(workspace_id, owner_id, session_id) DO UPDATE SET
+          coworker_id = excluded.coworker_id,
+          coworker_revision = excluded.coworker_revision,
+          resource_scope_hash = excluded.resource_scope_hash,
+          revision = excluded.revision,
+          updated_at = excluded.updated_at
+      `).run(
+        input.workspaceId,
+        input.ownerId,
+        input.sessionId,
+        input.coworkerId,
+        input.coworkerRevision,
+        input.resourceScopeHash,
+        revision,
+        createdAt,
+        input.updatedAt,
+      );
+      const binding = this.getSessionBinding(input.workspaceId, input.ownerId, input.sessionId);
+      if (!binding) throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+      this.#db.exec("COMMIT;");
+      return binding;
+    } catch (error) {
+      this.#db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  deleteSessionBinding(
+    workspaceId: string,
+    ownerId: string,
+    sessionId: string,
+    expectedRevision: number,
+  ): boolean {
+    return (statement(this.#db, `
+      DELETE FROM crypto_coworker_session_bindings
+      WHERE workspace_id = ? AND owner_id = ? AND session_id = ? AND revision = ?
+    `).run(workspaceId, ownerId, sessionId, expectedRevision).changes ?? 0) === 1;
   }
 
   listWatches(workspaceId: string, ownerId: string, coworkerId: string): MatterhornCoworkerWatch[] {
