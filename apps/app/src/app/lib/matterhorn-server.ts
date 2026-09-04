@@ -148,6 +148,8 @@ import type {
   MatterhornCryptoEvidenceWalrusDeletionPrepareResponse,
   MatterhornCryptoEvidenceWalrusRenewalConfirmResponse,
   MatterhornCryptoEvidenceWalrusRenewalPrepareResponse,
+  MatterhornCryptoEvidenceSuiAnchorConfirmResponse,
+  MatterhornCryptoEvidenceSuiAnchorPrepareResponse,
   MatterhornStoredAgentFile,
 } from "@matterhorn-work/types/crypto-coworkers";
 import type {
@@ -2474,6 +2476,35 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     ) => requestJson<MatterhornCryptoEvidenceWalrusDeletionConfirmResponse>(
       baseUrl,
       `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/delete/confirm`,
+      { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.binary },
+    ),
+    anchorCryptoEvidenceOnSui: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { expectedRevision: number; signer: string },
+    ) => requestJson<MatterhornCryptoEvidenceSuiAnchorPrepareResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/anchor`,
+      {
+        token,
+        hostToken,
+        method: "POST",
+        body: {
+          expectedRevision: input.expectedRevision,
+          network: "testnet",
+          signer: input.signer,
+          acknowledgePermanentPublicAnchor: true,
+        },
+        timeoutMs: timeouts.binary,
+      },
+    ),
+    confirmCryptoEvidenceSuiAnchor: (
+      workspaceId: string,
+      evidenceId: string,
+      input: { intentId: string; intentHash: string; transactionDigest: string },
+    ) => requestJson<MatterhornCryptoEvidenceSuiAnchorConfirmResponse>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence/${encodeURIComponent(evidenceId)}/anchor/confirm`,
       { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.binary },
     ),
     destroyCryptoEvidenceRecoveryKey: (

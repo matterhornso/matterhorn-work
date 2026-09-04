@@ -16,6 +16,7 @@ import {
   ChevronUp,
   Clipboard,
   CloudUpload,
+  Link2,
   LoaderCircle,
   RefreshCw,
   ShieldCheck,
@@ -59,6 +60,7 @@ function formatDate(value: string | null): string {
 function statusLabel(item: MatterhornEvidenceVerificationPacket): string {
   if (item.publication?.deletionTransactionDigest) return "Deleted from Walrus";
   if (item.state === "key_destroyed") return "Recovery removed";
+  if (item.anchor) return "Encrypted backup anchored on Sui";
   if (item.state === "published") return "Encrypted backup on Walrus";
   return "Encrypted in your workspace";
 }
@@ -90,6 +92,14 @@ function userMessage(error: unknown): string {
     if (error.code === "crypto_evidence_walrus_deletion_unavailable") return "Encrypted Walrus deletion is temporarily unavailable.";
     if (error.code === "crypto_evidence_walrus_wallet_owner_required") return "This copy is not owned by the connected Sui wallet. You can still delete its recovery key.";
     if (error.code.includes("crypto_evidence_walrus_deletion") && error.code.includes("mismatch")) return "The deletion changed after review. Nothing was recorded; check the proof and try again.";
+    if (error.code === "crypto_evidence_sui_anchor_confirmation_required") return "Confirm that the Sui testnet anchor will be permanent and public.";
+    if (error.code === "crypto_evidence_sui_anchor_unavailable") return "Sui testnet anchoring is not available in this deployment.";
+    if (error.code === "crypto_evidence_sui_anchor_in_progress") return "An anchor is already waiting for wallet review.";
+    if (error.code === "crypto_evidence_sui_anchor_expired_or_replayed") return "This anchor request expired or was already used. Prepare a new one.";
+    if (error.code === "crypto_evidence_sui_anchor_exists") return "This evidence is already anchored on Sui.";
+    if (error.code === "crypto_evidence_sui_anchor_certification_changed") return "The Walrus proof changed or expired. Check the proof before anchoring.";
+    if (error.code === "crypto_evidence_sui_anchor_transaction_failed") return "The Sui wallet transaction failed. The anchor was not recorded.";
+    if (error.code.includes("crypto_evidence_sui_anchor") && error.code.includes("mismatch")) return "The anchor changed after review. Nothing was recorded; prepare it again.";
   }
   return "Matterhorn could not load the evidence proof. Try again.";
 }
@@ -139,6 +149,9 @@ export function CryptoEvidenceRoute() {
   const [walletConnectingId, setWalletConnectingId] = useState<string | null>(null);
   const [cloudDeleteCandidateId, setCloudDeleteCandidateId] = useState<string | null>(null);
   const [cloudDeletingId, setCloudDeletingId] = useState<string | null>(null);
+  const [anchorCandidateId, setAnchorCandidateId] = useState<string | null>(null);
+  const [anchorAcknowledged, setAnchorAcknowledged] = useState(false);
+  const [anchoringId, setAnchoringId] = useState<string | null>(null);
   const [verificationById, setVerificationById] = useState<Record<string, MatterhornEvidenceVerificationResult>>({});
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -333,6 +346,52 @@ export function CryptoEvidenceRoute() {
     }
   }, [account, query.data, queryClient, queryKey, workspaceId]);
 
+  const anchorOnSui = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
+    if (!anchorAcknowledged || !account?.address) return;
+    setAnchoringId(item.evidenceId);
+    setError(null);
+    try {
+      const active = query.data ?? await loadEvidence(workspaceId);
+      const prepared = await active.client.anchorCryptoEvidenceOnSui(workspaceId, item.evidenceId, {
+        expectedRevision: item.revision,
+        signer: account.address,
+      });
+      if (!sameSuiAddress(prepared.preview.signer, account.address)) {
+        throw new Error("The connected Sui wallet does not match the anchor signer.");
+      }
+      const transaction = Transaction.from(prepared.preview.transactionBytesBase64);
+      if (await transaction.getDigest() !== prepared.preview.transactionDigest) {
+        throw new Error("The anchor transaction changed before wallet review.");
+      }
+      const result = await suiDAppKit.signAndExecuteTransaction({
+        transaction,
+        account,
+        network: "testnet",
+      });
+      const executed = "Transaction" in result ? result.Transaction : result.FailedTransaction;
+      if (!executed?.digest || executed.digest !== prepared.preview.transactionDigest) {
+        throw new Error("The wallet returned a different transaction. The anchor was not recorded.");
+      }
+      if (!("Transaction" in result)) {
+        throw new Error(executed.status?.error?.message ?? "The Sui wallet returned a failed anchor transaction.");
+      }
+      await active.client.confirmCryptoEvidenceSuiAnchor(workspaceId, item.evidenceId, {
+        intentId: prepared.preview.intentId,
+        intentHash: prepared.preview.intentHash,
+        transactionDigest: executed.digest,
+      });
+      setAnchorCandidateId(null);
+      setAnchorAcknowledged(false);
+      await queryClient.invalidateQueries({ queryKey });
+    } catch (cause) {
+      const message = userMessage(cause);
+      setError(message === "Matterhorn could not load the evidence proof. Try again."
+        && cause instanceof Error ? cause.message : message);
+    } finally {
+      setAnchoringId(null);
+    }
+  }, [account, anchorAcknowledged, query.data, queryClient, queryKey, workspaceId]);
+
   const copyPacket = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
     setError(null);
     try {
@@ -421,6 +480,15 @@ export function CryptoEvidenceRoute() {
                 && item.publication
                 && !deletedFromWalrus,
               );
+              const canAnchor = Boolean(
+                snapshot.anchorAvailable
+                && item.walletLifecycleReady
+                && item.state === "published"
+                && item.publication
+                && !item.anchor
+                && !deletedFromWalrus,
+              );
+              const confirmingAnchor = anchorCandidateId === item.evidenceId;
               const confirmingCloudDelete = cloudDeleteCandidateId === item.evidenceId;
               const confirmingPublish = publishCandidateId === item.evidenceId;
               const canDeleteRecoveryKey = item.retention.keyAvailable;
@@ -469,6 +537,14 @@ export function CryptoEvidenceRoute() {
                           <dd className="break-all font-mono text-xs">{item.publication?.merkleRoot ?? "Not published"}</dd>
                           <dt className="text-muted-foreground">Sui object</dt>
                           <dd className="break-all font-mono text-xs">{item.publication?.suiObjectId ?? "Not published"}</dd>
+                          <dt className="text-muted-foreground">Immutable anchor</dt>
+                          <dd className="break-all font-mono text-xs">{item.anchor?.objectId ?? "Not created"}</dd>
+                          {item.anchor ? (
+                            <>
+                              <dt className="text-muted-foreground">Anchor transaction</dt>
+                              <dd className="break-all font-mono text-xs">{item.anchor.transactionDigest}</dd>
+                            </>
+                          ) : null}
                           <dt className="text-muted-foreground">Walrus blob</dt>
                           <dd className="break-all font-mono text-xs">
                             {deletedFromWalrus ? "Deleted" : item.publication?.blobId ?? "Not published"}
@@ -532,6 +608,8 @@ export function CryptoEvidenceRoute() {
                             className="mt-3 w-full"
                             onClick={() => {
                               setRenewCandidateId(item.evidenceId);
+                              setAnchorCandidateId(null);
+                              setAnchorAcknowledged(false);
                               setCloudDeleteCandidateId(null);
                               setDeleteCandidateId(null);
                               setDeleteAcknowledged(false);
@@ -590,11 +668,94 @@ export function CryptoEvidenceRoute() {
                             </div>
                           </div>
                         ) : null}
+                        {canAnchor && !confirmingAnchor && !confirmingRenewal && !confirmingCloudDelete ? (
+                          <Button
+                            variant="outline"
+                            className="mt-3 w-full"
+                            onClick={() => {
+                              setAnchorCandidateId(item.evidenceId);
+                              setAnchorAcknowledged(false);
+                              setRenewCandidateId(null);
+                              setCloudDeleteCandidateId(null);
+                              setDeleteCandidateId(null);
+                              setError(null);
+                            }}
+                          >
+                            <Link2 aria-hidden="true" className="size-4" />
+                            Create Sui anchor
+                          </Button>
+                        ) : null}
+                        {canAnchor && confirmingAnchor ? (
+                          <div className="mt-5 border-t border-border pt-4">
+                            <p className="text-xs leading-5 text-foreground">
+                              Your wallet will create a permanent Sui testnet record that links this encrypted Walrus copy to its Merkle root.
+                            </p>
+                            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                              Prompts, account details, wallet addresses, and recovery keys are not included. The anchor and wallet transaction will remain public.
+                            </p>
+                            <label className="mt-3 flex cursor-pointer items-start gap-3 text-xs leading-5">
+                              <input
+                                type="checkbox"
+                                checked={anchorAcknowledged}
+                                onChange={(event) => setAnchorAcknowledged(event.target.checked)}
+                                className="mt-0.5 size-4 shrink-0 accent-primary"
+                              />
+                              <span>I understand this non-content anchor is permanent and public.</span>
+                            </label>
+                            {account?.address ? (
+                              <p className="mt-3 font-mono text-[11px] text-foreground">
+                                {account.address.slice(0, 10)}…{account.address.slice(-6)}
+                              </p>
+                            ) : wallets.length > 0 ? (
+                              <div className="mt-3 flex flex-wrap gap-2" aria-label="Available Sui wallets">
+                                {wallets.slice(0, 3).map((wallet) => (
+                                  <Button
+                                    key={`${wallet.name}-${wallet.version}`}
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={walletConnectingId === item.evidenceId || anchoringId === item.evidenceId}
+                                    onClick={() => void connectSuiWallet(item.evidenceId, wallet)}
+                                  >
+                                    <Wallet aria-hidden="true" className="size-4" />
+                                    {walletConnectingId === item.evidenceId ? "Connecting…" : `Connect ${wallet.name}`}
+                                  </Button>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-3 text-xs leading-5 text-foreground">Install a Sui-compatible wallet to create this anchor.</p>
+                            )}
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {account?.address ? (
+                                <Button
+                                  size="sm"
+                                  disabled={!anchorAcknowledged || anchoringId === item.evidenceId}
+                                  onClick={() => void anchorOnSui(item)}
+                                >
+                                  {anchoringId === item.evidenceId ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : null}
+                                  {anchoringId === item.evidenceId ? "Opening wallet…" : "Review in wallet"}
+                                </Button>
+                              ) : null}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={anchoringId === item.evidenceId}
+                                onClick={() => {
+                                  setAnchorCandidateId(null);
+                                  setAnchorAcknowledged(false);
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
                         {canPublish && !confirmingPublish ? (
                           <Button
                             className="mt-5 w-full"
                             onClick={() => {
                               setPublishCandidateId(item.evidenceId);
+                              setAnchorCandidateId(null);
+                              setAnchorAcknowledged(false);
                               setCloudDeleteCandidateId(null);
                               setPublishAcknowledged(false);
                               setDeleteCandidateId(null);
@@ -672,6 +833,8 @@ export function CryptoEvidenceRoute() {
                             className="mt-5 w-full justify-start text-destructive hover:text-destructive"
                             onClick={() => {
                               setCloudDeleteCandidateId(item.evidenceId);
+                              setAnchorCandidateId(null);
+                              setAnchorAcknowledged(false);
                               setRenewCandidateId(null);
                               setDeleteCandidateId(null);
                               setDeleteAcknowledged(false);
@@ -749,6 +912,8 @@ export function CryptoEvidenceRoute() {
                             className="mt-5 w-full justify-start text-destructive hover:text-destructive"
                             onClick={() => {
                               setDeleteCandidateId(item.evidenceId);
+                              setAnchorCandidateId(null);
+                              setAnchorAcknowledged(false);
                               setCloudDeleteCandidateId(null);
                               setDeleteAcknowledged(false);
                               setPublishCandidateId(null);

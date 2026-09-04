@@ -2,10 +2,15 @@ import type {
   MatterhornEncryptedEvidenceEnvelope,
   MatterhornEvidenceBundle,
   MatterhornEvidenceVerificationStatus,
+  MatterhornSuiEvidenceAnchor,
   MatterhornWalrusProof,
 } from "@matterhorn-work/types/crypto-coworkers";
-import { validateMatterhornWalrusProof } from "@matterhorn-work/types/crypto-coworkers";
+import {
+  validateMatterhornSuiEvidenceAnchor,
+  validateMatterhornWalrusProof,
+} from "@matterhorn-work/types/crypto-coworkers";
 import { createHash, randomUUID } from "node:crypto";
+import { normalizeSuiObjectId } from "@mysten/sui/utils";
 
 import type {
   MatterhornEvidenceKeyManager,
@@ -35,7 +40,7 @@ type MatterhornCryptoEvidenceOperationClaim = {
   claimId: string;
   evidenceId: string;
   expectedRevision: number;
-  operation: "publish" | "rotate_key" | "destroy_key";
+  operation: "publish" | "anchor" | "rotate_key" | "destroy_key";
   createdAt: string;
   expiresAt: string;
 };
@@ -70,7 +75,7 @@ export type MatterhornCryptoEvidenceAccessEvent = {
   workspaceIdHash: string;
   ownerIdHash: string;
   coworkerIdHash: string;
-  action: "seal" | "decrypt" | "attach_proof" | "renew_proof" | "rotate_key" | "destroy_key";
+  action: "seal" | "decrypt" | "attach_proof" | "attach_anchor" | "renew_proof" | "rotate_key" | "destroy_key";
   outcome: "allowed" | "denied";
   reason: string;
   recordRevision: number;
@@ -104,6 +109,7 @@ export type MatterhornCryptoEvidenceRecord = {
     "keyReference" | "wrappedKey" | "keyContext" | "recipientKeyIds"
   >;
   walrusProof: MatterhornWalrusProof | null;
+  suiAnchor?: MatterhornSuiEvidenceAnchor | null;
   /** Hash only; the account-linked wallet address is never stored in this record. */
   walrusOwnerAddressHash?: string | null;
   createdAt: string;
@@ -293,16 +299,23 @@ export class MatterhornCryptoEvidenceStore {
   }): boolean {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
-    return this.stateStore.transaction(() => {
-      const key = this.operationClaimKey(input);
-      const claim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
-        OPERATION_CLAIM_KIND,
-        key,
-        now.getTime(),
-      );
-      if (!claim || claim.claimId !== input.claimId || claim.evidenceId !== input.evidenceId) return false;
-      return this.stateStore.delete(OPERATION_CLAIM_KIND, key);
-    });
+    return this.stateStore.transaction(() => this.endExclusiveOperationInTransaction({ ...input, now }));
+  }
+
+  private endExclusiveOperationInTransaction(input: {
+    workspaceId: string;
+    evidenceId: string;
+    claimId: string;
+    now: Date;
+  }): boolean {
+    const key = this.operationClaimKey(input);
+    const claim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
+      OPERATION_CLAIM_KIND,
+      key,
+      input.now.getTime(),
+    );
+    if (!claim || claim.claimId !== input.claimId || claim.evidenceId !== input.evidenceId) return false;
+    return this.stateStore.delete(OPERATION_CLAIM_KIND, key);
   }
 
   findByRun(input: {
@@ -468,6 +481,7 @@ export class MatterhornCryptoEvidenceStore {
         deletable: input.sealed.localIndex.deletable,
       },
       walrusProof: null,
+      suiAnchor: null,
       walrusOwnerAddressHash: null,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
@@ -630,6 +644,123 @@ export class MatterhornCryptoEvidenceStore {
       record: claimed.record as MatterhornCryptoEvidencePublicationCandidate,
       claimId: claimed.claimId,
     };
+  }
+
+  beginSuiAnchor(input: {
+    workspaceId: string;
+    ownerId: string;
+    coworkerId?: string;
+    evidenceId: string;
+    expectedRevision: number;
+    now?: Date;
+  }): { record: MatterhornCryptoEvidenceRecord; claimId: string } {
+    const claimed = this.beginExclusiveOperation({ ...input, operation: "anchor" });
+    if (claimed.record.state !== "published" || !claimed.record.walrusProof) {
+      this.endExclusiveOperation({
+        workspaceId: input.workspaceId,
+        evidenceId: input.evidenceId,
+        claimId: claimed.claimId,
+        now: input.now,
+      });
+      throw new Error("crypto_evidence_sui_anchor_state_invalid");
+    }
+    if (claimed.record.suiAnchor) {
+      this.endExclusiveOperation({
+        workspaceId: input.workspaceId,
+        evidenceId: input.evidenceId,
+        claimId: claimed.claimId,
+        now: input.now,
+      });
+      throw new Error("crypto_evidence_sui_anchor_exists");
+    }
+    return claimed;
+  }
+
+  endSuiAnchor(input: {
+    workspaceId: string;
+    evidenceId: string;
+    claimId: string;
+    now?: Date;
+  }): boolean {
+    return this.endExclusiveOperation(input);
+  }
+
+  /** Complete a Sui anchor claim while the caller already owns the state-store transaction. */
+  completeSuiAnchorClaimInTransaction(input: {
+    workspaceId: string;
+    evidenceId: string;
+    claimId: string;
+    now: Date;
+  }): boolean {
+    if (!Number.isFinite(input.now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    return this.endExclusiveOperationInTransaction(input);
+  }
+
+  attachVerifiedSuiAnchor(input: {
+    workspaceId: string;
+    ownerId: string;
+    evidenceId: string;
+    expectedRevision: number;
+    expectedBlobId: string;
+    expectedWalrusObjectId: string;
+    anchor: MatterhornSuiEvidenceAnchor;
+    now?: Date;
+  }): MatterhornCryptoEvidenceRecord {
+    const current = this.get(input);
+    if (!current) throw new Error("crypto_evidence_not_found");
+    if (current.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
+    if (current.state !== "published" || !current.walrusProof || current.suiAnchor) {
+      throw new Error(current.suiAnchor
+        ? "crypto_evidence_sui_anchor_exists"
+        : "crypto_evidence_sui_anchor_state_invalid");
+    }
+    const issues = validateMatterhornSuiEvidenceAnchor(input.anchor);
+    if (issues.length > 0) throw new Error(`crypto_evidence_sui_anchor_invalid:${issues.join(",")}`);
+    const proof = current.walrusProof;
+    let proofObjectId: string;
+    try {
+      proofObjectId = normalizeSuiObjectId(proof.suiObjectId);
+    } catch {
+      throw new Error("crypto_evidence_sui_anchor_binding_mismatch");
+    }
+    const expectedBatchId = sha256({
+      domain: "matterhorn:sui-evidence-anchor-batch:v1",
+      network: "testnet",
+      merkleRoot: proof.merkleRoot,
+      blobId: proof.blobId,
+      walrusObjectId: proofObjectId,
+      certifiedEpoch: proof.certifiedEpoch,
+      validUntilEpoch: proof.validUntilEpoch,
+    });
+    if (proof.network !== "testnet"
+      || proof.blobId !== input.expectedBlobId
+      || proofObjectId !== input.expectedWalrusObjectId
+      || input.anchor.network !== "testnet"
+      || input.anchor.batchId !== expectedBatchId
+      || input.anchor.merkleRoot !== proof.merkleRoot
+      || input.anchor.walrusObjectId !== proofObjectId
+      || input.anchor.certifiedEpoch !== proof.certifiedEpoch
+      || input.anchor.validUntilEpoch !== proof.validUntilEpoch) {
+      throw new Error("crypto_evidence_sui_anchor_binding_mismatch");
+    }
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    const next: MatterhornCryptoEvidenceRecord = {
+      ...current,
+      revision: current.revision + 1,
+      suiAnchor: structuredClone(input.anchor),
+      updatedAt: now.toISOString(),
+    };
+    this.stateStore.put({
+      kind: STATE_KIND,
+      key: next.id,
+      workspaceId: next.workspaceId,
+      value: next,
+      nowMs: now.getTime(),
+    });
+    this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
+    this.recordAccess({ record: next, action: "attach_anchor", outcome: "allowed", reason: "wallet_anchor_verified", now });
+    return clone(next);
   }
 
   /** Release only the caller's claim; an expired worker cannot clear a newer claim. */

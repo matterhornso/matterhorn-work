@@ -37,6 +37,11 @@ import {
   type MatterhornWalrusDeletionTransactionBuilder,
 } from "./crypto-evidence-walrus-deletion.js";
 import { MatterhornCryptoEvidenceWalrusRenewalService } from "./crypto-evidence-walrus-renewal.js";
+import {
+  MatterhornCryptoEvidenceSuiAnchorService,
+  type MatterhornSuiEvidenceAnchorTransactionBuilder,
+  type MatterhornSuiEvidenceAnchorTransactionVerifier,
+} from "./crypto-evidence-sui-anchor.js";
 import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
 import type { MatterhornFinalizedCoworkerRun } from "./crypto-evidence-finalizer.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
@@ -261,6 +266,23 @@ export class MatterhornGuardedAgentRuntime {
     return new MatterhornCryptoEvidenceWalrusDeletionService(
       input.store,
       this.stateStore,
+      input.buildTransaction,
+      input.verifyTransaction,
+      input.verifyCertification,
+    );
+  }
+
+  createCryptoEvidenceSuiAnchorService(input: {
+    store: MatterhornCryptoEvidenceStore;
+    packageId: string;
+    buildTransaction: MatterhornSuiEvidenceAnchorTransactionBuilder;
+    verifyTransaction: MatterhornSuiEvidenceAnchorTransactionVerifier;
+    verifyCertification: MatterhornWalrusCertificationVerifier;
+  }): MatterhornCryptoEvidenceSuiAnchorService {
+    return new MatterhornCryptoEvidenceSuiAnchorService(
+      input.store,
+      this.stateStore,
+      input.packageId,
       input.buildTransaction,
       input.verifyTransaction,
       input.verifyCertification,

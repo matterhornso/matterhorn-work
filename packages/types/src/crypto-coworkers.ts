@@ -617,6 +617,28 @@ export type MatterhornWalrusProof = {
   deletedAt?: string;
 };
 
+export const MATTERHORN_SUI_EVIDENCE_ANCHOR_VERSION =
+  "matterhorn.sui-evidence-anchor.v1" as const;
+
+/**
+ * Public, non-content proof metadata for one immutable Sui object. The
+ * connected wallet address is deliberately excluded even though the public
+ * transaction itself remains observable on Sui.
+ */
+export type MatterhornSuiEvidenceAnchor = {
+  version: typeof MATTERHORN_SUI_EVIDENCE_ANCHOR_VERSION;
+  network: "testnet";
+  packageId: string;
+  objectId: string;
+  transactionDigest: string;
+  batchId: string;
+  merkleRoot: string;
+  walrusObjectId: string;
+  certifiedEpoch: number;
+  validUntilEpoch: number;
+  anchoredAt: string;
+};
+
 export const MATTERHORN_EVIDENCE_VERIFICATION_VERSION =
   "matterhorn.evidence-verification.v1" as const;
 
@@ -656,6 +678,8 @@ export type MatterhornEvidenceVerificationPacket = {
   /** True when the Walrus Blob object was transferred to a user wallet. */
   walletLifecycleReady: boolean;
   publication: MatterhornWalrusProof | null;
+  /** Optional immutable, non-content Sui Merkle anchor for this publication. */
+  anchor: MatterhornSuiEvidenceAnchor | null;
   /** Last server-side check of this exact evidence revision. */
   lastVerification: MatterhornEvidenceVerificationStatus | null;
 };
@@ -672,6 +696,7 @@ export type MatterhornEvidenceVerificationListResponse = {
   publicationAvailable: boolean;
   renewalAvailable: boolean;
   deletionAvailable: boolean;
+  anchorAvailable: boolean;
   items: MatterhornEvidenceVerificationPacket[];
 };
 
@@ -733,6 +758,48 @@ export type MatterhornCryptoEvidenceWalrusRenewalPrepareResponse = {
 export type MatterhornCryptoEvidenceWalrusRenewalConfirmResponse = {
   item: MatterhornEvidenceVerificationPacket;
   verification: MatterhornEvidenceVerificationStatus;
+};
+
+export const MATTERHORN_CRYPTO_EVIDENCE_SUI_ANCHOR_VERSION =
+  "matterhorn.crypto-evidence-sui-anchor.v1" as const;
+
+export type MatterhornCryptoEvidenceSuiAnchorPreview = {
+  version: typeof MATTERHORN_CRYPTO_EVIDENCE_SUI_ANCHOR_VERSION;
+  intentId: string;
+  intentHash: string;
+  evidenceId: string;
+  evidenceRevision: number;
+  network: "testnet";
+  signer: string;
+  packageId: string;
+  batchId: string;
+  merkleRoot: string;
+  walrusObjectId: string;
+  certifiedEpoch: number;
+  validUntilEpoch: number;
+  transactionBytesBase64: string;
+  transactionDigest: string;
+  simulationReference: string;
+  simulatedAt: string;
+  expiresAt: string;
+  walletAuthority: "connected_wallet_only";
+};
+
+export type MatterhornCryptoEvidenceSuiAnchorPrepareResponse = {
+  preview: MatterhornCryptoEvidenceSuiAnchorPreview;
+  disclosure: {
+    network: "testnet";
+    walletAction: "create_immutable_evidence_anchor";
+    signingAndSubmission: "connected_wallet_only";
+    agentAuthority: "none";
+    publicTransactionIsPermanent: true;
+    publicContent: "non_identifying_hashes_only";
+  };
+};
+
+export type MatterhornCryptoEvidenceSuiAnchorConfirmResponse = {
+  item: MatterhornEvidenceVerificationPacket;
+  anchor: MatterhornSuiEvidenceAnchor;
 };
 
 export const MATTERHORN_CRYPTO_EVIDENCE_WALRUS_DELETION_VERSION =
@@ -2206,6 +2273,52 @@ export function validateMatterhornWalrusProof(value: unknown): string[] {
     || (hasDeletedAt && (typeof value.deletedAt !== "string"
       || !Number.isFinite(Date.parse(value.deletedAt))))) {
     issues.push("walrus_proof_deletion_invalid");
+  }
+  return [...new Set(issues)];
+}
+
+export function validateMatterhornSuiEvidenceAnchor(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) return ["sui_evidence_anchor_not_object"];
+  if (!hasOnlyKeys(value, [
+    "version",
+    "network",
+    "packageId",
+    "objectId",
+    "transactionDigest",
+    "batchId",
+    "merkleRoot",
+    "walrusObjectId",
+    "certifiedEpoch",
+    "validUntilEpoch",
+    "anchoredAt",
+  ])) issues.push("sui_evidence_anchor_unknown_field");
+  const objectId = (candidate: unknown) => typeof candidate === "string"
+    && /^0x[a-f0-9]{64}$/.test(candidate);
+  const digest = (candidate: unknown) => typeof candidate === "string"
+    && /^[1-9A-HJ-NP-Za-km-z]{32,128}$/.test(candidate);
+  const hash = (candidate: unknown) => typeof candidate === "string"
+    && /^[a-f0-9]{64}$/.test(candidate);
+  const epoch = (candidate: unknown) => Number.isSafeInteger(candidate)
+    && Number(candidate) >= 0;
+  if (value.version !== MATTERHORN_SUI_EVIDENCE_ANCHOR_VERSION) {
+    issues.push("sui_evidence_anchor_version_invalid");
+  }
+  if (value.network !== "testnet") issues.push("sui_evidence_anchor_network_invalid");
+  if (!objectId(value.packageId)) issues.push("sui_evidence_anchor_package_invalid");
+  if (!objectId(value.objectId)) issues.push("sui_evidence_anchor_object_invalid");
+  if (!digest(value.transactionDigest)) issues.push("sui_evidence_anchor_transaction_invalid");
+  if (!hash(value.batchId)) issues.push("sui_evidence_anchor_batch_invalid");
+  if (!hash(value.merkleRoot)) issues.push("sui_evidence_anchor_merkle_root_invalid");
+  if (!objectId(value.walrusObjectId)) issues.push("sui_evidence_anchor_walrus_object_invalid");
+  if (!epoch(value.certifiedEpoch)
+    || !epoch(value.validUntilEpoch)
+    || Number(value.validUntilEpoch) <= Number(value.certifiedEpoch)
+    || Number(value.validUntilEpoch) - Number(value.certifiedEpoch) > 53) {
+    issues.push("sui_evidence_anchor_epoch_invalid");
+  }
+  if (typeof value.anchoredAt !== "string" || !Number.isFinite(Date.parse(value.anchoredAt))) {
+    issues.push("sui_evidence_anchor_time_invalid");
   }
   return [...new Set(issues)];
 }

@@ -76,6 +76,7 @@ const ENV_KEYS = [
   "MATTERHORN_WALRUS_PUBLISHER_URL",
   "MATTERHORN_WALRUS_AGGREGATOR_URL",
   "MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN",
+  "MATTERHORN_EVIDENCE_ANCHOR_PACKAGE_ID",
   "MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT",
 ] as const;
 const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -183,7 +184,7 @@ function routeTestCertification(): MatterhornWalrusCertification {
 
 async function boot(
   mode: "off" | "internal" | "invite",
-  options: { agentFiles?: boolean; walrus?: boolean } = {},
+  options: { agentFiles?: boolean; walrus?: boolean; anchor?: boolean } = {},
 ) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-routes-"));
   roots.push(root);
@@ -250,6 +251,11 @@ async function boot(
     delete process.env.MATTERHORN_WALRUS_AGGREGATOR_URL;
     delete process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN;
   }
+  if (options.anchor) {
+    process.env.MATTERHORN_EVIDENCE_ANCHOR_PACKAGE_ID = `0x${"8".repeat(64)}`;
+  } else {
+    delete process.env.MATTERHORN_EVIDENCE_ANCHOR_PACKAGE_ID;
+  }
   const keyManager = options.agentFiles ? new RouteTestKeyManager() : null;
   const walrusTransport = options.walrus ? new RouteTestWalrusTransport() : null;
   let walrusCurrentEpoch = 11;
@@ -309,6 +315,29 @@ async function boot(
       status: walrusRenewalTransactionStatus,
       observedAt: new Date().toISOString(),
     });
+    if (options.anchor) {
+      dependencies.cryptoEvidenceSuiAnchorTransactionBuilder = async (input) => {
+        expect(input.network).toBe("sui:testnet");
+        expect(input.signer).toBe(signer);
+        expect(input.packageId).toBe(`0x${"8".repeat(64)}`);
+        expect(input.walrusObjectId).toBe(normalizeSuiAddress("0x1234"));
+        return {
+          transactionBytesBase64: Buffer.from(renewalBytes).toString("base64"),
+          transactionDigest: renewalDigest,
+          simulationReference: sha256({ test: "route-sui-evidence-anchor" }),
+          simulatedAt: new Date().toISOString(),
+        };
+      };
+      dependencies.cryptoEvidenceSuiAnchorTransactionVerifier = async (input) => {
+        expect(input.network).toBe("sui:testnet");
+        expect(input.signer).toBe(signer);
+        expect(input.packageId).toBe(`0x${"8".repeat(64)}`);
+        return {
+          objectId: normalizeSuiAddress("0x9"),
+          observedAt: new Date().toISOString(),
+        };
+      };
+    }
   }
   const server = await startServer(
     config(await freePort(), root),
@@ -1337,6 +1366,7 @@ describe("crypto coworker HTTP boundary", () => {
       publicationAvailable: false,
       renewalAvailable: false,
       deletionAvailable: false,
+      anchorAvailable: false,
       items: [],
     });
   });
@@ -1570,6 +1600,161 @@ describe("crypto coworker HTTP boundary", () => {
     );
     expect(publishAfterDeletion.response.status).toBe(409);
     expect(publishAfterDeletion.payload.code).toBe("crypto_evidence_walrus_publish_state_invalid");
+  });
+
+  test("anchors published evidence only through one exact connected-wallet transaction", async () => {
+    const server = await boot("internal", { agentFiles: true, walrus: true, anchor: true });
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "evidence-anchor-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "evidence-anchor-b@example.com", password: PASSWORD },
+    });
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
+    const coworker = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: coworkerInput(),
+    });
+    if (!server.keyManager) throw new Error("route_test_key_manager_missing");
+    const record = await seedCryptoEvidence({
+      guardedDb: server.guardedDb,
+      keyManager: server.keyManager,
+      workspaceId: workspaceA,
+      ownerId: String(signupA.payload.user.id),
+      coworkerId: String(coworker.payload.coworker.id),
+      runId: "run_route_sui_anchor_evidence",
+    });
+    const published = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/publish`,
+      {
+        cookie: cookieA,
+        body: {
+          expectedRevision: 1,
+          network: "testnet",
+          ownerAddress: ROUTE_SIGNER,
+          acknowledgePublicCiphertext: true,
+        },
+      },
+    );
+    expect(published.response.status).toBe(200);
+
+    const listed = await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieA });
+    expect(listed.payload.anchorAvailable).toBe(true);
+    expect(listed.payload.items[0].anchor).toBeNull();
+
+    const missingAcknowledgement = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/anchor`,
+      { cookie: cookieA, body: { expectedRevision: 2, network: "testnet", signer: ROUTE_SIGNER } },
+    );
+    expect(missingAcknowledgement.response.status).toBe(400);
+    expect(missingAcknowledgement.payload.code).toBe("crypto_evidence_sui_anchor_confirmation_required");
+
+    const crossTenant = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/anchor`,
+      {
+        cookie: cookieB,
+        body: {
+          expectedRevision: 2,
+          network: "testnet",
+          signer: ROUTE_SIGNER,
+          acknowledgePermanentPublicAnchor: true,
+        },
+      },
+    );
+    expect(crossTenant.response.status).toBe(404);
+
+    const prepared = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/anchor`,
+      {
+        cookie: cookieA,
+        body: {
+          expectedRevision: 2,
+          network: "testnet",
+          signer: ROUTE_SIGNER,
+          acknowledgePermanentPublicAnchor: true,
+        },
+      },
+    );
+    expect(prepared.response.status).toBe(200);
+    expect(prepared.payload).toMatchObject({
+      preview: {
+        evidenceId: record.id,
+        evidenceRevision: 2,
+        network: "testnet",
+        walletAuthority: "connected_wallet_only",
+      },
+      disclosure: {
+        walletAction: "create_immutable_evidence_anchor",
+        publicTransactionIsPermanent: true,
+        publicContent: "non_identifying_hashes_only",
+        signingAndSubmission: "connected_wallet_only",
+        agentAuthority: "none",
+      },
+    });
+    const serialized = JSON.stringify(prepared.payload);
+    expect(serialized).not.toContain(String(signupA.payload.user.id));
+    expect(serialized).not.toContain(workspaceA);
+
+    const mutated = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/anchor/confirm`,
+      {
+        cookie: cookieA,
+        body: {
+          intentId: prepared.payload.preview.intentId,
+          intentHash: "0".repeat(64),
+          transactionDigest: prepared.payload.preview.transactionDigest,
+        },
+      },
+    );
+    expect(mutated.response.status).toBe(409);
+    expect(mutated.payload.code).toBe("crypto_evidence_sui_anchor_intent_mismatch");
+
+    const confirmed = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/anchor/confirm`,
+      {
+        cookie: cookieA,
+        body: {
+          intentId: prepared.payload.preview.intentId,
+          intentHash: prepared.payload.preview.intentHash,
+          transactionDigest: prepared.payload.preview.transactionDigest,
+        },
+      },
+    );
+    expect(confirmed.response.status).toBe(200);
+    expect(confirmed.payload).toMatchObject({
+      item: {
+        revision: 3,
+        anchor: {
+          network: "testnet",
+          objectId: normalizeSuiAddress("0x9"),
+          transactionDigest: prepared.payload.preview.transactionDigest,
+        },
+      },
+    });
+    expect(JSON.stringify(confirmed.payload)).not.toContain(String(signupA.payload.user.id));
+
+    const replay = await request(
+      server.base,
+      `/workspace/${workspaceA}/crypto-evidence/${record.id}/anchor/confirm`,
+      {
+        cookie: cookieA,
+        body: {
+          intentId: prepared.payload.preview.intentId,
+          intentHash: prepared.payload.preview.intentHash,
+          transactionDigest: prepared.payload.preview.transactionDigest,
+        },
+      },
+    );
+    expect(replay.response.status).toBe(410);
+    expect(replay.payload.code).toBe("crypto_evidence_sui_anchor_expired_or_replayed");
   });
 
   test("renews published evidence only through one exact connected-wallet transaction", async () => {
@@ -1947,6 +2132,7 @@ describe("crypto coworker HTTP boundary", () => {
       publicationAvailable: false,
       renewalAvailable: false,
       deletionAvailable: false,
+      anchorAvailable: false,
       items: [],
     });
     expect((await request(server.base, `/workspace/${workspaceA}/crypto-evidence`, { cookie: cookieB })).response.status)

@@ -45,6 +45,7 @@ export function cryptoEvidenceAccountPacket(
     },
     walletLifecycleReady: Boolean(record.walrusOwnerAddressHash),
     publication: record.walrusProof ? structuredClone(record.walrusProof) : null,
+    anchor: record.suiAnchor ? structuredClone(record.suiAnchor) : null,
     lastVerification: lastVerification ? structuredClone(lastVerification) : null,
   };
 }

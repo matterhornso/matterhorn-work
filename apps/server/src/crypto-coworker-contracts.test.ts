@@ -11,6 +11,7 @@ import {
   MATTERHORN_EVIDENCE_BUNDLE_VERSION,
   MATTERHORN_POLICY_DECISION_VERSION,
   MATTERHORN_WALRUS_PROOF_VERSION,
+  MATTERHORN_SUI_EVIDENCE_ANCHOR_VERSION,
   type MatterhornCoworkerInboxItem,
   type MatterhornCoworkerProfile,
   type MatterhornCoworkerResourceRecommendation,
@@ -21,6 +22,7 @@ import {
   type MatterhornEvidenceBundle,
   type MatterhornPolicyDecision,
   type MatterhornWalrusProof,
+  type MatterhornSuiEvidenceAnchor,
   validateMatterhornCoworkerInboxItem,
   validateMatterhornCoworkerProfile,
   validateMatterhornCoworkerResourceRecommendation,
@@ -31,6 +33,7 @@ import {
   validateMatterhornEvidenceBundle,
   validateMatterhornPolicyDecision,
   validateMatterhornWalrusProof,
+  validateMatterhornSuiEvidenceAnchor,
 } from "@matterhorn-work/types/crypto-coworkers";
 
 const manifest: MatterhornCryptoAppManifest = {
@@ -582,6 +585,37 @@ describe("crypto coworker public contracts", () => {
     })).toContain("walrus_proof_deletion_invalid");
     expect(validateMatterhornEvidenceBundle({ ...evidence, walrus: proof })).toContain("evidence_unknown_field");
     expect(validateMatterhornWalrusProof({ ...proof, signer: "wallet-private" })).toContain("walrus_proof_unknown_field");
+  });
+
+  test("accepts only bounded non-content immutable Sui evidence anchors", () => {
+    const anchor: MatterhornSuiEvidenceAnchor = {
+      version: MATTERHORN_SUI_EVIDENCE_ANCHOR_VERSION,
+      network: "testnet",
+      packageId: `0x${"1".repeat(64)}`,
+      objectId: `0x${"2".repeat(64)}`,
+      transactionDigest: "4".repeat(44),
+      batchId: "3".repeat(64),
+      merkleRoot: "4".repeat(64),
+      walrusObjectId: `0x${"5".repeat(64)}`,
+      certifiedEpoch: 10,
+      validUntilEpoch: 20,
+      anchoredAt: "2026-09-02T00:00:00.000Z",
+    };
+    expect(validateMatterhornSuiEvidenceAnchor(anchor)).toEqual([]);
+    expect(validateMatterhornSuiEvidenceAnchor({
+      ...anchor,
+      workspaceId: "ws_private",
+      prompt: "private prompt",
+      signer: `0x${"6".repeat(64)}`,
+    })).toContain("sui_evidence_anchor_unknown_field");
+    expect(validateMatterhornSuiEvidenceAnchor({
+      ...anchor,
+      network: "mainnet",
+      validUntilEpoch: 64,
+    })).toEqual(expect.arrayContaining([
+      "sui_evidence_anchor_network_invalid",
+      "sui_evidence_anchor_epoch_invalid",
+    ]));
   });
 
   test("requires an internally consistent policy decision before wallet review", () => {

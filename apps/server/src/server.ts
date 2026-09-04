@@ -406,6 +406,14 @@ import type {
   MatterhornWalrusCertificationVerifier,
   MatterhornWalrusEvidenceTransport,
 } from "./crypto-evidence-walrus-publisher.js";
+import {
+  createPinnedSuiEvidenceAnchorTransactionBuilder,
+  createPinnedSuiEvidenceAnchorTransactionVerifier,
+  MatterhornCryptoEvidenceSuiAnchorError,
+  type MatterhornCryptoEvidenceSuiAnchorService,
+  type MatterhornSuiEvidenceAnchorTransactionBuilder,
+  type MatterhornSuiEvidenceAnchorTransactionVerifier,
+} from "./crypto-evidence-sui-anchor.js";
 import { cryptoCoworkerFeatureConfig } from "./crypto-coworker-config.js";
 import type { MatterhornPendingCryptoIntent } from "./crypto-pending-intent-store.js";
 import type { MatterhornSuiVerifiedPublicTransaction } from "./sui-public-transaction-verifier.js";
@@ -1379,6 +1387,8 @@ export type MatterhornServerDependencies = {
   agentFileWalrusCertificationVerifier?: MatterhornWalrusCertificationVerifier;
   agentFileWalrusRenewalTransactionBuilder?: MatterhornWalrusRenewalTransactionBuilder;
   cryptoEvidenceWalrusDeletionTransactionBuilder?: MatterhornWalrusDeletionTransactionBuilder;
+  cryptoEvidenceSuiAnchorTransactionBuilder?: MatterhornSuiEvidenceAnchorTransactionBuilder;
+  cryptoEvidenceSuiAnchorTransactionVerifier?: MatterhornSuiEvidenceAnchorTransactionVerifier;
   agentFileWalrusTransactionStatusVerifier?: MatterhornSuiTransactionStatusVerifier;
   reviewedActionProtocolRefresh?: ReviewedActionRefreshAdapter;
 };
@@ -1550,6 +1560,21 @@ export async function startServer(
       buildTransaction: dependencies.cryptoEvidenceWalrusDeletionTransactionBuilder
         ?? createPinnedWalrusDeletionTransactionBuilder({ endpoint: SUI_GRPC_URLS.testnet }),
       verifyTransaction: suiTransactionStatusVerifier,
+      verifyCertification: cryptoEvidenceRuntime.certificationVerifier,
+    })
+    : null;
+  const cryptoEvidenceSuiAnchorPackageId = process.env.MATTERHORN_EVIDENCE_ANCHOR_PACKAGE_ID?.trim() || null;
+  const cryptoEvidenceSuiAnchor: MatterhornCryptoEvidenceSuiAnchorService | null = cryptoEvidenceStore
+    && cryptoEvidenceRuntime.mode === "testnet"
+    && cryptoEvidenceRuntime.certificationVerifier
+    && cryptoEvidenceSuiAnchorPackageId
+    ? guardedRuntime.createCryptoEvidenceSuiAnchorService({
+      store: cryptoEvidenceStore,
+      packageId: cryptoEvidenceSuiAnchorPackageId,
+      buildTransaction: dependencies.cryptoEvidenceSuiAnchorTransactionBuilder
+        ?? createPinnedSuiEvidenceAnchorTransactionBuilder({ endpoint: SUI_GRPC_URLS.testnet }),
+      verifyTransaction: dependencies.cryptoEvidenceSuiAnchorTransactionVerifier
+        ?? createPinnedSuiEvidenceAnchorTransactionVerifier({ endpoint: new URL(SUI_GRPC_URLS.testnet) }),
       verifyCertification: cryptoEvidenceRuntime.certificationVerifier,
     })
     : null;
@@ -1765,6 +1790,7 @@ export async function startServer(
     cryptoEvidenceRuntime,
     cryptoEvidenceWalrusRenewal,
     cryptoEvidenceWalrusDeletion,
+    cryptoEvidenceSuiAnchor,
     agentFileStore,
     agentFileWalrusPublisher,
     agentFileWalrusRenewal,
@@ -4064,6 +4090,59 @@ function cryptoEvidenceDeletionApiError(error: unknown): ApiError {
     503,
     "crypto_evidence_walrus_deletion_unavailable",
     "The encrypted Walrus copy could not be deleted safely. Nothing was changed.",
+  );
+}
+
+function cryptoEvidenceSuiAnchorApiError(error: unknown): ApiError {
+  if (error instanceof MatterhornCryptoEvidenceSuiAnchorError) {
+    if (error.code === "crypto_evidence_not_found") {
+      return new ApiError(404, error.code, "Evidence record not found.");
+    }
+    if (error.code === "crypto_evidence_sui_anchor_signer_invalid") {
+      return new ApiError(400, error.code, "Connect a valid Sui testnet wallet.");
+    }
+    if (error.code === "crypto_evidence_sui_anchor_expired_or_replayed") {
+      return new ApiError(410, error.code, "This anchor request expired or was already used. Prepare a new one.");
+    }
+    if (error.code === "crypto_evidence_sui_anchor_exists") {
+      return new ApiError(409, error.code, "This evidence is already anchored on Sui.");
+    }
+    if (error.code === "crypto_evidence_sui_anchor_in_progress") {
+      return new ApiError(409, error.code, "A Sui anchor is already waiting for wallet review.");
+    }
+    if (error.code === "crypto_evidence_sui_anchor_certification_changed") {
+      return new ApiError(409, error.code, "The Walrus proof changed or expired. Verify the evidence and try again.");
+    }
+    if (error.code === "crypto_evidence_sui_anchor_transaction_failed") {
+      return new ApiError(409, error.code, "The wallet transaction failed. Prepare a new Sui anchor.");
+    }
+    if (error.code === "crypto_evidence_sui_anchor_aborted") {
+      return new ApiError(408, error.code, "Sui anchor preparation was cancelled. Nothing was recorded.");
+    }
+    if (error.code.includes("mismatch") || error.code.endsWith("_invalid")) {
+      return new ApiError(409, error.code, "The Sui anchor changed or could not be verified. Prepare it again.");
+    }
+  }
+  const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
+  if (code === "crypto_evidence_not_found") {
+    return new ApiError(404, code, "Evidence record not found.");
+  }
+  if (code === "crypto_evidence_revision_conflict") {
+    return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
+  }
+  if (code === "crypto_evidence_operation_in_progress") {
+    return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
+  }
+  if (code === "crypto_evidence_sui_anchor_exists") {
+    return new ApiError(409, code, "This evidence is already anchored on Sui.");
+  }
+  if (code === "crypto_evidence_sui_anchor_state_invalid") {
+    return new ApiError(409, code, "Store and verify the encrypted Walrus copy before anchoring it on Sui.");
+  }
+  return new ApiError(
+    503,
+    "crypto_evidence_sui_anchor_unavailable",
+    "The Sui anchor could not be prepared or verified safely. Nothing was recorded.",
   );
 }
 
@@ -9181,6 +9260,7 @@ function createRoutes(
   cryptoEvidenceRuntime: MatterhornCryptoEvidenceRuntime,
   cryptoEvidenceWalrusRenewal: MatterhornCryptoEvidenceWalrusRenewalService | null,
   cryptoEvidenceWalrusDeletion: MatterhornCryptoEvidenceWalrusDeletionService | null,
+  cryptoEvidenceSuiAnchor: MatterhornCryptoEvidenceSuiAnchorService | null,
   agentFileStore: MatterhornAgentFileStore | null,
   agentFileWalrusPublisher: MatterhornAgentFileWalrusPublisher | null,
   agentFileWalrusRenewal: MatterhornAgentFileWalrusRenewalService | null,
@@ -10626,6 +10706,7 @@ function createRoutes(
       publicationAvailable: cryptoEvidenceRuntime.publicationAvailable,
       renewalAvailable: Boolean(cryptoEvidenceWalrusRenewal),
       deletionAvailable: Boolean(cryptoEvidenceWalrusDeletion),
+      anchorAvailable: Boolean(cryptoEvidenceSuiAnchor),
       items,
     });
   });
@@ -10692,6 +10773,108 @@ function createRoutes(
         });
       } catch (error) {
         throw cryptoEvidencePublicationApiError(error);
+      }
+    },
+  );
+
+  addRoute(
+    routes,
+    "POST",
+    "/workspace/:id/crypto-evidence/:evidenceId/anchor",
+    "client",
+    async (ctx) => {
+      ensureWritable(config);
+      requireClientScope(ctx, "collaborator");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const evidenceId = ctx.params.evidenceId?.trim() ?? "";
+      if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+      }
+      if (!cryptoEvidenceSuiAnchor) {
+        throw new ApiError(
+          503,
+          "crypto_evidence_sui_anchor_unavailable",
+          "Immutable Sui testnet evidence anchoring is not enabled for this deployment.",
+        );
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Sui evidence anchor");
+      const expectedRevision = isRecord(body)
+        && typeof body.expectedRevision === "number"
+        && Number.isSafeInteger(body.expectedRevision)
+        && body.expectedRevision > 0
+        ? body.expectedRevision
+        : null;
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => ![
+          "expectedRevision", "network", "signer", "acknowledgePermanentPublicAnchor",
+        ].includes(key))
+        || expectedRevision === null
+        || body.network !== "testnet"
+        || typeof body.signer !== "string"
+        || body.acknowledgePermanentPublicAnchor !== true) {
+        throw new ApiError(
+          400,
+          "crypto_evidence_sui_anchor_confirmation_required",
+          "Confirm that the connected wallet will create a permanent public non-content anchor on Sui testnet.",
+        );
+      }
+      try {
+        return noStoreJsonResponse(await cryptoEvidenceSuiAnchor.prepare({
+          workspaceId: workspace.id,
+          ownerId: cryptoAppCreatedBy(ctx),
+          evidenceId,
+          expectedRevision,
+          signer: body.signer,
+          signal: ctx.request.signal,
+        }));
+      } catch (error) {
+        throw cryptoEvidenceSuiAnchorApiError(error);
+      }
+    },
+  );
+
+  addRoute(
+    routes,
+    "POST",
+    "/workspace/:id/crypto-evidence/:evidenceId/anchor/confirm",
+    "client",
+    async (ctx) => {
+      ensureWritable(config);
+      requireClientScope(ctx, "collaborator");
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const evidenceId = ctx.params.evidenceId?.trim() ?? "";
+      if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+      }
+      if (!cryptoEvidenceSuiAnchor) {
+        throw new ApiError(
+          503,
+          "crypto_evidence_sui_anchor_unavailable",
+          "Immutable Sui testnet evidence anchoring is not enabled for this deployment.",
+        );
+      }
+      const body = await readJsonBody(ctx.request, 4_096, "Sui evidence anchor confirmation");
+      if (!isRecord(body)
+        || Object.keys(body).some((key) => ![
+          "intentId", "intentHash", "transactionDigest",
+        ].includes(key))
+        || typeof body.intentId !== "string"
+        || typeof body.intentHash !== "string"
+        || typeof body.transactionDigest !== "string") {
+        throw new ApiError(400, "crypto_evidence_sui_anchor_input_invalid", "Sui anchor confirmation is invalid.");
+      }
+      try {
+        return noStoreJsonResponse(await cryptoEvidenceSuiAnchor.confirm({
+          workspaceId: workspace.id,
+          ownerId: cryptoAppCreatedBy(ctx),
+          evidenceId,
+          intentId: body.intentId,
+          intentHash: body.intentHash,
+          transactionDigest: body.transactionDigest,
+          signal: ctx.request.signal,
+        }));
+      } catch (error) {
+        throw cryptoEvidenceSuiAnchorApiError(error);
       }
     },
   );
