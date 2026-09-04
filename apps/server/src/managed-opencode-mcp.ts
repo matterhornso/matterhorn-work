@@ -304,15 +304,23 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_polymarket_prepare_handoff",
     title: "Polymarket wallet handoff",
-    description: "Prepare a compliance-gated Polymarket handoff for separate connected-wallet review. Never signs or submits.",
+    description: "Prepare fresh, exact Polymarket CLOB terms for separate connected-wallet review. Never signs, authenticates, or submits.",
     inputSchema: objectSchema({
-      marketId: { type: "string" },
-      outcome: { type: "string" },
-      side: { type: "string", enum: ["buy", "sell", "yes", "no"] },
+      address: { type: "string", description: "Public Polygon wallet address that must review the order." },
+      marketId: { type: "string", description: "Exact Polymarket condition ID returned by certified discovery." },
+      tokenId: { type: "string", description: "Exact outcome token ID returned by certified discovery." },
+      outcome: { type: "string", description: "Outcome label paired with the exact token ID by certified discovery." },
+      side: { type: "string", enum: ["buy", "sell"] },
       amountUsdc: numberOrStringSchema,
+      amountShares: numberOrStringSchema,
       slippageTolerance: numberOrStringSchema,
-    }, ["marketId", "outcome", "side", "amountUsdc"]),
-    request: (args) => ({ path: "/api/polymarket/orders/handoff", method: "POST", body: args }),
+    }, ["address", "marketId", "tokenId", "outcome", "side"]),
+    request: () => {
+      // The exact contract is executable only through the certified coworker
+      // gateway above. Falling back to the legacy handoff route would discard
+      // the token, signer, and sell-size binding that the wallet airlock needs.
+      throw new Error("certified_crypto_app_required");
+    },
   },
   {
     name: "matterhorn_sui_get_balance",
