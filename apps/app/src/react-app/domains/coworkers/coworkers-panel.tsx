@@ -681,6 +681,49 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     setResourcesOpen(true);
   }, [resourceQuery.data?.recommendation]);
 
+  const startChat = useCallback((coworker: MatterhornCoworkerAccountProfile) => {
+    const context = {
+      id: coworker.id,
+      name: coworker.name,
+      role: coworker.role,
+      revision: coworker.revision,
+      updatedAt: new Date().toISOString(),
+    };
+    const sessionId = selectedSessionId?.trim() ?? "";
+    if (sessionId && !pendingOutcome) {
+      const fileContext = useMatterhornSessionAgentFileContextStore.getState().contexts[sessionId];
+      if (fileContext && fileContext.coworker.id !== coworker.id) {
+        useMatterhornSessionAgentFileContextStore.getState().clearContext(sessionId);
+      }
+      useMatterhornSessionCoworkerContextStore.getState().setContext(sessionId, context);
+      onClose();
+      showToast({ title: `${coworker.name} joined this chat`, description: "Your next request will use this coworker's limits.", tone: "success" });
+      return;
+    }
+    if (!onStartTask) {
+      setError("Open a chat, then choose this coworker again.");
+      return;
+    }
+    void (async () => {
+      const started = await onStartTask(
+        selectedWorkspaceId,
+        pendingOutcome || "Ask what outcome I want, then help me take the safest next step.",
+        {
+          title: `${coworker.name} chat`,
+          sendImmediately: false,
+          onSessionCreated: (createdSessionId) => {
+            useMatterhornSessionCoworkerContextStore.getState().setContext(createdSessionId, context);
+          },
+        },
+      );
+      if (started === false) {
+        setError("The chat did not start. Try again.");
+        return;
+      }
+      setPendingOutcome("");
+    })();
+  }, [onClose, onStartTask, pendingOutcome, selectedSessionId, selectedWorkspaceId, showToast]);
+
   const saveResources = useCallback(async () => {
     if (!props.client || !workspaceId || !selectedCoworker) return;
     setBusyAction(`resources:${selectedCoworker.id}`);
@@ -702,12 +745,13 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
         description: `${selectedCoworker.name} can use only the items you selected.`,
         tone: "success",
       });
+      if (pendingOutcome && resourceDraft.connectionIds.length > 0) startChat(selectedCoworker);
     } catch (cause) {
       setError(coworkerErrorMessage(cause));
     } finally {
       setBusyAction(null);
     }
-  }, [props.client, queryClient, resourceDraft, resourceKey, resourceQuery.data?.scope.resources?.revision, resourceRecommendationHash, selectedCoworker, showToast, workspaceId]);
+  }, [pendingOutcome, props.client, queryClient, resourceDraft, resourceKey, resourceQuery.data?.scope.resources?.revision, resourceRecommendationHash, selectedCoworker, showToast, startChat, workspaceId]);
 
   const connectApp = useCallback(async (app: MatterhornCryptoAppCatalogSummary) => {
     if (!props.client || !workspaceId || !selectedCoworker) return;
@@ -800,49 +844,6 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     if (scope.active && (scope.resources?.connections.length ?? 0) > 0) return;
     setResourcesOpen(true);
   }, [pendingOutcome, resourceQuery.data, selectedCoworker]);
-
-  const startChat = useCallback((coworker: MatterhornCoworkerAccountProfile) => {
-    const context = {
-      id: coworker.id,
-      name: coworker.name,
-      role: coworker.role,
-      revision: coworker.revision,
-      updatedAt: new Date().toISOString(),
-    };
-    const sessionId = selectedSessionId?.trim() ?? "";
-    if (sessionId) {
-      const fileContext = useMatterhornSessionAgentFileContextStore.getState().contexts[sessionId];
-      if (fileContext && fileContext.coworker.id !== coworker.id) {
-        useMatterhornSessionAgentFileContextStore.getState().clearContext(sessionId);
-      }
-      useMatterhornSessionCoworkerContextStore.getState().setContext(sessionId, context);
-      onClose();
-      showToast({ title: `${coworker.name} joined this chat`, description: "Your next request will use this coworker's limits.", tone: "success" });
-      return;
-    }
-    if (!onStartTask) {
-      setError("Open a chat, then choose this coworker again.");
-      return;
-    }
-    void (async () => {
-      const started = await onStartTask(
-        selectedWorkspaceId,
-        pendingOutcome || "Ask what outcome I want, then help me take the safest next step.",
-        {
-          title: `${coworker.name} chat`,
-          sendImmediately: false,
-          onSessionCreated: (createdSessionId) => {
-            useMatterhornSessionCoworkerContextStore.getState().setContext(createdSessionId, context);
-          },
-        },
-      );
-      if (started === false) {
-        setError("The chat did not start. Try again.");
-        return;
-      }
-      setPendingOutcome("");
-    })();
-  }, [onClose, onStartTask, pendingOutcome, selectedSessionId, selectedWorkspaceId, showToast]);
 
   const transitionCoworker = useCallback(async (coworker: MatterhornCoworkerAccountProfile, state: "active" | "paused" | "revoked") => {
     if (!props.client || !workspaceId) return;
@@ -1422,68 +1423,97 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                     ) : null}
                   </fieldset>
 
-                  <fieldset>
-                    <legend className="text-xs font-medium text-dls-text">Files</legend>
-                    {!resourceQuery.data.filesAvailable ? (
-                      <p className="mt-2 text-xs leading-5 text-dls-secondary">Private files are not enabled in this environment.</p>
-                    ) : resourceQuery.data.files.length ? (
-                      <div className="mt-2 grid gap-2">
-                        {resourceQuery.data.files.map((item) => (
-                          <label key={item.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
-                            <input
-                              type="checkbox"
-                              className="size-4 accent-current"
-                              checked={resourceDraft.agentFileIds.includes(item.id)}
-                              onChange={() => toggleResource("agentFileIds", item.id)}
-                            />
-                            <span className="truncate">{item.file.name}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mt-2 flex items-center justify-between gap-3">
-                        <p className="text-xs leading-5 text-dls-secondary">No private files are available for this coworker.</p>
-                        <Button size="xs" variant="outline" onClick={props.onBrowseFiles}>Add file</Button>
-                      </div>
-                    )}
-                  </fieldset>
+                  <details className="group border-t border-dls-border/70 pt-3">
+                    <summary className="min-h-9 cursor-pointer list-none outline-none focus-visible:ring-2 focus-visible:ring-ring/35 [&::-webkit-details-marker]:hidden">
+                      <span className="flex items-center justify-between gap-3">
+                        <span>
+                          <span className="block text-xs font-medium text-dls-text">Add private information</span>
+                          <span className="mt-0.5 block text-xs leading-5 text-dls-secondary">
+                            Optional · {resourceDraft.agentFileIds.length} files · {resourceDraft.memoryIds.length} memories
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-xs font-medium text-dls-secondary">
+                          <span className="group-open:hidden">Choose</span>
+                          <span className="hidden group-open:inline">Close</span>
+                        </span>
+                      </span>
+                    </summary>
 
-                  <fieldset>
-                    <legend className="text-xs font-medium text-dls-text">Saved memory</legend>
-                    {!resourceQuery.data.memoriesAvailable ? (
-                      <p className="mt-2 text-xs leading-5 text-dls-secondary">Saved memory is unavailable right now.</p>
-                    ) : resourceQuery.data.memories.length ? (
-                      <div className="mt-2 grid gap-2">
-                        {resourceQuery.data.memories.map((record) => (
-                          <label key={record.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
-                            <input
-                              type="checkbox"
-                              className="size-4 accent-current"
-                              checked={resourceDraft.memoryIds.includes(record.id)}
-                              onChange={() => toggleResource("memoryIds", record.id)}
-                            />
-                            <span className="truncate">{record.title}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mt-2 flex items-center justify-between gap-3">
-                        <p className="text-xs leading-5 text-dls-secondary">No saved memory is available yet.</p>
-                        <Button size="xs" variant="outline" onClick={props.onBrowseMemory}>Add memory</Button>
-                      </div>
-                    )}
-                  </fieldset>
+                    <div className="mt-3 grid gap-4 border-t border-dls-border/60 pt-3">
+                      <fieldset>
+                        <legend className="text-xs font-medium text-dls-text">Files</legend>
+                        {!resourceQuery.data.filesAvailable ? (
+                          <p className="mt-2 text-xs leading-5 text-dls-secondary">Private files are not enabled in this environment.</p>
+                        ) : resourceQuery.data.files.length ? (
+                          <div className="mt-2 grid gap-2">
+                            {resourceQuery.data.files.map((item) => (
+                              <label key={item.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
+                                <input
+                                  type="checkbox"
+                                  className="size-4 accent-current"
+                                  checked={resourceDraft.agentFileIds.includes(item.id)}
+                                  onChange={() => toggleResource("agentFileIds", item.id)}
+                                />
+                                <span className="truncate">{item.file.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <p className="text-xs leading-5 text-dls-secondary">No private files are available for this coworker.</p>
+                            <Button size="xs" variant="outline" onClick={props.onBrowseFiles}>Add file</Button>
+                          </div>
+                        )}
+                      </fieldset>
 
-                  <p className="text-xs leading-5 text-dls-secondary">
-                    Files and saved memory only go to a model approved for private data. This coworker cannot change that.
-                  </p>
+                      <fieldset>
+                        <legend className="text-xs font-medium text-dls-text">Saved memory</legend>
+                        {!resourceQuery.data.memoriesAvailable ? (
+                          <p className="mt-2 text-xs leading-5 text-dls-secondary">Saved memory is unavailable right now.</p>
+                        ) : resourceQuery.data.memories.length ? (
+                          <div className="mt-2 grid gap-2">
+                            {resourceQuery.data.memories.map((record) => (
+                              <label key={record.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
+                                <input
+                                  type="checkbox"
+                                  className="size-4 accent-current"
+                                  checked={resourceDraft.memoryIds.includes(record.id)}
+                                  onChange={() => toggleResource("memoryIds", record.id)}
+                                />
+                                <span className="truncate">{record.title}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <p className="text-xs leading-5 text-dls-secondary">No saved memory is available yet.</p>
+                            <Button size="xs" variant="outline" onClick={props.onBrowseMemory}>Add memory</Button>
+                          </div>
+                        )}
+                      </fieldset>
+
+                      <p className="text-xs leading-5 text-dls-secondary">
+                        Private information only goes to a model approved for private data. This coworker cannot change that.
+                      </p>
+                    </div>
+                  </details>
+
+                  {pendingOutcome && resourceDraft.connectionIds.length === 0 ? (
+                    <p className="text-xs leading-5 text-dls-secondary" role="status">
+                      Choose one app above to continue to your chat.
+                    </p>
+                  ) : null}
                   <div className="flex gap-2">
                     <Button
                       size="sm"
-                      disabled={busyAction !== null}
+                      disabled={busyAction !== null || Boolean(pendingOutcome && resourceDraft.connectionIds.length === 0)}
                       onClick={() => void saveResources()}
                     >
-                      {busyAction === `resources:${selectedCoworker.id}` ? "Saving…" : "Save access"}
+                      {busyAction === `resources:${selectedCoworker.id}`
+                        ? "Saving…"
+                        : pendingOutcome
+                          ? "Save and continue"
+                          : "Save access"}
                     </Button>
                     <Button size="sm" variant="ghost" disabled={busyAction !== null} onClick={() => setResourcesOpen(false)}>Cancel</Button>
                   </div>

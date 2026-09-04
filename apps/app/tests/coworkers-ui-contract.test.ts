@@ -87,6 +87,19 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("Your goal");
   });
 
+  test("keeps first-run access focused on one app and continues with an unsent draft", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    expect(panel).toContain("Add private information");
+    expect(panel).toContain("Optional · {resourceDraft.agentFileIds.length} files · {resourceDraft.memoryIds.length} memories");
+    expect(panel).toContain("Choose one app above to continue to your chat.");
+    expect(panel).toContain("pendingOutcome && resourceDraft.connectionIds.length === 0");
+    expect(panel).toContain("if (sessionId && !pendingOutcome)");
+    expect(panel).toContain('pendingOutcome\n                          ? "Save and continue"');
+    expect(panel).toContain("if (pendingOutcome && resourceDraft.connectionIds.length > 0) startChat(selectedCoworker)");
+    expect(panel).toContain("sendImmediately: false");
+    expect(panel).toContain("Private information only goes to a model approved for private data.");
+  });
+
   test("suggests a coworker deterministically without sending the outcome anywhere", () => {
     expect(suggestCoworkerTemplate("Compare validators and cite current public evidence")).toBe("market_analyst");
     expect(suggestCoworkerTemplate("Alert me when liquidation risk rises")).toBe("risk_monitor");
