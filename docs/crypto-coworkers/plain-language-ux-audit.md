@@ -1,0 +1,41 @@
+# Plain-language Coworker UX audit
+
+Date: 2026-09-05  
+Scope: first-run Home, Coworkers, Crypto Apps, Agent Files, and the private-mode control  
+Audience: a non-technical invite user who wants useful crypto work within five minutes
+
+## Activation target
+
+The first useful moment is a completed, cited crypto research answer or a prepared testnet wallet review. The user should reach it by stating one outcome, accepting or changing Matterhorn's coworker suggestion, choosing narrowly scoped access, and starting the chat. The product must not require the user to understand agents, tool registries, capabilities, providers, storage protocols, or transaction infrastructure.
+
+## What already works
+
+- Home starts with one plain-language outcome field and four recognizable jobs.
+- Matterhorn suggests a coworker locally and lets the user override that suggestion.
+- Access selection happens before work starts; files, saved memory, and apps remain explicit.
+- Private mode is a visible composer control and explains when Venice is unavailable or needs setup.
+- Agent Files explains accepted formats, secret blocking, storage duration, and the optional encrypted testnet backup without asking for keys.
+- Crypto Apps separates research, monitoring, wallet review, and safety checks, and keeps wallet approval visible.
+- Coworker detail exposes one contextual next action and puts limits, activity, technical proof, and destructive controls behind deliberate disclosure.
+
+## Issues found
+
+### P1 — A direct first visit to Coworkers lacks enough decision context
+
+The empty panel presents four job names as equal-width buttons, but hides the short explanation already present in the source data. A newcomer opening Coworkers directly must guess the difference between market research, risk monitoring, wallet preparation, and treasury tracking.
+
+Recommended change: show the existing one-sentence explanation inside each choice, add a direct instruction to choose one, and remove the arbitrary visual preference for the first option. Preserve the immediate path into access review and the connected-wallet-only boundary.
+
+### P2 — Role language is not fully consistent across surfaces
+
+Home uses `Watch risk`, `Prepare a wallet review`, and `Track balances`; Coworkers uses `Monitor risk`, `Prepare wallet actions`, and `Track treasury`. Each phrase is understandable, but switching nouns makes the product feel more complicated than it is.
+
+Recommended follow-up: choose the Home wording as the user-facing vocabulary and keep internal template IDs unchanged. Do this separately so the first-run fix stays reviewable.
+
+### P2 — Technical storage and certification facts still need rendered browser verification
+
+The source places Walrus, Sui, hashes, manifests, and certification detail behind secondary disclosures. This is the correct hierarchy, but it still needs authenticated 320/375/768/1024/1440 px, keyboard, and screen-reader acceptance against the release candidate.
+
+## Decision for this PR
+
+Fix the direct first-visit P1 issue only. The change is additive UI guidance: it does not alter coworker templates, permissions, app scopes, privacy classification, transaction preparation, wallet signing, or submission behavior.

@@ -986,17 +986,25 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
         ) : coworkers.length === 0 ? (
           <div className="py-8">
             <UserRound aria-hidden="true" className="size-5 text-dls-secondary" />
-            <h3 className="mt-3 text-sm font-semibold text-dls-text">Who should help first?</h3>
-            <p className="mt-2 text-sm leading-6 text-dls-secondary">Choose one job. Anything involving funds stops for your wallet approval.</p>
+            <h3 className="mt-3 text-sm font-semibold text-dls-text">What do you want help with?</h3>
+            <p className="mt-2 text-sm leading-6 text-dls-secondary">
+              Choose one to continue. You will review its access before it starts. Anything involving funds stops for your wallet approval.
+            </p>
             <div className="mt-4 grid gap-2">
-              {COWORKER_CHOICES.map((choice, index) => (
+              {COWORKER_CHOICES.map((choice) => (
                 <Button
                   key={choice.id}
-                  variant={index === 0 ? "default" : "outline"}
+                  variant="outline"
+                  className="h-auto min-h-14 justify-start whitespace-normal px-3 py-2 text-left"
                   disabled={creating !== null}
                   onClick={() => void createCoworker(choice.id)}
                 >
-                  {creating === choice.id ? "Adding…" : choice.label}
+                  <span className="block min-w-0">
+                    <span className="block text-sm font-medium text-dls-text">
+                      {creating === choice.id ? "Adding…" : choice.label}
+                    </span>
+                    <span className="mt-0.5 block text-xs font-normal leading-5 text-dls-secondary">{choice.summary}</span>
+                  </span>
                 </Button>
               ))}
             </div>
