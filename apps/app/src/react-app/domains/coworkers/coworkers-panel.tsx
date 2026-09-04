@@ -76,6 +76,7 @@ export type SessionCoworkersPanelProps = {
   workspaceId: string | null;
   selectedSessionId: string | null;
   selectedWorkspaceId: string;
+  compactHeader?: boolean;
   onClose: () => void;
   onBrowseApps: () => void;
   onBrowseFiles: () => void;
@@ -94,6 +95,18 @@ type CoworkerResourceDraft = {
   memoryIds: string[];
   connectionIds: string[];
 };
+
+type OptionalCoworkerResource<T> =
+  | { available: true; data: T }
+  | { available: false; data: null };
+
+async function loadOptionalCoworkerResource<T>(request: Promise<T>): Promise<OptionalCoworkerResource<T>> {
+  try {
+    return { available: true, data: await request };
+  } catch {
+    return { available: false, data: null };
+  }
+}
 
 const EMPTY_RESOURCE_DRAFT: CoworkerResourceDraft = {
   agentFileIds: [],
@@ -143,7 +156,7 @@ export function resolveCoworkerNextStep(input: {
     return { action: "wait", label: "Checking…", message: "Checking what this coworker can use…" };
   }
   if (!input.connectionsAvailable) {
-    return { action: "none", label: null, message: "Apps are unavailable right now. Try again later." };
+    return { action: "none", label: null, message: "App connections aren't available here yet." };
   }
   if (input.connectedAppCount === 0) {
     return { action: "connect", label: "Choose an app", message: "Choose an app for this coworker." };
@@ -383,52 +396,42 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     retry: false,
     queryFn: async () => {
       if (!props.client || !selectedCoworker) throw new Error("coworker_unavailable");
-      const cryptoAppsRequest = Promise.all([
+      const cryptoAppsRequest = loadOptionalCoworkerResource(Promise.all([
         props.client.listCryptoApps(),
         props.client.listCryptoAppConnections(workspaceId),
       ])
         .then(([catalog, connections]) => {
           if (catalog.mode !== connections.mode) throw new Error("crypto_app_mode_mismatch");
-          return { available: true, apps: catalog.apps, connections: connections.connections };
-        })
-        .catch((cause: unknown) => {
-          if (cause instanceof MatterhornServerError && cause.code === "crypto_app_gateway_disabled") {
-            const unavailable: {
-              available: false;
-              apps: MatterhornCryptoAppCatalogSummary[];
-              connections: MatterhornCryptoAppConnectionView[];
-            } = {
-              available: false,
-              apps: [],
-              connections: [],
-            };
-            return unavailable;
-          }
-          throw cause;
-        });
+          return { apps: catalog.apps, connections: connections.connections };
+        }));
       const [scope, recommendation, files, memories, cryptoApps] = await Promise.all([
         props.client.getCoworkerResources(workspaceId, selectedCoworker.id),
         props.client.getCoworkerResourceRecommendation(workspaceId, selectedCoworker.id),
-        props.client.listAgentFiles(workspaceId),
-        props.client.listWorkspaceMemory(workspaceId, { limit: 80 }),
+        loadOptionalCoworkerResource(props.client.listAgentFiles(workspaceId)),
+        loadOptionalCoworkerResource(props.client.listWorkspaceMemory(workspaceId, { limit: 80 })),
         cryptoAppsRequest,
       ]);
+      const fileItems = files.data?.items ?? [];
+      const memoryRecords = memories.data?.records ?? [];
+      const cryptoAppCatalog = cryptoApps.data?.apps ?? [];
+      const cryptoAppConnections = cryptoApps.data?.connections ?? [];
       return {
         scope,
         recommendation: recommendation.recommendation,
-        filesAvailable: files.available,
-        files: files.items.filter((item) => item.file.access.coworkerIds.includes(selectedCoworker.id)),
-        memories: memories.records.filter((record) => record.canUseInChat && record.sensitivity !== "forbidden_secret"),
+        filesAvailable: files.available && files.data.available,
+        files: fileItems.filter((item) => item.file.access.coworkerIds.includes(selectedCoworker.id)),
+        memoriesAvailable: memories.available,
+        memories: memoryRecords.filter((record) => record.canUseInChat && record.sensitivity !== "forbidden_secret"),
         connectionsAvailable: cryptoApps.available,
-        allConnections: cryptoApps.connections,
-        connections: cryptoApps.connections.filter((connection) => (
+        allConnections: cryptoAppConnections,
+        connections: cryptoAppConnections.filter((connection) => (
           connection.state === "active"
           && connection.availability === "available"
           && selectedCoworker.allowedAppIds.includes(connection.appId)
           && connection.grantedActionIds.some((actionId) => selectedCoworker.allowedActionIds.includes(actionId))
           && connection.grantedNetworks.some((network) => selectedCoworker.allowedNetworks.includes(network))
         )),
-        apps: cryptoApps.apps.filter((app) => buildCoworkerAppConnectionDraft(selectedCoworker, app) !== null),
+        apps: cryptoAppCatalog.filter((app) => buildCoworkerAppConnectionDraft(selectedCoworker, app) !== null),
       };
     },
   });
@@ -958,13 +961,25 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
 
   return (
     <div className="matterhorn-rail-content flex h-full min-h-0 flex-col bg-dls-background" data-testid="coworkers-panel">
-      <header className="shrink-0 border-b border-dls-border/70 px-4 py-4">
+      <header className={cn(
+        "shrink-0 border-b border-dls-border/70 px-4",
+        props.compactHeader ? "py-3" : "py-4",
+      )}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-dls-text">Coworkers</h2>
-            <p className="mt-1 text-xs leading-5 text-dls-secondary">Pick who helps. You choose what it can access.</p>
+            <h2 className={cn("text-base font-semibold text-dls-text", props.compactHeader && "sr-only")}>Coworkers</h2>
+            <p className={cn("text-xs leading-5 text-dls-secondary", !props.compactHeader && "mt-1")}>
+              Pick who helps. You choose what it can access.
+            </p>
           </div>
-          <Button size="icon-sm" variant="ghost" title="Refresh coworkers" aria-label="Refresh coworkers" onClick={() => void refresh()}>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className={cn(props.compactHeader && "size-11")}
+            title="Refresh coworkers"
+            aria-label="Refresh coworkers"
+            onClick={() => void refresh()}
+          >
             <RefreshCw aria-hidden="true" />
           </Button>
         </div>
@@ -1168,10 +1183,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   <fieldset>
                     <legend className="text-xs font-medium text-dls-text">Apps</legend>
                     {!resourceQuery.data.connectionsAvailable ? (
-                      <div className="mt-2 flex items-center justify-between gap-3">
-                        <p className="text-xs leading-5 text-dls-secondary">App connections are not enabled in this environment.</p>
-                        <Button size="xs" variant="outline" onClick={props.onBrowseApps}>Browse apps</Button>
-                      </div>
+                      <p className="mt-2 text-xs leading-5 text-dls-secondary">App connections aren't available here yet.</p>
                     ) : resourceQuery.data.connections.length ? (
                       <div className="mt-2 grid gap-2">
                         {resourceQuery.data.connections.map((connection) => (
@@ -1294,7 +1306,9 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
 
                   <fieldset>
                     <legend className="text-xs font-medium text-dls-text">Saved memory</legend>
-                    {resourceQuery.data.memories.length ? (
+                    {!resourceQuery.data.memoriesAvailable ? (
+                      <p className="mt-2 text-xs leading-5 text-dls-secondary">Saved memory is unavailable right now.</p>
+                    ) : resourceQuery.data.memories.length ? (
                       <div className="mt-2 grid gap-2">
                         {resourceQuery.data.memories.map((record) => (
                           <label key={record.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
