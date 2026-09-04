@@ -113,6 +113,7 @@ function privateMemoryRecord(overrides: Record<string, unknown> = {}) {
 }
 
 function startMockOpencode(input?: {
+  abortStatus?: number;
   invalidList?: boolean;
   holdCommand?: Promise<void>;
   sessionMessages?: unknown[] | (() => unknown[]);
@@ -336,6 +337,9 @@ function startMockOpencode(input?: {
       }
 
       if (url.pathname === "/session/ses_1/abort" && request.method === "POST") {
+        if (input?.abortStatus && input.abortStatus !== 200) {
+          return Response.json({ error: "upstream abort unavailable" }, { status: input.abortStatus });
+        }
         return Response.json(true);
       }
 
@@ -1092,6 +1096,141 @@ describe("workspace session read APIs", () => {
     });
     expect(stable.status).toBe(202);
     expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(1);
+    expect(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/abort"))
+      .toBeLessThan(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/summarize"));
+  });
+
+  test("replaces trusted proxy prompts only after the previous response is stopped", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const promptUrl = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/prompt_async`;
+    const prompt = await fetch(promptUrl, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messageID: "caller_supplied_message_id",
+        parts: [{ type: "text", text: "Compare public validator performance" }],
+        model: { providerID: "openai", modelID: "gpt-4.1" },
+      }),
+    });
+
+    expect(prompt.status).toBe(200);
+    expect(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/abort"))
+      .toBeLessThan(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/prompt_async"));
+    const forwardedPrompt = mock.requests.find((entry) => entry.pathname === "/session/ses_1/prompt_async");
+    expect((forwardedPrompt?.body as { messageID?: unknown })?.messageID)
+      .toMatch(/^msg_[a-f0-9]{32}$/);
+    expect((forwardedPrompt?.body as { messageID?: unknown })?.messageID)
+      .not.toBe("caller_supplied_message_id");
+
+    const blockedRoot = await createWorkspaceRoot();
+    const blockedMock = startMockOpencode({ abortStatus: 503 });
+    const blockedOpenwork = await startOpenworkServer({
+      workspaceRoot: blockedRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${blockedMock.server.port}`,
+      readOnly: false,
+    });
+    const blocked = await fetch(
+      `http://127.0.0.1:${blockedOpenwork.server.port}/workspace/ws_1/opencode/session/ses_1/prompt_async`,
+      {
+        method: "POST",
+        headers: { ...auth(blockedOpenwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parts: [{ type: "text", text: "Start a replacement response" }],
+          model: { providerID: "openai", modelID: "gpt-4.1" },
+        }),
+      },
+    );
+
+    expect(blocked.status).toBe(502);
+    await expect(blocked.json()).resolves.toEqual({
+      code: "agent_run_abort_failed",
+      message: "Matterhorn could not stop the previous response. Nothing new was sent.",
+    });
+    expect(blockedMock.requests.filter((entry) => entry.pathname === "/session/ses_1/prompt_async"))
+      .toHaveLength(0);
+  });
+
+  test("applies the guarded replacement boundary to synchronous trusted messages", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+
+    const response = await fetch(
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/message`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageID: "caller_supplied_sync_id",
+          parts: [{ type: "text", text: "Summarize public subnet activity" }],
+          model: { providerID: "openai", modelID: "gpt-4.1" },
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const abortIndex = mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/abort");
+    const messageIndex = mock.requests.findIndex((entry) => (
+      entry.pathname === "/session/ses_1/message" && entry.method === "POST"
+    ));
+    expect(abortIndex).toBeLessThan(messageIndex);
+    const forwarded = mock.requests[messageIndex]?.body as { messageID?: unknown };
+    expect(forwarded.messageID).toMatch(/^msg_[a-f0-9]{32}$/);
+    expect(forwarded.messageID).not.toBe("caller_supplied_sync_id");
+  });
+
+  test("guards trusted raw compaction and sends nothing when replacement abort fails", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const summarizeUrl = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/summarize`;
+    const body = JSON.stringify({ providerID: "ollama", modelID: "local-private" });
+
+    const accepted = await fetch(summarizeUrl, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body,
+    });
+    expect(accepted.status).toBe(200);
+    expect(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/abort"))
+      .toBeLessThan(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/summarize"));
+
+    const blockedRoot = await createWorkspaceRoot();
+    const blockedMock = startMockOpencode({ abortStatus: 503 });
+    const blockedOpenwork = await startOpenworkServer({
+      workspaceRoot: blockedRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${blockedMock.server.port}`,
+      readOnly: false,
+    });
+    const blocked = await fetch(
+      `http://127.0.0.1:${blockedOpenwork.server.port}/workspace/ws_1/opencode/session/ses_1/summarize`,
+      {
+        method: "POST",
+        headers: { ...auth(blockedOpenwork.token), "Content-Type": "application/json" },
+        body,
+      },
+    );
+    expect(blocked.status).toBe(502);
+    await expect(blocked.json()).resolves.toEqual({
+      code: "agent_run_abort_failed",
+      message: "Matterhorn could not stop the previous response. Nothing new was sent.",
+    });
+    expect(blockedMock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize"))
+      .toHaveLength(0);
   });
 
   test("allows disclosed public research only through the authoritative gateway", async () => {
@@ -1937,7 +2076,7 @@ describe("workspace session read APIs", () => {
       fetch(`http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/command`, {
         method: "POST",
         headers: { ...auth(openwork.token), "Content-Type": "application/json" },
-        body: JSON.stringify({ command: "review", arguments: "" }),
+        body: JSON.stringify({ command: "review", arguments: "", messageID: "caller_supplied_command_id" }),
       }),
       // This guards against accidentally awaiting the unresolved upstream
       // command, not against normal CI scheduler latency.
@@ -1950,6 +2089,39 @@ describe("workspace session read APIs", () => {
     const sawCommand = await waitUntil(() => mock.requests.some((request) => request.pathname === "/session/ses_1/command"));
     command.resolve();
     expect(sawCommand).toBe(true);
+    expect(mock.requests.findIndex((request) => request.pathname === "/session/ses_1/abort"))
+      .toBeLessThan(mock.requests.findIndex((request) => request.pathname === "/session/ses_1/command"));
+    const forwardedCommand = mock.requests.find((request) => request.pathname === "/session/ses_1/command");
+    expect((forwardedCommand?.body as { messageID?: unknown })?.messageID)
+      .toMatch(/^msg_[a-f0-9]{32}$/);
+    expect((forwardedCommand?.body as { messageID?: unknown })?.messageID)
+      .not.toBe("caller_supplied_command_id");
+  });
+
+  test("does not dispatch a trusted command when the previous response cannot be stopped", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode({ abortStatus: 503 });
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+
+    const response = await fetch(
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/command`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({ command: "review", arguments: "" }),
+      },
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      code: "agent_run_abort_failed",
+      message: "Matterhorn could not stop the previous response. Nothing new was sent.",
+    });
+    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/command"))
+      .toHaveLength(0);
   });
 
   test("enforces deny-by-default tools for Discuss and Plan prompts", async () => {

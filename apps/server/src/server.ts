@@ -627,6 +627,7 @@ import {
   MatterhornGuardedAgentRuntime,
   type GuardedPromptAcceptance,
   type GuardedPromptAuthorization,
+  type GuardedPromptInput,
 } from "./guarded-agent-runtime.js";
 import { canonicalJson } from "./guarded-runtime-crypto.js";
 import {
@@ -1303,7 +1304,7 @@ function assertOpencodeProxyAllowed(access: ClientAccess, request: Request, prox
 }
 
 function isSessionPromptProxyRequest(method: string, proxyPath: string) {
-  return method === "POST" && /^\/session\/[^/]+\/prompt_async$/.test(normalizeOpencodeProxyPath(proxyPath));
+  return method === "POST" && /^\/session\/[^/]+\/(?:message|prompt_async)$/.test(normalizeOpencodeProxyPath(proxyPath));
 }
 
 function isRestrictedSessionMutationProxyRequest(method: string, proxyPath: string) {
@@ -2429,6 +2430,27 @@ function unwrapOpencodeResult<T, E>(result: OpencodeClientResult<T, E>, path: st
   });
 }
 
+async function abortWorkspaceSessionBeforeReplacement(
+  config: ServerConfig,
+  workspace: WorkspaceInfo,
+  sessionId: string,
+): Promise<void> {
+  const directory = resolveOpencodeDirectory(workspace) ?? undefined;
+  const opencode = createWorkspaceOpencodeClient(config, workspace);
+  try {
+    unwrapOpencodeResult(
+      await opencode.session.abort({ sessionID: sessionId, ...(directory ? { directory } : {}) }),
+      `/session/${encodeURIComponent(sessionId)}/abort`,
+    );
+  } catch {
+    throw new ApiError(
+      502,
+      "agent_run_abort_failed",
+      "Matterhorn could not stop the previous response. Nothing new was sent.",
+    );
+  }
+}
+
 function recordLike(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
@@ -2745,6 +2767,17 @@ async function proxyOpencodeRequest(input: {
   let usageReservationId: string | null = null;
   let usageSubject: ModelUsageSubject | null = null;
   let guardedRunId: string | null = null;
+  let guardedPromptMessageId: string | null = null;
+  let guardedPromptStart: {
+    input: GuardedPromptInput;
+    authorization: GuardedPromptAuthorization;
+  } | null = null;
+  let guardedSummaryStart: {
+    input: GuardedPromptInput;
+    authorization: GuardedPromptAuthorization;
+    sessionId: string;
+  } | null = null;
+  let completeGuardedRunAfterResponse = false;
   if (isSessionPromptProxyRequest(method, proxyPath)) {
     let payload: Record<string, unknown>;
     try {
@@ -2818,6 +2851,12 @@ async function proxyOpencodeRequest(input: {
     const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
     promptAudit = { executionMode: bodyExecutionMode, agent, sessionId };
     if (workspace) {
+      // The server owns the upstream message identifier so the OpenCode guard
+      // can bind provider events and tool calls to this exact guarded run.
+      // Never accept a caller-supplied id: it could alias an earlier run.
+      guardedPromptMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
+      payload.messageID = guardedPromptMessageId;
+      body = JSON.stringify(payload);
       promptPermissionRequest = {
         workspace,
         sessionId,
@@ -2832,22 +2871,25 @@ async function proxyOpencodeRequest(input: {
       if (input.guardedRuntime.capabilities.mode === "off") {
         assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
       }
+      const guardedInput: GuardedPromptInput = {
+        workspaceId: workspace.id,
+        sessionId,
+        parts: normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
+        providerId: modelResolution.model.providerID,
+        modelId: modelResolution.model.modelID,
+        agentId: agent,
+        attachmentIds,
+        memoryIds,
+        privacyMode,
+        privacyConsentToken,
+        executionMode: bodyExecutionMode,
+        requestToolProfiles,
+      };
       try {
-        const acceptance = await input.guardedRuntime.acceptPrompt({
-          workspaceId: workspace.id,
-          sessionId,
-          parts: normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
-          providerId: modelResolution.model.providerID,
-          modelId: modelResolution.model.modelID,
-          agentId: agent,
-          attachmentIds,
-          memoryIds,
-          privacyMode,
-          privacyConsentToken,
-          executionMode: bodyExecutionMode,
-          requestToolProfiles,
-        });
-        guardedRunId = acceptance.runId;
+        guardedPromptStart = {
+          input: guardedInput,
+          authorization: input.guardedRuntime.authorizePrompt(guardedInput),
+        };
       } catch (error) {
         throw guardedRuntimeApiError(error);
       }
@@ -2889,10 +2931,10 @@ async function proxyOpencodeRequest(input: {
       const privacyConsentToken = typeof payload.privacyConsentToken === "string" ? payload.privacyConsentToken.trim() : undefined;
       delete payload.privacyMode;
       delete payload.privacyConsentToken;
-      body = JSON.stringify(payload);
-      headers.delete("content-length");
+      const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
+      payload.messageID = userMessageId;
       try {
-        const acceptance = await input.guardedRuntime.acceptPrompt({
+        const guardedInput: GuardedPromptInput = {
           workspaceId: workspace.id,
           sessionId,
           parts: [{ type: "text", text: `/${command}${commandArguments ? ` ${commandArguments}` : ""}` }],
@@ -2902,18 +2944,59 @@ async function proxyOpencodeRequest(input: {
           privacyMode,
           privacyConsentToken,
           executionMode: "work",
-        });
+        };
+        const authorization = input.guardedRuntime.authorizePrompt(guardedInput);
+        if (input.access && input.modelUsageStore) {
+          const usage = await reserveModelUsage({
+            config: input.config,
+            workspace,
+            store: input.modelUsageStore,
+            access: input.access,
+            sessionId,
+            providerId: modelResolution.model.providerID,
+            modelId: modelResolution.model.modelID,
+          });
+          usageReservationId = usage.reservation.reservationId;
+          usageSubject = usage.subject;
+        }
+        await abortWorkspaceSessionBeforeReplacement(input.config, workspace, sessionId);
+        const acceptance = await input.guardedRuntime.startAuthorizedPrompt(guardedInput, authorization);
         guardedRunId = acceptance.runId;
+        input.guardedRuntime.bindUserMessage({
+          runId: guardedRunId,
+          sessionId,
+          messageId: userMessageId,
+        });
       } catch (error) {
-        throw guardedRuntimeApiError(error);
+        input.modelUsageStore?.cancel(usageReservationId);
+        if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+        if (error instanceof GuardedRuntimeError) throw guardedRuntimeApiError(error);
+        throw error;
       }
+      body = JSON.stringify(payload);
+      headers.delete("content-length");
     }
     void fetch(targetUrl, {
       method,
       headers,
       body,
+    }).then((upstream) => {
+      if (!upstream.ok) {
+        input.modelUsageStore?.cancel(usageReservationId);
+        if (guardedRunId) void input.guardedRuntime.failRun(guardedRunId);
+        return;
+      }
+      if (input.modelUsageStore && usageSubject && workspace) {
+        scheduleModelUsageReconciliation({
+          config: input.config,
+          workspace,
+          store: input.modelUsageStore,
+          subject: usageSubject,
+          sessionId: decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? ""),
+        });
+      }
     }).catch(() => {
-      // Command failures are surfaced through the OpenCode event stream.
+      input.modelUsageStore?.cancel(usageReservationId);
       if (guardedRunId) void input.guardedRuntime.failRun(guardedRunId);
     });
     return jsonResponse({ ok: true, accepted: true });
@@ -2921,15 +3004,57 @@ async function proxyOpencodeRequest(input: {
   if (
     method === "POST" &&
     /^\/session\/[^/]+\/summarize$/.test(normalizeOpencodeProxyPath(proxyPath)) &&
-    workspace &&
-    (providerPrivacyEnforcementMode() === "verified_only" || input.guardedRuntime.capabilities.mode !== "off")
+    workspace
   ) {
+    const payload = parseJsonObjectBody(rawBody, "Session summary");
     const modelResolution = await resolveSessionPromptModel(
       input.config,
       workspace,
-      undefined,
+      parseSessionPromptModel(payload),
     );
-    assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
+    const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
+    const privacyMode = parseAgentPrivacyMode(payload.privacyMode);
+    const privacyConsentToken = typeof payload.privacyConsentToken === "string"
+      ? payload.privacyConsentToken.trim()
+      : undefined;
+    delete payload.privacyMode;
+    delete payload.privacyConsentToken;
+    body = JSON.stringify(payload);
+    headers.delete("content-length");
+    const messages = await readWorkspaceSessionMessages(input.config, workspace, sessionId, {});
+    const guardedInput: GuardedPromptInput = {
+      workspaceId: workspace.id,
+      sessionId,
+      parts: sessionCompactionPrivacyParts(messages),
+      providerId: modelResolution.model.providerID,
+      modelId: modelResolution.model.modelID,
+      privacyMode,
+      privacyConsentToken,
+      executionMode: "work",
+      requestToolProfiles: [],
+    };
+    try {
+      guardedSummaryStart = {
+        input: guardedInput,
+        authorization: input.guardedRuntime.authorizePrompt(guardedInput),
+        sessionId,
+      };
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+    if (input.access && input.modelUsageStore) {
+      const usage = await reserveModelUsage({
+        config: input.config,
+        workspace,
+        store: input.modelUsageStore,
+        access: input.access,
+        sessionId,
+        providerId: modelResolution.model.providerID,
+        modelId: modelResolution.model.modelID,
+      });
+      usageReservationId = usage.reservation.reservationId;
+      usageSubject = usage.subject;
+    }
   }
   if (promptPermissionRequest) {
     try {
@@ -2940,6 +3065,54 @@ async function proxyOpencodeRequest(input: {
     } catch (error) {
       input.modelUsageStore?.cancel(usageReservationId);
       if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+      throw error;
+    }
+  }
+  if (guardedPromptStart && workspace && promptAudit) {
+    try {
+      await abortWorkspaceSessionBeforeReplacement(input.config, workspace, promptAudit.sessionId);
+      const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
+        guardedPromptStart.input,
+        guardedPromptStart.authorization,
+      );
+      guardedRunId = acceptance.runId;
+      if (!guardedPromptMessageId) {
+        throw new Error("Matterhorn could not create a guarded message binding.");
+      }
+      input.guardedRuntime.bindUserMessage({
+        runId: guardedRunId,
+        sessionId: promptAudit.sessionId,
+        messageId: guardedPromptMessageId,
+      });
+    } catch (error) {
+      input.modelUsageStore?.cancel(usageReservationId);
+      if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+      if (error instanceof GuardedRuntimeError) throw guardedRuntimeApiError(error);
+      throw error;
+    }
+  }
+  if (guardedSummaryStart && workspace) {
+    try {
+      const currentMessages = await readWorkspaceSessionMessages(
+        input.config,
+        workspace,
+        guardedSummaryStart.sessionId,
+        {},
+      );
+      await abortWorkspaceSessionBeforeReplacement(input.config, workspace, guardedSummaryStart.sessionId);
+      const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
+        {
+          ...guardedSummaryStart.input,
+          parts: sessionCompactionPrivacyParts(currentMessages),
+        },
+        guardedSummaryStart.authorization,
+      );
+      guardedRunId = acceptance.runId;
+      completeGuardedRunAfterResponse = true;
+    } catch (error) {
+      input.modelUsageStore?.cancel(usageReservationId);
+      if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+      if (error instanceof GuardedRuntimeError) throw guardedRuntimeApiError(error);
       throw error;
     }
   }
@@ -3054,6 +3227,19 @@ async function proxyOpencodeRequest(input: {
         store: input.modelUsageStore,
         subject: usageSubject,
         sessionId: promptAudit.sessionId,
+      });
+    }
+  }
+
+  if (response.ok && completeGuardedRunAfterResponse && guardedRunId) {
+    await input.guardedRuntime.completeTrustedGatewayRun(guardedRunId, "success");
+    if (input.modelUsageStore && usageSubject && workspace && guardedSummaryStart) {
+      scheduleModelUsageReconciliation({
+        config: input.config,
+        workspace,
+        store: input.modelUsageStore,
+        subject: usageSubject,
+        sessionId: guardedSummaryStart.sessionId,
       });
     }
   }
@@ -14149,6 +14335,7 @@ function createRoutes(
       // before dispatch so a concurrent message, tool result, edit, or revert
       // invalidates the authorization instead of being silently compacted.
       const currentMessages = await readWorkspaceSessionMessages(config, workspace, sessionId, {});
+      await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
       guardedAcceptance = await guardedRuntime.startAuthorizedPrompt({
         ...guardedInput,
         parts: sessionCompactionPrivacyParts(currentMessages),
@@ -14361,10 +14548,7 @@ function createRoutes(
       // A follow-up is a replacement run. Abort any in-flight response before
       // consuming consent or starting the newly authorized guarded run; abort
       // is idempotent when the session is already idle.
-      unwrapOpencodeResult(
-        await sessionApi.abort({ sessionID: sessionId, ...(directory ? { directory } : {}) }),
-        `/session/${encodeURIComponent(sessionId)}/abort`,
-      );
+      await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
     } catch (error) {
       modelUsageStore.cancel(usage.reservation.reservationId);
       throw error;
