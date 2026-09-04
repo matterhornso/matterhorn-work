@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { startServer } from "./server.js";
+import { MatterhornAgentRunReceiptStore } from "./agent-run-receipts.js";
+import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
 import type { ServerConfig } from "./types.js";
 
 type Served = {
@@ -501,6 +503,129 @@ describe("project evidence routes", () => {
 
     const serialized = JSON.stringify({ hyperliquidFile, polymarketFile, evidence: evidence.payload.items });
     expect(serialized).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+  });
+
+  test("Polymarket v2 wallet receipts bind to the exact reviewed market, token, outcome, and side", async () => {
+    const { base, dir } = await boot();
+    const tokenId = "71321045679252212594626385532706912750332728571942532289631379312455583992563";
+    const marketId = `0x${"a".repeat(64)}`;
+    const signer = `0x${"1".repeat(40)}`;
+    const reviewedAction = buildReviewedActionHandoffV2({
+      handoff: {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "polymarket",
+        source: "agent-card",
+        draft: {
+          operation: "buy",
+          marketId,
+          tokenId,
+          outcome: "Yes",
+          orderType: "FAK",
+          limitPrice: 0.47,
+          tickSize: "0.01",
+          negativeRisk: false,
+          amountUsdc: 25,
+          amountShares: null,
+          slippageTolerance: 1,
+          orderIds: [],
+          cancelAll: false,
+        },
+      },
+      runId: "run_polymarket_wallet_receipt",
+      signer,
+      exactTerms: {
+        network: "polymarket:polygon",
+        operation: "buy",
+        amount: "25",
+        asset: tokenId,
+        recipient: marketId,
+        slippage: "100bps",
+        signer,
+      },
+      simulation: { reference: "book-simulation-reference", block: "book-snapshot", simulatedAt: new Date() },
+      preparedAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const receipts = new MatterhornAgentRunReceiptStore();
+    await receipts.start({
+      runId: reviewedAction.runId,
+      workspaceId: "ws_evidence",
+      sessionId: "sess_polymarket_wallet_receipt",
+      consentUsed: false,
+      preflight: {
+        version: "matterhorn.agent-privacy-preflight.v1",
+        requestHash: "polymarket-wallet-receipt-request",
+        workspaceId: "ws_evidence",
+        sessionId: "sess_polymarket_wallet_receipt",
+        requestedMode: "transaction",
+        effectiveMode: "transaction",
+        decision: "allow",
+        provider: {
+          id: "local",
+          name: "Local runtime",
+          modelId: "test",
+          privacyStatus: "local_processing",
+          trainingUse: "none",
+          retentionDays: 0,
+          policyUrl: null,
+          dataLeavesMatterhorn: false,
+        },
+        detectedData: { labels: ["wallet_private"], categories: ["transaction_intent"], redactionCount: 0 },
+        reason: "Wallet receipt binding test.",
+      },
+    });
+    await receipts.addReviewedAction({
+      runId: reviewedAction.runId,
+      intentHash: reviewedAction.intentHash,
+      policyHash: reviewedAction.policyHash,
+      simulationReference: reviewedAction.simulation.reference,
+    });
+
+    const tampered = await jsonFetch(base, "/workspace/ws_evidence/polymarket/orders/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        reviewedAction,
+        receiptIntentHash: reviewedAction.intentHash,
+        receipt: {
+          status: "filled",
+          submittedAt: new Date().toISOString(),
+          orderId: "pm-order-tampered",
+          marketId,
+          tokenId: "9",
+          outcome: "Yes",
+          side: "buy",
+        },
+      }),
+    });
+    expect(tampered.response.status).toBe(409);
+    expect(tampered.payload.code).toBe("reviewed_action_receipt_terms_mismatch");
+
+    const saved = await jsonFetch(base, "/workspace/ws_evidence/polymarket/orders/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_polymarket_wallet_receipt",
+        reviewedAction,
+        receiptIntentHash: reviewedAction.intentHash,
+        receipt: {
+          status: "filled",
+          submittedAt: new Date().toISOString(),
+          orderId: "pm-order-reviewed",
+          marketId,
+          tokenId,
+          outcome: "Yes",
+          side: "buy",
+        },
+      }),
+    });
+    expect(saved.response.status).toBe(201);
+    expect(saved.payload.receipt).toMatchObject({ marketId, tokenId, outcome: "Yes", side: "buy" });
+    expect(existsSync(join(dir, saved.payload.evidence.outputPath))).toBe(true);
+    const reconciled = await jsonFetch(base, `/workspace/ws_evidence/agent-run-receipts/${reviewedAction.runId}`);
+    expect(reconciled.response.status).toBe(200);
+    expect(reconciled.payload.item.reviewedActions).toContainEqual(expect.objectContaining({
+      intentHash: reviewedAction.intentHash,
+      publicReceipt: "pm-order-reviewed",
+    }));
   });
 
   test("workspace market receipt routes reject mismatches and signing secrets before storage", async () => {

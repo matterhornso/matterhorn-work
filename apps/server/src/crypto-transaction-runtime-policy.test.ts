@@ -346,4 +346,73 @@ describe("production transaction runtime policy", () => {
     });
     expect(facts.complianceAllowed).toBe(false);
   });
+
+  test("admits only the exact Polymarket preview under mainnet and trusted jurisdiction policy", () => {
+    const enabledPolicy = { ...walletPolicy(), mainnetEnabled: true };
+    const layers = buildMatterhornRuntimeTransactionPolicyLayers({
+      workspaceId: "ws_policy",
+      ownerId: "account_policy",
+      organizationId: null,
+      appId: "matterhorn.polymarket-wallet-preview",
+      actionId: "polymarket_preview_order",
+      network: "polymarket:polygon",
+      runId: "run_policy",
+      callId: "call_polymarket",
+      walletPolicy: enabledPolicy,
+      now: NOW,
+    });
+    expect(layers.platform).toMatchObject({
+      state: "active",
+      allowedAppIds: ["matterhorn.polymarket-wallet-preview"],
+      allowedActionIds: ["polymarket_preview_order"],
+      allowedNetworks: ["polymarket:polygon"],
+      walletSubmissionOnly: true,
+    });
+    expect(buildMatterhornRuntimeTransactionPolicyLayers({
+      workspaceId: "ws_policy",
+      ownerId: "account_policy",
+      organizationId: null,
+      appId: "matterhorn.polymarket-wallet-preview",
+      actionId: "polymarket_preview_order",
+      network: "polymarket:polygon",
+      runId: "run_policy",
+      callId: "call_polymarket",
+      walletPolicy: walletPolicy(),
+      now: NOW,
+    }).platform.state).toBe("deny");
+
+    const baseResult = hyperliquidResult();
+    const polymarketIntent: MatterhornCryptoIntent = {
+      ...intent(),
+      appId: "matterhorn.polymarket-wallet-preview",
+      connectionId: "cxc_polymarket",
+      actionId: "polymarket_preview_order",
+      protocol: "polymarket",
+      network: "polymarket:polygon",
+      operation: "buy",
+      asset: "71321045679252212594626385532706912750332728571942532289631379312455583992563",
+      amount: "25",
+      recipient: `0x${"a".repeat(64)}`,
+    };
+    const facts = resolveMatterhornRuntimeTransactionFacts({
+      adapterResult: {
+        ...baseResult,
+        app: { id: polymarketIntent.appId, manifestRevision: "1.0.0", connectionId: "cxc_polymarket" },
+        action: { id: polymarketIntent.actionId, access: "prepare", network: polymarketIntent.network },
+        result: { side: "buy", amountUsdc: "25", maximumSpendUsdc: "25" },
+      },
+      intent: polymarketIntent,
+      existingIntents: [],
+      jurisdictionPolicy: {
+        evidenceHash: "e".repeat(64),
+        policyVersion: MATTERHORN_POLYMARKET_JURISDICTION_POLICY_VERSION,
+        policyHash: MATTERHORN_POLYMARKET_JURISDICTION_POLICY_HASH,
+        decisionHash: "d".repeat(64),
+        validUntil: "2026-09-01T12:00:30.000Z",
+        polymarketOpenPositionAllowed: true,
+      },
+      now: NOW,
+    });
+    expect(facts).toMatchObject({ notionalUsd: 25, complianceAllowed: true });
+  });
 });

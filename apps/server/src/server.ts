@@ -784,9 +784,19 @@ function assertOptionalReviewedActionReceiptBinding(
       const asset = walletHandoff ? readStringField(walletHandoff, "asset") : "";
       if (asset && handoff.asset && asset !== handoff.asset) failTerms();
     } else {
-      const marketId = walletHandoff ? readStringField(walletHandoff, "marketId") : "";
-      const outcome = walletHandoff ? readStringField(walletHandoff, "outcome") : "";
-      if ((marketId && handoff.recipient && marketId !== handoff.recipient) || (outcome && handoff.asset && outcome !== handoff.asset)) failTerms();
+      const receipt = isRecord(body.receipt) ? body.receipt : null;
+      const marketId = readStringField(receipt, "marketId") || (walletHandoff ? readStringField(walletHandoff, "marketId") : "");
+      const order = walletHandoff && isRecord(walletHandoff.order) ? walletHandoff.order : null;
+      const tokenId = readStringField(receipt, "tokenId") || readStringField(order, "tokenId");
+      const outcome = readStringField(receipt, "outcome") || (walletHandoff ? readStringField(walletHandoff, "outcome") : "");
+      const side = readStringField(receipt, "side");
+      const reviewedDraft = handoff.draft.operation === "buy" || handoff.draft.operation === "sell"
+        ? handoff.draft
+        : null;
+      if ((marketId && handoff.recipient && marketId !== handoff.recipient)
+        || (tokenId && handoff.asset && tokenId !== handoff.asset)
+        || (outcome && reviewedDraft && outcome !== reviewedDraft.outcome)
+        || (side && reviewedDraft && side !== reviewedDraft.operation)) failTerms();
     }
   }
   return { handoff, receiptIntentHash };
@@ -18500,13 +18510,51 @@ function createRoutes(
       throw new ApiError(400, "market_secret_rejected", `Polymarket receipt evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
     }
     const handoff = coercePolymarketHandoffReference(body.handoff);
-    if (!handoff) {
+    if (!handoff && !receiptBinding) {
       throw new ApiError(400, "invalid_handoff", "A valid signing handoff (previewSha256, handoffSha256, marketId, outcome, side) is required to save a receipt.");
     }
-    const verification = verifyPolymarketReceipt(handoff, coercePolymarketReceiptInput(body.receipt));
-    if (!verification.ok || !verification.receipt) {
-      throw new ApiError(400, "receipt_mismatch", verification.errors.join(" ") || "The Polymarket receipt did not match the reviewed handoff.");
+    const legacyVerification = handoff
+      ? verifyPolymarketReceipt(handoff, coercePolymarketReceiptInput(body.receipt))
+      : null;
+    if (legacyVerification && (!legacyVerification.ok || !legacyVerification.receipt)) {
+      throw new ApiError(400, "receipt_mismatch", legacyVerification.errors.join(" ") || "The Polymarket receipt did not match the reviewed handoff.");
     }
+    const reviewedDraft = receiptBinding?.handoff.draft.operation === "buy"
+      || receiptBinding?.handoff.draft.operation === "sell"
+      ? receiptBinding.handoff.draft
+      : null;
+    const rawReceipt = isRecord(body.receipt) ? body.receipt : null;
+    if (!legacyVerification?.receipt && (!receiptBinding || !reviewedDraft || !rawReceipt)) {
+      throw new ApiError(400, "receipt_mismatch", "A public receipt must match the exact reviewed Polymarket order.");
+    }
+    const reviewedStatus = rawReceipt ? readStringField(rawReceipt, "status").slice(0, 80) : "";
+    const reviewedSubmittedAt = rawReceipt ? readStringField(rawReceipt, "submittedAt") : "";
+    const reviewedOrderId = rawReceipt ? readStringField(rawReceipt, "orderId") : "";
+    const reviewedTxHash = rawReceipt ? readStringField(rawReceipt, "txHash") : "";
+    if (!legacyVerification?.receipt && (!/^[A-Za-z0-9_-]{1,40}$/.test(reviewedStatus)
+      || !Number.isFinite(Date.parse(reviewedSubmittedAt))
+      || (reviewedOrderId && !/^[A-Za-z0-9_-]{6,160}$/.test(reviewedOrderId))
+      || (reviewedTxHash && !/^0x[a-fA-F0-9]{64}$/.test(reviewedTxHash)))) {
+      throw new ApiError(400, "invalid_receipt", "A public Polymarket order status and timestamp are required.");
+    }
+    const verifiedReceipt = legacyVerification?.receipt ?? {
+      version: "matterhorn.market.receipt.v1" as const,
+      venue: "polymarket" as const,
+      status: reviewedStatus,
+      action: reviewedDraft!.operation === "buy" ? "buy_shares" : "sell_shares",
+      previewSha256: receiptBinding!.handoff.simulation.reference,
+      handoffSha256: receiptBinding!.handoff.intentHash,
+      orderId: reviewedOrderId || null,
+      txHash: reviewedTxHash || null,
+      marketId: reviewedDraft!.marketId,
+      tokenId: reviewedDraft!.tokenId,
+      outcome: reviewedDraft!.outcome,
+      side: reviewedDraft!.operation,
+      submittedAt: new Date(reviewedSubmittedAt).toISOString(),
+      warnings: reviewedOrderId || reviewedTxHash
+        ? []
+        : ["Receipt has neither an order id nor a transaction hash; status cannot be independently located."],
+    };
 
     const requestedSessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
     const sessionSlug = normalizeSessionSlug(requestedSessionId || `polymarket_${shortId()}`);
@@ -18522,10 +18570,10 @@ function createRoutes(
       summary: "Polymarket order receipt saved",
       auditAction: "workspace.polymarket.receipt.import",
       metadata: {
-        receiptStatus: verification.receipt.status,
-        marketId: verification.receipt.marketId,
-        outcome: verification.receipt.outcome,
-        side: verification.receipt.side,
+        receiptStatus: verifiedReceipt.status,
+        marketId: verifiedReceipt.marketId,
+        outcome: verifiedReceipt.outcome,
+        side: verifiedReceipt.side,
       },
       outputPayload: {
         version: "matterhorn.market.workspace-evidence.v1",
@@ -18533,7 +18581,7 @@ function createRoutes(
         venue: "polymarket",
         workspaceId: workspace.id,
         outputPath,
-        receipt: verification.receipt,
+        receipt: verifiedReceipt,
         safety: {
           custody: false,
           containsSignatureMaterial: false,
@@ -18545,13 +18593,13 @@ function createRoutes(
       guardedRuntime,
       workspaceId: workspace.id,
       binding: receiptBinding,
-      publicReceipt: verification.receipt,
+      publicReceipt: verifiedReceipt,
     });
     return jsonResponse({
       success: true,
-      receipt: verification.receipt,
+      receipt: verifiedReceipt,
       matchesHandoff: true,
-      warnings: verification.warnings,
+      warnings: verifiedReceipt.warnings,
       evidence: { workspaceId: workspace.id, outputPath, taskId, sessionSlug, source: "task_events" },
     }, 201);
   });

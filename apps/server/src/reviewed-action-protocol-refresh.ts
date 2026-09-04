@@ -10,8 +10,6 @@ import {
 } from "./tools/hyperliquid.js";
 import {
   polymarketProvider,
-  preparePolymarketOrderFromRequest,
-  preparePolymarketSellPreviewFromRequest,
 } from "./tools/polymarket.js";
 import { prepareBittensorExtrinsic } from "./tools/bittensor.js";
 import { simulateSuiTransactionPreview } from "./tools/sui.js";
@@ -111,46 +109,50 @@ async function refreshPolymarket(
   currentDraft: Extract<ReviewedActionDraftHandoff, { protocol: "polymarket" }>,
 ): Promise<ReviewedActionRefreshEvidence> {
   const draft = currentDraft.draft;
-  const compliance = await polymarketProvider.checkCompliance();
-  if (compliance.status !== "allowed") {
-    return {
-      reference: sha256({ protocol: "polymarket", compliance }),
-      observedAt: new Date(compliance.checkedAt),
-      materialChangeReasons: [`Polymarket eligibility is ${compliance.status}; wallet review is blocked.`],
-    };
-  }
   if (draft.operation === "cancel") {
     throw new Error("Polymarket cancellation state cannot be refreshed without the connected wallet's CLOB session.");
   }
-  const preview = draft.operation === "buy"
-    ? await preparePolymarketOrderFromRequest({
-        marketId: draft.marketId,
-        outcome: draft.outcome,
-        side: "yes",
-        amountUsdc: draft.amountUsdc,
-        slippageTolerance: draft.slippageTolerance,
-      })
-    : await preparePolymarketSellPreviewFromRequest({
-        marketId: draft.marketId,
-        outcome: draft.outcome,
-        side: "yes",
-        shares: draft.amountShares,
-        slippageTolerance: draft.slippageTolerance,
-      });
+  if (!draft.tokenId || draft.orderType !== "FAK" || draft.limitPrice === null || draft.limitPrice === undefined
+    || !draft.tickSize || typeof draft.negativeRisk !== "boolean") {
+    throw new Error("The Polymarket review is missing exact CLOB execution terms.");
+  }
+  const orderbook = await polymarketProvider.getOrderbook(draft.tokenId, {
+    marketId: draft.marketId,
+    outcome: draft.outcome,
+  });
+  const eligibleLevels = draft.operation === "buy"
+    ? orderbook.asks.filter((level) => level.price <= draft.limitPrice!)
+    : orderbook.bids.filter((level) => level.price >= draft.limitPrice!);
+  const visibleCapacity = draft.operation === "buy"
+    ? eligibleLevels.reduce((sum, level) => sum + (level.price * level.size), 0)
+    : eligibleLevels.reduce((sum, level) => sum + level.size, 0);
+  const requestedCapacity = draft.operation === "buy" ? draft.amountUsdc : draft.amountShares;
   const reasons = [
-    ...mismatch(preview.marketId !== draft.marketId, "Polymarket resolved a different market."),
-    ...mismatch(preview.outcome !== draft.outcome, "Polymarket resolved a different outcome."),
-    ...mismatch(preview.compliance.status !== "allowed", "Polymarket compliance no longer permits this review."),
-    ...mismatch(
-      preview.marketability?.estimatedSlippagePct !== null
-        && preview.marketability?.estimatedSlippagePct !== undefined
-        && preview.marketability.estimatedSlippagePct > draft.slippageTolerance,
-      "Current Polymarket orderbook slippage exceeds the reviewed limit.",
-    ),
+    ...mismatch(orderbook.reportedMarketId !== draft.marketId, "Polymarket returned an orderbook for a different market."),
+    ...mismatch(orderbook.reportedTokenId !== draft.tokenId, "Polymarket returned an orderbook for a different outcome token."),
+    ...mismatch(orderbook.tickSize !== draft.tickSize, "Polymarket tick-size rules changed."),
+    ...mismatch(orderbook.negativeRisk !== draft.negativeRisk, "Polymarket negative-risk mode changed."),
+    ...mismatch(visibleCapacity + Number.EPSILON < requestedCapacity, "Visible liquidity inside the reviewed price limit is no longer sufficient."),
   ];
   return {
-    reference: preview.previewSha256,
-    observedAt: new Date(preview.source.fetchedAt),
+    reference: sha256({
+      protocol: "polymarket",
+      marketId: draft.marketId,
+      tokenId: draft.tokenId,
+      outcome: draft.outcome,
+      operation: draft.operation,
+      amountUsdc: draft.amountUsdc,
+      amountShares: draft.amountShares,
+      orderType: draft.orderType,
+      limitPrice: draft.limitPrice,
+      tickSize: draft.tickSize,
+      negativeRisk: draft.negativeRisk,
+      snapshotHash: orderbook.snapshotHash ?? null,
+      snapshotTimestamp: orderbook.snapshotTimestamp ?? null,
+      eligibleLevels,
+    }),
+    block: orderbook.snapshotHash ?? null,
+    observedAt: new Date(orderbook.source.fetchedAt),
     materialChangeReasons: reasons,
   };
 }

@@ -7,7 +7,9 @@ import {
 } from "./crypto-app-conformance.js";
 import {
   createFirstPartyCryptoAppCertificationDriver,
+  createFirstPartyPolymarketWalletPreviewCertificationDriver,
   createFirstPartyPublicReadCryptoAppCertificationDriver,
+  firstPartyPolymarketWalletPreviewCertificationScopeValid,
   firstPartyPublicReadCertificationScopeValid,
   type MatterhornFirstPartyCertificationInputs,
 } from "./first-party-crypto-app-certification-driver.js";
@@ -31,6 +33,12 @@ export type MatterhornFirstPartyCertificationPromotion = {
 };
 
 export type MatterhornFirstPartyPublicReadCertificationPromotion = {
+  state: "certified_mainnet";
+  report: MatterhornCryptoAppConformanceReport;
+  runtimeReport: MatterhornCryptoAppRuntimeCertificationReport;
+};
+
+export type MatterhornFirstPartyPolymarketWalletPreviewCertificationPromotion = {
   state: "certified_mainnet";
   report: MatterhornCryptoAppConformanceReport;
   runtimeReport: MatterhornCryptoAppRuntimeCertificationReport;
@@ -144,4 +152,42 @@ export async function certifyMatterhornFirstPartyPublicReadCryptoApp(
     report,
     runtimeReport,
   };
+}
+
+/**
+ * Certifies only the fixed, unauthenticated, simulation-only Polymarket wallet
+ * preview. It cannot promote account, signing, cancellation, relay, or submit
+ * authority.
+ */
+export async function certifyMatterhornFirstPartyPolymarketWalletPreview(
+  options: CertificationOptions,
+): Promise<MatterhornFirstPartyPolymarketWalletPreviewCertificationPromotion> {
+  if (!firstPartyPolymarketWalletPreviewCertificationScopeValid(options.manifest)
+    || !policyVersionValid(options.policyVersion)) {
+    throw new Error("first_party_polymarket_preview_certification_scope_invalid");
+  }
+  const report = runCryptoAppManifestConformance(options.manifest, {
+    publisherKey: options.publisherPublicKey,
+    policyVersion: options.policyVersion.trim(),
+    targetEnvironment: "mainnet",
+    now: options.now,
+  });
+  if (!verifyCryptoAppConformanceReport(report) || !report.passed) {
+    throw new Error("first_party_polymarket_preview_certification_static_failed");
+  }
+  const runtimeReport = await runCryptoAppRuntimeCertificationHarness({
+    manifest: options.manifest,
+    staticReport: report,
+    driver: options.driver ?? createFirstPartyPolymarketWalletPreviewCertificationDriver({
+      actionInputs: options.actionInputs,
+      now: options.now,
+    }),
+    probeTimeoutMs: options.probeTimeoutMs,
+    now: options.now,
+  });
+  if (!verifyCryptoAppRuntimeCertificationReport(runtimeReport, options.manifest, report)
+    || !runtimeReport.passed) {
+    throw new Error("first_party_polymarket_preview_certification_runtime_failed");
+  }
+  return { state: "certified_mainnet", report, runtimeReport };
 }

@@ -29,6 +29,7 @@ import type {
 import type { MatterhornCryptoAppRuntimeProbeId } from "./crypto-app-runtime-certification.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import { evaluatePolymarketOpenPositionJurisdiction } from "./polymarket-jurisdiction-policy.js";
 import { quarantineUntrustedContent, untrustedContentChanged } from "./untrusted-data-quarantine.js";
 import { createFirstPartyCryptoAppExecutor } from "./first-party-crypto-app-executor.js";
 import { firstPartyCryptoAppCapabilityBindings } from "./first-party-crypto-apps.js";
@@ -46,7 +47,7 @@ type DriverOptions = {
   makeTempDirectory?: () => string;
 };
 
-type CertificationScope = "testnet" | "public_mainnet_read";
+type CertificationScope = "testnet" | "public_mainnet_read" | "public_mainnet_prepare";
 
 type LiveActionResult = {
   action: MatterhornCryptoAppAction;
@@ -65,6 +66,9 @@ const TESTNET_SUPPORTED_APP_IDS = new Set([
 const PUBLIC_MAINNET_READ_SUPPORTED_APP_IDS = new Set([
   "matterhorn.polymarket-research",
   "matterhorn.polymarket-clob-research",
+]);
+const PUBLIC_MAINNET_PREPARE_SUPPORTED_APP_IDS = new Set([
+  "matterhorn.polymarket-wallet-preview",
 ]);
 const PUBLIC_MAINNET_READ_PROFILES: Readonly<Record<string, {
   actionId: string;
@@ -203,6 +207,48 @@ export function firstPartyPublicReadCertificationScopeValid(
     ));
 }
 
+/** Exact authority boundary for the wallet-only Polymarket mainnet preview. */
+export function firstPartyPolymarketWalletPreviewCertificationScopeValid(
+  manifest: MatterhornCryptoAppManifest,
+): boolean {
+  let endpoint: URL;
+  try {
+    endpoint = new URL(manifest.transport.endpoint);
+  } catch {
+    return false;
+  }
+  const action = manifest.actions[0];
+  return manifest.appId === "matterhorn.polymarket-wallet-preview"
+    && manifest.manifestRevision === "1.0.0"
+    && manifest.transport.kind === "matterhorn_sdk"
+    && endpoint.origin === "https://clob.polymarket.com"
+    && endpoint.pathname === "/"
+    && !endpoint.username
+    && !endpoint.password
+    && !endpoint.search
+    && !endpoint.hash
+    && manifest.authentication.type === "none"
+    && manifest.authentication.scopes.length === 0
+    && manifest.networks.length === 1
+    && manifest.networks[0]?.protocol === "polymarket"
+    && manifest.networks[0]?.chainId === "polymarket:polygon"
+    && manifest.networks[0]?.environment === "mainnet"
+    && manifest.actions.length === 1
+    && action?.id === "polymarket_preview_order"
+    && action.access === "prepare"
+    && action.risk === "financial_high"
+    && action.requiredScopes.length === 0
+    && action.requiresFreshness
+    && action.freshnessMaxAgeMs !== null
+    && action.freshnessMaxAgeMs > 0
+    && action.freshnessMaxAgeMs <= 10_000
+    && action.timeoutMs > 0
+    && action.timeoutMs <= 10_000
+    && action.simulationRequired
+    && action.walletSubmissionOnly
+    && !action.agentMaySubmit;
+}
+
 /**
  * Trusted operator-only driver for Matterhorn's first-party testnet adapters.
  * It uses real pinned transports for positive controls and isolated temporary
@@ -226,6 +272,27 @@ export function createFirstPartyPublicReadCryptoAppCertificationDriver(
   return createScopedFirstPartyCryptoAppCertificationDriver(options, "public_mainnet_read");
 }
 
+/** Operator-only driver for the single wallet-review-only Polymarket preview. */
+export function createFirstPartyPolymarketWalletPreviewCertificationDriver(
+  options: DriverOptions,
+): MatterhornCryptoAppRuntimeProbeDriver {
+  return createScopedFirstPartyCryptoAppCertificationDriver(options, "public_mainnet_prepare");
+}
+
+function supportedApps(scope: CertificationScope): ReadonlySet<string> {
+  return scope === "testnet"
+    ? TESTNET_SUPPORTED_APP_IDS
+    : scope === "public_mainnet_read"
+      ? PUBLIC_MAINNET_READ_SUPPORTED_APP_IDS
+      : PUBLIC_MAINNET_PREPARE_SUPPORTED_APP_IDS;
+}
+
+function liveProbeAction(manifest: MatterhornCryptoAppManifest, scope: CertificationScope): MatterhornCryptoAppAction | undefined {
+  return scope === "public_mainnet_prepare"
+    ? manifest.actions.find((action) => action.access === "prepare" || action.access === "simulate")
+    : manifest.actions.find((action) => action.access === "read" || action.access === "watch");
+}
+
 function createScopedFirstPartyCryptoAppCertificationDriver(
   options: DriverOptions,
   scope: CertificationScope,
@@ -240,9 +307,7 @@ function createScopedFirstPartyCryptoAppCertificationDriver(
     actionId: string,
     signal: AbortSignal,
   ): Promise<LiveActionResult> => {
-    const supported = scope === "testnet"
-      ? TESTNET_SUPPORTED_APP_IDS
-      : PUBLIC_MAINNET_READ_SUPPORTED_APP_IDS;
+    const supported = supportedApps(scope);
     if (!supported.has(manifest.appId)) throw new Error("first_party_certification_app_unsupported");
     const action = actionById(manifest, actionId);
     const args = inputForAction(options.actionInputs, action);
@@ -273,17 +338,17 @@ function createScopedFirstPartyCryptoAppCertificationDriver(
 
   return {
     runProbe: async ({ probeId, manifest, expectedActionIds, signal }) => {
-      const supported = scope === "testnet"
-        ? TESTNET_SUPPORTED_APP_IDS
-        : PUBLIC_MAINNET_READ_SUPPORTED_APP_IDS;
+      const supported = supportedApps(scope);
       const expectedEnvironment = scope === "testnet" ? "testnet" : "mainnet";
-      const publicReadOnly = scope !== "public_mainnet_read"
-        || firstPartyPublicReadCertificationScopeValid(manifest);
+      const scopeValid = scope === "testnet"
+        || (scope === "public_mainnet_read"
+          ? firstPartyPublicReadCertificationScopeValid(manifest)
+          : firstPartyPolymarketWalletPreviewCertificationScopeValid(manifest));
       if (!supported.has(manifest.appId)
         || manifest.authentication.type !== "none"
         || manifest.authentication.scopes.length !== 0
         || manifest.networks.some((network) => network.environment !== expectedEnvironment)
-        || !publicReadOnly) {
+        || !scopeValid) {
         return { assertions: [assertion(probeId, "first_party_scope_valid", false, { supported: false })] };
       }
 
@@ -293,7 +358,9 @@ function createScopedFirstPartyCryptoAppCertificationDriver(
           && !action.agentMaySubmit
           && (scope === "public_mainnet_read"
             ? action.access === "read" && action.risk === "informational" && !action.simulationRequired
-            : ["read", "watch", "prepare", "simulate"].includes(action.access))
+            : scope === "public_mainnet_prepare"
+              ? action.access === "prepare" && action.risk === "financial_high" && action.simulationRequired
+              : ["read", "watch", "prepare", "simulate"].includes(action.access))
         ));
         const baseAction = actionById(manifest, expectedActionIds[0]!);
         let unsupportedRejected = false;
@@ -322,7 +389,7 @@ function createScopedFirstPartyCryptoAppCertificationDriver(
       }
 
       if (probeId === "egress_boundary") {
-        const readAction = manifest.actions.find((action) => action.access === "read" || action.access === "watch");
+        const readAction = liveProbeAction(manifest, scope);
         if (!readAction) return { assertions: [assertion(probeId, "egress_live_read", false, { readAction: false })] };
         const result = await executeLive(manifest, readAction.id, signal);
         let mismatchRejected = false;
@@ -382,7 +449,9 @@ function createScopedFirstPartyCryptoAppCertificationDriver(
       }
 
       if (probeId === "schema_drift") {
-        const readActions = manifest.actions.filter((action) => action.access === "read" || action.access === "watch");
+        const readActions = scope === "public_mainnet_prepare"
+          ? manifest.actions.filter((action) => action.access === "prepare" || action.access === "simulate")
+          : manifest.actions.filter((action) => action.access === "read" || action.access === "watch");
         const live = await Promise.all(readActions.map((action) => executeLive(manifest, action.id, signal)));
         const liveValid = live.length > 0 && live.every((item) => item.projected !== null);
         const malformedRejected = manifest.actions.every((action) => (
@@ -421,7 +490,7 @@ function createScopedFirstPartyCryptoAppCertificationDriver(
       }
 
       if (probeId === "timeout_abort") {
-        const action = manifest.actions.find((item) => item.access === "read" || item.access === "watch");
+        const action = liveProbeAction(manifest, scope);
         if (!action) return { assertions: [assertion(probeId, "abort_before_dial", false, { action: false })] };
         const controller = new AbortController();
         controller.abort("certification_abort_probe");
@@ -442,12 +511,35 @@ function createScopedFirstPartyCryptoAppCertificationDriver(
           const binding = firstPartyCryptoAppCapabilityBindings([manifest])[0];
           if (!binding) throw new Error("first_party_certification_binding_missing");
           const args = { appId: manifest.appId, actionId: binding.actionId, certificationProbe: true };
+          const jurisdictionDecision = scope === "public_mainnet_prepare"
+            ? evaluatePolymarketOpenPositionJurisdiction({
+              version: "matterhorn.edge-jurisdiction.v2",
+              source: "vercel_ip_country",
+              country: "CH",
+              region: null,
+              observedAt: new Date(now().getTime() - 1_000).toISOString(),
+              expiresAt: new Date(now().getTime() + 60_000).toISOString(),
+              evidenceHash: "c".repeat(64),
+            }, now())
+            : null;
+          const jurisdictionPolicy = jurisdictionDecision?.jurisdictionEvidenceHash && jurisdictionDecision.validUntil
+            ? {
+              evidenceHash: jurisdictionDecision.jurisdictionEvidenceHash,
+              policyVersion: jurisdictionDecision.policyVersion,
+              policyHash: jurisdictionDecision.policyHash,
+              decisionHash: jurisdictionDecision.decisionHash,
+              validUntil: jurisdictionDecision.validUntil,
+              polymarketOpenPositionAllowed: jurisdictionDecision.canOpenPosition,
+            }
+            : undefined;
           broker.createRunGrant({
             runId: "run_certification",
             workspaceId: "ws_certification",
             sessionId: "ses_certification",
             agentId: "matterhorn",
             executionMode: "work",
+            jurisdictionEvidenceHash: jurisdictionPolicy?.evidenceHash,
+            jurisdictionPolicy,
             now: now(),
           });
           const capability = broker.issue({

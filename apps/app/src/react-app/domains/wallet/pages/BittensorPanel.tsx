@@ -181,6 +181,10 @@ type PolymarketPreviewResponse = {
     outcome: string | null;
     size: number | null;
     price: number | null;
+    orderType: "FAK";
+    limitPrice: number | null;
+    tickSize: string | null;
+    negativeRisk: boolean | null;
     estimatedShares: number | null;
     previewSha256: string;
     expiresAt: string;
@@ -202,6 +206,10 @@ type PolymarketSellPreviewResponse = {
     shares: number;
     estimatedFillPrice: number | null;
     estimatedProceedsUsdc: number | null;
+    orderType: "FAK";
+    limitPrice: number | null;
+    tickSize: string | null;
+    negativeRisk: boolean | null;
     previewSha256: string;
     expiresAt: string;
     compliance: { status: "allowed" | "blocked" | "unknown"; reason: string | null };
@@ -1726,8 +1734,12 @@ function PolymarketTradeExecution({
         return;
       }
     }
+    let validatedGuardedHandoff = guardedHandoff;
     try {
       const source = guardedHandoff?.source ?? "agent-card";
+      const exactDraft = guardedHandoff?.draft.operation === tradeAction.toLowerCase()
+        ? guardedHandoff.draft
+        : null;
       const currentDraft: ReviewedActionDraftHandoff = tradeAction === "CANCEL"
         ? {
             version: "matterhorn.reviewed-action-handoff.v1",
@@ -1750,9 +1762,14 @@ function PolymarketTradeExecution({
               protocol: "polymarket",
               source,
               draft: {
-                operation: "sell",
-                marketId: marketId.trim(),
-                outcome: outcome.trim(),
+              operation: "sell",
+              marketId: marketId.trim(),
+              tokenId: exactDraft?.operation === "sell" ? exactDraft.tokenId : null,
+              outcome: outcome.trim(),
+              orderType: exactDraft?.operation === "sell" ? exactDraft.orderType : null,
+              limitPrice: exactDraft?.operation === "sell" ? exactDraft.limitPrice : null,
+              tickSize: exactDraft?.operation === "sell" ? exactDraft.tickSize : null,
+              negativeRisk: exactDraft?.operation === "sell" ? exactDraft.negativeRisk : null,
                 amountUsdc: null,
                 amountShares: Number(amountShares),
                 slippageTolerance: Number(slippageTolerance),
@@ -1767,7 +1784,12 @@ function PolymarketTradeExecution({
               draft: {
                 operation: "buy",
                 marketId: marketId.trim(),
+                tokenId: exactDraft?.operation === "buy" ? exactDraft.tokenId : null,
                 outcome: outcome.trim(),
+                orderType: exactDraft?.operation === "buy" ? exactDraft.orderType : null,
+                limitPrice: exactDraft?.operation === "buy" ? exactDraft.limitPrice : null,
+                tickSize: exactDraft?.operation === "buy" ? exactDraft.tickSize : null,
+                negativeRisk: exactDraft?.operation === "buy" ? exactDraft.negativeRisk : null,
                 amountUsdc: Number(amountUsdc),
                 amountShares: null,
                 slippageTolerance: Number(slippageTolerance),
@@ -1782,6 +1804,7 @@ function PolymarketTradeExecution({
         originatedFromHandoff: Boolean(initialDraft),
       });
       setGuardedHandoff(refreshedHandoff);
+      validatedGuardedHandoff = refreshedHandoff;
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "This agent wallet draft must be regenerated before review.");
       return;
@@ -1796,6 +1819,46 @@ function PolymarketTradeExecution({
       } catch (error) {
         setTradeError(error instanceof Error ? error.message : "Could not review this cancellation.");
       }
+      return;
+    }
+    if (validatedGuardedHandoff?.protocol === "polymarket"
+      && (validatedGuardedHandoff.draft.operation === "buy" || validatedGuardedHandoff.draft.operation === "sell")) {
+      const exact = validatedGuardedHandoff.draft;
+      if (!exact.tokenId || exact.orderType !== "FAK" || !exact.limitPrice || !exact.tickSize
+        || typeof exact.negativeRisk !== "boolean") {
+        setTradeError("The certified Polymarket review is missing exact wallet execution bounds. Regenerate it from the desk.");
+        return;
+      }
+      setPrepared({
+        tradeSide: exact.operation === "buy" ? "BUY" : "SELL",
+        marketId: exact.marketId,
+        tokenId: exact.tokenId,
+        signerAddress: validatedGuardedHandoff.signer,
+        marketLabel: selectedMarket?.question ?? exact.marketId,
+        outcome: exact.outcome,
+        amountUsdc: exact.operation === "buy" ? exact.amountUsdc : null,
+        amountShares: exact.operation === "sell" ? exact.amountShares : null,
+        estimatedFillPrice: exact.limitPrice,
+        estimatedShares: exact.operation === "sell" ? exact.amountShares : null,
+        estimatedProceedsUsdc: exact.operation === "sell"
+          ? Number((exact.amountShares * exact.limitPrice).toFixed(6))
+          : null,
+        maxLossUsdc: exact.operation === "buy" ? exact.amountUsdc : null,
+        orderType: exact.orderType,
+        limitPrice: exact.limitPrice,
+        tickSize: exact.tickSize,
+        negativeRisk: exact.negativeRisk,
+        previewSha256: validatedGuardedHandoff.simulation.reference,
+        expiresAt: validatedGuardedHandoff.expiresAt,
+        compliance: { status: "allowed", reason: null },
+        warnings: [
+          "Exact FAK price and CLOB rules are hash-bound to this wallet review.",
+          "Your connected wallet remains the only component that can authorize and submit the order.",
+        ],
+      });
+      setHandoff(null);
+      setTradeError(null);
+      setReceipt(null);
       return;
     }
     const amount = Number(amountUsdc);
@@ -1831,10 +1894,24 @@ function PolymarketTradeExecution({
         if (!response.ok || !json.success || !json.preview) {
           throw new Error(json.error?.message ?? "Could not prepare the Polymarket sale.");
         }
+        const exactDraft = validatedGuardedHandoff?.draft.operation === "sell"
+          ? validatedGuardedHandoff.draft
+          : null;
+        if (exactDraft && (json.preview.tokenId !== exactDraft.tokenId
+          || json.preview.orderType !== exactDraft.orderType
+          || json.preview.limitPrice !== exactDraft.limitPrice
+          || json.preview.tickSize !== exactDraft.tickSize
+          || json.preview.negativeRisk !== exactDraft.negativeRisk)) {
+          throw new Error("Polymarket execution terms changed after review. Regenerate the wallet action.");
+        }
+        if (!json.preview.limitPrice || !json.preview.tickSize || typeof json.preview.negativeRisk !== "boolean") {
+          throw new Error("Polymarket did not return exact wallet execution bounds. No order was prepared.");
+        }
         setPrepared({
           tradeSide: "SELL",
           marketId: json.preview.marketId,
           tokenId: json.preview.tokenId,
+          signerAddress: address ?? null,
           marketLabel: json.preview.marketLabel,
           outcome: json.preview.outcome,
           amountUsdc: null,
@@ -1843,6 +1920,10 @@ function PolymarketTradeExecution({
           estimatedShares: json.preview.shares,
           estimatedProceedsUsdc: json.preview.estimatedProceedsUsdc,
           maxLossUsdc: null,
+          orderType: json.preview.orderType,
+          limitPrice: json.preview.limitPrice,
+          tickSize: json.preview.tickSize,
+          negativeRisk: json.preview.negativeRisk,
           previewSha256: json.preview.previewSha256,
           expiresAt: json.preview.expiresAt,
           compliance: json.preview.compliance,
@@ -1871,10 +1952,24 @@ function PolymarketTradeExecution({
       if (!json.preview.marketId || !json.preview.tokenId || !json.preview.marketLabel || !json.preview.outcome || !json.preview.size || !json.preview.risk) {
         throw new Error("The agent preview is missing an exact market, outcome, token, amount, or risk value.");
       }
+      const exactDraft = validatedGuardedHandoff?.draft.operation === "buy"
+        ? validatedGuardedHandoff.draft
+        : null;
+      if (exactDraft && (json.preview.tokenId !== exactDraft.tokenId
+        || json.preview.orderType !== exactDraft.orderType
+        || json.preview.limitPrice !== exactDraft.limitPrice
+        || json.preview.tickSize !== exactDraft.tickSize
+        || json.preview.negativeRisk !== exactDraft.negativeRisk)) {
+        throw new Error("Polymarket execution terms changed after review. Regenerate the wallet action.");
+      }
+      if (!json.preview.limitPrice || !json.preview.tickSize || typeof json.preview.negativeRisk !== "boolean") {
+        throw new Error("Polymarket did not return exact wallet execution bounds. No order was prepared.");
+      }
       setPrepared({
         tradeSide: "BUY",
         marketId: json.preview.marketId,
         tokenId: json.preview.tokenId,
+        signerAddress: address ?? null,
         marketLabel: json.preview.marketLabel,
         outcome: json.preview.outcome,
         amountUsdc: json.preview.size,
@@ -1883,6 +1978,10 @@ function PolymarketTradeExecution({
         estimatedShares: json.preview.estimatedShares,
         estimatedProceedsUsdc: null,
         maxLossUsdc: json.preview.risk.maxLossUsdc,
+        orderType: json.preview.orderType,
+        limitPrice: json.preview.limitPrice,
+        tickSize: json.preview.tickSize,
+        negativeRisk: json.preview.negativeRisk,
         previewSha256: json.preview.previewSha256,
         expiresAt: json.preview.expiresAt,
         compliance: json.preview.compliance,
@@ -1894,7 +1993,7 @@ function PolymarketTradeExecution({
     } finally {
       setBusy(null);
     }
-  }, [amountShares, amountUsdc, cancelAll, cancelOrderIds, guardedHandoff, initialDraft, marketId, outcome, slippageTolerance, tradeAction, workspaceId]);
+  }, [address, amountShares, amountUsdc, cancelAll, cancelOrderIds, guardedHandoff, initialDraft, marketId, outcome, selectedMarket, slippageTolerance, tradeAction, workspaceId]);
 
   const signAndSubmit = useCallback(async () => {
     if ((!prepared && !cancelReview) || !walletClient || !address) return;
@@ -1966,7 +2065,7 @@ function PolymarketTradeExecution({
       if (!prepared) return;
       const publicReceipt = await submitPolymarketOrder({ walletClient, order: prepared });
       setReceipt(publicReceipt);
-      if (handoff) {
+      if (handoff || guardedHandoff) {
         const receiptPath = workspaceId
           ? `/workspace/${encodeURIComponent(workspaceId)}/polymarket/orders/receipt`
           : "/api/polymarket/orders/receipt";
@@ -1980,18 +2079,19 @@ function PolymarketTradeExecution({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               sessionId: sessionId || null,
-              handoff,
+              ...(handoff ? { handoff } : {}),
               ...(guardedHandoff ? {
                 reviewedAction: guardedHandoff,
                 receiptIntentHash: guardedHandoff.intentHash,
               } : {}),
               receipt: {
                 previewSha256: prepared.previewSha256,
-                handoffSha256: typeof handoff.handoffSha256 === "string" ? handoff.handoffSha256 : null,
+                handoffSha256: handoff && typeof handoff.handoffSha256 === "string" ? handoff.handoffSha256 : null,
                 orderId: publicReceipt.orderId,
                 txHash: publicReceipt.transactionHashes[0] ?? null,
                 status: publicReceipt.status,
                 marketId: prepared.marketId,
+                tokenId: prepared.tokenId,
                 outcome: prepared.outcome,
                 side: prepared.tradeSide.toLowerCase(),
                 submittedAt: publicReceipt.submittedAt,

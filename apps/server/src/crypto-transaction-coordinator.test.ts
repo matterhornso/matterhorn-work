@@ -197,6 +197,114 @@ describe("deterministic crypto transaction coordinator", () => {
     });
   });
 
+  test("compiles exact Polymarket token and FAK bounds into a wallet-only v2 handoff", () => {
+    const signer = `0x${"4".repeat(40)}`;
+    const marketId = `0x${"a".repeat(64)}`;
+    const tokenId = "71321045679252212594626385532706912750332728571942532289631379312455583992563";
+    const request = {
+      signer,
+      marketId,
+      tokenId,
+      outcome: "Yes",
+      side: "buy",
+      amountUsdc: "25",
+      amountShares: null,
+      maxSlippageBps: 100,
+    };
+    const intent = compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_polymarket_prepare",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "9".repeat(64),
+      canonicalRequestArguments: request,
+      now: NOW,
+      result: envelope({
+        appId: "matterhorn.polymarket-wallet-preview",
+        connectionId: "cxc_polymarket",
+        actionId: "polymarket_preview_order",
+        network: "polymarket:polygon",
+        blockOrVersion: `0x${"b".repeat(64)}`,
+        result: {
+          version: "matterhorn.polymarket-wallet-preview.v1",
+          network: "polymarket:polygon",
+          signer,
+          marketId,
+          tokenId,
+          outcome: "Yes",
+          side: "buy",
+          amountUsdc: "25",
+          amountShares: null,
+          orderType: "FAK",
+          limitPrice: "0.47",
+          maxSlippageBps: 100,
+          tickSize: "0.01",
+          minimumOrderSize: "1",
+          negativeRisk: false,
+          bestPrice: "0.46",
+          estimatedAverageFillPrice: "0.46",
+          estimatedShares: "54.347826086956",
+          estimatedProceedsUsdc: null,
+          maximumSpendUsdc: "25",
+          visibleDepthSufficient: true,
+          snapshotHash: `0x${"b".repeat(64)}`,
+          simulationReference: `sha256:${"c".repeat(64)}`,
+          observedAt: "2026-09-01T12:00:00.000Z",
+          expiresAt: "2026-09-01T12:00:30.000Z",
+        },
+      }),
+    });
+    expect(intent).toMatchObject({
+      protocol: "polymarket",
+      network: "polymarket:polygon",
+      signer,
+      operation: "buy",
+      asset: tokenId,
+      amount: "25",
+      recipient: marketId,
+      slippageBps: 100,
+      capabilityClass: "wallet_review_only",
+    });
+    const handoff = cryptoIntentToReviewedActionHandoffV2(intent, policyDecision(intent));
+    expect(isReviewedActionHandoffV2(handoff)).toBe(true);
+    expect(handoff).toMatchObject({
+      protocol: "polymarket",
+      signer,
+      draft: {
+        operation: "buy",
+        marketId,
+        tokenId,
+        outcome: "Yes",
+        orderType: "FAK",
+        limitPrice: 0.47,
+        tickSize: "0.01",
+        negativeRisk: false,
+        amountUsdc: 25,
+        slippageTolerance: 1,
+      },
+    });
+    expect(() => compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_polymarket_mutated",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "9".repeat(64),
+      canonicalRequestArguments: request,
+      now: NOW,
+      result: envelope({
+        appId: "matterhorn.polymarket-wallet-preview",
+        connectionId: "cxc_polymarket",
+        actionId: "polymarket_preview_order",
+        network: "polymarket:polygon",
+        result: {
+          ...(intent.canonicalArguments as Record<string, unknown>),
+          network: "polymarket:polygon",
+          tokenId: "9",
+          simulationReference: `sha256:${"c".repeat(64)}`,
+          expiresAt: "2026-09-01T12:00:30.000Z",
+        },
+      }),
+    })).toThrow("crypto_intent_request_result_mismatch");
+  });
+
   test("compiles exact Bittensor testnet terms into a connected-wallet-only handoff", () => {
     const sender = `5${"C".repeat(47)}`;
     const hotkey = `5${"E".repeat(47)}`;

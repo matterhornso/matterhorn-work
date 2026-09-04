@@ -19,7 +19,8 @@ describe("first-party crypto app certification CLI", () => {
     expect(stdout).toContain("--inputs");
     expect(stdout).toContain("mode 0600");
     expect(stdout).toContain("certify:crypto-app-readonly");
-    expect(stdout).toContain("grants no transaction authority");
+    expect(stdout).toContain("certify:crypto-app-polymarket-preview");
+    expect(stdout).toContain("grants no account, signing, relay, or submit authority");
     expect(stdout).not.toContain("private-key");
   });
 
@@ -30,6 +31,8 @@ describe("first-party crypto app certification CLI", () => {
     expect(packageJson.scripts?.["certify:crypto-app"]).not.toContain("public-readonly");
     expect(packageJson.scripts?.["certify:crypto-app-readonly"])
       .toBe("bun scripts/certify-first-party-crypto-app.ts --scope public-readonly");
+    expect(packageJson.scripts?.["certify:crypto-app-polymarket-preview"])
+      .toBe("bun scripts/certify-first-party-crypto-app.ts --scope polymarket-wallet-preview");
   });
 
   test("rejects unknown certification scopes before reading operator files", () => {
