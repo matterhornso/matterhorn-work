@@ -28,6 +28,7 @@ import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state
 import type { MatterhornRecoveryErasureLedger } from "./recovery-erasure-ledger.js";
 
 const STATE_KIND = "agent_file_record";
+const OPERATION_CLAIM_KIND = "agent_file_operation_claim";
 const RENEWAL_STATE_KIND = "agent_file_renewal_intent";
 const ENVELOPE_VERSION = "matterhorn.agent-file-envelope.v1";
 const ALGORITHM = "aes-256-gcm";
@@ -35,6 +36,17 @@ const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const MAX_CIPHERTEXT_BYTES = 10 * 1_024 * 1_024 + TAG_BYTES;
 const FILE_ID = /^agent_file_[a-f0-9]{32}$/;
+const PUBLICATION_CLAIM_TTL_MS = 5 * 60 * 1_000;
+
+type AgentFileOperationClaim = {
+  version: "matterhorn.agent-file-operation-claim.v1";
+  claimId: string;
+  fileId: string;
+  expectedRevision: number;
+  operation: "publish" | "destroy_key";
+  createdAt: string;
+  expiresAt: string;
+};
 
 type AgentFileEnvelope = {
   version: typeof ENVELOPE_VERSION;
@@ -238,13 +250,103 @@ function assertTenant(record: MatterhornAgentFileRecord, input: { workspaceId: s
 }
 
 export class MatterhornAgentFileStore {
-  private readonly activePublications = new Set<string>();
-
   constructor(
     private readonly stateStore: MatterhornGuardedRuntimeStateStore,
     private readonly keyManager: MatterhornEvidenceKeyManager,
     private readonly erasureLedger: MatterhornRecoveryErasureLedger | null = null,
   ) {}
+
+  private operationClaimKey(input: { workspaceId: string; fileId: string }): string {
+    return sha256({
+      domain: "matterhorn:agent-file-operation-claim:v1",
+      workspaceId: input.workspaceId,
+      fileId: input.fileId,
+    });
+  }
+
+  private activeOperationClaim(input: {
+    workspaceId: string;
+    fileId: string;
+    nowMs?: number;
+  }): AgentFileOperationClaim | null {
+    return this.stateStore.get<AgentFileOperationClaim>(
+      OPERATION_CLAIM_KIND,
+      this.operationClaimKey(input),
+      input.nowMs,
+    );
+  }
+
+  private beginExclusiveOperation(input: {
+    workspaceId: string;
+    ownerId: string;
+    fileId: string;
+    expectedRevision: number;
+    operation: AgentFileOperationClaim["operation"];
+    now: Date;
+  }): { record: MatterhornAgentFileRecord; claimId: string } {
+    const claimId = `agent_file_operation_${randomUUID().replaceAll("-", "")}`;
+    const expiresAtMs = input.now.getTime() + PUBLICATION_CLAIM_TTL_MS;
+    return this.stateStore.transaction(() => {
+      this.stateStore.deleteExpired(input.now.getTime());
+      const record = this.stateStore.get<MatterhornAgentFileRecord>(
+        STATE_KIND,
+        input.fileId,
+        input.now.getTime(),
+      );
+      if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
+      assertTenant(record, input);
+      this.assertRecoveryMaterialActive(record);
+      if (record.revision !== input.expectedRevision) {
+        throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
+      }
+      if (input.operation === "publish") {
+        if (record.publication) throw new MatterhornAgentFileStoreError("agent_file_already_published");
+        if (record.file.retention.expiresAt
+          && Date.parse(record.file.retention.expiresAt) <= input.now.getTime()) {
+          throw new MatterhornAgentFileStoreError("agent_file_expired");
+        }
+      }
+      const claim: AgentFileOperationClaim = {
+        version: "matterhorn.agent-file-operation-claim.v1",
+        claimId,
+        fileId: input.fileId,
+        expectedRevision: input.expectedRevision,
+        operation: input.operation,
+        createdAt: input.now.toISOString(),
+        expiresAt: new Date(expiresAtMs).toISOString(),
+      };
+      if (!this.stateStore.putIfAbsent({
+        kind: OPERATION_CLAIM_KIND,
+        key: this.operationClaimKey(input),
+        workspaceId: input.workspaceId,
+        value: claim,
+        expiresAtMs,
+        nowMs: input.now.getTime(),
+      })) {
+        const active = this.activeOperationClaim({ ...input, nowMs: input.now.getTime() });
+        throw new MatterhornAgentFileStoreError(active?.operation === "publish"
+          ? "agent_file_walrus_publication_in_progress"
+          : "agent_file_operation_in_progress");
+      }
+      return { record: structuredClone(record), claimId };
+    });
+  }
+
+  private endExclusiveOperation(input: {
+    workspaceId: string;
+    fileId: string;
+    claimId: string;
+    now: Date;
+  }): boolean {
+    return this.stateStore.transaction(() => {
+      const claim = this.activeOperationClaim({ ...input, nowMs: input.now.getTime() });
+      if (!claim
+        || claim.version !== "matterhorn.agent-file-operation-claim.v1"
+        || claim.claimId !== input.claimId
+        || claim.fileId !== input.fileId) return false;
+      return this.stateStore.delete(OPERATION_CLAIM_KIND, this.operationClaimKey(input));
+    });
+  }
 
   private recoveryMaterialErased(record: MatterhornAgentFileRecord): boolean {
     if (!this.erasureLedger) return false;
@@ -469,17 +571,32 @@ export class MatterhornAgentFileStore {
     fileId: string;
     expectedRevision: number;
     now?: Date;
-  }): ReturnType<MatterhornAgentFileStore["publicationCandidate"]> {
-    if (this.activePublications.has(input.fileId)) {
-      throw new MatterhornAgentFileStoreError("agent_file_walrus_publication_in_progress");
+  }): ReturnType<MatterhornAgentFileStore["publicationCandidate"]> & { claimId: string } {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
+    const claimed = this.beginExclusiveOperation({ ...input, operation: "publish", now });
+    try {
+      return { ...this.publicationCandidate({ ...input, now }), claimId: claimed.claimId };
+    } catch (error) {
+      this.endWalrusPublication({
+        workspaceId: input.workspaceId,
+        fileId: input.fileId,
+        claimId: claimed.claimId,
+        now,
+      });
+      throw error;
     }
-    const candidate = this.publicationCandidate(input);
-    this.activePublications.add(input.fileId);
-    return candidate;
   }
 
-  endWalrusPublication(fileId: string): void {
-    this.activePublications.delete(fileId);
+  endWalrusPublication(input: {
+    workspaceId: string;
+    fileId: string;
+    claimId: string;
+    now?: Date;
+  }): boolean {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
+    return this.endExclusiveOperation({ ...input, now });
   }
 
   attachWalrusPublication(input: {
@@ -487,43 +604,58 @@ export class MatterhornAgentFileStore {
     ownerId: string;
     fileId: string;
     expectedRevision: number;
+    claimId: string;
     publication: MatterhornAgentFileWalrusPublication;
     now?: Date;
   }): MatterhornStoredAgentFile {
     validatePublication(input.publication);
-    const candidate = this.publicationCandidate(input);
-    try {
-      if (candidate.item.publication) {
-        throw new MatterhornAgentFileStoreError("agent_file_already_published");
-      }
-      if (candidate.ciphertextSha256 !== input.publication.ciphertextSha256) {
-        throw new MatterhornAgentFileStoreError("agent_file_publication_hash_mismatch");
-      }
-    } finally {
-      candidate.bytes.fill(0);
-    }
-    const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
-    if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
-    assertTenant(record, input);
-    if (record.revision !== input.expectedRevision || record.publication) {
-      throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
-    }
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
-    const next: MatterhornAgentFileRecord = {
-      ...record,
-      revision: record.revision + 1,
-      publication: structuredClone(input.publication),
-      updatedAt: now.toISOString(),
-    };
-    this.stateStore.put({
-      kind: STATE_KIND,
-      key: next.id,
-      workspaceId: next.workspaceId,
-      value: next,
-      nowMs: now.getTime(),
+    return this.stateStore.transaction(() => {
+      const claim = this.activeOperationClaim({ ...input, nowMs: now.getTime() });
+      if (!claim
+        || claim.version !== "matterhorn.agent-file-operation-claim.v1"
+        || claim.claimId !== input.claimId
+        || claim.fileId !== input.fileId
+        || claim.expectedRevision !== input.expectedRevision
+        || claim.operation !== "publish") {
+        throw new MatterhornAgentFileStoreError("agent_file_walrus_publication_claim_invalid");
+      }
+      const candidate = this.publicationCandidate(input);
+      try {
+        if (candidate.item.publication) {
+          throw new MatterhornAgentFileStoreError("agent_file_already_published");
+        }
+        if (candidate.ciphertextSha256 !== input.publication.ciphertextSha256) {
+          throw new MatterhornAgentFileStoreError("agent_file_publication_hash_mismatch");
+        }
+      } finally {
+        candidate.bytes.fill(0);
+      }
+      const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId, now.getTime());
+      if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
+      assertTenant(record, input);
+      if (record.revision !== input.expectedRevision || record.publication) {
+        throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
+      }
+      const next: MatterhornAgentFileRecord = {
+        ...record,
+        revision: record.revision + 1,
+        publication: structuredClone(input.publication),
+        updatedAt: now.toISOString(),
+      };
+      this.stateStore.put({
+        kind: STATE_KIND,
+        key: next.id,
+        workspaceId: next.workspaceId,
+        value: next,
+        nowMs: now.getTime(),
+      });
+      if (!this.stateStore.delete(OPERATION_CLAIM_KIND, this.operationClaimKey(input))) {
+        throw new MatterhornAgentFileStoreError("agent_file_walrus_publication_claim_invalid");
+      }
+      return accountView(next);
     });
-    return accountView(next);
   }
 
   renewWalrusPublication(input: {
@@ -589,27 +721,29 @@ export class MatterhornAgentFileStore {
     now?: Date;
   }): Promise<void> {
     if (!FILE_ID.test(input.fileId)) throw new MatterhornAgentFileStoreError("agent_file_not_found");
-    const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
-    if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
-    assertTenant(record, input);
-    if (this.activePublications.has(record.id)) {
-      throw new MatterhornAgentFileStoreError("agent_file_walrus_publication_in_progress");
-    }
-    if (record.revision !== input.expectedRevision) {
-      throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
-    }
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
-    this.erasureLedger?.record({
-      materialKind: "agent_file",
-      wrappedKey: record.key.wrappedKey,
-      keyContext: record.key.keyContext,
-      now,
-    });
-    await this.keyManager.destroyKey({ workspaceId: record.workspaceId, keyReference: record.key.keyReference });
-    this.stateStore.delete(RENEWAL_STATE_KIND, record.id);
-    this.stateStore.delete(STATE_KIND, record.id);
-    this.stateStore.secureCheckpoint();
+    const claimed = this.beginExclusiveOperation({ ...input, operation: "destroy_key", now });
+    const record = claimed.record;
+    try {
+      this.erasureLedger?.record({
+        materialKind: "agent_file",
+        wrappedKey: record.key.wrappedKey,
+        keyContext: record.key.keyContext,
+        now,
+      });
+      await this.keyManager.destroyKey({ workspaceId: record.workspaceId, keyReference: record.key.keyReference });
+      this.stateStore.delete(RENEWAL_STATE_KIND, record.id);
+      this.stateStore.delete(STATE_KIND, record.id);
+      this.stateStore.secureCheckpoint();
+    } finally {
+      this.endExclusiveOperation({
+        workspaceId: record.workspaceId,
+        fileId: record.id,
+        claimId: claimed.claimId,
+        now,
+      });
+    }
   }
 
   async destroyExpired(now = new Date()): Promise<{ checked: number; destroyed: number; failures: string[] }> {

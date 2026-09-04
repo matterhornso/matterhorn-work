@@ -247,4 +247,144 @@ describe("encrypted Agent Files store", () => {
       expect(store.get({ workspaceId: "ws_beta", ownerId: "owner_beta", fileId: second.id })).not.toBeNull();
     });
   });
+
+  test("serializes Walrus publication across SQLite connections and protects replacement claims", async () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-agent-file-publication-claim-"));
+    const databasePath = join(root, "state.db");
+    const stateA = new MatterhornGuardedRuntimeStateStore(databasePath);
+    const stateB = new MatterhornGuardedRuntimeStateStore(databasePath);
+    const keys = new TestKeyManager();
+    const storeA = new MatterhornAgentFileStore(stateA, keys);
+    const storeB = new MatterhornAgentFileStore(stateB, keys);
+    try {
+      const created = await storeA.create({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        request: uploadRequest({ expiresAt: null }),
+        bytes: encoder.encode("Crash-safe encrypted cloud copy."),
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      });
+      const firstNow = new Date("2026-09-02T00:01:00.000Z");
+      const first = storeA.beginWalrusPublication({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision,
+        now: firstNow,
+      });
+      expect(() => storeB.beginWalrusPublication({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision,
+        now: firstNow,
+      })).toThrow("agent_file_walrus_publication_in_progress");
+      await expect(storeB.delete({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision,
+        now: firstNow,
+      })).rejects.toThrow("agent_file_walrus_publication_in_progress");
+
+      const replacementNow = new Date("2026-09-02T00:06:01.000Z");
+      const replacement = storeB.beginWalrusPublication({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision,
+        now: replacementNow,
+      });
+      expect(storeA.endWalrusPublication({
+        workspaceId: "ws_alpha",
+        fileId: created.id,
+        claimId: first.claimId,
+        now: replacementNow,
+      })).toBe(false);
+      expect(() => storeA.attachWalrusPublication({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision,
+        claimId: first.claimId,
+        publication: {
+          version: "matterhorn.agent-file-walrus-publication.v1",
+          network: "testnet",
+          blobId: "stale-worker-blob",
+          suiObjectId: "0x1234",
+          ciphertextSha256: first.ciphertextSha256,
+          certifiedEpoch: 1,
+          validUntilEpoch: 6,
+          suiTransactionDigest: null,
+          publishedAt: replacementNow.toISOString(),
+          verifiedAt: replacementNow.toISOString(),
+        },
+        now: replacementNow,
+      })).toThrow("agent_file_walrus_publication_claim_invalid");
+      expect(() => storeA.beginWalrusPublication({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision,
+        now: replacementNow,
+      })).toThrow("agent_file_walrus_publication_in_progress");
+      expect(storeB.endWalrusPublication({
+        workspaceId: "ws_alpha",
+        fileId: created.id,
+        claimId: replacement.claimId,
+        now: replacementNow,
+      })).toBe(true);
+
+      first.bytes.fill(0);
+      replacement.bytes.fill(0);
+      await storeA.delete({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        expectedRevision: created.revision,
+        now: replacementNow,
+      });
+      expect(storeA.get({ workspaceId: "ws_alpha", ownerId: "owner_alpha", fileId: created.id })).toBeNull();
+
+      const deleting = await storeA.create({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        request: uploadRequest({ name: "deleting.md", expiresAt: null }),
+        bytes: encoder.encode("Deletion owns the external-operation boundary."),
+        now: new Date("2026-09-02T00:07:00.000Z"),
+      });
+      let unblockDestruction!: () => void;
+      let destructionStarted!: () => void;
+      const destructionGate = new Promise<void>((resolve) => { unblockDestruction = resolve; });
+      const started = new Promise<void>((resolve) => { destructionStarted = resolve; });
+      const destroyKey = keys.destroyKey.bind(keys);
+      keys.destroyKey = async (input) => {
+        destructionStarted();
+        await destructionGate;
+        await destroyKey(input);
+      };
+      const deletePromise = storeA.delete({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: deleting.id,
+        expectedRevision: deleting.revision,
+        now: new Date("2026-09-02T00:08:00.000Z"),
+      });
+      await started;
+      expect(() => storeB.beginWalrusPublication({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: deleting.id,
+        expectedRevision: deleting.revision,
+        now: new Date("2026-09-02T00:08:00.000Z"),
+      })).toThrow("agent_file_operation_in_progress");
+      unblockDestruction();
+      await deletePromise;
+      expect(storeB.get({ workspaceId: "ws_alpha", ownerId: "owner_alpha", fileId: deleting.id })).toBeNull();
+    } finally {
+      stateB.close();
+      stateA.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

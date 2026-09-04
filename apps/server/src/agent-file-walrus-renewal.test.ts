@@ -91,16 +91,19 @@ async function fixture(input: { currentEpoch?: number; validUntilEpoch?: number 
     bytes: encoder.encode("Private portfolio policy."),
     now: new Date("2026-09-01T23:00:00.000Z"),
   });
-  const candidate = store.publicationCandidate({
+  const candidate = store.beginWalrusPublication({
     workspaceId: "workspace_alpha",
     ownerId: "owner_alpha",
     fileId: item.id,
+    expectedRevision: item.revision,
+    now: new Date("2026-09-01T23:01:00.000Z"),
   });
   const published = store.attachWalrusPublication({
     workspaceId: "workspace_alpha",
     ownerId: "owner_alpha",
     fileId: item.id,
     expectedRevision: item.revision,
+    claimId: candidate.claimId,
     publication: {
       version: "matterhorn.agent-file-walrus-publication.v1",
       network: "testnet",

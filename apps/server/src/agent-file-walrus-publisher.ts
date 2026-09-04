@@ -94,10 +94,11 @@ export class MatterhornAgentFileWalrusPublisher {
   }): Promise<MatterhornStoredAgentFile> {
     if (input.signal.aborted) throw new Error("agent_file_walrus_aborted");
     let candidate: ReturnType<MatterhornAgentFileStore["publicationCandidate"]> | null = null;
-    let publicationStarted = false;
+    let claimId: string | null = null;
     try {
-      candidate = this.store.beginWalrusPublication(input);
-      publicationStarted = true;
+      const claimed = this.store.beginWalrusPublication(input);
+      candidate = claimed;
+      claimId = claimed.claimId;
       if (candidate.item.publication) throw new Error("agent_file_already_published");
       const upload = await this.transport.publish({
         bytes: candidate.bytes,
@@ -142,10 +143,15 @@ export class MatterhornAgentFileWalrusPublisher {
         publishedAt: now.toISOString(),
         verifiedAt: now.toISOString(),
       };
-      return this.store.attachWalrusPublication({ ...input, publication, now });
+      return this.store.attachWalrusPublication({ ...input, claimId, publication, now });
     } finally {
       candidate?.bytes.fill(0);
-      if (publicationStarted) this.store.endWalrusPublication(input.fileId);
+      if (claimId) this.store.endWalrusPublication({
+        workspaceId: input.workspaceId,
+        fileId: input.fileId,
+        claimId,
+        now: input.now,
+      });
     }
   }
 

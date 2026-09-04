@@ -41,6 +41,7 @@ export type GuardedRuntimeStateKind =
   | "crypto_evidence_deletion_intent"
   | "crypto_evidence_sui_anchor_intent"
   | "agent_file_record"
+  | "agent_file_operation_claim"
   | "agent_file_renewal_intent"
   | "receipt_index";
 
