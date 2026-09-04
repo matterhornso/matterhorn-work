@@ -188,7 +188,7 @@ import {
 } from "@matterhorn-work/types/desk-agents";
 import { getCustomerProtocolDeskVisual } from "../domains/session/workflows/protocol-desk-ui";
 import {
-  buildMatterhornPublicWalletContext,
+  buildMatterhornWalletPrivateContext,
   compileMatterhornSessionSystemContext,
   estimateMatterhornContextTokens,
   MATTERHORN_DESK_CONTEXT_MAX_CHARS,
@@ -2608,11 +2608,11 @@ export function SessionRoute() {
         )
       : Promise.resolve(undefined);
 
-    const includeWalletPublicContext = contextPolicy?.includeWalletPublicContext === true || (
+    const includeWalletContext = contextPolicy?.includeWalletPublicContext === true || (
       isGeneralMatterhornAgent && shouldInjectCryptoPrompt(text)
     );
-    const walletContext = wallet.snapshot.isConnected && includeWalletPublicContext
-      ? buildMatterhornPublicWalletContext({
+    const walletContext = wallet.snapshot.isConnected && includeWalletContext
+      ? buildMatterhornWalletPrivateContext({
           address: wallet.snapshot.address,
           chainId: wallet.snapshot.chainId,
           ethBalance: wallet.snapshot.ethBalance,
@@ -2683,7 +2683,7 @@ export function SessionRoute() {
         content: envSystemContext,
         enabled: includeEnvironmentMetadata,
       },
-      { id: "wallet_public_metadata", content: walletContext },
+      { id: "wallet_private_context", content: walletContext },
       { id: "crypto_safety", content: cryptoPrompt },
       { id: "workspace_orientation", content: matterhornOrientationPrompt },
       { id: "workflow_run", content: workflowRunPrompt },

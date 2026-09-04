@@ -104,7 +104,8 @@ The session system context is assembled from typed blocks in a stable order:
 2. selected desk contract;
 3. direct-response guidance;
 4. environment variable names, never values;
-5. public wallet context when the desk permits it;
+5. account-linked wallet context when the desk permits it (privacy-labeled as
+   wallet-private even though the underlying chain facts are public);
 6. crypto safety policy when relevant;
 7. workspace orientation;
 8. active workflow; and
@@ -118,6 +119,12 @@ The compiler:
 - records when content is omitted;
 - excludes signing material and secret values; and
 - includes memory only when it was explicitly selected for the session.
+
+For trusted local OpenCode requests, the server scans and hashes the exact final
+compiled system string before usage reservation or provider dispatch. This makes
+one-request consent sensitive to every system-context change rather than only to
+the visible composer parts. Hosted clients cannot provide this field; Matterhorn
+constructs it server-side.
 
 Implementation:
 `apps/app/src/react-app/domains/session/context/session-system-context.ts`.

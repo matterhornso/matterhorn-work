@@ -42,6 +42,16 @@ contact. Consent is bound to every canonical stored message hash, provider,
 model, workspace, and session; a concurrent message, edit, tool result, revert,
 provider change, or token replay fails closed.
 
+Trusted local clients may still use the raw OpenCode prompt route, but its
+`system` field is not outside this boundary. Matterhorn scans and SHA-256 binds
+the exact final string forwarded upstream, including its enforced execution-mode
+suffix. Recognized workflow and environment blocks are workspace-private;
+account-linked wallet addresses and balances are wallet-private even though the
+underlying chain facts are public. Secrets in any system block are rejected
+before allowance reservation or provider contact, and changing one byte after
+consent invalidates that consent. Hosted account clients cannot author system
+context at all; the authoritative message gateway builds it server-side.
+
 ## Retention and deletion
 
 Run receipts contain provider policy, categories, content-free counts of chat files,
