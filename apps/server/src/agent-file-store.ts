@@ -43,7 +43,7 @@ type AgentFileOperationClaim = {
   claimId: string;
   fileId: string;
   expectedRevision: number;
-  operation: "publish" | "destroy_key";
+  operation: "publish" | "renew" | "destroy_key";
   createdAt: string;
   expiresAt: string;
 };
@@ -326,7 +326,9 @@ export class MatterhornAgentFileStore {
         const active = this.activeOperationClaim({ ...input, nowMs: input.now.getTime() });
         throw new MatterhornAgentFileStoreError(active?.operation === "publish"
           ? "agent_file_walrus_publication_in_progress"
-          : "agent_file_operation_in_progress");
+          : active?.operation === "renew"
+            ? "agent_file_walrus_renewal_in_progress"
+            : "agent_file_operation_in_progress");
       }
       return { record: structuredClone(record), claimId };
     });
@@ -599,6 +601,57 @@ export class MatterhornAgentFileStore {
     return this.endExclusiveOperation({ ...input, now });
   }
 
+  beginWalrusRenewal(input: {
+    workspaceId: string;
+    ownerId: string;
+    fileId: string;
+    expectedRevision: number;
+    now?: Date;
+  }): ReturnType<MatterhornAgentFileStore["publicationCandidate"]> & { claimId: string } {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
+    const claimed = this.beginExclusiveOperation({ ...input, operation: "renew", now });
+    try {
+      return { ...this.publicationCandidate({ ...input, now }), claimId: claimed.claimId };
+    } catch (error) {
+      this.endWalrusRenewal({
+        workspaceId: input.workspaceId,
+        fileId: input.fileId,
+        claimId: claimed.claimId,
+        now,
+      });
+      throw error;
+    }
+  }
+
+  hasWalrusRenewalClaim(input: {
+    workspaceId: string;
+    fileId: string;
+    expectedRevision: number;
+    claimId: string;
+    now?: Date;
+  }): boolean {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
+    const claim = this.activeOperationClaim({ ...input, nowMs: now.getTime() });
+    return claim?.version === "matterhorn.agent-file-operation-claim.v1"
+      && claim.claimId === input.claimId
+      && claim.fileId === input.fileId
+      && claim.expectedRevision === input.expectedRevision
+      && claim.operation === "renew";
+  }
+
+  endWalrusRenewal(input: {
+    workspaceId: string;
+    fileId: string;
+    claimId: string;
+    now?: Date;
+  }): boolean {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
+    return this.endExclusiveOperation({ ...input, now });
+  }
+
   attachWalrusPublication(input: {
     workspaceId: string;
     ownerId: string;
@@ -667,11 +720,17 @@ export class MatterhornAgentFileStore {
     expectedSuiObjectId: string;
     expectedCiphertextSha256: string;
     expectedPreviousValidUntilEpoch: number;
+    claimId: string;
     publication: MatterhornAgentFileWalrusPublication;
     now?: Date;
   }): MatterhornStoredAgentFile {
     validatePublication(input.publication);
-    const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId);
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
+    if (!this.hasWalrusRenewalClaim({ ...input, now })) {
+      throw new MatterhornAgentFileStoreError("agent_file_walrus_renewal_claim_invalid");
+    }
+    const record = this.stateStore.get<MatterhornAgentFileRecord>(STATE_KIND, input.fileId, now.getTime());
     if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
     assertTenant(record, input);
     this.assertRecoveryMaterialActive(record);
@@ -695,8 +754,6 @@ export class MatterhornAgentFileStore {
       || !input.publication.renewedAt) {
       throw new MatterhornAgentFileStoreError("agent_file_walrus_renewal_invalid");
     }
-    const now = input.now ?? new Date();
-    if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
     const next: MatterhornAgentFileRecord = {
       ...record,
       revision: record.revision + 1,
@@ -710,6 +767,9 @@ export class MatterhornAgentFileStore {
       value: next,
       nowMs: now.getTime(),
     });
+    if (!this.stateStore.delete(OPERATION_CLAIM_KIND, this.operationClaimKey(input))) {
+      throw new MatterhornAgentFileStoreError("agent_file_walrus_renewal_claim_invalid");
+    }
     return accountView(next);
   }
 

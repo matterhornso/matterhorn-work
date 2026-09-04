@@ -36,6 +36,7 @@ const SUI_TESTNET_NETWORK = "sui:testnet" as const;
 type RenewalIntentRecord = {
   workspaceId: string;
   ownerId: string;
+  claimId: string;
   preview: MatterhornAgentFileWalrusRenewalPreview;
 };
 
@@ -339,21 +340,32 @@ export class MatterhornAgentFileWalrusRenewalService {
     const existing = this.stateStore.get<RenewalIntentRecord>(STATE_KIND, input.fileId, now.getTime());
     if (existing) {
       assertIntentTenant(existing, input);
-      if (existing.preview.fileRevision !== input.expectedRevision
-        || existing.preview.signer !== signer
-        || existing.preview.extensionEpochs !== this.extensionEpochs) {
-        fail("agent_file_walrus_renewal_in_progress");
+      if (!this.store.hasWalrusRenewalClaim({
+        workspaceId: input.workspaceId,
+        fileId: input.fileId,
+        expectedRevision: existing.preview.fileRevision,
+        claimId: existing.claimId,
+        now,
+      })) {
+        this.stateStore.delete(STATE_KIND, input.fileId);
+      } else {
+        if (existing.preview.fileRevision !== input.expectedRevision
+          || existing.preview.signer !== signer
+          || existing.preview.extensionEpochs !== this.extensionEpochs) {
+          fail("agent_file_walrus_renewal_in_progress");
+        }
+        return this.prepareResponse(existing.preview);
       }
-      return this.prepareResponse(existing.preview);
     }
     this.stateStore.delete(STATE_KIND, input.fileId);
-    const candidate = this.store.publicationCandidate({
+    const candidate = this.store.beginWalrusRenewal({
       workspaceId: input.workspaceId,
       ownerId: input.ownerId,
       fileId: input.fileId,
       expectedRevision: input.expectedRevision,
       now,
     });
+    let retainedClaim = false;
     try {
       const publication = candidate.item.publication;
       if (!publication) fail("agent_file_walrus_not_published");
@@ -430,7 +442,12 @@ export class MatterhornAgentFileWalrusRenewalService {
         intentHash: sha256(intentHashPayload(previewWithoutHash)),
       };
       assertPreview(preview);
-      const record: RenewalIntentRecord = { workspaceId: input.workspaceId, ownerId: input.ownerId, preview };
+      const record: RenewalIntentRecord = {
+        workspaceId: input.workspaceId,
+        ownerId: input.ownerId,
+        claimId: candidate.claimId,
+        preview,
+      };
       if (!this.stateStore.putIfAbsent({
         kind: STATE_KIND,
         key: input.fileId,
@@ -439,9 +456,18 @@ export class MatterhornAgentFileWalrusRenewalService {
         expiresAtMs: Date.parse(preview.expiresAt),
         nowMs: now.getTime(),
       })) fail("agent_file_walrus_renewal_in_progress");
+      retainedClaim = true;
       return this.prepareResponse(preview);
     } finally {
       candidate.bytes.fill(0);
+      if (!retainedClaim) {
+        this.store.endWalrusRenewal({
+          workspaceId: input.workspaceId,
+          fileId: input.fileId,
+          claimId: candidate.claimId,
+          now,
+        });
+      }
     }
   }
 
@@ -467,6 +493,13 @@ export class MatterhornAgentFileWalrusRenewalService {
       || preview.transactionDigest !== transactionDigest(input.transactionDigest)) {
       fail("agent_file_walrus_renewal_intent_mismatch");
     }
+    if (!this.store.hasWalrusRenewalClaim({
+      workspaceId: input.workspaceId,
+      fileId: input.fileId,
+      expectedRevision: preview.fileRevision,
+      claimId: record.claimId,
+      now,
+    })) fail("agent_file_walrus_renewal_expired_or_replayed");
     const transaction = await this.verifyTransaction({
       network: SUI_TESTNET_NETWORK,
       digest: preview.transactionDigest,
@@ -499,15 +532,17 @@ export class MatterhornAgentFileWalrusRenewalService {
     });
     const currentPublication = currentItem?.publication;
     if (!currentPublication) fail("agent_file_walrus_not_published");
+    const finalizedAt = input.now ?? new Date();
+    if (!Number.isFinite(finalizedAt.getTime())) fail("agent_file_time_invalid");
     const renewedPublication: MatterhornAgentFileWalrusPublication = {
       ...currentPublication,
       validUntilEpoch: certification.validUntilEpoch,
       renewalTransactionDigest: transaction.digest,
       renewedAt: transaction.observedAt,
-      verifiedAt: now.toISOString(),
+      verifiedAt: finalizedAt.toISOString(),
     };
     const item = this.stateStore.transaction(() => {
-      const consumed = this.stateStore.take<RenewalIntentRecord>(STATE_KIND, input.fileId, now.getTime());
+      const consumed = this.stateStore.take<RenewalIntentRecord>(STATE_KIND, input.fileId, finalizedAt.getTime());
       if (!consumed) fail("agent_file_walrus_renewal_expired_or_replayed");
       assertIntentTenant(consumed, input);
       if (canonicalJson(consumed.preview) !== canonicalJson(preview)) {
@@ -522,8 +557,9 @@ export class MatterhornAgentFileWalrusRenewalService {
         expectedSuiObjectId: preview.suiObjectId,
         expectedCiphertextSha256: currentPublication.ciphertextSha256,
         expectedPreviousValidUntilEpoch: preview.previousValidUntilEpoch,
+        claimId: consumed.claimId,
         publication: renewedPublication,
-        now,
+        now: finalizedAt,
       });
     });
     return {
@@ -531,7 +567,7 @@ export class MatterhornAgentFileWalrusRenewalService {
       verification: verification({
         publication: renewedPublication,
         currentEpoch: certification.currentEpoch,
-        verifiedAt: now.toISOString(),
+        verifiedAt: finalizedAt.toISOString(),
       }),
     };
   }

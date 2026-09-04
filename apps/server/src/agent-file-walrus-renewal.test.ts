@@ -154,11 +154,16 @@ async function fixture(input: { currentEpoch?: number; validUntilEpoch?: number 
     5,
   );
   return {
+    root,
     state,
+    keys,
     store,
     published,
     service,
     built,
+    buildTransaction,
+    verifyTransaction,
+    verifyCertification,
     setValidUntilEpoch: (value: number) => { validUntilEpoch = value; },
     setTransactionStatus: (value: "confirmed" | "failed") => { transactionStatus = value; },
   };
@@ -231,6 +236,18 @@ describe("Walrus Agent File renewal airlock", () => {
         signal: new AbortController().signal,
         now: new Date("2026-09-02T00:02:01.000Z"),
       })).rejects.toThrow("agent_file_walrus_renewal_expired_or_replayed");
+      await value.store.delete({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: confirmed.item.revision,
+        now: new Date("2026-09-02T00:02:02.000Z"),
+      });
+      expect(value.store.get({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+      })).toBeNull();
     } finally {
       value.state.close();
     }
@@ -317,6 +334,190 @@ describe("Walrus Agent File renewal airlock", () => {
       } finally {
         value.state.close();
       }
+    }
+  });
+
+  test("serializes renewal preparation and deletion across SQLite connections", async () => {
+    const value = await fixture();
+    const stateB = new MatterhornGuardedRuntimeStateStore(join(value.root, "state.db"));
+    const storeB = new MatterhornAgentFileStore(stateB, value.keys);
+    let releaseBuild!: () => void;
+    let buildStarted!: () => void;
+    const buildGate = new Promise<void>((resolve) => { releaseBuild = resolve; });
+    const started = new Promise<void>((resolve) => { buildStarted = resolve; });
+    let secondBuildCalls = 0;
+    const serviceA = new MatterhornAgentFileWalrusRenewalService(
+      value.store,
+      value.state,
+      async (input) => {
+        buildStarted();
+        await buildGate;
+        return value.buildTransaction(input);
+      },
+      value.verifyTransaction,
+      value.verifyCertification,
+      5,
+    );
+    const serviceB = new MatterhornAgentFileWalrusRenewalService(
+      storeB,
+      stateB,
+      async (input) => {
+        secondBuildCalls += 1;
+        return value.buildTransaction(input);
+      },
+      value.verifyTransaction,
+      value.verifyCertification,
+      5,
+    );
+    try {
+      const now = new Date("2026-09-02T00:00:00.000Z");
+      const firstPrepare = serviceA.prepare({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        signer: SIGNER,
+        signal: new AbortController().signal,
+        now,
+      });
+      await started;
+      await expect(serviceB.prepare({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        signer: SIGNER,
+        signal: new AbortController().signal,
+        now,
+      })).rejects.toThrow("agent_file_walrus_renewal_in_progress");
+      expect(secondBuildCalls).toBe(0);
+      await expect(storeB.delete({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        now,
+      })).rejects.toThrow("agent_file_walrus_renewal_in_progress");
+
+      releaseBuild();
+      const prepared = await firstPrepare;
+      const repeated = await serviceB.prepare({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        signer: SIGNER,
+        signal: new AbortController().signal,
+        now: new Date("2026-09-02T00:00:01.000Z"),
+      });
+      expect(repeated.preview).toEqual(prepared.preview);
+      expect(secondBuildCalls).toBe(0);
+      await expect(storeB.delete({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        now: new Date("2026-09-02T00:00:01.000Z"),
+      })).rejects.toThrow("agent_file_walrus_renewal_in_progress");
+    } finally {
+      releaseBuild();
+      stateB.close();
+      value.state.close();
+    }
+  });
+
+  test("does not let a stale renewal worker clear or finalize a replacement claim", async () => {
+    const value = await fixture();
+    const stateB = new MatterhornGuardedRuntimeStateStore(join(value.root, "state.db"));
+    const storeB = new MatterhornAgentFileStore(stateB, value.keys);
+    try {
+      const first = value.store.beginWalrusRenewal({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      });
+      const replacementNow = new Date("2026-09-02T00:05:01.000Z");
+      const replacement = storeB.beginWalrusRenewal({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        now: replacementNow,
+      });
+      expect(value.store.endWalrusRenewal({
+        workspaceId: "workspace_alpha",
+        fileId: value.published.id,
+        claimId: first.claimId,
+        now: replacementNow,
+      })).toBe(false);
+      expect(() => value.store.renewWalrusPublication({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        expectedBlobId: "test-blob-id",
+        expectedSuiObjectId: "0x1234",
+        expectedCiphertextSha256: value.published.publication!.ciphertextSha256,
+        expectedPreviousValidUntilEpoch: 15,
+        claimId: first.claimId,
+        publication: {
+          ...value.published.publication!,
+          validUntilEpoch: 20,
+          renewalTransactionDigest: value.built.transactionDigest,
+          renewedAt: replacementNow.toISOString(),
+          verifiedAt: replacementNow.toISOString(),
+        },
+        now: replacementNow,
+      })).toThrow("agent_file_walrus_renewal_claim_invalid");
+      expect(value.store.hasWalrusRenewalClaim({
+        workspaceId: "workspace_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        claimId: replacement.claimId,
+        now: replacementNow,
+      })).toBe(true);
+      expect(storeB.endWalrusRenewal({
+        workspaceId: "workspace_alpha",
+        fileId: value.published.id,
+        claimId: replacement.claimId,
+        now: replacementNow,
+      })).toBe(true);
+      first.bytes.fill(0);
+      replacement.bytes.fill(0);
+    } finally {
+      stateB.close();
+      value.state.close();
+    }
+  });
+
+  test("releases the renewal claim when preparation fails before wallet review", async () => {
+    const value = await fixture({ currentEpoch: 11 });
+    try {
+      await expect(value.service.prepare({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        signer: SIGNER,
+        signal: new AbortController().signal,
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      })).rejects.toThrow("agent_file_walrus_renewal_not_due");
+      await value.store.delete({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        now: new Date("2026-09-02T00:00:01.000Z"),
+      });
+      expect(value.store.get({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+      })).toBeNull();
+    } finally {
+      value.state.close();
     }
   });
 });
