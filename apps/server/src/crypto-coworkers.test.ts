@@ -576,6 +576,75 @@ describe("durable crypto coworkers", () => {
     }
   });
 
+  test("inherits an active coworker binding to one new chat without caller-selected authority", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      const resources = coworkers.setResourceScope(
+        "ws_alpha",
+        "account_alpha",
+        profile.id,
+        watchResourceScopeInput(),
+      );
+      coworkers.bindSession("ws_alpha", "account_alpha", "ses_source", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      });
+      const inherited = coworkers.inheritSessionBinding(
+        "ws_alpha",
+        "account_alpha",
+        "ses_source",
+        "ses_fork",
+      );
+      expect(inherited).toMatchObject({
+        sessionId: "ses_fork",
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        resourceScopeHash: resources.scopeHash,
+        revision: 1,
+      });
+      expect(() => coworkers.inheritSessionBinding(
+        "ws_alpha",
+        "account_alpha",
+        "ses_source",
+        "ses_fork",
+      )).toThrow(new MatterhornCoworkerError("coworker_session_binding_conflict"));
+      expect(() => coworkers.inheritSessionBinding(
+        "ws_alpha",
+        "account_beta",
+        "ses_source",
+        "ses_beta_fork",
+      )).toThrow(new MatterhornCoworkerError("coworker_session_binding_not_found"));
+      expect(() => coworkers.inheritSessionBinding(
+        "ws_other",
+        "account_alpha",
+        "ses_source",
+        "ses_other_fork",
+      )).toThrow(new MatterhornCoworkerError("coworker_session_binding_not_found"));
+      expect(() => coworkers.inheritSessionBinding(
+        "ws_alpha",
+        "account_alpha",
+        "ses_source",
+        "ses_source",
+      )).toThrow(new MatterhornCoworkerError("coworker_session_binding_invalid"));
+
+      coworkers.update("ws_alpha", "account_alpha", profile.id, {
+        expectedRevision: profile.revision,
+        mission: "Continue only after the user reviews this changed coworker.",
+      });
+      expect(() => coworkers.inheritSessionBinding(
+        "ws_alpha",
+        "account_alpha",
+        "ses_source",
+        "ses_stale_fork",
+      )).toThrow(new MatterhornCoworkerError("coworker_session_binding_stale"));
+      expect(coworkers.getSessionBinding("ws_alpha", "account_alpha", "ses_stale_fork")).toBeNull();
+    } finally {
+      store.close();
+    }
+  });
+
   test("rejects stale or replayed chat bindings after profile and resource changes", () => {
     const { store, coworkers } = fixture();
     try {

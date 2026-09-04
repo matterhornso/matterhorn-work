@@ -3030,6 +3030,28 @@ export function SessionRoute() {
         void (async () => {
           try {
             const forked = await forkSession(opencodeClient, selectedSessionId, messageId);
+            let coworkerForkWarning = false;
+            if (selectedWorkspaceEndpoint) {
+              try {
+                const sourceBinding = await selectedWorkspaceEndpoint.client.getCoworkerSessionBinding(
+                  selectedWorkspaceEndpoint.workspaceId,
+                  selectedSessionId,
+                );
+                if (sourceBinding.binding) {
+                  if (!sourceBinding.active) {
+                    coworkerForkWarning = true;
+                  } else {
+                    await selectedWorkspaceEndpoint.client.inheritCoworkerSessionBinding(
+                      selectedWorkspaceEndpoint.workspaceId,
+                      selectedSessionId,
+                      forked.id,
+                    );
+                  }
+                }
+              } catch {
+                coworkerForkWarning = true;
+              }
+            }
             writeLastSessionFor(selectedWorkspaceId, forked.id);
             rememberPendingCreatedSession(selectedWorkspaceId, forked.id);
             setSessionsByWorkspaceId((current) => ({
@@ -3038,6 +3060,14 @@ export function SessionRoute() {
             }));
             navigateToWorkspaceSession(selectedWorkspaceId, forked.id);
             void refreshRouteState();
+            if (coworkerForkWarning) {
+              showToast({
+                title: "Chat forked without its coworker",
+                description: "Open Coworkers and choose who should continue this chat.",
+                tone: "warning",
+                durationMs: 4200,
+              });
+            }
           } catch (error) {
             console.warn("[fork] failed", error);
           }
