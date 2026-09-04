@@ -645,6 +645,42 @@ describe("durable crypto coworkers", () => {
     }
   });
 
+  test("purges a deleted chat binding after coworker access is revoked", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-session-purge-"));
+    roots.push(root);
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    let accountAllowed = true;
+    const coworkers = new MatterhornCoworkers({
+      store,
+      policyVersion: "coworker-policy-1",
+      enforceAccountAccess: true,
+      accountIsAllowed: () => accountAllowed,
+      now: () => new Date(NOW),
+      id: () => "cw_session_purge",
+    });
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      coworkers.bindSession("ws_alpha", "account_alpha", "ses_deleted", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      });
+      accountAllowed = false;
+      expect(() => coworkers.getSessionBinding("ws_alpha", "account_alpha", "ses_deleted"))
+        .toThrow(new MatterhornCoworkerError("coworker_access_required"));
+      expect(coworkers.purgeDeletedSessionBinding("ws_alpha", "account_alpha", "ses_deleted"))
+        .toBe(true);
+      expect(coworkers.purgeDeletedSessionBinding("ws_alpha", "account_alpha", "ses_deleted"))
+        .toBe(false);
+      expect(store.getSessionBinding("ws_alpha", "account_alpha", "ses_deleted")).toBeNull();
+      expect(() => coworkers.purgeDeletedSessionBinding("ws_alpha", "account_alpha", ""))
+        .toThrow(new MatterhornCoworkerError("coworker_session_binding_invalid"));
+    } finally {
+      store.close();
+    }
+  });
+
   test("rejects stale or replayed chat bindings after profile and resource changes", () => {
     const { store, coworkers } = fixture();
     try {

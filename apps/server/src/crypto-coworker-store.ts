@@ -1058,6 +1058,17 @@ export class MatterhornCoworkerStore {
     `).run(workspaceId, ownerId, sessionId, expectedRevision).changes ?? 0) === 1;
   }
 
+  purgeSessionBinding(
+    workspaceId: string,
+    ownerId: string,
+    sessionId: string,
+  ): boolean {
+    return (statement(this.#db, `
+      DELETE FROM crypto_coworker_session_bindings
+      WHERE workspace_id = ? AND owner_id = ? AND session_id = ?
+    `).run(workspaceId, ownerId, sessionId).changes ?? 0) === 1;
+  }
+
   listWatches(workspaceId: string, ownerId: string, coworkerId: string): MatterhornCoworkerWatch[] {
     return (statement(this.#db, `
       SELECT * FROM crypto_coworker_watches

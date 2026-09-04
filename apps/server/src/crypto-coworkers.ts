@@ -480,6 +480,22 @@ export class MatterhornCoworkers {
     }
   }
 
+  /**
+   * Internal lifecycle cleanup after the authoritative chat no longer exists.
+   * It intentionally does not require an active invite so revoking coworker
+   * access cannot prevent a user from deleting their own residual binding.
+   */
+  purgeDeletedSessionBinding(
+    workspaceId: string,
+    ownerId: string,
+    sessionId: string,
+  ): boolean {
+    if (!validIdentity(workspaceId) || !validIdentity(ownerId) || !validIdentity(sessionId)) {
+      throw new MatterhornCoworkerError("coworker_session_binding_invalid");
+    }
+    return this.#store.purgeSessionBinding(workspaceId, ownerId, sessionId);
+  }
+
   setResourceScope(
     workspaceId: string,
     ownerId: string,
