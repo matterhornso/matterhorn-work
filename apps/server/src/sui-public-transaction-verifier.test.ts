@@ -139,7 +139,8 @@ describe("pinned Sui public transaction verifier", () => {
     for (const [candidate, code] of [
       [projection({ digest: "4".repeat(44) }), "sui_public_transaction_digest_mismatch"],
       [projection({ sender: `0x${"4".repeat(64)}` }), "sui_public_transaction_sender_mismatch"],
-      [projection({ gasOwner: `0x${"4".repeat(64)}` }), "sui_public_transaction_sender_mismatch"],
+      [projection({ gasOwner: `0x${"4".repeat(64)}` }), "sui_public_transaction_gas_owner_mismatch"],
+      [projection({ gasOwner: null }), "sui_public_transaction_gas_owner_mismatch"],
       [projection({ inputs: [
         { $kind: "Pure", Pure: { bytes: u64(2_000_000_000n) } },
         { $kind: "Pure", Pure: { bytes: address(RECIPIENT) } },
@@ -152,8 +153,44 @@ describe("pinned Sui public transaction verifier", () => {
         ...projection().commands,
         { $kind: "MoveCall", MoveCall: { package: "0x2", module: "coin", function: "burn" } },
       ] }), "sui_public_transaction_commands_mismatch"],
+      [projection({ commands: [
+        {
+          ...projection().commands[0],
+          MoveCall: { package: "0x2", module: "coin", function: "burn" },
+        },
+        projection().commands[1]!,
+      ] }), "sui_public_transaction_commands_mismatch"],
+      [projection({ commands: [
+        projection().commands[0]!,
+        {
+          ...projection().commands[1],
+          MergeCoins: { destination: { $kind: "GasCoin", GasCoin: true }, sources: [] },
+        },
+      ] }), "sui_public_transaction_commands_mismatch"],
+      [projection({ commands: [
+        {
+          $kind: "SplitCoins",
+          SplitCoins: {
+            coin: { $kind: "GasCoin", GasCoin: true, Input: 0 },
+            amounts: [{ $kind: "Input", Input: 0 }],
+          },
+        },
+        projection().commands[1]!,
+      ] }), "sui_public_transaction_commands_mismatch"],
     ] as const) {
       await expect(verifier(candidate).verify(request())).rejects.toThrow(code);
+    }
+  });
+
+  test("rejects malformed digests and non-canonical or missing chain epochs before promotion", async () => {
+    const fixture = verifier();
+    await expect(fixture.verify(request({ digest: "3".repeat(32) })))
+      .rejects.toThrow("sui_public_transaction_digest_invalid");
+    expect(fixture.calls).toHaveLength(0);
+
+    for (const epoch of [null, "01", "18446744073709551616", "epoch-912"]) {
+      await expect(verifier(projection({ epoch })).verify(request()))
+        .rejects.toThrow("sui_public_transaction_epoch_invalid");
     }
   });
 

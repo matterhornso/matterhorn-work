@@ -1,7 +1,12 @@
 import { bcs } from "@mysten/sui/bcs";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { SuiClientTypes } from "@mysten/sui/client";
-import { fromBase64, normalizeSuiAddress, normalizeStructTag } from "@mysten/sui/utils";
+import {
+  fromBase64,
+  isValidTransactionDigest,
+  normalizeSuiAddress,
+  normalizeStructTag,
+} from "@mysten/sui/utils";
 import { GrpcWebFetchTransport } from "@protobuf-ts/grpcweb-transport";
 
 import {
@@ -97,10 +102,26 @@ export type MatterhornSuiPublicTransactionVerifierOptions = {
 
 function canonicalSuiDigest(value: string): string {
   const digest = value.trim();
-  if (!/^[1-9A-HJ-NP-Za-km-z]{32,128}$/.test(digest)) {
+  if (!isValidTransactionDigest(digest)) {
     throw new Error("sui_public_transaction_digest_invalid");
   }
   return digest;
+}
+
+function canonicalSuiEpoch(value: string | null): string {
+  if (typeof value !== "string" || !/^(?:0|[1-9][0-9]{0,19})$/.test(value)) {
+    throw new Error("sui_public_transaction_epoch_invalid");
+  }
+  const epoch = BigInt(value);
+  if (epoch > 18_446_744_073_709_551_615n) {
+    throw new Error("sui_public_transaction_epoch_invalid");
+  }
+  return epoch.toString();
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const keys = Object.keys(value);
+  return keys.length === allowed.length && keys.every((key) => allowed.includes(key));
 }
 
 function canonicalSuiAddress(value: string, code: string): string {
@@ -130,7 +151,11 @@ function pureBytes(inputs: unknown[], argument: SuiArgument, code: string): Uint
   const candidate = inputs[Number(argument.Input)] as Partial<SuiPureInput> | null;
   if (!candidate
     || candidate.$kind !== "Pure"
+    || !hasOnlyKeys(candidate as Record<string, unknown>, ["$kind", "Pure"])
     || !candidate.Pure
+    || typeof candidate.Pure !== "object"
+    || Array.isArray(candidate.Pure)
+    || !hasOnlyKeys(candidate.Pure as unknown as Record<string, unknown>, ["bytes"])
     || typeof candidate.Pure.bytes !== "string") throw new Error(code);
   try {
     return fromBase64(candidate.Pure.bytes);
@@ -140,8 +165,11 @@ function pureBytes(inputs: unknown[], argument: SuiArgument, code: string): Uint
 }
 
 function enumKind(value: Record<string, unknown>, allowed: readonly string[]): string | null {
-  if (typeof value.$kind === "string" && allowed.includes(value.$kind)) return value.$kind;
   const present = allowed.filter((key) => Object.hasOwn(value, key));
+  if (typeof value.$kind === "string") {
+    if (!allowed.includes(value.$kind) || present.length !== 1 || present[0] !== value.$kind) return null;
+    return value.$kind;
+  }
   return present.length === 1 ? present[0]! : null;
 }
 
@@ -149,6 +177,7 @@ function isArgument(value: unknown): value is SuiArgument {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const argument = value as Partial<SuiArgument>;
   const kind = enumKind(argument as Record<string, unknown>, ["GasCoin", "Input", "Result", "NestedResult"]);
+  if (!kind || !hasOnlyKeys(argument as Record<string, unknown>, ["$kind", kind])) return false;
   if (kind === "GasCoin") return argument.GasCoin === true;
   if (kind === "Input") return Number.isSafeInteger(argument.Input) && Number(argument.Input) >= 0;
   if (kind === "Result") return Number.isSafeInteger(argument.Result) && Number(argument.Result) >= 0;
@@ -160,10 +189,12 @@ function isArgument(value: unknown): value is SuiArgument {
 
 function isSplitCoinsCommand(value: SuiCommand | undefined): value is SplitCoinsCommand {
   if (!value || enumKind(value, ["SplitCoins", "TransferObjects", "MoveCall", "MergeCoins", "Publish", "MakeMoveVec", "Upgrade", "$Intent"]) !== "SplitCoins") return false;
+  if (!hasOnlyKeys(value, ["$kind", "SplitCoins"])) return false;
   const split = value.SplitCoins;
   return Boolean(split)
     && typeof split === "object"
     && !Array.isArray(split)
+    && hasOnlyKeys(split as Record<string, unknown>, ["coin", "amounts"])
     && isArgument((split as { coin?: unknown }).coin)
     && Array.isArray((split as { amounts?: unknown }).amounts)
     && (split as { amounts: unknown[] }).amounts.every(isArgument);
@@ -171,10 +202,12 @@ function isSplitCoinsCommand(value: SuiCommand | undefined): value is SplitCoins
 
 function isTransferObjectsCommand(value: SuiCommand | undefined): value is TransferObjectsCommand {
   if (!value || enumKind(value, ["SplitCoins", "TransferObjects", "MoveCall", "MergeCoins", "Publish", "MakeMoveVec", "Upgrade", "$Intent"]) !== "TransferObjects") return false;
+  if (!hasOnlyKeys(value, ["$kind", "TransferObjects"])) return false;
   const transfer = value.TransferObjects;
   return Boolean(transfer)
     && typeof transfer === "object"
     && !Array.isArray(transfer)
+    && hasOnlyKeys(transfer as Record<string, unknown>, ["objects", "address"])
     && isArgument((transfer as { address?: unknown }).address)
     && Array.isArray((transfer as { objects?: unknown }).objects)
     && (transfer as { objects: unknown[] }).objects.every(isArgument);
@@ -334,11 +367,14 @@ export function createPinnedSuiPublicTransactionVerifier(
       throw new Error("sui_public_transaction_lookup_failed");
     }
     if (transaction.digest !== digest) throw new Error("sui_public_transaction_digest_mismatch");
-    if (canonicalSuiAddress(transaction.sender, "sui_public_transaction_sender_mismatch") !== signer
-      || (transaction.gasOwner !== null
-        && canonicalSuiAddress(transaction.gasOwner, "sui_public_transaction_gas_owner_mismatch") !== signer)) {
+    if (canonicalSuiAddress(transaction.sender, "sui_public_transaction_sender_mismatch") !== signer) {
       throw new Error("sui_public_transaction_sender_mismatch");
     }
+    if (typeof transaction.gasOwner !== "string"
+      || canonicalSuiAddress(transaction.gasOwner, "sui_public_transaction_gas_owner_mismatch") !== signer) {
+      throw new Error("sui_public_transaction_gas_owner_mismatch");
+    }
+    const epoch = canonicalSuiEpoch(transaction.epoch);
     assertExactNativeTransfer({ transaction, signer, recipient, amountMist });
     return {
       network: SUI_TESTNET_NETWORK,
@@ -347,7 +383,7 @@ export function createPinnedSuiPublicTransactionVerifier(
       signer,
       recipient,
       amountMist: amountMist.toString(),
-      epoch: transaction.epoch,
+      epoch,
       source: "sui.grpc",
       observedAt: now().toISOString(),
     };
