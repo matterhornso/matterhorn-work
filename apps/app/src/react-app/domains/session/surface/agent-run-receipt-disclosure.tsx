@@ -47,6 +47,9 @@ function providerTrainingLabel(receipt: MatterhornAgentRunReceipt): string {
 }
 
 function providerRetentionLabel(receipt: MatterhornAgentRunReceipt): string {
+  if (receipt.provider.retentionDays === 0) {
+    return "The provider does not keep this request after processing.";
+  }
   if (receipt.provider.retentionDays !== null) {
     return `The provider may keep request data for up to ${plural(receipt.provider.retentionDays, "day")}.`;
   }
