@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   readSessionPanelFromSearch,
@@ -16,6 +18,7 @@ import {
   resolveCoworkerWatchSources,
 } from "../src/react-app/domains/coworkers/coworker-watch-form";
 import { suggestCoworkerTemplate } from "../src/react-app/domains/session/chat/workspace-coworker-suggestion";
+import { WorkspaceCoworkerStart } from "../src/react-app/domains/session/chat/workspace-coworker-start";
 
 function appSource(path: string): string {
   return readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
@@ -46,13 +49,16 @@ describe("chat-operated coworker UI", () => {
     const home = appSource("react-app/domains/session/chat/session-page.tsx");
     const start = appSource("react-app/domains/session/chat/workspace-coworker-start.tsx");
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
-    expect(start).toContain("What should Matterhorn help you do?");
+    expect(start).toContain("What do you want done?");
     expect(start).toContain("Describe the outcome in one sentence.");
+    expect(start).toContain("{trimmedOutcome ? (");
+    expect(start).toContain("Suggested coworker");
+    expect(start).toContain("Change coworker");
     expect(start).toContain('role="group" aria-label="Coworker role"');
     expect(start).toContain("aria-pressed={selected}");
     expect(start).toContain("Suggested");
     expect(start).toContain('type="submit"');
-    expect(start).toContain("Continue");
+    expect(start).toContain("Set up coworker");
     expect(start).toContain("Research markets");
     expect(start).toContain("Watch risk");
     expect(start).toContain("Prepare a wallet review");
@@ -65,6 +71,15 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("setPendingOutcome(props.initialOutcome?.trim() ?? \"\")");
     expect(panel).toContain('pendingOutcome || "Ask what outcome I want, then help me take the safest next step."');
     expect(panel).toContain("Your outcome");
+  });
+
+  test("keeps role choices out of the first-run view until the user describes an outcome", () => {
+    const html = renderToStaticMarkup(createElement(WorkspaceCoworkerStart, { onChoose: () => undefined }));
+    expect(html).toContain("What do you want done?");
+    expect(html).toContain("Set up coworker");
+    expect(html).not.toContain("Suggested coworker");
+    expect(html).not.toContain("Change coworker");
+    expect(html).not.toContain("Research markets");
   });
 
   test("suggests a coworker deterministically without sending the outcome anywhere", () => {
