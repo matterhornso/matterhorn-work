@@ -84,6 +84,18 @@ describe("Wallet approval security contract", () => {
     expect(source).not.toContain('label="Simulation"');
   });
 
+  test("wallet review warnings use readable theme tokens", () => {
+    const source = readAppSource("domains/wallet/TransactionApproval.tsx");
+
+    expect(source).toContain("bg-amber-3/40 text-amber-12");
+    expect(source).toContain("dark:text-amber-11");
+    expect(source).toContain("bg-red-3/40 text-red-12");
+    expect(source).toContain("dark:text-red-11");
+    expect(source).not.toContain("text-amber-100");
+    expect(source).not.toContain("text-red-100");
+    expect(source).not.toMatch(/text-(?:green|red|amber)-(?:100|200|300|400)/);
+  });
+
   test("approval modal uses one calm status summary and a dominant reviewed value", () => {
     const source = readAppSource("domains/wallet/TransactionApproval.tsx");
 

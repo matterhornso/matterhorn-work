@@ -461,10 +461,10 @@ async function assertApprovalBlocked(page, reason) {
     return;
   }
 
-  const approveButton = page.getByRole("button", { name: /^Approve$/ });
-  if ((await approveButton.count()) > 0 && await approveButton.first().isVisible()) {
-    if (await approveButton.first().isEnabled()) {
-      throw new Error(`${reason} approve button is enabled.`);
+  const continueButton = page.getByRole("button", { name: /^Continue in wallet$/ });
+  if ((await continueButton.count()) > 0 && await continueButton.first().isVisible()) {
+    if (await continueButton.first().isEnabled()) {
+      throw new Error(`${reason} continue-in-wallet button is enabled.`);
     }
     return;
   }
@@ -596,7 +596,7 @@ async function runSmoke(config) {
     await stage(report, "block_failed_simulation", "Block transaction that fails pre-approval simulation", async () => {
       simulationMode = "failed";
       await dispatchApprovalRequest(page, { chainId: 84532 });
-      await page.getByRole("dialog", { name: /Transaction Approval/i }).waitFor({ state: "visible", timeout: 15_000 });
+      await page.getByRole("dialog", { name: /Review wallet action/i }).waitFor({ state: "visible", timeout: 15_000 });
       const simulationOutcome = await waitForAnyVisible(page, [
         { id: "failed", pattern: /Smoke simulation failed before wallet approval/i },
         { id: "unavailable", pattern: /Simulation service is unavailable/i },
@@ -622,11 +622,11 @@ async function runSmoke(config) {
     await stage(report, "reject_reviewed_transaction", "Cancel reviewed Base Sepolia transaction", async () => {
       const sentCountBefore = await page.evaluate(() => window.__matterhornWalletSmoke.sentTransactions.length);
       await dispatchApprovalRequest(page, { chainId: 84532 });
-      const approvalDialog = page.getByRole("dialog", { name: /Transaction Approval/i });
+      const approvalDialog = page.getByRole("dialog", { name: /Review wallet action/i });
       await approvalDialog.waitFor({ state: "visible", timeout: 15_000 });
-      await page.getByText(/Passed pre-approval simulation/i).waitFor({ state: "visible", timeout: 10_000 });
-      const approveButton = page.getByRole("button", { name: /^Approve$/ });
-      if (!(await approveButton.isEnabled())) {
+      await page.getByText(/Checks passed\. Your wallet can review this action\./i).waitFor({ state: "visible", timeout: 10_000 });
+      const continueButton = page.getByRole("button", { name: /^Continue in wallet$/ });
+      if (!(await continueButton.isEnabled())) {
         throw new Error("Valid simulated transaction could not be reviewed before cancellation.");
       }
       await page.getByRole("button", { name: /^Reject$/ }).click();
@@ -637,17 +637,21 @@ async function runSmoke(config) {
       }
     });
 
-    await stage(report, "approve_reviewed_transaction", "Approve reviewed Base Sepolia transaction", async () => {
+    await stage(report, "approve_reviewed_transaction", "Continue reviewed Base Sepolia transaction in wallet", async () => {
       await dispatchApprovalRequest(page, { chainId: 84532 });
-      await page.getByRole("dialog", { name: /Transaction Approval/i }).waitFor({ state: "visible", timeout: 15_000 });
+      await page.getByRole("dialog", { name: /Review wallet action/i }).waitFor({ state: "visible", timeout: 15_000 });
       await page.getByText(REVIEWED_TO.slice(0, 6), { exact: false }).first().waitFor({ state: "visible", timeout: 10_000 });
       await page.getByText(REVIEWED_VALUE_DISPLAY, { exact: false }).first().waitFor({ state: "visible", timeout: 10_000 });
-      await page.getByText(/Passed pre-approval simulation/i).waitFor({ state: "visible", timeout: 10_000 });
-      const approvalCopy = await page.getByRole("dialog", { name: /Transaction Approval/i }).innerText();
+      await page.getByText(/Checks passed\. Your wallet can review this action\./i).waitFor({ state: "visible", timeout: 10_000 });
+      const approvalCopy = await page.getByRole("dialog", { name: /Review wallet action/i }).innerText();
       if (approvalCopy.includes(REVIEWED_VALUE_RAW_BUG)) {
         throw new Error(`Approval modal exposed raw wei as ETH: ${REVIEWED_VALUE_RAW_BUG}`);
       }
-      await page.getByRole("button", { name: /^Approve$/ }).click();
+      await mkdir(config.outputDir, { recursive: true });
+      const reviewScreenshotPath = resolve(config.outputDir, "wallet-approval-review.png");
+      await page.screenshot({ path: reviewScreenshotPath, fullPage: true });
+      report.artifacts.reviewScreenshot = reviewScreenshotPath;
+      await page.getByRole("button", { name: /^Continue in wallet$/ }).click();
       await page.waitForFunction(() => (window.__matterhornWalletSmoke?.sentTransactions?.length ?? 0) === 1, { timeout: 15_000 });
       const sent = await page.evaluate(() => window.__matterhornWalletSmoke.sentTransactions[0]);
       if (String(sent.to).toLowerCase() !== REVIEWED_TO.toLowerCase()) {
@@ -663,7 +667,7 @@ async function runSmoke(config) {
 
     await stage(report, "block_mainnet_transaction", "Block mainnet request before wallet send", async () => {
       await dispatchApprovalRequest(page, { chainId: BASE_MAINNET_ID });
-      await page.getByRole("dialog", { name: /Transaction Approval/i }).waitFor({ state: "visible", timeout: 15_000 });
+      await page.getByRole("dialog", { name: /Review wallet action/i }).waitFor({ state: "visible", timeout: 15_000 });
       await page.getByText(/Mainnet is disabled|Switch your wallet/i).first().waitFor({ state: "visible", timeout: 10_000 });
       const blockedButton = page.getByRole("button", { name: /^Blocked$/ });
       await blockedButton.waitFor({ state: "visible", timeout: 10_000 });
