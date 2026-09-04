@@ -166,7 +166,10 @@ const input = {
     status: "pass", explicitOptIn: true, ciphertextOnly: true, exactReadback: true,
     suiCertification: true, tamperBlocked: true, renewalWalletOnly: true, expiryBlocked: true,
     deleted: true, recoveryKeyDestroyed: true, publicScanNonIdentifying: true,
-    restoreDrill: true, erasureLedgerVerified: true, evidence: evidence("walrus-sui-evidence"),
+    restoreDrill: true, erasureLedgerVerified: true, anchorWalletOnly: true,
+    anchorExactBinding: true, anchorImmutable: true, anchorMutationBlocked: true,
+    anchorReplayBlocked: true, anchorPublicScanNonIdentifying: true,
+    evidence: evidence("walrus-sui-evidence"),
   },
   developerPlatform: {
     status: "pass", quickstartUnder30Minutes: true, localConformance: true,
@@ -255,6 +258,12 @@ try {
   assert.equal(pending.transactions.polymarket.network, "mainnet-public-readonly");
   assert.equal(pending.coworkers.transactionCoordinator.walletReviewRequired, false);
   assert.equal(pending.encryptedEvidence.recoveryKeyDestroyed, false);
+  assert.equal(pending.encryptedEvidence.anchorWalletOnly, false);
+  assert.equal(pending.encryptedEvidence.anchorExactBinding, false);
+  assert.equal(pending.encryptedEvidence.anchorImmutable, false);
+  assert.equal(pending.encryptedEvidence.anchorMutationBlocked, false);
+  assert.equal(pending.encryptedEvidence.anchorReplayBlocked, false);
+  assert.equal(pending.encryptedEvidence.anchorPublicScanNonIdentifying, false);
   assert.equal(pending.developerPlatform.sdkPublished, false);
   assert.equal(pending.developerPlatform.sdkProvenance.path, "reports/crypto-app-sdk-provenance.json");
   assert.equal(pending.rollout.hours, 0);
@@ -423,6 +432,12 @@ try {
   assert.equal(tampered.code, 1);
   assert.ok(JSON.parse(tampered.stdout).blockers.some((item) => item.id === "encrypted_evidence_lifecycle"));
   writeFileSync(join(directory, input.encryptedEvidence.evidence.path), "Redacted acceptance outcomes for walrus-sui-evidence.\n");
+
+  const unverifiedAnchor = structuredClone(input);
+  unverifiedAnchor.encryptedEvidence.anchorExactBinding = false;
+  const unverifiedAnchorResult = await run(unverifiedAnchor);
+  assert.equal(unverifiedAnchorResult.code, 1);
+  assert.ok(JSON.parse(unverifiedAnchorResult.stdout).blockers.some((item) => item.id === "encrypted_evidence_lifecycle"));
 
   const symlinkedEvidence = structuredClone(input);
   symlinkSync(input.runtime.evidence.path, join(directory, "runtime-link.md"));

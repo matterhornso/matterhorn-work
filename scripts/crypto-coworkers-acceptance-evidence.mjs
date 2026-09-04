@@ -252,6 +252,8 @@ function buildPendingTemplate(config) {
         "explicitOptIn", "ciphertextOnly", "exactReadback", "suiCertification",
         "tamperBlocked", "renewalWalletOnly", "expiryBlocked", "deleted",
         "recoveryKeyDestroyed", "publicScanNonIdentifying", "restoreDrill", "erasureLedgerVerified",
+        "anchorWalletOnly", "anchorExactBinding", "anchorImmutable",
+        "anchorMutationBlocked", "anchorReplayBlocked", "anchorPublicScanNonIdentifying",
       ]),
       evidence: pendingEvidence("walrus-sui-evidence"),
     },
@@ -514,6 +516,8 @@ function validateClosedInput(input) {
     "status", "explicitOptIn", "ciphertextOnly", "exactReadback", "suiCertification",
     "tamperBlocked", "renewalWalletOnly", "expiryBlocked", "deleted", "recoveryKeyDestroyed",
     "publicScanNonIdentifying", "restoreDrill", "erasureLedgerVerified", "evidence",
+    "anchorWalletOnly", "anchorExactBinding", "anchorImmutable",
+    "anchorMutationBlocked", "anchorReplayBlocked", "anchorPublicScanNonIdentifying",
   ], "evidence.encryptedEvidence");
   onlyKeys(input.developerPlatform, [
     "status", "quickstartUnder30Minutes", "localConformance", "signedRevision",
@@ -695,7 +699,7 @@ function evaluate(input, config) {
     checks,
     "encrypted_evidence_lifecycle",
     "evidence.walrus_sui_lifecycle",
-    "Agent Files pass opt-in ciphertext publication, verification, renewal, expiry, deletion, key destruction, public scan, and restore",
+    "Agent Files and run evidence pass opt-in ciphertext publication, verification, wallet-only immutable anchoring, renewal, expiry, deletion, key destruction, public scan, and restore",
     scenarioPass(encryptedEvidence, [
       "explicitOptIn",
       "ciphertextOnly",
@@ -709,6 +713,12 @@ function evaluate(input, config) {
       "publicScanNonIdentifying",
       "restoreDrill",
       "erasureLedgerVerified",
+      "anchorWalletOnly",
+      "anchorExactBinding",
+      "anchorImmutable",
+      "anchorMutationBlocked",
+      "anchorReplayBlocked",
+      "anchorPublicScanNonIdentifying",
     ], config.evidence),
     encryptedEvidence?.evidence,
   );

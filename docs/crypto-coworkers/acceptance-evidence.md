@@ -36,7 +36,7 @@ The gate requires 21 independent checks:
 3. sealed and promoted live Sui, Hyperliquid, Bittensor, and public-read-only Polymarket certifications;
 4. Market Analyst, Risk Monitor, Transaction Coordinator, and Treasury Coworker journeys, including explicit resource grants, receipts, budgets, pause/revoke, and cross-tenant denial;
 5. Sui, Hyperliquid, and Bittensor wallet-airlock journeys plus Polymarket's explicit safe read-only boundary;
-6. opt-in encrypted Agent Files publication, exact Walrus readback, Sui certification, renewal, expiry, deletion, key destruction, public-object scan, and restore drill;
+6. opt-in encrypted Agent Files and run-evidence publication, exact Walrus readback, Sui certification, connected-wallet-only immutable anchor creation, exact anchor binding, mutation/replay rejection, renewal, expiry, deletion, key destruction, public-object scan, and restore drill;
 7. developer quickstart, conformance, certification outcomes, one-use invite, guarded Codex/Claude Code/MCP setup, tenant-safe metering, and published SDK provenance;
 8. three to five invite-only design-partner apps;
 9. an uninterrupted 48-hour shadow window with every bypass reviewed, no unexplained denial, sequential protocol review, and rollback proof; and
