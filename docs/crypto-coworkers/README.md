@@ -226,6 +226,7 @@ Exit: a malicious or malformed adapter cannot broaden authority or expose a mode
 - Chat-first setup for all four initial roles, with prepare authority available only to the Transaction Coordinator and Treasury Coworker and only as an exact connected-wallet review.
 - Durable watches with an inbox for alerts and questions.
 - One active run per session and bounded tool/model budgets.
+- Replacement requests stop the current response before dispatch and receive a new server-owned message/run binding; abort failure sends nothing.
 - Explicit data disclosure and Memory selection.
 - Compact mobile workspace navigation exposes Coworkers, Files, MCPs, Memory, Notes, Wallet, Profile, and all crypto desks through the same shareable panel routes as the desktop rail.
 
