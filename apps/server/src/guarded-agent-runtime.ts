@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   MatterhornAgentCapabilityClaims,
+  MatterhornAgentJurisdictionPolicyContext,
   MatterhornAgentPrivacyMode,
   MatterhornAgentPrivacyPart,
   MatterhornAgentPrivacyPreflightResponse,
@@ -47,6 +48,7 @@ import type { MatterhornFinalizedCoworkerRun } from "./crypto-evidence-finalizer
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 import type { MatterhornTrustedJurisdiction } from "./trusted-jurisdiction.js";
+import { evaluatePolymarketOpenPositionJurisdiction } from "./polymarket-jurisdiction-policy.js";
 import type {
   MatterhornRecoveryErasureLedger,
   MatterhornRecoveryErasureReconciliation,
@@ -534,6 +536,18 @@ export class MatterhornGuardedAgentRuntime {
     if (previousRunId) await this.finishRun(previousRunId, "cancelled");
     const runId = `${this.capabilities.mode === "off" ? "agent_run_off" : "agent_run"}_${randomUUID()}`;
     const expiresAtMs = Date.now() + 6 * 60 * 60 * 1_000;
+    const polymarketJurisdiction = evaluatePolymarketOpenPositionJurisdiction(input.jurisdiction ?? null);
+    const jurisdictionPolicy: MatterhornAgentJurisdictionPolicyContext | undefined = input.jurisdiction
+      && polymarketJurisdiction.validUntil
+      ? {
+          evidenceHash: input.jurisdiction.evidenceHash,
+          policyVersion: polymarketJurisdiction.policyVersion,
+          policyHash: polymarketJurisdiction.policyHash,
+          decisionHash: polymarketJurisdiction.decisionHash,
+          validUntil: polymarketJurisdiction.validUntil,
+          polymarketOpenPositionAllowed: polymarketJurisdiction.canOpenPosition,
+        }
+      : undefined;
     this.establishRunSecurityState({
       runId,
       workspaceId: input.workspaceId,
@@ -543,6 +557,7 @@ export class MatterhornGuardedAgentRuntime {
       requestToolProfiles: input.requestToolProfiles,
       coworker: input.coworker,
       jurisdictionEvidenceHash: input.jurisdiction?.evidenceHash,
+      jurisdictionPolicy,
       expiresAtMs,
     });
     try {
@@ -706,13 +721,14 @@ export class MatterhornGuardedAgentRuntime {
     workspaceId: string | null;
     sessionId: string | null;
     coworker: MatterhornAgentCapabilityClaims["coworker"] | null;
+    jurisdictionPolicy: MatterhornAgentCapabilityClaims["jurisdictionPolicy"] | null;
   } {
     this.cleanupStagedCapabilities();
     const callIdValue = input.args[MATTERHORN_CAPABILITY_CALL_ARGUMENT];
     const callId = typeof callIdValue === "string" ? callIdValue.trim() : "";
     const args = stripCapabilityArgument(input.args);
     if (this.capabilities.mode === "off") {
-      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
+      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
     }
     const bypass = callId
       ? this.stateStore.take<{
@@ -736,20 +752,20 @@ export class MatterhornGuardedAgentRuntime {
             "Matterhorn rejected a staged rollout call that no longer matches its exact tool and arguments.",
           );
         }
-        return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
+        return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
       }
       this.observe("consume", "bypassed", bypass.reason);
-      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
+      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
     }
     if (this.capabilities.mode === "enforce" && !callId && !guardedCapabilityEnforcementActive({
       toolName: input.toolName,
     })) {
       this.observe("consume", "bypassed", "rollout_not_enforced");
-      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
+      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
     }
     if (!callId && this.capabilities.mode === "shadow") {
       this.observe("consume", "would_deny", "missing_call_id");
-      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
+      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
     }
     if (!callId) {
       this.observe("consume", "denied", "missing_call_id");
@@ -761,7 +777,7 @@ export class MatterhornGuardedAgentRuntime {
     if (!staged) {
       if (this.capabilities.mode === "shadow") {
         this.observe("consume", "would_deny", "unknown_or_replayed_call_id");
-        return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
+        return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
       }
       this.observe("consume", "denied", "unknown_or_replayed_call_id");
       throw new GuardedRuntimeError(403, "agent_capability_denied", "Matterhorn rejected an unknown, expired, or replayed tool call.");
@@ -776,12 +792,13 @@ export class MatterhornGuardedAgentRuntime {
         workspaceId: claims.workspaceId,
         sessionId: claims.sessionId,
         coworker: claims.coworker ?? null,
+        jurisdictionPolicy: claims.jurisdictionPolicy ?? null,
       };
     } catch (error) {
       const reason = guardedObservationReason(error);
       if (this.capabilities.mode === "shadow") {
         this.observe("consume", "would_deny", reason);
-        return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null };
+        return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
       }
       this.observe("consume", "denied", reason);
       throw new GuardedRuntimeError(
@@ -980,6 +997,7 @@ export class MatterhornGuardedAgentRuntime {
     requestToolProfiles?: readonly Record<string, boolean>[];
     coworker?: MatterhornCoworkerRunBinding;
     jurisdictionEvidenceHash?: string;
+    jurisdictionPolicy?: MatterhornAgentJurisdictionPolicyContext;
     expiresAtMs: number;
   }): void {
     this.stateStore.deleteExpired();
@@ -995,6 +1013,7 @@ export class MatterhornGuardedAgentRuntime {
             workspaceId: input.workspaceId,
             sessionId: input.sessionId,
             jurisdictionEvidenceHash: input.jurisdictionEvidenceHash ?? null,
+            jurisdictionPolicyHash: input.jurisdictionPolicy?.decisionHash ?? null,
           },
           expiresAtMs: input.expiresAtMs,
         });
@@ -1009,6 +1028,7 @@ export class MatterhornGuardedAgentRuntime {
             workspaceId: input.workspaceId,
             sessionId: input.sessionId,
             jurisdictionEvidenceHash: input.jurisdictionEvidenceHash ?? null,
+            jurisdictionPolicyHash: input.jurisdictionPolicy?.decisionHash ?? null,
           },
           expiresAtMs: input.expiresAtMs,
         });
@@ -1023,6 +1043,7 @@ export class MatterhornGuardedAgentRuntime {
             requestToolProfiles: input.requestToolProfiles,
             coworker: input.coworker,
             jurisdictionEvidenceHash: input.jurisdictionEvidenceHash,
+            jurisdictionPolicy: input.jurisdictionPolicy,
             expiresAtMs: input.expiresAtMs,
           });
         }

@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MatterhornAgentCapabilityBroker } from "./agent-capability.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import { evaluatePolymarketOpenPositionJurisdiction } from "./polymarket-jurisdiction-policy.js";
+import type { MatterhornTrustedJurisdiction } from "./trusted-jurisdiction.js";
 
 const originalSigningSecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
 const originalRuntimeSecret = process.env.MATTERHORN_AGENT_RUNTIME_SECRET;
@@ -31,6 +33,81 @@ function brokerWithRun() {
     requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
   });
   return broker;
+}
+
+const JURISDICTION_NOW = new Date("2026-09-04T12:00:00.000Z");
+
+function polymarketJurisdiction(country: string): MatterhornTrustedJurisdiction {
+  return {
+    version: "matterhorn.edge-jurisdiction.v2",
+    source: "vercel_ip_country",
+    country,
+    region: null,
+    observedAt: "2026-09-04T11:59:59.000Z",
+    expiresAt: "2026-09-04T12:00:59.000Z",
+    evidenceHash: country === "CH" ? "c".repeat(64) : "b".repeat(64),
+  };
+}
+
+function polymarketPolicyContext(country: string) {
+  const evaluated = evaluatePolymarketOpenPositionJurisdiction(
+    polymarketJurisdiction(country),
+    JURISDICTION_NOW,
+  );
+  if (!evaluated.jurisdictionEvidenceHash || !evaluated.validUntil) {
+    throw new Error("test_jurisdiction_context_missing");
+  }
+  return {
+    evidenceHash: evaluated.jurisdictionEvidenceHash,
+    policyVersion: evaluated.policyVersion,
+    policyHash: evaluated.policyHash,
+    decisionHash: evaluated.decisionHash,
+    validUntil: evaluated.validUntil,
+    polymarketOpenPositionAllowed: evaluated.canOpenPosition,
+  };
+}
+
+function polymarketPrepareBroker(input: { appId?: string; country?: string; includePolicy?: boolean } = {}) {
+  const broker = new MatterhornAgentCapabilityBroker("enforce");
+  broker.setCoworkerResolver(() => true);
+  const context = polymarketPolicyContext(input.country ?? "CH");
+  const appId = input.appId ?? "matterhorn.polymarket-wallet-preview";
+  broker.createRunGrant({
+    runId: "run_polymarket_prepare",
+    workspaceId: "ws_1",
+    sessionId: "ses_polymarket_prepare",
+    agentId: "matterhorn-polymarket",
+    executionMode: "work",
+    requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_polymarket_preview_order": true }],
+    coworker: {
+      id: "cw_polymarket",
+      workspaceId: "ws_1",
+      ownerId: "account_1",
+      revision: 1,
+      policyVersion: "coworker-policy-1",
+      allowedAppIds: [appId],
+      allowedActionIds: ["polymarket_preview_trade"],
+      allowedNetworks: ["polygon:mainnet"],
+      automaticAuthorities: ["prepare"],
+      actionBindings: [{
+        connectionId: "cxc_polymarket",
+        appId,
+        manifestRevision: "1.0.0",
+        actionId: "polymarket_preview_trade",
+        network: "polygon:mainnet",
+        proxyToolName: "matterhorn_polymarket_preview_order",
+        access: "prepare",
+      }],
+      allowedDataLabels: ["public", "wallet_private", "untrusted_external"],
+      allowUnverifiedProviderConsent: false,
+      maxReadCallsPerRun: 0,
+      maxPrepareCallsPerFamily: 1,
+    },
+    jurisdictionEvidenceHash: context.evidenceHash,
+    ...(input.includePolicy === false ? {} : { jurisdictionPolicy: context }),
+    now: JURISDICTION_NOW,
+  });
+  return { broker, context };
 }
 
 describe("agent capability broker", () => {
@@ -112,6 +189,176 @@ describe("agent capability broker", () => {
       executionMode: "work",
       jurisdictionEvidenceHash: "not-a-digest",
     })).toThrow("capability_jurisdiction_binding_invalid");
+  });
+
+  test("binds an allowed Polymarket prepare capability to the current server policy", () => {
+    const { broker, context } = polymarketPrepareBroker();
+    const args = { marketId: "market_1", outcome: "YES", side: "buy", amountUsdc: "5" };
+    const capability = broker.issue({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_polymarket_allowed",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: JURISDICTION_NOW,
+    });
+    expect(capability.claims.jurisdictionPolicy).toEqual(context);
+    expect(Date.parse(capability.claims.expiresAt)).toBeLessThanOrEqual(Date.parse(context.validUntil));
+    expect(broker.consume({
+      token: capability.token,
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: JURISDICTION_NOW,
+    })).toMatchObject({ jurisdictionPolicy: context });
+    expect(broker.consumedCapabilityProof({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_polymarket_allowed",
+      coworkerId: "cw_polymarket",
+      connectionId: "cxc_polymarket",
+      appId: "matterhorn.polymarket-wallet-preview",
+      manifestRevision: "1.0.0",
+      actionId: "polymarket_preview_trade",
+      network: "polygon:mainnet",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+    })).toMatchObject({ jurisdictionPolicy: context });
+  });
+
+  test("fails closed for missing, blocked, expired, or substituted Polymarket policy context", () => {
+    const args = { marketId: "market_1", outcome: "YES", side: "buy", amountUsdc: "5" };
+    const missing = polymarketPrepareBroker({ includePolicy: false }).broker;
+    expect(() => missing.issue({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_missing_policy",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: JURISDICTION_NOW,
+    })).toThrow("capability_polymarket_jurisdiction_denied");
+
+    const thirdParty = polymarketPrepareBroker({
+      appId: "acme.prediction-market",
+      includePolicy: false,
+    }).broker;
+    expect(() => thirdParty.issue({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_third_party_missing_policy",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: JURISDICTION_NOW,
+    })).toThrow("capability_polymarket_jurisdiction_denied");
+
+    const blocked = polymarketPrepareBroker({ country: "GB" }).broker;
+    expect(() => blocked.issue({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_blocked_policy",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: JURISDICTION_NOW,
+    })).toThrow("capability_polymarket_jurisdiction_denied");
+
+    const expired = polymarketPrepareBroker().broker;
+    expect(() => expired.issue({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_expired_policy",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: new Date("2026-09-04T12:05:00.000Z"),
+    })).toThrow("capability_polymarket_jurisdiction_denied");
+
+    const context = polymarketPolicyContext("CH");
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    expect(() => broker.createRunGrant({
+      runId: "run_substituted_policy",
+      workspaceId: "ws_1",
+      sessionId: "ses_substituted_policy",
+      executionMode: "work",
+      jurisdictionEvidenceHash: context.evidenceHash,
+      jurisdictionPolicy: { ...context, policyHash: "f".repeat(64) },
+      now: JURISDICTION_NOW,
+    })).toThrow("capability_jurisdiction_policy_invalid");
+  });
+
+  test("does not let a generic agent bypass Polymarket transaction jurisdiction", () => {
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    broker.createRunGrant({
+      runId: "run_generic_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_generic_polymarket_prepare",
+      agentId: "matterhorn",
+      executionMode: "work",
+      requestToolProfiles: [{
+        "*": false,
+        "matterhorn-work_matterhorn_polymarket_preview_order": true,
+      }],
+      now: JURISDICTION_NOW,
+    });
+    expect(() => broker.issue({
+      runId: "run_generic_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_generic_polymarket_prepare",
+      callId: "call_generic_polymarket_prepare",
+      toolName: "matterhorn_polymarket_preview_order",
+      args: { marketId: "market_1", outcome: "YES", side: "buy", amountUsdc: "5" },
+      now: JURISDICTION_NOW,
+    })).toThrow("capability_polymarket_jurisdiction_denied");
+  });
+
+  test("keeps certified Polymarket public reads available without transaction jurisdiction", () => {
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    broker.setCoworkerResolver(() => true);
+    broker.createRunGrant({
+      runId: "run_polymarket_read",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_read",
+      agentId: "matterhorn-polymarket",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_polymarket_search_markets": true }],
+      coworker: {
+        id: "cw_polymarket_read",
+        workspaceId: "ws_1",
+        ownerId: "account_1",
+        revision: 1,
+        policyVersion: "coworker-policy-1",
+        allowedAppIds: ["matterhorn.polymarket-research"],
+        allowedActionIds: ["polymarket_market_search"],
+        allowedNetworks: ["polymarket:public"],
+        automaticAuthorities: ["read"],
+        actionBindings: [{
+          connectionId: "cxc_polymarket_read",
+          appId: "matterhorn.polymarket-research",
+          manifestRevision: "1.0.0",
+          actionId: "polymarket_market_search",
+          network: "polymarket:public",
+          proxyToolName: "matterhorn_polymarket_search_markets",
+          access: "read",
+        }],
+        allowedDataLabels: ["public", "untrusted_external"],
+        allowUnverifiedProviderConsent: false,
+        maxReadCallsPerRun: 1,
+        maxPrepareCallsPerFamily: 0,
+      },
+      now: JURISDICTION_NOW,
+    });
+    expect(broker.issue({
+      runId: "run_polymarket_read",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_read",
+      callId: "call_polymarket_read",
+      toolName: "matterhorn_polymarket_search_markets",
+      args: { query: "election", limit: 5 },
+      now: JURISDICTION_NOW,
+    }).claims.access).toBe("read");
   });
 
   test("fails closed for argument mutation, wrong tools and wrong sessions", () => {
@@ -422,6 +669,7 @@ describe("agent capability broker", () => {
 
   test("accounts prepare budgets from the resolved protocol instead of a static registry prefix", () => {
     const broker = new MatterhornAgentCapabilityBroker("enforce");
+    const jurisdictionPolicy = polymarketPolicyContext("CH");
     broker.createRunGrant({
       runId: "run_protocol_family",
       workspaceId: "ws_1",
@@ -434,6 +682,9 @@ describe("agent capability broker", () => {
         "matterhorn-work_matterhorn_hyperliquid_preview_order": true,
         "matterhorn-work_matterhorn_polymarket_preview_order": true,
       }],
+      jurisdictionEvidenceHash: jurisdictionPolicy.evidenceHash,
+      jurisdictionPolicy,
+      now: JURISDICTION_NOW,
     });
     const autoArgs = { message: "Prepare the reviewed action I described" };
     const automatic = broker.issue({
@@ -443,8 +694,14 @@ describe("agent capability broker", () => {
       callId: "call_auto_hyperliquid",
       toolName: "matterhorn_crypto_chat",
       args: autoArgs,
+      now: JURISDICTION_NOW,
     });
-    broker.consume({ token: automatic.token, toolName: "matterhorn_crypto_chat", args: autoArgs });
+    broker.consume({
+      token: automatic.token,
+      toolName: "matterhorn_crypto_chat",
+      args: autoArgs,
+      now: JURISDICTION_NOW,
+    });
     broker.recordToolOutcome(
       "run_protocol_family",
       "call_auto_hyperliquid",
@@ -459,6 +716,7 @@ describe("agent capability broker", () => {
       callId: "call_duplicate_hyperliquid",
       toolName: "matterhorn_hyperliquid_preview_order",
       args: { asset: "BTC", side: "buy", size: "0.01" },
+      now: JURISDICTION_NOW,
     })).toThrow("capability_prepare_family_already_completed");
     expect(broker.issue({
       runId: "run_protocol_family",
@@ -467,6 +725,7 @@ describe("agent capability broker", () => {
       callId: "call_distinct_polymarket",
       toolName: "matterhorn_polymarket_preview_order",
       args: { marketId: "market_1", outcome: "YES", amountUsdc: "5" },
+      now: JURISDICTION_NOW,
     }).claims.access).toBe("prepare");
   });
 

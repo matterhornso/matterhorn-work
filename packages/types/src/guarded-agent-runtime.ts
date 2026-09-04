@@ -134,6 +134,15 @@ export type MatterhornAgentPrivacyConsentResponse = {
 
 export type MatterhornAgentCapabilityAccess = "read" | "prepare";
 
+export type MatterhornAgentJurisdictionPolicyContext = {
+  evidenceHash: string;
+  policyVersion: string;
+  policyHash: string;
+  decisionHash: string;
+  validUntil: string;
+  polymarketOpenPositionAllowed: boolean;
+};
+
 export type MatterhornAgentCapabilityClaims = {
   version: typeof MATTERHORN_AGENT_CAPABILITY_VERSION;
   jti: string;
@@ -152,6 +161,8 @@ export type MatterhornAgentCapabilityClaims = {
   registryVersion: string;
   /** Hash-only proof that server-owned request policy context is unchanged. */
   jurisdictionEvidenceHash?: string;
+  /** Content-free server policy decision bound to the edge evidence. */
+  jurisdictionPolicy?: MatterhornAgentJurisdictionPolicyContext;
   coworker?: {
     id: string;
     ownerId: string;

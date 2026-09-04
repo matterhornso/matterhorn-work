@@ -14,9 +14,10 @@ function sha256(value: string): string {
 
 function attestation(overrides: Record<string, unknown> = {}): string {
   const payload = {
-    version: "matterhorn.edge-jurisdiction.v1",
+    version: "matterhorn.edge-jurisdiction.v2",
     source: "vercel_ip_country",
     country: "GB",
+    region: "ENG",
     method: "POST",
     path: "/workspace/ws_1/sessions/ses_1/messages",
     clientIpHash: sha256("203.0.113.9"),
@@ -46,15 +47,17 @@ describe("trusted edge jurisdiction", () => {
   test("accepts an exact short-lived same-origin proxy proof without retaining an IP", () => {
     const result = resolveTrustedRequestJurisdiction(request(), SECRET, new Date(NOW_MS + 1_000));
     expect(result).toEqual({
-      version: "matterhorn.edge-jurisdiction.v1",
+      version: "matterhorn.edge-jurisdiction.v2",
       source: "vercel_ip_country",
       country: "GB",
+      region: "ENG",
       observedAt: "2026-09-04T18:00:00.000Z",
       expiresAt: "2026-09-04T18:01:00.000Z",
       evidenceHash: sha256([
-        "matterhorn.edge-jurisdiction.v1",
+        "matterhorn.edge-jurisdiction.v2",
         "vercel_ip_country",
         "GB",
+        "ENG",
         sha256("203.0.113.9"),
       ].join("\u0000")),
     });
@@ -70,6 +73,7 @@ describe("trusted edge jurisdiction", () => {
       request(attestation({ expiresAtMs: NOW_MS + 60_001 })),
       request(attestation({ attacker: true })),
       request(attestation({ country: "USA" })),
+      request(attestation({ region: "ENGLAND" })),
     ];
     for (const candidate of cases) {
       expect(resolveTrustedRequestJurisdiction(candidate, SECRET, new Date(NOW_MS + 1_000))).toBeNull();

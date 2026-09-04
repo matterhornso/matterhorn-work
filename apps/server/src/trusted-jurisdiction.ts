@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 
 export const MATTERHORN_EDGE_JURISDICTION_HEADER = "x-matterhorn-edge-jurisdiction";
-export const MATTERHORN_EDGE_JURISDICTION_VERSION = "matterhorn.edge-jurisdiction.v1" as const;
+export const MATTERHORN_EDGE_JURISDICTION_VERSION = "matterhorn.edge-jurisdiction.v2" as const;
 const MATTERHORN_EDGE_JURISDICTION_TTL_MS = 60_000;
 const MATTERHORN_EDGE_JURISDICTION_CLOCK_SKEW_MS = 5_000;
 
@@ -10,6 +10,7 @@ type EdgeJurisdictionPayload = {
   version: typeof MATTERHORN_EDGE_JURISDICTION_VERSION;
   source: "vercel_ip_country";
   country: string;
+  region: string | null;
   method: string;
   path: string;
   clientIpHash: string;
@@ -22,6 +23,7 @@ export type MatterhornTrustedJurisdiction = {
   version: typeof MATTERHORN_EDGE_JURISDICTION_VERSION;
   source: "vercel_ip_country";
   country: string;
+  region: string | null;
   observedAt: string;
   expiresAt: string;
   /** Content-free digest bound into consent, guarded runs, and capabilities. */
@@ -48,6 +50,7 @@ function closedPayload(value: unknown): value is EdgeJurisdictionPayload {
     "issuedAtMs",
     "method",
     "path",
+    "region",
     "requestIdHash",
     "source",
     "version",
@@ -57,6 +60,7 @@ function closedPayload(value: unknown): value is EdgeJurisdictionPayload {
     && record.source === "vercel_ip_country"
     && typeof record.country === "string"
     && /^[A-Z]{2}$/.test(record.country)
+    && (record.region === null || (typeof record.region === "string" && /^[A-Z0-9]{1,3}$/.test(record.region)))
     && typeof record.method === "string"
     && /^[A-Z]+$/.test(record.method)
     && typeof record.path === "string"
@@ -131,6 +135,7 @@ export function resolveTrustedRequestJurisdiction(
     version: MATTERHORN_EDGE_JURISDICTION_VERSION,
     source: payload.source,
     country: payload.country,
+    region: payload.region,
     observedAt: new Date(payload.issuedAtMs).toISOString(),
     expiresAt: new Date(payload.expiresAtMs).toISOString(),
     // Deliberately stable across the preflight and submission HTTP requests
@@ -141,6 +146,7 @@ export function resolveTrustedRequestJurisdiction(
       MATTERHORN_EDGE_JURISDICTION_VERSION,
       payload.source,
       payload.country,
+      payload.region ?? "",
       payload.clientIpHash,
     ].join("\u0000")),
   };

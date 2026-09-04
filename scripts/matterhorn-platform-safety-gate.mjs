@@ -47,6 +47,7 @@ const STAGES = [
       "apps/server/src/crypto-app-json-rpc-transport.test.ts",
       "apps/server/src/crypto-app-openapi-transport.test.ts",
       "apps/server/src/trusted-jurisdiction.test.ts",
+      "apps/server/src/polymarket-jurisdiction-policy.test.ts",
       "apps/server/src/agent-privacy.test.ts",
       "apps/server/src/agent-capability.test.ts",
       "apps/server/src/wallet-safety-policy-routes.e2e.test.ts",
