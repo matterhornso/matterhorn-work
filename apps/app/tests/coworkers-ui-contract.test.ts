@@ -324,6 +324,19 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("<details className=\"border-b border-dls-border/70 py-4\">");
   });
 
+  test("explains every first coworker choice without steering users to an arbitrary default", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const emptyState = panel.slice(
+      panel.indexOf("coworkers.length === 0"),
+      panel.indexOf(") : selectedCoworker ?"),
+    );
+    expect(emptyState).toContain("What do you want help with?");
+    expect(emptyState).toContain("Choose one to continue. You will review its access before it starts.");
+    expect(emptyState).toContain("{choice.summary}");
+    expect(emptyState).toContain('className="h-auto min-h-14 justify-start whitespace-normal px-3 py-2 text-left"');
+    expect(emptyState).not.toContain('variant={index === 0 ? "default" : "outline"}');
+  });
+
   test("collapses empty activity and destructive controls behind plain-language summaries", () => {
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
     expect(coworkerActivitySummary({ walletReviewCount: 0, checkCount: 0, updateCount: 0 })).toBe("No activity yet");
