@@ -111,4 +111,28 @@ describe("private model mode", () => {
     expect(sessionRoute).toContain("Model privacy not verified");
     expect(sessionRoute).toContain("privateModePrivacyPolicy?.verificationExpiresAt");
   });
+
+  test("preserves private workspace mode for immediate desk tasks", () => {
+    const sessionRoute = readFileSync(
+      new URL(
+        "../src/react-app/shell/session-route.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const launcherBlock = sessionRoute.slice(
+      sessionRoute.indexOf("onCreateTaskWithPrompt:"),
+      sessionRoute.indexOf("onOpenRenameWorkspace:"),
+    );
+    const sendBlock = launcherBlock.slice(
+      launcherBlock.indexOf('recordInspectorEvent("desk.task_launch.prompt_send_started"'),
+      launcherBlock.indexOf('recordInspectorEvent("desk.task_launch.prompt_sent"'),
+    );
+    const privateModeBinding =
+      '...(privateModeEnabled ? { privacyMode: "private_workspace" as const } : {})';
+
+    expect(sendBlock).toContain("await endpoint.client.sendAgentMessage");
+    expect(sendBlock).toContain("await workspaceClient.session.promptAsync");
+    expect(sendBlock.split(privateModeBinding)).toHaveLength(3);
+  });
 });
