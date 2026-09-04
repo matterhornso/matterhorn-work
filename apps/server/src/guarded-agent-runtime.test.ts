@@ -539,6 +539,85 @@ describe("guarded agent runtime transport", () => {
     })).toThrow("unknown, expired, or replayed");
   });
 
+  test("carries only a content-free current Polymarket jurisdiction decision through the capability", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    runtime.setCoworkerResolver(() => true);
+    const nowMs = Date.now();
+    const jurisdiction = {
+      version: "matterhorn.edge-jurisdiction.v2" as const,
+      source: "vercel_ip_country" as const,
+      country: "CH",
+      region: "ZH",
+      observedAt: new Date(nowMs - 1_000).toISOString(),
+      expiresAt: new Date(nowMs + 59_000).toISOString(),
+      evidenceHash: "c".repeat(64),
+    };
+    const coworker = {
+      id: "cw_polymarket_policy",
+      workspaceId: "ws_polymarket_policy",
+      ownerId: "account_polymarket_policy",
+      revision: 1,
+      policyVersion: "coworker-policy-1",
+      allowedAppIds: ["matterhorn.polymarket-wallet-preview"],
+      allowedActionIds: ["polymarket_preview_trade"],
+      allowedNetworks: ["polygon:mainnet"],
+      automaticAuthorities: ["prepare"] as Array<"prepare">,
+      actionBindings: [{
+        connectionId: "cxc_polymarket_policy",
+        appId: "matterhorn.polymarket-wallet-preview",
+        manifestRevision: "1.0.0",
+        actionId: "polymarket_preview_trade",
+        network: "polygon:mainnet",
+        proxyToolName: "matterhorn_polymarket_preview_order",
+        access: "prepare" as const,
+      }],
+      allowedDataLabels: ["public", "wallet_private", "untrusted_external"] as Array<
+        "public" | "wallet_private" | "untrusted_external"
+      >,
+      allowUnverifiedProviderConsent: false,
+      maxReadCallsPerRun: 0,
+      maxPrepareCallsPerFamily: 1,
+    };
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_polymarket_policy",
+      sessionId: "ses_polymarket_policy",
+      parts: [{ type: "text", text: "Prepare a five dollar public market order for wallet review" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-polymarket",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_polymarket_preview_order": true }],
+      coworker,
+      jurisdiction,
+    });
+    const args = { marketId: "market_1", outcome: "YES", side: "buy", amountUsdc: "5" };
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_polymarket_policy",
+      sessionId: "ses_polymarket_policy",
+      callId: "call_polymarket_policy",
+      agentId: "matterhorn-polymarket",
+      toolName: "matterhorn-work_matterhorn_polymarket_preview_order",
+      args,
+    });
+    const authorization = runtime.authorizeMcpTool({
+      toolName: "matterhorn_polymarket_preview_order",
+      args: { ...args, _matterhornCallId: "call_polymarket_policy" },
+    });
+    expect(authorization.jurisdictionPolicy).toMatchObject({
+      evidenceHash: jurisdiction.evidenceHash,
+      polymarketOpenPositionAllowed: true,
+    });
+    const serializedAuthorization = JSON.stringify(authorization);
+    expect(serializedAuthorization).not.toContain(jurisdiction.country);
+    expect(serializedAuthorization).not.toContain(jurisdiction.region);
+    const receipt = await runtime.receipts.get("ws_polymarket_policy", accepted.runId);
+    expect(JSON.stringify(receipt)).not.toContain(jurisdiction.country);
+    expect(JSON.stringify(receipt)).not.toContain(jurisdiction.region);
+    runtime.close();
+  });
+
   test("revokes staged authority immediately when an exact app connection is disconnected", async () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     runtime.setCoworkerResolver(() => true);
@@ -876,6 +955,7 @@ describe("guarded agent runtime transport", () => {
       workspaceId: null,
       sessionId: null,
       coworker: null,
+      jurisdictionPolicy: null,
     });
     expect(runtime.observationSnapshot()).toContainEqual(expect.objectContaining({
       mode: "shadow",

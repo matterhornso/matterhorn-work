@@ -60,6 +60,7 @@ export type ManagedMcpToolAuthorization = {
   workspaceId: string | null;
   sessionId?: string | null;
   coworker?: MatterhornAgentCapabilityClaims["coworker"] | null;
+  jurisdictionPolicy?: MatterhornAgentCapabilityClaims["jurisdictionPolicy"] | null;
 };
 
 export type ManagedMcpCertifiedToolExecutor = (input: {

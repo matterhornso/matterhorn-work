@@ -40,7 +40,7 @@ const FORWARDED_REQUEST_HEADERS_TO_REMOVE = [
   "x-openwork-host-token",
 ];
 const FORWARDED_RESPONSE_HEADERS_TO_REMOVE = ["connection", "content-length", "transfer-encoding"];
-const EDGE_JURISDICTION_VERSION = "matterhorn.edge-jurisdiction.v1";
+const EDGE_JURISDICTION_VERSION = "matterhorn.edge-jurisdiction.v2";
 const EDGE_JURISDICTION_TTL_MS = 60_000;
 
 export function normalizeProxyPath(value) {
@@ -107,6 +107,11 @@ function normalizedVercelCountry(value) {
   return /^[A-Z]{2}$/.test(country) ? country : null;
 }
 
+function normalizedVercelRegion(value) {
+  const region = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return /^[A-Z0-9]{1,3}$/.test(region) ? region : null;
+}
+
 function boundedVercelRequestId(value) {
   const requestId = typeof value === "string" ? value.trim() : "";
   return requestId.length > 0 && requestId.length <= 256 && /^[A-Za-z0-9:._-]+$/.test(requestId)
@@ -121,6 +126,7 @@ function boundedVercelRequestId(value) {
  */
 export function createEdgeJurisdictionAttestation(input) {
   const country = normalizedVercelCountry(input?.country);
+  const region = normalizedVercelRegion(input?.region);
   const clientIp = typeof input?.clientIp === "string" && isIP(input.clientIp) ? input.clientIp : null;
   const method = typeof input?.method === "string" ? input.method.trim().toUpperCase() : "";
   const path = normalizeProxyPath(input?.path);
@@ -142,6 +148,7 @@ export function createEdgeJurisdictionAttestation(input) {
     version: EDGE_JURISDICTION_VERSION,
     source: "vercel_ip_country",
     country,
+    region,
     method,
     path,
     clientIpHash: sha256(clientIp),
@@ -221,6 +228,7 @@ export async function matterhornProxy(request) {
   const jurisdictionAttestation = process.env.VERCEL === "1"
     ? createEdgeJurisdictionAttestation({
         country: request.headers.get("x-vercel-ip-country"),
+        region: request.headers.get("x-vercel-ip-country-region"),
         clientIp,
         method: request.method,
         path,

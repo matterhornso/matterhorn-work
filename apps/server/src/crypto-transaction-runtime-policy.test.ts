@@ -5,6 +5,10 @@ import type {
   MatterhornCryptoIntent,
 } from "@matterhorn-work/types/crypto-coworkers";
 import type { MatterhornWalletSafetyPolicy } from "@matterhorn-work/types/wallet-safety-policy";
+import {
+  MATTERHORN_POLYMARKET_JURISDICTION_POLICY_HASH,
+  MATTERHORN_POLYMARKET_JURISDICTION_POLICY_VERSION,
+} from "./polymarket-jurisdiction-policy.js";
 
 import type { MatterhornPendingCryptoIntent } from "./crypto-pending-intent-store.js";
 import {
@@ -304,5 +308,42 @@ describe("production transaction runtime policy", () => {
         complianceAllowed: true,
       });
     }
+  });
+
+  test("does not let jurisdiction evidence activate an uncertified Polymarket transaction adapter", () => {
+    const baseResult = hyperliquidResult();
+    const baseIntent = intent();
+    const polymarketIntent: MatterhornCryptoIntent = {
+      ...baseIntent,
+      appId: "matterhorn.polymarket-wallet-preview",
+      connectionId: "cxc_polymarket",
+      actionId: "polymarket_preview_trade",
+      protocol: "polymarket",
+      network: "polygon:mainnet",
+      operation: "buy",
+      asset: "market_1:YES",
+      amount: "5",
+      recipient: null,
+    };
+    const facts = resolveMatterhornRuntimeTransactionFacts({
+      adapterResult: {
+        ...baseResult,
+        app: { id: polymarketIntent.appId, manifestRevision: "1.0.0", connectionId: "cxc_polymarket" },
+        action: { id: polymarketIntent.actionId, access: "prepare", network: polymarketIntent.network },
+        result: { marketId: "market_1", outcome: "YES", amountUsdc: "5" },
+      },
+      intent: polymarketIntent,
+      existingIntents: [],
+      jurisdictionPolicy: {
+        evidenceHash: "e".repeat(64),
+        policyVersion: MATTERHORN_POLYMARKET_JURISDICTION_POLICY_VERSION,
+        policyHash: MATTERHORN_POLYMARKET_JURISDICTION_POLICY_HASH,
+        decisionHash: "d".repeat(64),
+        validUntil: "2026-09-01T12:00:30.000Z",
+        polymarketOpenPositionAllowed: true,
+      },
+      now: NOW,
+    });
+    expect(facts.complianceAllowed).toBe(false);
   });
 });

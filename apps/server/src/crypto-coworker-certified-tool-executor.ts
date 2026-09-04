@@ -127,6 +127,7 @@ export function createMatterhornCertifiedCoworkerToolExecutor(
             request.workspaceId,
             request.ownerId,
           ),
+          jurisdictionPolicy: authorization.jurisdictionPolicy,
           now: now(),
         })
       ),

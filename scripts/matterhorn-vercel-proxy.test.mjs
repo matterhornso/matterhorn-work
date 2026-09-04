@@ -109,6 +109,7 @@ try {
       "x-vercel-forwarded-for": "203.0.113.9",
       "x-vercel-id": "iad1::matterhorn-test-request",
       "x-vercel-ip-country": "gb",
+      "x-vercel-ip-country-region": "eng",
       "x-vercel-ip-city": "spoof-me-not",
       "x-matterhorn-edge-jurisdiction": "attacker-supplied",
     }),
@@ -127,9 +128,10 @@ try {
   );
   const attested = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
   assert.deepEqual(attested, {
-    version: "matterhorn.edge-jurisdiction.v1",
+    version: "matterhorn.edge-jurisdiction.v2",
     source: "vercel_ip_country",
     country: "GB",
+    region: "ENG",
     method: "GET",
     path: "/workspaces",
     clientIpHash: createHash("sha256").update("203.0.113.9").digest("hex"),
@@ -138,6 +140,7 @@ try {
     expiresAtMs: attested.issuedAtMs + 60_000,
   });
   assert.equal(forwardedRequest.init.headers.get("x-vercel-ip-country"), null);
+  assert.equal(forwardedRequest.init.headers.get("x-vercel-ip-country-region"), null);
   assert.equal(forwardedRequest.init.headers.get("x-vercel-ip-city"), null);
   assert.equal(forwardedRequest.init.headers.get("x-vercel-id"), null);
   assert.equal(forwardedRequest.init.headers.get("x-vercel-forwarded-for"), null);

@@ -2,6 +2,7 @@ import type {
   MatterhornCryptoAppResult,
   MatterhornCryptoIntent,
 } from "@matterhorn-work/types/crypto-coworkers";
+import type { MatterhornAgentJurisdictionPolicyContext } from "@matterhorn-work/types/guarded-agent-runtime";
 import type { MatterhornWalletSafetyPolicy } from "@matterhorn-work/types/wallet-safety-policy";
 
 import type { MatterhornPendingCryptoIntent } from "./crypto-pending-intent-store.js";
@@ -12,6 +13,10 @@ import type {
   MatterhornTransactionPolicyScope,
 } from "./crypto-transaction-policy.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
+import {
+  MATTERHORN_POLYMARKET_JURISDICTION_POLICY_HASH,
+  MATTERHORN_POLYMARKET_JURISDICTION_POLICY_VERSION,
+} from "./polymarket-jurisdiction-policy.js";
 
 type NonCoworkerPolicyLayers = Omit<MatterhornTransactionPolicyLayers, "coworker">;
 
@@ -32,6 +37,7 @@ type FactsInput = {
   adapterResult: MatterhornCryptoAppResult;
   intent: MatterhornCryptoIntent;
   existingIntents: readonly MatterhornPendingCryptoIntent[];
+  jurisdictionPolicy?: MatterhornAgentJurisdictionPolicyContext | null;
   now?: Date;
 };
 
@@ -235,6 +241,20 @@ function historyFacts(
   return { dailySpendUsdBefore, weeklySpendUsdBefore, transactionsLastHour, transactionsToday };
 }
 
+function currentPolymarketJurisdictionAllows(
+  context: MatterhornAgentJurisdictionPolicyContext | null | undefined,
+  now: Date,
+): boolean {
+  return Boolean(context
+    && context.policyVersion === MATTERHORN_POLYMARKET_JURISDICTION_POLICY_VERSION
+    && context.policyHash === MATTERHORN_POLYMARKET_JURISDICTION_POLICY_HASH
+    && context.polymarketOpenPositionAllowed === true
+    && /^[a-f0-9]{64}$/.test(context.evidenceHash)
+    && /^[a-f0-9]{64}$/.test(context.decisionHash)
+    && Number.isFinite(Date.parse(context.validUntil))
+    && Date.parse(context.validUntil) > now.getTime());
+}
+
 /**
  * Resolves only deterministic facts emitted by the pinned first-party
  * executors. Missing, contradictory, or third-party facts remain unavailable,
@@ -285,16 +305,19 @@ export function resolveMatterhornRuntimeTransactionFacts(input: FactsInput): Mat
       }
     }
   }
+  const supported = supportedFirstPartyAction({
+    appId: input.intent.appId,
+    actionId: input.intent.actionId,
+    network: input.intent.network,
+  });
+  const jurisdictionAllowed = input.intent.protocol !== "polymarket"
+    || currentPolymarketJurisdictionAllows(input.jurisdictionPolicy, now);
   return {
     notionalUsd,
     ...historyFacts(input.existingIntents, now),
     projectedReserveUsd,
     leverage,
     regionCode: null,
-    complianceAllowed: supportedFirstPartyAction({
-      appId: input.intent.appId,
-      actionId: input.intent.actionId,
-      network: input.intent.network,
-    }),
+    complianceAllowed: supported && jurisdictionAllowed,
   };
 }

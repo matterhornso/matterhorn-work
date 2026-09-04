@@ -2,6 +2,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import type {
   MatterhornAgentCapabilityClaims,
   MatterhornAgentCapabilityDecision,
+  MatterhornAgentJurisdictionPolicyContext,
   MatterhornAgentCapabilityToken,
   MatterhornGuardedRuntimeMode,
 } from "@matterhorn-work/types/guarded-agent-runtime";
@@ -14,6 +15,10 @@ import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-m
 import type { MatterhornCoworkerProfile } from "@matterhorn-work/types/crypto-coworkers";
 import { canonicalJson, equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import {
+  MATTERHORN_POLYMARKET_JURISDICTION_POLICY_HASH,
+  MATTERHORN_POLYMARKET_JURISDICTION_POLICY_VERSION,
+} from "./polymarket-jurisdiction-policy.js";
 
 export const MATTERHORN_CAPABILITY_ARGUMENT = "_matterhornCapability";
 export const MATTERHORN_CAPABILITY_CALL_ARGUMENT = "_matterhornCallId";
@@ -41,6 +46,7 @@ type RunGrant = {
   issuedPrepareFamilies: Map<string, string>;
   issuedCallIds: Set<string>;
   jurisdictionEvidenceHash: string | null;
+  jurisdictionPolicy: MatterhornAgentJurisdictionPolicyContext | null;
   expiresAtMs: number;
 };
 
@@ -112,6 +118,7 @@ function deserializeGrant(stored: StoredRunGrant): RunGrant {
     issuedPrepareFamilies: new Map(stored.issuedPrepareFamilies),
     issuedCallIds: new Set(stored.issuedCallIds),
     jurisdictionEvidenceHash: stored.jurisdictionEvidenceHash ?? null,
+    jurisdictionPolicy: stored.jurisdictionPolicy ?? null,
   };
 }
 
@@ -302,6 +309,33 @@ function validCoworkerBinding(binding: MatterhornCoworkerRunBinding, workspaceId
     && binding.maxPrepareCallsPerFamily <= MAX_PREPARE_ATTEMPTS_PER_FAMILY;
 }
 
+function validJurisdictionPolicyContext(
+  value: unknown,
+  jurisdictionEvidenceHash: string | null,
+): value is MatterhornAgentJurisdictionPolicyContext {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const context = value as Record<string, unknown>;
+  return Object.keys(context).length === 6
+    && Object.keys(context).every((key) => [
+      "evidenceHash",
+      "policyVersion",
+      "policyHash",
+      "decisionHash",
+      "validUntil",
+      "polymarketOpenPositionAllowed",
+    ].includes(key))
+    && typeof context.evidenceHash === "string"
+    && context.evidenceHash === jurisdictionEvidenceHash
+    && /^[a-f0-9]{64}$/.test(context.evidenceHash)
+    && context.policyVersion === MATTERHORN_POLYMARKET_JURISDICTION_POLICY_VERSION
+    && context.policyHash === MATTERHORN_POLYMARKET_JURISDICTION_POLICY_HASH
+    && typeof context.decisionHash === "string"
+    && /^[a-f0-9]{64}$/.test(context.decisionHash)
+    && typeof context.validUntil === "string"
+    && Number.isFinite(Date.parse(context.validUntil))
+    && typeof context.polymarketOpenPositionAllowed === "boolean";
+}
+
 function signingSecret(): string {
   const value = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET?.trim() ?? "";
   return value.length >= 32 ? value : "";
@@ -340,6 +374,13 @@ function decodeClaims(token: string, secret: string): MatterhornAgentCapabilityC
       || typeof claims.policyVersion !== "string"
       || typeof claims.registryVersion !== "string"
     ) return null;
+    const jurisdictionEvidenceHash = typeof claims.jurisdictionEvidenceHash === "string"
+      && /^[a-f0-9]{64}$/.test(claims.jurisdictionEvidenceHash)
+      ? claims.jurisdictionEvidenceHash
+      : claims.jurisdictionEvidenceHash === undefined ? null : undefined;
+    if (jurisdictionEvidenceHash === undefined) return null;
+    if (claims.jurisdictionPolicy !== undefined
+      && !validJurisdictionPolicyContext(claims.jurisdictionPolicy, jurisdictionEvidenceHash)) return null;
     if (claims.coworker !== undefined) {
       if (!claims.coworker || typeof claims.coworker !== "object" || Array.isArray(claims.coworker)) return null;
       const coworker = claims.coworker as Record<string, unknown>;
@@ -413,6 +454,7 @@ export class MatterhornAgentCapabilityBroker {
     requestToolProfiles?: readonly Record<string, boolean>[];
     coworker?: MatterhornCoworkerRunBinding;
     jurisdictionEvidenceHash?: string;
+    jurisdictionPolicy?: MatterhornAgentJurisdictionPolicyContext;
     expiresAtMs?: number;
     now?: Date;
   }): void {
@@ -430,6 +472,10 @@ export class MatterhornAgentCapabilityBroker {
     const jurisdictionEvidenceHash = input.jurisdictionEvidenceHash?.trim() || null;
     if (jurisdictionEvidenceHash && !/^[a-f0-9]{64}$/.test(jurisdictionEvidenceHash)) {
       throw new Error("capability_jurisdiction_binding_invalid");
+    }
+    const jurisdictionPolicy = input.jurisdictionPolicy ? structuredClone(input.jurisdictionPolicy) : null;
+    if (jurisdictionPolicy && !validJurisdictionPolicyContext(jurisdictionPolicy, jurisdictionEvidenceHash)) {
+      throw new Error("capability_jurisdiction_policy_invalid");
     }
     let allowedTools = allowedToolsForRun({ agentId, requestToolProfiles: input.requestToolProfiles });
     if (input.coworker) {
@@ -456,6 +502,7 @@ export class MatterhornAgentCapabilityBroker {
       issuedPrepareFamilies: new Map(),
       issuedCallIds: new Set(),
       jurisdictionEvidenceHash,
+      jurisdictionPolicy,
       expiresAtMs,
     };
     this.persistGrant(grant);
@@ -503,6 +550,13 @@ export class MatterhornAgentCapabilityBroker {
       deny("capability_wrong_desk");
     }
     if (definition.access === "prepare" && grant.executionMode !== "work") deny("capability_prepare_requires_work_mode");
+    const polymarketPrepare = definition.access === "prepare"
+      && definition.deskIds.some((deskId) => deskId === "polymarket");
+    if (polymarketPrepare && (
+      !grant.jurisdictionPolicy
+      || grant.jurisdictionPolicy.polymarketOpenPositionAllowed !== true
+      || Date.parse(grant.jurisdictionPolicy.validUntil) <= now.getTime()
+    )) deny("capability_polymarket_jurisdiction_denied");
     if (definition.access === "read") {
       if (grant.readIssues >= grant.maxReadCalls) deny("capability_read_budget_exhausted");
       grant.readIssues += 1;
@@ -521,7 +575,12 @@ export class MatterhornAgentCapabilityBroker {
     const secret = this.resolveSigningSecret();
     if (!secret) deny("capability_signing_secret_missing");
     grant.issuedCallIds.add(input.callId);
-    const expiresAt = new Date(now.getTime() + CAPABILITY_TTL_MS);
+    const expiresAt = new Date(Math.min(
+      now.getTime() + CAPABILITY_TTL_MS,
+      polymarketPrepare && grant.jurisdictionPolicy
+        ? Date.parse(grant.jurisdictionPolicy.validUntil)
+        : Number.POSITIVE_INFINITY,
+    ));
     const claims: MatterhornAgentCapabilityClaims = {
       version: "matterhorn.agent-capability.v1",
       jti: `cap_${randomUUID()}`,
@@ -540,6 +599,9 @@ export class MatterhornAgentCapabilityBroker {
       registryVersion: MATTERHORN_CRYPTO_REGISTRY_VERSION,
       ...(grant.jurisdictionEvidenceHash
         ? { jurisdictionEvidenceHash: grant.jurisdictionEvidenceHash }
+        : {}),
+      ...(grant.jurisdictionPolicy
+        ? { jurisdictionPolicy: structuredClone(grant.jurisdictionPolicy) }
         : {}),
       ...(grant.coworker ? {
         coworker: {
@@ -602,6 +664,9 @@ export class MatterhornAgentCapabilityBroker {
     if (grant.workspaceId !== claims.workspaceId || grant.sessionId !== claims.sessionId) deny("capability_scope_mismatch");
     if ((grant.jurisdictionEvidenceHash ?? null) !== (claims.jurisdictionEvidenceHash ?? null)) {
       deny("capability_jurisdiction_mismatch");
+    }
+    if (canonicalJson(grant.jurisdictionPolicy) !== canonicalJson(claims.jurisdictionPolicy ?? null)) {
+      deny("capability_jurisdiction_policy_mismatch");
     }
     if (grant.coworker) {
       if (!claims.coworker
@@ -688,7 +753,11 @@ export class MatterhornAgentCapabilityBroker {
     network: string;
     toolName: string;
     args: Record<string, unknown>;
-  }): { access: "read" | "prepare"; expiresAt: string } | null {
+  }): {
+    access: "read" | "prepare";
+    expiresAt: string;
+    jurisdictionPolicy: MatterhornAgentJurisdictionPolicyContext | null;
+  } | null {
     const claims = this.consumedByCallId.get(input.callId);
     if (!claims
       || claims.runId !== input.runId
@@ -703,7 +772,11 @@ export class MatterhornAgentCapabilityBroker {
       || claims.coworker.network !== input.network
       || claims.toolName !== normalizedToolName(input.toolName)
       || !equalDigest(claims.argsHash, capabilityArgsHash(input.args))) return null;
-    return { access: claims.access, expiresAt: claims.expiresAt };
+    return {
+      access: claims.access,
+      expiresAt: claims.expiresAt,
+      jurisdictionPolicy: claims.jurisdictionPolicy ? structuredClone(claims.jurisdictionPolicy) : null,
+    };
   }
 
   activeRun(sessionId: string): string | null {

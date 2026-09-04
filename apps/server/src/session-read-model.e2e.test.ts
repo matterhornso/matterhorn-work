@@ -86,6 +86,7 @@ function auth(token: string) {
 
 function trustedJurisdictionHeaders(input: {
   country: string;
+  region?: string | null;
   path: string;
   secret: string;
   clientIp?: string;
@@ -93,9 +94,10 @@ function trustedJurisdictionHeaders(input: {
   const clientIp = input.clientIp ?? "203.0.113.9";
   const issuedAtMs = Date.now();
   const payload = {
-    version: "matterhorn.edge-jurisdiction.v1",
+    version: "matterhorn.edge-jurisdiction.v2",
     source: "vercel_ip_country",
     country: input.country,
+    region: input.region ?? null,
     method: "POST",
     path: input.path,
     clientIpHash: createHash("sha256").update(clientIp).digest("hex"),
