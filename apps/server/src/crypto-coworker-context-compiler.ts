@@ -1,7 +1,7 @@
 import { sha256 } from "./guarded-runtime-crypto.js";
 
 export const MATTERHORN_COWORKER_CONTEXT_COMPILER_VERSION =
-  "matterhorn.coworker-context-compiler.v1";
+  "matterhorn.coworker-context-compiler.v2";
 
 export type MatterhornCoworkerContextDataSectionId =
   | "coworker_profile"
@@ -24,6 +24,7 @@ export type MatterhornCoworkerContextCompilation = {
   policyChars: number;
   dataChars: number;
   includedSections: MatterhornCoworkerContextDataSectionId[];
+  escapedSections: MatterhornCoworkerContextDataSectionId[];
   truncatedSections: MatterhornCoworkerContextDataSectionId[];
   omittedSections: MatterhornCoworkerContextDataSectionId[];
 };
@@ -39,6 +40,8 @@ const POLICY_HEADER = [
 ].join("\n");
 
 const TRUNCATION_NOTICE = "\n[Matterhorn omitted the remainder of this data block to stay within the context budget.]";
+const ESCAPED_CONTROL_MARKER = "[Matterhorn escaped a reserved control marker from data]";
+const RESERVED_DATA_CONTROL_LINE = /^\s*(?:#{1,6}\s+Matterhorn\s+(?:Authoritative\s+Policy|Coworker\s+Rules|Security\s+Boundary)\b.*|\[(?:BEGIN|END)\s+MATTERHORN\s+DATA:[^\r\n]*\].*)$/i;
 
 function validateSection(section: MatterhornCoworkerContextDataSection): void {
   if (!section.label.trim() || section.label.length > 80 || /[\r\n\[\]]/.test(section.label)) {
@@ -67,11 +70,22 @@ function boundedContent(value: string, maxChars: number): { text: string; trunca
   };
 }
 
+function escapeReservedDataControlLines(value: string): { text: string; escaped: boolean } {
+  let escaped = false;
+  const text = value.split("\n").map((line) => {
+    if (!RESERVED_DATA_CONTROL_LINE.test(line)) return line;
+    escaped = true;
+    return ESCAPED_CONTROL_MARKER;
+  }).join("\n");
+  return { text, escaped };
+}
+
 function renderDataBlock(
   section: MatterhornCoworkerContextDataSection,
   contentBudget: number,
-): { text: string; truncated: boolean } {
-  const content = boundedContent(section.text, contentBudget);
+): { text: string; escaped: boolean; truncated: boolean } {
+  const escaped = escapeReservedDataControlLines(section.text);
+  const content = boundedContent(escaped.text, contentBudget);
   return {
     text: [
       `### ${section.label}`,
@@ -79,6 +93,7 @@ function renderDataBlock(
       content.text,
       `[END MATTERHORN DATA: ${section.id}]`,
     ].join("\n"),
+    escaped: escaped.escaped,
     truncated: content.truncated,
   };
 }
@@ -108,6 +123,7 @@ export function compileMatterhornCoworkerSystemContext(input: {
   const availableDataChars = maxChars - policy.length - 2;
   const rendered: string[] = [];
   const includedSections: MatterhornCoworkerContextDataSectionId[] = [];
+  const escapedSections: MatterhornCoworkerContextDataSectionId[] = [];
   const truncatedSections: MatterhornCoworkerContextDataSectionId[] = [];
   const omittedSections: MatterhornCoworkerContextDataSectionId[] = [];
   let used = DATA_HEADER.length;
@@ -129,7 +145,8 @@ export function compileMatterhornCoworkerSystemContext(input: {
     const block = renderDataBlock(section, contentBudget);
     rendered.push(block.text);
     includedSections.push(section.id);
-    if (block.truncated || contentBudget < section.text.length) truncatedSections.push(section.id);
+    if (block.escaped) escapedSections.push(section.id);
+    if (block.truncated) truncatedSections.push(section.id);
     used += separatorChars + block.text.length;
   }
 
@@ -146,6 +163,7 @@ export function compileMatterhornCoworkerSystemContext(input: {
     policyChars: policy.length,
     dataChars: data.length,
     includedSections,
+    escapedSections,
     truncatedSections,
     omittedSections,
   };
