@@ -1,5 +1,10 @@
 # Guarded Crypto Coworkers acceptance evidence
 
+Security note: the proposed [exact-release report v2 contract](./acceptance-report-v2-rfc.md)
+would bind every individual report to its exact commit, deployed origin, group,
+capture window, and trusted producer. It is an RFC only; this v1 gate remains
+unchanged until the contract migration is explicitly approved.
+
 The Crypto Coworkers release gate turns the remaining live Phase 1–5 exit criteria into one fail-closed, exact-commit decision. It does not certify an app, enable a runtime mode, publish to Walrus, promote a deployment, or grant wallet authority.
 
 Create a non-passing, exact-commit template after the immutable candidate is deployed:
