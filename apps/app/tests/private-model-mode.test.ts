@@ -110,6 +110,10 @@ describe("private model mode", () => {
     expect(sessionRoute).toContain("selectedPrivateModeVerified");
     expect(sessionRoute).toContain("Model privacy not verified");
     expect(sessionRoute).toContain("privateModePrivacyPolicy?.verificationExpiresAt");
+    expect(sessionRoute).toContain("storeSessionModelChoice(selectedWorkspaceId, selectedSessionId");
+    expect(sessionRoute).toContain('target={selectedSessionId ? "session" : "default"}');
+    expect(sessionRoute).toContain("inheritStoredSessionModelChoice(selectedWorkspaceId, selectedSessionId, forked.id)");
+    expect(sessionRoute).toContain("storeSessionModelChoice(selectedWorkspaceId, sessionId, null)");
   });
 
   test("preserves private workspace mode for immediate desk tasks", () => {

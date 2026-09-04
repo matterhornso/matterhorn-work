@@ -120,6 +120,66 @@ export function serializeSessionChoiceOverrides(
   return JSON.stringify(payload);
 }
 
+export function readStoredSessionChoiceOverrides(
+  workspaceId: string,
+): Record<string, SessionChoiceOverride> {
+  if (typeof window === "undefined" || !workspaceId.trim()) return {};
+  try {
+    return parseSessionChoiceOverrides(
+      window.localStorage.getItem(sessionModelOverridesKey(workspaceId)),
+    );
+  } catch {
+    return {};
+  }
+}
+
+export function writeStoredSessionChoiceOverrides(
+  workspaceId: string,
+  overrides: Record<string, SessionChoiceOverride>,
+): void {
+  if (typeof window === "undefined" || !workspaceId.trim()) return;
+  try {
+    const key = sessionModelOverridesKey(workspaceId);
+    const serialized = serializeSessionChoiceOverrides(overrides);
+    if (serialized) {
+      window.localStorage.setItem(key, serialized);
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore unavailable storage and quota failures. The caller keeps an
+    // in-memory copy for the current page lifetime.
+  }
+}
+
+export function withSessionChoiceOverride(
+  overrides: Record<string, SessionChoiceOverride>,
+  sessionId: string,
+  choice: SessionChoiceOverride | null,
+): Record<string, SessionChoiceOverride> {
+  const id = sessionId.trim();
+  if (!id) return overrides;
+  const next = { ...overrides };
+  const normalized = normalizeSessionChoice(choice);
+  if (normalized) next[id] = normalized;
+  else delete next[id];
+  return next;
+}
+
+export function inheritSessionChoiceOverride(
+  overrides: Record<string, SessionChoiceOverride>,
+  sourceSessionId: string,
+  targetSessionId: string,
+): Record<string, SessionChoiceOverride> {
+  const sourceId = sourceSessionId.trim();
+  const targetId = targetSessionId.trim();
+  if (!sourceId || !targetId || sourceId === targetId) return overrides;
+  const source = normalizeSessionChoice(overrides[sourceId]);
+  return source
+    ? withSessionChoiceOverride(overrides, targetId, source)
+    : withSessionChoiceOverride(overrides, targetId, null);
+}
+
 export function parseWorkspaceModelVariants(
   raw: string | null,
   fallbackModel: ModelRef = DEFAULT_MODEL,
@@ -174,11 +234,7 @@ export function writeStoredDefaultModel(model: ModelRef): void {
   }
 }
 
-/**
- * Minimal React hook covering the default model picker state. The richer
- * session/workspace model overrides from context/model-config.ts will be
- * ported incrementally as the session and settings surfaces migrate.
- */
+/** Minimal React hook for surfaces that intentionally edit the default model. */
 export function useDefaultModel(): [ModelRef, (next: ModelRef) => void] {
   const [model, setModel] = useState<ModelRef>(() => readStoredDefaultModel());
 

@@ -30,6 +30,10 @@ Recommended change: show the existing one-sentence explanation inside each choic
 
 Home and Coworkers now use `Research markets`, `Watch risk`, `Prepare a wallet review`, and `Track balances`. Internal template IDs and persisted coworker names remain unchanged.
 
+### Resolved — Private mode stays with the chat where it was chosen
+
+The model picker and Venice Private control now change the active chat only. A deliberate chat fork inherits that choice; another chat keeps its own model, and deleting the chat removes the saved choice. The workspace default remains available for new chats without being silently changed by a private conversation.
+
 ### P2 — Technical storage and certification facts still need rendered browser verification
 
 The source places Walrus, Sui, hashes, manifests, and certification detail behind secondary disclosures. This is the correct hierarchy, but it still needs authenticated 320/375/768/1024/1440 px, keyboard, and screen-reader acceptance against the release candidate.
