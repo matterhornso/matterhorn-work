@@ -40,6 +40,7 @@ const SUI_TESTNET_NETWORK = "sui:testnet" as const;
 type DeletionIntentRecord = {
   workspaceId: string;
   ownerId: string;
+  claimId: string;
   preview: MatterhornCryptoEvidenceWalrusDeletionPreview;
 };
 
@@ -248,97 +249,127 @@ export class MatterhornCryptoEvidenceWalrusDeletionService {
     const existing = this.stateStore.get<DeletionIntentRecord>(STATE_KIND, input.evidenceId, now.getTime());
     if (existing) {
       assertIntentTenant(existing, input);
-      if (existing.preview.evidenceRevision !== input.expectedRevision
-        || existing.preview.signer !== signer) {
-        fail("crypto_evidence_walrus_deletion_in_progress");
+      if (!this.store.hasWalrusDeletionClaim({
+        workspaceId: input.workspaceId,
+        evidenceId: input.evidenceId,
+        expectedRevision: existing.preview.evidenceRevision,
+        claimId: existing.claimId,
+        now,
+      })) {
+        this.stateStore.delete(STATE_KIND, input.evidenceId);
+      } else {
+        if (existing.preview.evidenceRevision !== input.expectedRevision
+          || existing.preview.signer !== signer) {
+          fail("crypto_evidence_walrus_deletion_in_progress");
+        }
+        return this.prepareResponse(existing.preview);
       }
-      return this.prepareResponse(existing.preview);
     }
     this.stateStore.delete(STATE_KIND, input.evidenceId);
-    const record = this.store.get(input);
-    const proof = record?.walrusProof;
-    if (!record) fail("crypto_evidence_not_found");
-    if (record.revision !== input.expectedRevision) fail("crypto_evidence_revision_conflict");
-    if (record.state !== "published" || !record.envelope || !proof || proof.deletionTransactionDigest) {
-      fail("crypto_evidence_walrus_deletion_state_invalid");
-    }
-    if (!record.walrusOwnerAddressHash
-      || record.walrusOwnerAddressHash !== matterhornWalrusOwnerAddressHash(signer)) {
-      fail("crypto_evidence_walrus_wallet_owner_required");
-    }
-    const certification = await this.verifyCertification({
-      network: "testnet",
-      blobId: proof.blobId,
-      suiObjectId: proof.suiObjectId,
-      signal: input.signal,
-    });
-    if (certification.network !== "testnet"
-      || proof.network !== "testnet"
-      || certification.blobId !== proof.blobId
-      || certification.suiObjectId !== proof.suiObjectId
-      || certification.certifiedEpoch !== proof.certifiedEpoch
-      || certification.validUntilEpoch !== proof.validUntilEpoch
-      || certification.suiTransactionDigest !== proof.suiTransactionDigest
-      || certification.ownerAddress !== signer) {
-      fail("crypto_evidence_walrus_certification_changed");
-    }
-    if (!certification.deletable) fail("crypto_evidence_walrus_not_deletable");
-    const lifecycle = assessMatterhornWalrusStorageLifecycle({
-      currentEpoch: certification.currentEpoch,
-      validUntilEpoch: certification.validUntilEpoch,
-    });
-    if (lifecycle.status === "expired") fail("crypto_evidence_walrus_certification_expired");
-    const built = await this.buildTransaction({
-      network: SUI_TESTNET_NETWORK,
-      signer,
-      blobObjectId: proof.suiObjectId,
-      signal: input.signal,
-    });
-    const transactionBytes = canonicalTransactionBytes(built.transactionBytesBase64);
-    try {
-      if (TransactionDataBuilder.getDigestFromBytes(transactionBytes)
-        !== transactionDigest(built.transactionDigest)) {
-        fail("crypto_evidence_walrus_deletion_transaction_invalid");
-      }
-    } finally {
-      transactionBytes.fill(0);
-    }
-    if (!/^[a-f0-9]{64}$/.test(built.simulationReference)
-      || !Number.isFinite(Date.parse(built.simulatedAt))
-      || Math.abs(Date.parse(built.simulatedAt) - now.getTime()) > 30_000) {
-      fail("crypto_evidence_walrus_deletion_simulation_invalid");
-    }
-    const previewWithoutHash: Omit<MatterhornCryptoEvidenceWalrusDeletionPreview, "intentHash"> = {
-      version: MATTERHORN_CRYPTO_EVIDENCE_WALRUS_DELETION_VERSION,
-      intentId: `crypto_evidence_deletion_${randomUUID().replaceAll("-", "")}`,
-      evidenceId: input.evidenceId,
-      evidenceRevision: input.expectedRevision,
-      network: "testnet",
-      signer,
-      blobId: proof.blobId,
-      suiObjectId: proof.suiObjectId,
-      ciphertextSha256: record.index.ciphertextHash,
-      transactionBytesBase64: built.transactionBytesBase64,
-      transactionDigest: built.transactionDigest,
-      simulationReference: built.simulationReference,
-      simulatedAt: built.simulatedAt,
-      expiresAt: new Date(now.getTime() + INTENT_TTL_MS).toISOString(),
-      walletAuthority: "connected_wallet_only",
-    };
-    const preview: MatterhornCryptoEvidenceWalrusDeletionPreview = {
-      ...previewWithoutHash,
-      intentHash: sha256(intentHashPayload(previewWithoutHash)),
-    };
-    assertPreview(preview);
-    if (!this.stateStore.putIfAbsent({
-      kind: STATE_KIND,
-      key: input.evidenceId,
+    const candidate = this.store.beginWalrusDeletion({
       workspaceId: input.workspaceId,
-      value: { workspaceId: input.workspaceId, ownerId: input.ownerId, preview },
-      expiresAtMs: Date.parse(preview.expiresAt),
-      nowMs: now.getTime(),
-    })) fail("crypto_evidence_walrus_deletion_in_progress");
-    return this.prepareResponse(preview);
+      ownerId: input.ownerId,
+      evidenceId: input.evidenceId,
+      expectedRevision: input.expectedRevision,
+      now,
+    });
+    let retainedClaim = false;
+    try {
+      const record = candidate.record;
+      const proof = record.walrusProof;
+      if (!record.walrusOwnerAddressHash
+        || record.walrusOwnerAddressHash !== matterhornWalrusOwnerAddressHash(signer)) {
+        fail("crypto_evidence_walrus_wallet_owner_required");
+      }
+      const certification = await this.verifyCertification({
+        network: "testnet",
+        blobId: proof.blobId,
+        suiObjectId: proof.suiObjectId,
+        signal: input.signal,
+      });
+      if (certification.network !== "testnet"
+        || proof.network !== "testnet"
+        || certification.blobId !== proof.blobId
+        || certification.suiObjectId !== proof.suiObjectId
+        || certification.certifiedEpoch !== proof.certifiedEpoch
+        || certification.validUntilEpoch !== proof.validUntilEpoch
+        || certification.suiTransactionDigest !== proof.suiTransactionDigest
+        || certification.ownerAddress !== signer) {
+        fail("crypto_evidence_walrus_certification_changed");
+      }
+      if (!certification.deletable) fail("crypto_evidence_walrus_not_deletable");
+      const lifecycle = assessMatterhornWalrusStorageLifecycle({
+        currentEpoch: certification.currentEpoch,
+        validUntilEpoch: certification.validUntilEpoch,
+      });
+      if (lifecycle.status === "expired") fail("crypto_evidence_walrus_certification_expired");
+      const built = await this.buildTransaction({
+        network: SUI_TESTNET_NETWORK,
+        signer,
+        blobObjectId: proof.suiObjectId,
+        signal: input.signal,
+      });
+      const transactionBytes = canonicalTransactionBytes(built.transactionBytesBase64);
+      try {
+        if (TransactionDataBuilder.getDigestFromBytes(transactionBytes)
+          !== transactionDigest(built.transactionDigest)) {
+          fail("crypto_evidence_walrus_deletion_transaction_invalid");
+        }
+      } finally {
+        transactionBytes.fill(0);
+      }
+      if (!/^[a-f0-9]{64}$/.test(built.simulationReference)
+        || !Number.isFinite(Date.parse(built.simulatedAt))
+        || Math.abs(Date.parse(built.simulatedAt) - now.getTime()) > 30_000) {
+        fail("crypto_evidence_walrus_deletion_simulation_invalid");
+      }
+      const previewWithoutHash: Omit<MatterhornCryptoEvidenceWalrusDeletionPreview, "intentHash"> = {
+        version: MATTERHORN_CRYPTO_EVIDENCE_WALRUS_DELETION_VERSION,
+        intentId: `crypto_evidence_deletion_${randomUUID().replaceAll("-", "")}`,
+        evidenceId: input.evidenceId,
+        evidenceRevision: input.expectedRevision,
+        network: "testnet",
+        signer,
+        blobId: proof.blobId,
+        suiObjectId: proof.suiObjectId,
+        ciphertextSha256: record.index.ciphertextHash,
+        transactionBytesBase64: built.transactionBytesBase64,
+        transactionDigest: built.transactionDigest,
+        simulationReference: built.simulationReference,
+        simulatedAt: built.simulatedAt,
+        expiresAt: new Date(now.getTime() + INTENT_TTL_MS).toISOString(),
+        walletAuthority: "connected_wallet_only",
+      };
+      const preview: MatterhornCryptoEvidenceWalrusDeletionPreview = {
+        ...previewWithoutHash,
+        intentHash: sha256(intentHashPayload(previewWithoutHash)),
+      };
+      assertPreview(preview);
+      if (!this.stateStore.putIfAbsent({
+        kind: STATE_KIND,
+        key: input.evidenceId,
+        workspaceId: input.workspaceId,
+        value: {
+          workspaceId: input.workspaceId,
+          ownerId: input.ownerId,
+          claimId: candidate.claimId,
+          preview,
+        },
+        expiresAtMs: Date.parse(preview.expiresAt),
+        nowMs: now.getTime(),
+      })) fail("crypto_evidence_walrus_deletion_in_progress");
+      retainedClaim = true;
+      return this.prepareResponse(preview);
+    } finally {
+      if (!retainedClaim) {
+        this.store.endWalrusDeletion({
+          workspaceId: input.workspaceId,
+          evidenceId: input.evidenceId,
+          claimId: candidate.claimId,
+          now,
+        });
+      }
+    }
   }
 
   async confirm(input: {
@@ -363,6 +394,13 @@ export class MatterhornCryptoEvidenceWalrusDeletionService {
       || preview.transactionDigest !== transactionDigest(input.transactionDigest)) {
       fail("crypto_evidence_walrus_deletion_intent_mismatch");
     }
+    if (!this.store.hasWalrusDeletionClaim({
+      workspaceId: input.workspaceId,
+      evidenceId: input.evidenceId,
+      expectedRevision: preview.evidenceRevision,
+      claimId: record.claimId,
+      now,
+    })) fail("crypto_evidence_walrus_deletion_expired_or_replayed");
     const transaction = await this.verifyTransaction({
       network: SUI_TESTNET_NETWORK,
       digest: preview.transactionDigest,
@@ -374,6 +412,8 @@ export class MatterhornCryptoEvidenceWalrusDeletionService {
       fail("crypto_evidence_walrus_deletion_transaction_mismatch");
     }
     if (transaction.status !== "confirmed") fail("crypto_evidence_walrus_deletion_transaction_failed");
+    const finalizedAt = input.now ?? new Date();
+    if (!Number.isFinite(finalizedAt.getTime())) fail("crypto_evidence_time_invalid");
     const item = await this.store.destroyKey({
       workspaceId: input.workspaceId,
       ownerId: input.ownerId,
@@ -385,10 +425,15 @@ export class MatterhornCryptoEvidenceWalrusDeletionService {
         transactionDigest: transaction.digest,
         deletedAt: transaction.observedAt,
       },
-      now,
+      claimId: record.claimId,
+      now: finalizedAt,
     });
     const consumed = this.stateStore.transaction(() => {
-      const current = this.stateStore.take<DeletionIntentRecord>(STATE_KIND, input.evidenceId, now.getTime());
+      const current = this.stateStore.take<DeletionIntentRecord>(
+        STATE_KIND,
+        input.evidenceId,
+        finalizedAt.getTime(),
+      );
       if (!current) fail("crypto_evidence_walrus_deletion_expired_or_replayed");
       assertIntentTenant(current, input);
       if (canonicalJson(current.preview) !== canonicalJson(preview)) {
@@ -399,7 +444,7 @@ export class MatterhornCryptoEvidenceWalrusDeletionService {
     if (!consumed) fail("crypto_evidence_walrus_deletion_expired_or_replayed");
     const verification: MatterhornEvidenceVerificationStatus = {
       status: "deleted",
-      verifiedAt: now.toISOString(),
+      verifiedAt: finalizedAt.toISOString(),
       checks: {
         tenantScope: true,
         ciphertextHash: true,

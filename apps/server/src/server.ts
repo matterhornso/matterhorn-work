@@ -4150,6 +4150,12 @@ function cryptoEvidenceDeletionApiError(error: unknown): ApiError {
     || code === "crypto_evidence_walrus_renewal_in_progress") {
     return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
   }
+  if (code === "crypto_evidence_walrus_deletion_in_progress") {
+    return new ApiError(409, code, "A wallet deletion is already waiting for this evidence.");
+  }
+  if (code === "crypto_evidence_walrus_deletion_claim_invalid") {
+    return new ApiError(409, code, "This deletion is no longer current. Prepare it again.");
+  }
   return new ApiError(
     503,
     "crypto_evidence_walrus_deletion_unavailable",

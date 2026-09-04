@@ -40,7 +40,7 @@ type MatterhornCryptoEvidenceOperationClaim = {
   claimId: string;
   evidenceId: string;
   expectedRevision: number;
-  operation: "publish" | "renew" | "anchor" | "rotate_key" | "destroy_key";
+  operation: "publish" | "renew" | "delete" | "anchor" | "rotate_key" | "destroy_key";
   createdAt: string;
   expiresAt: string;
 };
@@ -246,6 +246,8 @@ export class MatterhornCryptoEvidenceStore {
           ? "crypto_evidence_walrus_publication_in_progress"
           : input.operation === "renew"
             ? "crypto_evidence_walrus_renewal_in_progress"
+            : input.operation === "delete"
+              ? "crypto_evidence_walrus_deletion_in_progress"
             : "crypto_evidence_operation_in_progress");
       }
       if (input.operation === "publish") {
@@ -289,6 +291,8 @@ export class MatterhornCryptoEvidenceStore {
           ? "crypto_evidence_walrus_publication_in_progress"
           : input.operation === "renew" && activeClaim?.operation === "renew"
             ? "crypto_evidence_walrus_renewal_in_progress"
+            : input.operation === "delete" && activeClaim?.operation === "delete"
+              ? "crypto_evidence_walrus_deletion_in_progress"
             : "crypto_evidence_operation_in_progress");
       }
       return { record: clone(record), claimId };
@@ -700,6 +704,67 @@ export class MatterhornCryptoEvidenceStore {
   }
 
   endWalrusRenewal(input: {
+    workspaceId: string;
+    evidenceId: string;
+    claimId: string;
+    now?: Date;
+  }): boolean {
+    return this.endExclusiveOperation(input);
+  }
+
+  beginWalrusDeletion(input: {
+    workspaceId: string;
+    ownerId: string;
+    coworkerId?: string;
+    evidenceId: string;
+    expectedRevision: number;
+    now?: Date;
+  }): { record: MatterhornCryptoEvidenceRecord & { state: "published"; envelope: MatterhornEncryptedEvidenceEnvelope; walrusProof: MatterhornWalrusProof }; claimId: string } {
+    const claimed = this.beginExclusiveOperation({ ...input, operation: "delete" });
+    if (claimed.record.state !== "published"
+      || !claimed.record.envelope
+      || !claimed.record.walrusProof
+      || claimed.record.walrusProof.deletionTransactionDigest) {
+      this.endWalrusDeletion({
+        workspaceId: input.workspaceId,
+        evidenceId: input.evidenceId,
+        claimId: claimed.claimId,
+        now: input.now,
+      });
+      throw new Error("crypto_evidence_walrus_deletion_state_invalid");
+    }
+    return {
+      record: claimed.record as MatterhornCryptoEvidenceRecord & {
+        state: "published";
+        envelope: MatterhornEncryptedEvidenceEnvelope;
+        walrusProof: MatterhornWalrusProof;
+      },
+      claimId: claimed.claimId,
+    };
+  }
+
+  hasWalrusDeletionClaim(input: {
+    workspaceId: string;
+    evidenceId: string;
+    expectedRevision: number;
+    claimId: string;
+    now?: Date;
+  }): boolean {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    const claim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
+      OPERATION_CLAIM_KIND,
+      this.operationClaimKey(input),
+      now.getTime(),
+    );
+    return claim?.version === "matterhorn.crypto-evidence-operation-claim.v1"
+      && claim.claimId === input.claimId
+      && claim.evidenceId === input.evidenceId
+      && claim.expectedRevision === input.expectedRevision
+      && claim.operation === "delete";
+  }
+
+  endWalrusDeletion(input: {
     workspaceId: string;
     evidenceId: string;
     claimId: string;
@@ -1217,6 +1282,7 @@ export class MatterhornCryptoEvidenceStore {
       transactionDigest: string;
       deletedAt: string;
     };
+    claimId?: string;
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceRecord> {
     const existing = this.get(input);
@@ -1256,7 +1322,19 @@ export class MatterhornCryptoEvidenceStore {
     }
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
-    const claimed = this.beginExclusiveOperation({ ...input, operation: "destroy_key", now });
+    const claimed = input.walrusDeletion
+      ? {
+          record: existing,
+          claimId: input.claimId ?? "",
+        }
+      : this.beginExclusiveOperation({ ...input, operation: "destroy_key", now });
+    if (input.walrusDeletion && !this.hasWalrusDeletionClaim({
+      workspaceId: input.workspaceId,
+      evidenceId: input.evidenceId,
+      expectedRevision: input.expectedRevision,
+      claimId: claimed.claimId,
+      now,
+    })) throw new Error("crypto_evidence_walrus_deletion_claim_invalid");
     const current = claimed.record;
     const keyReference = current.key.keyReference;
     const wrappedKey = current.key.wrappedKey;
@@ -1290,43 +1368,71 @@ export class MatterhornCryptoEvidenceStore {
         },
         updatedAt: now.toISOString(),
       };
-      this.stateStore.put({
-        kind: STATE_KIND,
-        key: next.id,
-        workspaceId: next.workspaceId,
-        value: next,
-        expiresAtMs: now.getTime() + SECURITY_RETENTION_MS,
-        nowMs: now.getTime(),
-      });
-      this.stateStore.delete("crypto_evidence_renewal_intent", next.id);
-      if (!input.walrusDeletion) this.stateStore.delete("crypto_evidence_deletion_intent", next.id);
-      this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
-      this.stateStore.put({
-        kind: RUN_INDEX_KIND,
-        key: this.runIndexKey(next),
-        workspaceId: next.workspaceId,
-        value: { evidenceId: next.id },
-        expiresAtMs: now.getTime() + SECURITY_RETENTION_MS,
-        nowMs: now.getTime(),
-      });
-      this.recordAccess({
-        record: next,
-        action: "destroy_key",
-        outcome: "allowed",
-        reason: input.walrusDeletion
-          ? "walrus_deleted_and_recovery_material_deleted"
-          : "recovery_material_deleted",
-        now,
+      this.stateStore.transaction(() => {
+        const latest = this.stateStore.get<MatterhornCryptoEvidenceRecord>(
+          STATE_KIND,
+          input.evidenceId,
+          now.getTime(),
+        );
+        if (!latest) throw new Error("crypto_evidence_not_found");
+        assertTenant(latest, input);
+        if (latest.revision !== current.revision
+          || latest.state === "key_destroyed") throw new Error("crypto_evidence_revision_conflict");
+        if (input.walrusDeletion && !this.hasWalrusDeletionClaim({
+          workspaceId: input.workspaceId,
+          evidenceId: input.evidenceId,
+          expectedRevision: input.expectedRevision,
+          claimId: claimed.claimId,
+          now,
+        })) throw new Error("crypto_evidence_walrus_deletion_claim_invalid");
+        this.stateStore.put({
+          kind: STATE_KIND,
+          key: next.id,
+          workspaceId: next.workspaceId,
+          value: next,
+          expiresAtMs: now.getTime() + SECURITY_RETENTION_MS,
+          nowMs: now.getTime(),
+        });
+        this.stateStore.delete("crypto_evidence_renewal_intent", next.id);
+        if (!input.walrusDeletion) this.stateStore.delete("crypto_evidence_deletion_intent", next.id);
+        this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
+        this.stateStore.put({
+          kind: RUN_INDEX_KIND,
+          key: this.runIndexKey(next),
+          workspaceId: next.workspaceId,
+          value: { evidenceId: next.id },
+          expiresAtMs: now.getTime() + SECURITY_RETENTION_MS,
+          nowMs: now.getTime(),
+        });
+        this.recordAccess({
+          record: next,
+          action: "destroy_key",
+          outcome: "allowed",
+          reason: input.walrusDeletion
+            ? "walrus_deleted_and_recovery_material_deleted"
+            : "recovery_material_deleted",
+          now,
+        });
+        if (!this.endExclusiveOperationInTransaction({
+          workspaceId: input.workspaceId,
+          evidenceId: input.evidenceId,
+          claimId: claimed.claimId,
+          now,
+        })) throw new Error(input.walrusDeletion
+          ? "crypto_evidence_walrus_deletion_claim_invalid"
+          : "crypto_evidence_operation_claim_invalid");
       });
       this.stateStore.secureCheckpoint();
       return clone(next);
     } finally {
-      this.endExclusiveOperation({
-        workspaceId: input.workspaceId,
-        evidenceId: input.evidenceId,
-        claimId: claimed.claimId,
-        now,
-      });
+      if (!input.walrusDeletion) {
+        this.endExclusiveOperation({
+          workspaceId: input.workspaceId,
+          evidenceId: input.evidenceId,
+          claimId: claimed.claimId,
+          now,
+        });
+      }
     }
   }
 

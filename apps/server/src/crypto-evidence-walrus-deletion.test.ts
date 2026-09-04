@@ -90,10 +90,15 @@ async function transactionFixture() {
   };
 }
 
-async function fixture(input: { deletable?: boolean; currentEpoch?: number } = {}) {
+async function fixture(input: {
+  deletable?: boolean;
+  currentEpoch?: number;
+  onBuild?: () => void | Promise<void>;
+} = {}) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-evidence-deletion-"));
   roots.push(root);
-  const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
+  const statePath = join(root, "state.db");
+  const state = new MatterhornGuardedRuntimeStateStore(statePath);
   const key = Buffer.alloc(32, 7);
   let destroyFails = false;
   let destroyCalls = 0;
@@ -151,13 +156,16 @@ async function fixture(input: { deletable?: boolean; currentEpoch?: number } = {
     now: new Date("2026-09-01T23:01:00.000Z"),
   });
   let transactionStatus: "confirmed" | "failed" = "confirmed";
+  let buildCalls = 0;
   const built = await transactionFixture();
   const buildTransaction: MatterhornWalrusDeletionTransactionBuilder = async (request) => {
+    buildCalls += 1;
     expect(request).toMatchObject({
       network: "sui:testnet",
       signer: SIGNER,
       blobObjectId: "0x1234",
     });
+    await input.onBuild?.();
     return built;
   };
   const verifyTransaction: MatterhornSuiTransactionStatusVerifier = async (request) => ({
@@ -186,10 +194,16 @@ async function fixture(input: { deletable?: boolean; currentEpoch?: number } = {
   );
   return {
     state,
+    statePath,
+    keyManager,
     store,
     published,
     service,
     built,
+    buildTransaction,
+    verifyTransaction,
+    verifyCertification,
+    buildCalls: () => buildCalls,
     destroyCalls: () => destroyCalls,
     setDestroyFails: (value: boolean) => { destroyFails = value; },
     setTransactionStatus: (value: "confirmed" | "failed") => { transactionStatus = value; },
@@ -209,6 +223,95 @@ async function prepare(value: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("Walrus encrypted evidence deletion airlock", () => {
+  test("serializes deletion preparation across SQLite connections and protects replacement claims", async () => {
+    let releaseBuild!: () => void;
+    let buildStarted!: () => void;
+    const buildGate = new Promise<void>((resolve) => { releaseBuild = resolve; });
+    const started = new Promise<void>((resolve) => { buildStarted = resolve; });
+    const value = await fixture({
+      onBuild: async () => {
+        buildStarted();
+        await buildGate;
+      },
+    });
+    const secondState = new MatterhornGuardedRuntimeStateStore(value.statePath);
+    try {
+      const secondStore = new MatterhornCryptoEvidenceStore(secondState, value.keyManager);
+      const secondService = new MatterhornCryptoEvidenceWalrusDeletionService(
+        secondStore,
+        secondState,
+        value.buildTransaction,
+        value.verifyTransaction,
+        value.verifyCertification,
+      );
+      const request = {
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        evidenceId: value.published.id,
+        expectedRevision: value.published.revision,
+        signer: SIGNER,
+        signal: new AbortController().signal,
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      };
+      const firstPrepare = value.service.prepare(request);
+      await started;
+      await expect(secondService.prepare(request)).rejects.toThrow(
+        "crypto_evidence_walrus_deletion_in_progress",
+      );
+      expect(() => secondStore.beginWalrusRenewal({
+        workspaceId: request.workspaceId,
+        ownerId: request.ownerId,
+        evidenceId: request.evidenceId,
+        expectedRevision: request.expectedRevision,
+        now: request.now,
+      })).toThrow("crypto_evidence_operation_in_progress");
+      await expect(secondStore.destroyKey({
+        workspaceId: request.workspaceId,
+        ownerId: request.ownerId,
+        evidenceId: request.evidenceId,
+        expectedRevision: request.expectedRevision,
+        now: request.now,
+      })).rejects.toThrow("crypto_evidence_operation_in_progress");
+      expect(value.buildCalls()).toBe(1);
+      releaseBuild();
+      const prepared = await firstPrepare;
+      await expect(secondService.prepare(request)).resolves.toEqual(prepared);
+      expect(value.buildCalls()).toBe(1);
+
+      const firstClaim = value.store.beginWalrusDeletion({
+        workspaceId: request.workspaceId,
+        ownerId: request.ownerId,
+        evidenceId: request.evidenceId,
+        expectedRevision: request.expectedRevision,
+        now: new Date("2026-09-02T00:06:00.000Z"),
+      });
+      const replacement = secondStore.beginWalrusDeletion({
+        workspaceId: request.workspaceId,
+        ownerId: request.ownerId,
+        evidenceId: request.evidenceId,
+        expectedRevision: request.expectedRevision,
+        now: new Date("2026-09-02T00:12:00.000Z"),
+      });
+      expect(value.store.endWalrusDeletion({
+        workspaceId: request.workspaceId,
+        evidenceId: request.evidenceId,
+        claimId: firstClaim.claimId,
+        now: new Date("2026-09-02T00:12:00.000Z"),
+      })).toBe(false);
+      expect(secondStore.hasWalrusDeletionClaim({
+        workspaceId: request.workspaceId,
+        evidenceId: request.evidenceId,
+        expectedRevision: request.expectedRevision,
+        claimId: replacement.claimId,
+        now: new Date("2026-09-02T00:12:00.000Z"),
+      })).toBe(true);
+    } finally {
+      releaseBuild?.();
+      secondState.close();
+      value.state.close();
+    }
+  });
+
   test("prepares one exact transaction and destroys the copy and key once after wallet confirmation", async () => {
     const value = await fixture();
     try {
