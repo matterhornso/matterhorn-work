@@ -207,6 +207,9 @@ describe("Shared primitives UI contract", () => {
     expect(composerSource).toContain(
       "inline-flex h-9 max-h-9 w-9 items-center justify-center rounded-lg",
     );
+    expect(composerSource).toContain(
+      'aria-label={t("composer.attach_files")}',
+    );
     expect(editorSource).toContain("min-h-[72px]");
     expect(editorSource).toContain("aria-label={props.placeholder}");
     expect(composerSource).toContain("border border-transparent");

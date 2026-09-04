@@ -1312,6 +1312,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                     fileInput?.click();
                   }}
                   disabled={!props.attachmentsEnabled}
+                  aria-label={t("composer.attach_files")}
                   title={props.attachmentsDisabledReason ?? t("composer.attach_files")}
                 >
                   <Paperclip size={16} />
