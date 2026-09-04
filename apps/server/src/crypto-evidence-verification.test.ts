@@ -89,12 +89,20 @@ describe("crypto evidence verification boundary", () => {
         coworkerId: "coworker_private",
         sealed,
       });
+      const publication = store.beginWalrusPublication({
+        workspaceId: "workspace_evidence",
+        ownerId: "owner_private",
+        coworkerId: "coworker_private",
+        evidenceId: created.id,
+        expectedRevision: created.revision,
+      });
       const published = store.attachVerifiedWalrusProof({
         workspaceId: "workspace_evidence",
         ownerId: "owner_private",
         coworkerId: "coworker_private",
         evidenceId: created.id,
         expectedRevision: created.revision,
+        claimId: publication.claimId,
         proof: {
           version: MATTERHORN_WALRUS_PROOF_VERSION,
           network: "testnet",

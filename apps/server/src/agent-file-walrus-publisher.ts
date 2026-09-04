@@ -78,6 +78,7 @@ export class MatterhornAgentFileWalrusPublisher {
     private readonly transport: MatterhornWalrusEvidenceTransport,
     private readonly verifyCertification: MatterhornWalrusCertificationVerifier,
     private readonly storageEpochs = DEFAULT_STORAGE_EPOCHS,
+    private readonly now: () => Date = () => new Date(),
   ) {
     if (!Number.isSafeInteger(storageEpochs) || storageEpochs < 1 || storageEpochs > 53) {
       throw new Error("agent_file_walrus_epochs_invalid");
@@ -93,10 +94,12 @@ export class MatterhornAgentFileWalrusPublisher {
     now?: Date;
   }): Promise<MatterhornStoredAgentFile> {
     if (input.signal.aborted) throw new Error("agent_file_walrus_aborted");
+    const startedAt = input.now ?? this.now();
+    if (!Number.isFinite(startedAt.getTime())) throw new Error("agent_file_time_invalid");
     let candidate: ReturnType<MatterhornAgentFileStore["publicationCandidate"]> | null = null;
     let claimId: string | null = null;
     try {
-      const claimed = this.store.beginWalrusPublication(input);
+      const claimed = this.store.beginWalrusPublication({ ...input, now: startedAt });
       candidate = claimed;
       claimId = claimed.claimId;
       if (candidate.item.publication) throw new Error("agent_file_already_published");
@@ -129,8 +132,10 @@ export class MatterhornAgentFileWalrusPublisher {
       } finally {
         readback.fill(0);
       }
-      const now = input.now ?? new Date();
-      if (!Number.isFinite(now.getTime())) throw new Error("agent_file_time_invalid");
+      // The claim is short-lived. Re-read time after all external work so a
+      // stalled publisher cannot commit after its lease expires.
+      const finalizedAt = this.now();
+      if (!Number.isFinite(finalizedAt.getTime())) throw new Error("agent_file_time_invalid");
       const publication: MatterhornAgentFileWalrusPublication = {
         version: MATTERHORN_AGENT_FILE_WALRUS_PUBLICATION_VERSION,
         network: "testnet",
@@ -140,18 +145,21 @@ export class MatterhornAgentFileWalrusPublisher {
         certifiedEpoch: certification.certifiedEpoch,
         validUntilEpoch: certification.validUntilEpoch,
         suiTransactionDigest: certification.suiTransactionDigest,
-        publishedAt: now.toISOString(),
-        verifiedAt: now.toISOString(),
+        publishedAt: finalizedAt.toISOString(),
+        verifiedAt: finalizedAt.toISOString(),
       };
-      return this.store.attachWalrusPublication({ ...input, claimId, publication, now });
+      return this.store.attachWalrusPublication({ ...input, claimId, publication, now: finalizedAt });
     } finally {
       candidate?.bytes.fill(0);
-      if (claimId) this.store.endWalrusPublication({
-        workspaceId: input.workspaceId,
-        fileId: input.fileId,
-        claimId,
-        now: input.now,
-      });
+      if (claimId) {
+        const finalizedAt = this.now();
+        this.store.endWalrusPublication({
+          workspaceId: input.workspaceId,
+          fileId: input.fileId,
+          claimId,
+          ...(Number.isFinite(finalizedAt.getTime()) ? { now: finalizedAt } : {}),
+        });
+      }
     }
   }
 

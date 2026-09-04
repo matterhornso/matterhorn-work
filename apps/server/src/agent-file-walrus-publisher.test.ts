@@ -102,6 +102,8 @@ describe("Agent File Walrus backup", () => {
         value.store,
         transport,
         async () => certification(),
+        5,
+        () => new Date("2026-09-02T00:01:00.000Z"),
       );
       const published = await publisher.publish({
         workspaceId: "workspace_alpha",
@@ -328,6 +330,47 @@ describe("Agent File Walrus backup", () => {
       expect(publishCalls).toBe(1);
       releaseUpload();
       await expect(first).resolves.toMatchObject({ revision: 2 });
+    } finally {
+      value.state.close();
+      rmSync(value.root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects a publication whose claim expires during external verification", async () => {
+    const value = await fixture();
+    try {
+      let uploaded = Buffer.alloc(0);
+      const transport: MatterhornWalrusEvidenceTransport = {
+        publish: async ({ bytes }) => {
+          uploaded = Buffer.from(bytes);
+          return { blobId: "blob-agent-file-1", suiObjectId: "0x1234", declaredEndEpoch: 15 };
+        },
+        readByObjectId: async () => Buffer.from(uploaded),
+      };
+      const times = [
+        new Date("2026-09-02T00:00:00.000Z"),
+        new Date("2026-09-02T00:05:01.000Z"),
+        new Date("2026-09-02T00:05:01.000Z"),
+      ];
+      const publisher = new MatterhornAgentFileWalrusPublisher(
+        value.store,
+        transport,
+        async () => certification(),
+        5,
+        () => times.shift() ?? new Date("2026-09-02T00:05:01.000Z"),
+      );
+      await expect(publisher.publish({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.item.id,
+        expectedRevision: value.item.revision,
+        signal: new AbortController().signal,
+      })).rejects.toThrow("agent_file_walrus_publication_claim_invalid");
+      expect(value.store.get({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.item.id,
+      })?.publication).toBeNull();
     } finally {
       value.state.close();
       rmSync(value.root, { recursive: true, force: true });

@@ -130,23 +130,44 @@ describe("durable crypto evidence store", () => {
         merkleProof: [],
         suiTransactionDigest: null,
       };
+      const mainnetClaim = store.beginWalrusPublication({
+        workspaceId: "workspace_store",
+        ownerId: "owner_store",
+        coworkerId: "coworker_store",
+        evidenceId: created.id,
+        expectedRevision: created.revision,
+      });
+      expect(() => store.attachVerifiedWalrusProof({
+        workspaceId: "workspace_store",
+        ownerId: "owner_store",
+        coworkerId: "coworker_store",
+        evidenceId: created.id,
+        expectedRevision: created.revision,
+        claimId: mainnetClaim.claimId,
+        proof: { ...proof, network: "mainnet" },
+      })).toThrow("crypto_evidence_mainnet_disabled");
+      expect(store.endWalrusPublication({
+        workspaceId: "workspace_store",
+        evidenceId: created.id,
+        claimId: mainnetClaim.claimId,
+      })).toBe(true);
+      const publication = store.beginWalrusPublication({
+        workspaceId: "workspace_store",
+        ownerId: "owner_store",
+        coworkerId: "coworker_store",
+        evidenceId: created.id,
+        expectedRevision: created.revision,
+      });
       const published = store.attachVerifiedWalrusProof({
         workspaceId: "workspace_store",
         ownerId: "owner_store",
         coworkerId: "coworker_store",
         evidenceId: created.id,
         expectedRevision: created.revision,
+        claimId: publication.claimId,
         proof,
       });
       expect(published.state).toBe("published");
-      expect(() => store.attachVerifiedWalrusProof({
-        workspaceId: "workspace_store",
-        ownerId: "owner_store",
-        coworkerId: "coworker_store",
-        evidenceId: created.id,
-        expectedRevision: published.revision,
-        proof: { ...proof, network: "mainnet" },
-      })).toThrow("crypto_evidence_mainnet_disabled");
 
       const rotatedRecord = await store.rotateKey({
         workspaceId: "workspace_store",

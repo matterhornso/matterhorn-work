@@ -654,6 +654,27 @@ export class MatterhornCryptoEvidenceStore {
     };
   }
 
+  hasWalrusPublicationClaim(input: {
+    workspaceId: string;
+    evidenceId: string;
+    expectedRevision: number;
+    claimId: string;
+    now?: Date;
+  }): boolean {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    const claim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
+      OPERATION_CLAIM_KIND,
+      this.operationClaimKey(input),
+      now.getTime(),
+    );
+    return claim?.version === "matterhorn.crypto-evidence-operation-claim.v1"
+      && claim.claimId === input.claimId
+      && claim.evidenceId === input.evidenceId
+      && claim.expectedRevision === input.expectedRevision
+      && claim.operation === "publish";
+  }
+
   beginWalrusRenewal(input: {
     workspaceId: string;
     ownerId: string;
@@ -927,45 +948,58 @@ export class MatterhornCryptoEvidenceStore {
     coworkerId: string;
     evidenceId: string;
     expectedRevision: number;
+    claimId: string;
     proof: MatterhornWalrusProof;
     walrusOwnerAddressHash?: string | null;
     now?: Date;
   }): MatterhornCryptoEvidenceRecord {
-    const current = this.get(input);
-    if (!current) throw new Error("crypto_evidence_not_found");
-    if (current.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
-    if (current.state === "key_destroyed" || this.recoveryMaterialErased(current)) {
-      throw new Error("crypto_evidence_key_destroyed");
-    }
-    const issues = validateMatterhornWalrusProof(input.proof);
-    if (issues.length > 0) throw new Error(`crypto_evidence_walrus_proof_invalid:${issues.join(",")}`);
-    if (input.proof.network === "mainnet" && this.options.allowMainnet !== true) {
-      throw new Error("crypto_evidence_mainnet_disabled");
-    }
-    if (input.walrusOwnerAddressHash !== undefined
-      && input.walrusOwnerAddressHash !== null
-      && !/^[a-f0-9]{64}$/.test(input.walrusOwnerAddressHash)) {
-      throw new Error("crypto_evidence_walrus_owner_invalid");
-    }
-    if (!verifyMatterhornEvidenceMerkleProof({
-      ciphertextHash: current.index.ciphertextHash,
-      leaf: current.index.merkleLeaf,
-      root: input.proof.merkleRoot,
-      proof: input.proof.merkleProof,
-    })) throw new Error("crypto_evidence_merkle_proof_mismatch");
     const now = input.now ?? new Date();
-    const next: MatterhornCryptoEvidenceRecord = {
-      ...current,
-      revision: current.revision + 1,
-      state: "published",
-      walrusProof: structuredClone(input.proof),
-      walrusOwnerAddressHash: input.walrusOwnerAddressHash ?? null,
-      updatedAt: now.toISOString(),
-    };
-    this.stateStore.put({ kind: STATE_KIND, key: next.id, workspaceId: next.workspaceId, value: next, nowMs: now.getTime() });
-    this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
-    this.recordAccess({ record: next, action: "attach_proof", outcome: "allowed", reason: "proof_verified", now });
-    return clone(next);
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    return this.stateStore.transaction(() => {
+      if (!this.hasWalrusPublicationClaim({ ...input, now })) {
+        throw new Error("crypto_evidence_walrus_publication_claim_invalid");
+      }
+      const current = this.get(input);
+      if (!current) throw new Error("crypto_evidence_not_found");
+      if (current.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
+      if (current.state === "key_destroyed" || this.recoveryMaterialErased(current)) {
+        throw new Error("crypto_evidence_key_destroyed");
+      }
+      const issues = validateMatterhornWalrusProof(input.proof);
+      if (issues.length > 0) throw new Error(`crypto_evidence_walrus_proof_invalid:${issues.join(",")}`);
+      if (input.proof.network === "mainnet" && this.options.allowMainnet !== true) {
+        throw new Error("crypto_evidence_mainnet_disabled");
+      }
+      if (input.walrusOwnerAddressHash !== undefined
+        && input.walrusOwnerAddressHash !== null
+        && !/^[a-f0-9]{64}$/.test(input.walrusOwnerAddressHash)) {
+        throw new Error("crypto_evidence_walrus_owner_invalid");
+      }
+      if (!verifyMatterhornEvidenceMerkleProof({
+        ciphertextHash: current.index.ciphertextHash,
+        leaf: current.index.merkleLeaf,
+        root: input.proof.merkleRoot,
+        proof: input.proof.merkleProof,
+      })) throw new Error("crypto_evidence_merkle_proof_mismatch");
+      const next: MatterhornCryptoEvidenceRecord = {
+        ...current,
+        revision: current.revision + 1,
+        state: "published",
+        walrusProof: structuredClone(input.proof),
+        walrusOwnerAddressHash: input.walrusOwnerAddressHash ?? null,
+        updatedAt: now.toISOString(),
+      };
+      this.stateStore.put({ kind: STATE_KIND, key: next.id, workspaceId: next.workspaceId, value: next, nowMs: now.getTime() });
+      this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
+      this.recordAccess({ record: next, action: "attach_proof", outcome: "allowed", reason: "proof_verified", now });
+      if (!this.endExclusiveOperationInTransaction({
+        workspaceId: input.workspaceId,
+        evidenceId: input.evidenceId,
+        claimId: input.claimId,
+        now,
+      })) throw new Error("crypto_evidence_walrus_publication_claim_invalid");
+      return clone(next);
+    });
   }
 
   renewVerifiedWalrusProof(input: {
@@ -1056,6 +1090,7 @@ export class MatterhornCryptoEvidenceStore {
     entries: Array<{
       evidenceId: string;
       expectedRevision: number;
+      claimId: string;
       proof: MatterhornWalrusProof;
     }>;
     now?: Date;
@@ -1071,6 +1106,13 @@ export class MatterhornCryptoEvidenceStore {
 
     return this.stateStore.transaction(() => {
       const nextRecords = input.entries.map((entry) => {
+        if (!this.hasWalrusPublicationClaim({
+          workspaceId: input.workspaceId,
+          evidenceId: entry.evidenceId,
+          expectedRevision: entry.expectedRevision,
+          claimId: entry.claimId,
+          now,
+        })) throw new Error("crypto_evidence_walrus_publication_claim_invalid");
         const current = this.get({
           workspaceId: input.workspaceId,
           ownerId: input.ownerId,
@@ -1124,6 +1166,8 @@ export class MatterhornCryptoEvidenceStore {
       }
 
       for (const record of nextRecords) {
+        const entry = input.entries.find((candidate) => candidate.evidenceId === record.id);
+        if (!entry) throw new Error("crypto_evidence_walrus_batch_missing");
         this.stateStore.put({
           kind: STATE_KIND,
           key: record.id,
@@ -1139,6 +1183,12 @@ export class MatterhornCryptoEvidenceStore {
           reason: "quilt_proof_verified",
           now,
         });
+        if (!this.endExclusiveOperationInTransaction({
+          workspaceId: input.workspaceId,
+          evidenceId: record.id,
+          claimId: entry.claimId,
+          now,
+        })) throw new Error("crypto_evidence_walrus_publication_claim_invalid");
       }
       return nextRecords.map(clone);
     });

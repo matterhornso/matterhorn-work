@@ -129,12 +129,21 @@ async function fixture(input: {
     sealed,
     now: new Date("2026-09-01T23:00:00.000Z"),
   });
+  const publication = store.beginWalrusPublication({
+    workspaceId: "workspace_alpha",
+    ownerId: "owner_alpha",
+    coworkerId: "coworker_alpha",
+    evidenceId: created.id,
+    expectedRevision: created.revision,
+    now: new Date("2026-09-01T23:01:00.000Z"),
+  });
   const published = store.attachVerifiedWalrusProof({
     workspaceId: "workspace_alpha",
     ownerId: "owner_alpha",
     coworkerId: "coworker_alpha",
     evidenceId: created.id,
     expectedRevision: created.revision,
+    claimId: publication.claimId,
     proof: {
       version: "matterhorn.walrus-proof.v1",
       network: "testnet",

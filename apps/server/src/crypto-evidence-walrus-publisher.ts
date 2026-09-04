@@ -410,6 +410,7 @@ export class MatterhornTestnetWalrusEvidencePublisher {
     private readonly transport: MatterhornWalrusEvidenceTransport,
     private readonly verifyCertification: MatterhornWalrusCertificationVerifier,
     private readonly storageEpochs = DEFAULT_STORAGE_EPOCHS,
+    private readonly now: () => Date = () => new Date(),
   ) {
     boundedPositiveInteger(storageEpochs, "crypto_evidence_walrus_epochs_invalid", 53);
   }
@@ -424,10 +425,12 @@ export class MatterhornTestnetWalrusEvidencePublisher {
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceRecord> {
     if (input.signal.aborted) throw new Error("crypto_evidence_walrus_aborted");
+    const startedAt = input.now ?? this.now();
+    if (!Number.isFinite(startedAt.getTime())) throw new Error("crypto_evidence_time_invalid");
     // Validate the wallet owner before claiming the publication record. A malformed
     // address must not leave behind a durable in-flight claim that blocks retries.
     const ownerAddress = optionalSuiOwner(input.ownerAddress);
-    const { record, claimId } = this.store.beginWalrusPublication(input);
+    const { record, claimId } = this.store.beginWalrusPublication({ ...input, now: startedAt });
     const publicBytes = serializeMatterhornWalrusCiphertext(record.envelope);
     try {
       if (sha256(publicBytes) !== record.index.ciphertextHash) {
@@ -480,23 +483,30 @@ export class MatterhornTestnetWalrusEvidencePublisher {
         merkleProof: merkle.proof,
         suiTransactionDigest: certification.suiTransactionDigest,
       };
+      // The request timestamp may pin claim creation in tests, but claim
+      // validity must always be evaluated against a fresh completion time
+      // after publisher, certification, and readback network calls finish.
+      const finalizedAt = this.now();
+      if (!Number.isFinite(finalizedAt.getTime())) throw new Error("crypto_evidence_time_invalid");
       return this.store.attachVerifiedWalrusProof({
         workspaceId: input.workspaceId,
         ownerId: input.ownerId,
         coworkerId: record.coworkerId,
         evidenceId: input.evidenceId,
         expectedRevision: input.expectedRevision,
+        claimId,
         proof,
         walrusOwnerAddressHash: ownerAddress ? matterhornWalrusOwnerAddressHash(ownerAddress) : null,
-        ...(input.now ? { now: input.now } : {}),
+        now: finalizedAt,
       });
     } finally {
       publicBytes.fill(0);
+      const finalizedAt = this.now();
       this.store.endWalrusPublication({
         workspaceId: input.workspaceId,
         evidenceId: input.evidenceId,
         claimId,
-        ...(input.now ? { now: input.now } : {}),
+        ...(Number.isFinite(finalizedAt.getTime()) ? { now: finalizedAt } : {}),
       });
     }
   }
@@ -510,6 +520,8 @@ export class MatterhornTestnetWalrusEvidencePublisher {
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceRecord[]> {
     if (input.signal.aborted) throw new Error("crypto_evidence_walrus_aborted");
+    const startedAt = input.now ?? this.now();
+    if (!Number.isFinite(startedAt.getTime())) throw new Error("crypto_evidence_time_invalid");
     if (input.evidence.length < 2 || input.evidence.length > MAX_QUILT_PATCHES) {
       throw new Error("crypto_evidence_walrus_batch_size_invalid");
     }
@@ -532,7 +544,7 @@ export class MatterhornTestnetWalrusEvidencePublisher {
           coworkerId: input.coworkerId,
           evidenceId: item.evidenceId,
           expectedRevision: item.expectedRevision,
-          ...(input.now ? { now: input.now } : {}),
+          now: startedAt,
         });
         const bytes = serializeMatterhornWalrusCiphertext(claimed.record.envelope);
         publications.push({ record: claimed.record, claimId: claimed.claimId, bytes });
@@ -580,17 +592,20 @@ export class MatterhornTestnetWalrusEvidencePublisher {
           readback.fill(0);
         }
       }
+      const finalizedAt = this.now();
+      if (!Number.isFinite(finalizedAt.getTime())) throw new Error("crypto_evidence_time_invalid");
       return this.store.attachVerifiedWalrusProofBatch({
         workspaceId: input.workspaceId,
         ownerId: input.ownerId,
         coworkerId: input.coworkerId,
-        entries: publications.map(({ record }) => {
+        entries: publications.map(({ record, claimId }) => {
           const patchId = patchByHash.get(record.index.ciphertextHash);
           const inclusion = merkleByHash.get(record.index.ciphertextHash);
           if (!patchId || !inclusion) throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
           return {
             evidenceId: record.id,
             expectedRevision: record.revision,
+            claimId,
             proof: {
               version: MATTERHORN_WALRUS_PROOF_VERSION,
               network: "testnet",
@@ -605,16 +620,17 @@ export class MatterhornTestnetWalrusEvidencePublisher {
             },
           };
         }),
-        ...(input.now ? { now: input.now } : {}),
+        now: finalizedAt,
       });
     } finally {
+      const finalizedAt = this.now();
       for (const publication of publications) {
         publication.bytes.fill(0);
         this.store.endWalrusPublication({
           workspaceId: input.workspaceId,
           evidenceId: publication.record.id,
           claimId: publication.claimId,
-          ...(input.now ? { now: input.now } : {}),
+          ...(Number.isFinite(finalizedAt.getTime()) ? { now: finalizedAt } : {}),
         });
       }
     }

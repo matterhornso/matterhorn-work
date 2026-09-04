@@ -4038,6 +4038,9 @@ function cryptoEvidencePublicationApiError(error: unknown): ApiError {
   if (code === "crypto_evidence_walrus_publication_in_progress") {
     return new ApiError(409, code, "This encrypted copy is already being stored.");
   }
+  if (code === "crypto_evidence_walrus_publication_claim_invalid") {
+    return new ApiError(409, code, "This storage request expired or changed. Start it again.");
+  }
   if (code === "crypto_evidence_operation_in_progress") {
     return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
   }

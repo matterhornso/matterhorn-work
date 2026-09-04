@@ -248,6 +248,130 @@ describe("testnet Walrus evidence publisher", () => {
     }
   });
 
+  test("keeps a replacement publisher's cross-process claim when a stale upload finishes", async () => {
+    const value = await fixture();
+    const secondState = new MatterhornGuardedRuntimeStateStore(join(value.directory, "state.db"));
+    let releaseFirst: (() => void) | undefined;
+    let releaseSecond: (() => void) | undefined;
+    try {
+      let firstStarted!: () => void;
+      const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+      const started = new Promise<void>((resolve) => { firstStarted = resolve; });
+      let firstBytes = Buffer.alloc(0);
+      const firstTransport: MatterhornWalrusEvidenceTransport = {
+        publish: async ({ bytes }) => {
+          firstBytes = Buffer.from(bytes);
+          firstStarted();
+          await firstGate;
+          return { blobId: "blob-testnet-1", suiObjectId: "0x1234", declaredEndEpoch: 110 };
+        },
+        readByObjectId: async () => Buffer.from(firstBytes),
+      };
+      let secondStarted!: () => void;
+      const secondGate = new Promise<void>((resolve) => { releaseSecond = resolve; });
+      const replacementStarted = new Promise<void>((resolve) => { secondStarted = resolve; });
+      let secondBytes = Buffer.alloc(0);
+      const secondTransport: MatterhornWalrusEvidenceTransport = {
+        publish: async ({ bytes }) => {
+          secondBytes = Buffer.from(bytes);
+          secondStarted();
+          await secondGate;
+          return { blobId: "blob-testnet-2", suiObjectId: "0x5678", declaredEndEpoch: 110 };
+        },
+        readByObjectId: async () => Buffer.from(secondBytes),
+      };
+      const firstTimes = [
+        new Date("2026-09-01T00:00:00.000Z"),
+        new Date("2026-09-01T00:06:00.000Z"),
+        new Date("2026-09-01T00:06:00.000Z"),
+      ];
+      const firstPublisher = new MatterhornTestnetWalrusEvidencePublisher(
+        value.store,
+        firstTransport,
+        async () => certification(),
+        5,
+        () => firstTimes.shift() ?? new Date("2026-09-01T00:06:00.000Z"),
+      );
+      const secondStore = new MatterhornCryptoEvidenceStore(secondState, value.keyManager);
+      const secondPublisher = new MatterhornTestnetWalrusEvidencePublisher(
+        secondStore,
+        secondTransport,
+        async () => certification({ blobId: "blob-testnet-2", suiObjectId: "0x5678" }),
+        5,
+        () => new Date("2026-09-01T00:06:00.000Z"),
+      );
+      const request = {
+        workspaceId: "workspace_walrus",
+        ownerId: "owner_walrus",
+        evidenceId: value.record.id,
+        expectedRevision: value.record.revision,
+        signal: new AbortController().signal,
+      };
+      const stale = firstPublisher.publish(request);
+      await started;
+      const replacement = secondPublisher.publish(request);
+      await replacementStarted;
+      releaseFirst?.();
+      await expect(stale).rejects.toThrow("crypto_evidence_walrus_publication_claim_invalid");
+      await expect(firstPublisher.publish(request)).rejects.toThrow(
+        "crypto_evidence_walrus_publication_in_progress",
+      );
+      releaseSecond?.();
+      await expect(replacement).resolves.toMatchObject({
+        state: "published",
+        revision: 2,
+        walrusProof: { blobId: "blob-testnet-2", suiObjectId: "0x5678" },
+      });
+    } finally {
+      releaseFirst?.();
+      releaseSecond?.();
+      secondState.close();
+      value.state.close();
+      await rm(value.directory, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects a single publication that expires during external verification", async () => {
+    const value = await fixture();
+    try {
+      let publishedBytes = Buffer.alloc(0);
+      const transport: MatterhornWalrusEvidenceTransport = {
+        publish: async ({ bytes }) => {
+          publishedBytes = Buffer.from(bytes);
+          return { blobId: "blob-testnet-1", suiObjectId: "0x1234", declaredEndEpoch: 110 };
+        },
+        readByObjectId: async () => Buffer.from(publishedBytes),
+      };
+      const times = [
+        new Date("2026-09-01T00:00:00.000Z"),
+        new Date("2026-09-01T00:05:01.000Z"),
+        new Date("2026-09-01T00:05:01.000Z"),
+      ];
+      const publisher = new MatterhornTestnetWalrusEvidencePublisher(
+        value.store,
+        transport,
+        async () => certification(),
+        5,
+        () => times.shift() ?? new Date("2026-09-01T00:05:01.000Z"),
+      );
+      await expect(publisher.publish({
+        workspaceId: "workspace_walrus",
+        ownerId: "owner_walrus",
+        evidenceId: value.record.id,
+        expectedRevision: value.record.revision,
+        signal: new AbortController().signal,
+      })).rejects.toThrow("crypto_evidence_walrus_publication_claim_invalid");
+      expect(value.store.get({
+        workspaceId: "workspace_walrus",
+        ownerId: "owner_walrus",
+        evidenceId: value.record.id,
+      })?.state).toBe("sealed");
+    } finally {
+      value.state.close();
+      await rm(value.directory, { recursive: true, force: true });
+    }
+  });
+
   test("fails closed before proof attachment for wrong certification or readback bytes", async () => {
     for (const mode of ["wrong_certification", "wrong_readback"] as const) {
       const value = await fixture();
@@ -437,11 +561,65 @@ describe("testnet Walrus evidence publisher", () => {
     }
   });
 
-  test("leaves every batch record sealed when a patch readback or final revision check fails", async () => {
-    for (const mode of ["readback", "revision"] as const) {
-      const value = await fixture();
-      try {
-        const second = await addEvidence(value, `${mode}x`);
+  test("leaves an entire Quilt sealed when its publication claims expire", async () => {
+    const value = await fixture();
+    try {
+      const second = await addEvidence(value, "expired-batch");
+      const patchBytes = new Map<string, Buffer>();
+      const transport: MatterhornWalrusEvidenceTransport = {
+        publish: async () => { throw new Error("single_publish_not_expected"); },
+        readByObjectId: async () => { throw new Error("object_read_not_expected"); },
+        publishQuilt: async ({ patches }) => ({
+          blobId: "blob-testnet-1",
+          suiObjectId: "0x1234",
+          declaredEndEpoch: 110,
+          patches: patches.map((patch, index) => {
+            const quiltPatchId = `expired-patch-${index + 1}`;
+            patchBytes.set(quiltPatchId, Buffer.from(patch.bytes));
+            return { ciphertextHash: patch.ciphertextHash, quiltPatchId };
+          }),
+        }),
+        readByQuiltPatchId: async ({ quiltPatchId }) => Buffer.from(patchBytes.get(quiltPatchId)!),
+      };
+      const times = [
+        new Date("2026-09-01T00:00:00.000Z"),
+        new Date("2026-09-01T00:05:01.000Z"),
+        new Date("2026-09-01T00:05:01.000Z"),
+      ];
+      const publisher = new MatterhornTestnetWalrusEvidencePublisher(
+        value.store,
+        transport,
+        async () => certification(),
+        5,
+        () => times.shift() ?? new Date("2026-09-01T00:05:01.000Z"),
+      );
+      await expect(publisher.publishBatch({
+        workspaceId: "workspace_walrus",
+        ownerId: "owner_walrus",
+        coworkerId: "coworker_walrus",
+        evidence: [
+          { evidenceId: value.record.id, expectedRevision: value.record.revision },
+          { evidenceId: second.id, expectedRevision: second.revision },
+        ],
+        signal: new AbortController().signal,
+      })).rejects.toThrow("crypto_evidence_walrus_publication_claim_invalid");
+      for (const evidenceId of [value.record.id, second.id]) {
+        expect(value.store.get({
+          workspaceId: "workspace_walrus",
+          ownerId: "owner_walrus",
+          evidenceId,
+        })?.state).toBe("sealed");
+      }
+    } finally {
+      value.state.close();
+      await rm(value.directory, { recursive: true, force: true });
+    }
+  });
+
+  test("leaves every batch record sealed when a patch readback fails", async () => {
+    const value = await fixture();
+    try {
+        const second = await addEvidence(value, "readbackx");
         const patchBytes = new Map<string, Buffer>();
         const transport: MatterhornWalrusEvidenceTransport = {
           publish: async () => { throw new Error("single_publish_not_expected"); },
@@ -452,33 +630,6 @@ describe("testnet Walrus evidence publisher", () => {
               patchBytes.set(quiltPatchId, Buffer.from(patch.bytes));
               return { ciphertextHash: patch.ciphertextHash, quiltPatchId };
             });
-            if (mode === "revision") {
-              const current = value.store.get({
-                workspaceId: "workspace_walrus",
-                ownerId: "owner_walrus",
-                coworkerId: "coworker_walrus",
-                evidenceId: second.id,
-              })!;
-              value.store.attachVerifiedWalrusProof({
-                workspaceId: "workspace_walrus",
-                ownerId: "owner_walrus",
-                coworkerId: "coworker_walrus",
-                evidenceId: second.id,
-                expectedRevision: current.revision,
-                proof: {
-                  version: "matterhorn.walrus-proof.v1",
-                  network: "testnet",
-                  blobId: "race-blob",
-                  suiObjectId: "0x9999",
-                  certifiedEpoch: 100,
-                  validUntilEpoch: 110,
-                  quiltPatchId: null,
-                  merkleRoot: current.index.merkleLeaf,
-                  merkleProof: [],
-                  suiTransactionDigest: null,
-                },
-              });
-            }
             return {
               blobId: "blob-testnet-1",
               suiObjectId: "0x1234",
@@ -486,7 +637,7 @@ describe("testnet Walrus evidence publisher", () => {
               patches: result,
             };
           },
-          readByQuiltPatchId: async ({ quiltPatchId }) => mode === "readback" && quiltPatchId === "patch-2"
+          readByQuiltPatchId: async ({ quiltPatchId }) => quiltPatchId === "patch-2"
             ? Buffer.from("tampered")
             : Buffer.from(patchBytes.get(quiltPatchId)!),
         };
@@ -500,9 +651,7 @@ describe("testnet Walrus evidence publisher", () => {
             { evidenceId: second.id, expectedRevision: second.revision },
           ],
           signal: new AbortController().signal,
-        })).rejects.toThrow(mode === "readback"
-          ? "crypto_evidence_walrus_readback_mismatch"
-          : "crypto_evidence_revision_conflict");
+        })).rejects.toThrow("crypto_evidence_walrus_readback_mismatch");
         expect(value.store.get({
           workspaceId: "workspace_walrus",
           ownerId: "owner_walrus",
@@ -512,11 +661,10 @@ describe("testnet Walrus evidence publisher", () => {
           workspaceId: "workspace_walrus",
           ownerId: "owner_walrus",
           evidenceId: second.id,
-        })?.state).toBe(mode === "revision" ? "published" : "sealed");
-      } finally {
-        value.state.close();
-        await rm(value.directory, { recursive: true, force: true });
-      }
+        })?.state).toBe("sealed");
+    } finally {
+      value.state.close();
+      await rm(value.directory, { recursive: true, force: true });
     }
   });
 
