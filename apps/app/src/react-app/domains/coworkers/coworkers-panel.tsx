@@ -137,7 +137,7 @@ export function resolveCoworkerNextStep(input: {
     return { action: "start", label: "Start chat", message: "Ready. Start a chat and describe what you need." };
   }
   if (input.loadFailed) {
-    return { action: "reload", label: "Reload setup", message: "Next: reload this coworker's setup." };
+    return { action: "reload", label: "Reload setup", message: "Reload this coworker's setup." };
   }
   if (input.loading || input.connectionsAvailable === undefined) {
     return { action: "wait", label: "Checking setup…", message: "Checking what this coworker can use…" };
@@ -146,9 +146,28 @@ export function resolveCoworkerNextStep(input: {
     return { action: "none", label: null, message: "App connections are currently unavailable." };
   }
   if (input.connectedAppCount === 0) {
-    return { action: "connect", label: "Connect an app", message: "Next: connect one app for this coworker." };
+    return { action: "connect", label: "Connect an app", message: "Connect one app for this coworker." };
   }
-  return { action: "review", label: "Review access", message: "Next: review and save what this coworker can use." };
+  return { action: "review", label: "Review access", message: "Choose what this coworker can use, then save." };
+}
+
+export function coworkerActivitySummary(input: {
+  walletReviewCount: number;
+  checkCount: number;
+  updateCount: number;
+}): string {
+  const parts = [
+    input.walletReviewCount > 0
+      ? `${input.walletReviewCount} wallet ${input.walletReviewCount === 1 ? "review" : "reviews"}`
+      : null,
+    input.checkCount > 0
+      ? `${input.checkCount} recurring ${input.checkCount === 1 ? "check" : "checks"}`
+      : null,
+    input.updateCount > 0
+      ? `${input.updateCount} ${input.updateCount === 1 ? "update" : "updates"}`
+      : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length ? parts.join(" · ") : "No activity yet";
 }
 
 function coworkerErrorMessage(error: unknown): string {
@@ -309,6 +328,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [resourcesOpen, setResourcesOpen] = useState(false);
   const [resourceDraft, setResourceDraft] = useState<CoworkerResourceDraft>(EMPTY_RESOURCE_DRAFT);
   const [resourceRecommendationHash, setResourceRecommendationHash] = useState<string | null>(null);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [cancelIntent, setCancelIntent] = useState<MatterhornCoworkerWalletIntentView | null>(null);
@@ -501,12 +521,22 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     [watchDetailQuery.data, watchSource?.actionId],
   );
   const activeWatchCount = detailQuery.data?.watches.filter((watch) => watch.state === "active").length ?? 0;
+  const activitySummary = coworkerActivitySummary({
+    walletReviewCount: walletIntents.length,
+    checkCount: detailQuery.data?.watches.length ?? 0,
+    updateCount: detailQuery.data?.inbox.length ?? 0,
+  });
+  const hasCoworkerActivity = activitySummary !== "No activity yet";
   const canAddWatch = Boolean(
     selectedCoworker?.state === "active"
     && selectedCoworker.automaticAuthorities.includes("watch")
     && selectedCoworker.limits.maxActiveWatches > activeWatchCount
     && watchSources.length > 0,
   );
+
+  useEffect(() => {
+    setActivityOpen(hasCoworkerActivity);
+  }, [hasCoworkerActivity, selectedCoworker?.id]);
 
   useEffect(() => {
     if (!watchFormOpen) return;
@@ -1302,7 +1332,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
               <p className="mt-1 text-xs leading-5 text-dls-secondary">See how often this coworker may read data, run checks, or prepare a wallet review.</p>
               <dl className="mt-3 grid gap-2 text-xs leading-5">
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Apps this role can use</dt><dd className="text-right text-dls-text">{selectedCoworker.allowedAppIds.map(humanizeId).join(", ") || "None"}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Reads per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxReadCallsPerRun}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">App lookups per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxReadCallsPerRun}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Wallet reviews per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxPrepareCallsPerFamily > 0 ? selectedCoworker.limits.maxPrepareCallsPerFamily : "Not available"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Active checks</dt><dd className="text-dls-text">{selectedCoworker.limits.maxActiveWatches > 0 ? `${detailQuery.data?.watches.filter((watch) => watch.state === "active").length ?? 0} of ${selectedCoworker.limits.maxActiveWatches}` : "Not available"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Per wallet action</dt><dd className="text-dls-text">{selectedCoworker.limits.perActionUsd > 0 ? `Up to $${selectedCoworker.limits.perActionUsd.toLocaleString()}` : "Not allowed"}</dd></div>
@@ -1321,8 +1351,18 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                 <Button className="mt-3" size="sm" variant="outline" onClick={() => void detailQuery.refetch()}>Reload activity</Button>
               </div>
             ) : (
-              <>
-                <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-wallet-title">
+              <details
+                key={`${selectedCoworker.id}:${hasCoworkerActivity ? "has-activity" : "empty"}`}
+                className="border-b border-dls-border/70 py-4"
+                open={activityOpen}
+                onToggle={(event) => setActivityOpen(event.currentTarget.open)}
+              >
+                <summary className="min-h-8 cursor-pointer list-none outline-none focus-visible:ring-2 focus-visible:ring-ring/35 [&::-webkit-details-marker]:hidden">
+                  <span className="block text-sm font-semibold text-dls-text">Activity</span>
+                  <span className="mt-1 block text-xs leading-5 text-dls-secondary">{activitySummary}</span>
+                </summary>
+                <div className="mt-3 border-t border-dls-border/60">
+                  <section className="py-4" aria-labelledby="coworker-wallet-title">
                   <div>
                     <h3 id="coworker-wallet-title" className="text-sm font-semibold text-dls-text">Wallet activity</h3>
                     <p className="mt-1 text-xs text-dls-secondary">Only your connected wallet can approve and send.</p>
@@ -1384,9 +1424,9 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                     </ul>
                   ) : <p className="mt-3 text-xs leading-5 text-dls-secondary">No wallet actions yet. Ask this coworker to prepare one when you are ready.</p>}
                   {activeIntents.length > 4 ? <p className="mt-2 text-xs text-dls-secondary">{activeIntents.length - 4} more pending in wallet history.</p> : null}
-                </section>
+                  </section>
 
-                <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-watches-title">
+                  <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-watches-title">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h3 id="coworker-watches-title" className="text-sm font-semibold text-dls-text">Checks</h3>
@@ -1541,9 +1581,9 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       ))}
                     </ul>
                   ) : !watchFormOpen ? <p className="mt-3 text-xs leading-5 text-dls-secondary">No recurring checks yet.</p> : null}
-                </section>
+                  </section>
 
-                <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-inbox-title">
+                  <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-inbox-title">
                   <h3 id="coworker-inbox-title" className="text-sm font-semibold text-dls-text">Updates</h3>
                   {detailQuery.data?.inbox.length ? (
                     <ul className="mt-2 divide-y divide-dls-border/70">
@@ -1558,15 +1598,18 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       ))}
                     </ul>
                   ) : <p className="mt-3 text-xs leading-5 text-dls-secondary">No updates yet.</p>}
-                </section>
-              </>
+                  </section>
+                </div>
+              </details>
             )}
 
             {error ? <p className="border-t border-dls-border/70 py-3 text-sm leading-6 text-destructive" role="alert">{error}</p> : null}
 
-            <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-stop-title">
-              <h3 id="coworker-stop-title" className="text-sm font-semibold text-dls-text">Stop this coworker</h3>
-              <p className="mt-1 text-xs leading-5 text-dls-secondary">Pause is reversible. Disabling is permanent and immediately stops new chats, checks, and access to connected apps.</p>
+            <details className="border-t border-dls-border/70 py-4">
+              <summary className="min-h-8 cursor-pointer text-sm font-semibold text-dls-text outline-none focus-visible:ring-2 focus-visible:ring-ring/35">
+                Pause or disable
+              </summary>
+              <p className="mt-1 text-xs leading-5 text-dls-secondary">Pause is reversible. Disabling is permanent and immediately stops new chats, checks, and app access.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {selectedCoworker.state === "active" ? (
                   <Button size="sm" variant="outline" disabled={busyAction !== null} onClick={() => void transitionCoworker(selectedCoworker, "paused")}>
@@ -1581,7 +1624,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   </Button>
                 )}
               </div>
-            </section>
+            </details>
           </>
         ) : null}
       </div>

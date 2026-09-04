@@ -6,7 +6,10 @@ import {
   resolveSessionPanelNavigation,
 } from "../src/react-app/shell/session-panel-route";
 import { buildCoworkerAppConnectionDraft } from "../src/react-app/domains/coworkers/coworker-app-connection";
-import { resolveCoworkerNextStep } from "../src/react-app/domains/coworkers/coworkers-panel";
+import {
+  coworkerActivitySummary,
+  resolveCoworkerNextStep,
+} from "../src/react-app/domains/coworkers/coworkers-panel";
 import {
   parseCoworkerWatchParameters,
   resolveCoworkerWatchFields,
@@ -316,6 +319,20 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("Your wallet will no longer be able to approve or send this review.");
     expect(panel).toContain("Safety limits");
     expect(panel).toContain("<details className=\"border-b border-dls-border/70 py-4\">");
+  });
+
+  test("collapses empty activity and destructive controls behind plain-language summaries", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    expect(coworkerActivitySummary({ walletReviewCount: 0, checkCount: 0, updateCount: 0 })).toBe("No activity yet");
+    expect(coworkerActivitySummary({ walletReviewCount: 1, checkCount: 2, updateCount: 3 }))
+      .toBe("1 wallet review · 2 recurring checks · 3 updates");
+    expect(panel).toContain("open={activityOpen}");
+    expect(panel).toContain("setActivityOpen(event.currentTarget.open)");
+    expect(panel).toContain(">Activity</span>");
+    expect(panel).toContain("Pause or disable");
+    expect(panel).not.toContain("Stop this coworker");
+    expect(panel).toContain("App lookups per request");
+    expect(panel).not.toContain("Reads per request");
   });
 
   test("lets the user approve an exact resource sandbox without privacy bypasses", () => {
