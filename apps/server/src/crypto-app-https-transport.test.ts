@@ -51,6 +51,7 @@ function fakeHttps(input: {
   connectedAddress?: string;
   alpnProtocol?: string | false;
   body?: unknown;
+  responseHeaders?: Record<string, string | string[]>;
 }) {
   let tlsOptions: Record<string, unknown> | null = null;
   let requestOptions: Record<string, unknown> | null = null;
@@ -93,7 +94,10 @@ function fakeHttps(input: {
       const response = Readable.from([Buffer.from(encoded)]) as IncomingMessage;
       Object.defineProperties(response, {
         statusCode: { value: input.statusCode ?? 200 },
-        headers: { value: { "content-type": input.contentType ?? "application/json; charset=utf-8" } },
+        headers: { value: {
+          "content-type": input.contentType ?? "application/json; charset=utf-8",
+          ...input.responseHeaders,
+        } },
         socket: { value: socket },
       });
       queueMicrotask(() => callback(response));
@@ -239,6 +243,87 @@ describe("pinned JSON crypto app transport", () => {
       method: "GET",
       signal: new AbortController().signal,
     })).resolves.toMatchObject({ value: { type: "about:blank", status: 200 } });
+  });
+
+  test("adds only server-owned MCP headers and accepts an empty 202 initialization notification", async () => {
+    const fake = fakeHttps({ statusCode: 202, body: "" });
+    const requester = createPinnedJsonRequester({ request: fake.request, tlsConnect: fake.tlsConnect });
+    const result = await requester({
+      endpoint: new URL("https://adapter.example.test/v1/mcp"),
+      approvedAddresses: ["93.184.216.34"],
+      method: "POST",
+      body: { jsonrpc: "2.0", method: "notifications/initialized", params: {} },
+      signal: new AbortController().signal,
+      mcp: {
+        protocolVersion: "2025-11-25",
+        sessionId: "opaque-session",
+        expectNotificationAccepted: true,
+      },
+    });
+    expect(fake.options().headers).toMatchObject({
+      accept: "application/json, text/event-stream",
+      "mcp-protocol-version": "2025-11-25",
+      "mcp-session-id": "opaque-session",
+    });
+    expect(result).toMatchObject({ value: null, responseBytes: 0 });
+
+    let connected = false;
+    const guarded = createPinnedJsonRequester({
+      request: (() => { throw new Error("must not request"); }) as never,
+      tlsConnect: (() => { connected = true; throw new Error("must not connect"); }) as never,
+    });
+    await expect(guarded({
+      endpoint: new URL("https://adapter.example.test/v1/mcp"),
+      approvedAddresses: ["93.184.216.34"],
+      body: {},
+      signal: new AbortController().signal,
+      headers: { "mcp-session-id": "credential-controlled" },
+      mcp: {},
+    })).rejects.toThrow("crypto_app_credential_header_forbidden");
+    expect(connected).toBe(false);
+  });
+
+  test("returns one bounded opaque MCP session and rejects duplicated session headers", async () => {
+    const fake = fakeHttps({
+      responseHeaders: { "mcp-session-id": "opaque-session" },
+      body: { jsonrpc: "2.0", id: "1", result: {} },
+    });
+    const requester = createPinnedJsonRequester({ request: fake.request, tlsConnect: fake.tlsConnect });
+    await expect(requester({
+      endpoint: new URL("https://adapter.example.test/v1/mcp"),
+      approvedAddresses: ["93.184.216.34"],
+      body: { jsonrpc: "2.0", id: "1", method: "initialize", params: {} },
+      signal: new AbortController().signal,
+      mcp: {},
+    })).resolves.toMatchObject({ mcpSessionId: "opaque-session" });
+
+    const duplicated = fakeHttps({
+      responseHeaders: { "mcp-session-id": ["one", "two"] },
+      body: { jsonrpc: "2.0", id: "1", result: {} },
+    });
+    const duplicatedRequester = createPinnedJsonRequester({
+      request: duplicated.request,
+      tlsConnect: duplicated.tlsConnect,
+    });
+    await expect(duplicatedRequester({
+      endpoint: new URL("https://adapter.example.test/v1/mcp"),
+      approvedAddresses: ["93.184.216.34"],
+      body: { jsonrpc: "2.0", id: "1", method: "initialize", params: {} },
+      signal: new AbortController().signal,
+      mcp: {},
+    })).rejects.toThrow("crypto_app_mcp_session_invalid");
+  });
+
+  test("rejects SSE responses in the certified MCP JSON-only profile", async () => {
+    const fake = fakeHttps({ contentType: "text/event-stream", body: "event: message\ndata: {}\n\n" });
+    const requester = createPinnedJsonRequester({ request: fake.request, tlsConnect: fake.tlsConnect });
+    await expect(requester({
+      endpoint: new URL("https://adapter.example.test/v1/mcp"),
+      approvedAddresses: ["93.184.216.34"],
+      body: { jsonrpc: "2.0", id: "1", method: "initialize", params: {} },
+      signal: new AbortController().signal,
+      mcp: {},
+    })).rejects.toThrow("crypto_app_transport_content_type_invalid");
   });
 
   test("pins DNS and TLS hostname while keeping opaque credential references out of the request", async () => {

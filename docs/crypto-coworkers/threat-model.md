@@ -49,6 +49,7 @@ The release has four absolute objectives:
 | Threat | Required control | Verification |
 |---|---|---|
 | Prompt injection in app/tool data | Treat output as `untrusted_external`; typed field projection; quarantine instruction-like text | Malicious metadata cannot cause a second tool call |
+| MCP server broadens protocol authority | Server performs a fixed initialize/initialized/one-call lifecycle; exact signed action name; no discovery, prompts, resources, sampling, elicitation, tasks, SSE, or server requests; only closed structured evidence crosses the boundary | Dynamic tools, content-only output, session mutation, SSE, and server instructions fail closed or remain unobserved |
 | Manifest advertises submit authority | Strict action allowlist; unknown action fields rejected; no submit class | Contract test and CI registry scan |
 | OAuth code/token confused across apps | Exact redirect, issuer, resource, audience, app revision, workspace and connection binding; S256 PKCE; HMAC one-time state; encrypted server-only tokens; no token passthrough | Wrong issuer/resource/audience/tenant and replayed state fail with zero adapter traffic |
 | Managed API credential confused across apps | Deployment secret is bound to one certified app and manifest revision; only closed headers and schemes resolve at the pinned transport boundary | Wrong app, revision, reference, header, missing value, or malformed value produces zero upstream traffic |

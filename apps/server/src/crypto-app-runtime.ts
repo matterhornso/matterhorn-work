@@ -23,7 +23,11 @@ import { isTrustedEd25519PublisherKey, type MatterhornTrustedPublisherKey } from
 import { cryptoCoworkerFeatureConfig, type MatterhornCryptoAppGatewayMode } from "./crypto-coworker-config.js";
 import { createFirstPartyCryptoAppExecutor } from "./first-party-crypto-app-executor.js";
 import { firstPartyCryptoAppProxyTool } from "./first-party-crypto-apps.js";
-import { createPinnedJsonCryptoAppTransport } from "./crypto-app-https-transport.js";
+import {
+  createPinnedJsonCryptoAppTransport,
+  type MatterhornCryptoAppCredentialResolver,
+} from "./crypto-app-https-transport.js";
+import { createPinnedMcpHttpCryptoAppTransport } from "./crypto-app-mcp-http-transport.js";
 import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 import {
   createPinnedSuiPublicTransactionVerifier,
@@ -233,23 +237,23 @@ export function createMatterhornCryptoAppRuntime(
           return proxyToolName ? { ...input, proxyToolName } : null;
         },
       });
-      const pinnedJsonTransport = createPinnedJsonCryptoAppTransport({
-        resolveCredentialHeaders: (input) => {
-          if (input.credential.type === "oauth2") {
-            if (!oauthConnections || !input.workspaceId || !input.connectionId) {
-              throw new Error("crypto_app_oauth_token_unavailable");
-            }
-            return oauthConnections.resolveHeaders({
-              workspaceId: input.workspaceId,
-              connectionId: input.connectionId,
-              appId: input.appId,
-              manifestRevision: input.manifestRevision,
-              secretReference: input.credential.secretReference,
-            });
+      const resolveCredentialHeaders: MatterhornCryptoAppCredentialResolver = (input) => {
+        if (input.credential.type === "oauth2") {
+          if (!oauthConnections || !input.workspaceId || !input.connectionId) {
+            throw new Error("crypto_app_oauth_token_unavailable");
           }
-          return managedCredentials.resolveHeaders(input);
-        },
-      });
+          return oauthConnections.resolveHeaders({
+            workspaceId: input.workspaceId,
+            connectionId: input.connectionId,
+            appId: input.appId,
+            manifestRevision: input.manifestRevision,
+            secretReference: input.credential.secretReference,
+          });
+        }
+        return managedCredentials.resolveHeaders(input);
+      };
+      const pinnedJsonTransport = createPinnedJsonCryptoAppTransport({ resolveCredentialHeaders });
+      const pinnedMcpHttpTransport = createPinnedMcpHttpCryptoAppTransport({ resolveCredentialHeaders });
       router = new MatterhornCryptoAppAdapterRouter({
         registry,
         connections,
@@ -279,7 +283,7 @@ export function createMatterhornCryptoAppRuntime(
         },
         executors: {
           matterhorn_sdk: createFirstPartyCryptoAppExecutor(),
-          mcp_http: pinnedJsonTransport,
+          mcp_http: pinnedMcpHttpTransport,
           openapi: pinnedJsonTransport,
           rpc: pinnedJsonTransport,
         },
