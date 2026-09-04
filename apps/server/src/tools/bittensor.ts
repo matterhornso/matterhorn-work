@@ -1156,7 +1156,7 @@ export interface BittensorChatCardItem {
 
 export interface BittensorChatCardAction {
   label: string;
-  kind: "copy_payload" | "open_url" | "sign_externally" | "send_to_chat";
+  kind: "copy_payload" | "copy_for_wallet" | "open_url" | "sign_externally" | "send_to_chat";
   href?: string | null;
   payload?: Record<string, unknown> | null;
 }
@@ -11676,8 +11676,8 @@ export function buildBittensorExtrinsicPreviewCard(preview: BittensorExtrinsicPr
       cardItem("Slippage", formatPercentFromBps(preview.slippageBps), preview.slippageBps && preview.slippageBps > 100 ? "warning" : "default"),
     ],
     actions: [{
-      label: "Sign externally",
-      kind: "sign_externally",
+      label: "Copy for wallet",
+      kind: "copy_for_wallet",
       payload: preview.unsignedPayload,
     }],
     warnings: preview.warnings,
@@ -11730,22 +11730,15 @@ export function buildBittensorSigningHandoffCard(handoff: BittensorSigningHandof
       cardItem("Expires", handoff.expiresAt, "muted"),
       cardItem("Signer mode", titleCase(handoff.signerMode)),
     ],
-    actions: [
-      {
-        label: "Copy payload",
-        kind: "copy_payload",
-        payload: {
-          filename: handoff.suggestedFilename,
-          payload: handoff.payload,
-          payloadSha256: handoff.payloadSha256,
-        },
-      },
-      {
-        label: "Continue in wallet",
-        kind: "sign_externally",
+    actions: [{
+      label: "Copy for wallet",
+      kind: "copy_for_wallet",
+      payload: {
+        filename: handoff.suggestedFilename,
         payload: handoff.payload,
+        payloadSha256: handoff.payloadSha256,
       },
-    ],
+    }],
     warnings: handoff.warnings,
     data: { handoff },
   };

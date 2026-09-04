@@ -386,7 +386,7 @@ const CUSTOMER_DEMO_PROMPTS = [
     id: "bittensor-image-subnets",
     label: "Bittensor discovery",
     betaVisible: true,
-    prompt: "Bittensor Agent task: Find Bittensor subnets useful for image generation. Return customer-safe cards and explain which actions are read-only, which are preview-only, and which require external signing.",
+    prompt: "Bittensor Agent task: Find Bittensor subnets useful for image generation. Return customer-safe cards and explain which actions are read-only, which are preview-only, and which require connected-wallet review.",
   },
   {
     id: "bittensor-tao-wallet",
@@ -459,7 +459,7 @@ const BETA_TRY_PROMPTS = [
     label: "find Bittensor subnets for image generation",
     mode: "crypto",
     prompt:
-      "Bittensor Agent task: Find Bittensor subnets useful for image generation and return customer-safe cards. Explain which actions are read-only, which are preview-only, and which require external signing.",
+      "Bittensor Agent task: Find Bittensor subnets useful for image generation and return customer-safe cards. Explain which actions are read-only, which are preview-only, and which require connected-wallet review.",
   },
   {
     id: "beta-validators-14",
@@ -543,7 +543,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     safety: "Read-only discovery",
     outcome: "Subnet shortlist",
     prompt:
-      "Bittensor Agent task: Help me find Bittensor subnets for my goal. Explain each subnet in beginner language with utility, risks, source/freshness, adapter support, and which actions require external signing.",
+      "Bittensor Agent task: Help me find Bittensor subnets for my goal. Explain each subnet in beginner language with utility, risks, source/freshness, adapter support, and which actions require connected-wallet review.",
   },
   {
     id: "validator-compare",

@@ -196,10 +196,10 @@ describe("createBittensorSigningReceipt", () => {
         canSubmit: false,
         network: "finney" as const,
         address: null,
-        message: "External signer required.",
+        message: "Connected wallet required.",
       },
       warnings: ["Test preview."],
-      consequenceSummary: "Stake 1 TAO to subnet 14 with an external signer.",
+      consequenceSummary: "Stake 1 TAO to subnet 14 after connected-wallet review.",
       requiresExternalSignature: true as const,
     };
   }
@@ -236,7 +236,7 @@ describe("createBittensorSigningReceipt", () => {
 });
 
 describe("buildBittensorQuote", () => {
-  test("builds quote-only staking guidance with external signature requirement", () => {
+  test("builds quote-only staking guidance with connected-wallet review", () => {
     const quote = buildBittensorQuote(
       { action: "stake", netuid: 14, amountTao: "2", validatorHotkey: VALID_SS58 },
       {
@@ -4318,7 +4318,7 @@ describe("prepareBittensorExtrinsic", () => {
     expect(preview.unsignedPayload.action).toBe("stake");
     expect(preview.signer.canSign).toBe(false);
     expect(preview.warnings.join(" ")).toContain("connected Bittensor wallet");
-    expect(buildBittensorExtrinsicPreviewCard(preview).actions?.[0]?.kind).toBe("sign_externally");
+    expect(buildBittensorExtrinsicPreviewCard(preview).actions?.[0]?.kind).toBe("copy_for_wallet");
     const checklist = buildBittensorSigningSafetyChecklist(preview);
     expect(["pass", "warning"]).toContain(checklist.status);
     expect(checklist.checks.some((check) => check.label === "Connected-wallet authority" && check.status === "pass")).toBe(true);

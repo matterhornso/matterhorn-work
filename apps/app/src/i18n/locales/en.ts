@@ -790,7 +790,7 @@ export default {
   "welcome.capability_spreadsheets": "Use Bittensor",
   "welcome.capability_spreadsheets_desc": "Explore subnets, wallets, staking previews, and monitors.",
   "welcome.capability_browser": "Preview markets",
-  "welcome.capability_browser_desc": "Read Hyperliquid and Polymarket data before any external signer step.",
+  "welcome.capability_browser_desc": "Read Hyperliquid and Polymarket data before any connected-wallet review.",
   "welcome.capability_files": "Build workflows",
   "welcome.capability_files_desc": "Create longevity, customer, research, and operator workflow artifacts.",
   "welcome.capability_automate": "Plan services",

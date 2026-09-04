@@ -950,7 +950,7 @@ export type BittensorPublicEvidenceCard = {
   }>;
   actions?: Array<{
     label?: string;
-    kind?: "copy_payload" | "open_url" | "sign_externally" | "send_to_chat";
+    kind?: "copy_payload" | "copy_for_wallet" | "open_url" | "sign_externally" | "send_to_chat";
     href?: string | null;
     payload?: Record<string, unknown> | null;
   }>;
@@ -1419,9 +1419,9 @@ function BittensorCardActionButton(props: { card: BittensorChatCard; action: Non
     <button
       type="button"
       className="inline-flex items-center gap-1.5 rounded-md border border-dls-border bg-dls-surface px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/35 hover:text-primary disabled:opacity-50"
-      disabled={!payload && (props.action.kind === "copy_payload" || props.action.kind === "sign_externally")}
+      disabled={!payload && (props.action.kind === "copy_payload" || props.action.kind === "copy_for_wallet" || props.action.kind === "sign_externally")}
       onClick={() => {
-        if (props.action.kind === "copy_payload" || props.action.kind === "sign_externally") {
+        if (props.action.kind === "copy_payload" || props.action.kind === "copy_for_wallet" || props.action.kind === "sign_externally") {
           void copyPayload();
           return;
         }
@@ -1429,9 +1429,9 @@ function BittensorCardActionButton(props: { card: BittensorChatCard; action: Non
           sendToChat();
         }
       }}
-      title={props.action.kind === "sign_externally" ? "Copy the unsigned payload for external signing" : label}
+      title={props.action.kind === "copy_for_wallet" || props.action.kind === "sign_externally" ? "Copy the unsigned payload for connected-wallet review" : label}
     >
-      {props.action.kind === "sign_externally" ? <ShieldAlert size={12} /> : props.action.kind === "send_to_chat" ? <BrainCircuit size={12} /> : <Copy size={12} />}
+      {props.action.kind === "copy_for_wallet" || props.action.kind === "sign_externally" ? <ShieldAlert size={12} /> : props.action.kind === "send_to_chat" ? <BrainCircuit size={12} /> : <Copy size={12} />}
       <span>{label}</span>
     </button>
   );
