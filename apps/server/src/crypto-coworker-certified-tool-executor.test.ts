@@ -19,6 +19,9 @@ import type { WorkspaceInfo } from "./types.js";
 const NOW = new Date("2026-09-01T12:00:01.000Z");
 const SENDER = `0x${"1".repeat(64)}`;
 const RECIPIENT = `0x${"2".repeat(64)}`;
+const BITTENSOR_SENDER = "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF";
+const BITTENSOR_DESTINATION = "5DAAnrj7VHTz5qL3S9cV3mKf2x5jXz2XGvGYuWQfJj9GzVQd";
+const BITTENSOR_HOTKEY = "5FHneW46xGXgs5mUiveU4sbTyGBzmtoW4h4KYxqsdXw4nq8Z";
 const roots: string[] = [];
 const runtimes: MatterhornGuardedAgentRuntime[] = [];
 const priorMode = process.env.MATTERHORN_GUARDED_RUNTIME_MODE;
@@ -50,23 +53,31 @@ function runtime(): MatterhornGuardedAgentRuntime {
   return instance;
 }
 
-function profile(protocol: "sui" | "hyperliquid", overrides: Partial<MatterhornCoworkerProfile> = {}): MatterhornCoworkerProfile {
+function profile(protocol: "sui" | "hyperliquid" | "bittensor", overrides: Partial<MatterhornCoworkerProfile> = {}): MatterhornCoworkerProfile {
   const sui = protocol === "sui";
+  const bittensor = protocol === "bittensor";
+  const appId = sui
+    ? "matterhorn.sui-testnet"
+    : bittensor ? "matterhorn.bittensor-testnet" : "matterhorn.hyperliquid-testnet";
+  const actionId = sui
+    ? "sui_transfer_preview"
+    : bittensor ? "bittensor_prepare_transfer" : "hyperliquid_preview_order";
+  const network = sui ? "sui:testnet" : bittensor ? "bittensor:test" : "hyperliquid:testnet";
   return {
     version: "matterhorn.coworker-profile.v1",
-    id: sui ? "cw_sui" : "cw_hl",
+    id: sui ? "cw_sui" : bittensor ? "cw_bittensor" : "cw_hl",
     workspaceId: "ws_crypto",
     ownerId: "account_a",
     revision: 1,
     policyVersion: "coworker-policy-1",
-    name: sui ? "Sui coworker" : "Hyperliquid coworker",
+    name: sui ? "Sui coworker" : bittensor ? "Bittensor coworker" : "Hyperliquid coworker",
     role: "wallet_reviewer",
     mission: "Prepare exact terms for connected-wallet review.",
     state: "active",
-    allowedAppIds: [sui ? "matterhorn.sui-testnet" : "matterhorn.hyperliquid-testnet"],
-    allowedActionIds: [sui ? "sui_transfer_preview" : "hyperliquid_preview_order"],
-    allowedNetworks: [sui ? "sui:testnet" : "hyperliquid:testnet"],
-    allowedAssets: [sui ? "SUI" : "ETH"],
+    allowedAppIds: [appId],
+    allowedActionIds: [actionId],
+    allowedNetworks: [network],
+    allowedAssets: [sui ? "SUI" : bittensor ? "TAO" : "ETH"],
     automaticAuthorities: ["read", "prepare"],
     limits: {
       perActionUsd: 50,
@@ -288,6 +299,57 @@ function hyperliquidResult(): MatterhornCryptoAppResult {
   };
 }
 
+function bittensorResult(
+  actionId: "bittensor_prepare_transfer" | "bittensor_prepare_stake" | "bittensor_prepare_unstake",
+): MatterhornCryptoAppResult {
+  const action = actionId === "bittensor_prepare_transfer"
+    ? "transfer"
+    : actionId === "bittensor_prepare_stake" ? "stake" : "unstake";
+  const transfer = action === "transfer";
+  return {
+    version: "matterhorn.crypto-app-result.v1",
+    app: { id: "matterhorn.bittensor-testnet", manifestRevision: "1.1.0", connectionId: "cxc_bittensor" },
+    action: { id: actionId, access: "prepare", network: "bittensor:test" },
+    timing: {
+      startedAt: "2026-09-01T12:00:00.000Z",
+      completedAt: "2026-09-01T12:00:00.500Z",
+      durationMs: 500,
+    },
+    observation: {
+      source: "Bittensor testnet pinned SDK simulation",
+      observedAt: "2026-09-01T12:00:00.250Z",
+      blockOrVersion: "1234567",
+      ageMs: 250,
+      freshnessMaxAgeMs: 10_000,
+    },
+    provenance: {
+      trust: "untrusted_external",
+      sanitization: "typed_projection",
+      evidenceReference: `sha256:${"f".repeat(64)}`,
+    },
+    metering: { costMicros: 0, reservationId: `reservation_${action}` },
+    result: {
+      preparedActionId: `bt_preview_${action}`,
+      network: "bittensor:test",
+      action,
+      sender: BITTENSOR_SENDER,
+      destination: transfer ? BITTENSOR_DESTINATION : null,
+      hotkey: transfer ? null : BITTENSOR_HOTKEY,
+      netuid: transfer ? null : 14,
+      amountTao: "0.1",
+      availableTao: "10",
+      currentStakeTao: transfer ? null : "2",
+      expectedAlpha: transfer ? null : "0.19",
+      networkFeeTao: "0.0001",
+      swapFeeTao: transfer ? null : "0.00005",
+      slippageBps: transfer ? null : 25,
+      block: 1_234_567,
+      simulationReference: `sha256:${"9".repeat(64)}`,
+      expiresAt: "2026-09-01T12:00:15.250Z",
+    },
+  };
+}
+
 describe("certified coworker tool executor", () => {
   test("turns Sui terms into a tenant-bound wallet review and never submit authority", async () => {
     const guardedRuntime = runtime();
@@ -421,6 +483,84 @@ describe("certified coworker tool executor", () => {
       reduceOnly: false,
       maxSlippageBps: 50,
     });
+  });
+
+  test("routes every certified Bittensor testnet preparation to wallet review", async () => {
+    for (const [index, actionId, action] of [
+      [1, "bittensor_prepare_transfer", "transfer"],
+      [2, "bittensor_prepare_stake", "stake"],
+      [3, "bittensor_prepare_unstake", "unstake"],
+    ] as const) {
+      const transfer = action === "transfer";
+      const coworker = profile("bittensor", {
+        id: `cw_bittensor_${index}`,
+        allowedActionIds: [actionId],
+      });
+      const rawArguments = {
+        action,
+        sender: BITTENSOR_SENDER,
+        ...(transfer
+          ? { destination: BITTENSOR_DESTINATION }
+          : { hotkey: BITTENSOR_HOTKEY, netuid: 14 }),
+        amountTao: "0.1",
+      };
+      const guardedRuntime = runtime();
+      const auth = await authorization({
+        guardedRuntime,
+        profile: coworker,
+        toolName: "matterhorn_bittensor_prepare_action",
+        rawArguments,
+        manifestRevision: "1.1.0",
+        connectionId: "cxc_bittensor",
+        agentId: "matterhorn-bittensor",
+      });
+      const routed: any[] = [];
+      const execute = createMatterhornCertifiedCoworkerToolExecutor({
+        router: { execute: async (request) => { routed.push(request); return bittensorResult(actionId); } },
+        coworkers: { get: () => coworker },
+        guardedRuntime,
+        resolveWorkspace: async () => workspace(roots.at(-1)!),
+        readWalletPolicy: () => ({
+          version: "matterhorn.wallet.safety-policy.v1",
+          maxPerTransactionUSD: 50,
+          maxDailySpendUSD: 100,
+          mainnetEnabled: false,
+          maxSlippageBps: 100,
+          preferredNetwork: 84532,
+          updatedAt: NOW.toISOString(),
+        }),
+        now: () => NOW,
+      });
+      const result = await execute({
+        toolName: "matterhorn_bittensor_prepare_action",
+        args: rawArguments,
+        authorization: auth,
+      }) as Record<string, any>;
+      expect(result).toMatchObject({
+        version: "matterhorn.crypto-wallet-review-result.v1",
+        status: "wallet_review_required",
+        reviewedAction: {
+          protocol: "bittensor",
+          network: "bittensor:test",
+          operation: action,
+          capabilityClass: "wallet_review_only",
+        },
+        pendingIntent: { state: "wallet_review", revision: 1 },
+      });
+      expect(result.policy.limits).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "per_action_usd", observed: "0", passed: true }),
+      ]));
+      expect(routed).toEqual([expect.objectContaining({
+        workspaceId: "ws_crypto",
+        connectionId: "cxc_bittensor",
+        actionId,
+        network: "bittensor:test",
+        arguments: transfer
+          ? { sender: BITTENSOR_SENDER, destination: BITTENSOR_DESTINATION, amountTao: "0.1" }
+          : { sender: BITTENSOR_SENDER, hotkey: BITTENSOR_HOTKEY, netuid: 14, amountTao: "0.1" },
+      })]);
+      expect(JSON.stringify(result)).not.toMatch(/private.?key|signature|submitAuthority/i);
+    }
   });
 
   test("returns a policy block without creating a wallet ticket when trusted facts are unavailable", async () => {

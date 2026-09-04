@@ -36,6 +36,11 @@ type FactsInput = {
 };
 
 const ACTIVE_BUDGET_STATES = new Set(["wallet_review", "wallet_approved", "submitted", "confirmed"]);
+const BITTENSOR_TESTNET_PREPARE_ACTIONS = new Set([
+  "bittensor_prepare_transfer",
+  "bittensor_prepare_stake",
+  "bittensor_prepare_unstake",
+]);
 
 function limits(input: Partial<MatterhornTransactionPolicyLayer["limits"]> = {}): MatterhornTransactionPolicyLayer["limits"] {
   return {
@@ -90,7 +95,16 @@ function supportedFirstPartyAction(input: Pick<PolicyInput, "appId" | "actionId"
       && input.network === "sui:testnet")
     || (input.appId === "matterhorn.hyperliquid-testnet"
       && input.actionId === "hyperliquid_preview_order"
-      && input.network === "hyperliquid:testnet");
+      && input.network === "hyperliquid:testnet")
+    || (input.appId === "matterhorn.bittensor-testnet"
+      && BITTENSOR_TESTNET_PREPARE_ACTIONS.has(input.actionId)
+      && input.network === "bittensor:test");
+}
+
+function certifiedTestNetwork(input: Pick<PolicyInput, "appId" | "network">): boolean {
+  return (input.appId === "matterhorn.sui-testnet" && input.network === "sui:testnet")
+    || (input.appId === "matterhorn.hyperliquid-testnet" && input.network === "hyperliquid:testnet")
+    || (input.appId === "matterhorn.bittensor-testnet" && input.network === "bittensor:test");
 }
 
 /**
@@ -111,8 +125,10 @@ export function buildMatterhornRuntimeTransactionPolicyLayers(input: PolicyInput
     actionId: input.actionId,
     network: input.network,
   };
-  const appAssets = input.appId === "matterhorn.sui-testnet" ? ["SUI"] : null;
-  const mainnetDenied = !input.walletPolicy.mainnetEnabled && !input.network.endsWith(":testnet");
+  const appAssets = input.appId === "matterhorn.sui-testnet"
+    ? ["SUI"]
+    : input.appId === "matterhorn.bittensor-testnet" ? ["TAO"] : null;
+  const mainnetDenied = !input.walletPolicy.mainnetEnabled && !certifiedTestNetwork(input);
   return {
     platform: layer({
       ...common,
@@ -236,6 +252,13 @@ export function resolveMatterhornRuntimeTransactionFacts(input: FactsInput): Mat
     && input.intent.network === "sui:testnet") {
     // Sui testnet assets have no cash value. A positive reserve requirement
     // still fails closed because no trusted USD reserve fact exists.
+    notionalUsd = 0;
+  } else if (result
+    && input.intent.appId === "matterhorn.bittensor-testnet"
+    && BITTENSOR_TESTNET_PREPARE_ACTIONS.has(input.intent.actionId)
+    && input.intent.network === "bittensor:test") {
+    // Testnet TAO has no cash value. As with Sui testnet, reserve limits still
+    // fail closed because this boundary does not invent a trusted USD reserve.
     notionalUsd = 0;
   } else if (result
     && input.intent.appId === "matterhorn.hyperliquid-testnet"
