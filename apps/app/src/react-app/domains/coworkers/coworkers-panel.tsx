@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  MatterhornCoworkerInboxSummary,
   MatterhornCoworkerTemplateId,
   MatterhornCryptoAppCatalogSummary,
   MatterhornCryptoAppConnectionView,
@@ -205,6 +206,22 @@ export function coworkerPositionSource(appId: string, network: string): string {
   return labels.filter((label, index) => labels.indexOf(label) === index).join(" · ");
 }
 
+export function coworkerUnreadSummaryLabel(totalUnread: number): string {
+  if (totalUnread === 1) return "1 update needs your attention";
+  return `${totalUnread} updates need your attention`;
+}
+
+export function newestUnreadCoworkerId(
+  summaries: readonly MatterhornCoworkerInboxSummary[],
+): string | null {
+  return [...summaries]
+    .filter((summary) => summary.unreadCount > 0 && Number.isFinite(Date.parse(summary.latestUnreadAt)))
+    .sort((left, right) => (
+      right.latestUnreadAt.localeCompare(left.latestUnreadAt)
+      || left.coworkerId.localeCompare(right.coworkerId)
+    ))[0]?.coworkerId ?? null;
+}
+
 function coworkerErrorMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
     if (error.code === "coworker_runtime_disabled" || error.code === "coworker_execution_not_ready") {
@@ -365,6 +382,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [resourceDraft, setResourceDraft] = useState<CoworkerResourceDraft>(EMPTY_RESOURCE_DRAFT);
   const [resourceRecommendationHash, setResourceRecommendationHash] = useState<string | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [pendingActivityCoworkerId, setPendingActivityCoworkerId] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [cancelIntent, setCancelIntent] = useState<MatterhornCoworkerWalletIntentView | null>(null);
@@ -378,6 +396,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const handledInitialTemplateRef = useRef<MatterhornCoworkerTemplateId | null>(null);
   const newlyConnectedAppRef = useRef<string | null>(null);
+  const activitySectionRef = useRef<HTMLDetailsElement | null>(null);
   const boundCoworkerId = useMatterhornSessionCoworkerContextStore((state) => (
     selectedSessionId ? state.contexts[selectedSessionId]?.id ?? "" : ""
   ));
@@ -386,9 +405,17 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     queryKey: listKey,
     enabled: Boolean(props.client && workspaceId),
     retry: false,
+    refetchInterval: 30_000,
     queryFn: () => props.client!.listCoworkers(workspaceId),
   });
   const coworkers = listQuery.data?.coworkers ?? [];
+  const inboxSummary = listQuery.data?.inbox;
+  const unreadByCoworker = useMemo(
+    () => new Map((inboxSummary?.byCoworker ?? []).map((summary) => [summary.coworkerId, summary.unreadCount])),
+    [inboxSummary?.byCoworker],
+  );
+  const latestUnreadCoworkerId = newestUnreadCoworkerId(inboxSummary?.byCoworker ?? []);
+  const latestUnreadCoworker = coworkers.find((coworker) => coworker.id === latestUnreadCoworkerId) ?? null;
   const selectedCoworker = coworkers.find((item) => item.id === (coworkerChoice || boundCoworkerId)) ?? coworkers[0] ?? null;
   const detailKey = useMemo(
     () => [QUERY_PREFIX, workspaceId, selectedCoworker?.id ?? "none", "detail"],
@@ -598,6 +625,22 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     setWatchValues({});
     setWatchFormError(null);
   }, [selectedCoworker?.id]);
+
+  useEffect(() => {
+    if (!pendingActivityCoworkerId
+      || selectedCoworker?.id !== pendingActivityCoworkerId
+      || detailQuery.isLoading
+      || !detailQuery.data) return;
+    setActivityOpen(true);
+    const frame = window.requestAnimationFrame(() => {
+      activitySectionRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+      setPendingActivityCoworkerId(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [detailQuery.data, detailQuery.isLoading, pendingActivityCoworkerId, selectedCoworker?.id]);
   const nextStep = resolveCoworkerNextStep({
     coworkerState: selectedCoworker?.state ?? "revoked",
     ready: canStartCoworker,
@@ -1110,7 +1153,14 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       setError(null);
                     }}
                   >
-                    {coworkers.map((coworker) => <option key={coworker.id} value={coworker.id}>{coworker.name}</option>)}
+                    {coworkers.map((coworker) => {
+                      const unreadCount = unreadByCoworker.get(coworker.id) ?? 0;
+                      return (
+                        <option key={coworker.id} value={coworker.id}>
+                          {coworker.name}{unreadCount > 0 ? ` — ${unreadCount} new` : ""}
+                        </option>
+                      );
+                    })}
                   </select>
                 </label>
                 <Button
@@ -1136,6 +1186,28 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                     </Button>
                   ))}
                 </div>
+              ) : null}
+              {(inboxSummary?.totalUnread ?? 0) > 0 && latestUnreadCoworker ? (
+                <button
+                  type="button"
+                  className="mt-3 flex min-h-11 w-full items-center gap-2 border-t border-dls-border/60 pt-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+                  onClick={() => {
+                    setCoworkerChoice(latestUnreadCoworker.id);
+                    setPendingActivityCoworkerId(latestUnreadCoworker.id);
+                    setActivityOpen(true);
+                  }}
+                >
+                  <Bell className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-medium text-dls-text">
+                      {coworkerUnreadSummaryLabel(inboxSummary?.totalUnread ?? 0)}
+                    </span>
+                    <span className="block truncate text-[11px] leading-5 text-dls-secondary">
+                      Latest from {latestUnreadCoworker.name}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs font-medium text-dls-secondary">View</span>
+                </button>
               ) : null}
             </div>
 
@@ -1552,6 +1624,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
             ) : (
               <details
                 key={`${selectedCoworker.id}:${hasCoworkerActivity ? "has-activity" : "empty"}`}
+                ref={activitySectionRef}
                 className="border-b border-dls-border/70 py-4"
                 open={activityOpen}
                 onToggle={(event) => setActivityOpen(event.currentTarget.open)}

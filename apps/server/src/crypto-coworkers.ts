@@ -8,6 +8,7 @@ import {
   MATTERHORN_COWORKER_WORKING_STATE_VERSION,
   type MatterhornCoworkerAuthority,
   type MatterhornCoworkerInboxItem,
+  type MatterhornCoworkerInboxSummary,
   type MatterhornCoworkerProfile,
   type MatterhornCoworkerResourceScope,
   type MatterhornCoworkerState,
@@ -254,6 +255,11 @@ export class MatterhornCoworkers {
   list(workspaceId: string, ownerId: string): MatterhornCoworkerProfile[] {
     this.#assertAccountAccess(ownerId);
     return this.#store.list(workspaceId, ownerId);
+  }
+
+  listInboxSummaries(workspaceId: string, ownerId: string): MatterhornCoworkerInboxSummary[] {
+    this.#assertAccountAccess(ownerId);
+    return this.#store.listInboxSummaries(workspaceId, ownerId);
   }
 
   purgeWorkspace(workspaceId: string): number {

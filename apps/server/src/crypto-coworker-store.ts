@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import {
   type MatterhornCoworkerResourceScope,
   type MatterhornCoworkerInboxItem,
+  type MatterhornCoworkerInboxSummary,
   type MatterhornCoworkerProfile,
   type MatterhornCoworkerWatch,
   type MatterhornCoworkerWorkingState,
@@ -1385,6 +1386,32 @@ export class MatterhornCoworkerStore {
         ORDER BY created_at DESC, item_id DESC LIMIT ?
       `).all(input.workspaceId, input.ownerId, input.coworkerId, input.limit);
     return (rows as CoworkerInboxItemRow[]).map(inboxItemFromRow);
+  }
+
+  listInboxSummaries(workspaceId: string, ownerId: string): MatterhornCoworkerInboxSummary[] {
+    const rows = statement(this.#db, `
+      SELECT *
+      FROM crypto_coworker_inbox
+      WHERE workspace_id = ? AND owner_id = ? AND state = 'unread'
+      ORDER BY created_at DESC, item_id DESC
+    `).all(workspaceId, ownerId) as CoworkerInboxItemRow[];
+    const summaries = new Map<string, MatterhornCoworkerInboxSummary>();
+    for (const row of rows) {
+      // Restored rows must pass the same schema, ownership and secret scan as a
+      // full inbox read before even their content-free metadata is disclosed.
+      const item = inboxItemFromRow(row);
+      const existing = summaries.get(item.coworkerId);
+      if (existing) {
+        existing.unreadCount += 1;
+        continue;
+      }
+      summaries.set(item.coworkerId, {
+        coworkerId: item.coworkerId,
+        unreadCount: 1,
+        latestUnreadAt: item.createdAt,
+      });
+    }
+    return [...summaries.values()];
   }
 
   replaceInboxItem(item: MatterhornCoworkerInboxItem, expectedState: MatterhornCoworkerInboxItem["state"]): MatterhornCoworkerInboxItem | null {
