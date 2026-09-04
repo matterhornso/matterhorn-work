@@ -32,6 +32,7 @@ import {
   POLYMARKET_CANCEL_ALL_CONFIRMATION,
   POLYMARKET_CANCEL_CONFIRMATION,
   POLYMARKET_LIVE_CONFIRMATION,
+  assertPolymarketUserCanPlaceOrders,
   cancelPolymarketOrders,
   normalizePolymarketOrderIds,
   submitPolymarketOrder,
@@ -1712,6 +1713,18 @@ function PolymarketTradeExecution({
   }, []);
 
   const prepareOrder = useCallback(async () => {
+    if (tradeAction !== "CANCEL") {
+      setBusy("prepare");
+      setTradeError(null);
+      try {
+        await assertPolymarketUserCanPlaceOrders();
+        setBusy(null);
+      } catch (error) {
+        setTradeError(error instanceof Error ? error.message : "Polymarket location verification failed. No order was prepared.");
+        setBusy(null);
+        return;
+      }
+    }
     try {
       const source = guardedHandoff?.source ?? "agent-card";
       const currentDraft: ReviewedActionDraftHandoff = tradeAction === "CANCEL"
