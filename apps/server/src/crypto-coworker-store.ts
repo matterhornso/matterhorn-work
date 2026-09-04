@@ -16,6 +16,12 @@ import {
   validateMatterhornCoworkerWatch,
   validateMatterhornCoworkerWorkingState,
 } from "@matterhorn-work/types/crypto-coworkers";
+import {
+  containsForbiddenCoworkerInboxMaterial,
+  containsForbiddenCoworkerProfileMaterial,
+  containsForbiddenCoworkerWatchMaterial,
+  containsForbiddenCoworkerWorkingStateMaterial,
+} from "./crypto-coworker-secret-boundary.js";
 
 type SqliteRunResult = { changes?: number };
 type SqliteStatement = {
@@ -147,7 +153,8 @@ function profileFromRow(row: CoworkerRow): MatterhornCoworkerProfile {
   const issues = validateMatterhornCoworkerProfile(profile);
   if (issues.length > 0) throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   const result = profile as MatterhornCoworkerProfile;
-  if (result.workspaceId !== row.workspace_id
+  if (containsForbiddenCoworkerProfileMaterial(result)
+    || result.workspaceId !== row.workspace_id
     || result.ownerId !== row.owner_id
     || result.id !== row.coworker_id
     || result.revision !== row.revision
@@ -167,7 +174,8 @@ function workingStateFromRow(row: CoworkerWorkingStateRow): MatterhornCoworkerWo
   } catch {
     throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   }
-  if (validateMatterhornCoworkerWorkingState(state).length > 0) {
+  if (validateMatterhornCoworkerWorkingState(state).length > 0
+    || containsForbiddenCoworkerWorkingStateMaterial(state as Record<string, unknown>)) {
     throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   }
   const result = state as MatterhornCoworkerWorkingState;
@@ -225,7 +233,8 @@ function watchFromRow(row: CoworkerWatchRow): MatterhornCoworkerWatch {
   } catch {
     throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   }
-  if (validateMatterhornCoworkerWatch(watch).length > 0) {
+  if (validateMatterhornCoworkerWatch(watch).length > 0
+    || containsForbiddenCoworkerWatchMaterial(watch as Record<string, unknown>)) {
     throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   }
   const result = watch as MatterhornCoworkerWatch;
@@ -251,7 +260,8 @@ function inboxItemFromRow(row: CoworkerInboxItemRow): MatterhornCoworkerInboxIte
   } catch {
     throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   }
-  if (validateMatterhornCoworkerInboxItem(item).length > 0) {
+  if (validateMatterhornCoworkerInboxItem(item).length > 0
+    || containsForbiddenCoworkerInboxMaterial(item as Record<string, unknown>)) {
     throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   }
   const result = item as MatterhornCoworkerInboxItem;
