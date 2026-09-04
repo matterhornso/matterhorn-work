@@ -3728,8 +3728,8 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.cards[0]?.kind).toBe("signed_action_review");
       const guidance = result.cards.find((card) => card.kind === "customer_guidance");
       expect(guidance?.title).toBe("Unsigned action review next steps");
-      expect(guidance?.items.some((item) => item.value.includes("external signer"))).toBe(true);
-      expect(result.responseText).toContain("external signing");
+      expect(guidance?.items.some((item) => item.value.includes("connected wallet"))).toBe(true);
+      expect(result.responseText).toContain("connected-wallet review");
       expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
     });
   });
@@ -3845,7 +3845,7 @@ describe("Bittensor chat cards", () => {
     const plan = planBittensorChat({ message: "Stake 1 TAO to subnet 14" });
     const cards = buildBittensorPlanCards(plan);
     expect(cards[0]?.kind).toBe("subnet_result");
-    expect(cards[0]?.warnings?.join(" ")).toContain("external signer");
+    expect(cards[0]?.warnings?.join(" ")).toContain("connected wallet");
   });
 
   test("builds wallet and quote cards for chat rendering", () => {
@@ -4306,7 +4306,7 @@ describe("auditBittensorReadiness", () => {
 });
 
 describe("prepareBittensorExtrinsic", () => {
-  test("builds unsigned external-signer preview", async () => {
+  test("builds an unsigned connected-wallet preview", async () => {
     const preview = await prepareBittensorExtrinsic({
       action: "stake",
       netuid: 14,
@@ -4317,11 +4317,11 @@ describe("prepareBittensorExtrinsic", () => {
     expect(preview.action).toBe("stake");
     expect(preview.unsignedPayload.action).toBe("stake");
     expect(preview.signer.canSign).toBe(false);
-    expect(preview.warnings.join(" ")).toContain("external");
+    expect(preview.warnings.join(" ")).toContain("connected Bittensor wallet");
     expect(buildBittensorExtrinsicPreviewCard(preview).actions?.[0]?.kind).toBe("sign_externally");
     const checklist = buildBittensorSigningSafetyChecklist(preview);
     expect(["pass", "warning"]).toContain(checklist.status);
-    expect(checklist.checks.some((check) => check.label === "External signature" && check.status === "pass")).toBe(true);
+    expect(checklist.checks.some((check) => check.label === "Connected-wallet authority" && check.status === "pass")).toBe(true);
     expect(checklist.checks.some((check) => check.label === "No key material" && check.status === "pass")).toBe(true);
     expect(buildBittensorSigningSafetyChecklistCard(checklist).kind).toBe("signed_action_review");
     expect(JSON.stringify(checklist)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|suri/i);
@@ -4334,7 +4334,7 @@ describe("prepareBittensorExtrinsic", () => {
       validatorHotkey: VALID_SS58,
     });
     expect(result.execution).toBe("unsigned_preview");
-    expect(result.cards.some((card) => card.title === "External signing safety checklist")).toBe(true);
+    expect(result.cards.some((card) => card.title === "Connected-wallet safety checklist")).toBe(true);
     expect((result.data.signingSafety as { kind?: string })?.kind).toBe("signing_safety_checklist");
     expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|suri/i);
   });
@@ -4354,9 +4354,9 @@ describe("prepareBittensorExtrinsic", () => {
     expect(buildBittensorSigningHandoffCard(handoff).kind).toBe("signing_handoff");
   });
 
-  test("creates no-secret signing receipts for handoff and submission follow-through", async () => {
+  test("creates no-secret signing receipts and keeps deprecated submission behind the wallet airlock", async () => {
     const previous = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
-    delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = "https://must-not-be-called.invalid";
     const preview = await prepareBittensorExtrinsic({
       action: "stake",
       netuid: 14,
@@ -4368,18 +4368,26 @@ describe("prepareBittensorExtrinsic", () => {
     expect(awaitingReceipt.status).toBe("awaiting_signature");
     expect(awaitingReceipt.payloadSha256).toBe(handoff.payloadSha256);
     expect(awaitingReceipt.signatureSha256).toBeNull();
-    expect(awaitingReceipt.nextActions.join(" ")).toContain("Sign externally");
+    expect(awaitingReceipt.nextActions.join(" ")).toContain("connected wallet");
     expect(buildBittensorSigningReceiptCard(awaitingReceipt).kind).toBe("signed_action_review");
 
     const signature = "0x".padEnd(130, "a");
+    const previousFetch = globalThis.fetch;
+    let networkCalls = 0;
+    globalThis.fetch = (async () => {
+      networkCalls += 1;
+      throw new Error("deprecated submission must not contact a sidecar");
+    }) as unknown as typeof fetch;
     const result = await submitSignedBittensorExtrinsic({ preview, signature, signerAddress: VALID_SS58 });
+    globalThis.fetch = previousFetch;
     const receipt = createBittensorSigningReceipt({ preview, result, signature, signerAddress: VALID_SS58 });
-    expect(result.status).toBe("sidecar_unavailable");
-    expect(receipt.status).toBe("sidecar_unavailable");
+    expect(networkCalls).toBe(0);
+    expect(result.status).toBe("wallet_airlock_required");
+    expect(receipt.status).toBe("wallet_airlock_required");
     expect(receipt.signatureSha256).toHaveLength(64);
     expect(JSON.stringify(receipt)).not.toContain(signature);
     expect(receipt.signerAddress).toBe(VALID_SS58);
-    expect(receipt.nextActions.join(" ")).toContain("Subtensor sidecar");
+    expect(receipt.nextActions.join(" ")).toContain("connected Bittensor wallet");
     expect(JSON.stringify({ awaitingReceipt, receipt })).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
     if (previous === undefined) {
       delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
