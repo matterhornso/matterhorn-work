@@ -216,10 +216,15 @@ async function builtTransaction() {
   };
 }
 
-async function serviceFixture() {
+async function serviceFixture(input: {
+  onBuild?: () => void | Promise<void>;
+  onVerify?: () => void | Promise<void>;
+  now?: () => Date;
+} = {}) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-evidence-anchor-"));
   roots.push(root);
-  const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
+  const statePath = join(root, "state.db");
+  const state = new MatterhornGuardedRuntimeStateStore(statePath);
   const key = Buffer.alloc(32, 7);
   const keyManager: MatterhornEvidenceKeyManager = {
     createDataKey: async ({ recipientKeyIds }) => ({
@@ -275,10 +280,12 @@ async function serviceFixture() {
   const verifyCalls: unknown[] = [];
   const build: MatterhornSuiEvidenceAnchorTransactionBuilder = async (request) => {
     buildCalls.push(structuredClone({ ...request, signal: undefined }));
+    await input.onBuild?.();
     return built;
   };
   const verify: MatterhornSuiEvidenceAnchorTransactionVerifier = async (request) => {
     verifyCalls.push(structuredClone({ ...request, signal: undefined }));
+    await input.onVerify?.();
     return { objectId: ANCHOR_OBJECT, observedAt: "2026-09-03T00:01:00.000Z" };
   };
   const certification = async (): Promise<MatterhornWalrusCertification> => ({
@@ -292,12 +299,146 @@ async function serviceFixture() {
     suiTransactionDigest: null,
   });
   const service = new MatterhornCryptoEvidenceSuiAnchorService(
-    store, state, PACKAGE, build, verify, certification,
+    store, state, PACKAGE, build, verify, certification, input.now,
   );
-  return { state, store, service, published, built, buildCalls, verifyCalls };
+  return {
+    state,
+    statePath,
+    keyManager,
+    store,
+    service,
+    published,
+    built,
+    build,
+    verify,
+    certification,
+    buildCalls,
+    verifyCalls,
+  };
 }
 
 describe("Sui evidence anchor wallet airlock", () => {
+  test("serializes anchor preparation across SQLite connections and protects replacement claims", async () => {
+    let releaseBuild!: () => void;
+    let buildStarted!: () => void;
+    const buildGate = new Promise<void>((resolve) => { releaseBuild = resolve; });
+    const started = new Promise<void>((resolve) => { buildStarted = resolve; });
+    const fixture = await serviceFixture({
+      onBuild: async () => {
+        buildStarted();
+        await buildGate;
+      },
+    });
+    const secondState = new MatterhornGuardedRuntimeStateStore(fixture.statePath);
+    try {
+      const secondStore = new MatterhornCryptoEvidenceStore(secondState, fixture.keyManager);
+      const secondService = new MatterhornCryptoEvidenceSuiAnchorService(
+        secondStore,
+        secondState,
+        PACKAGE,
+        fixture.build,
+        fixture.verify,
+        fixture.certification,
+      );
+      const request = {
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        evidenceId: fixture.published.id,
+        expectedRevision: fixture.published.revision,
+        signer: SIGNER,
+        signal: new AbortController().signal,
+        now: new Date("2026-09-03T00:00:00.000Z"),
+      };
+      const firstPrepare = fixture.service.prepare(request);
+      await started;
+      await expect(secondService.prepare(request)).rejects.toThrow(
+        "crypto_evidence_operation_in_progress",
+      );
+      expect(() => secondStore.beginWalrusDeletion({
+        workspaceId: request.workspaceId,
+        ownerId: request.ownerId,
+        evidenceId: request.evidenceId,
+        expectedRevision: request.expectedRevision,
+        now: request.now,
+      })).toThrow("crypto_evidence_operation_in_progress");
+      expect(fixture.buildCalls).toHaveLength(1);
+      releaseBuild();
+      const prepared = await firstPrepare;
+      await expect(secondService.prepare(request)).resolves.toEqual(prepared);
+      expect(fixture.buildCalls).toHaveLength(1);
+
+      const firstClaim = fixture.store.beginSuiAnchor({
+        workspaceId: request.workspaceId,
+        ownerId: request.ownerId,
+        evidenceId: request.evidenceId,
+        expectedRevision: request.expectedRevision,
+        now: new Date("2026-09-03T00:06:00.000Z"),
+      });
+      const replacement = secondStore.beginSuiAnchor({
+        workspaceId: request.workspaceId,
+        ownerId: request.ownerId,
+        evidenceId: request.evidenceId,
+        expectedRevision: request.expectedRevision,
+        now: new Date("2026-09-03T00:12:00.000Z"),
+      });
+      expect(fixture.store.endSuiAnchor({
+        workspaceId: request.workspaceId,
+        evidenceId: request.evidenceId,
+        claimId: firstClaim.claimId,
+        now: new Date("2026-09-03T00:12:00.000Z"),
+      })).toBe(false);
+      expect(secondStore.hasSuiAnchorClaim({
+        workspaceId: request.workspaceId,
+        evidenceId: request.evidenceId,
+        expectedRevision: request.expectedRevision,
+        claimId: replacement.claimId,
+        now: new Date("2026-09-03T00:12:00.000Z"),
+      })).toBe(true);
+    } finally {
+      releaseBuild?.();
+      secondState.close();
+      fixture.state.close();
+    }
+  });
+
+  test("rejects a wallet confirmation that expires during public-chain verification", async () => {
+    const verificationTimes = [
+      new Date("2026-09-03T00:04:59.000Z"),
+      new Date("2026-09-03T00:05:01.000Z"),
+    ];
+    const fixture = await serviceFixture({
+      now: () => verificationTimes.shift() ?? new Date("2026-09-03T00:05:01.000Z"),
+    });
+    try {
+      const prepared = await fixture.service.prepare({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        evidenceId: fixture.published.id,
+        expectedRevision: fixture.published.revision,
+        signer: SIGNER,
+        signal: new AbortController().signal,
+        now: new Date("2026-09-03T00:00:00.000Z"),
+      });
+      await expect(fixture.service.confirm({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        evidenceId: fixture.published.id,
+        intentId: prepared.preview.intentId,
+        intentHash: prepared.preview.intentHash,
+        transactionDigest: prepared.preview.transactionDigest,
+        signal: new AbortController().signal,
+      })).rejects.toThrow("crypto_evidence_sui_anchor_expired_or_replayed");
+      expect(fixture.verifyCalls).toHaveLength(1);
+      expect(fixture.store.get({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        evidenceId: fixture.published.id,
+      })?.suiAnchor).toBeNull();
+    } finally {
+      fixture.state.close();
+    }
+  });
+
   test("prepares, hash-binds, verifies, and atomically attaches one immutable anchor", async () => {
     const fixture = await serviceFixture();
     const prepared = await fixture.service.prepare({

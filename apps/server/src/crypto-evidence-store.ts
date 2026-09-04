@@ -803,6 +803,27 @@ export class MatterhornCryptoEvidenceStore {
     return claimed;
   }
 
+  hasSuiAnchorClaim(input: {
+    workspaceId: string;
+    evidenceId: string;
+    expectedRevision: number;
+    claimId: string;
+    now?: Date;
+  }): boolean {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
+    const claim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
+      OPERATION_CLAIM_KIND,
+      this.operationClaimKey(input),
+      now.getTime(),
+    );
+    return claim?.version === "matterhorn.crypto-evidence-operation-claim.v1"
+      && claim.claimId === input.claimId
+      && claim.evidenceId === input.evidenceId
+      && claim.expectedRevision === input.expectedRevision
+      && claim.operation === "anchor";
+  }
+
   endSuiAnchor(input: {
     workspaceId: string;
     evidenceId: string;

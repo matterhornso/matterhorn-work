@@ -541,6 +541,7 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
     private readonly buildTransaction: MatterhornSuiEvidenceAnchorTransactionBuilder,
     private readonly verifyTransaction: MatterhornSuiEvidenceAnchorTransactionVerifier,
     private readonly verifyCertification: MatterhornWalrusCertificationVerifier,
+    private readonly now: () => Date = () => new Date(),
   ) {
     this.packageId = canonicalObjectId(packageId, "crypto_evidence_sui_anchor_package_invalid");
   }
@@ -556,7 +557,7 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
   }): Promise<MatterhornCryptoEvidenceSuiAnchorPrepareResponse> {
     if (input.signal.aborted) fail("crypto_evidence_sui_anchor_aborted");
     const signer = canonicalSigner(input.signer);
-    const now = input.now ?? new Date();
+    const now = input.now ?? this.now();
     if (!Number.isFinite(now.getTime())) fail("crypto_evidence_time_invalid");
     const existing = this.stateStore.get<AnchorIntentRecord>(STATE_KIND, input.evidenceId, now.getTime());
     if (existing) {
@@ -564,12 +565,22 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
       if (existing.workspaceId !== input.workspaceId
         || existing.ownerId !== input.ownerId
         || existing.preview.evidenceId !== input.evidenceId) fail("crypto_evidence_not_found");
-      if (existing.preview.evidenceRevision !== input.expectedRevision
-        || existing.preview.signer !== signer
-        || existing.preview.packageId !== this.packageId) {
-        fail("crypto_evidence_sui_anchor_in_progress");
+      if (!this.store.hasSuiAnchorClaim({
+        workspaceId: input.workspaceId,
+        evidenceId: input.evidenceId,
+        expectedRevision: existing.preview.evidenceRevision,
+        claimId: existing.claimId,
+        now,
+      })) {
+        this.stateStore.delete(STATE_KIND, input.evidenceId);
+      } else {
+        if (existing.preview.evidenceRevision !== input.expectedRevision
+          || existing.preview.signer !== signer
+          || existing.preview.packageId !== this.packageId) {
+          fail("crypto_evidence_sui_anchor_in_progress");
+        }
+        return this.prepareResponse(existing.preview);
       }
-      return this.prepareResponse(existing.preview);
     }
     this.stateStore.delete(STATE_KIND, input.evidenceId);
     const claimed = this.store.beginSuiAnchor({
@@ -690,7 +701,7 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceSuiAnchorConfirmResponse> {
     if (input.signal.aborted) fail("crypto_evidence_sui_anchor_aborted");
-    const now = input.now ?? new Date();
+    const now = input.now ?? this.now();
     if (!Number.isFinite(now.getTime())) fail("crypto_evidence_time_invalid");
     const record = this.stateStore.get<AnchorIntentRecord>(STATE_KIND, input.evidenceId, now.getTime());
     if (!record) fail("crypto_evidence_sui_anchor_expired_or_replayed");
@@ -704,6 +715,13 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
       || preview.transactionDigest !== canonicalDigest(input.transactionDigest)) {
       fail("crypto_evidence_sui_anchor_intent_mismatch");
     }
+    if (!this.store.hasSuiAnchorClaim({
+      workspaceId: input.workspaceId,
+      evidenceId: input.evidenceId,
+      expectedRevision: preview.evidenceRevision,
+      claimId: record.claimId,
+      now,
+    })) fail("crypto_evidence_sui_anchor_expired_or_replayed");
     const verified = await this.verifyTransaction({
       network: SUI_TESTNET_NETWORK,
       digest: preview.transactionDigest,
@@ -716,6 +734,8 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
       validUntilEpoch: preview.validUntilEpoch,
       signal: input.signal,
     });
+    const finalizedAt = input.now ?? this.now();
+    if (!Number.isFinite(finalizedAt.getTime())) fail("crypto_evidence_time_invalid");
     const anchor: MatterhornSuiEvidenceAnchor = {
       version: MATTERHORN_SUI_EVIDENCE_ANCHOR_VERSION,
       network: "testnet",
@@ -730,7 +750,11 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
       anchoredAt: verified.observedAt,
     };
     const item = this.stateStore.transaction(() => {
-      const consumed = this.stateStore.take<AnchorIntentRecord>(STATE_KIND, input.evidenceId, now.getTime());
+      const consumed = this.stateStore.take<AnchorIntentRecord>(
+        STATE_KIND,
+        input.evidenceId,
+        finalizedAt.getTime(),
+      );
       if (!consumed) fail("crypto_evidence_sui_anchor_expired_or_replayed");
       if (canonicalJson(consumed) !== canonicalJson(record)) fail("crypto_evidence_sui_anchor_intent_mismatch");
       const attached = this.store.attachVerifiedSuiAnchor({
@@ -741,13 +765,13 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
         expectedBlobId: this.store.get(input)?.walrusProof?.blobId ?? "",
         expectedWalrusObjectId: preview.walrusObjectId,
         anchor,
-        now,
+        now: finalizedAt,
       });
       if (!this.store.completeSuiAnchorClaimInTransaction({
         workspaceId: input.workspaceId,
         evidenceId: input.evidenceId,
         claimId: consumed.claimId,
-        now,
+        now: finalizedAt,
       })) fail("crypto_evidence_sui_anchor_claim_mismatch");
       return cryptoEvidenceAccountPacket(attached, null);
     });
