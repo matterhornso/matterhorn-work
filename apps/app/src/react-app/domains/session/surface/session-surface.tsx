@@ -2152,11 +2152,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
       props.onDraftChange(buildDraft("", []));
       return;
     }
-    // Intentionally allow sending while the assistant is still streaming.
-    // OpenCode accepts follow-up user turns mid-run and queues them; if the
-    // backend can't accept the follow-up it'll surface an error via the
-    // catch below. This restores the "append a prompt while it's still
-    // talking" behavior that the Solid composer had.
+    // Follow-up sends replace the active run. The authoritative gateway aborts
+    // the prior response before dispatch; trusted/local proxy paths enforce the
+    // same boundary so late tool events cannot inherit newer authority.
     suppressNextAbortFailureRef.current = false;
     setError(null);
     useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "busy" });
