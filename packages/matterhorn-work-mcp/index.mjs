@@ -919,7 +919,7 @@ const tools = [
         marketId: { type: "string", description: "Optional Polymarket market id for detail/orderbook/preview/monitor." },
         outcome: { type: "string", description: "Optional outcome label such as Yes or No." },
         side: { type: "string", enum: ["yes", "no"] },
-        amountUsdc: { oneOf: [{ type: "number" }, { type: "string" }], description: "USDC notional for a bet preview." },
+        amountUsdc: { oneOf: [{ type: "number" }, { type: "string" }], description: "Legacy field name for the pUSD notional in a Polymarket CLOB V2 preview." },
         slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
         limit: { type: "number" },
       },

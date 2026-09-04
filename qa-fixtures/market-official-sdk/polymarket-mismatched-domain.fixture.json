@@ -1,7 +1,7 @@
 {
   "domain": {
     "name": "Polymarket CTF Exchange",
-    "version": "1",
+    "version": "2",
     "chainId": 80002,
     "verifyingContract": "0x0000000000000000000000000000000000000002"
   },

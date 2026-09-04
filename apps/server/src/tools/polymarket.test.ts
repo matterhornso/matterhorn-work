@@ -22,6 +22,7 @@ import {
   preparePolymarketOrderFromRequest,
   preparePolymarketOrderPreview,
   preparePolymarketSellPreviewFromRequest,
+  readPolymarketExchangeConfig,
   sanitizePolymarketSearchQuery,
   validatePolymarketRedactedArtifactEnvelope,
   verifyPolymarketReceipt,
@@ -329,7 +330,7 @@ describe("Polymarket chat workflow", () => {
 });
 
 describe("Polymarket preview math", () => {
-  test("estimatePolymarketFill walks asks for a USDC buy", () => {
+  test("estimatePolymarketFill walks asks for a pUSD buy", () => {
     const asks: PolymarketBookLevel[] = [
       { price: 0.63, size: 200, raw: null },
       { price: 0.64, size: 300, raw: null },
@@ -571,7 +572,7 @@ describe("Polymarket external-signer handoff + receipt", () => {
   });
 
   test("Phase 1 sign request requires explicit testnet mode and remains non-submittable", async () => {
-    const exchange = { chainId: 80002, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "1" };
+    const exchange = { chainId: 80002, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "2" };
     const { handoff, signRequest } = await preparePolymarketExternalSignRequestFromRequest(
       { marketId: "0xmarket-ai", side: "yes", amountUsdc: 10, executionMode: "testnet_external_signer" },
       provider({ blocked: false }),
@@ -604,7 +605,7 @@ describe("Polymarket external-signer handoff + receipt", () => {
   });
 
   test("Phase 2 validates redacted artifact metadata and emits a public receipt candidate", async () => {
-    const exchange = { chainId: 80002, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "1" };
+    const exchange = { chainId: 80002, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "2" };
     const { signRequest } = await preparePolymarketExternalSignRequestFromRequest(
       { marketId: "0xmarket-ai", side: "yes", amountUsdc: 10, executionMode: "testnet_external_signer" },
       provider({ blocked: false }),
@@ -645,7 +646,7 @@ describe("Polymarket external-signer handoff + receipt", () => {
   });
 
   test("Phase 2 rejects hash mismatch and raw artifact material", async () => {
-    const exchange = { chainId: 80002, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "1" };
+    const exchange = { chainId: 80002, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "2" };
     const { signRequest } = await preparePolymarketExternalSignRequestFromRequest(
       { marketId: "0xmarket-ai", side: "yes", amountUsdc: 10, executionMode: "testnet_external_signer" },
       provider({ blocked: false }),
@@ -738,7 +739,7 @@ describe("Polymarket request coercion", () => {
 });
 
 describe("Polymarket EIP-712 order typed-data", () => {
-  const exchange = { chainId: 137, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "1" };
+  const exchange = { chainId: 137, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "2" };
 
   test("builds a well-formed, validation-flagged template", () => {
     const td = buildPolymarketOrderTypedData({ tokenId: "12345", amountUsdc: 10, price: 0.5, side: "yes", exchange });
@@ -748,9 +749,29 @@ describe("Polymarket EIP-712 order typed-data", () => {
     expect(td.domain.chainId).toBe(137);
     expect(td.domain.verifyingContract).toBe(exchange.verifyingContract);
     expect(td.message.tokenId).toBe("12345");
-    expect(td.message.makerAmount).toBe("10000000"); // 10 USDC * 1e6
+    expect(td.message.makerAmount).toBe("10000000"); // 10 pUSD * 1e6
     expect(td.message.takerAmount).toBe("20000000"); // 10/0.5 = 20 shares * 1e6
     expect(td.message.side).toBe(0); // BUY
+    expect(td.message.timestamp).toBe("0");
+    expect(td.message.metadata).toMatch(/^0x0{64}$/);
+    expect(td.message.builder).toMatch(/^0x0{64}$/);
+    expect(td.types.Order.map((field) => field.name)).toEqual([
+      "salt",
+      "maker",
+      "signer",
+      "tokenId",
+      "makerAmount",
+      "takerAmount",
+      "side",
+      "signatureType",
+      "timestamp",
+      "metadata",
+      "builder",
+    ]);
+    expect(td.message).not.toHaveProperty("nonce");
+    expect(td.message).not.toHaveProperty("feeRateBps");
+    expect(td.message).not.toHaveProperty("taker");
+    expect(td.message).not.toHaveProperty("expiration");
     expect(td.walletMustSet).toContain("maker");
     expect(td.walletMustSet).toContain("salt");
     // viem accepts the structure (proves the EIP-712 template is internally well-formed).
@@ -761,6 +782,41 @@ describe("Polymarket EIP-712 order typed-data", () => {
       message: td.message,
     });
     expect(digest).toMatch(/^0x[a-f0-9]{64}$/);
+  });
+
+  test("loads only an exact CLOB V2 exchange domain on supported Polygon networks", () => {
+    const snapshot = {
+      address: process.env.POLYMARKET_EXCHANGE_ADDRESS,
+      chainId: process.env.POLYMARKET_CHAIN_ID,
+      name: process.env.POLYMARKET_EXCHANGE_DOMAIN_NAME,
+      version: process.env.POLYMARKET_EXCHANGE_DOMAIN_VERSION,
+    };
+    try {
+      process.env.POLYMARKET_EXCHANGE_ADDRESS = exchange.verifyingContract;
+      process.env.POLYMARKET_CHAIN_ID = "137";
+      process.env.POLYMARKET_EXCHANGE_DOMAIN_NAME = "Polymarket CTF Exchange";
+      process.env.POLYMARKET_EXCHANGE_DOMAIN_VERSION = "2";
+      expect(readPolymarketExchangeConfig()).toEqual(exchange);
+
+      process.env.POLYMARKET_EXCHANGE_DOMAIN_VERSION = "1";
+      expect(readPolymarketExchangeConfig()).toBeNull();
+      process.env.POLYMARKET_EXCHANGE_DOMAIN_VERSION = "2";
+      process.env.POLYMARKET_CHAIN_ID = "1";
+      expect(readPolymarketExchangeConfig()).toBeNull();
+      process.env.POLYMARKET_CHAIN_ID = "80002";
+      expect(readPolymarketExchangeConfig()?.chainId).toBe(80002);
+      process.env.POLYMARKET_EXCHANGE_DOMAIN_NAME = "Unexpected Exchange";
+      expect(readPolymarketExchangeConfig()).toBeNull();
+    } finally {
+      const restore = (key: string, value: string | undefined) => {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      };
+      restore("POLYMARKET_EXCHANGE_ADDRESS", snapshot.address);
+      restore("POLYMARKET_CHAIN_ID", snapshot.chainId);
+      restore("POLYMARKET_EXCHANGE_DOMAIN_NAME", snapshot.name);
+      restore("POLYMARKET_EXCHANGE_DOMAIN_VERSION", snapshot.version);
+    }
   });
 
   test("handoff attaches typed-data only when an exchange is configured", async () => {

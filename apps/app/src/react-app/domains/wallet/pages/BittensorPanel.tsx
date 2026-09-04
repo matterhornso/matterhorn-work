@@ -31,6 +31,7 @@ import {
   POLYMARKET_CHAIN_ID,
   POLYMARKET_CANCEL_ALL_CONFIRMATION,
   POLYMARKET_CANCEL_CONFIRMATION,
+  POLYMARKET_COLLATERAL_SYMBOL,
   POLYMARKET_LIVE_CONFIRMATION,
   assertPolymarketUserCanPlaceOrders,
   cancelPolymarketOrders,
@@ -1804,7 +1805,7 @@ function PolymarketTradeExecution({
       return;
     }
     if (tradeAction === "BUY" && !(amount > 0)) {
-      setTradeError("Enter a positive USDC amount to spend.");
+      setTradeError(`Enter a positive ${POLYMARKET_COLLATERAL_SYMBOL} amount to spend.`);
       return;
     }
     if (tradeAction === "SELL" && !(shares > 0)) {
@@ -2203,7 +2204,7 @@ function PolymarketTradeExecution({
           </label>
         )}
         <label className="space-y-1.5 text-xs text-dls-secondary">
-          {tradeAction === "BUY" ? "Amount (USDC)" : "Shares to sell"}
+          {tradeAction === "BUY" ? "Amount (Polymarket USD)" : "Shares to sell"}
           <Input
             value={tradeAction === "BUY" ? amountUsdc : amountShares}
             inputMode="decimal"
@@ -2233,16 +2234,16 @@ function PolymarketTradeExecution({
           <p className="text-xs font-medium leading-5 text-dls-text">{prepared.marketLabel}</p>
           <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs sm:grid-cols-3">
             {(prepared.tradeSide === "BUY" ? [
-              ["Spend", `$${(prepared.amountUsdc ?? 0).toFixed(2)} USDC`],
+              ["Spend", `${(prepared.amountUsdc ?? 0).toFixed(2)} ${POLYMARKET_COLLATERAL_SYMBOL}`],
               ["Estimated fill", prepared.estimatedFillPrice === null ? "Unavailable" : `${(prepared.estimatedFillPrice * 100).toFixed(1)}¢`],
               ["Estimated shares", prepared.estimatedShares?.toFixed(3) ?? "Unavailable"],
-              ["Maximum loss", `$${(prepared.maxLossUsdc ?? 0).toFixed(2)}`],
+              ["Maximum loss", `${(prepared.maxLossUsdc ?? 0).toFixed(2)} ${POLYMARKET_COLLATERAL_SYMBOL}`],
               ["Network", "Polygon · real funds"],
               ["Expires", new Date(prepared.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })],
             ] : [
               ["Shares", (prepared.amountShares ?? 0).toFixed(3)],
               ["Estimated fill", prepared.estimatedFillPrice === null ? "Unavailable" : `${(prepared.estimatedFillPrice * 100).toFixed(1)}¢`],
-              ["Estimated proceeds", prepared.estimatedProceedsUsdc === null ? "Unavailable" : `$${prepared.estimatedProceedsUsdc.toFixed(2)} USDC`],
+              ["Estimated proceeds", prepared.estimatedProceedsUsdc === null ? "Unavailable" : `${prepared.estimatedProceedsUsdc.toFixed(2)} ${POLYMARKET_COLLATERAL_SYMBOL}`],
               ["Network", "Polygon · real funds"],
               ["Expires", new Date(prepared.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })],
             ]).map(([label, value]) => (
@@ -2309,7 +2310,7 @@ function PolymarketTradeExecution({
       {coworkerReceiptWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Coworker history not updated">{coworkerReceiptWarning}</Notice> : null}
       {tradeError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Polymarket order">{tradeError}</Notice> : null}
       <p className="text-[11px] leading-5 text-dls-secondary">
-        Browser-wallet EOA accounts are supported in this release. The temporary CLOB credential exists only in memory for this submission and is cleared immediately afterward.
+        Browser-wallet EOA accounts are supported in this release. Orders use Polymarket&apos;s current CLOB V2 and pUSD collateral. The temporary CLOB credential exists only in memory for this submission and is cleared immediately afterward.
       </p>
     </div>
   );

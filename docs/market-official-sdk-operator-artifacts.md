@@ -52,7 +52,7 @@ submission envelopes.
 ## Polymarket Public Artifact
 
 Export public EIP-712 order typed data from an operator-owned
-`@polymarket/clob-client-v2` or `@polymarket/clob-client` Amoy run. Keep only:
+`@polymarket/clob-client-v2` or `py-clob-client-v2` Amoy run. Legacy V1 output is invalid. Keep only:
 
 - `domain.name`
 - `domain.version`

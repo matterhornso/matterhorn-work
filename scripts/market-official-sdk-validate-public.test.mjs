@@ -76,7 +76,7 @@ const mainnet = run([
   "--polymarket-network", "polygon-mainnet",
   "--polymarket-chain-id", "137",
   "--polymarket-exchange-address", "0x0000000000000000000000000000000000000001",
-  "--polymarket-package-version", "4.22.0",
+  "--polymarket-package-version", "1.1.0",
   "--strict",
   "--json",
 ]);
@@ -119,7 +119,7 @@ const testnet = run([
   "--polymarket-network", "polygon-amoy",
   "--polymarket-chain-id", "80002",
   "--polymarket-exchange-address", "0x0000000000000000000000000000000000000001",
-  "--polymarket-package-version", "4.22.0",
+  "--polymarket-package-version", "1.1.0",
   "--strict",
   "--json",
 ]);
