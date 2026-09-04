@@ -184,6 +184,160 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(tool?.inputSchema.properties.network?.enum).toEqual(["testnet", "mainnet"]);
   });
 
+  test("advertises exact certified Polymarket wallet terms and never falls back to the legacy route", async () => {
+    const listed = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "polymarket-tools", method: "tools/list" },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+    });
+    const body = listed.body as {
+      result: {
+        tools: Array<{
+          name: string;
+          inputSchema: {
+            properties: Record<string, { enum?: string[] }>;
+            required?: string[];
+            additionalProperties?: boolean;
+          };
+        }>;
+      };
+    };
+    const tool = body.result.tools.find((item) => item.name === "matterhorn_polymarket_prepare_handoff");
+    expect(tool?.inputSchema.required).toEqual(["address", "marketId", "tokenId", "outcome", "side"]);
+    expect(tool?.inputSchema.properties.side?.enum).toEqual(["buy", "sell"]);
+    expect(tool?.inputSchema.properties).toHaveProperty("amountUsdc");
+    expect(tool?.inputSchema.properties).toHaveProperty("amountShares");
+    expect(tool?.inputSchema.additionalProperties).toBe(false);
+
+    let legacyCalls = 0;
+    const args = {
+      address: `0x${"1".repeat(40)}`,
+      marketId: `0x${"2".repeat(64)}`,
+      tokenId: "123456789",
+      outcome: "YES",
+      side: "buy",
+      amountUsdc: "10",
+      slippageTolerance: "2",
+    };
+    const unbound = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: "polymarket-unbound",
+        method: "tools/call",
+        params: { name: "matterhorn_polymarket_prepare_handoff", arguments: args },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      fetchImpl: Object.assign(async () => {
+        legacyCalls += 1;
+        throw new Error("legacy_route_must_not_run");
+      }, { preconnect: fetch.preconnect }),
+    });
+    expect(legacyCalls).toBe(0);
+    expect(unbound.body).toMatchObject({
+      error: { code: -32603, message: "certified_crypto_app_required" },
+    });
+  });
+
+  test("routes exact Polymarket wallet terms only through the certified coworker executor", async () => {
+    const args = {
+      address: `0x${"1".repeat(40)}`,
+      marketId: `0x${"2".repeat(64)}`,
+      tokenId: "123456789",
+      outcome: "YES",
+      side: "buy",
+      amountUsdc: "10",
+      slippageTolerance: "2",
+    };
+    const reviewedAction = buildReviewedActionHandoffV2({
+      handoff: {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "polymarket",
+        source: "agent-card",
+        draft: {
+          operation: "buy",
+          marketId: args.marketId,
+          tokenId: args.tokenId,
+          outcome: args.outcome,
+          orderType: "FAK",
+          limitPrice: 0.51,
+          tickSize: "0.01",
+          negativeRisk: false,
+          amountUsdc: 10,
+          amountShares: null,
+          slippageTolerance: 2,
+          orderIds: [],
+          cancelAll: false,
+        },
+      },
+      runId: "run_polymarket_prepare",
+      signer: args.address,
+      simulation: {
+        reference: `sha256:${"a".repeat(64)}`,
+        block: "clob:snapshot-101",
+        simulatedAt: new Date("2026-09-01T12:00:00.000Z"),
+      },
+      preparedAt: new Date("2026-09-01T12:00:00.000Z"),
+    });
+    let legacyCalls = 0;
+    let certifiedCalls = 0;
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: "polymarket-certified",
+        method: "tools/call",
+        params: { name: "matterhorn_polymarket_prepare_handoff", arguments: args },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      authorizeToolCall: () => ({
+        args,
+        runId: "run_polymarket_prepare",
+        callId: "call_polymarket_prepare",
+        workspaceId: "ws_polymarket",
+        sessionId: "ses_polymarket",
+        coworker: {
+          id: "cw_polymarket",
+          ownerId: "account_polymarket",
+          revision: 1,
+          policyVersion: "coworker-policy-1",
+          connectionId: "cxc_polymarket",
+          appId: "matterhorn.polymarket-wallet-preview",
+          manifestRevision: "1.0.0",
+          actionId: "polymarket_preview_order",
+          network: "polymarket:polygon",
+        },
+      }),
+      executeCertifiedTool: async (input) => {
+        certifiedCalls += 1;
+        expect(input.args).toEqual(args);
+        return {
+          version: "matterhorn.crypto-wallet-review-result.v1",
+          status: "wallet_review_required",
+          reviewedAction,
+          pendingIntent: { id: "cpending_polymarket", revision: 1, state: "wallet_review" },
+        };
+      },
+      fetchImpl: Object.assign(async () => {
+        legacyCalls += 1;
+        throw new Error("legacy_route_must_not_run");
+      }, { preconnect: fetch.preconnect }),
+    });
+    expect(certifiedCalls).toBe(1);
+    expect(legacyCalls).toBe(0);
+    expect(result).toMatchObject({
+      status: 200,
+      body: {
+        result: {
+          structuredContent: {
+            status: "success",
+            reviewedAction: { intentHash: reviewedAction.intentHash },
+          },
+        },
+      },
+    });
+  });
+
   test("forwards the Sui decimal amount using amountSui", async () => {
     let observedBody: unknown = null;
     const result = await handleManagedOpencodeMcp({
