@@ -1,7 +1,18 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  constants as fsConstants,
+  fstatSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -111,8 +122,13 @@ try {
     "--now", now,
   ], { encoding: "utf8" });
   assert.equal(template.status, 0, template.stderr);
-  assert.equal(statSync(templatePath).mode & 0o777, 0o600);
-  assert.equal(JSON.parse(readFileSync(templatePath, "utf8")).provider.status, "pending");
+  const templateDescriptor = openSync(templatePath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+  try {
+    assert.equal(fstatSync(templateDescriptor).mode & 0o777, 0o600);
+    assert.equal(JSON.parse(readFileSync(templateDescriptor, "utf8")).provider.status, "pending");
+  } finally {
+    closeSync(templateDescriptor);
+  }
   const overwrite = spawnSync(process.execPath, [
     "scripts/venice-private-hosted-acceptance.mjs", "template",
     "--expected-commit", commit,

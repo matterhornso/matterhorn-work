@@ -227,19 +227,20 @@ function rejectDuplicateJsonKeys(text) {
 }
 
 function readInputJson(path) {
-  const pathStat = lstatSync(path);
-  if (pathStat.isSymbolicLink() || !pathStat.isFile()) {
-    throw new Error("Acceptance input must be a regular non-symlink file.");
-  }
   let descriptor;
   try {
-    descriptor = openSync(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+    try {
+      descriptor = openSync(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+    } catch {
+      throw new Error("Acceptance input must be an available regular non-symlink file.");
+    }
     const before = fstatSync(descriptor);
     if (!before.isFile() || before.size <= 0 || before.size > MAX_INPUT_BYTES) {
       throw new Error("Acceptance input must be non-empty and no larger than 256 KiB.");
     }
-    if (pathStat.dev !== before.dev || pathStat.ino !== before.ino) {
-      throw new Error("Acceptance input changed before it was read.");
+    const openedPathStat = lstatSync(path);
+    if (openedPathStat.isSymbolicLink() || openedPathStat.dev !== before.dev || openedPathStat.ino !== before.ino) {
+      throw new Error("Acceptance input must be a regular non-symlink file.");
     }
     const bytes = readFileSync(descriptor);
     const after = fstatSync(descriptor);
