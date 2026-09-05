@@ -14,6 +14,8 @@ const original = {
   signingSecret: process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET,
   dataDir: process.env.OPENWORK_DATA_DIR,
 };
+const PROJECTION_HASH = "a".repeat(64);
+const OBSERVATION_HASH = "b".repeat(64);
 let root = "";
 
 beforeAll(async () => {
@@ -253,6 +255,8 @@ describe("guarded crypto app authorization bridge", () => {
         observedAt: "2026-09-01T12:00:00.000Z",
         ageMs: 750,
         freshnessMaxAgeMs: 30_000,
+        projectionHash: PROJECTION_HASH,
+        observationHash: OBSERVATION_HASH,
       },
     });
     const receipt = await app.runtime.receipts.get("ws_sui", app.runId);
@@ -266,6 +270,8 @@ describe("guarded crypto app authorization bridge", () => {
         observedAt: "2026-09-01T12:00:00.000Z",
         ageMs: 750,
         freshnessMaxAgeMs: 30_000,
+        projectionHash: PROJECTION_HASH,
+        observationHash: OBSERVATION_HASH,
       },
     }));
     expect(receipt?.capabilities.some((decision) => decision.callId === "call_sui_balance" && decision.decision === "allowed")).toBe(true);
@@ -279,6 +285,8 @@ describe("guarded crypto app authorization bridge", () => {
         observedAt: "2026-09-01T12:00:00.000Z",
         ageMs: 750,
         freshnessMaxAgeMs: 30_000,
+        projectionHash: PROJECTION_HASH,
+        observationHash: OBSERVATION_HASH,
       },
     })).rejects.toThrow("crypto_app_reservation_unknown_or_replayed");
     app.reservationStore.close();
@@ -298,8 +306,25 @@ describe("guarded crypto app authorization bridge", () => {
         observedAt: "2026-09-01T12:00:00.000Z",
         ageMs: 100,
         freshnessMaxAgeMs: 30_000,
+        projectionHash: PROJECTION_HASH,
+        observationHash: OBSERVATION_HASH,
         query: "must never enter a receipt",
-      } as Parameters<typeof app.authorization.reconcile>[0]["evidence"],
+      } as unknown as Parameters<typeof app.authorization.reconcile>[0]["evidence"],
+    })).rejects.toThrow("crypto_app_reconciliation_invalid");
+
+    await expect(app.authorization.reconcile({
+      reservationId: reserved.reservationId,
+      outcome: "success",
+      costMicros: 0,
+      durationMs: 3,
+      evidence: {
+        delivery: "certified_cache",
+        observedAt: "2026-09-01T12:00:00.000Z",
+        ageMs: 100,
+        freshnessMaxAgeMs: 30_000,
+        projectionHash: "not-a-proof",
+        observationHash: OBSERVATION_HASH,
+      },
     })).rejects.toThrow("crypto_app_reconciliation_invalid");
 
     await app.authorization.reconcile({
@@ -312,12 +337,19 @@ describe("guarded crypto app authorization bridge", () => {
         observedAt: "2026-09-01T12:00:00.000Z",
         ageMs: 100,
         freshnessMaxAgeMs: 30_000,
+        projectionHash: PROJECTION_HASH,
+        observationHash: OBSERVATION_HASH,
       },
     });
     const receipt = await app.runtime.receipts.get("ws_sui", app.runId);
     expect(JSON.stringify(receipt)).not.toContain("must never enter a receipt");
     expect(receipt?.tools).toContainEqual(expect.objectContaining({
-      evidence: expect.objectContaining({ delivery: "live", ageMs: 100 }),
+      evidence: expect.objectContaining({
+        delivery: "live",
+        ageMs: 100,
+        projectionHash: PROJECTION_HASH,
+        observationHash: OBSERVATION_HASH,
+      }),
     }));
     app.reservationStore.close();
     app.runtime.close();

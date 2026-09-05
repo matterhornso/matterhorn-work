@@ -178,6 +178,45 @@ function publicEvidenceCacheEligible(input: {
     && input.credential.type === "none";
 }
 
+function evidenceReceiptMetadata(input: {
+  delivery: "live" | "certified_cache";
+  appId: string;
+  manifestRevision: string;
+  actionId: string;
+  network: string;
+  result: unknown;
+  observation: MatterhornCryptoAppResult["observation"];
+}): NonNullable<MatterhornAgentToolReceipt["evidence"]> {
+  const projectionHash = sha256({
+    domain: "matterhorn:crypto-app-projection:v1",
+    appId: input.appId,
+    manifestRevision: input.manifestRevision,
+    actionId: input.actionId,
+    network: input.network,
+    result: input.result,
+  });
+  return {
+    delivery: input.delivery,
+    observedAt: input.observation.observedAt,
+    ageMs: input.observation.ageMs,
+    freshnessMaxAgeMs: input.observation.freshnessMaxAgeMs,
+    projectionHash,
+    observationHash: sha256({
+      domain: "matterhorn:crypto-app-observation:v1",
+      appId: input.appId,
+      manifestRevision: input.manifestRevision,
+      actionId: input.actionId,
+      network: input.network,
+      observation: {
+        source: input.observation.source,
+        observedAt: input.observation.observedAt,
+        blockOrVersion: input.observation.blockOrVersion,
+      },
+      projectionHash,
+    }),
+  };
+}
+
 function executionEnvelopeValid(value: unknown): value is MatterhornCryptoAppAdapterExecution {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const execution = value as Partial<MatterhornCryptoAppAdapterExecution>;
@@ -414,18 +453,26 @@ export class MatterhornCryptoAppAdapterRouter {
         throw new MatterhornCryptoAppAdapterError("adapter_output_stale");
       }
       const durationMs = Math.max(0, completedAt.getTime() - startedAt.getTime());
+      const observation = {
+        ...structuredClone(cached.value.observation),
+        ageMs,
+        freshnessMaxAgeMs: action.freshnessMaxAgeMs,
+      };
       await this.#reconcile(
         reservationId,
         operationalReservation,
         "success",
         0,
         durationMs,
-        {
+        evidenceReceiptMetadata({
           delivery: "certified_cache",
-          observedAt: cached.value.observation.observedAt,
-          ageMs,
-          freshnessMaxAgeMs: action.freshnessMaxAgeMs,
-        },
+          appId: connection.appId,
+          manifestRevision: connection.manifestRevision,
+          actionId: action.id,
+          network: request.network,
+          result: cached.value.result,
+          observation,
+        }),
       );
       return {
         version: MATTERHORN_CRYPTO_APP_RESULT_VERSION,
@@ -440,11 +487,7 @@ export class MatterhornCryptoAppAdapterRouter {
           completedAt: completedAt.toISOString(),
           durationMs,
         },
-        observation: {
-          ...structuredClone(cached.value.observation),
-          ageMs,
-          freshnessMaxAgeMs: action.freshnessMaxAgeMs,
-        },
+        observation,
         provenance: {
           ...structuredClone(cached.value.provenance),
           delivery: "certified_cache",
@@ -560,26 +603,36 @@ export class MatterhornCryptoAppAdapterRouter {
       throw new MatterhornCryptoAppAdapterError("adapter_output_stale");
     }
 
+    const safeSource = quarantineUntrustedContent(execution.source);
+    const safeBlockOrVersion = execution.blockOrVersion === null
+      ? null
+      : quarantineUntrustedContent(execution.blockOrVersion);
+    const observation: MatterhornCryptoAppResult["observation"] = {
+      source: typeof safeSource === "string" ? safeSource : "[Matterhorn quarantined external source]",
+      observedAt: observedAt?.toISOString() ?? null,
+      blockOrVersion: typeof safeBlockOrVersion === "string" ? safeBlockOrVersion : null,
+      ageMs,
+      freshnessMaxAgeMs: action.freshnessMaxAgeMs,
+    };
     await this.#reconcile(
       reservationId,
       operationalReservation,
       "success",
       execution.costMicros,
       durationMs,
-      {
+      evidenceReceiptMetadata({
         delivery: "live",
-        observedAt: observedAt?.toISOString() ?? null,
-        ageMs,
-        freshnessMaxAgeMs: action.freshnessMaxAgeMs,
-      },
+        appId: connection.appId,
+        manifestRevision: connection.manifestRevision,
+        actionId: action.id,
+        network: request.network,
+        result: quarantined,
+        observation,
+      }),
     );
     if (!this.#recordSuccess(request.workspaceId, circuitKey)) {
       throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
     }
-    const safeSource = quarantineUntrustedContent(execution.source);
-    const safeBlockOrVersion = execution.blockOrVersion === null
-      ? null
-      : quarantineUntrustedContent(execution.blockOrVersion);
     const result: MatterhornCryptoAppResult = {
       version: MATTERHORN_CRYPTO_APP_RESULT_VERSION,
       app: {
@@ -593,13 +646,7 @@ export class MatterhornCryptoAppAdapterRouter {
         completedAt: completedAt.toISOString(),
         durationMs,
       },
-      observation: {
-        source: typeof safeSource === "string" ? safeSource : "[Matterhorn quarantined external source]",
-        observedAt: observedAt?.toISOString() ?? null,
-        blockOrVersion: typeof safeBlockOrVersion === "string" ? safeBlockOrVersion : null,
-        ageMs,
-        freshnessMaxAgeMs: action.freshnessMaxAgeMs,
-      },
+      observation,
       provenance: {
         trust: "untrusted_external",
         sanitization: untrustedContentChanged(projected.value, quarantined) ? "quarantined" : "typed_projection",

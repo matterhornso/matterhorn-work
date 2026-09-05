@@ -60,6 +60,8 @@ function validEvidenceMetadata(value: MatterhornAgentToolReceipt["evidence"]): b
     "observedAt",
     "ageMs",
     "freshnessMaxAgeMs",
+    "projectionHash",
+    "observationHash",
   ].includes(key))) return false;
   if (value.delivery !== "live" && value.delivery !== "certified_cache") return false;
   if (value.observedAt !== null) {
@@ -71,6 +73,10 @@ function validEvidenceMetadata(value: MatterhornAgentToolReceipt["evidence"]): b
     && (!Number.isSafeInteger(value.ageMs) || value.ageMs < -60_000)) return false;
   if (value.freshnessMaxAgeMs !== null
     && (!Number.isSafeInteger(value.freshnessMaxAgeMs) || value.freshnessMaxAgeMs < 1)) return false;
+  if (typeof value.projectionHash !== "string"
+    || typeof value.observationHash !== "string"
+    || !/^[a-f0-9]{64}$/.test(value.projectionHash)
+    || !/^[a-f0-9]{64}$/.test(value.observationHash)) return false;
   return true;
 }
 

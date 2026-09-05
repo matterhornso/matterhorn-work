@@ -277,15 +277,32 @@ describe("certified crypto app adapter router", () => {
         reservationId: "reservation_1",
         outcome: "success",
         costMicros: 600,
-        evidence: expect.objectContaining({ delivery: "live", ageMs: 0, freshnessMaxAgeMs: 30_000 }),
+        evidence: expect.objectContaining({
+          delivery: "live",
+          ageMs: 0,
+          freshnessMaxAgeMs: 30_000,
+          projectionHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          observationHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
       }),
       expect.objectContaining({
         reservationId: "reservation_2",
         outcome: "success",
         costMicros: 0,
-        evidence: expect.objectContaining({ delivery: "certified_cache", ageMs: 0, freshnessMaxAgeMs: 30_000 }),
+        evidence: expect.objectContaining({
+          delivery: "certified_cache",
+          ageMs: 0,
+          freshnessMaxAgeMs: 30_000,
+          projectionHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          observationHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
       }),
     ]);
+    const [liveReconciliation, cachedReconciliation] = app.reconciliationCalls as Array<{
+      evidence: { projectionHash: string; observationHash: string };
+    }>;
+    expect(cachedReconciliation?.evidence.projectionHash).toBe(liveReconciliation?.evidence.projectionHash);
+    expect(cachedReconciliation?.evidence.observationHash).toBe(liveReconciliation?.evidence.observationHash);
     expect(first.provenance.delivery).toBe("live");
     expect(second.provenance.delivery).toBe("certified_cache");
     expect(second).toMatchObject({
