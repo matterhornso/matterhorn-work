@@ -203,7 +203,13 @@ function normalizeProviderSystemContext(
 function normalizeRuntimeProviderMessages(
   messages: unknown,
   expectedSessionId: string,
-): { inspectionText: string; messagesHash: string } {
+): {
+  inspectionText: string;
+  userIntentText: string;
+  hasAttachment: boolean;
+  hasToolOutput: boolean;
+  messagesHash: string;
+} {
   if (!Array.isArray(messages) || messages.length === 0 || messages.length > PROVIDER_MESSAGES_MAX_COUNT) {
     throw new GuardedRuntimeError(
       400,
@@ -211,6 +217,9 @@ function normalizeRuntimeProviderMessages(
       "The final provider messages are invalid.",
     );
   }
+  const userIntentParts: unknown[] = [];
+  let hasAttachment = false;
+  let hasToolOutput = false;
   for (const message of messages) {
     if (!message || typeof message !== "object" || Array.isArray(message)) {
       throw new GuardedRuntimeError(400, "agent_provider_messages_invalid", "The final provider messages are invalid.");
@@ -227,10 +236,33 @@ function normalizeRuntimeProviderMessages(
         "The final provider messages are not bound to this chat.",
       );
     }
+    const role = Reflect.get(info, "role");
+    for (const part of parts) {
+      if (!part || typeof part !== "object" || Array.isArray(part)) {
+        throw new GuardedRuntimeError(
+          400,
+          "agent_provider_messages_invalid",
+          "The final provider messages are invalid.",
+        );
+      }
+      const type = Reflect.get(part, "type");
+      if (typeof type !== "string" || !type.trim()) {
+        throw new GuardedRuntimeError(
+          400,
+          "agent_provider_messages_invalid",
+          "The final provider messages are invalid.",
+        );
+      }
+      if (role === "user") userIntentParts.push(part);
+      if (type === "file" || type === "attachment") hasAttachment = true;
+      if (type === "tool") hasToolOutput = true;
+    }
   }
   let inspectionText = "";
+  let userIntentText = "";
   try {
     inspectionText = JSON.stringify(messages);
+    userIntentText = JSON.stringify(userIntentParts);
   } catch {
     throw new GuardedRuntimeError(400, "agent_provider_messages_invalid", "The final provider messages are invalid.");
   }
@@ -241,7 +273,13 @@ function normalizeRuntimeProviderMessages(
       "The final provider messages are too large to verify safely.",
     );
   }
-  return { inspectionText, messagesHash: sha256(inspectionText) };
+  return {
+    inspectionText,
+    userIntentText,
+    hasAttachment,
+    hasToolOutput,
+    messagesHash: sha256(inspectionText),
+  };
 }
 
 function selectedContextCounts(input: GuardedPromptInput): NonNullable<MatterhornAgentRunReceipt["context"]> {
@@ -858,15 +896,38 @@ export class MatterhornGuardedAgentRuntime {
       );
     }
     const normalized = normalizeRuntimeProviderMessages(input.messages, input.sessionId);
+    const privacyParts: MatterhornAgentPrivacyPart[] = [{
+      type: "final_provider_messages",
+      text: normalized.inspectionText,
+      source: "system",
+      label: sessionHistoryLabel(context.effectiveMode),
+    }];
+    if (normalized.userIntentText && normalized.userIntentText !== "[]") {
+      privacyParts.push({
+        type: "final_provider_user_intent",
+        text: normalized.userIntentText,
+        source: "composer",
+        label: sessionHistoryLabel(context.effectiveMode),
+      });
+    }
+    if (normalized.hasAttachment) {
+      privacyParts.push({
+        type: "attachment",
+        source: "attachment",
+        label: "workspace_private",
+      });
+    }
+    if (normalized.hasToolOutput) {
+      privacyParts.push({
+        type: "final_provider_tool_output",
+        source: "tool",
+        label: "untrusted_external",
+      });
+    }
     const evaluation = this.privacy.preflight({
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
-      parts: [{
-        type: "final_provider_messages",
-        text: normalized.inspectionText,
-        source: "system",
-        label: sessionHistoryLabel(context.effectiveMode),
-      }],
+      parts: privacyParts,
       providerId: context.providerId,
       providerName: context.provider.name,
       modelId: context.modelId,

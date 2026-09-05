@@ -14,10 +14,11 @@ tool access, reviewed transaction terms, retention, and security receipts.
 - Immediately before that release, the same last plugin submits OpenCode's
   exact final message array to a runtime-only endpoint. Matterhorn bounds and
   scans every restored user/assistant part and tool result, rejects mixed-chat
-  arrays and late-added secrets, rechecks the accepted provider policy, and
-  records only a SHA-256 digest in transient memory. One validation authorizes
-  one immediate system release and expires after 30 seconds; a retry or tool
-  continuation must validate its new final array again.
+  arrays and late-added secrets, attachments, or wallet/transaction intent,
+  marks tool output as untrusted external data, rechecks the accepted provider
+  policy, and records only a SHA-256 digest in transient memory. One validation
+  authorizes one immediate system release and expires after 30 seconds; a retry
+  or tool continuation must validate its new final array again.
 - OpenCode's provider-backed automatic title agent is disabled in hosted
   configuration because upstream starts it before the final-message hook. Chat
   names remain deterministic and user-editable; titles cannot race or bypass

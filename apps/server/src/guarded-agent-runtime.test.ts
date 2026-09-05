@@ -1424,6 +1424,60 @@ describe("guarded agent runtime transport", () => {
     runtime.close();
   });
 
+  test("rejects private attachments and wallet intent introduced after public preflight", async () => {
+    for (const [suffix, parts] of [
+      ["attachment", [{ type: "file", mime: "text/plain", url: "data:text/plain;base64,cHJpdmF0ZQ==" }]],
+      ["wallet", [{
+        type: "text",
+        text: "Transfer 1 SUI to recipient 0x1111111111111111111111111111111111111111111111111111111111111111",
+      }]],
+    ] as const) {
+      const runtime = new MatterhornGuardedAgentRuntime();
+      const system = "Matterhorn-approved public research context.";
+      const input = {
+        workspaceId: `ws_provider_message_${suffix}`,
+        sessionId: `ses_provider_message_${suffix}`,
+        parts: [{
+          type: "system_context" as const,
+          text: system,
+          source: "system" as const,
+          label: "public" as const,
+          contentHash: sha256(system),
+        }, {
+          type: "provider_system_manifest" as const,
+          source: "system" as const,
+          label: "public" as const,
+          contentHash: sha256(system),
+          version: "matterhorn.provider-system.message.v1",
+        }],
+        providerId: "cudos",
+        modelId: "asi1-mini",
+        executionMode: "work" as const,
+      };
+      const authorization = runtime.authorizePrompt(input);
+      await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+
+      expect(() => runtime.validateRuntimeProviderMessages({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        messages: [{
+          info: { role: "user", sessionID: input.sessionId },
+          parts,
+        }],
+      })).toThrow("became more sensitive");
+      expect(() => runtime.resolveRuntimeProviderSystem({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        providerId: input.providerId,
+        modelId: input.modelId,
+        purpose: "message",
+      })).toThrow("Provider system context is not bound");
+      runtime.close();
+    }
+  });
+
   test("rejects final messages when the accepted provider policy changes", async () => {
     const keys = [
       "MATTERHORN_CUDOS_TRAINING_USE",
