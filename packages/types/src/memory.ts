@@ -119,6 +119,14 @@ export const FORBIDDEN_MEMORY_SECRET_FIELD_NAMES = [
   "mnemonic",
   "apiSecret",
   "api_secret",
+  "apiKey",
+  "api_key",
+  "accessToken",
+  "access_token",
+  "authorization",
+  "cookie",
+  "password",
+  "passphrase",
   "rawSignature",
   "raw_signature",
   "signedPayload",
@@ -157,7 +165,7 @@ const CRYPTO_SECRET_TEXT_PATTERNS = [
 ];
 const CRYPTO_32_BYTE_TOKEN = /\b(?:0x)?[a-f0-9]{64}\b/gi;
 const PUBLIC_CRYPTO_TEXT_CONTEXT = /"?(?:transaction|tx|block|object|receipt|content)?[ _-]*(?:hash|digest|address|account|checksum|sha-?256|public[ _-]?key|transaction[ _-]?signature)"?\s*[:=]\s*["']?\s*$/i;
-const PUBLIC_CRYPTO_FIELD = /(?:hash|digest|address|account|checksum|sha256|publickey|transactionsignature)$/;
+const PUBLIC_CRYPTO_FIELD = /(?:hash|digest|address|account|checksum|sha256|publickey|transactionsignature|signer|sender|recipient|destination|hotkey|coldkey|objectids?|tokenids?|marketid|eventid)$/;
 const MAX_MEMORY_SECRET_SCAN_CONTAINERS = 4_096;
 const MAX_MEMORY_SECRET_SCAN_NODES = 16_384;
 const MAX_MEMORY_SECRET_SCAN_CHARACTERS = 1_000_000;
@@ -230,7 +238,7 @@ function containsCryptoSecretFormat(value: unknown): boolean {
       if (current.value.some((entry) => typeof entry === "string" && /^[A-Za-z0-9+/]{44}$/.test(entry))) {
         return true;
       }
-      for (const entry of current.value) pending.push({ value: entry, fieldName: null });
+      for (const entry of current.value) pending.push({ value: entry, fieldName: current.fieldName });
       continue;
     }
     if (!isMemoryRecordValue(current.value)) continue;
@@ -293,18 +301,32 @@ function deepStringify(value: unknown): string {
 
 export function findForbiddenMemorySecretFields(body: Record<string, unknown>): string[] {
   const found: string[] = [];
-  const pending: Array<{ value: Record<string, unknown>; prefix: string }> = [{ value: body, prefix: "body" }];
+  const pending: Array<{ value: unknown; prefix: string }> = [{ value: body, prefix: "body" }];
   const seen = new WeakSet<object>();
   let containersInspected = 0;
   let nodesScheduled = 1;
   while (pending.length > 0) {
     const current = pending.pop();
     if (!current) continue;
+    if (!current.value || typeof current.value !== "object") continue;
     if (seen.has(current.value)) return [...found, MEMORY_SECRET_SCAN_LIMIT_PATH];
     seen.add(current.value);
     containersInspected += 1;
     if (containersInspected > MAX_MEMORY_SECRET_SCAN_CONTAINERS) {
       return [...found, MEMORY_SECRET_SCAN_LIMIT_PATH];
+    }
+    if (Array.isArray(current.value)) {
+      nodesScheduled += current.value.length;
+      if (nodesScheduled > MAX_MEMORY_SECRET_SCAN_NODES) {
+        return [...found, MEMORY_SECRET_SCAN_LIMIT_PATH];
+      }
+      for (let index = 0; index < current.value.length; index += 1) {
+        const entry = current.value[index];
+        if (entry && typeof entry === "object") {
+          pending.push({ value: entry, prefix: `${current.prefix}.${index}` });
+        }
+      }
+      continue;
     }
     const entries = Object.entries(current.value);
     nodesScheduled += entries.length;
@@ -317,7 +339,7 @@ export function findForbiddenMemorySecretFields(body: Record<string, unknown>): 
       if (FORBIDDEN_MEMORY_SECRET_FIELD_NAMES.some((forbidden) => keyLower === forbidden.toLowerCase())) {
         found.push(path);
       }
-      if (isMemoryRecordValue(entry)) pending.push({ value: entry, prefix: path });
+      if (entry && typeof entry === "object") pending.push({ value: entry, prefix: path });
     }
   }
   return found;
