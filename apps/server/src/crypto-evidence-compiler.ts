@@ -117,13 +117,19 @@ export function compileMatterhornEvidenceBundle(input: {
           source: tool.source,
           freshness: tool.freshness,
           trust: tool.trust,
+          evidence: tool.evidence ?? null,
         })),
       ),
       evidenceReferenceHashes: hashList(
         "matterhorn:evidence-reference:v1",
         receipt.tools
-          .filter((tool) => tool.source !== null || tool.freshness !== null)
-          .map((tool) => ({ source: tool.source, freshness: tool.freshness, trust: tool.trust })),
+          .filter((tool) => tool.source !== null || tool.freshness !== null || tool.evidence !== undefined)
+          .map((tool) => ({
+            source: tool.source,
+            freshness: tool.freshness,
+            trust: tool.trust,
+            evidence: tool.evidence ?? null,
+          })),
       ),
       reviewedIntentHashes: hashList(
         "matterhorn:evidence-reviewed-intent:v1",

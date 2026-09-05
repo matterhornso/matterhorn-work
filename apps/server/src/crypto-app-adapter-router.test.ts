@@ -273,13 +273,30 @@ describe("certified crypto app adapter router", () => {
     expect(app.executorCalls).toHaveLength(1);
     expect(app.authorizationCalls).toHaveLength(2);
     expect(app.reconciliationCalls).toEqual([
-      expect.objectContaining({ reservationId: "reservation_1", outcome: "success", costMicros: 600 }),
-      expect.objectContaining({ reservationId: "reservation_2", outcome: "success", costMicros: 0 }),
+      expect.objectContaining({
+        reservationId: "reservation_1",
+        outcome: "success",
+        costMicros: 600,
+        evidence: expect.objectContaining({ delivery: "live", ageMs: 0, freshnessMaxAgeMs: 30_000 }),
+      }),
+      expect.objectContaining({
+        reservationId: "reservation_2",
+        outcome: "success",
+        costMicros: 0,
+        evidence: expect.objectContaining({ delivery: "certified_cache", ageMs: 0, freshnessMaxAgeMs: 30_000 }),
+      }),
     ]);
+    expect(first.provenance.delivery).toBe("live");
+    expect(second.provenance.delivery).toBe("certified_cache");
     expect(second).toMatchObject({
       metering: { reservationId: "reservation_2", costMicros: 0 },
       observation: first.observation,
-      provenance: first.provenance,
+      provenance: {
+        trust: first.provenance.trust,
+        sanitization: first.provenance.sanitization,
+        evidenceReference: first.provenance.evidenceReference,
+        delivery: "certified_cache",
+      },
       result: first.result,
     });
 

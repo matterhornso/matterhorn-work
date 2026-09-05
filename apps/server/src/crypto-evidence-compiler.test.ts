@@ -51,6 +51,12 @@ function finalizedReceipt(): MatterhornAgentRunReceipt {
       source: "https://source.example/?credential=must-not-survive-projection",
       freshness: "checkpoint:123",
       trust: "untrusted_external",
+      evidence: {
+        delivery: "live",
+        observedAt: "2026-09-01T00:00:00.900Z",
+        ageMs: 100,
+        freshnessMaxAgeMs: 30_000,
+      },
     }],
     memory: {
       readIds: ["memory_private_user_preference"],
@@ -123,6 +129,33 @@ describe("crypto evidence compiler", () => {
     expect(first.workspaceIdHash).not.toBe(second.workspaceIdHash);
     expect(first.runIdHash).not.toBe(second.runIdHash);
     expect(first.coworkerIdHash).not.toBe(second.coworkerIdHash);
+  });
+
+  test("binds live-versus-cache delivery to encrypted evidence without adding query content", () => {
+    const base = finalizedReceipt();
+    const shared = {
+      coworkerId: "coworker_private_alpha",
+      keyReference: "kms://matterhorn/evidence/key-1",
+      recipientKeyIds: ["workspace-recipient-1"],
+      now: new Date("2026-09-01T01:00:00.000Z"),
+      correlationSalt: Buffer.alloc(32, 4),
+      idEntropy: Buffer.alloc(24, 5),
+    };
+    const live = compileMatterhornEvidenceBundle({ receipt: base, ...shared });
+    const cached = compileMatterhornEvidenceBundle({
+      receipt: {
+        ...base,
+        tools: base.tools.map((tool) => ({
+          ...tool,
+          evidence: tool.evidence ? { ...tool.evidence, delivery: "certified_cache" as const } : undefined,
+        })),
+      },
+      ...shared,
+    });
+
+    expect(live.receipt.toolOutcomeHashes).not.toEqual(cached.receipt.toolOutcomeHashes);
+    expect(live.receipt.evidenceReferenceHashes).not.toEqual(cached.receipt.evidenceReferenceHashes);
+    expect(JSON.stringify(cached)).not.toContain("query");
   });
 
   test("refuses pending receipts and evidence schemas with forbidden or unknown content fields", () => {

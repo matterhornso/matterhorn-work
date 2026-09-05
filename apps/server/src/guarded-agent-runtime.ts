@@ -1223,6 +1223,7 @@ export class MatterhornGuardedAgentRuntime {
     receiptToolName?: string;
     source?: string | null;
     freshness?: string | null;
+    evidence?: MatterhornAgentRunReceipt["tools"][number]["evidence"];
   }): Promise<void> {
     if (!input.runId) return;
     if (!input.callId) throw new GuardedRuntimeError(409, "agent_tool_outcome_not_bound", "The tool result is missing its exact guarded call binding.");
@@ -1246,6 +1247,7 @@ export class MatterhornGuardedAgentRuntime {
         source: input.source ?? input.metric.source ?? null,
         freshness: input.freshness ?? input.metric.freshness ?? null,
         trust: "untrusted_external",
+        ...(input.evidence ? { evidence: structuredClone(input.evidence) } : {}),
       },
       capabilityDecisions: this.capabilities.decisionsForRun(input.runId),
     });

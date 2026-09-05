@@ -79,6 +79,12 @@ const completedReceipt: MatterhornAgentRunReceipt = {
     source: "Hyperliquid",
     freshness: "observed 10 seconds ago",
     trust: "untrusted_external",
+    evidence: {
+      delivery: "certified_cache",
+      observedAt: "2026-09-04T11:59:50.000Z",
+      ageMs: 10_000,
+      freshnessMaxAgeMs: 30_000,
+    },
   }],
   memory: {
     readIds: ["memory_used"],
@@ -166,13 +172,14 @@ describe("plain-language response details", () => {
     expect(html).not.toContain("up to 0 days");
     expect(html).toContain("Shared: workspace information, app and market data.");
     expect(html).toContain("You approved sharing this exact request once. That approval cannot be reused.");
-    expect(html).toContain("Hyperliquid: Completed · Data observed 10 seconds ago");
+    expect(html).toContain("Hyperliquid: Completed · Used recently checked public data · Observed 10s earlier · Data observed 10 seconds ago");
     expect(html).toContain("1 wallet action prepared for review. None was sent.");
     expect(html).toContain("Your connected wallet is the only place that can approve and send a transaction.");
     expect(html).toContain("Matterhorn made 4 crypto actions available for this answer instead of the full 20.");
     expect(html).toContain("2 older context sections shortened or left out.");
     expect(html).toContain("Context compiler: matterhorn.coworker-context-compiler.v2");
     expect(html).toContain("matterhorn_work_hyperliquid_markets · read · untrusted_external · success · 80ms");
+    expect(html).toContain("certified_cache · age 10000ms · freshness limit 30000ms");
     expect(html).toContain("Intent intent-proof · policy policy-proof · simulation simulation-proof · not sent");
     expect(html).not.toContain("workspace_private");
   });
@@ -203,5 +210,16 @@ describe("plain-language response details", () => {
     expect(html).toContain("In progress");
     expect(html).toContain("Still running");
     expect(html).not.toContain("Response time: 0ms");
+  });
+
+  test("keeps legacy receipts readable without inventing evidence delivery", () => {
+    const html = renderReceipt({
+      ...completedReceipt,
+      tools: completedReceipt.tools.map(({ evidence: _evidence, ...tool }) => tool),
+    });
+
+    expect(html).toContain("Hyperliquid: Completed · Data observed 10 seconds ago");
+    expect(html).not.toContain("Fetched from the app");
+    expect(html).not.toContain("Used recently checked public data");
   });
 });

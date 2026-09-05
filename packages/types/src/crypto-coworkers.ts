@@ -276,6 +276,11 @@ export type MatterhornCryptoAppResult = {
     trust: "untrusted_external";
     sanitization: "typed_projection" | "quarantined";
     evidenceReference: string;
+    /**
+     * Content-free delivery provenance. Legacy v1 results may omit this
+     * additive field; current certified executions always set it.
+     */
+    delivery?: "live" | "certified_cache";
   };
   metering: {
     costMicros: number;

@@ -200,6 +200,16 @@ export type MatterhornAgentToolReceipt = {
   source: string | null;
   freshness: string | null;
   trust: "trusted_runtime" | "untrusted_external";
+  /**
+   * Content-free evidence delivery metadata. It deliberately excludes the
+   * query, tool result, wallet identity, and upstream response body.
+   */
+  evidence?: {
+    delivery: "live" | "certified_cache";
+    observedAt: string | null;
+    ageMs: number | null;
+    freshnessMaxAgeMs: number | null;
+  };
 };
 
 export type MatterhornAgentRunReceipt = {
