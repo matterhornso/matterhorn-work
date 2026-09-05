@@ -111,6 +111,30 @@ describe("durable authorized state", () => {
     }
   });
 
+  test("authenticates durable records without an expiry", () => {
+    const value = fixture();
+    try {
+      value.state.put({
+        key: "durable_evidence_index",
+        workspaceId: "workspace_a",
+        value: { evidenceId: "evidence_1", revision: 1 },
+        expiresAtMs: null,
+        nowMs: 1_000,
+      });
+      expect(value.state.getRecord<{ evidenceId: string; revision: number }>(
+        "durable_evidence_index",
+        Number.MAX_SAFE_INTEGER,
+      )).toEqual(expect.objectContaining({
+        workspaceId: "workspace_a",
+        expiresAtMs: null,
+        value: { evidenceId: "evidence_1", revision: 1 },
+      }));
+    } finally {
+      value.authority.close();
+      value.store.close();
+    }
+  });
+
   test("rejects raw legacy state, tenant transplantation, row mutation, and a wrong key", () => {
     const value = fixture();
     try {

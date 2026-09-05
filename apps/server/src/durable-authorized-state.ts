@@ -6,7 +6,7 @@ import type {
 } from "./guarded-runtime-state-store.js";
 
 /**
- * Narrow adapter for short-lived authority-bearing records in guarded SQLite.
+ * Narrow adapter for authority-bearing records in guarded SQLite.
  *
  * The authenticated envelope binds the payload to the exact kind, key, tenant,
  * session, expiry, and SQLite update time used for persistence. Callers still
@@ -67,7 +67,7 @@ export class MatterhornDurableAuthorizedState {
     workspaceId: string;
     sessionId?: string | null;
     value: T;
-    expiresAtMs: number;
+    expiresAtMs: number | null;
     nowMs: number;
   }): void {
     const sessionId = input.sessionId ?? null;
@@ -96,7 +96,7 @@ export class MatterhornDurableAuthorizedState {
     workspaceId: string;
     sessionId?: string | null;
     value: T;
-    expiresAtMs: number;
+    expiresAtMs: number | null;
     nowMs: number;
   }): boolean {
     this.assertWritable(input);
@@ -127,14 +127,14 @@ export class MatterhornDurableAuthorizedState {
   private assertWritable(input: {
     key: string;
     workspaceId: string;
-    expiresAtMs: number;
+    expiresAtMs: number | null;
     nowMs: number;
   }): void {
     if (!input.key
       || !input.workspaceId
-      || !Number.isSafeInteger(input.expiresAtMs)
       || !Number.isSafeInteger(input.nowMs)
-      || input.expiresAtMs <= input.nowMs) {
+      || (input.expiresAtMs !== null
+        && (!Number.isSafeInteger(input.expiresAtMs) || input.expiresAtMs <= input.nowMs))) {
       throw this.invalidError();
     }
   }

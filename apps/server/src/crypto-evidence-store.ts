@@ -39,6 +39,29 @@ const AUDIT_KIND = "crypto_evidence_audit" as const;
 const VERIFICATION_STATUS_KIND = "crypto_evidence_verification_status" as const;
 const SECURITY_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
 const OPERATION_CLAIM_TTL_MS = 5 * 60 * 1_000;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const AUDIT_ID_PATTERN = /^crypto_evidence_audit_[a-f0-9]{32}$/;
+
+function exactObjectKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const actual = Object.keys(value).sort();
+  const required = [...expected].sort();
+  return actual.length === required.length && actual.every((key, index) => key === required[index]);
+}
+
+function canonicalIso(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+
+function safeRecordText(value: unknown, maxLength = 256): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= maxLength
+    && value === value.trim()
+    && !/[\u0000-\u001f\u007f]/.test(value);
+}
 
 type MatterhornCryptoEvidenceOperationClaim = {
   version: "matterhorn.crypto-evidence-operation-claim.v1";
@@ -70,6 +93,16 @@ type MatterhornCryptoEvidenceVerificationStatusRecord = {
   evidenceRevision: number;
   ownerIdHash: string;
   verification: MatterhornEvidenceVerificationStatus;
+};
+
+export type MatterhornCryptoEvidenceRunIndexRecord = {
+  version: "matterhorn.crypto-evidence-run-index.v1";
+  evidenceId: string;
+  workspaceIdHash: string;
+  ownerIdHash: string;
+  coworkerIdHash: string;
+  runIdHash: string;
+  updatedAt: string;
 };
 
 export type MatterhornCryptoEvidenceAccessEvent = {
@@ -125,10 +158,55 @@ function clone(record: MatterhornCryptoEvidenceRecord): MatterhornCryptoEvidence
   return structuredClone(record);
 }
 
-function runIndexExpiry(record: MatterhornCryptoEvidenceRecord): number | null {
+export function matterhornCryptoEvidenceRunIndexExpiry(
+  record: MatterhornCryptoEvidenceRecord,
+): number | null {
   if (record.state !== "key_destroyed") return null;
   const updatedAt = Date.parse(record.updatedAt);
   return Number.isFinite(updatedAt) ? updatedAt + SECURITY_RETENTION_MS : null;
+}
+
+function runIndexIdentityHash(
+  kind: "workspace" | "owner" | "coworker" | "run",
+  workspaceId: string,
+  value: string,
+): string {
+  return sha256({
+    domain: `matterhorn:crypto-evidence-run-index-identity:${kind}:v1`,
+    workspaceId,
+    value,
+  });
+}
+
+export function matterhornCryptoEvidenceRunIndexKey(input: {
+  workspaceId: string;
+  ownerId: string;
+  coworkerId: string;
+  runId: string;
+}): string {
+  return sha256({
+    domain: "matterhorn:crypto-evidence-run-index:v1",
+    workspaceId: input.workspaceId,
+    ownerId: input.ownerId,
+    coworkerId: input.coworkerId,
+    runId: input.runId,
+  });
+}
+
+export function matterhornCryptoEvidenceRunIndexValue(
+  record: MatterhornCryptoEvidenceRecord,
+  nowMs: number,
+): MatterhornCryptoEvidenceRunIndexRecord {
+  if (!Number.isSafeInteger(nowMs)) throw new Error("crypto_evidence_run_index_integrity_invalid");
+  return {
+    version: "matterhorn.crypto-evidence-run-index.v1",
+    evidenceId: record.id,
+    workspaceIdHash: runIndexIdentityHash("workspace", record.workspaceId, record.workspaceId),
+    ownerIdHash: runIndexIdentityHash("owner", record.workspaceId, record.ownerId),
+    coworkerIdHash: runIndexIdentityHash("coworker", record.workspaceId, record.coworkerId),
+    runIdHash: runIndexIdentityHash("run", record.workspaceId, record.runId),
+    updatedAt: new Date(nowMs).toISOString(),
+  };
 }
 
 function assertTenant(record: MatterhornCryptoEvidenceRecord, input: {
@@ -158,6 +236,9 @@ function validateSealedEvidence(sealed: MatterhornSealedEvidence): void {
 
 export class MatterhornCryptoEvidenceStore {
   private readonly operationClaims: MatterhornDurableAuthorizedState | null;
+  private readonly runIndexes: MatterhornDurableAuthorizedState | null;
+  private readonly accessAudits: MatterhornDurableAuthorizedState | null;
+  private readonly verificationStatuses: MatterhornDurableAuthorizedState | null;
 
   constructor(
     private readonly stateStore: MatterhornGuardedRuntimeStateStore,
@@ -174,6 +255,30 @@ export class MatterhornCryptoEvidenceStore {
         "crypto_evidence_operation_claim_integrity_invalid",
       )
       : null;
+    this.runIndexes = authority
+      ? new MatterhornDurableAuthorizedState(
+        stateStore,
+        authority,
+        RUN_INDEX_KIND,
+        "crypto_evidence_run_index_integrity_invalid",
+      )
+      : null;
+    this.accessAudits = authority
+      ? new MatterhornDurableAuthorizedState(
+        stateStore,
+        authority,
+        AUDIT_KIND,
+        "crypto_evidence_audit_corrupt",
+      )
+      : null;
+    this.verificationStatuses = authority
+      ? new MatterhornDurableAuthorizedState(
+        stateStore,
+        authority,
+        VERIFICATION_STATUS_KIND,
+        "crypto_evidence_verification_status_integrity_invalid",
+      )
+      : null;
   }
 
   private requireAuthority(): MatterhornDurableStateAuthority {
@@ -184,6 +289,21 @@ export class MatterhornCryptoEvidenceStore {
   private requireOperationClaims(): MatterhornDurableAuthorizedState {
     if (!this.operationClaims) throw new Error("crypto_evidence_state_integrity_unavailable");
     return this.operationClaims;
+  }
+
+  private requireRunIndexes(): MatterhornDurableAuthorizedState {
+    if (!this.runIndexes) throw new Error("crypto_evidence_state_integrity_unavailable");
+    return this.runIndexes;
+  }
+
+  private requireAccessAudits(): MatterhornDurableAuthorizedState {
+    if (!this.accessAudits) throw new Error("crypto_evidence_state_integrity_unavailable");
+    return this.accessAudits;
+  }
+
+  private requireVerificationStatuses(): MatterhornDurableAuthorizedState {
+    if (!this.verificationStatuses) throw new Error("crypto_evidence_state_integrity_unavailable");
+    return this.verificationStatuses;
   }
 
   private activeOperationClaim(input: {
@@ -209,7 +329,7 @@ export class MatterhornCryptoEvidenceStore {
       if (!record) throw new Error("crypto_evidence_state_integrity_invalid");
       const createdAtMs = Date.parse(record.createdAt);
       const updatedAtMs = Date.parse(record.updatedAt);
-      const expectedExpiry = runIndexExpiry(record);
+      const expectedExpiry = matterhornCryptoEvidenceRunIndexExpiry(record);
       const metadataIssues = [
         state.kind !== STATE_KIND && "kind",
         state.key !== record.id && "key",
@@ -301,7 +421,7 @@ export class MatterhornCryptoEvidenceStore {
   }
 
   private persistRecord(record: MatterhornCryptoEvidenceRecord, nowMs: number): void {
-    const expiresAtMs = runIndexExpiry(record);
+    const expiresAtMs = matterhornCryptoEvidenceRunIndexExpiry(record);
     if (Date.parse(record.updatedAt) !== nowMs) {
       throw new Error("crypto_evidence_state_integrity_invalid");
     }
@@ -323,6 +443,60 @@ export class MatterhornCryptoEvidenceStore {
     });
   }
 
+  private persistRunIndex(record: MatterhornCryptoEvidenceRecord, nowMs: number): void {
+    this.requireRunIndexes().put({
+      key: this.runIndexKey(record),
+      workspaceId: record.workspaceId,
+      value: matterhornCryptoEvidenceRunIndexValue(record, nowMs),
+      expiresAtMs: matterhornCryptoEvidenceRunIndexExpiry(record),
+      nowMs,
+    });
+  }
+
+  private admitRunIndex(
+    state: GuardedRuntimeStateRecord<MatterhornCryptoEvidenceRunIndexRecord>,
+    input: { workspaceId: string; ownerId: string; coworkerId: string; runId: string },
+  ): MatterhornCryptoEvidenceRecord {
+    const index = state.value;
+    if (!exactObjectKeys(index, [
+      "version",
+      "evidenceId",
+      "workspaceIdHash",
+      "ownerIdHash",
+      "coworkerIdHash",
+      "runIdHash",
+      "updatedAt",
+    ])
+      || index.version !== "matterhorn.crypto-evidence-run-index.v1"
+      || !safeRecordText(index.evidenceId)
+      || !SHA256_PATTERN.test(String(index.workspaceIdHash))
+      || !SHA256_PATTERN.test(String(index.ownerIdHash))
+      || !SHA256_PATTERN.test(String(index.coworkerIdHash))
+      || !SHA256_PATTERN.test(String(index.runIdHash))
+      || !canonicalIso(index.updatedAt)
+      || state.kind !== RUN_INDEX_KIND
+      || state.key !== this.runIndexKey(input)
+      || state.workspaceId !== input.workspaceId
+      || state.sessionId !== null
+      || state.updatedAtMs !== Date.parse(index.updatedAt)
+      || index.workspaceIdHash !== runIndexIdentityHash("workspace", input.workspaceId, input.workspaceId)
+      || index.ownerIdHash !== runIndexIdentityHash("owner", input.workspaceId, input.ownerId)
+      || index.coworkerIdHash !== runIndexIdentityHash("coworker", input.workspaceId, input.coworkerId)
+      || index.runIdHash !== runIndexIdentityHash("run", input.workspaceId, input.runId)) {
+      throw new Error("crypto_evidence_run_index_integrity_invalid");
+    }
+    const record = this.storedRecord(index.evidenceId, state.updatedAtMs);
+    if (!record
+      || record.workspaceId !== input.workspaceId
+      || record.ownerId !== input.ownerId
+      || record.coworkerId !== input.coworkerId
+      || record.runId !== input.runId
+      || state.expiresAtMs !== matterhornCryptoEvidenceRunIndexExpiry(record)) {
+      throw new Error("crypto_evidence_run_index_integrity_invalid");
+    }
+    return record;
+  }
+
   private recoveryMaterialErased(record: MatterhornCryptoEvidenceRecord): boolean {
     if (!this.erasureLedger || !record.key.wrappedKey || !record.key.keyContext) return false;
     return this.erasureLedger.eventFor({
@@ -342,13 +516,7 @@ export class MatterhornCryptoEvidenceStore {
     coworkerId: string;
     runId: string;
   }): string {
-    return sha256({
-      domain: "matterhorn:crypto-evidence-run-index:v1",
-      workspaceId: input.workspaceId,
-      ownerId: input.ownerId,
-      coworkerId: input.coworkerId,
-      runId: input.runId,
-    });
+    return matterhornCryptoEvidenceRunIndexKey(input);
   }
 
   private operationClaimKey(input: { workspaceId: string; evidenceId: string }): string {
@@ -376,7 +544,7 @@ export class MatterhornCryptoEvidenceStore {
   }
 
   private clearVerificationStatus(input: { workspaceId: string; evidenceId: string }): void {
-    this.stateStore.delete(VERIFICATION_STATUS_KIND, this.verificationStatusKey(input));
+    this.requireVerificationStatuses().delete(this.verificationStatusKey(input));
   }
 
   private beginExclusiveOperation(input: {
@@ -484,17 +652,12 @@ export class MatterhornCryptoEvidenceStore {
     runId: string;
   }): MatterhornCryptoEvidenceRecord | null {
     const indexKey = this.runIndexKey(input);
-    const indexed = this.stateStore.get<{ evidenceId: string }>(RUN_INDEX_KIND, indexKey);
+    const indexed = this.requireRunIndexes().getRecord<MatterhornCryptoEvidenceRunIndexRecord>(
+      indexKey,
+      Date.now(),
+    );
     if (indexed) {
-      const record = this.storedRecord(indexed.evidenceId);
-      if (!record
-        || record.workspaceId !== input.workspaceId
-        || record.ownerId !== input.ownerId
-        || record.coworkerId !== input.coworkerId
-        || record.runId !== input.runId) {
-        throw new Error("crypto_evidence_run_index_corrupt");
-      }
-      return clone(record);
+      return clone(this.admitRunIndex(indexed, input));
     }
 
     const legacy = this.storedRecords({
@@ -503,14 +666,89 @@ export class MatterhornCryptoEvidenceStore {
       && record.coworkerId === input.coworkerId
       && record.runId === input.runId);
     if (!legacy) return null;
-    this.stateStore.put({
-      kind: RUN_INDEX_KIND,
-      key: indexKey,
-      workspaceId: input.workspaceId,
-      value: { evidenceId: legacy.id },
-      expiresAtMs: runIndexExpiry(legacy),
-    });
+    this.persistRunIndex(legacy, Date.now());
     return clone(legacy);
+  }
+
+  private admitAccessEvent(
+    state: GuardedRuntimeStateRecord<MatterhornCryptoEvidenceAccessEvent>,
+  ): MatterhornCryptoEvidenceAccessEvent {
+    const event = state.value;
+    const createdAtMs = canonicalIso(event?.createdAt) ? Date.parse(event.createdAt) : Number.NaN;
+    const expiresAtMs = canonicalIso(event?.expiresAt) ? Date.parse(event.expiresAt) : Number.NaN;
+    if (!exactObjectKeys(event, [
+      "version",
+      "id",
+      "evidenceId",
+      "sequence",
+      "workspaceIdHash",
+      "ownerIdHash",
+      "coworkerIdHash",
+      "action",
+      "outcome",
+      "reason",
+      "recordRevision",
+      "keyReferenceHash",
+      "previousHash",
+      "recordHash",
+      "createdAt",
+      "expiresAt",
+    ])
+      || event.version !== AUDIT_VERSION
+      || typeof event.id !== "string"
+      || !AUDIT_ID_PATTERN.test(event.id)
+      || !safeRecordText(event.evidenceId)
+      || !Number.isSafeInteger(event.sequence)
+      || event.sequence < 1
+      || !SHA256_PATTERN.test(String(event.workspaceIdHash))
+      || !SHA256_PATTERN.test(String(event.ownerIdHash))
+      || !SHA256_PATTERN.test(String(event.coworkerIdHash))
+      || !["seal", "decrypt", "attach_proof", "attach_anchor", "renew_proof", "rotate_key", "destroy_key"].includes(String(event.action))
+      || !["allowed", "denied"].includes(String(event.outcome))
+      || !safeRecordText(event.reason, 80)
+      || !Number.isSafeInteger(event.recordRevision)
+      || event.recordRevision < 1
+      || !SHA256_PATTERN.test(String(event.keyReferenceHash))
+      || (event.previousHash !== null && !SHA256_PATTERN.test(String(event.previousHash)))
+      || !SHA256_PATTERN.test(String(event.recordHash))
+      || !Number.isFinite(createdAtMs)
+      || !Number.isFinite(expiresAtMs)
+      || expiresAtMs - createdAtMs !== SECURITY_RETENTION_MS
+      || state.kind !== AUDIT_KIND
+      || state.key !== event.id
+      || !safeRecordText(state.workspaceId)
+      || state.sessionId !== null
+      || state.updatedAtMs !== createdAtMs
+      || state.expiresAtMs !== expiresAtMs
+      || event.workspaceIdHash !== this.identityHash("workspace", state.workspaceId, state.workspaceId)) {
+      throw new Error("crypto_evidence_audit_corrupt");
+    }
+    const { recordHash, ...unsigned } = event;
+    if (recordHash !== sha256({ domain: "matterhorn:crypto-evidence-access-record:v1", ...unsigned })) {
+      throw new Error("crypto_evidence_audit_corrupt");
+    }
+    return event;
+  }
+
+  private storedAccessEvents(workspaceId: string, nowMs = Date.now()): MatterhornCryptoEvidenceAccessEvent[] {
+    const events = this.requireAccessAudits()
+      .listRecords<MatterhornCryptoEvidenceAccessEvent>({ workspaceId, nowMs })
+      .map((state) => this.admitAccessEvent(state))
+      .sort((left, right) => left.evidenceId.localeCompare(right.evidenceId) || left.sequence - right.sequence);
+    const previousByEvidence = new Map<string, MatterhornCryptoEvidenceAccessEvent>();
+    for (const event of events) {
+      const previous = previousByEvidence.get(event.evidenceId);
+      // The retained window may begin after an older prefix expired normally.
+      // A retained middle-row deletion is still detectable through the exact
+      // sequence and previous-hash link between adjacent active events.
+      if ((!previous && ((event.sequence === 1) !== (event.previousHash === null)))
+        || (previous && (event.sequence !== previous.sequence + 1
+          || event.previousHash !== previous.recordHash))) {
+        throw new Error("crypto_evidence_audit_chain_broken");
+      }
+      previousByEvidence.set(event.evidenceId, event);
+    }
+    return events;
   }
 
   private recordAccess(input: {
@@ -522,11 +760,8 @@ export class MatterhornCryptoEvidenceStore {
   }): MatterhornCryptoEvidenceAccessEvent {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
-    const existing = this.stateStore.list<MatterhornCryptoEvidenceAccessEvent>(AUDIT_KIND, {
-      workspaceId: input.record.workspaceId,
-      nowMs: now.getTime(),
-    }).filter((event) => event.evidenceId === input.record.id)
-      .sort((left, right) => left.sequence - right.sequence);
+    const existing = this.storedAccessEvents(input.record.workspaceId, now.getTime())
+      .filter((event) => event.evidenceId === input.record.id);
     const previous = existing.at(-1) ?? null;
     const reason = input.reason.trim().slice(0, 80) || "unspecified";
     const unsigned = {
@@ -550,8 +785,7 @@ export class MatterhornCryptoEvidenceStore {
       ...unsigned,
       recordHash: sha256({ domain: "matterhorn:crypto-evidence-access-record:v1", ...unsigned }),
     };
-    this.stateStore.put({
-      kind: AUDIT_KIND,
+    this.requireAccessAudits().put({
       key: event.id,
       workspaceId: input.record.workspaceId,
       value: event,
@@ -567,23 +801,9 @@ export class MatterhornCryptoEvidenceStore {
     evidenceId?: string;
   }): MatterhornCryptoEvidenceAccessEvent[] {
     const ownerIdHash = this.identityHash("owner", input.workspaceId, input.ownerId);
-    const events = this.stateStore.list<MatterhornCryptoEvidenceAccessEvent>(AUDIT_KIND, {
-      workspaceId: input.workspaceId,
-    }).filter((event) => event.ownerIdHash === ownerIdHash
-      && (input.evidenceId === undefined || event.evidenceId === input.evidenceId))
-      .sort((left, right) => left.evidenceId.localeCompare(right.evidenceId) || left.sequence - right.sequence);
-    const previousByEvidence = new Map<string, MatterhornCryptoEvidenceAccessEvent>();
-    for (const event of events) {
-      const { recordHash, ...unsigned } = event;
-      if (recordHash !== sha256({ domain: "matterhorn:crypto-evidence-access-record:v1", ...unsigned })) {
-        throw new Error("crypto_evidence_audit_corrupt");
-      }
-      const previous = previousByEvidence.get(event.evidenceId);
-      if (previous && event.previousHash !== previous.recordHash) {
-        throw new Error("crypto_evidence_audit_chain_broken");
-      }
-      previousByEvidence.set(event.evidenceId, event);
-    }
+    const events = this.storedAccessEvents(input.workspaceId)
+      .filter((event) => event.ownerIdHash === ownerIdHash
+        && (input.evidenceId === undefined || event.evidenceId === input.evidenceId));
     return events.map((event) => structuredClone(event));
   }
 
@@ -646,14 +866,7 @@ export class MatterhornCryptoEvidenceStore {
       updatedAt: now.toISOString(),
     };
     this.persistRecord(record, now.getTime());
-    this.stateStore.put({
-      kind: RUN_INDEX_KIND,
-      key: this.runIndexKey(input),
-      workspaceId: record.workspaceId,
-      value: { evidenceId: record.id },
-      expiresAtMs: runIndexExpiry(record),
-      nowMs: now.getTime(),
-    });
+    this.persistRunIndex(record, now.getTime());
     this.recordAccess({ record, action: "seal", outcome: "allowed", reason: "sealed", now });
     return clone(record);
   }
@@ -682,6 +895,77 @@ export class MatterhornCryptoEvidenceStore {
       .map(clone);
   }
 
+  private validVerificationStatus(
+    record: MatterhornCryptoEvidenceRecord,
+    verification: MatterhornEvidenceVerificationStatus,
+  ): boolean {
+    if (!exactObjectKeys(verification, ["status", "verifiedAt", "checks", "currentEpoch", "reason"])
+      || !["verified", "sealed_local", "key_destroyed", "deleted", "expired", "failed"].includes(
+        String(verification.status),
+      )
+      || !canonicalIso(verification.verifiedAt)
+      || !exactObjectKeys(verification.checks, [
+        "tenantScope",
+        "ciphertextHash",
+        "merkleInclusion",
+        "suiCertification",
+        "walrusReadback",
+      ])
+      || verification.checks.tenantScope !== true
+      || typeof verification.checks.ciphertextHash !== "boolean"
+      || typeof verification.checks.merkleInclusion !== "boolean"
+      || typeof verification.checks.suiCertification !== "boolean"
+      || typeof verification.checks.walrusReadback !== "boolean"
+      || (verification.currentEpoch !== null
+        && (!Number.isSafeInteger(verification.currentEpoch) || verification.currentEpoch < 0))
+      || (verification.reason !== null && !safeRecordText(verification.reason, 80))) {
+      return false;
+    }
+    if (verification.status === "verified") {
+      return record.state === "published"
+        && verification.currentEpoch !== null
+        && verification.reason === null
+        && Object.values(verification.checks).every((value) => value === true);
+    }
+    if (verification.status === "sealed_local") return record.state === "sealed";
+    if (verification.status === "key_destroyed" || verification.status === "deleted") {
+      return record.state === "key_destroyed" && verification.currentEpoch === null;
+    }
+    return record.state === "published";
+  }
+
+  private admitVerificationStatus(
+    state: GuardedRuntimeStateRecord<MatterhornCryptoEvidenceVerificationStatusRecord>,
+    record: MatterhornCryptoEvidenceRecord,
+  ): MatterhornEvidenceVerificationStatus {
+    const status = state.value;
+    if (!exactObjectKeys(status, [
+      "version",
+      "evidenceId",
+      "evidenceRevision",
+      "ownerIdHash",
+      "verification",
+    ])
+      || status.version !== "matterhorn.crypto-evidence-verification-status.v1"
+      || status.evidenceId !== record.id
+      || !Number.isSafeInteger(status.evidenceRevision)
+      || status.evidenceRevision !== record.revision
+      || status.ownerIdHash !== this.identityHash("owner", record.workspaceId, record.ownerId)
+      || !this.validVerificationStatus(record, status.verification)
+      || state.kind !== VERIFICATION_STATUS_KIND
+      || state.key !== this.verificationStatusKey({
+        workspaceId: record.workspaceId,
+        evidenceId: record.id,
+      })
+      || state.workspaceId !== record.workspaceId
+      || state.sessionId !== null
+      || state.expiresAtMs !== matterhornCryptoEvidenceRunIndexExpiry(record)
+      || state.updatedAtMs !== Date.parse(status.verification.verifiedAt)) {
+      throw new Error("crypto_evidence_verification_status_integrity_invalid");
+    }
+    return status.verification;
+  }
+
   getVerificationStatus(input: {
     workspaceId: string;
     ownerId: string;
@@ -689,17 +973,12 @@ export class MatterhornCryptoEvidenceStore {
   }): MatterhornEvidenceVerificationStatus | null {
     const record = this.get(input);
     if (!record) return null;
-    const status = this.stateStore.get<MatterhornCryptoEvidenceVerificationStatusRecord>(
-      VERIFICATION_STATUS_KIND,
+    const status = this.requireVerificationStatuses().getRecord<MatterhornCryptoEvidenceVerificationStatusRecord>(
       this.verificationStatusKey(input),
+      Date.now(),
     );
-    if (!status
-      || status.evidenceId !== record.id
-      || status.evidenceRevision !== record.revision
-      || status.ownerIdHash !== this.identityHash("owner", record.workspaceId, record.ownerId)) {
-      return null;
-    }
-    return structuredClone(status.verification);
+    if (!status) return null;
+    return structuredClone(this.admitVerificationStatus(status, record));
   }
 
   recordVerificationStatus(input: {
@@ -713,10 +992,7 @@ export class MatterhornCryptoEvidenceStore {
     if (!record) throw new Error("crypto_evidence_not_found");
     if (record.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
     const verifiedAt = Date.parse(input.verification.verifiedAt);
-    if (!Number.isFinite(verifiedAt)
-      || (input.verification.currentEpoch !== null
-        && (!Number.isSafeInteger(input.verification.currentEpoch) || input.verification.currentEpoch < 0))
-      || (input.verification.reason !== null && input.verification.reason.length > 80)) {
+    if (!this.validVerificationStatus(record, input.verification)) {
       throw new Error("crypto_evidence_verification_status_invalid");
     }
     const status: MatterhornCryptoEvidenceVerificationStatusRecord = {
@@ -726,12 +1002,11 @@ export class MatterhornCryptoEvidenceStore {
       ownerIdHash: this.identityHash("owner", record.workspaceId, record.ownerId),
       verification: structuredClone(input.verification),
     };
-    this.stateStore.put({
-      kind: VERIFICATION_STATUS_KIND,
+    this.requireVerificationStatuses().put({
       key: this.verificationStatusKey(input),
       workspaceId: record.workspaceId,
       value: status,
-      expiresAtMs: runIndexExpiry(record),
+      expiresAtMs: matterhornCryptoEvidenceRunIndexExpiry(record),
       nowMs: verifiedAt,
     });
   }
@@ -1565,14 +1840,7 @@ export class MatterhornCryptoEvidenceStore {
         this.stateStore.delete("crypto_evidence_renewal_intent", next.id);
         if (!input.walrusDeletion) this.stateStore.delete("crypto_evidence_deletion_intent", next.id);
         this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
-        this.stateStore.put({
-          kind: RUN_INDEX_KIND,
-          key: this.runIndexKey(next),
-          workspaceId: next.workspaceId,
-          value: { evidenceId: next.id },
-          expiresAtMs: now.getTime() + SECURITY_RETENTION_MS,
-          nowMs: now.getTime(),
-        });
+        this.persistRunIndex(next, now.getTime());
         this.recordAccess({
           record: next,
           action: "destroy_key",
