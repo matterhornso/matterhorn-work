@@ -60,11 +60,14 @@ describe("AI provider UI contract", () => {
     const surfaceSource = readReactSource(
       "domains/session/surface/session-surface.tsx",
     );
+    const noticeSource = readReactSource(
+      "domains/session/surface/private-mode-privacy-notice.tsx",
+    );
 
     expect(viewSource).toContain("modelReadiness.providerPrivacy");
     expect(viewSource).toContain("Review provider policy");
-    expect(surfaceSource).toContain("Matterhorn does not train on your chats");
-    expect(surfaceSource).toContain("Privacy details");
+    expect(noticeSource).toContain("Matterhorn does not train on your chats");
+    expect(noticeSource).toContain("Privacy details");
     expect(surfaceSource).toContain("props.onOpenPrivacyDetails");
     expect(surfaceSource).not.toContain('href="/privacy"');
     expect(routeSource).toContain('handleOpenSettings("/settings/privacy")');

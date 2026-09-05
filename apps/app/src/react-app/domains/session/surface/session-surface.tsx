@@ -152,6 +152,7 @@ import { getMatterhornMemoryPolicyDecision } from "../../memory/memory-policy";
 import { useQuickJot } from "../../notes";
 import type { BittensorPublicEvidenceCard } from "./message-list";
 import { buildResultCardMemoryRecord } from "./result-card-memory";
+import { PrivateModePrivacyNotice } from "./private-mode-privacy-notice";
 
 const SessionTranscript = lazy(() => import("./message-list").then((module) => ({
   default: module.SessionTranscript,
@@ -3430,39 +3431,14 @@ export function SessionSurface(props: SessionSurfaceProps) {
       </div>
 
       <div ref={composerShellRef} className="shrink-0 bg-dls-surface px-0 pb-3 pt-3">
-        <div
-          className="mx-auto mb-2 flex max-w-[920px] items-start gap-2 px-4 text-[11px] leading-4 text-dls-secondary"
-          aria-live="polite"
-        >
-          <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-          <p className="min-w-0">
-              {props.privateModeEnabled ? (
-                <>
-                  Private mode · Venice does not retain this prompt or response.
-                </>
-              ) : props.providerPrivacyPolicy ? (
-                props.providerPrivacyPolicy.allowed ? (
-                  <>
-                    Matterhorn does not train on your chats · {props.providerPrivacyPolicy.providerName} processes this chat · {props.providerPrivacyPolicy.label}.
-                  </>
-                ) : (
-                  <>
-                    Sending blocked · {props.providerPrivacyPolicy.providerName}&apos;s training and retention terms are not verified.
-                  </>
-                )
-              ) : (
-                <>Checking model privacy.</>
-              )}{" "}
-              <button
-                type="button"
-                className="whitespace-nowrap text-dls-text underline decoration-dls-border underline-offset-2 hover:decoration-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/30"
-                onClick={props.onOpenPrivacyDetails}
-                disabled={!props.onOpenPrivacyDetails}
-              >
-                Privacy details
-              </button>
-          </p>
-        </div>
+        <PrivateModePrivacyNotice
+          providerPrivacyPolicy={props.providerPrivacyPolicy}
+          privateModeAvailable={props.privateModeAvailable}
+          privateModeEnabled={props.privateModeEnabled}
+          privateModeUnavailableReason={props.privateModeUnavailableReason}
+          onPrivateModeChange={props.onPrivateModeChange}
+          onOpenPrivacyDetails={props.onOpenPrivacyDetails}
+        />
         <DevProfiler id="SessionComposer">
         <ReactSessionComposer
           draft={draft}
