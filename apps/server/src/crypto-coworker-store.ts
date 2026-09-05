@@ -110,6 +110,7 @@ type CoworkerWatchRow = {
   watch_json: string;
   created_at: string;
   updated_at: string;
+  authority_seal: string | null;
 };
 
 type CoworkerInboxItemRow = {
@@ -121,6 +122,7 @@ type CoworkerInboxItemRow = {
   created_at: string;
   updated_at: string;
   item_json: string;
+  authority_seal: string | null;
 };
 
 type CoworkerAccessRow = {
@@ -169,6 +171,8 @@ const COWORKER_PROFILE_AAD_DOMAIN = "matterhorn:crypto-coworker-profile-authorit
 const COWORKER_WORKING_STATE_AAD_DOMAIN = "matterhorn:crypto-coworker-working-state-authority:v1";
 const COWORKER_RESOURCE_SCOPE_AAD_DOMAIN = "matterhorn:crypto-coworker-resource-scope-authority:v1";
 const COWORKER_SESSION_BINDING_AAD_DOMAIN = "matterhorn:crypto-coworker-session-binding-authority:v1";
+const COWORKER_WATCH_AAD_DOMAIN = "matterhorn:crypto-coworker-watch-authority:v1";
+const COWORKER_INBOX_AAD_DOMAIN = "matterhorn:crypto-coworker-inbox-authority:v1";
 const COWORKER_AUTHORITY_SECRET_MINIMUM_BYTES = 32;
 const COWORKER_AUTHORITY_SEAL_PATTERN = /^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}$/;
 const COWORKER_ACCESS_ID_PATTERN = /^mhca_[A-Za-z0-9_-]{20,64}$/;
@@ -304,7 +308,7 @@ function sessionBindingAuthorityValue(row: CoworkerSessionBindingRow): Matterhor
   };
 }
 
-function watchFromRow(row: CoworkerWatchRow): MatterhornCoworkerWatch {
+function watchAuthorityValue(row: CoworkerWatchRow): MatterhornCoworkerWatch {
   let watch: unknown;
   try {
     watch = JSON.parse(row.watch_json);
@@ -328,10 +332,10 @@ function watchFromRow(row: CoworkerWatchRow): MatterhornCoworkerWatch {
     || result.updatedAt !== row.updated_at) {
     throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   }
-  return structuredClone(result);
+  return result;
 }
 
-function inboxItemFromRow(row: CoworkerInboxItemRow): MatterhornCoworkerInboxItem {
+function inboxItemAuthorityValue(row: CoworkerInboxItemRow): MatterhornCoworkerInboxItem {
   let item: unknown;
   try {
     item = JSON.parse(row.item_json);
@@ -352,7 +356,7 @@ function inboxItemFromRow(row: CoworkerInboxItemRow): MatterhornCoworkerInboxIte
     || result.updatedAt !== row.updated_at) {
     throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   }
-  return structuredClone(result);
+  return result;
 }
 
 function exactTimestamp(value: unknown): value is string {
@@ -463,6 +467,24 @@ function sessionBindingFromRow(row: CoworkerSessionBindingRow, key: Buffer): Mat
     row.authority_seal,
     key,
   );
+}
+
+function watchFromRow(row: CoworkerWatchRow, key: Buffer): MatterhornCoworkerWatch {
+  return structuredClone(verifiedAuthority(
+    COWORKER_WATCH_AAD_DOMAIN,
+    watchAuthorityValue(row),
+    row.authority_seal,
+    key,
+  ));
+}
+
+function inboxItemFromRow(row: CoworkerInboxItemRow, key: Buffer): MatterhornCoworkerInboxItem {
+  return structuredClone(verifiedAuthority(
+    COWORKER_INBOX_AAD_DOMAIN,
+    inboxItemAuthorityValue(row),
+    row.authority_seal,
+    key,
+  ));
 }
 
 function accessInviteAuthorityValue(row: CoworkerAccessInviteRow) {
@@ -663,6 +685,7 @@ export class MatterhornCoworkerStore {
         watch_json TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        authority_seal TEXT NOT NULL,
         PRIMARY KEY (workspace_id, owner_id, coworker_id, watch_id),
         CHECK (revision >= 1),
         CHECK (profile_revision >= 1),
@@ -682,6 +705,7 @@ export class MatterhornCoworkerStore {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         item_json TEXT NOT NULL,
+        authority_seal TEXT NOT NULL,
         PRIMARY KEY (workspace_id, owner_id, coworker_id, item_id),
         CHECK (state IN ('unread', 'read', 'dismissed')),
         FOREIGN KEY (workspace_id, owner_id, coworker_id)
@@ -721,6 +745,10 @@ export class MatterhornCoworkerStore {
         .all() as Array<{ name: string }>;
       const sessionBindingColumns = statement(this.#db, "PRAGMA table_info(crypto_coworker_session_bindings)")
         .all() as Array<{ name: string }>;
+      const watchColumns = statement(this.#db, "PRAGMA table_info(crypto_coworker_watches)")
+        .all() as Array<{ name: string }>;
+      const inboxColumns = statement(this.#db, "PRAGMA table_info(crypto_coworker_inbox)")
+        .all() as Array<{ name: string }>;
       const inviteColumns = statement(this.#db, "PRAGMA table_info(crypto_coworker_access_invites)")
         .all() as Array<{ name: string }>;
       const accessColumns = statement(this.#db, "PRAGMA table_info(crypto_coworker_account_access)")
@@ -747,18 +775,24 @@ export class MatterhornCoworkerStore {
       const legacyWorkingState = !workingStateColumns.some((column) => column.name === "authority_seal");
       const legacyResourceScopes = !resourceScopeColumns.some((column) => column.name === "authority_seal");
       const legacySessionBindings = !sessionBindingColumns.some((column) => column.name === "authority_seal");
+      const legacyWatches = !watchColumns.some((column) => column.name === "authority_seal");
+      const legacyInbox = !inboxColumns.some((column) => column.name === "authority_seal");
       const legacyInvites = !inviteColumns.some((column) => column.name === "authority_seal");
       const legacyAccess = !accessColumns.some((column) => column.name === "authority_seal");
       if (legacyProfiles) this.#db.exec("ALTER TABLE crypto_coworkers ADD COLUMN authority_seal TEXT;");
       if (legacyWorkingState) this.#db.exec("ALTER TABLE crypto_coworker_working_state ADD COLUMN authority_seal TEXT;");
       if (legacyResourceScopes) this.#db.exec("ALTER TABLE crypto_coworker_resource_scopes ADD COLUMN authority_seal TEXT;");
       if (legacySessionBindings) this.#db.exec("ALTER TABLE crypto_coworker_session_bindings ADD COLUMN authority_seal TEXT;");
+      if (legacyWatches) this.#db.exec("ALTER TABLE crypto_coworker_watches ADD COLUMN authority_seal TEXT;");
+      if (legacyInbox) this.#db.exec("ALTER TABLE crypto_coworker_inbox ADD COLUMN authority_seal TEXT;");
       if (legacyInvites) this.#db.exec("ALTER TABLE crypto_coworker_access_invites ADD COLUMN authority_seal TEXT;");
       if (legacyAccess) this.#db.exec("ALTER TABLE crypto_coworker_account_access ADD COLUMN authority_seal TEXT;");
       if (legacyProfiles) this.#backfillProfileAuthoritySeals();
       if (legacyWorkingState) this.#backfillWorkingStateAuthoritySeals();
       if (legacyResourceScopes) this.#backfillResourceScopeAuthoritySeals();
       if (legacySessionBindings) this.#backfillSessionBindingAuthoritySeals();
+      if (legacyWatches) this.#backfillWatchAuthoritySeals();
+      if (legacyInbox) this.#backfillInboxAuthoritySeals();
       if (legacyInvites) this.#backfillAccessInviteAuthoritySeals();
       if (legacyAccess) this.#backfillAccountAccessAuthoritySeals();
       this.#verifyCoworkerExecutionAuthorityState();
@@ -806,6 +840,28 @@ export class MatterhornCoworkerStore {
       BEGIN SELECT RAISE(ABORT, 'coworker_state_corrupt'); END;
       CREATE TRIGGER IF NOT EXISTS crypto_coworker_session_binding_seal_update
       BEFORE UPDATE ON crypto_coworker_session_bindings
+      WHEN NEW.authority_seal IS NULL OR length(NEW.authority_seal) <> 39
+        OR NEW.authority_seal NOT GLOB '[A-Za-z0-9_-]*.[A-Za-z0-9_-]*'
+        OR NEW.authority_seal = OLD.authority_seal
+      BEGIN SELECT RAISE(ABORT, 'coworker_state_corrupt'); END;
+      CREATE TRIGGER IF NOT EXISTS crypto_coworker_watch_seal_insert
+      BEFORE INSERT ON crypto_coworker_watches
+      WHEN NEW.authority_seal IS NULL OR length(NEW.authority_seal) <> 39
+        OR NEW.authority_seal NOT GLOB '[A-Za-z0-9_-]*.[A-Za-z0-9_-]*'
+      BEGIN SELECT RAISE(ABORT, 'coworker_state_corrupt'); END;
+      CREATE TRIGGER IF NOT EXISTS crypto_coworker_watch_seal_update
+      BEFORE UPDATE ON crypto_coworker_watches
+      WHEN NEW.authority_seal IS NULL OR length(NEW.authority_seal) <> 39
+        OR NEW.authority_seal NOT GLOB '[A-Za-z0-9_-]*.[A-Za-z0-9_-]*'
+        OR NEW.authority_seal = OLD.authority_seal
+      BEGIN SELECT RAISE(ABORT, 'coworker_state_corrupt'); END;
+      CREATE TRIGGER IF NOT EXISTS crypto_coworker_inbox_seal_insert
+      BEFORE INSERT ON crypto_coworker_inbox
+      WHEN NEW.authority_seal IS NULL OR length(NEW.authority_seal) <> 39
+        OR NEW.authority_seal NOT GLOB '[A-Za-z0-9_-]*.[A-Za-z0-9_-]*'
+      BEGIN SELECT RAISE(ABORT, 'coworker_state_corrupt'); END;
+      CREATE TRIGGER IF NOT EXISTS crypto_coworker_inbox_seal_update
+      BEFORE UPDATE ON crypto_coworker_inbox
       WHEN NEW.authority_seal IS NULL OR length(NEW.authority_seal) <> 39
         OR NEW.authority_seal NOT GLOB '[A-Za-z0-9_-]*.[A-Za-z0-9_-]*'
         OR NEW.authority_seal = OLD.authority_seal
@@ -1487,7 +1543,8 @@ export class MatterhornCoworkerStore {
       SELECT * FROM crypto_coworker_watches
       WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
       ORDER BY created_at ASC, watch_id ASC
-    `).all(workspaceId, ownerId, coworkerId) as CoworkerWatchRow[]).map(watchFromRow);
+    `).all(workspaceId, ownerId, coworkerId) as CoworkerWatchRow[])
+      .map((row) => watchFromRow(row, this.#authorityKey));
   }
 
   getWatch(workspaceId: string, ownerId: string, coworkerId: string, watchId: string): MatterhornCoworkerWatch | null {
@@ -1495,7 +1552,7 @@ export class MatterhornCoworkerStore {
       SELECT * FROM crypto_coworker_watches
       WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? LIMIT 1
     `).get(workspaceId, ownerId, coworkerId, watchId) as CoworkerWatchRow | undefined;
-    return row ? watchFromRow(row) : null;
+    return row ? watchFromRow(row, this.#authorityKey) : null;
   }
 
   listDueWatches(dueBefore: string, limit = 100): MatterhornCoworkerWatch[] {
@@ -1504,7 +1561,8 @@ export class MatterhornCoworkerStore {
       WHERE state = 'active' AND next_check_at <= ?
       ORDER BY next_check_at ASC, workspace_id ASC, owner_id ASC, coworker_id ASC, watch_id ASC
       LIMIT ?
-    `).all(dueBefore, limit) as CoworkerWatchRow[]).map(watchFromRow);
+    `).all(dueBefore, limit) as CoworkerWatchRow[])
+      .map((row) => watchFromRow(row, this.#authorityKey));
   }
 
   claimDueWatches(
@@ -1533,8 +1591,9 @@ export class MatterhornCoworkerStore {
         ORDER BY watches.next_check_at ASC, watches.workspace_id ASC, watches.owner_id ASC,
           watches.coworker_id ASC, watches.watch_id ASC
         LIMIT ?
-      `).all(nowIso, Math.min(100, limit * 4)) as CoworkerWatchRow[]).map(watchFromRow);
-      for (const watch of candidates) {
+      `).all(nowIso, Math.min(100, limit * 4)) as CoworkerWatchRow[])
+        .map((row) => ({ row, watch: watchFromRow(row, this.#authorityKey) }));
+      for (const { row: watchRow, watch } of candidates) {
         if (claimed.length >= limit) break;
         if (requireActiveAccountAccess && this.getAccountAccess(watch.ownerId)?.state !== "active") {
           throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
@@ -1549,22 +1608,28 @@ export class MatterhornCoworkerStore {
             pauseReason: parent?.state === "active" ? "profile_changed" : "coworker_paused",
             updatedAt: nowIso,
           };
-          statement(this.#db, `
+          const result = statement(this.#db, `
             UPDATE crypto_coworker_watches
-            SET revision = ?, profile_revision = ?, state = ?, watch_json = ?, updated_at = ?
-            WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? AND revision = ?
+            SET revision = ?, profile_revision = ?, state = ?, watch_json = ?, updated_at = ?, authority_seal = ?
+            WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ?
+              AND revision = ? AND authority_seal = ?
           `).run(
             paused.revision,
             paused.profileRevision,
             paused.state,
             JSON.stringify(paused),
             paused.updatedAt,
+            sealAuthority(COWORKER_WATCH_AAD_DOMAIN, paused, this.#authorityKey),
             paused.workspaceId,
             paused.ownerId,
             paused.coworkerId,
             paused.id,
             watch.revision,
+            watchRow.authority_seal,
           );
+          if ((result.changes ?? 0) !== 1) {
+            throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+          }
           continue;
         }
         const checksToday = watch.schedule.dayBucket === dayBucket ? watch.schedule.checksToday : 0;
@@ -1580,21 +1645,27 @@ export class MatterhornCoworkerStore {
             },
             updatedAt: nowIso,
           };
-          statement(this.#db, `
+          const result = statement(this.#db, `
             UPDATE crypto_coworker_watches
-            SET revision = ?, next_check_at = ?, watch_json = ?, updated_at = ?
-            WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? AND revision = ?
+            SET revision = ?, next_check_at = ?, watch_json = ?, updated_at = ?, authority_seal = ?
+            WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ?
+              AND revision = ? AND authority_seal = ?
           `).run(
             deferred.revision,
             deferred.schedule.nextCheckAt,
             JSON.stringify(deferred),
             deferred.updatedAt,
+            sealAuthority(COWORKER_WATCH_AAD_DOMAIN, deferred, this.#authorityKey),
             deferred.workspaceId,
             deferred.ownerId,
             deferred.coworkerId,
             deferred.id,
             watch.revision,
+            watchRow.authority_seal,
           );
+          if ((result.changes ?? 0) !== 1) {
+            throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
+          }
           continue;
         }
         const next: MatterhornCoworkerWatch = {
@@ -1613,20 +1684,22 @@ export class MatterhornCoworkerStore {
         }
         const result = statement(this.#db, `
           UPDATE crypto_coworker_watches
-          SET revision = ?, next_check_at = ?, watch_json = ?, updated_at = ?
+          SET revision = ?, next_check_at = ?, watch_json = ?, updated_at = ?, authority_seal = ?
           WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ?
-            AND revision = ? AND state = 'active' AND next_check_at <= ?
+            AND revision = ? AND state = 'active' AND next_check_at <= ? AND authority_seal = ?
         `).run(
           next.revision,
           next.schedule.nextCheckAt,
           JSON.stringify(next),
           next.updatedAt,
+          sealAuthority(COWORKER_WATCH_AAD_DOMAIN, next, this.#authorityKey),
           next.workspaceId,
           next.ownerId,
           next.coworkerId,
           next.id,
           watch.revision,
           nowIso,
+          watchRow.authority_seal,
         );
         if ((result.changes ?? 0) === 1) claimed.push(next);
       }
@@ -1667,7 +1740,7 @@ export class MatterhornCoworkerStore {
           return null;
         }
       }
-      const watch = watchFromRow(row);
+      const watch = watchFromRow(row, this.#authorityKey);
       const parent = this.get(input.workspaceId, input.ownerId, input.coworkerId);
       if (!parent || parent.state !== "active" || parent.revision !== watch.profileRevision || watch.state !== "active") {
         this.#db.exec("ROLLBACK;");
@@ -1702,19 +1775,21 @@ export class MatterhornCoworkerStore {
       }
       const result = statement(this.#db, `
         UPDATE crypto_coworker_watches
-        SET revision = ?, next_check_at = ?, watch_json = ?, updated_at = ?
+        SET revision = ?, next_check_at = ?, watch_json = ?, updated_at = ?, authority_seal = ?
         WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ?
-          AND revision = ? AND state = 'active'
+          AND revision = ? AND state = 'active' AND authority_seal = ?
       `).run(
         next.revision,
         next.schedule.nextCheckAt,
         JSON.stringify(next),
         next.updatedAt,
+        sealAuthority(COWORKER_WATCH_AAD_DOMAIN, next, this.#authorityKey),
         next.workspaceId,
         next.ownerId,
         next.coworkerId,
         next.id,
         watch.revision,
+        row.authority_seal,
       );
       if ((result.changes ?? 0) !== 1) {
         this.#db.exec("ROLLBACK;");
@@ -1724,8 +1799,8 @@ export class MatterhornCoworkerStore {
         const item = input.inboxItem;
         statement(this.#db, `
           INSERT INTO crypto_coworker_inbox(
-            workspace_id, owner_id, coworker_id, item_id, state, created_at, updated_at, item_json
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            workspace_id, owner_id, coworker_id, item_id, state, created_at, updated_at, item_json, authority_seal
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           item.workspaceId,
           item.ownerId,
@@ -1735,23 +1810,9 @@ export class MatterhornCoworkerStore {
           item.createdAt,
           item.updatedAt,
           JSON.stringify(item),
+          sealAuthority(COWORKER_INBOX_AAD_DOMAIN, item, this.#authorityKey),
         );
-        statement(this.#db, `
-          DELETE FROM crypto_coworker_inbox
-          WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
-            AND item_id NOT IN (
-              SELECT item_id FROM crypto_coworker_inbox
-              WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
-              ORDER BY created_at DESC, item_id DESC LIMIT 500
-            )
-        `).run(
-          item.workspaceId,
-          item.ownerId,
-          item.coworkerId,
-          item.workspaceId,
-          item.ownerId,
-          item.coworkerId,
-        );
+        this.#pruneInbox(item.workspaceId, item.ownerId, item.coworkerId);
       }
       this.#db.exec("COMMIT;");
       return structuredClone(next);
@@ -1784,8 +1845,8 @@ export class MatterhornCoworkerStore {
       statement(this.#db, `
         INSERT INTO crypto_coworker_watches(
           workspace_id, owner_id, coworker_id, watch_id, revision, profile_revision,
-          state, next_check_at, watch_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          state, next_check_at, watch_json, created_at, updated_at, authority_seal
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         watch.workspaceId,
         watch.ownerId,
@@ -1798,6 +1859,7 @@ export class MatterhornCoworkerStore {
         JSON.stringify(watch),
         watch.createdAt,
         watch.updatedAt,
+        sealAuthority(COWORKER_WATCH_AAD_DOMAIN, watch, this.#authorityKey),
       );
       this.#db.exec("COMMIT;");
       return structuredClone(watch);
@@ -1819,10 +1881,16 @@ export class MatterhornCoworkerStore {
     expectedRevision: number,
     maxActiveWatches?: number,
   ): MatterhornCoworkerWatch | null {
+    const currentRow = statement(this.#db, `
+      SELECT * FROM crypto_coworker_watches
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? LIMIT 1
+    `).get(watch.workspaceId, watch.ownerId, watch.coworkerId, watch.id) as CoworkerWatchRow | undefined;
+    if (!currentRow || watchFromRow(currentRow, this.#authorityKey).revision !== expectedRevision) return null;
     const update = () => statement(this.#db, `
         UPDATE crypto_coworker_watches
-        SET revision = ?, profile_revision = ?, state = ?, next_check_at = ?, watch_json = ?, updated_at = ?
-        WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? AND revision = ?
+        SET revision = ?, profile_revision = ?, state = ?, next_check_at = ?, watch_json = ?, updated_at = ?, authority_seal = ?
+        WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ?
+          AND revision = ? AND authority_seal = ?
         RETURNING *
       `).get(
         watch.revision,
@@ -1831,15 +1899,17 @@ export class MatterhornCoworkerStore {
         watch.schedule.nextCheckAt,
         JSON.stringify(watch),
         watch.updatedAt,
+        sealAuthority(COWORKER_WATCH_AAD_DOMAIN, watch, this.#authorityKey),
         watch.workspaceId,
         watch.ownerId,
         watch.coworkerId,
         watch.id,
         expectedRevision,
+        currentRow.authority_seal,
       ) as CoworkerWatchRow | undefined;
     if (watch.state !== "active" || maxActiveWatches === undefined) {
       const row = update();
-      return row ? watchFromRow(row) : null;
+      return row ? watchFromRow(row, this.#authorityKey) : null;
     }
     this.#db.exec("BEGIN IMMEDIATE;");
     try {
@@ -1854,7 +1924,7 @@ export class MatterhornCoworkerStore {
       if (count.count >= maxActiveWatches) throw new MatterhornCoworkerStoreError("coworker_watch_limit");
       const row = update();
       this.#db.exec("COMMIT;");
-      return row ? watchFromRow(row) : null;
+      return row ? watchFromRow(row, this.#authorityKey) : null;
     } catch (error) {
       this.#db.exec("ROLLBACK;");
       throw error;
@@ -1876,8 +1946,9 @@ export class MatterhornCoworkerStore {
         SELECT * FROM crypto_coworker_watches
         WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
         ORDER BY created_at ASC, watch_id ASC
-      `).all(input.workspaceId, input.ownerId, input.coworkerId) as CoworkerWatchRow[]).map(watchFromRow);
-      for (const watch of watches) {
+      `).all(input.workspaceId, input.ownerId, input.coworkerId) as CoworkerWatchRow[])
+        .map((row) => ({ row, watch: watchFromRow(row, this.#authorityKey) }));
+      for (const { row: watchRow, watch } of watches) {
         const next: MatterhornCoworkerWatch = {
           ...watch,
           revision: watch.revision + 1,
@@ -1888,19 +1959,22 @@ export class MatterhornCoworkerStore {
         };
         const result = statement(this.#db, `
           UPDATE crypto_coworker_watches
-          SET revision = ?, profile_revision = ?, state = ?, watch_json = ?, updated_at = ?
-          WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? AND revision = ?
+          SET revision = ?, profile_revision = ?, state = ?, watch_json = ?, updated_at = ?, authority_seal = ?
+          WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ?
+            AND revision = ? AND authority_seal = ?
         `).run(
           next.revision,
           next.profileRevision,
           next.state,
           JSON.stringify(next),
           next.updatedAt,
+          sealAuthority(COWORKER_WATCH_AAD_DOMAIN, next, this.#authorityKey),
           next.workspaceId,
           next.ownerId,
           next.coworkerId,
           next.id,
           watch.revision,
+          watchRow.authority_seal,
         );
         if ((result.changes ?? 0) !== 1) throw new MatterhornCoworkerStoreError("coworker_revision_conflict");
         changed += 1;
@@ -1925,8 +1999,9 @@ export class MatterhornCoworkerStore {
         SELECT * FROM crypto_coworker_watches
         WHERE workspace_id = ? AND state = 'active'
         ORDER BY owner_id ASC, coworker_id ASC, created_at ASC, watch_id ASC
-      `).all(input.workspaceId) as CoworkerWatchRow[]).map(watchFromRow);
-      for (const watch of watches) {
+      `).all(input.workspaceId) as CoworkerWatchRow[])
+        .map((row) => ({ row, watch: watchFromRow(row, this.#authorityKey) }));
+      for (const { row: watchRow, watch } of watches) {
         if (watch.connectionBinding?.connectionId !== input.connectionId) continue;
         const next: MatterhornCoworkerWatch = {
           ...watch,
@@ -1937,18 +2012,21 @@ export class MatterhornCoworkerStore {
         };
         const result = statement(this.#db, `
           UPDATE crypto_coworker_watches
-          SET revision = ?, state = ?, watch_json = ?, updated_at = ?
-          WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? AND revision = ? AND state = 'active'
+          SET revision = ?, state = ?, watch_json = ?, updated_at = ?, authority_seal = ?
+          WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ?
+            AND revision = ? AND state = 'active' AND authority_seal = ?
         `).run(
           next.revision,
           next.state,
           JSON.stringify(next),
           next.updatedAt,
+          sealAuthority(COWORKER_WATCH_AAD_DOMAIN, next, this.#authorityKey),
           next.workspaceId,
           next.ownerId,
           next.coworkerId,
           next.id,
           watch.revision,
+          watchRow.authority_seal,
         );
         if ((result.changes ?? 0) !== 1) throw new MatterhornCoworkerStoreError("coworker_revision_conflict");
         changed += 1;
@@ -1962,10 +2040,16 @@ export class MatterhornCoworkerStore {
   }
 
   deleteWatch(workspaceId: string, ownerId: string, coworkerId: string, watchId: string, expectedRevision: number): boolean {
+    const row = statement(this.#db, `
+      SELECT * FROM crypto_coworker_watches
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? LIMIT 1
+    `).get(workspaceId, ownerId, coworkerId, watchId) as CoworkerWatchRow | undefined;
+    if (!row || watchFromRow(row, this.#authorityKey).revision !== expectedRevision) return false;
     return (statement(this.#db, `
       DELETE FROM crypto_coworker_watches
-      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ? AND revision = ?
-    `).run(workspaceId, ownerId, coworkerId, watchId, expectedRevision).changes ?? 0) === 1;
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ?
+        AND revision = ? AND authority_seal = ?
+    `).run(workspaceId, ownerId, coworkerId, watchId, expectedRevision, row.authority_seal).changes ?? 0) === 1;
   }
 
   createInboxItem(item: MatterhornCoworkerInboxItem): MatterhornCoworkerInboxItem {
@@ -1977,8 +2061,8 @@ export class MatterhornCoworkerStore {
       }
       statement(this.#db, `
         INSERT INTO crypto_coworker_inbox(
-          workspace_id, owner_id, coworker_id, item_id, state, created_at, updated_at, item_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          workspace_id, owner_id, coworker_id, item_id, state, created_at, updated_at, item_json, authority_seal
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         item.workspaceId,
         item.ownerId,
@@ -1988,24 +2072,9 @@ export class MatterhornCoworkerStore {
         item.createdAt,
         item.updatedAt,
         JSON.stringify(item),
+        sealAuthority(COWORKER_INBOX_AAD_DOMAIN, item, this.#authorityKey),
       );
-      statement(this.#db, `
-        DELETE FROM crypto_coworker_inbox
-        WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
-          AND item_id NOT IN (
-            SELECT item_id FROM crypto_coworker_inbox
-            WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
-            ORDER BY created_at DESC, item_id DESC
-            LIMIT 500
-          )
-      `).run(
-        item.workspaceId,
-        item.ownerId,
-        item.coworkerId,
-        item.workspaceId,
-        item.ownerId,
-        item.coworkerId,
-      );
+      this.#pruneInbox(item.workspaceId, item.ownerId, item.coworkerId);
       this.#db.exec("COMMIT;");
       return structuredClone(item);
     } catch (error) {
@@ -2021,7 +2090,7 @@ export class MatterhornCoworkerStore {
       SELECT * FROM crypto_coworker_inbox
       WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND item_id = ? LIMIT 1
     `).get(workspaceId, ownerId, coworkerId, itemId) as CoworkerInboxItemRow | undefined;
-    return row ? inboxItemFromRow(row) : null;
+    return row ? inboxItemFromRow(row, this.#authorityKey) : null;
   }
 
   listInbox(input: {
@@ -2042,7 +2111,8 @@ export class MatterhornCoworkerStore {
         WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND state != 'dismissed'
         ORDER BY created_at DESC, item_id DESC LIMIT ?
       `).all(input.workspaceId, input.ownerId, input.coworkerId, input.limit);
-    return (rows as CoworkerInboxItemRow[]).map(inboxItemFromRow);
+    return (rows as CoworkerInboxItemRow[])
+      .map((row) => inboxItemFromRow(row, this.#authorityKey));
   }
 
   listInboxSummaries(workspaceId: string, ownerId: string): MatterhornCoworkerInboxSummary[] {
@@ -2056,7 +2126,7 @@ export class MatterhornCoworkerStore {
     for (const row of rows) {
       // Restored rows must pass the same schema, ownership and secret scan as a
       // full inbox read before even their content-free metadata is disclosed.
-      const item = inboxItemFromRow(row);
+      const item = inboxItemFromRow(row, this.#authorityKey);
       const existing = summaries.get(item.coworkerId);
       if (existing) {
         existing.unreadCount += 1;
@@ -2072,22 +2142,30 @@ export class MatterhornCoworkerStore {
   }
 
   replaceInboxItem(item: MatterhornCoworkerInboxItem, expectedState: MatterhornCoworkerInboxItem["state"]): MatterhornCoworkerInboxItem | null {
+    const currentRow = statement(this.#db, `
+      SELECT * FROM crypto_coworker_inbox
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND item_id = ? LIMIT 1
+    `).get(item.workspaceId, item.ownerId, item.coworkerId, item.id) as CoworkerInboxItemRow | undefined;
+    if (!currentRow || inboxItemFromRow(currentRow, this.#authorityKey).state !== expectedState) return null;
     const row = statement(this.#db, `
       UPDATE crypto_coworker_inbox
-      SET state = ?, updated_at = ?, item_json = ?
-      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND item_id = ? AND state = ?
+      SET state = ?, updated_at = ?, item_json = ?, authority_seal = ?
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND item_id = ?
+        AND state = ? AND authority_seal = ?
       RETURNING *
     `).get(
       item.state,
       item.updatedAt,
       JSON.stringify(item),
+      sealAuthority(COWORKER_INBOX_AAD_DOMAIN, item, this.#authorityKey),
       item.workspaceId,
       item.ownerId,
       item.coworkerId,
       item.id,
       expectedState,
+      currentRow.authority_seal,
     ) as CoworkerInboxItemRow | undefined;
-    return row ? inboxItemFromRow(row) : null;
+    return row ? inboxItemFromRow(row, this.#authorityKey) : null;
   }
 
   deleteWorkingState(workspaceId: string, ownerId: string, coworkerId: string): boolean {
@@ -2206,6 +2284,12 @@ export class MatterhornCoworkerStore {
     for (const row of statement(this.#db, "SELECT * FROM crypto_coworker_session_bindings").all() as CoworkerSessionBindingRow[]) {
       sessionBindingFromRow(row, this.#authorityKey);
     }
+    for (const row of statement(this.#db, "SELECT * FROM crypto_coworker_watches").all() as CoworkerWatchRow[]) {
+      watchFromRow(row, this.#authorityKey);
+    }
+    for (const row of statement(this.#db, "SELECT * FROM crypto_coworker_inbox").all() as CoworkerInboxItemRow[]) {
+      inboxItemFromRow(row, this.#authorityKey);
+    }
   }
 
   #backfillProfileAuthoritySeals(): void {
@@ -2262,6 +2346,63 @@ export class MatterhornCoworkerStore {
       row.owner_id,
       row.session_id,
     ).changes ?? 0);
+  }
+
+  #backfillWatchAuthoritySeals(): void {
+    const rows = statement(this.#db, "SELECT * FROM crypto_coworker_watches WHERE authority_seal IS NULL")
+      .all() as CoworkerWatchRow[];
+    this.#backfillAuthorityRows(rows, (row) => statement(this.#db, `
+      UPDATE crypto_coworker_watches SET authority_seal = ?
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND watch_id = ?
+        AND authority_seal IS NULL
+    `).run(
+      sealAuthority(COWORKER_WATCH_AAD_DOMAIN, watchAuthorityValue(row), this.#authorityKey),
+      row.workspace_id,
+      row.owner_id,
+      row.coworker_id,
+      row.watch_id,
+    ).changes ?? 0);
+  }
+
+  #backfillInboxAuthoritySeals(): void {
+    const rows = statement(this.#db, "SELECT * FROM crypto_coworker_inbox WHERE authority_seal IS NULL")
+      .all() as CoworkerInboxItemRow[];
+    this.#backfillAuthorityRows(rows, (row) => statement(this.#db, `
+      UPDATE crypto_coworker_inbox SET authority_seal = ?
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND item_id = ?
+        AND authority_seal IS NULL
+    `).run(
+      sealAuthority(COWORKER_INBOX_AAD_DOMAIN, inboxItemAuthorityValue(row), this.#authorityKey),
+      row.workspace_id,
+      row.owner_id,
+      row.coworker_id,
+      row.item_id,
+    ).changes ?? 0);
+  }
+
+  #pruneInbox(workspaceId: string, ownerId: string, coworkerId: string): void {
+    const rows = statement(this.#db, `
+      SELECT * FROM crypto_coworker_inbox
+      WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
+      ORDER BY created_at DESC, item_id DESC
+      LIMIT -1 OFFSET 500
+    `).all(workspaceId, ownerId, coworkerId) as CoworkerInboxItemRow[];
+    let deleted = 0;
+    for (const row of rows) {
+      inboxItemFromRow(row, this.#authorityKey);
+      deleted += statement(this.#db, `
+        DELETE FROM crypto_coworker_inbox
+        WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ? AND item_id = ?
+          AND authority_seal = ?
+      `).run(
+        row.workspace_id,
+        row.owner_id,
+        row.coworker_id,
+        row.item_id,
+        row.authority_seal,
+      ).changes ?? 0;
+    }
+    if (deleted !== rows.length) throw new MatterhornCoworkerStoreError("coworker_state_corrupt");
   }
 
   #verifyAccessAuthorityState(): void {

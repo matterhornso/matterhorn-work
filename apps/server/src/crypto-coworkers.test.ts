@@ -1119,55 +1119,160 @@ describe("durable crypto coworkers", () => {
     }
   });
 
-  test("rescans restored watch and inbox rows before use", () => {
-    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-secret-rescan-"));
+  test("rejects restored watch authority and inbox evidence mutation before use", () => {
+    for (const target of ["watch", "inbox"] as const) {
+      const root = mkdtempSync(join(tmpdir(), `matterhorn-coworker-${target}-seal-`));
+      roots.push(root);
+      const path = join(root, "coworkers.db");
+      const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+      const coworkers = new MatterhornCoworkers({
+        store,
+        policyVersion: "coworker-policy-1",
+        now: () => new Date(NOW),
+        id: () => "cw_restored_authority",
+        watchId: () => "cwatch_restored_authority",
+        inboxItemId: () => "cinbox_restored_authority",
+      });
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
+      store.close();
+
+      const database = new Database(path);
+      if (target === "watch") {
+        const row = database.query("SELECT watch_json FROM crypto_coworker_watches LIMIT 1")
+          .get() as { watch_json: string };
+        const payload = JSON.parse(row.watch_json) as Record<string, any>;
+        payload.parameters.address = "0x9999";
+        database.query(`
+          UPDATE crypto_coworker_watches SET watch_json = ?, authority_seal = ?
+        `).run(JSON.stringify(payload), FORGED_AUTHORITY_SEAL);
+      } else {
+        const row = database.query("SELECT item_json FROM crypto_coworker_inbox LIMIT 1")
+          .get() as { item_json: string };
+        const payload = JSON.parse(row.item_json) as Record<string, any>;
+        payload.summary = "This restored alert was not produced by the approved watch.";
+        database.query(`
+          UPDATE crypto_coworker_inbox SET item_json = ?, authority_seal = ?
+        `).run(JSON.stringify(payload), FORGED_AUTHORITY_SEAL);
+      }
+      database.close();
+
+      expect(() => new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET))
+        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+    }
+  });
+
+  test("seals structurally valid legacy watch authority and inbox evidence during migration", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-watch-migration-"));
     roots.push(root);
     const path = join(root, "coworkers.db");
-    const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
-    const coworkers = new MatterhornCoworkers({
-      store,
+    const sourceStore = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    const source = new MatterhornCoworkers({
+      store: sourceStore,
       policyVersion: "coworker-policy-1",
       now: () => new Date(NOW),
-      id: () => "cw_secret_rescan",
-      watchId: () => "cwatch_secret_rescan",
-      inboxItemId: () => "cinbox_secret_rescan",
+      id: () => "cw_legacy_watch",
+      watchId: () => "cwatch_legacy_watch",
+      inboxItemId: () => "cinbox_legacy_watch",
     });
-    const profile = coworkers.create("ws_alpha", "account_alpha", input({
+    const profile = source.create("ws_alpha", "account_alpha", input({
       automaticAuthorities: ["read", "watch"],
       limits: { ...input().limits, maxActiveWatches: 1 },
     }));
-    coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
-    coworkers.setWorkingState("ws_alpha", "account_alpha", profile.id, workingStateInput());
-    const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
-    const item = coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
-    store.close();
+    source.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+    const watch = source.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+    const item = source.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
+    sourceStore.close();
 
-    const secret = `suiprivkey1${"t".repeat(58)}`;
-    const database = new Database(path);
-    const mutations = [
-      ["crypto_coworker_watches", "watch_json", "parameters"],
-      ["crypto_coworker_inbox", "item_json", "summary"],
-    ] as const;
-    for (const [table, column, field] of mutations) {
-      const row = database.query(`SELECT ${column} AS payload FROM ${table} LIMIT 1`)
-        .get() as { payload: string };
-      const payload = JSON.parse(row.payload) as Record<string, any>;
-      if (field === "parameters") payload.parameters.note = secret;
-      else payload[field] = secret;
-      database.query(`UPDATE ${table} SET ${column} = ?`).run(JSON.stringify(payload));
-    }
-    database.close();
+    const legacy = new Database(path);
+    legacy.exec(`
+      DROP TRIGGER crypto_coworker_watch_seal_insert;
+      DROP TRIGGER crypto_coworker_watch_seal_update;
+      DROP TRIGGER crypto_coworker_inbox_seal_insert;
+      DROP TRIGGER crypto_coworker_inbox_seal_update;
+      ALTER TABLE crypto_coworker_watches DROP COLUMN authority_seal;
+      ALTER TABLE crypto_coworker_inbox DROP COLUMN authority_seal;
+    `);
+    legacy.close();
 
-    const reopened = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    const migrated = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
     try {
-      expect(() => reopened.getWatch("ws_alpha", "account_alpha", profile.id, watch.id))
-        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
-      expect(() => reopened.getInboxItem("ws_alpha", "account_alpha", profile.id, item.id))
-        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
-      expect(() => reopened.listInboxSummaries("ws_alpha", "account_alpha"))
-        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+      expect(migrated.getWatch("ws_alpha", "account_alpha", profile.id, watch.id)).toEqual(watch);
+      expect(migrated.getInboxItem("ws_alpha", "account_alpha", profile.id, item.id)).toEqual(item);
+      const database = new Database(path, { readonly: true });
+      try {
+        const migratedWatch = database.query("SELECT authority_seal FROM crypto_coworker_watches LIMIT 1")
+          .get() as { authority_seal: string };
+        const migratedItem = database.query("SELECT authority_seal FROM crypto_coworker_inbox LIMIT 1")
+          .get() as { authority_seal: string };
+        expect(migratedWatch.authority_seal).toMatch(/^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}$/);
+        expect(migratedItem.authority_seal).toMatch(/^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}$/);
+      } finally {
+        database.close();
+      }
     } finally {
-      reopened.close();
+      migrated.close();
+    }
+  });
+
+  test("rejects secret-bearing legacy watch authority and inbox evidence instead of sealing it", () => {
+    for (const target of ["watch", "inbox"] as const) {
+      const root = mkdtempSync(join(tmpdir(), `matterhorn-coworker-legacy-${target}-secret-`));
+      roots.push(root);
+      const path = join(root, "coworkers.db");
+      const sourceStore = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+      const source = new MatterhornCoworkers({
+        store: sourceStore,
+        policyVersion: "coworker-policy-1",
+        now: () => new Date(NOW),
+        id: () => "cw_legacy_secret",
+        watchId: () => "cwatch_legacy_secret",
+        inboxItemId: () => "cinbox_legacy_secret",
+      });
+      const profile = source.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      source.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      const watch = source.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      source.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
+      sourceStore.close();
+
+      const legacy = new Database(path);
+      if (target === "watch") {
+        legacy.exec(`
+          DROP TRIGGER crypto_coworker_watch_seal_insert;
+          DROP TRIGGER crypto_coworker_watch_seal_update;
+          ALTER TABLE crypto_coworker_watches DROP COLUMN authority_seal;
+        `);
+        const row = legacy.query("SELECT watch_json FROM crypto_coworker_watches LIMIT 1")
+          .get() as { watch_json: string };
+        const payload = JSON.parse(row.watch_json) as Record<string, any>;
+        payload.parameters.note = `suiprivkey1${"t".repeat(58)}`;
+        legacy.query("UPDATE crypto_coworker_watches SET watch_json = ?")
+          .run(JSON.stringify(payload));
+      } else {
+        legacy.exec(`
+          DROP TRIGGER crypto_coworker_inbox_seal_insert;
+          DROP TRIGGER crypto_coworker_inbox_seal_update;
+          ALTER TABLE crypto_coworker_inbox DROP COLUMN authority_seal;
+        `);
+        const row = legacy.query("SELECT item_json FROM crypto_coworker_inbox LIMIT 1")
+          .get() as { item_json: string };
+        const payload = JSON.parse(row.item_json) as Record<string, any>;
+        payload.summary = `suiprivkey1${"t".repeat(58)}`;
+        legacy.query("UPDATE crypto_coworker_inbox SET item_json = ?")
+          .run(JSON.stringify(payload));
+      }
+      legacy.close();
+
+      expect(() => new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET))
+        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
     }
   });
 
@@ -1258,6 +1363,48 @@ describe("durable crypto coworkers", () => {
       coworkers.delete("ws_alpha", "account_alpha", profile.id, profile.revision);
       expect(store.getWatch("ws_alpha", "account_alpha", profile.id, watch.id)).toBeNull();
       expect(store.getInboxItem("ws_alpha", "account_alpha", profile.id, item.id)).toBeNull();
+    } finally {
+      store.close();
+    }
+  });
+
+  test("prunes only authenticated inbox evidence beyond the 500-item tenant cap", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-inbox-pruning-"));
+    roots.push(root);
+    const path = join(root, "coworkers.db");
+    const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    let itemSequence = 0;
+    const coworkers = new MatterhornCoworkers({
+      store,
+      policyVersion: "coworker-policy-1",
+      now: () => new Date(NOW),
+      id: () => "cw_inbox_pruning",
+      watchId: () => "cwatch_inbox_pruning",
+      inboxItemId: () => `cinbox_prune_${String(++itemSequence).padStart(4, "0")}`,
+    });
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      for (let index = 0; index < 501; index += 1) {
+        coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
+      }
+
+      expect(store.getInboxItem("ws_alpha", "account_alpha", profile.id, "cinbox_prune_0001")).toBeNull();
+      expect(store.getInboxItem("ws_alpha", "account_alpha", profile.id, "cinbox_prune_0501")).not.toBeNull();
+      const database = new Database(path, { readonly: true });
+      try {
+        const row = database.query(`
+          SELECT COUNT(*) AS count FROM crypto_coworker_inbox
+          WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
+        `).get("ws_alpha", "account_alpha", profile.id) as { count: number };
+        expect(row.count).toBe(500);
+      } finally {
+        database.close();
+      }
     } finally {
       store.close();
     }
