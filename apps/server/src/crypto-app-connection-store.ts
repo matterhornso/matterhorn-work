@@ -300,14 +300,7 @@ function connectionState(value: string): MatterhornCryptoAppConnectionState {
 }
 
 function connectionAuthorityDigest(connection: MatterhornCryptoAppConnection): string {
-  // The credential union contains only an opaque vault record locator or wallet
-  // connection id, never a password, token, key, signature, or credential value.
-  // It is deliberately included in this non-authenticating content checksum so
-  // restored connection authority cannot be changed without detection.
-
   return createHash("sha256")
-
-    // codeql[js/insufficient-password-hash]
     .update(canonicalJson({
       domain: "matterhorn:crypto-app-connection-authority:v1",
       version: connection.version,
@@ -319,7 +312,7 @@ function connectionAuthorityDigest(connection: MatterhornCryptoAppConnection): s
       grantedActionIds: connection.grantedActionIds,
       grantedScopes: connection.grantedScopes,
       grantedNetworks: connection.grantedNetworks,
-      credential: connection.credential,
+      credentialClass: connection.credential.type,
       createdBy: connection.createdBy,
       createdAt: connection.createdAt,
       updatedAt: connection.updatedAt,
