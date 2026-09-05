@@ -59,6 +59,7 @@ describe("distributable manifest contract", () => {
         description: "Read one public Sui testnet balance.",
         access: "read",
         risk: "informational",
+        cachePolicy: "block_bound_public",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         outputProjectionSchema: { type: "object", properties: {}, additionalProperties: false },
         requiredScopes: [],

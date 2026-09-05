@@ -405,7 +405,7 @@ function hyperliquidManifest(options: MatterhornFirstPartyCryptoAppOptions): Mat
     appId: "matterhorn.hyperliquid-testnet",
     displayName: "Hyperliquid Testnet",
     description: "Certified Hyperliquid testnet market reads and wallet-reviewed order preparation.",
-    manifestRevision: "1.1.0",
+    manifestRevision: "1.2.0",
     transport: { kind: "matterhorn_sdk", endpoint: options.hyperliquidTestnetEndpoint },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "hyperliquid", chainId: "hyperliquid:testnet", environment: "testnet" }],
@@ -416,6 +416,7 @@ function hyperliquidManifest(options: MatterhornFirstPartyCryptoAppOptions): Mat
         description: "Read bounded Hyperliquid testnet market summaries.",
         access: "read",
         risk: "informational",
+        cachePolicy: "block_bound_public",
         inputSchema: objectSchema({ limit: { type: "integer", minimum: 1, maximum: 50 } }),
         outputProjectionSchema: objectSchema({
           markets: {
@@ -444,6 +445,7 @@ function hyperliquidManifest(options: MatterhornFirstPartyCryptoAppOptions): Mat
         description: "Read a bounded Hyperliquid testnet orderbook for one asset.",
         access: "read",
         risk: "informational",
+        cachePolicy: "block_bound_public",
         inputSchema: objectSchema({ asset: { type: "string", minLength: 1, maxLength: 32 } }, ["asset"]),
         outputProjectionSchema: objectSchema({
           asset: { type: "string", minLength: 1, maxLength: 32 },
@@ -673,7 +675,7 @@ export function buildMatterhornFirstPartyBittensorTestnetManifest(
     appId: "matterhorn.bittensor-testnet",
     displayName: "Bittensor Testnet",
     description: "Certified Bittensor testnet research and wallet-reviewed transfer, stake, and unstake preparation.",
-    manifestRevision: "1.1.0",
+    manifestRevision: "1.2.0",
     transport: { kind: "matterhorn_sdk", endpoint: options.bittensorTestnetSidecarEndpoint },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "bittensor", chainId: "bittensor:test", environment: "testnet" }],
@@ -684,6 +686,7 @@ export function buildMatterhornFirstPartyBittensorTestnetManifest(
         description: "Read bounded public subnet metadata with block and observation freshness.",
         access: "read",
         risk: "informational",
+        cachePolicy: "block_bound_public",
         inputSchema: objectSchema({ limit: { type: "integer", minimum: 1, maximum: 50 } }),
         outputProjectionSchema: objectSchema({
           network: { type: "string", const: "bittensor:test" },
@@ -705,6 +708,7 @@ export function buildMatterhornFirstPartyBittensorTestnetManifest(
         description: "Read one subnet and a bounded validator comparison from public testnet state.",
         access: "read",
         risk: "informational",
+        cachePolicy: "block_bound_public",
         inputSchema: objectSchema({
           netuid: { type: "integer", minimum: 0, maximum: 65_535 },
           validatorLimit: { type: "integer", minimum: 1, maximum: 20 },
@@ -754,7 +758,7 @@ export function buildMatterhornFirstPartyPolymarketResearchManifest(
     appId: "matterhorn.polymarket-research",
     displayName: "Polymarket Public Research",
     description: "Read-only public Polymarket market discovery. No wallet or order authority.",
-    manifestRevision: "1.1.0",
+    manifestRevision: "1.2.0",
     transport: { kind: "matterhorn_sdk", endpoint: options.polymarketGammaEndpoint },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "polymarket", chainId: "polymarket:public", environment: "mainnet" }],
@@ -764,6 +768,7 @@ export function buildMatterhornFirstPartyPolymarketResearchManifest(
       description: "Search bounded public market metadata without wallet, profile, or order access.",
       access: "read",
       risk: "informational",
+      cachePolicy: "block_bound_public",
       inputSchema: objectSchema({
         query: { type: "string", minLength: 1, maxLength: 200 },
         limit: { type: "integer", minimum: 1, maximum: 10 },
@@ -842,7 +847,7 @@ export function buildMatterhornFirstPartyPolymarketClobResearchManifest(
     appId: "matterhorn.polymarket-clob-research",
     displayName: "Polymarket Public Order Books",
     description: "Read-only public Polymarket order-book snapshots. No account, wallet, or order authority.",
-    manifestRevision: "1.0.0",
+    manifestRevision: "1.1.0",
     transport: { kind: "matterhorn_sdk", endpoint: options.polymarketClobEndpoint },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "polymarket", chainId: "polymarket:public", environment: "mainnet" }],
@@ -852,6 +857,7 @@ export function buildMatterhornFirstPartyPolymarketClobResearchManifest(
       description: "Read one bounded public order book by its exact outcome token ID.",
       access: "read",
       risk: "informational",
+      cachePolicy: "block_bound_public",
       inputSchema: objectSchema({
         tokenId: { type: "string", minLength: 1, maxLength: 78 },
       }, ["tokenId"]),

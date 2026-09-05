@@ -23,6 +23,7 @@ export const MATTERHORN_WALRUS_PROOF_VERSION = "matterhorn.walrus-proof.v1";
 
 export type MatterhornCryptoAppActionAccess = "read" | "watch" | "prepare" | "simulate";
 export type MatterhornCryptoAppActionRisk = "informational" | "private_data" | "financial_low" | "financial_high";
+export type MatterhornCryptoAppCachePolicy = "block_bound_public";
 export type MatterhornCryptoAppTransportKind = "mcp_http" | "openapi" | "rpc" | "matterhorn_sdk";
 export type MatterhornCryptoAppNetworkEnvironment = "testnet" | "mainnet";
 
@@ -62,6 +63,11 @@ export type MatterhornCryptoAppAction = {
   description: string;
   access: MatterhornCryptoAppActionAccess;
   risk: MatterhornCryptoAppActionRisk;
+  /**
+   * An explicit signed opt-in for short-lived public evidence reuse. Absence
+   * means the result must never enter Matterhorn's public evidence cache.
+   */
+  cachePolicy?: MatterhornCryptoAppCachePolicy;
   inputSchema: Record<string, unknown>;
   outputProjectionSchema: Record<string, unknown>;
   requiredScopes: string[];
@@ -193,6 +199,7 @@ export type MatterhornCryptoAppCatalogActionView = {
   description: string;
   access: MatterhornCryptoAppActionAccess;
   risk: MatterhornCryptoAppActionRisk;
+  cachePolicy: MatterhornCryptoAppCachePolicy | null;
   requiredScopes: string[];
   requiresFreshness: boolean;
   freshnessMaxAgeMs: number | null;
@@ -1181,6 +1188,7 @@ const ACTION_KEYS: readonly string[] = [
   "description",
   "access",
   "risk",
+  "cachePolicy",
   "inputSchema",
   "outputProjectionSchema",
   "requiredScopes",
@@ -1364,6 +1372,9 @@ export function validateMatterhornCryptoAppManifest(value: unknown): string[] {
       if (!isNonEmptyString(action.description) || action.description.length > 2_000 || CONTROL_CHARACTER.test(action.description)) issues.push("action_description_required");
       if (!isNonEmptyString(action.access) || !SAFE_ACTION_ACCESS.includes(action.access)) issues.push("action_access_invalid");
       if (!isNonEmptyString(action.risk) || !SAFE_ACTION_RISK.includes(action.risk)) issues.push("action_risk_invalid");
+      if (action.cachePolicy !== undefined && action.cachePolicy !== "block_bound_public") {
+        issues.push("action_cache_policy_invalid");
+      }
       if (!isRecord(action.inputSchema)) issues.push("action_input_schema_invalid");
       if (!isRecord(action.outputProjectionSchema)) issues.push("action_output_schema_invalid");
       if (!isStringArray(action.requiredScopes)

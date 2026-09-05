@@ -51,6 +51,7 @@ function manifest(
       description: "Read one market summary.",
       access: "read",
       risk: "informational",
+      ...(authentication.type === "none" ? { cachePolicy: "block_bound_public" as const } : {}),
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -329,8 +330,19 @@ describe("certified crypto app adapter router", () => {
   });
 
   test("never caches private, authenticated, unbound or expired evidence", async () => {
+    const undeclared = fixture({
+      mutateManifest: (candidate) => { delete candidate.actions[0]!.cachePolicy; },
+    });
+    await undeclared.router.execute(request({ runId: "run_undeclared_1", callId: "call_undeclared_1" }));
+    await undeclared.router.execute(request({ runId: "run_undeclared_2", callId: "call_undeclared_2" }));
+    expect(undeclared.executorCalls).toHaveLength(2);
+    undeclared.store.close();
+
     const privateRead = fixture({
-      mutateManifest: (candidate) => { candidate.actions[0]!.risk = "private_data"; },
+      mutateManifest: (candidate) => {
+        candidate.actions[0]!.risk = "private_data";
+        delete candidate.actions[0]!.cachePolicy;
+      },
     });
     await privateRead.router.execute(request({ runId: "run_private_1", callId: "call_private_1" }));
     await privateRead.router.execute(request({ runId: "run_private_2", callId: "call_private_2" }));

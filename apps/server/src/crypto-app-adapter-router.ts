@@ -164,6 +164,7 @@ function publicEvidenceCacheEligible(input: {
 }): boolean {
   return input.action.access === "read"
     && input.action.risk === "informational"
+    && input.action.cachePolicy === "block_bound_public"
     && input.action.requiresFreshness
     && input.action.freshnessMaxAgeMs !== null
     && Number.isSafeInteger(input.action.freshnessMaxAgeMs)

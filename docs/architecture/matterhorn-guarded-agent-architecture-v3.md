@@ -254,8 +254,9 @@ The reviewed prompt text is documented in
 
 Matterhorn exposes only the active coworker's approved actions to the model.
 Typed projections replace unrestricted tool responses; full evidence remains
-outside model context. Public block-bound evidence can be cached by app,
-network, block, and query. Structured state carries decisions, risks, positions,
+outside model context. Public block-bound evidence can be cached only when the
+signed, certified action explicitly opts into the public cache policy and the
+runtime observation is anonymous, scope-free, fresh, and block-bound. Structured state carries decisions, risks, positions,
 pending reviews, and evidence references instead of replaying entire chats.
 
 The compiler targets bounded summaries and preserves citations, action terms,

@@ -84,6 +84,17 @@ describe("account-safe crypto app catalog", () => {
     expect(apps.every((app) => app.certification.runtimeReportHash.length === 64)).toBe(true);
     expect(apps.every((app) => app.actions.every((action) => action.walletSubmissionOnly && !action.agentMaySubmit)))
       .toBe(true);
+    const hyperliquid = apps.find((app) => app.appId === "matterhorn.hyperliquid-testnet")!;
+    expect(hyperliquid.actions.filter((action) => action.access === "read"))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "hyperliquid_market_read", cachePolicy: "block_bound_public" }),
+        expect.objectContaining({ id: "hyperliquid_orderbook_read", cachePolicy: "block_bound_public" }),
+        expect.objectContaining({ id: "hyperliquid_account_exposure", cachePolicy: null }),
+      ]));
+    expect(hyperliquid.actions.find((action) => action.id === "hyperliquid_preview_order")?.cachePolicy)
+      .toBeNull();
+    expect(apps.find((app) => app.appId === "matterhorn.sui-testnet")?.actions
+      .every((action) => action.cachePolicy === null)).toBe(true);
     const serialized = JSON.stringify(apps);
     expect(serialized).not.toContain("certification.internal.example");
     expect(serialized).not.toContain("publisher-1");

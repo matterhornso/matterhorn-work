@@ -89,6 +89,7 @@ export {
   type MatterhornCryptoAppAction,
   type MatterhornCryptoAppActionAccess,
   type MatterhornCryptoAppActionRisk,
+  type MatterhornCryptoAppCachePolicy,
   type MatterhornCryptoAppAuthentication,
   type MatterhornCryptoAppManifest,
   type MatterhornCryptoAppNetworkEnvironment,
@@ -122,7 +123,7 @@ export type MatterhornCryptoAppSigningRequest = {
 
 export type MatterhornCryptoAppLocalFinding = {
   severity: "error" | "warning";
-  category: "manifest" | "authority" | "authentication" | "network" | "schema" | "reliability";
+  category: "manifest" | "authority" | "authentication" | "network" | "schema" | "reliability" | "privacy";
   code: string;
   actionId: string | null;
 };
@@ -333,6 +334,7 @@ function publicHttpsShape(value: string): boolean {
 function inspectAction(
   action: MatterhornCryptoAppAction,
   scopes: Set<string>,
+  anonymous: boolean,
   findings: MatterhornCryptoAppLocalFinding[],
 ): void {
   for (const issue of validateCryptoAppSchemaDefinition(action.inputSchema)) {
@@ -359,6 +361,17 @@ function inspectAction(
   }
   if (!financial && (action.risk === "financial_low" || action.risk === "financial_high")) {
     addFinding(findings, "error", "authority", "financial_risk_requires_prepare_or_simulate", action.id);
+  }
+  if (action.cachePolicy === "block_bound_public") {
+    if (action.access !== "read" || action.risk !== "informational") {
+      addFinding(findings, "error", "privacy", "public_cache_requires_informational_read", action.id);
+    }
+    if (!action.requiresFreshness || action.freshnessMaxAgeMs === null) {
+      addFinding(findings, "error", "privacy", "public_cache_requires_freshness", action.id);
+    }
+    if (!anonymous || scopes.size > 0 || action.requiredScopes.length > 0) {
+      addFinding(findings, "error", "privacy", "public_cache_requires_anonymous_scope_free_action", action.id);
+    }
   }
   if (action.walletSubmissionOnly !== true || action.agentMaySubmit !== false) {
     addFinding(findings, "error", "authority", "wallet_submission_boundary_required", action.id);
@@ -392,7 +405,9 @@ export function emulateCryptoAppPolicy(
     addFinding(findings, "error", "network", "target_environment_not_declared");
   }
   const scopes = new Set(manifest.authentication.scopes);
-  for (const action of manifest.actions) inspectAction(action, scopes, findings);
+  for (const action of manifest.actions) {
+    inspectAction(action, scopes, manifest.authentication.type === "none", findings);
+  }
   return {
     version: "matterhorn.crypto-app-local-policy.v1",
     targetEnvironment,

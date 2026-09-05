@@ -21,6 +21,8 @@ export type MatterhornCryptoAppActionRisk =
   | "financial_low"
   | "financial_high";
 
+export type MatterhornCryptoAppCachePolicy = "block_bound_public";
+
 export type MatterhornCryptoAppTransportKind =
   | "mcp_http"
   | "openapi"
@@ -68,6 +70,11 @@ export type MatterhornCryptoAppAction = {
   description: string;
   access: MatterhornCryptoAppActionAccess;
   risk: MatterhornCryptoAppActionRisk;
+  /**
+   * Explicitly opts a signed public read into short-lived, block-bound reuse.
+   * Omit this for private, authenticated, scoped, or financial actions.
+   */
+  cachePolicy?: MatterhornCryptoAppCachePolicy;
   inputSchema: Record<string, unknown>;
   outputProjectionSchema: Record<string, unknown>;
   requiredScopes: string[];

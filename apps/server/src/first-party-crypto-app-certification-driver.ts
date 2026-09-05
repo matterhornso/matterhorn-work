@@ -78,12 +78,12 @@ const PUBLIC_MAINNET_READ_PROFILES: Readonly<Record<string, {
   "matterhorn.polymarket-research": {
     actionId: "polymarket_market_search",
     endpointOrigin: "https://gamma-api.polymarket.com",
-    manifestRevision: "1.1.0",
+    manifestRevision: "1.2.0",
   },
   "matterhorn.polymarket-clob-research": {
     actionId: "polymarket_orderbook_read",
     endpointOrigin: "https://clob.polymarket.com",
-    manifestRevision: "1.0.0",
+    manifestRevision: "1.1.0",
   },
 };
 const FORBIDDEN_INPUT_KEY = /(?:^|_)(?:api_?key|authorization|credential|mnemonic|password|passphrase|private_?key|raw_?signature|secret|seed(?:_?phrase)?|signed_?payload|token|wallet_?export)(?:$|_)/i;
@@ -194,6 +194,7 @@ export function firstPartyPublicReadCertificationScopeValid(
     && manifest.actions.every((action) => (
       action.access === "read"
       && action.risk === "informational"
+      && action.cachePolicy === "block_bound_public"
       && action.requiredScopes.length === 0
       && action.requiresFreshness
       && action.freshnessMaxAgeMs !== null

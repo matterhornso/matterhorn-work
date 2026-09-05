@@ -490,9 +490,11 @@ describe("first-party crypto app certification driver", () => {
     redirected.transport.endpoint = "https://attacker.invalid";
     const revisionDrift = structuredClone(polymarketManifests[0]!);
     revisionDrift.manifestRevision = "999.0.0";
+    const undeclaredCachePolicy = structuredClone(polymarketManifests[0]!);
+    delete undeclaredCachePolicy.actions[0]!.cachePolicy;
     const extraAction = structuredClone(polymarketManifests[0]!);
     extraAction.actions.push({ ...extraAction.actions[0]!, id: "polymarket_account_read" });
-    for (const manifest of [broadened, redirected, revisionDrift, extraAction]) {
+    for (const manifest of [broadened, redirected, revisionDrift, undeclaredCachePolicy, extraAction]) {
       await expect(certifyMatterhornFirstPartyPublicReadCryptoApp({
         manifest,
         publisherPublicKey: keys.publicKey,
