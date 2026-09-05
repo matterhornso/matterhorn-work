@@ -411,6 +411,131 @@ describe("agent privacy firewall", () => {
     competingStore.close();
   });
 
+  test("rejects a restored challenge whose durable tenant scope was changed", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-privacy-corrupt-scope-"));
+    const path = join(root, "state.db");
+    const now = new Date("2026-09-04T12:00:00.000Z");
+    const request = { ...baseInput(), memoryIds: ["memory_private"] };
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    try {
+      const firewall = new MatterhornPrivacyFirewall(store);
+      const preflight = firewall.preflight(request, { now }).response;
+      const challengeId = preflight.challenge?.id ?? "";
+      const persisted = store.getRecord<Record<string, unknown>>(
+        "privacy_challenge",
+        challengeId,
+        now.getTime(),
+      );
+      if (!persisted) throw new Error("test privacy challenge missing");
+      store.put({
+        kind: "privacy_challenge",
+        key: challengeId,
+        workspaceId: "ws_other",
+        sessionId: persisted.sessionId,
+        value: persisted.value,
+        expiresAtMs: persisted.expiresAtMs,
+        nowMs: persisted.updatedAtMs,
+      });
+      expect(() => firewall.confirm({
+        challengeId,
+        requestHash: preflight.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+        now: new Date(now.getTime() + 1),
+      })).toThrow("privacy_persisted_challenge_invalid");
+    } finally {
+      store.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects restored consent with an open payload contract", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-privacy-corrupt-consent-"));
+    const path = join(root, "state.db");
+    const now = new Date("2026-09-04T12:00:00.000Z");
+    const request = { ...baseInput(), memoryIds: ["memory_private"] };
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    try {
+      const firewall = new MatterhornPrivacyFirewall(store);
+      const preflight = firewall.preflight(request, { now }).response;
+      const consent = firewall.confirm({
+        challengeId: preflight.challenge?.id ?? "",
+        requestHash: preflight.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+        now,
+      });
+      const persisted = store.listRecords<Record<string, unknown>>(
+        "privacy_consent",
+        { workspaceId: request.workspaceId, nowMs: now.getTime() },
+      )[0];
+      if (!persisted) throw new Error("test privacy consent missing");
+      store.put({
+        kind: "privacy_consent",
+        key: persisted.key,
+        workspaceId: persisted.workspaceId,
+        sessionId: persisted.sessionId,
+        value: { ...persisted.value, authority: "broadened" },
+        expiresAtMs: persisted.expiresAtMs,
+        nowMs: persisted.updatedAtMs,
+      });
+      expect(() => firewall.validateConsent({
+        token: consent.consentToken,
+        requestHash: consent.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+        now: new Date(now.getTime() + 1),
+      })).toThrow("privacy_persisted_consent_invalid");
+    } finally {
+      store.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects restored consent whose expiry was extended after issuance", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-privacy-extended-consent-"));
+    const path = join(root, "state.db");
+    const now = new Date("2026-09-04T12:00:00.000Z");
+    const request = { ...baseInput(), memoryIds: ["memory_private"] };
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    try {
+      const firewall = new MatterhornPrivacyFirewall(store);
+      const preflight = firewall.preflight(request, { now }).response;
+      const consent = firewall.confirm({
+        challengeId: preflight.challenge?.id ?? "",
+        requestHash: preflight.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+        now,
+      });
+      const persisted = store.listRecords<Record<string, unknown>>(
+        "privacy_consent",
+        { workspaceId: request.workspaceId, nowMs: now.getTime() },
+      )[0];
+      if (!persisted) throw new Error("test privacy consent missing");
+      const extendedExpiry = now.getTime() + 10 * 60_000;
+      store.put({
+        kind: "privacy_consent",
+        key: persisted.key,
+        workspaceId: persisted.workspaceId,
+        sessionId: persisted.sessionId,
+        value: { ...persisted.value, expiresAtMs: extendedExpiry },
+        expiresAtMs: extendedExpiry,
+        nowMs: persisted.updatedAtMs,
+      });
+      expect(() => firewall.consumeConsent({
+        token: consent.consentToken,
+        requestHash: consent.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+        now: new Date(now.getTime() + 1),
+      })).toThrow("privacy_persisted_consent_invalid");
+    } finally {
+      store.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("restores a privacy challenge when consent persistence fails", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-privacy-confirm-rollback-"));
     const path = join(root, "state.db");
