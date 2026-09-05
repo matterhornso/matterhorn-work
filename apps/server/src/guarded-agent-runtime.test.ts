@@ -311,6 +311,136 @@ describe("guarded agent runtime transport", () => {
     second.close();
   });
 
+  test("rejects restored active-run state with added authority fields", async () => {
+    const path = join(dataDir, "active-run-open-contract.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const prompt = {
+      workspaceId: "ws_active_contract",
+      sessionId: "ses_active_contract",
+      parts: [{ type: "text" as const, text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work" as const,
+    };
+    const accepted = await runtime.acceptPrompt(prompt);
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "active_agent_run",
+      prompt.sessionId,
+    );
+    if (!persisted) throw new Error("test active run missing");
+    store.put({
+      kind: "active_agent_run",
+      key: persisted.key,
+      workspaceId: persisted.workspaceId,
+      sessionId: persisted.sessionId,
+      value: { ...persisted.value, submit: true },
+      expiresAtMs: persisted.expiresAtMs,
+      nowMs: persisted.updatedAtMs,
+    });
+
+    expect(() => runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: prompt.workspaceId,
+      sessionId: prompt.sessionId,
+      callId: "call_active_contract",
+      agentId: prompt.agentId,
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    })).toThrow("guarded_run_state_invalid");
+    expect(store.list("staged_capability", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    runtime.close();
+  });
+
+  test("fails closed with a stable error for malformed restored run payloads", async () => {
+    const path = join(dataDir, "active-run-malformed-contract.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const prompt = {
+      workspaceId: "ws_malformed_contract",
+      sessionId: "ses_malformed_contract",
+      parts: [{ type: "text" as const, text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work" as const,
+    };
+    const accepted = await runtime.acceptPrompt(prompt);
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "active_agent_run",
+      prompt.sessionId,
+    );
+    if (!persisted) throw new Error("test active run missing");
+    store.put({
+      kind: "active_agent_run",
+      key: persisted.key,
+      workspaceId: persisted.workspaceId,
+      sessionId: persisted.sessionId,
+      value: null,
+      expiresAtMs: persisted.expiresAtMs,
+      nowMs: persisted.updatedAtMs,
+    });
+
+    expect(() => runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: prompt.workspaceId,
+      sessionId: prompt.sessionId,
+      callId: "call_malformed_contract",
+      agentId: prompt.agentId,
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    })).toThrow("guarded_run_state_invalid");
+    expect(store.list("staged_capability", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    runtime.close();
+  });
+
+  test("rejects restored run scope with changed tenant metadata or extended authority", async () => {
+    const path = join(dataDir, "run-scope-tenant-substitution.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const prompt = {
+      workspaceId: "ws_scope_contract",
+      sessionId: "ses_scope_contract",
+      parts: [{ type: "text" as const, text: "Read public Hyperliquid markets" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-hyperliquid",
+      executionMode: "work" as const,
+    };
+    const accepted = await runtime.acceptPrompt(prompt);
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "agent_run_scope",
+      accepted.runId,
+    );
+    if (!persisted) throw new Error("test run scope missing");
+    const extendedExpiry = persisted.updatedAtMs + 12 * 60 * 60 * 1_000;
+    store.put({
+      kind: "agent_run_scope",
+      key: persisted.key,
+      workspaceId: "ws_scope_other",
+      sessionId: persisted.sessionId,
+      value: persisted.value,
+      expiresAtMs: extendedExpiry,
+      nowMs: persisted.updatedAtMs,
+    });
+
+    expect(() => runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: prompt.workspaceId,
+      sessionId: prompt.sessionId,
+      callId: "call_scope_contract",
+      agentId: prompt.agentId,
+      toolName: "matterhorn-work_matterhorn_hyperliquid_markets",
+      args: {},
+    })).toThrow("guarded_run_state_invalid");
+    expect(store.list("staged_capability", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    runtime.close();
+  });
+
   test("rejects a receipt index rebound to another tenant", async () => {
     const path = join(dataDir, "receipt-index-tenant-substitution.db");
     const store = new MatterhornGuardedRuntimeStateStore(path);

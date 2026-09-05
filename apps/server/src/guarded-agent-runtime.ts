@@ -47,7 +47,10 @@ import {
 import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
 import type { MatterhornFinalizedCoworkerRun } from "./crypto-evidence-finalizer.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
-import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import {
+  MatterhornGuardedRuntimeStateStore,
+  type GuardedRuntimeStateRecord,
+} from "./guarded-runtime-state-store.js";
 import type { MatterhornTrustedJurisdiction } from "./trusted-jurisdiction.js";
 import { evaluatePolymarketOpenPositionJurisdiction } from "./polymarket-jurisdiction-policy.js";
 import type {
@@ -117,6 +120,15 @@ const PROVIDER_MESSAGES_MAX_COUNT = 2_048;
 const PROVIDER_MESSAGES_MAX_BYTES = 16 * 1_024 * 1_024;
 const PROVIDER_MESSAGES_VALIDATION_TTL_MS = 30_000;
 const SESSION_PRIVACY_FLOOR_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
+const GUARDED_RUN_AUTHORITY_TTL_MS = 6 * 60 * 60 * 1_000;
+
+type GuardedRunState = {
+  runId: string;
+  workspaceId: string;
+  sessionId: string;
+  jurisdictionEvidenceHash: string | null;
+  jurisdictionPolicyHash: string | null;
+};
 
 type GuardedSessionPrivacyFloor = {
   workspaceId: string;
@@ -124,6 +136,68 @@ type GuardedSessionPrivacyFloor = {
   mode: MatterhornAgentPrivacyMode;
   updatedAt: string;
 };
+
+const GUARDED_RUN_ID = /^(?:agent_run(?:_off)?|coworker_run)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function guardedRunStateHasExactKeys(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const expected = [
+    "jurisdictionEvidenceHash",
+    "jurisdictionPolicyHash",
+    "runId",
+    "sessionId",
+    "workspaceId",
+  ];
+  const keys = Object.keys(value).sort();
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+}
+
+function guardedRunIdentifier(value: unknown): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= 256
+    && value.trim() === value;
+}
+
+function guardedRunHashOrNull(value: unknown): value is string | null {
+  return value === null || (typeof value === "string" && /^[a-f0-9]{64}$/.test(value));
+}
+
+function assertGuardedRunState(
+  state: GuardedRuntimeStateRecord<GuardedRunState> | null,
+  kind: "active_agent_run" | "agent_run_scope",
+  key: string,
+  nowMs: number,
+): GuardedRunState | null {
+  if (!state) return null;
+  const value = state.value;
+  if (!guardedRunStateHasExactKeys(value)) {
+    throw new Error("guarded_run_state_invalid");
+  }
+  const keyMatches = kind === "active_agent_run"
+    ? value.sessionId === key
+    : value.runId === key;
+  if (
+    state.kind !== kind
+    || state.key !== key
+    || !GUARDED_RUN_ID.test(value.runId)
+    || !guardedRunIdentifier(value.workspaceId)
+    || !guardedRunIdentifier(value.sessionId)
+    || !guardedRunHashOrNull(value.jurisdictionEvidenceHash)
+    || !guardedRunHashOrNull(value.jurisdictionPolicyHash)
+    || !keyMatches
+    || state.workspaceId !== value.workspaceId
+    || state.sessionId !== value.sessionId
+    || !Number.isSafeInteger(state.updatedAtMs)
+    || state.updatedAtMs > nowMs
+    || !Number.isSafeInteger(state.expiresAtMs)
+    || (state.expiresAtMs as number) <= nowMs
+    || (state.expiresAtMs as number) - state.updatedAtMs > GUARDED_RUN_AUTHORITY_TTL_MS
+  ) {
+    throw new Error("guarded_run_state_invalid");
+  }
+  return value as GuardedRunState;
+}
 
 function privacyModeRank(mode: MatterhornAgentPrivacyMode): number {
   if (mode === "transaction") return 2;
@@ -332,6 +406,7 @@ const GUARDED_OBSERVATION_REASONS = new Set([
   "capability_tool_not_in_run_grant",
   "capability_wrong_desk",
   "capability_wrong_tool",
+  "guarded_run_state_invalid",
   "missing_call_id",
   "policy_allowed",
   "rollout_not_enforced",
@@ -741,7 +816,7 @@ export class MatterhornGuardedAgentRuntime {
     const previousRunId = this.activeRun(input.sessionId);
     if (previousRunId) await this.finishRun(previousRunId, "cancelled");
     const runId = `${this.capabilities.mode === "off" ? "agent_run_off" : "agent_run"}_${randomUUID()}`;
-    const expiresAtMs = Date.now() + 6 * 60 * 60 * 1_000;
+    const expiresAtMs = Date.now() + GUARDED_RUN_AUTHORITY_TTL_MS;
     const polymarketJurisdiction = evaluatePolymarketOpenPositionJurisdiction(input.jurisdiction ?? null);
     const jurisdictionPolicy: MatterhornAgentJurisdictionPolicyContext | undefined = input.jurisdiction
       && polymarketJurisdiction.validUntil
@@ -822,7 +897,7 @@ export class MatterhornGuardedAgentRuntime {
       workspaceId: scope.workspaceId,
       sessionId: input.sessionId,
       value: { ...bound, messageId: input.messageId },
-      expiresAtMs: Date.now() + 6 * 60 * 60 * 1_000,
+      expiresAtMs: Date.now() + GUARDED_RUN_AUTHORITY_TTL_MS,
     });
     if (!stored) {
       throw new GuardedRuntimeError(409, "agent_run_message_already_bound", "The user message is already bound to another Matterhorn run.");
@@ -1029,7 +1104,7 @@ export class MatterhornGuardedAgentRuntime {
       if (!candidate || candidate.sessionId !== input.sessionId) {
         throw new GuardedRuntimeError(409, "agent_run_message_not_bound", "The assistant message is not bound to an accepted Matterhorn run.");
       }
-      const active = this.stateStore.get<{ runId: string }>("active_agent_run", input.sessionId, nowMs);
+      const active = this.activeRunState(input.sessionId, nowMs);
       const scope = this.runScope(candidate.runId);
       if (!active || active.runId !== candidate.runId || !scope || scope.sessionId !== input.sessionId) {
         throw new GuardedRuntimeError(409, "agent_run_not_active", "The message no longer belongs to an active guarded run.");
@@ -1040,7 +1115,7 @@ export class MatterhornGuardedAgentRuntime {
         workspaceId: scope.workspaceId,
         sessionId: input.sessionId,
         value: { ...candidate, messageId: input.assistantMessageId },
-        expiresAtMs: nowMs + 6 * 60 * 60 * 1_000,
+        expiresAtMs: nowMs + GUARDED_RUN_AUTHORITY_TTL_MS,
         nowMs,
       });
       if (!stored) {
@@ -1420,7 +1495,7 @@ export class MatterhornGuardedAgentRuntime {
     this.providerSystemByRunId.delete(runId);
     const scope = this.runScope(runId);
     if (scope) {
-      const active = this.stateStore.get<{ runId: string }>("active_agent_run", scope.sessionId);
+      const active = this.activeRunState(scope.sessionId);
       if (active?.runId === runId) this.stateStore.delete("active_agent_run", scope.sessionId);
     }
     for (const [callId, staged] of this.stagedCapabilities) {
@@ -1499,7 +1574,7 @@ export class MatterhornGuardedAgentRuntime {
       });
     } catch (error) {
       this.capabilities.closeRun(input.runId);
-      const active = this.stateStore.get<{ runId: string }>("active_agent_run", input.sessionId);
+      const active = this.activeRunState(input.sessionId);
       if (active?.runId === input.runId) this.stateStore.delete("active_agent_run", input.sessionId);
       this.stateStore.delete("agent_run_scope", input.runId);
       throw error;
@@ -1524,20 +1599,15 @@ export class MatterhornGuardedAgentRuntime {
     workspaceId: string;
     sessionId: string;
   }): void {
-    const active = this.stateStore.get<{ runId: string; workspaceId: string; sessionId: string }>(
-      "active_agent_run",
-      input.sessionId,
-    );
-    const scope = this.stateStore.get<{ runId: string; workspaceId: string; sessionId: string }>(
-      "agent_run_scope",
-      input.runId,
-    );
+    const nowMs = Date.now();
+    const active = this.activeRunState(input.sessionId, nowMs);
+    const scope = this.runScopeState(input.runId, nowMs);
     const receipt = this.stateStore.get<{
       runId: string;
       workspaceId?: string;
       sessionId?: string;
       status: MatterhornAgentRunReceipt["status"];
-    }>("receipt_index", input.runId);
+    }>("receipt_index", input.runId, nowMs);
     if (!active || active.runId !== input.runId || !scope || scope.runId !== input.runId || !receipt
       || receipt.runId !== input.runId || receipt.status !== "pending") {
       throw new Error("capability_run_or_tool_not_found");
@@ -1626,11 +1696,30 @@ export class MatterhornGuardedAgentRuntime {
   }
 
   private activeRun(sessionId: string): string | null {
-    return this.stateStore.get<{ runId: string }>("active_agent_run", sessionId)?.runId ?? null;
+    return this.activeRunState(sessionId)?.runId ?? null;
   }
 
   private runScope(runId: string): { workspaceId: string; sessionId: string } | null {
-    return this.stateStore.get<{ workspaceId: string; sessionId: string }>("agent_run_scope", runId);
+    const scope = this.runScopeState(runId);
+    return scope ? { workspaceId: scope.workspaceId, sessionId: scope.sessionId } : null;
+  }
+
+  private activeRunState(sessionId: string, nowMs = Date.now()): GuardedRunState | null {
+    return assertGuardedRunState(
+      this.stateStore.getRecord<GuardedRunState>("active_agent_run", sessionId, nowMs),
+      "active_agent_run",
+      sessionId,
+      nowMs,
+    );
+  }
+
+  private runScopeState(runId: string, nowMs = Date.now()): GuardedRunState | null {
+    return assertGuardedRunState(
+      this.stateStore.getRecord<GuardedRunState>("agent_run_scope", runId, nowMs),
+      "agent_run_scope",
+      runId,
+      nowMs,
+    );
   }
 
   private observe(
