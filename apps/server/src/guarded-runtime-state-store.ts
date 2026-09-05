@@ -22,6 +22,7 @@ export type GuardedRuntimeStateKind =
   | "privacy_consent"
   | "run_grant"
   | "staged_capability"
+  | "consumed_capability"
   | "rollout_bypass"
   | "active_agent_run"
   | "agent_run_scope"

@@ -15,6 +15,8 @@ import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-m
 import type { MatterhornCoworkerProfile } from "@matterhorn-work/types/crypto-coworkers";
 import { canonicalJson, equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
 import {
   MATTERHORN_POLYMARKET_JURISDICTION_POLICY_HASH,
   MATTERHORN_POLYMARKET_JURISDICTION_POLICY_VERSION,
@@ -554,13 +556,13 @@ function encodeClaims(claims: MatterhornAgentCapabilityClaims, secret: string): 
   return `${payload}.${signature(payload, secret)}`;
 }
 
-function decodeClaims(token: string, secret: string): MatterhornAgentCapabilityClaims | null {
+function decodeClaims(token: string, secret: string, nowMs = Date.now()): MatterhornAgentCapabilityClaims | null {
   if (Buffer.byteLength(token, "utf8") > MAX_CAPABILITY_TOKEN_BYTES) return null;
   const [payload, suppliedSignature, extra] = token.split(".");
   if (!payload || !suppliedSignature || extra || !equalDigest(signature(payload, secret), suppliedSignature)) return null;
   try {
     const decoded: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return validCapabilityClaims(decoded, Date.now()) ? decoded : null;
+    return validCapabilityClaims(decoded, nowMs) ? decoded : null;
   } catch {
     return null;
   }
@@ -572,6 +574,8 @@ export class MatterhornAgentCapabilityBroker {
   private readonly consumed = new Map<string, ConsumedCapability>();
   private readonly consumedByCallId = new Map<string, MatterhornAgentCapabilityClaims>();
   private readonly decisions = new Map<string, MatterhornAgentCapabilityDecision[]>();
+  private readonly stateAuthority: MatterhornDurableStateAuthority | null;
+  private readonly runGrantState: MatterhornDurableAuthorizedState | null;
   private coworkerResolver: ((binding: MatterhornCoworkerRunBinding) => boolean) | null = null;
 
   readonly mode: MatterhornGuardedRuntimeMode;
@@ -582,9 +586,21 @@ export class MatterhornAgentCapabilityBroker {
     private readonly resolveSigningSecret: () => string = signingSecret,
   ) {
     this.mode = mode;
-    if (!stateStore) return;
+    const stateSecret = stateStore ? resolveSigningSecret() : "";
+    this.stateAuthority = stateStore && stateSecret
+      ? new MatterhornDurableStateAuthority(stateSecret)
+      : null;
+    this.runGrantState = stateStore && this.stateAuthority
+      ? new MatterhornDurableAuthorizedState(
+        stateStore,
+        this.stateAuthority,
+        "run_grant",
+        "capability_persisted_grant_invalid",
+      )
+      : null;
+    if (!stateStore || this.mode === "off" || !this.stateAuthority || !this.runGrantState) return;
     const nowMs = Date.now();
-    for (const stored of stateStore.list<unknown>("run_grant", { nowMs })) {
+    for (const stored of this.requireRunGrantState().list<unknown>({ nowMs })) {
       const grant = restoreStoredRunGrant(stored, nowMs);
       if (!grant || this.grants.has(grant.runId) || this.activeRunBySession.has(grant.sessionId)) {
         throw new Error("capability_persisted_grant_invalid");
@@ -595,9 +611,21 @@ export class MatterhornAgentCapabilityBroker {
       if (decisions.length) this.decisions.set(grant.runId, decisions.slice(-100));
     }
     for (const record of stateStore.listConsumedCapabilityRecords<unknown>(nowMs)) {
-      const claims = record.claims;
+      const claims = this.requireStateAuthority().open<MatterhornAgentCapabilityClaims>({
+        kind: "consumed_capability",
+        key: record.jti,
+        workspaceId: record.workspaceId,
+        sessionId: record.sessionId,
+        value: record.claims,
+        expiresAtMs: record.expiresAtMs,
+        updatedAtMs: record.consumedAtMs,
+      }, "capability_persisted_consumption_invalid");
       const expiresAtMs = isRecord(claims) && typeof claims.expiresAt === "string" ? Date.parse(claims.expiresAt) : Number.NaN;
-      if (!validCapabilityClaims(claims, nowMs)
+      const validationNowMs = Number.isFinite(expiresAtMs)
+        ? Math.min(nowMs, expiresAtMs - 1)
+        : nowMs;
+      if (!claims
+        || !validCapabilityClaims(claims, validationNowMs)
         || record.jti !== claims.jti
         || record.runId !== claims.runId
         || record.callId !== claims.callId
@@ -612,6 +640,16 @@ export class MatterhornAgentCapabilityBroker {
       this.consumed.set(claims.jti, { claims, consumedAtMs: record.consumedAtMs });
       this.consumedByCallId.set(claims.callId, claims);
     }
+  }
+
+  private requireStateAuthority(): MatterhornDurableStateAuthority {
+    if (!this.stateAuthority) throw new Error("capability_state_integrity_unavailable");
+    return this.stateAuthority;
+  }
+
+  private requireRunGrantState(): MatterhornDurableAuthorizedState {
+    if (!this.runGrantState) throw new Error("capability_state_integrity_unavailable");
+    return this.runGrantState;
   }
 
   ready(): boolean {
@@ -692,7 +730,7 @@ export class MatterhornAgentCapabilityBroker {
       jurisdictionPolicy,
       expiresAtMs,
     };
-    this.persistGrant(grant);
+    this.persistGrant(grant, nowMs);
     this.grants.set(input.runId, grant);
     this.activeRunBySession.set(input.sessionId, input.runId);
   }
@@ -827,7 +865,7 @@ export class MatterhornAgentCapabilityBroker {
     const nowMs = (input.now ?? new Date()).getTime();
     this.cleanup(nowMs);
     const secret = this.resolveSigningSecret();
-    const claims = secret ? decodeClaims(input.token, secret) : null;
+    const claims = secret ? decodeClaims(input.token, secret, nowMs) : null;
     const toolName = normalizedToolName(input.toolName);
     const deny = (reason: string): never => {
       if (claims?.runId) this.recordDecision(claims.runId, {
@@ -873,16 +911,28 @@ export class MatterhornAgentCapabilityBroker {
       if (!currentBinding) deny("capability_coworker_mismatch");
       if (!this.coworkerResolver?.(grant.coworker)) deny("capability_coworker_inactive");
     } else if (claims.coworker) deny("capability_coworker_mismatch");
-    if (this.stateStore && !this.stateStore.consumeCapability({
-      jti: claims.jti,
-      runId: claims.runId,
-      callId: claims.callId,
-      workspaceId: claims.workspaceId,
-      sessionId: claims.sessionId,
-      claims,
-      consumedAtMs: nowMs,
-      expiresAtMs: Date.parse(claims.expiresAt) + CAPABILITY_TTL_MS,
-    })) deny("capability_replayed");
+    if (this.stateStore) {
+      const expiresAtMs = Date.parse(claims.expiresAt) + CAPABILITY_TTL_MS;
+      const sealedClaims = this.requireStateAuthority().seal({
+        kind: "consumed_capability",
+        key: claims.jti,
+        workspaceId: claims.workspaceId,
+        sessionId: claims.sessionId,
+        expiresAtMs,
+        updatedAtMs: nowMs,
+        value: claims,
+      });
+      if (!this.stateStore.consumeCapability({
+        jti: claims.jti,
+        runId: claims.runId,
+        callId: claims.callId,
+        workspaceId: claims.workspaceId,
+        sessionId: claims.sessionId,
+        claims: sealedClaims,
+        consumedAtMs: nowMs,
+        expiresAtMs,
+      })) deny("capability_replayed");
+    }
     this.consumed.set(claims.jti, { claims, consumedAtMs: nowMs });
     this.consumedByCallId.set(claims.callId, claims);
     this.recordDecision(claims.runId, {
@@ -1079,7 +1129,7 @@ export class MatterhornAgentCapabilityBroker {
     const grant = this.grants.get(runId);
     if (!grant) return { callIds: [] };
     this.grants.delete(runId);
-    this.stateStore?.delete("run_grant", runId);
+    this.runGrantState?.delete(runId);
     this.decisions.delete(runId);
     if (this.activeRunBySession.get(grant.sessionId) === runId) {
       this.activeRunBySession.delete(grant.sessionId);
@@ -1169,14 +1219,16 @@ export class MatterhornAgentCapabilityBroker {
     return toolBinding;
   }
 
-  private persistGrant(grant: RunGrant): void {
-    this.stateStore?.put({
-      kind: "run_grant",
+  private persistGrant(grant: RunGrant, nowMs = Date.now()): void {
+    if (!this.stateStore) return;
+    const updatedAtMs = Math.min(nowMs, grant.expiresAtMs - 1);
+    this.requireRunGrantState().put({
       key: grant.runId,
       workspaceId: grant.workspaceId,
       sessionId: grant.sessionId,
       value: serializeGrant(grant, this.decisions.get(grant.runId) ?? []),
       expiresAtMs: grant.expiresAtMs,
+      nowMs: updatedAtMs,
     });
   }
 
@@ -1184,7 +1236,7 @@ export class MatterhornAgentCapabilityBroker {
     for (const [runId, grant] of this.grants) {
       if (grant.expiresAtMs > nowMs) continue;
       this.grants.delete(runId);
-      this.stateStore?.delete("run_grant", runId);
+      this.runGrantState?.delete(runId);
       if (this.activeRunBySession.get(grant.sessionId) === runId) this.activeRunBySession.delete(grant.sessionId);
       this.decisions.delete(runId);
     }
@@ -1195,5 +1247,9 @@ export class MatterhornAgentCapabilityBroker {
       }
     }
     this.stateStore?.deleteExpired(nowMs);
+  }
+
+  close(): void {
+    this.stateAuthority?.close();
   }
 }

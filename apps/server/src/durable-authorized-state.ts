@@ -43,6 +43,47 @@ export class MatterhornDurableAuthorizedState {
     }
   }
 
+  list<T>(input: { workspaceId?: string; nowMs?: number } = {}): T[] {
+    try {
+      return this.stateStore.listRecords<unknown>(this.kind, input).map((record) => {
+        const value = this.authority.open<T>(record, this.invalidCode);
+        if (value === null) throw this.invalidError();
+        return value;
+      });
+    } catch (error) {
+      return this.rethrowIntegrityFailure(error);
+    }
+  }
+
+  put<T>(input: {
+    key: string;
+    workspaceId: string;
+    sessionId?: string | null;
+    value: T;
+    expiresAtMs: number;
+    nowMs: number;
+  }): void {
+    const sessionId = input.sessionId ?? null;
+    this.assertWritable(input);
+    this.stateStore.put({
+      kind: this.kind,
+      key: input.key,
+      workspaceId: input.workspaceId,
+      sessionId,
+      value: this.authority.seal({
+        kind: this.kind,
+        key: input.key,
+        workspaceId: input.workspaceId,
+        sessionId,
+        expiresAtMs: input.expiresAtMs,
+        updatedAtMs: input.nowMs,
+        value: input.value,
+      }),
+      expiresAtMs: input.expiresAtMs,
+      nowMs: input.nowMs,
+    });
+  }
+
   putIfAbsent<T>(input: {
     key: string;
     workspaceId: string;
@@ -51,13 +92,7 @@ export class MatterhornDurableAuthorizedState {
     expiresAtMs: number;
     nowMs: number;
   }): boolean {
-    if (!input.key
-      || !input.workspaceId
-      || !Number.isSafeInteger(input.expiresAtMs)
-      || !Number.isSafeInteger(input.nowMs)
-      || input.expiresAtMs <= input.nowMs) {
-      throw this.invalidError();
-    }
+    this.assertWritable(input);
     const sessionId = input.sessionId ?? null;
     return this.stateStore.putIfAbsent({
       kind: this.kind,
@@ -80,6 +115,21 @@ export class MatterhornDurableAuthorizedState {
 
   delete(key: string): boolean {
     return this.stateStore.delete(this.kind, key);
+  }
+
+  private assertWritable(input: {
+    key: string;
+    workspaceId: string;
+    expiresAtMs: number;
+    nowMs: number;
+  }): void {
+    if (!input.key
+      || !input.workspaceId
+      || !Number.isSafeInteger(input.expiresAtMs)
+      || !Number.isSafeInteger(input.nowMs)
+      || input.expiresAtMs <= input.nowMs) {
+      throw this.invalidError();
+    }
   }
 
   private rethrowIntegrityFailure(error: unknown): never {

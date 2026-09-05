@@ -2177,6 +2177,7 @@ export class MatterhornGuardedAgentRuntime {
   close(): void {
     this.sessionPrivacyFloorAuthorityKey?.fill(0);
     this.finalizedRunAuthorityKey?.fill(0);
+    this.capabilities.close();
     this.durableStateAuthority?.close();
     this.stateStore.close();
   }

@@ -220,7 +220,7 @@ describe("guarded agent runtime transport", () => {
     const path = join(dataDir, "session-privacy-floor-key.db");
     const initialState = new MatterhornGuardedRuntimeStateStore(path);
     const initial = new MatterhornGuardedAgentRuntime(initialState);
-    await initial.acceptPrompt({
+    const accepted = await initial.acceptPrompt({
       workspaceId: "ws_floor_key",
       sessionId: "ses_floor_key",
       parts: [{ type: "text", text: "Use my private workspace report" }],
@@ -231,6 +231,7 @@ describe("guarded agent runtime transport", () => {
     });
     const stored = initialState.getRecord<unknown>("session_privacy_floor", "ses_floor_key");
     if (!stored) throw new Error("expected_session_privacy_floor");
+    await initial.completeTrustedGatewayRun(accepted.runId, "cancelled");
     initial.close();
 
     const expectedSigningSecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
