@@ -98,6 +98,11 @@ export function formatAgentFileSize(bytes: number): string {
   return `${(bytes / (1_024 * 1_024)).toFixed(bytes >= 10 * 1_024 * 1_024 ? 0 : 1)} MB`;
 }
 
+export function agentFileSelectionSummary(count: number): string {
+  if (count <= 0) return "No files selected";
+  return `${count} ${count === 1 ? "file" : "files"} selected · 8 maximum`;
+}
+
 function agentFileErrorMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
     if (error.code === "agent_file_blocked") {
@@ -185,8 +190,8 @@ function FileRow(props: {
   onDelete: () => void;
 }) {
   const backupState = props.verification?.lifecycle.status === "renewal_due"
-    ? "Encrypted backup expires soon"
-    : props.verification ? "Encrypted backup checked" : "Encrypted backup saved";
+    ? "Backup expires soon"
+    : props.verification ? "Backup checked" : "Backed up";
   return (
     <li className="border-b border-dls-border/70 py-4 last:border-b-0">
       <div className="flex items-start gap-1 sm:gap-3">
@@ -209,13 +214,13 @@ function FileRow(props: {
             {props.item.publication ? <Cloud aria-hidden="true" className="size-3.5" /> : <ShieldCheck aria-hidden="true" className="size-3.5" />}
             {props.item.publication
               ? backupState
-              : "Encrypted in this workspace"}
+              : "Private in Matterhorn"}
           </p>
           {props.item.publication ? (
             <details className="mt-1 text-xs leading-5 text-dls-secondary">
-              <summary className="min-h-6 cursor-pointer outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Where the backup is stored</summary>
+              <summary className="min-h-6 cursor-pointer outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Backup details</summary>
               <p className="mt-1">
-                Stored as encrypted data on Walrus's public Sui test network through network storage period {props.item.publication.validUntilEpoch}.
+                An encrypted copy is stored on Walrus's public Sui test network through storage period {props.item.publication.validUntilEpoch}. It cannot be opened without the recovery key kept by Matterhorn.
               </p>
             </details>
           ) : null}
@@ -224,7 +229,7 @@ function FileRow(props: {
 
       {props.confirmingBackup ? (
         <div className="mt-3 border-t border-dls-border/70 pt-3 text-xs leading-5 text-dls-secondary">
-          <p className="font-medium text-dls-text">Save an encrypted testnet backup?</p>
+          <p className="font-medium text-dls-text">Back up this file?</p>
           <p className="mt-1">
             Only the encrypted copy is uploaded. Your readable file and recovery key stay private in Matterhorn.
           </p>
@@ -236,7 +241,7 @@ function FileRow(props: {
           </details>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button className="min-h-11 sm:min-h-8" size="sm" disabled={props.busy} onClick={props.onConfirmBackup}>
-              {props.busy ? "Saving backup…" : "Save encrypted backup"}
+              {props.busy ? "Saving backup…" : "Back up file"}
             </Button>
             <Button className="min-h-11 sm:min-h-8" size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancelBackup}>Cancel</Button>
           </div>
@@ -305,7 +310,7 @@ function FileRow(props: {
           ) : null}
           <Button className="min-h-11 sm:min-h-6" size="xs" variant="ghost" disabled={props.busy} onClick={props.onRecover}>
             <Download aria-hidden="true" className="size-3.5" />
-            Download original
+            Download
           </Button>
           <Button className="min-h-11 sm:min-h-6" size="xs" variant="ghost" disabled={props.busy} onClick={props.onDelete}>
             <Trash2 aria-hidden="true" className="size-3.5" />
@@ -634,9 +639,9 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
       <header className="shrink-0 border-b border-dls-border/70 px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-dls-text">Files for your coworker</h2>
+            <h2 className="text-base font-semibold text-dls-text">Files</h2>
             <p className="mt-1 text-xs leading-5 text-dls-secondary">
-              You choose what a coworker can read. Files stay read-only and cannot grant wallet access.
+              Choose what {selectedCoworker?.name ?? "a coworker"} can read in this chat. Files stay read-only and never grant wallet access.
             </p>
           </div>
           {selectedCoworker ? (
@@ -646,7 +651,6 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
             </Button>
           ) : null}
         </div>
-        <p className="mt-3 text-[11px] leading-5 text-dls-secondary">Text, Markdown, CSV, or JSON · 10 MB max · secrets are blocked</p>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5">
@@ -685,7 +689,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
           <>
             <div className="sticky top-0 z-[var(--matterhorn-layer-sticky)] -mx-4 border-b border-dls-border/70 bg-dls-background px-4 py-3">
               <label className="grid gap-1.5 text-xs font-medium text-dls-text">
-                Coworker
+                Who can read them
                 <select
                   className="h-11 w-full rounded-md border border-dls-border bg-dls-surface px-3 text-sm text-dls-text outline-none focus:border-ring focus:ring-2 focus:ring-ring/35 sm:h-9"
                   value={selectedCoworker?.id ?? ""}
@@ -699,9 +703,15 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
                 </select>
               </label>
               <div className="mt-3 flex items-center justify-between gap-3">
-                <p className="text-xs text-dls-secondary">Select up to 8 files for one chat.</p>
-                <Button className="min-h-11 sm:min-h-8" size="sm" disabled={selectedFiles.length === 0} onClick={useInChat}>
-                  Use {selectedFiles.length || "files"} in chat
+                <p className="text-xs text-dls-secondary" aria-live="polite">{agentFileSelectionSummary(selectedFiles.length)}</p>
+                <Button
+                  className="min-h-11 sm:min-h-8"
+                  size="sm"
+                  aria-label={selectedFiles.length > 0 ? `Use ${selectedFiles.length} selected files in chat` : "Use selected files in chat"}
+                  disabled={selectedFiles.length === 0}
+                  onClick={useInChat}
+                >
+                  Use in chat
                 </Button>
               </div>
             </div>
@@ -710,6 +720,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
               <section className="border-b border-dls-border/70 py-4" aria-label="Add a coworker file">
                 <h3 className="text-sm font-semibold text-dls-text">Add a private file</h3>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">It will be encrypted for {selectedCoworker?.name}. Matterhorn checks for secrets and unsafe file types before saving it.</p>
+                <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Text, Markdown, CSV, or JSON · 10 MB maximum</p>
                 <div className="mt-3 grid gap-3">
                   <label className={cn(buttonVariants({ variant: "outline", size: "sm" }), "min-h-11 w-fit cursor-pointer sm:min-h-8") }>
                     Choose file
