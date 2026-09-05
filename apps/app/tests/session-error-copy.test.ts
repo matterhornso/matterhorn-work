@@ -100,7 +100,12 @@ describe("session error copy", () => {
 
     expect(parsed.kind).toBe("privacy-consent");
     expect(parsed.privacyPreflight?.requestHash).toBe("request_hash");
-    expect(parsed.message).toBe("Allow ASI:Cloud for this request?");
-    expect(parsed.detail).toContain("selected_memory");
+    expect(parsed.message).toBe("Share private context with ASI:Cloud once?");
+    expect(parsed.detail).toContain("saved memory");
+    expect(parsed.detail).toContain("will send it to ASI:Cloud");
+    expect(parsed.detail).toContain("has not verified whether the provider uses requests for training");
+    expect(parsed.detail).toContain("has not verified how long the provider keeps request data");
+    expect(parsed.detail).toContain("only to this exact request");
+    expect(parsed.detail).not.toContain("selected_memory");
   });
 });
