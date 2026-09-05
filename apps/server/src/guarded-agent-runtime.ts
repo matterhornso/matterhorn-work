@@ -130,6 +130,13 @@ type GuardedRunState = {
   jurisdictionPolicyHash: string | null;
 };
 
+type GuardedMessageBindingState = {
+  runId: string;
+  workspaceId: string;
+  sessionId: string;
+  messageId: string;
+};
+
 type GuardedSessionPrivacyFloor = {
   workspaceId: string;
   sessionId: string;
@@ -197,6 +204,54 @@ function assertGuardedRunState(
     throw new Error("guarded_run_state_invalid");
   }
   return value as GuardedRunState;
+}
+
+function guardedMessageBindingHasExactKeys(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const expected = ["messageId", "runId", "sessionId", "workspaceId"];
+  const keys = Object.keys(value).sort();
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+}
+
+function guardedMessageIdentifier(value: unknown): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= 512
+    && value.trim() === value
+    && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function assertGuardedMessageBindingState(
+  state: GuardedRuntimeStateRecord<unknown> | null,
+  kind: "user_message_binding" | "assistant_message_binding",
+  messageId: string,
+  nowMs: number,
+): GuardedMessageBindingState | null {
+  if (!state) return null;
+  const value = state.value;
+  if (!guardedMessageBindingHasExactKeys(value)) {
+    throw new Error("guarded_message_binding_state_invalid");
+  }
+  if (
+    state.kind !== kind
+    || state.key !== messageId
+    || !guardedRunIdentifier(value.runId)
+    || !GUARDED_RUN_ID.test(value.runId)
+    || !guardedRunIdentifier(value.workspaceId)
+    || !guardedRunIdentifier(value.sessionId)
+    || !guardedMessageIdentifier(value.messageId)
+    || value.messageId !== messageId
+    || state.workspaceId !== value.workspaceId
+    || state.sessionId !== value.sessionId
+    || !Number.isSafeInteger(state.updatedAtMs)
+    || state.updatedAtMs > nowMs
+    || !Number.isSafeInteger(state.expiresAtMs)
+    || (state.expiresAtMs as number) <= nowMs
+    || (state.expiresAtMs as number) - state.updatedAtMs > GUARDED_RUN_AUTHORITY_TTL_MS
+  ) {
+    throw new Error("guarded_message_binding_state_invalid");
+  }
+  return value as GuardedMessageBindingState;
 }
 
 function privacyModeRank(mode: MatterhornAgentPrivacyMode): number {
@@ -882,22 +937,31 @@ export class MatterhornGuardedAgentRuntime {
   }
 
   bindUserMessage(input: { runId: string; sessionId: string; messageId: string }): void {
+    if (!guardedMessageIdentifier(input.messageId)) {
+      throw new GuardedRuntimeError(400, "agent_run_message_id_invalid", "The user message identifier is invalid.");
+    }
     const activeRunId = this.activeRun(input.sessionId);
     if (activeRunId !== input.runId) {
       throw new GuardedRuntimeError(409, "agent_run_not_active", "The message no longer belongs to the active guarded run.");
     }
-    const bound = { runId: input.runId, sessionId: input.sessionId };
     const scope = this.runScope(input.runId);
     if (!scope || scope.sessionId !== input.sessionId) {
       throw new GuardedRuntimeError(409, "agent_run_not_active", "The message no longer belongs to the active guarded run.");
     }
+    const nowMs = Date.now();
     const stored = this.stateStore.putIfAbsent({
       kind: "user_message_binding",
       key: input.messageId,
       workspaceId: scope.workspaceId,
       sessionId: input.sessionId,
-      value: { ...bound, messageId: input.messageId },
-      expiresAtMs: Date.now() + GUARDED_RUN_AUTHORITY_TTL_MS,
+      value: {
+        runId: input.runId,
+        workspaceId: scope.workspaceId,
+        sessionId: input.sessionId,
+        messageId: input.messageId,
+      } satisfies GuardedMessageBindingState,
+      expiresAtMs: nowMs + GUARDED_RUN_AUTHORITY_TTL_MS,
+      nowMs,
     });
     if (!stored) {
       throw new GuardedRuntimeError(409, "agent_run_message_already_bound", "The user message is already bound to another Matterhorn run.");
@@ -1094,9 +1158,14 @@ export class MatterhornGuardedAgentRuntime {
     assistantMessageId: string;
   }): { runId: string } {
     this.assertRuntimeSecret(input.runtimeSecret);
+    if (!guardedMessageIdentifier(input.userMessageId)
+      || !guardedMessageIdentifier(input.assistantMessageId)) {
+      throw new GuardedRuntimeError(400, "agent_run_message_id_invalid", "The runtime message identifier is invalid.");
+    }
     const nowMs = Date.now();
     const bound = this.stateStore.transaction(() => {
-      const candidate = this.stateStore.take<{ runId: string; sessionId: string }>(
+      const candidate = assertGuardedMessageBindingState(
+        this.stateStore.takeRecord<unknown>("user_message_binding", input.userMessageId, nowMs),
         "user_message_binding",
         input.userMessageId,
         nowMs,
@@ -1105,16 +1174,22 @@ export class MatterhornGuardedAgentRuntime {
         throw new GuardedRuntimeError(409, "agent_run_message_not_bound", "The assistant message is not bound to an accepted Matterhorn run.");
       }
       const active = this.activeRunState(input.sessionId, nowMs);
-      const scope = this.runScope(candidate.runId);
-      if (!active || active.runId !== candidate.runId || !scope || scope.sessionId !== input.sessionId) {
+      const scope = this.runScopeState(candidate.runId, nowMs);
+      if (!active
+        || active.runId !== candidate.runId
+        || !scope
+        || scope.sessionId !== input.sessionId) {
         throw new GuardedRuntimeError(409, "agent_run_not_active", "The message no longer belongs to an active guarded run.");
+      }
+      if (scope.workspaceId !== candidate.workspaceId) {
+        throw new Error("guarded_message_binding_state_invalid");
       }
       const stored = this.stateStore.putIfAbsent({
         kind: "assistant_message_binding",
         key: input.assistantMessageId,
         workspaceId: scope.workspaceId,
         sessionId: input.sessionId,
-        value: { ...candidate, messageId: input.assistantMessageId },
+        value: { ...candidate, messageId: input.assistantMessageId } satisfies GuardedMessageBindingState,
         expiresAtMs: nowMs + GUARDED_RUN_AUTHORITY_TTL_MS,
         nowMs,
       });
