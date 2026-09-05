@@ -1477,6 +1477,7 @@ describe("Data-map contract: must not leak secrets", () => {
       recipient: `0x${"f".repeat(64)}`,
       objectIds: [`0x${"1".repeat(64)}`, `0x${"2".repeat(64)}`],
       tokenId: "1".repeat(64),
+      simulationReference: `sha256:${"3".repeat(64)}`,
     };
 
     expect(containsForbiddenMemorySecretMaterial(publicEvidence)).toBe(false);

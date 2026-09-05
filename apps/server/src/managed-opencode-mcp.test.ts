@@ -847,6 +847,79 @@ describe("managed OpenCode Matterhorn MCP", () => {
     });
   });
 
+  test("rejects an uncertified reviewed-action shape before it reaches either MCP result channel", async () => {
+    const args = {
+      network: "testnet",
+      sender: `0x${"1".repeat(64)}`,
+      recipient: `0x${"2".repeat(64)}`,
+      amountSui: "0.01",
+    };
+    const reviewedAction = buildReviewedActionHandoffV2({
+      handoff: {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "sui",
+        source: "agent-card",
+        draft: {
+          operation: "transfer_sui",
+          network: "testnet",
+          sender: args.sender,
+          recipient: args.recipient,
+          amount: args.amountSui,
+          coinType: null,
+          objectId: null,
+          transfers: [],
+        },
+      },
+      runId: "run_uncertified_shape",
+      signer: args.sender,
+      simulation: {
+        reference: `sha256:${"a".repeat(64)}`,
+        block: "checkpoint:101",
+        simulatedAt: new Date("2026-09-01T12:00:00.000Z"),
+      },
+      preparedAt: new Date("2026-09-01T12:00:00.000Z"),
+    });
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: "uncertified-reviewed-action",
+        method: "tools/call",
+        params: { name: "matterhorn_sui_preview_transfer", arguments: args },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      authorizeToolCall: () => ({
+        args,
+        runId: "run_uncertified_shape",
+        callId: "call_uncertified_shape",
+        workspaceId: "ws_coworker",
+        sessionId: "ses_coworker",
+        coworker: {
+          id: "cw_sui",
+          ownerId: "account_sui",
+          revision: 1,
+          policyVersion: "coworker-policy-1",
+          connectionId: "cxc_sui",
+          appId: "matterhorn.sui-testnet",
+          manifestRevision: "1.0.0",
+          actionId: "sui_transfer_preview",
+          network: "sui:testnet",
+        },
+      }),
+      executeCertifiedTool: async () => ({
+        version: "matterhorn.crypto-wallet-review-result.v1",
+        status: "wallet_review_required",
+        reviewedAction: { ...reviewedAction, privateKey: "must-never-enter-the-airlock" },
+      }),
+    });
+    expect(result.body).toEqual({
+      jsonrpc: "2.0",
+      id: "uncertified-reviewed-action",
+      error: { code: -32603, message: "matterhorn_tool_result_rejected" },
+    });
+    expect(JSON.stringify(result.body)).not.toContain("privateKey");
+  });
+
   test("reduces backend HTTP failures to an exact safe code", async () => {
     const metrics: ManagedMcpToolCallMetric[] = [];
     const secret = "sk-live-backend-body-must-not-reach-model";

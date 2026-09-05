@@ -651,16 +651,16 @@ function projectManagedMcpResult(input: {
     throw new Error("matterhorn_tool_result_rejected");
   }
   const rawResult = input.result;
-  const secretScanResult = input.origin === "certified" && rawResult.reviewedAction !== undefined
-    ? { ...rawResult, reviewedAction: projectReviewedActionForModel(rawResult.reviewedAction) }
-    : rawResult;
-  if (containsForbiddenToolResultSecret(secretScanResult)) {
+  if (containsForbiddenToolResultSecret(rawResult)) {
     throw new Error("matterhorn_tool_result_rejected");
   }
   const definition = getMatterhornCryptoTool(input.tool.name);
   let closed: JsonObject;
   if (input.origin === "certified") {
     if (!definition) throw new Error("matterhorn_tool_result_rejected");
+    if (rawResult.reviewedAction !== undefined && !input.reviewedAction) {
+      throw new Error("matterhorn_tool_result_rejected");
+    }
     closed = projectCertifiedResult(definition, rawResult);
   } else {
     const keys = LEGACY_MODEL_RESULT_KEYS[input.tool.name];
