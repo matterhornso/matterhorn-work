@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 import {
+  agentFileSelectionSummary,
   agentFileExpiry,
   formatAgentFileSize,
   resolveAgentFileMimeType,
@@ -31,6 +32,12 @@ describe("coworker files UI", () => {
     expect(agentFileExpiry("30_days", new Date("2026-09-02T00:00:00.000Z"))).toBe("2026-10-02T00:00:00.000Z");
   });
 
+  test("explains file selection without exposing implementation language", () => {
+    expect(agentFileSelectionSummary(0)).toBe("No files selected");
+    expect(agentFileSelectionSummary(1)).toBe("1 file selected · 8 maximum");
+    expect(agentFileSelectionSummary(3)).toBe("3 files selected · 8 maximum");
+  });
+
   test("makes the Files panel a shareable, reversible workspace destination", () => {
     expect(readSessionPanelFromSearch("?panel=files")).toBe("files");
     expect(resolveSessionPanelNavigation("", "files")).toEqual({ search: "?panel=files", replace: false });
@@ -40,13 +47,16 @@ describe("coworker files UI", () => {
   test("keeps the primary flow plain while requiring explicit public-backup consent", () => {
     const panel = appSource("react-app/domains/agent-files/agent-files-panel.tsx");
     const serverClient = appSource("app/lib/matterhorn-server.ts");
-    expect(panel).toContain("Files for your coworker");
-    expect(panel).toContain("Files stay read-only and cannot grant wallet access.");
+    expect(panel).toContain('<h2 className="text-base font-semibold text-dls-text">Files</h2>');
+    expect(panel).toContain("Files stay read-only and never grant wallet access.");
+    expect(panel).toContain("Who can read them");
+    expect(panel).toContain("Use in chat");
+    expect(panel).toContain("No files selected");
     expect(panel).toContain("Only the encrypted copy is uploaded.");
     expect(panel).toContain("Encrypted bytes may remain after deletion");
-    expect(panel).toContain("Encrypted backup expires soon");
-    expect(panel).toContain("Where the backup is stored");
-    expect(panel).toContain("Stored as encrypted data on Walrus's public Sui test network");
+    expect(panel).toContain("Backup expires soon");
+    expect(panel).toContain("Backup details");
+    expect(panel).toContain("An encrypted copy is stored on Walrus's public Sui test network");
     expect(panel).not.toContain("remainingEpochs} remaining");
     expect(panel).toContain("Renew backup");
     expect(panel).toContain("The storage fee is paid in WAL on Sui testnet.");
@@ -60,7 +70,7 @@ describe("coworker files UI", () => {
     expect(panel).toContain('className="flex size-11 shrink-0 cursor-pointer items-start justify-center pt-1 sm:size-6"');
     expect(panel).toContain('className="min-h-11 sm:min-h-6" size="xs"');
     expect(panel).toContain("h-11 w-full");
-    expect(panel).toContain("Download original");
+    expect(panel).toContain("Download");
     expect(panel).toContain("Matterhorn decrypted this copy only for your download.");
     expect(serverClient).toContain("acknowledgePublicCiphertext: true");
     expect(serverClient).toContain("acknowledgeWalletPayment: true");
