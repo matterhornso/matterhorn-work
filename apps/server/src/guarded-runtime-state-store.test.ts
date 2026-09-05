@@ -62,4 +62,21 @@ describe("durable guarded runtime state", () => {
     first.close();
     second.close();
   });
+
+  test("permits only one consumed capability per guarded run call", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-guarded-call-replay-"));
+    const path = join(root, "state.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const base = {
+      runId: "run_1",
+      callId: "call_1",
+      workspaceId: "ws_a",
+      sessionId: "ses_a",
+      consumedAtMs: Date.now(),
+      expiresAtMs: Date.now() + 60_000,
+    };
+    expect(state.consumeCapability({ ...base, jti: "cap_1", claims: { jti: "cap_1" } })).toBe(true);
+    expect(state.consumeCapability({ ...base, jti: "cap_2", claims: { jti: "cap_2" } })).toBe(false);
+    state.close();
+  });
 });
