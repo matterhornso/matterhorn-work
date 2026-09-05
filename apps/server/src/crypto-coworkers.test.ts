@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +22,7 @@ import {
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const COWORKER_INTEGRITY_SECRET = "coworker-state-integrity-secret-at-least-32-bytes";
+const FORGED_AUTHORITY_SEAL = `${"A".repeat(16)}.${"B".repeat(22)}`;
 const roots: string[] = [];
 
 function input(overrides: Partial<MatterhornCoworkerCreateInput> = {}): MatterhornCoworkerCreateInput {
@@ -749,17 +751,158 @@ describe("durable crypto coworkers", () => {
       .get() as { scope_json: string };
     const tampered = JSON.parse(row.scope_json) as Record<string, unknown>;
     tampered.memories = [];
-    database.query("UPDATE crypto_coworker_resource_scopes SET scope_json = ?")
-      .run(JSON.stringify(tampered));
+    database.query("UPDATE crypto_coworker_resource_scopes SET scope_json = ?, authority_seal = ?")
+      .run(JSON.stringify(tampered), FORGED_AUTHORITY_SEAL);
     database.close();
 
-    const reopenedStore = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
-    try {
-      const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
-      expect(() => reopened.getResourceScope("ws_alpha", "account_alpha", profile.id))
+    expect(() => new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET))
+      .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+  });
+
+  test("rejects valid-shaped restored execution-state mutation and wrong-key restoration", () => {
+    const targets = ["profile", "working_state", "resource_scope", "session_binding"] as const;
+    for (const target of targets) {
+      const root = mkdtempSync(join(tmpdir(), `matterhorn-coworker-${target}-seal-`));
+      roots.push(root);
+      const path = join(root, "coworkers.db");
+      const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+      const coworkers = new MatterhornCoworkers({
+        store,
+        policyVersion: "coworker-policy-1",
+        now: () => new Date(NOW),
+        id: () => "cw_authority_state",
+      });
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      coworkers.setWorkingState("ws_alpha", "account_alpha", profile.id, workingStateInput());
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      coworkers.bindSession("ws_alpha", "account_alpha", "ses_authority_state", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      });
+      store.close();
+
+      const database = new Database(path);
+      if (target === "profile") {
+        const row = database.query("SELECT profile_json FROM crypto_coworkers LIMIT 1")
+          .get() as { profile_json: string };
+        const payload = JSON.parse(row.profile_json) as Record<string, unknown>;
+        payload.policyVersion = "attacker-policy";
+        database.query(`
+          UPDATE crypto_coworkers
+          SET policy_version = 'attacker-policy', profile_json = ?, authority_seal = ?
+        `).run(JSON.stringify(payload), FORGED_AUTHORITY_SEAL);
+      } else if (target === "working_state") {
+        const row = database.query("SELECT state_json FROM crypto_coworker_working_state LIMIT 1")
+          .get() as { state_json: string };
+        const payload = JSON.parse(row.state_json) as Record<string, any>;
+        payload.decisions[0].summary = "Trust a restored decision that the user never approved.";
+        database.query(`
+          UPDATE crypto_coworker_working_state SET state_json = ?, authority_seal = ?
+        `).run(JSON.stringify(payload), FORGED_AUTHORITY_SEAL);
+      } else if (target === "resource_scope") {
+        const row = database.query("SELECT scope_json FROM crypto_coworker_resource_scopes LIMIT 1")
+          .get() as { scope_json: string };
+        const payload = JSON.parse(row.scope_json) as Record<string, any>;
+        payload.connections[0].actionIds = ["sui_transfer_prepare"];
+        payload.scopeHash = createHash("sha256").update(JSON.stringify({
+          workspaceId: payload.workspaceId,
+          ownerId: payload.ownerId,
+          coworkerId: payload.coworkerId,
+          profileRevision: payload.profileRevision,
+          agentFiles: payload.agentFiles,
+          memories: payload.memories,
+          connections: payload.connections,
+          privacy: payload.privacy,
+        })).digest("hex");
+        database.query(`
+          UPDATE crypto_coworker_resource_scopes
+          SET scope_hash = ?, scope_json = ?, authority_seal = ?
+        `).run(payload.scopeHash, JSON.stringify(payload), FORGED_AUTHORITY_SEAL);
+      } else {
+        database.query(`
+          UPDATE crypto_coworker_session_bindings
+          SET resource_scope_hash = ?, authority_seal = ?
+        `).run("f".repeat(64), FORGED_AUTHORITY_SEAL);
+      }
+      database.close();
+
+      expect(() => new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET))
         .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+    }
+
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-wrong-state-key-"));
+    roots.push(root);
+    const path = join(root, "coworkers.db");
+    const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    const coworkers = new MatterhornCoworkers({ store, policyVersion: "coworker-policy-1", id: () => "cw_wrong_key" });
+    coworkers.create("ws_alpha", "account_alpha", input());
+    store.close();
+    expect(() => new MatterhornCoworkerStore(path, "different-coworker-integrity-secret-at-least-32-bytes"))
+      .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+  });
+
+  test("seals a structurally valid legacy coworker profile during one-time migration", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-profile-migration-"));
+    roots.push(root);
+    const sourceStore = new MatterhornCoworkerStore(join(root, "source.db"), COWORKER_INTEGRITY_SECRET);
+    const source = new MatterhornCoworkers({
+      store: sourceStore,
+      policyVersion: "coworker-policy-1",
+      now: () => new Date(NOW),
+      id: () => "cw_legacy_profile",
+    });
+    const profile = source.create("ws_alpha", "account_alpha", input());
+    sourceStore.close();
+
+    const path = join(root, "legacy.db");
+    const legacy = new Database(path);
+    legacy.exec(`
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE crypto_coworkers (
+        workspace_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        coworker_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        state TEXT NOT NULL,
+        policy_version TEXT NOT NULL,
+        profile_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, owner_id, coworker_id)
+      );
+    `);
+    legacy.query(`
+      INSERT INTO crypto_coworkers(
+        workspace_id, owner_id, coworker_id, revision, state,
+        policy_version, profile_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      profile.workspaceId,
+      profile.ownerId,
+      profile.id,
+      profile.revision,
+      profile.state,
+      profile.policyVersion,
+      JSON.stringify(profile),
+      profile.createdAt,
+      profile.updatedAt,
+    );
+    legacy.close();
+
+    const migrated = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    try {
+      expect(migrated.get(profile.workspaceId, profile.ownerId, profile.id)).toEqual(profile);
+      const database = new Database(path, { readonly: true });
+      try {
+        const row = database.query("SELECT authority_seal FROM crypto_coworkers LIMIT 1")
+          .get() as { authority_seal: string };
+        expect(row.authority_seal).toMatch(/^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}$/);
+      } finally {
+        database.close();
+      }
     } finally {
-      reopenedStore.close();
+      migrated.close();
     }
   });
 
@@ -976,7 +1119,7 @@ describe("durable crypto coworkers", () => {
     }
   });
 
-  test("rescans restored profile, state, watch, and inbox rows before use", () => {
+  test("rescans restored watch and inbox rows before use", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-secret-rescan-"));
     roots.push(root);
     const path = join(root, "coworkers.db");
@@ -1002,8 +1145,6 @@ describe("durable crypto coworkers", () => {
     const secret = `suiprivkey1${"t".repeat(58)}`;
     const database = new Database(path);
     const mutations = [
-      ["crypto_coworkers", "profile_json", "mission"],
-      ["crypto_coworker_working_state", "state_json", "decisions"],
       ["crypto_coworker_watches", "watch_json", "parameters"],
       ["crypto_coworker_inbox", "item_json", "summary"],
     ] as const;
@@ -1011,8 +1152,7 @@ describe("durable crypto coworkers", () => {
       const row = database.query(`SELECT ${column} AS payload FROM ${table} LIMIT 1`)
         .get() as { payload: string };
       const payload = JSON.parse(row.payload) as Record<string, any>;
-      if (field === "decisions") payload.decisions[0].summary = secret;
-      else if (field === "parameters") payload.parameters.note = secret;
+      if (field === "parameters") payload.parameters.note = secret;
       else payload[field] = secret;
       database.query(`UPDATE ${table} SET ${column} = ?`).run(JSON.stringify(payload));
     }
@@ -1020,10 +1160,6 @@ describe("durable crypto coworkers", () => {
 
     const reopened = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
     try {
-      expect(() => reopened.get("ws_alpha", "account_alpha", profile.id))
-        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
-      expect(() => reopened.getWorkingState("ws_alpha", "account_alpha", profile.id))
-        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
       expect(() => reopened.getWatch("ws_alpha", "account_alpha", profile.id, watch.id))
         .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
       expect(() => reopened.getInboxItem("ws_alpha", "account_alpha", profile.id, item.id))
