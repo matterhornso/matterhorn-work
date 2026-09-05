@@ -117,7 +117,9 @@ function certifiedSuiResult(): MatterhornCryptoAppResult {
   Object.assign(candidate.provenance, cryptoAppEvidenceIdentity({
     appId: candidate.app.id,
     manifestRevision: candidate.app.manifestRevision,
+    connectionId: candidate.app.connectionId,
     actionId: candidate.action.id,
+    access: candidate.action.access,
     network: candidate.action.network,
     result: candidate.result,
     observation: candidate.observation,

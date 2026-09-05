@@ -1,11 +1,16 @@
-import type { MatterhornCryptoAppResult } from "@matterhorn-work/types/crypto-coworkers";
+import type {
+  MatterhornCryptoAppActionAccess,
+  MatterhornCryptoAppResult,
+} from "@matterhorn-work/types/crypto-coworkers";
 
 import { sha256 } from "./guarded-runtime-crypto.js";
 
 export type MatterhornCryptoAppEvidenceIdentityInput = {
   appId: string;
   manifestRevision: string;
+  connectionId: string;
   actionId: string;
+  access: MatterhornCryptoAppActionAccess;
   network: string;
   result: unknown;
   observation: MatterhornCryptoAppResult["observation"];
@@ -17,20 +22,24 @@ export function cryptoAppEvidenceIdentity(
   input: MatterhornCryptoAppEvidenceIdentityInput,
 ): { projectionHash: string; observationHash: string } {
   const projectionHash = sha256({
-    domain: "matterhorn:crypto-app-projection:v1",
+    domain: "matterhorn:crypto-app-projection:v2",
     appId: input.appId,
     manifestRevision: input.manifestRevision,
+    connectionId: input.connectionId,
     actionId: input.actionId,
+    access: input.access,
     network: input.network,
     result: input.result,
   });
   return {
     projectionHash,
     observationHash: sha256({
-      domain: "matterhorn:crypto-app-observation:v1",
+      domain: "matterhorn:crypto-app-observation:v2",
       appId: input.appId,
       manifestRevision: input.manifestRevision,
+      connectionId: input.connectionId,
       actionId: input.actionId,
+      access: input.access,
       network: input.network,
       observation: {
         source: input.observation.source,
@@ -51,7 +60,9 @@ export function verifyCryptoAppResultEvidence(result: MatterhornCryptoAppResult)
   const expected = cryptoAppEvidenceIdentity({
     appId: result.app.id,
     manifestRevision: result.app.manifestRevision,
+    connectionId: result.app.connectionId,
     actionId: result.action.id,
+    access: result.action.access,
     network: result.action.network,
     result: result.result,
     observation: result.observation,

@@ -32,7 +32,9 @@ function certifiedResult(): MatterhornCryptoAppResult {
   Object.assign(candidate.provenance, cryptoAppEvidenceIdentity({
     appId: candidate.app.id,
     manifestRevision: candidate.app.manifestRevision,
+    connectionId: candidate.app.connectionId,
     actionId: candidate.action.id,
+    access: candidate.action.access,
     network: candidate.action.network,
     result: candidate.result,
     observation: candidate.observation,
@@ -41,12 +43,14 @@ function certifiedResult(): MatterhornCryptoAppResult {
 }
 
 describe("crypto app evidence identity", () => {
-  test("verifies the exact app, action, network, result, source, block and observation time", () => {
+  test("verifies the exact app, connection, action authority, network, result and observation", () => {
     expect(verifyCryptoAppResultEvidence(certifiedResult())).toBe(true);
     const mutations: Array<(result: MatterhornCryptoAppResult) => void> = [
       (result) => { result.app.id = "matterhorn.other"; },
       (result) => { result.app.manifestRevision = "1.0.1"; },
+      (result) => { result.app.connectionId = "cxc_other"; },
       (result) => { result.action.id = "sui_object_read"; },
+      (result) => { result.action.access = "prepare"; },
       (result) => { result.action.network = "sui:mainnet"; },
       (result) => { (result.result as { balanceAtomic: string }).balanceAtomic = "11"; },
       (result) => { result.observation.source = "other source"; },

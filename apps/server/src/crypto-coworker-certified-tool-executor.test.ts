@@ -120,7 +120,9 @@ function certifyResult(result: MatterhornCryptoAppResult): MatterhornCryptoAppRe
   const identity = cryptoAppEvidenceIdentity({
     appId: result.app.id,
     manifestRevision: result.app.manifestRevision,
+    connectionId: result.app.connectionId,
     actionId: result.action.id,
+    access: result.action.access,
     network: result.action.network,
     result: result.result,
     observation: result.observation,
@@ -450,7 +452,7 @@ describe("certified coworker tool executor", () => {
     })]);
   });
 
-  test("rejects a mutated certified read before exposing it to the agent", async () => {
+  test("rejects a certified read whose tenant connection was substituted", async () => {
     const guardedRuntime = runtime();
     const coworker = profile("sui", {
       id: "cw_sui_read_invalid",
@@ -474,10 +476,7 @@ describe("certified coworker tool executor", () => {
       access: "read",
     });
     const tampered = suiReadResult();
-    tampered.result = {
-      ...tampered.result as Record<string, unknown>,
-      balanceAtomic: "2000000000",
-    };
+    tampered.app.connectionId = "cxc_other_tenant";
     const execute = createMatterhornCertifiedCoworkerToolExecutor({
       router: { execute: async () => tampered },
       coworkers: { get: () => coworker },

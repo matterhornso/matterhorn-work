@@ -70,7 +70,9 @@ function result(balance: string, now: Date): MatterhornCryptoAppResult {
   Object.assign(candidate.provenance, cryptoAppEvidenceIdentity({
     appId: candidate.app.id,
     manifestRevision: candidate.app.manifestRevision,
+    connectionId: candidate.app.connectionId,
     actionId: candidate.action.id,
+    access: candidate.action.access,
     network: candidate.action.network,
     result: candidate.result,
     observation: candidate.observation,
@@ -284,14 +286,14 @@ describe("crypto coworker watch runner", () => {
     }
   });
 
-  test("fails closed before establishing a baseline when certified result data was mutated", async () => {
+  test("fails closed before establishing a baseline when certified action authority was mutated", async () => {
     const setup = fixture();
     const runner = new MatterhornCoworkerWatchRunner({
       coworkers: setup.coworkers,
       now: setup.now,
       execute: async () => {
         const candidate = result("10", setup.now());
-        (candidate.result as { balanceAtomic: string }).balanceAtomic = "999";
+        candidate.action.access = "prepare";
         return candidate;
       },
     });
