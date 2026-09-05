@@ -61,6 +61,41 @@ describe("durable crypto app operational policy", () => {
     store.close();
   });
 
+  test("records zero-cost public cache calls without consuming upstream cost quota", () => {
+    let sequence = 0;
+    const store = new MatterhornCryptoAppOperationalPolicyStore(path(), {
+      dailyWorkspaceLimitMicros: 1_000,
+      maxCallCostMicros: 1_000,
+      now: () => new Date("2026-09-01T12:00:00.000Z"),
+      id: () => `operational_${++sequence}`,
+    });
+    const upstream = store.reserve(reservation("call_upstream"));
+    store.reconcile({ reservationId: upstream.reservationId, outcome: "success", actualCostMicros: 1_000 });
+
+    const cached = store.reserve({
+      ...reservation("call_cached"),
+      reservationClass: "public_block_cache",
+    });
+    expect(cached.reservedCostMicros).toBe(0);
+    expect(store.reconcile({
+      reservationId: cached.reservationId,
+      outcome: "success",
+      actualCostMicros: 0,
+    })).toEqual({ reservedCostMicros: 0, overCallLimit: false });
+    expect(store.usage("ws_a")).toEqual({ actualCostMicros: 1_000, pendingReservedCostMicros: 0 });
+    expect(store.developerUsage({
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      windowDays: 1,
+    }).totals).toMatchObject({ calls: 2, succeeded: 2, actualCostMicros: 1_000 });
+    expect(() => store.reconcile({
+      reservationId: cached.reservationId,
+      outcome: "success",
+      actualCostMicros: 1,
+    })).toThrow("crypto_app_operational_reservation_unavailable");
+    store.close();
+  });
+
   test("serializes quota reservations across store instances", () => {
     const databasePath = path();
     const options = {

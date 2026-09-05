@@ -8,6 +8,7 @@ import {
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
+import { MatterhornBlockEvidenceCache } from "./crypto-context-compiler.js";
 import {
   assertCryptoAdapterConnectedAddress,
   resolvePublicCryptoAdapterEndpoint,
@@ -121,6 +122,7 @@ type RouterOptions = {
   authorization: MatterhornCryptoAppAuthorization;
   executors: Partial<Record<MatterhornCryptoAppTransportKind, MatterhornCryptoAppTransportExecutor>>;
   operationalPolicy?: MatterhornCryptoAppOperationalPolicy;
+  publicEvidenceCache?: MatterhornBlockEvidenceCache<MatterhornCachedPublicCryptoAppEvidence>;
   validateCredential?: (input: {
     workspaceId: string;
     connectionId: string;
@@ -137,6 +139,10 @@ type RouterOptions = {
 
 type CircuitState = { consecutiveFailures: number; openUntilMs: number };
 type OperationalReservation = { reservationId: string; reservedCostMicros: number };
+export type MatterhornCachedPublicCryptoAppEvidence = Pick<
+  MatterhornCryptoAppResult,
+  "observation" | "provenance" | "result"
+>;
 
 const MAX_ARGUMENT_BYTES = 64 * 1024;
 const MAX_RESULT_BYTES = 256 * 1024;
@@ -147,6 +153,26 @@ function nonEmpty(value: string): boolean {
 
 function boundedIdentifier(value: string): boolean {
   return nonEmpty(value) && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function publicEvidenceCacheEligible(input: {
+  action: MatterhornCryptoAppAction;
+  manifestAuthentication: MatterhornCryptoAppConnectionCredential["type"];
+  manifestScopes: string[];
+  grantedScopes: string[];
+  credential: MatterhornCryptoAppConnectionCredential;
+}): boolean {
+  return input.action.access === "read"
+    && input.action.risk === "informational"
+    && input.action.requiresFreshness
+    && input.action.freshnessMaxAgeMs !== null
+    && Number.isSafeInteger(input.action.freshnessMaxAgeMs)
+    && input.action.freshnessMaxAgeMs > 0
+    && input.action.requiredScopes.length === 0
+    && input.manifestAuthentication === "none"
+    && input.manifestScopes.length === 0
+    && input.grantedScopes.length === 0
+    && input.credential.type === "none";
 }
 
 function executionEnvelopeValid(value: unknown): value is MatterhornCryptoAppAdapterExecution {
@@ -186,6 +212,7 @@ export class MatterhornCryptoAppAdapterRouter {
   readonly #executors: Partial<Record<MatterhornCryptoAppTransportKind, MatterhornCryptoAppTransportExecutor>>;
   readonly #resolveDns: MatterhornAdapterDnsResolver | undefined;
   readonly #operationalPolicy: MatterhornCryptoAppOperationalPolicy | undefined;
+  readonly #publicEvidenceCache: MatterhornBlockEvidenceCache<MatterhornCachedPublicCryptoAppEvidence>;
   readonly #validateCredential: RouterOptions["validateCredential"];
   readonly #now: () => Date;
   readonly #circuitFailureThreshold: number;
@@ -199,6 +226,7 @@ export class MatterhornCryptoAppAdapterRouter {
     this.#authorization = options.authorization;
     this.#executors = options.executors;
     this.#operationalPolicy = options.operationalPolicy;
+    this.#publicEvidenceCache = options.publicEvidenceCache ?? new MatterhornBlockEvidenceCache();
     this.#validateCredential = options.validateCredential;
     this.#resolveDns = options.resolveDns;
     this.#now = options.now ?? (() => new Date());
@@ -258,23 +286,62 @@ export class MatterhornCryptoAppAdapterRouter {
     }
     const canonicalArguments = validated.value as Record<string, unknown>;
     const argumentsHash = sha256(canonicalArguments);
+    const cacheEligible = publicEvidenceCacheEligible({
+      action,
+      manifestAuthentication: registryEntry.manifest.authentication.type,
+      manifestScopes: registryEntry.manifest.authentication.scopes,
+      grantedScopes: connection.grantedScopes,
+      credential: connection.credential,
+    });
+    const cacheQuery = {
+      workspaceId: request.workspaceId,
+      connectionId: connection.id,
+      connectionUpdatedAt: connection.updatedAt,
+      grantedActionIds: [...connection.grantedActionIds].sort(),
+      grantedNetworks: [...connection.grantedNetworks].sort(),
+      appId: connection.appId,
+      manifestRevision: connection.manifestRevision,
+      manifestHash: registryEntry.manifestHash,
+      certification: {
+        state: registryEntry.certification.state,
+        reportHash: registryEntry.certification.reportHash,
+        runtimeReportHash: registryEntry.certification.runtimeReportHash,
+        policyVersion: registryEntry.certification.policyVersion,
+      },
+      actionId: action.id,
+      network: request.network,
+      argumentsHash,
+      outputProjectionSchemaHash: sha256(action.outputProjectionSchema),
+    };
+    const cached = cacheEligible
+      ? this.#publicEvidenceCache.getLatest({
+        venue: connection.appId,
+        network: request.network,
+        query: cacheQuery,
+        now: this.#now(),
+        maxAgeMs: Math.min(action.freshnessMaxAgeMs ?? 0, 60 * 60 * 1000),
+      })
+      : null;
     const circuitKey = `${request.workspaceId}\u0000${connection.id}\u0000${connection.appId}\u0000${connection.manifestRevision}\u0000${action.id}`;
-    if (this.#circuitOpen(request.workspaceId, circuitKey)) {
+    if (!cached && this.#circuitOpen(request.workspaceId, circuitKey)) {
       throw new MatterhornCryptoAppAdapterError("adapter_circuit_open");
     }
 
-    let resolved: MatterhornResolvedAdapterEndpoint;
-    try {
-      resolved = await resolvePublicCryptoAdapterEndpoint(registryEntry.manifest.transport.endpoint, this.#resolveDns);
-    } catch {
-      if (!this.#recordFailure(request.workspaceId, circuitKey)) {
-        throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
+    let resolved: MatterhornResolvedAdapterEndpoint | null = null;
+    let executor: MatterhornCryptoAppTransportExecutor | undefined;
+    if (!cached) {
+      try {
+        resolved = await resolvePublicCryptoAdapterEndpoint(registryEntry.manifest.transport.endpoint, this.#resolveDns);
+      } catch {
+        if (!this.#recordFailure(request.workspaceId, circuitKey)) {
+          throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
+        }
+        throw new MatterhornCryptoAppAdapterError("adapter_endpoint_blocked");
       }
-      throw new MatterhornCryptoAppAdapterError("adapter_endpoint_blocked");
-    }
 
-    const executor = this.#executors[registryEntry.manifest.transport.kind];
-    if (!executor) throw new MatterhornCryptoAppAdapterError("adapter_transport_unavailable");
+      executor = this.#executors[registryEntry.manifest.transport.kind];
+      if (!executor) throw new MatterhornCryptoAppAdapterError("adapter_transport_unavailable");
+    }
 
     let operationalReservation: OperationalReservation | null = null;
     if (this.#operationalPolicy) {
@@ -287,6 +354,7 @@ export class MatterhornCryptoAppAdapterRouter {
           actionId: action.id,
           runId: request.runId,
           callId: request.callId,
+          reservationClass: cached ? "public_block_cache" : "upstream",
         });
       } catch (error) {
         if (error instanceof MatterhornCryptoAppOperationalPolicyError
@@ -323,6 +391,52 @@ export class MatterhornCryptoAppAdapterRouter {
     }
 
     const startedAt = this.#now();
+    if (cached) {
+      const completedAt = this.#now();
+      const observedAtMs = cached.value.observation.observedAt
+        ? Date.parse(cached.value.observation.observedAt)
+        : Number.NaN;
+      const ageMs = completedAt.getTime() - observedAtMs;
+      if (!Number.isFinite(observedAtMs)
+        || ageMs < -60_000
+        || action.freshnessMaxAgeMs === null
+        || ageMs > action.freshnessMaxAgeMs) {
+        await this.#reconcile(
+          reservationId,
+          operationalReservation,
+          "error",
+          0,
+          Math.max(0, completedAt.getTime() - startedAt.getTime()),
+        );
+        throw new MatterhornCryptoAppAdapterError("adapter_output_stale");
+      }
+      const durationMs = Math.max(0, completedAt.getTime() - startedAt.getTime());
+      await this.#reconcile(reservationId, operationalReservation, "success", 0, durationMs);
+      return {
+        version: MATTERHORN_CRYPTO_APP_RESULT_VERSION,
+        app: {
+          id: connection.appId,
+          manifestRevision: connection.manifestRevision,
+          connectionId: connection.id,
+        },
+        action: { id: action.id, access: action.access, network: request.network },
+        timing: {
+          startedAt: startedAt.toISOString(),
+          completedAt: completedAt.toISOString(),
+          durationMs,
+        },
+        observation: {
+          ...structuredClone(cached.value.observation),
+          ageMs,
+          freshnessMaxAgeMs: action.freshnessMaxAgeMs,
+        },
+        provenance: structuredClone(cached.value.provenance),
+        metering: { costMicros: 0, reservationId },
+        result: structuredClone(cached.value.result),
+      };
+    }
+
+    if (!resolved || !executor) throw new MatterhornCryptoAppAdapterError("adapter_transport_unavailable");
     const controller = new AbortController();
     const timeout = this.#timeout(action.timeoutMs, () => controller.abort());
     let execution: MatterhornCryptoAppAdapterExecution;
@@ -436,7 +550,7 @@ export class MatterhornCryptoAppAdapterRouter {
     const safeBlockOrVersion = execution.blockOrVersion === null
       ? null
       : quarantineUntrustedContent(execution.blockOrVersion);
-    return {
+    const result: MatterhornCryptoAppResult = {
       version: MATTERHORN_CRYPTO_APP_RESULT_VERSION,
       app: {
         id: connection.appId,
@@ -464,6 +578,30 @@ export class MatterhornCryptoAppAdapterRouter {
       metering: { costMicros: execution.costMicros, reservationId },
       result: quarantined,
     };
+    if (cacheEligible && result.observation.observedAt && result.observation.blockOrVersion) {
+      try {
+        this.#publicEvidenceCache.put({
+          venue: connection.appId,
+          network: request.network,
+          block: sha256({
+            appId: connection.appId,
+            network: request.network,
+            blockOrVersion: execution.blockOrVersion,
+          }),
+          query: cacheQuery,
+          value: {
+            observation: structuredClone(result.observation),
+            provenance: structuredClone(result.provenance),
+            result: structuredClone(result.result),
+          },
+          observedAt: observedAt ?? undefined,
+        });
+      } catch {
+        // Cache admission is a bounded optimization. A validated live result
+        // remains authoritative when an entry is too large or otherwise unsafe.
+      }
+    }
+    return result;
   }
 
   #circuitOpen(workspaceId: string, key: string): boolean {
