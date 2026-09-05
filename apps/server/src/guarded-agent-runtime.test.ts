@@ -553,6 +553,131 @@ describe("guarded agent runtime transport", () => {
     second.close();
   });
 
+  test("rejects restored staged capabilities with added authority or prolonged lifetime", async () => {
+    const path = join(dataDir, "staged-capability-open-contract.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_staged_contract",
+      sessionId: "ses_staged_contract",
+      parts: [{ type: "text", text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+    });
+    const args = { address: `0x${"4".repeat(64)}` };
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_staged_contract",
+      sessionId: "ses_staged_contract",
+      callId: "call_staged_open_contract",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args,
+    });
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "staged_capability",
+      "call_staged_open_contract",
+    );
+    if (!persisted) throw new Error("test staged capability missing");
+    store.put({
+      kind: "staged_capability",
+      key: persisted.key,
+      workspaceId: persisted.workspaceId,
+      sessionId: persisted.sessionId,
+      value: { ...persisted.value, submit: true },
+      expiresAtMs: persisted.expiresAtMs,
+      nowMs: persisted.updatedAtMs,
+    });
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { ...args, _matterhornCallId: "call_staged_open_contract" },
+    })).toThrow("invalid persisted tool capability");
+
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_staged_contract",
+      sessionId: "ses_staged_contract",
+      callId: "call_staged_prolonged",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args,
+    });
+    const prolonged = store.getRecord<Record<string, unknown>>(
+      "staged_capability",
+      "call_staged_prolonged",
+    );
+    if (!prolonged) throw new Error("test staged capability missing");
+    const extendedExpiry = prolonged.updatedAtMs + 5 * 60_000;
+    store.put({
+      kind: "staged_capability",
+      key: prolonged.key,
+      workspaceId: prolonged.workspaceId,
+      sessionId: prolonged.sessionId,
+      value: { ...prolonged.value, expiresAtMs: extendedExpiry },
+      expiresAtMs: extendedExpiry,
+      nowMs: prolonged.updatedAtMs,
+    });
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { ...args, _matterhornCallId: "call_staged_prolonged" },
+    })).toThrow("invalid persisted tool capability");
+    runtime.close();
+  });
+
+  test("rejects staged capability tenant metadata that disagrees with its signed claims", async () => {
+    const path = join(dataDir, "staged-capability-tenant-substitution.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_staged_tenant",
+      sessionId: "ses_staged_tenant",
+      parts: [{ type: "text", text: "Read public Bittensor state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-bittensor",
+      executionMode: "work",
+    });
+    const args = { address: "5DtenantAddress" };
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_staged_tenant",
+      sessionId: "ses_staged_tenant",
+      callId: "call_staged_tenant",
+      agentId: "matterhorn-bittensor",
+      toolName: "matterhorn-work_matterhorn_bittensor_chat",
+      args,
+    });
+    const persisted = store.getRecord<Record<string, unknown>>("staged_capability", "call_staged_tenant");
+    if (!persisted) throw new Error("test staged capability missing");
+    store.put({
+      kind: "staged_capability",
+      key: persisted.key,
+      workspaceId: "ws_staged_other",
+      sessionId: "ses_staged_other",
+      value: {
+        ...persisted.value,
+        workspaceId: "ws_staged_other",
+        sessionId: "ses_staged_other",
+      },
+      expiresAtMs: persisted.expiresAtMs,
+      nowMs: persisted.updatedAtMs,
+    });
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_bittensor_chat",
+      args: { ...args, _matterhornCallId: "call_staged_tenant" },
+    })).toThrow("guarded_staged_capability_state_invalid");
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_bittensor_chat",
+      args: { ...args, _matterhornCallId: "call_staged_tenant" },
+    })).toThrow("unknown, expired, or replayed");
+    runtime.close();
+  });
+
   test("restores a user-message binding when assistant binding persistence fails", async () => {
     const path = join(dataDir, "message-binding-rollback.db");
     const firstStore = new MatterhornGuardedRuntimeStateStore(path);
@@ -1393,6 +1518,101 @@ describe("guarded agent runtime transport", () => {
     })).toThrow("did not include");
     delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS;
     delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS;
+  });
+
+  test("rejects restored rollout bypasses with added authority and invalidates them when policy changes", async () => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS = "prepare";
+    process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS = "sui";
+    const path = join(dataDir, "rollout-bypass-closed-contract.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    try {
+      const accepted = await runtime.acceptPrompt({
+        workspaceId: "ws_rollout_contract",
+        sessionId: "ses_rollout_contract",
+        parts: [{ type: "text", text: "Read public Sui state" }],
+        providerId: "cudos",
+        modelId: "asi1-mini",
+        agentId: "matterhorn-sui",
+        executionMode: "work",
+      });
+      const args = { address: `0x${"6".repeat(64)}` };
+      runtime.stageRuntimeTool({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        runId: accepted.runId,
+        workspaceId: "ws_rollout_contract",
+        sessionId: "ses_rollout_contract",
+        callId: "call_rollout_contract",
+        agentId: "matterhorn-sui",
+        toolName: "matterhorn-work_matterhorn_sui_get_balance",
+        args,
+      });
+      const persisted = store.getRecord<Record<string, unknown>>("rollout_bypass", "call_rollout_contract");
+      if (!persisted) throw new Error("test rollout bypass missing");
+      store.put({
+        kind: "rollout_bypass",
+        key: persisted.key,
+        workspaceId: persisted.workspaceId,
+        sessionId: persisted.sessionId,
+        value: { ...persisted.value, submit: true },
+        expiresAtMs: persisted.expiresAtMs,
+        nowMs: persisted.updatedAtMs,
+      });
+      expect(() => runtime.authorizeMcpTool({
+        toolName: "matterhorn_sui_get_balance",
+        args: { ...args, _matterhornCallId: "call_rollout_contract" },
+      })).toThrow("invalid persisted rollout authorization");
+
+      runtime.stageRuntimeTool({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        runId: accepted.runId,
+        workspaceId: "ws_rollout_contract",
+        sessionId: "ses_rollout_contract",
+        callId: "call_rollout_policy_changed",
+        agentId: "matterhorn-sui",
+        toolName: "matterhorn-work_matterhorn_sui_get_balance",
+        args,
+      });
+      delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS;
+      delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS;
+      expect(() => runtime.authorizeMcpTool({
+        toolName: "matterhorn_sui_get_balance",
+        args: { ...args, _matterhornCallId: "call_rollout_policy_changed" },
+      })).toThrow("no longer matches the active enforcement policy");
+    } finally {
+      runtime.close();
+      delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS;
+      delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS;
+    }
+  });
+
+  test("never promotes a persisted shadow denial into enforce-mode rollout authority", () => {
+    const path = join(dataDir, "rollout-bypass-mode-transition.db");
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "shadow";
+    const shadow = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    shadow.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: "run_missing",
+      workspaceId: "ws_shadow_transition",
+      sessionId: "ses_shadow_transition",
+      callId: "call_shadow_transition",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"7".repeat(64)}` },
+    });
+    shadow.close();
+
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+    const enforce = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    try {
+      expect(() => enforce.authorizeMcpTool({
+        toolName: "matterhorn_sui_get_balance",
+        args: { address: `0x${"7".repeat(64)}`, _matterhornCallId: "call_shadow_transition" },
+      })).toThrow("no longer matches the active enforcement policy");
+    } finally {
+      enforce.close();
+      process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+    }
   });
 
   test("invalid rollout selectors fail readiness instead of bypassing tools", () => {
