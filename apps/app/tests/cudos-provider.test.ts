@@ -102,7 +102,7 @@ describe("CUDOS provider preset", () => {
       "isDesktopRuntime() ? connectCudosProvider : undefined",
     );
     expect(viewSource).toContain(
-      "Matterhorn manages the provider used by this web workspace.",
+      "Matterhorn manages this connection for your workspace.",
     );
   });
 });
