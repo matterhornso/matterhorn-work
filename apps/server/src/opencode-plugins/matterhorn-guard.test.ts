@@ -20,6 +20,13 @@ const mockFetch = (async (input: string | URL | Request, init?: RequestInit) => 
   if (url.endsWith("/internal/agent-runs/bind-message")) {
     return Response.json({ runId: "run_plugin_1" });
   }
+  if (url.endsWith("/internal/agent-runs/provider-messages")) {
+    return Response.json({
+      accepted: true,
+      runId: "run_plugin_1",
+      messagesHash: "7d119f997579d6f57b4f7f20c3c546cbf7ab1593f5f1b42b763643278c3022e5",
+    });
+  }
   if (url.endsWith("/internal/agent-runs/provider-system")) {
     return Response.json({
       runId: "run_plugin_1",
@@ -89,6 +96,43 @@ describe("matterhorn-guard OpenCode plugin", () => {
     expect(request?.init?.headers).toEqual(expect.objectContaining({ "X-Matterhorn-Agent-Runtime-Secret": "runtime-only-secret" }));
     expect(String(request?.init?.body)).not.toContain("runtime-only-secret");
     expect(JSON.parse(String(request?.init?.body))).toMatchObject({ runId: "run_plugin_1" });
+  });
+
+  test("validates the exact final message array without modifying it", async () => {
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    const messages = [{
+      info: { id: "msg_user_plugin_1", role: "user", sessionID: "ses_plugin" },
+      parts: [{ type: "text", text: "Compare public Bittensor validators" }],
+    }];
+    const output = { messages: structuredClone(messages) };
+
+    await plugin["experimental.chat.messages.transform"]({}, output);
+
+    expect(output.messages).toEqual(messages);
+    const request = requests.at(-1);
+    expect(request?.url).toEndWith("/internal/agent-runs/provider-messages");
+    expect(JSON.parse(String(request?.init?.body))).toEqual({
+      workspaceDirectory: "/workspace/guarded",
+      sessionId: "ses_plugin",
+      messages,
+    });
+    expect(String(request?.init?.body)).not.toContain("runtime-only-secret");
+  });
+
+  test("rejects mixed-session and unbounded final message arrays before transport", async () => {
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    const message = (sessionID: string) => ({
+      info: { role: "user", sessionID },
+      parts: [{ type: "text", text: "public research" }],
+    });
+
+    await expect(plugin["experimental.chat.messages.transform"]({}, {
+      messages: [message("ses_plugin"), message("ses_other")],
+    })).rejects.toThrow("crossed chat boundaries");
+    await expect(plugin["experimental.chat.messages.transform"]({}, {
+      messages: Array.from({ length: 2_049 }, () => message("ses_plugin")),
+    })).rejects.toThrow("safely validate");
+    expect(requests).toHaveLength(0);
   });
 
   test("replaces late OpenCode system context with the exact authorized provider context", async () => {

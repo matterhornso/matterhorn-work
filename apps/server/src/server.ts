@@ -10595,6 +10595,38 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/internal/agent-runs/provider-messages", "none", async (ctx) => {
+    const runtimeSecret = ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "";
+    try {
+      guardedRuntime.authenticateRuntime(runtimeSecret);
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+    const body = await readJsonBody(
+      ctx.request,
+      (16 * 1_024 * 1_024) + (64 * 1_024),
+      "Agent provider messages",
+    );
+    const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    if (!sessionId || !Array.isArray(body.messages)) {
+      throw new ApiError(400, "invalid_payload", "sessionId and messages are required");
+    }
+    try {
+      const validated = guardedRuntime.validateRuntimeProviderMessages({
+        runtimeSecret,
+        workspaceId: workspace.id,
+        sessionId,
+        messages: body.messages,
+      });
+      const response = jsonResponse(validated);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+  });
+
   addRoute(routes, "POST", "/internal/agent-runs/provider-system", "none", async (ctx) => {
     const body = await readJsonBody(ctx.request, 32_000, "Agent provider system context");
     const runtimeSecret = ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "";

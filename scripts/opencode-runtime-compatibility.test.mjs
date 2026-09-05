@@ -17,6 +17,11 @@ assert.equal(upstream.version, "matterhorn.upstream-compatibility.v1");
 assert.equal(upstream.openwork?.version, openworkVersion, "OpenWork compatibility baseline must match constants.json");
 assert.equal(upstream.opencode?.version, `v${pinnedVersion}`, "OpenCode compatibility baseline must match constants.json");
 assert.equal(upstream.opencode?.sdkVersion, pinnedVersion, "OpenCode SDK and runtime must remain paired");
+assert.deepEqual(upstream.opencode?.requiredPluginHooks, [
+  "experimental.chat.messages.transform",
+  "experimental.chat.system.transform",
+  "tool.execute.before",
+], "the guarded runtime must pin every OpenCode hook used as a security boundary");
 assert.equal(upstream.openwork?.integrationStrategy, "compatibility_port");
 assert.match(upstream.openwork?.commit ?? "", /^[a-f0-9]{40}$/);
 assert.match(upstream.opencode?.commit ?? "", /^[a-f0-9]{40}$/);
@@ -79,9 +84,25 @@ for (const contract of [
   'webfetch: "deny"',
   'websearch: "deny"',
   'external_directory: "deny"',
+  'title: { disable: true }',
 ]) {
   assert.ok(runtimeConfig.includes(contract), `managed runtime permission policy missing ${contract}`);
 }
+
+assert.match(
+  runtimeConfig,
+  /openworkExtensionsPreviewPluginPath\(\),\s*matterhornGuardPluginPath\(\),/,
+  "the Matterhorn guard must remain the final managed plugin",
+);
+const guardPlugin = readText("apps/server/src/opencode-plugins/matterhorn-guard.ts");
+for (const hook of upstream.opencode.requiredPluginHooks) {
+  assert.ok(guardPlugin.includes(`"${hook}"`), `the Matterhorn guard must implement ${hook}`);
+}
+assert.ok(
+  guardPlugin.indexOf('"experimental.chat.messages.transform"')
+    < guardPlugin.indexOf('"experimental.chat.system.transform"'),
+  "final provider messages must be validated before provider system context is released",
+);
 
 const webClient = readText("apps/app/src/app/lib/opencode.ts");
 assert.match(
