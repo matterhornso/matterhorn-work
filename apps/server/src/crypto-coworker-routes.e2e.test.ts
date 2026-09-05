@@ -70,6 +70,7 @@ const ENV_KEYS = [
   "MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_DEVELOPER_DB",
   "MATTERHORN_CRYPTO_APP_OPERATIONAL_DB",
+  "MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET",
   "MATTERHORN_GUARDED_RUNTIME_MODE",
   "MATTERHORN_CAPABILITY_SIGNING_SECRET",
@@ -234,6 +235,8 @@ async function boot(
       "coworker-route-connection-integrity-secret-at-least-32-bytes";
     process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB = join(root, "crypto-app-developers.db");
     process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB = join(root, "crypto-app-operations.db");
+    process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET =
+      "coworker-route-operational-integrity-secret-at-least-32-bytes";
     process.env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET = "route-wallet-proof-secret-at-least-32-characters";
     if (options.seedCryptoApps) {
       const registryStore = new MatterhornCryptoAppRegistryStore(process.env.MATTERHORN_CRYPTO_APP_REGISTRY_DB);
@@ -285,6 +288,7 @@ async function boot(
     delete process.env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET;
     delete process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB;
     delete process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB;
+    delete process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET;
     delete process.env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET;
   }
   process.env.MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT = "1";
