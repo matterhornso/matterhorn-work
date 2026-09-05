@@ -42,6 +42,34 @@ describe("durable guarded runtime state", () => {
     second.close();
   });
 
+  test("returns row scope with restored state for admission checks", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-guarded-record-"));
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
+    const expiresAtMs = Date.now() + 60_000;
+    state.put({
+      kind: "privacy_challenge",
+      key: "challenge_1",
+      workspaceId: "ws_a",
+      sessionId: "ses_a",
+      value: { requestHash: "hash_a" },
+      expiresAtMs,
+      nowMs: expiresAtMs - 60_000,
+    });
+    expect(state.getRecord<{ requestHash: string }>("privacy_challenge", "challenge_1")).toEqual({
+      kind: "privacy_challenge",
+      key: "challenge_1",
+      workspaceId: "ws_a",
+      sessionId: "ses_a",
+      value: { requestHash: "hash_a" },
+      expiresAtMs,
+      updatedAtMs: expiresAtMs - 60_000,
+    });
+    expect(state.takeRecord<{ requestHash: string }>("privacy_challenge", "challenge_1")?.workspaceId)
+      .toBe("ws_a");
+    expect(state.get("privacy_challenge", "challenge_1")).toBeNull();
+    state.close();
+  });
+
   test("atomically rejects capability replay across store instances", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-guarded-replay-"));
     const path = join(root, "state.db");

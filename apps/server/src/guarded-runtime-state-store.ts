@@ -67,6 +67,16 @@ export type GuardedRuntimeConsumedCapabilityRecord<T> = {
   expiresAtMs: number;
 };
 
+export type GuardedRuntimeStateRecord<T> = {
+  kind: GuardedRuntimeStateKind;
+  key: string;
+  workspaceId: string;
+  sessionId: string | null;
+  value: T;
+  expiresAtMs: number | null;
+  updatedAtMs: number;
+};
+
 const require = createRequire(import.meta.url);
 
 function openSqliteDatabase(path: string): SqliteDatabase {
@@ -83,6 +93,22 @@ function statement(db: SqliteDatabase, sql: string): SqliteStatement {
   if (db.prepare) return db.prepare(sql);
   if (db.query) return db.query(sql);
   throw new Error("SQLite database does not support prepare/query.");
+}
+
+function parseStateRow<T>(row: StateRow): GuardedRuntimeStateRecord<T> {
+  try {
+    return {
+      kind: row.kind,
+      key: row.state_key,
+      workspaceId: row.workspace_id,
+      sessionId: row.session_id,
+      value: JSON.parse(row.payload_json) as T,
+      expiresAtMs: row.expires_at,
+      updatedAtMs: row.updated_at,
+    };
+  } catch {
+    throw new Error("guarded_runtime_state_corrupt");
+  }
 }
 
 export function guardedRuntimeStatePath(): string {
@@ -223,6 +249,14 @@ export class MatterhornGuardedRuntimeStateStore {
   }
 
   get<T>(kind: GuardedRuntimeStateKind, key: string, nowMs = Date.now()): T | null {
+    return this.getRecord<T>(kind, key, nowMs)?.value ?? null;
+  }
+
+  getRecord<T>(
+    kind: GuardedRuntimeStateKind,
+    key: string,
+    nowMs = Date.now(),
+  ): GuardedRuntimeStateRecord<T> | null {
     const row = statement(this.db, `
       SELECT kind, state_key, workspace_id, session_id, payload_json, expires_at, updated_at
       FROM guarded_state
@@ -230,11 +264,7 @@ export class MatterhornGuardedRuntimeStateStore {
       LIMIT 1
     `).get(kind, key, nowMs) as StateRow | undefined;
     if (!row) return null;
-    try {
-      return JSON.parse(row.payload_json) as T;
-    } catch {
-      throw new Error("guarded_runtime_state_corrupt");
-    }
+    return parseStateRow<T>(row);
   }
 
   /**
@@ -243,39 +273,46 @@ export class MatterhornGuardedRuntimeStateStore {
    * cannot confirm or consume the same record after the first process wins.
    */
   take<T>(kind: GuardedRuntimeStateKind, key: string, nowMs = Date.now()): T | null {
+    return this.takeRecord<T>(kind, key, nowMs)?.value ?? null;
+  }
+
+  takeRecord<T>(
+    kind: GuardedRuntimeStateKind,
+    key: string,
+    nowMs = Date.now(),
+  ): GuardedRuntimeStateRecord<T> | null {
     const row = statement(this.db, `
       DELETE FROM guarded_state
       WHERE kind = ? AND state_key = ? AND (expires_at IS NULL OR expires_at > ?)
-      RETURNING payload_json
-    `).get(kind, key, nowMs) as { payload_json: string } | undefined;
+      RETURNING kind, state_key, workspace_id, session_id, payload_json, expires_at, updated_at
+    `).get(kind, key, nowMs) as StateRow | undefined;
     if (!row) return null;
-    try {
-      return JSON.parse(row.payload_json) as T;
-    } catch {
-      throw new Error("guarded_runtime_state_corrupt");
-    }
+    return parseStateRow<T>(row);
   }
 
   list<T>(kind: GuardedRuntimeStateKind, input: { workspaceId?: string; nowMs?: number } = {}): T[] {
+    return this.listRecords<T>(kind, input).map((record) => record.value);
+  }
+
+  listRecords<T>(
+    kind: GuardedRuntimeStateKind,
+    input: { workspaceId?: string; nowMs?: number } = {},
+  ): Array<GuardedRuntimeStateRecord<T>> {
     const nowMs = input.nowMs ?? Date.now();
     const rows = input.workspaceId
       ? statement(this.db, `
-          SELECT payload_json FROM guarded_state
+          SELECT kind, state_key, workspace_id, session_id, payload_json, expires_at, updated_at
+          FROM guarded_state
           WHERE kind = ? AND workspace_id = ? AND (expires_at IS NULL OR expires_at > ?)
           ORDER BY updated_at ASC
         `).all(kind, input.workspaceId, nowMs)
       : statement(this.db, `
-          SELECT payload_json FROM guarded_state
+          SELECT kind, state_key, workspace_id, session_id, payload_json, expires_at, updated_at
+          FROM guarded_state
           WHERE kind = ? AND (expires_at IS NULL OR expires_at > ?)
           ORDER BY updated_at ASC
         `).all(kind, nowMs);
-    return rows.map((row) => {
-      try {
-        return JSON.parse((row as { payload_json: string }).payload_json) as T;
-      } catch {
-        throw new Error("guarded_runtime_state_corrupt");
-      }
-    });
+    return rows.map((row) => parseStateRow<T>(row as StateRow));
   }
 
   delete(kind: GuardedRuntimeStateKind, key: string): boolean {
