@@ -9,6 +9,7 @@ import {
 import type { MatterhornAgentToolReceipt } from "@matterhorn-work/types/guarded-agent-runtime";
 
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
+import { cryptoAppEvidenceIdentity } from "./crypto-app-evidence-identity.js";
 import { MatterhornBlockEvidenceCache } from "./crypto-context-compiler.js";
 import {
   assertCryptoAdapterConnectedAddress,
@@ -190,33 +191,20 @@ function evidenceReceiptMetadata(input: {
   projectionHash: string;
   observationHash: string;
 } {
-  const projectionHash = sha256({
-    domain: "matterhorn:crypto-app-projection:v1",
+  const identity = cryptoAppEvidenceIdentity({
     appId: input.appId,
     manifestRevision: input.manifestRevision,
     actionId: input.actionId,
     network: input.network,
     result: input.result,
+    observation: input.observation,
   });
   return {
     delivery: input.delivery,
     observedAt: input.observation.observedAt,
     ageMs: input.observation.ageMs,
     freshnessMaxAgeMs: input.observation.freshnessMaxAgeMs,
-    projectionHash,
-    observationHash: sha256({
-      domain: "matterhorn:crypto-app-observation:v1",
-      appId: input.appId,
-      manifestRevision: input.manifestRevision,
-      actionId: input.actionId,
-      network: input.network,
-      observation: {
-        source: input.observation.source,
-        observedAt: input.observation.observedAt,
-        blockOrVersion: input.observation.blockOrVersion,
-      },
-      projectionHash,
-    }),
+    ...identity,
   };
 }
 

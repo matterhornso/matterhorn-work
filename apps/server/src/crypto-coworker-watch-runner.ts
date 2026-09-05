@@ -4,6 +4,7 @@ import type {
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import { MatterhornCryptoAppAdapterError } from "./crypto-app-adapter-router.js";
+import { verifyCryptoAppResultEvidence } from "./crypto-app-evidence-identity.js";
 import { MatterhornCoworkers, type MatterhornCoworkerInboxItemInput } from "./crypto-coworkers.js";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 
@@ -19,7 +20,6 @@ type WatchRunnerOptions = {
 };
 
 const METRIC_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-const EXACT_EVIDENCE_HASH = /^[a-f0-9]{64}$/;
 const LEGACY_EVIDENCE_REFERENCE = /^(?:sha256:)?([a-f0-9]{64})$/i;
 const SAFE_EXECUTION_ERRORS = new Set([
   "adapter_connection_unavailable",
@@ -101,14 +101,12 @@ function evidenceReferenceHash(result: MatterhornCryptoAppResult): string {
   const projectionHash = result.provenance.projectionHash;
   const observationHash = result.provenance.observationHash;
   if (projectionHash !== undefined || observationHash !== undefined) {
-    if (!projectionHash || !observationHash
-      || !EXACT_EVIDENCE_HASH.test(projectionHash)
-      || !EXACT_EVIDENCE_HASH.test(observationHash)) {
+    if (!verifyCryptoAppResultEvidence(result)) {
       throw new MatterhornCryptoAppAdapterError("adapter_output_invalid");
     }
     // The observation proof also binds the exact projection proof, app,
     // action, network, source, block/version and observation time.
-    return observationHash;
+    return observationHash!;
   }
   const legacy = LEGACY_EVIDENCE_REFERENCE.exec(result.provenance.evidenceReference);
   if (!legacy?.[1]) throw new MatterhornCryptoAppAdapterError("adapter_output_invalid");
@@ -159,6 +157,7 @@ export class MatterhornCoworkerWatchRunner {
     try {
       const result = await this.#execute(watch);
       const completedAt = this.#now();
+      const exactEvidenceReferenceHash = evidenceReferenceHash(result);
       const resultHash = sha256({
         app: result.app,
         action: result.action,
@@ -193,7 +192,7 @@ export class MatterhornCoworkerWatchRunner {
           source: {
             appId: watch.appId,
             actionId: watch.actionId,
-            evidenceReferenceHash: evidenceReferenceHash(result),
+            evidenceReferenceHash: exactEvidenceReferenceHash,
             freshness: freshness(result),
             observedAt: result.observation.observedAt ?? result.timing.completedAt,
           },
