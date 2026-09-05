@@ -362,6 +362,73 @@ function ToolMenuLoading({ label }: { label: string }) {
   );
 }
 
+type PrivateModelControlProps = Pick<
+  ComposerProps,
+  | "busy"
+  | "privateModeAvailable"
+  | "privateModeEnabled"
+  | "privateModeUnavailableReason"
+  | "onPrivateModeChange"
+>;
+
+const PRIVATE_MODEL_UNAVAILABLE_DESCRIPTION_ID = "composer-private-model-unavailable";
+
+export function PrivateModelControl(props: PrivateModelControlProps) {
+  if (!props.onPrivateModeChange) return null;
+
+  if (props.privateModeAvailable) {
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={Boolean(props.privateModeEnabled)}
+        aria-busy={props.busy || undefined}
+        aria-label={props.privateModeEnabled ? "Turn off private model" : "Turn on private model"}
+        className={cn(
+          "inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",
+          props.privateModeEnabled
+            ? "bg-[rgb(var(--dls-accent-rgb)/0.16)] text-dls-text"
+            : "text-dls-secondary hover:bg-dls-surface-muted/[0.2] hover:text-dls-text",
+        )}
+        onClick={() => props.onPrivateModeChange?.(!props.privateModeEnabled)}
+        disabled={props.busy}
+        title={props.privateModeEnabled
+          ? "Private model is on. Venice does not retain this prompt or response."
+          : "Use a Venice model that does not retain prompts or responses."}
+      >
+        <LockKeyhole size={12} aria-hidden="true" />
+        <span>{props.privateModeEnabled ? "Private on" : "Private"}</span>
+      </button>
+    );
+  }
+
+  const unavailableDescriptionId = props.privateModeUnavailableReason
+    ? PRIVATE_MODEL_UNAVAILABLE_DESCRIPTION_ID
+    : undefined;
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={props.privateModeUnavailableReason ? "Private model unavailable" : "Set up a private model"}
+        aria-describedby={unavailableDescriptionId}
+        aria-busy={props.busy || undefined}
+        className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:bg-dls-surface-muted/[0.2] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none"
+        onClick={() => props.onPrivateModeChange?.(true)}
+        disabled={props.busy}
+        title={props.privateModeUnavailableReason ?? "Set up a Venice private model"}
+      >
+        <LockKeyhole size={12} aria-hidden="true" />
+        <span>{props.privateModeUnavailableReason ? "Private unavailable" : "Private setup"}</span>
+      </button>
+      {props.privateModeUnavailableReason ? (
+        <span id={PRIVATE_MODEL_UNAVAILABLE_DESCRIPTION_ID} className="sr-only">
+          {props.privateModeUnavailableReason}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 export function ReactSessionComposer(props: ComposerProps) {
   const builtInExtensionsDisabled = useDesktopRestriction("allowBuiltInExtensions");
   let fileInput: HTMLInputElement | undefined;
@@ -1803,42 +1870,13 @@ export function ReactSessionComposer(props: ComposerProps) {
               ) : null}
             </div>
 
-            {props.onPrivateModeChange ? (
-              props.privateModeAvailable ? (
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={Boolean(props.privateModeEnabled)}
-                  aria-label={props.privateModeEnabled ? "Turn off private model" : "Turn on private model"}
-                  className={cn(
-                    "inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",
-                    props.privateModeEnabled
-                      ? "bg-[rgb(var(--dls-accent-rgb)/0.16)] text-dls-text"
-                      : "text-dls-secondary hover:bg-dls-surface-muted/[0.2] hover:text-dls-text",
-                  )}
-                  onClick={() => props.onPrivateModeChange?.(!props.privateModeEnabled)}
-                  disabled={props.busy}
-                  title={props.privateModeEnabled
-                    ? "Private model is on. Venice does not retain this prompt or response."
-                    : "Use a Venice model that does not retain prompts or responses."}
-                >
-                  <LockKeyhole size={12} aria-hidden="true" />
-                  <span>{props.privateModeEnabled ? "Private on" : "Private"}</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  aria-label={props.privateModeUnavailableReason ? "Private model unavailable" : "Set up a private model"}
-                  className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:bg-dls-surface-muted/[0.2] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none"
-                  onClick={() => props.onPrivateModeChange?.(true)}
-                  disabled={props.busy}
-                  title={props.privateModeUnavailableReason ?? "Set up a Venice private model"}
-                >
-                  <LockKeyhole size={12} aria-hidden="true" />
-                  <span>{props.privateModeUnavailableReason ? "Private unavailable" : "Private setup"}</span>
-                </button>
-              )
-            ) : null}
+            <PrivateModelControl
+              busy={props.busy}
+              privateModeAvailable={props.privateModeAvailable}
+              privateModeEnabled={props.privateModeEnabled}
+              privateModeUnavailableReason={props.privateModeUnavailableReason}
+              onPrivateModeChange={props.onPrivateModeChange}
+            />
 
             {props.showModelPicker !== false ? (
               <ModelSelect
