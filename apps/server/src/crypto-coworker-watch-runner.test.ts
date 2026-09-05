@@ -310,14 +310,13 @@ describe("crypto coworker watch runner", () => {
     }
   });
 
-  test("continues to accept legacy evidence references during the compatibility window", async () => {
+  test("rejects proof-less legacy evidence before establishing a baseline or alert", async () => {
     const setup = fixture();
-    let balance = "10";
     const runner = new MatterhornCoworkerWatchRunner({
       coworkers: setup.coworkers,
       now: setup.now,
       execute: async () => {
-        const candidate = result(balance, setup.now());
+        const candidate = result("10", setup.now());
         delete candidate.provenance.projectionHash;
         delete candidate.provenance.observationHash;
         return candidate;
@@ -325,15 +324,14 @@ describe("crypto coworker watch runner", () => {
     });
     try {
       setup.advance("2026-09-01T12:05:00.000Z");
-      expect(await runner.tick()).toEqual({ claimed: 1, completed: 1, alerted: 0, failed: 0 });
-      balance = "11";
-      setup.advance("2026-09-01T12:10:00.000Z");
-      expect(await runner.tick()).toEqual({ claimed: 1, completed: 1, alerted: 1, failed: 0 });
+      expect(await runner.tick()).toEqual({ claimed: 1, completed: 0, alerted: 0, failed: 1 });
       expect(setup.coworkers.listInbox({
         workspaceId: "ws_alpha",
         ownerId: "account_alpha",
         coworkerId: setup.profile.id,
-      })[0]).toMatchObject({ source: { evidenceReferenceHash: "a".repeat(64) } });
+      })[0]).toMatchObject({ kind: "notice", reasonCodes: ["adapter_output_invalid"] });
+      expect(setup.coworkers.getWatch("ws_alpha", "account_alpha", setup.profile.id, setup.watch.id)?.schedule)
+        .toMatchObject({ lastConditionValues: {} });
     } finally {
       setup.store.close();
     }
