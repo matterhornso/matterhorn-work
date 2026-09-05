@@ -15,6 +15,7 @@ import {
   coworkerUnreadStatusLabel,
 } from "../src/react-app/domains/coworkers/coworker-query";
 import {
+  CoworkerResourceSaveActions,
   coworkerActivitySummary,
   coworkerUnreadSummaryLabel,
   coworkerPositionSource,
@@ -128,13 +129,51 @@ describe("chat-operated coworker UI", () => {
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
     expect(panel).toContain("Add private information");
     expect(panel).toContain("Optional · {resourceDraft.agentFileIds.length} files · {resourceDraft.memoryIds.length} memories");
-    expect(panel).toContain("Choose one app above to continue to your chat.");
-    expect(panel).toContain("pendingOutcome && resourceDraft.connectionIds.length === 0");
+    expect(panel).toContain("Choose one app above. Then you can continue to chat.");
+    expect(panel).toContain("<CoworkerResourceSaveActions");
+    expect(panel).toContain("continuingToChat={Boolean(pendingOutcome)}");
+    expect(panel).toContain("selectedAppCount={resourceDraft.connectionIds.length}");
     expect(panel).toContain("if (sessionId && !pendingOutcome)");
-    expect(panel).toContain('pendingOutcome\n                          ? "Save and continue"');
     expect(panel).toContain("if (pendingOutcome && resourceDraft.connectionIds.length > 0) startChat(selectedCoworker)");
     expect(panel).toContain("sendImmediately: false");
     expect(panel).toContain("Private information only goes to a model approved for private data.");
+  });
+
+  test("renders an explicit, accessible app gate before continuing to chat", () => {
+    const blocked = renderToStaticMarkup(React.createElement(CoworkerResourceSaveActions, {
+      busy: false,
+      continuingToChat: true,
+      selectedAppCount: 0,
+      onSave: () => undefined,
+      onCancel: () => undefined,
+    }));
+    expect(blocked).toContain('id="coworker-resource-app-required"');
+    expect(blocked).toContain('role="status"');
+    expect(blocked).toContain("Choose one app above. Then you can continue to chat.");
+    expect(blocked).toContain('aria-describedby="coworker-resource-app-required"');
+    expect(blocked).toContain("disabled");
+    expect(blocked).toContain("Choose an app above");
+
+    const ready = renderToStaticMarkup(React.createElement(CoworkerResourceSaveActions, {
+      busy: false,
+      continuingToChat: true,
+      selectedAppCount: 1,
+      onSave: () => undefined,
+      onCancel: () => undefined,
+    }));
+    expect(ready).toContain("Save and continue");
+    expect(ready).not.toContain('aria-describedby="coworker-resource-app-required"');
+    expect(ready).not.toContain("Choose an app above");
+
+    const saving = renderToStaticMarkup(React.createElement(CoworkerResourceSaveActions, {
+      busy: true,
+      continuingToChat: false,
+      selectedAppCount: 1,
+      onSave: () => undefined,
+      onCancel: () => undefined,
+    }));
+    expect(saving).toContain('aria-busy="true"');
+    expect(saving).toContain("Saving…");
   });
 
   test("suggests a coworker deterministically without sending the outcome anywhere", () => {
