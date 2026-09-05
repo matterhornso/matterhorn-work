@@ -5,13 +5,17 @@ import { join } from "node:path";
 
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
   type MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
-import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
+import {
+  MatterhornCryptoAppConnectionStore,
+  MatterhornCryptoAppConnectionStoreError,
+} from "./crypto-app-connection-store.js";
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
 import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certification-test-support.js";
@@ -309,5 +313,89 @@ describe("crypto app wallet connection proof", () => {
       manifestRevision: "2.0.0",
     })).toBeNull();
     restartedStore.close();
+  });
+
+  test("rejects restored wallet challenge and proof authority mutation", async () => {
+    const pending = fixture("ethereum", "eip155:84532");
+    const pendingAccount = privateKeyToAccount(generatePrivateKey());
+    pending.walletConnections.issue({
+      ...pending.request,
+      walletFamily: "evm",
+      walletAddress: pendingAccount.address,
+    });
+    pending.store.close();
+    const pendingEditor = new Database(pending.dbPath);
+    pendingEditor.query("UPDATE crypto_app_wallet_challenges SET networks_json = ? WHERE challenge_id = ?")
+      .run(JSON.stringify(["eip155:84532", "eip155:1"]), "cwc_1");
+    pendingEditor.close();
+    expect(() => new MatterhornCryptoAppConnectionStore(
+      pending.dbPath,
+      CONNECTION_INTEGRITY_SECRET,
+    )).toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+
+    const completed = fixture("ethereum", "eip155:84532");
+    const account = privateKeyToAccount(generatePrivateKey());
+    const challenge = completed.walletConnections.issue({
+      ...completed.request,
+      walletFamily: "evm",
+      walletAddress: account.address,
+    });
+    await completed.walletConnections.confirm({
+      workspaceId: "ws_a",
+      accountId: "account_a",
+      challengeId: challenge.challengeId,
+      walletAddress: account.address,
+      signature: await account.signMessage({ message: challenge.message }),
+    });
+    completed.store.close();
+    const proofEditor = new Database(completed.dbPath);
+    proofEditor.query("UPDATE crypto_app_wallet_proofs SET address_digest = ? WHERE wallet_connection_id = ?")
+      .run("b".repeat(64), "cwp_1");
+    proofEditor.close();
+    expect(() => new MatterhornCryptoAppConnectionStore(
+      completed.dbPath,
+      CONNECTION_INTEGRITY_SECRET,
+    )).toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+  });
+
+  test("migrates valid legacy wallet setup rows exactly once", async () => {
+    const setup = fixture("ethereum", "eip155:84532");
+    const account = privateKeyToAccount(generatePrivateKey());
+    const challenge = setup.walletConnections.issue({
+      ...setup.request,
+      walletFamily: "evm",
+      walletAddress: account.address,
+    });
+    await setup.walletConnections.confirm({
+      workspaceId: "ws_a",
+      accountId: "account_a",
+      challengeId: challenge.challengeId,
+      walletAddress: account.address,
+      signature: await account.signMessage({ message: challenge.message }),
+    });
+    setup.store.close();
+
+    const legacy = new Database(setup.dbPath);
+    legacy.exec(`
+      DROP TRIGGER crypto_app_wallet_challenges_authority_seal_insert;
+      DROP TRIGGER crypto_app_wallet_challenges_authority_seal_update;
+      DROP TRIGGER crypto_app_wallet_proofs_authority_seal_insert;
+      DROP TRIGGER crypto_app_wallet_proofs_authority_seal_update;
+      ALTER TABLE crypto_app_wallet_challenges DROP COLUMN authority_seal;
+      ALTER TABLE crypto_app_wallet_proofs DROP COLUMN authority_seal;
+    `);
+    legacy.close();
+
+    const migrated = new MatterhornCryptoAppConnectionStore(setup.dbPath, CONNECTION_INTEGRITY_SECRET);
+    expect(migrated.getWalletChallenge("ws_a", "account_a", "cwc_1"))
+      .toMatchObject({ state: "consumed", challengeId: "cwc_1" });
+    expect(migrated.resolveWalletProof({
+      workspaceId: "ws_a",
+      walletConnectionId: "cwp_1",
+      connectionId: "cxc_1",
+      appId: setup.request.appId,
+      manifestRevision: "1.0.0",
+    })).toMatchObject({ walletFamily: "evm" });
+    migrated.close();
   });
 });

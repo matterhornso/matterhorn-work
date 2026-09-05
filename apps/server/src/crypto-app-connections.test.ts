@@ -422,12 +422,21 @@ describe("workspace-scoped crypto app connections", () => {
       .run(JSON.stringify(["read_balance", { submit: true }]), "cwc_integrity");
     database.query("UPDATE crypto_app_oauth_flows SET issuer = ? WHERE flow_id = ?")
       .run("https://127.0.0.1/", "flow_integrity");
-    database.query(`
+    database.close();
+
+    expect(() => new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET))
+      .toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+
+    const tokenPath = join(mkdtempSync(join(tmpdir(), "matterhorn-crypto-token-integrity-")), "connections.db");
+    const tokenFixture = fixture(tokenPath);
+    tokenFixture.store.close();
+    const tokenDatabase = new Database(tokenPath);
+    tokenDatabase.query(`
       INSERT INTO crypto_app_oauth_tokens(
         workspace_id, oauth_token_id, connection_id, account_id, app_id,
         manifest_revision, binding_id, resource, audience, token_envelope,
-        scopes_json, expires_at, refreshable, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        scopes_json, expires_at, refreshable, created_at, updated_at, authority_seal
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       "ws_a",
       "token_integrity",
@@ -444,25 +453,12 @@ describe("workspace-scoped crypto app connections", () => {
       2,
       "2026-09-01T11:00:00.000Z",
       "2026-09-01T11:00:00.000Z",
+      `${"a".repeat(16)}.${"b".repeat(22)}`,
     );
-    database.close();
+    tokenDatabase.close();
 
-    const reopened = new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET);
-    try {
-      expect(() => reopened.getWalletChallenge("ws_a", "account_a", "cwc_integrity"))
-        .toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
-      expect(() => reopened.getOAuthFlow("ws_a", "account_a", "flow_integrity"))
-        .toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
-      expect(() => reopened.resolveOAuthToken({
-        workspaceId: "ws_a",
-        connectionId: "connection_integrity",
-        oauthTokenId: "token_integrity",
-        appId: "matterhorn.sui",
-        manifestRevision: "1.0.0",
-      })).toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
-    } finally {
-      reopened.close();
-    }
+    expect(() => new MatterhornCryptoAppConnectionStore(tokenPath, CONNECTION_INTEGRITY_SECRET))
+      .toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
   });
 
   test("registry revocation immediately disables active connections", () => {
