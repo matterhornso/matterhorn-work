@@ -4566,6 +4566,9 @@ function cryptoEvidencePublicationApiError(error: unknown): ApiError {
 
 function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
   if (error instanceof MatterhornCryptoEvidenceWalrusRenewalError) {
+    if (error.code === "crypto_evidence_walrus_renewal_intent_integrity_invalid") {
+      return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+    }
     if (error.code === "crypto_evidence_not_found") {
       return new ApiError(404, error.code, "Evidence record not found.");
     }
@@ -4617,6 +4620,9 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
 
 function cryptoEvidenceDeletionApiError(error: unknown): ApiError {
   if (error instanceof MatterhornCryptoEvidenceWalrusDeletionError) {
+    if (error.code === "crypto_evidence_walrus_deletion_intent_integrity_invalid") {
+      return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+    }
     if (error.code === "crypto_evidence_not_found") {
       return new ApiError(404, error.code, "Evidence record not found.");
     }
@@ -4669,6 +4675,9 @@ function cryptoEvidenceDeletionApiError(error: unknown): ApiError {
 
 function cryptoEvidenceSuiAnchorApiError(error: unknown): ApiError {
   if (error instanceof MatterhornCryptoEvidenceSuiAnchorError) {
+    if (error.code === "crypto_evidence_sui_anchor_intent_integrity_invalid") {
+      return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+    }
     if (error.code === "crypto_evidence_not_found") {
       return new ApiError(404, error.code, "Evidence record not found.");
     }
@@ -4798,6 +4807,9 @@ function agentFileApiError(error: unknown): ApiError {
 function agentFileWalrusApiError(error: unknown): ApiError {
   if (error instanceof MatterhornAgentFileStoreError) return agentFileApiError(error);
   if (error instanceof MatterhornAgentFileWalrusRenewalError) {
+    if (error.code === "agent_file_walrus_renewal_intent_integrity_invalid") {
+      return new ApiError(503, "agent_file_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+    }
     if (error.code === "agent_file_not_found") {
       return new ApiError(404, error.code, "Agent file not found.");
     }

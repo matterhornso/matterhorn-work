@@ -25,6 +25,8 @@ import {
 } from "./crypto-app-egress.js";
 import type { MatterhornWalrusCertificationVerifier } from "./crypto-evidence-walrus-publisher.js";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
+import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 import { assessMatterhornWalrusStorageLifecycle } from "./walrus-storage-lifecycle.js";
 
@@ -311,14 +313,25 @@ export function createPinnedSuiTransactionStatusVerifier(options: {
 }
 
 export class MatterhornAgentFileWalrusRenewalService {
+  private readonly intentState: MatterhornDurableAuthorizedState;
+
   constructor(
     private readonly store: MatterhornAgentFileStore,
-    private readonly stateStore: MatterhornGuardedRuntimeStateStore,
+    stateStore: MatterhornGuardedRuntimeStateStore,
+    authority: MatterhornDurableStateAuthority,
     private readonly buildTransaction: MatterhornWalrusRenewalTransactionBuilder,
     private readonly verifyTransaction: MatterhornSuiTransactionStatusVerifier,
     private readonly verifyCertification: MatterhornWalrusCertificationVerifier,
     private readonly extensionEpochs = 5,
   ) {
+    const integrityCode = "agent_file_walrus_renewal_intent_integrity_invalid";
+    this.intentState = new MatterhornDurableAuthorizedState(
+      stateStore,
+      authority,
+      STATE_KIND,
+      integrityCode,
+      () => new MatterhornAgentFileWalrusRenewalError(integrityCode),
+    );
     if (!Number.isSafeInteger(extensionEpochs) || extensionEpochs < 1 || extensionEpochs > 53) {
       fail("agent_file_walrus_renewal_epochs_invalid");
     }
@@ -337,7 +350,7 @@ export class MatterhornAgentFileWalrusRenewalService {
     const signer = canonicalSigner(input.signer);
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) fail("agent_file_time_invalid");
-    const existing = this.stateStore.get<RenewalIntentRecord>(STATE_KIND, input.fileId, now.getTime());
+    const existing = this.intentState.get<RenewalIntentRecord>(input.fileId, now.getTime());
     if (existing) {
       assertIntentTenant(existing, input);
       if (!this.store.hasWalrusRenewalClaim({
@@ -347,7 +360,7 @@ export class MatterhornAgentFileWalrusRenewalService {
         claimId: existing.claimId,
         now,
       })) {
-        this.stateStore.delete(STATE_KIND, input.fileId);
+        this.intentState.delete(input.fileId);
       } else {
         if (existing.preview.fileRevision !== input.expectedRevision
           || existing.preview.signer !== signer
@@ -357,7 +370,7 @@ export class MatterhornAgentFileWalrusRenewalService {
         return this.prepareResponse(existing.preview);
       }
     }
-    this.stateStore.delete(STATE_KIND, input.fileId);
+    this.intentState.delete(input.fileId);
     const candidate = this.store.beginWalrusRenewal({
       workspaceId: input.workspaceId,
       ownerId: input.ownerId,
@@ -448,8 +461,7 @@ export class MatterhornAgentFileWalrusRenewalService {
         claimId: candidate.claimId,
         preview,
       };
-      if (!this.stateStore.putIfAbsent({
-        kind: STATE_KIND,
+      if (!this.intentState.putIfAbsent({
         key: input.fileId,
         workspaceId: input.workspaceId,
         value: record,
@@ -484,7 +496,7 @@ export class MatterhornAgentFileWalrusRenewalService {
     if (input.signal.aborted) fail("agent_file_walrus_aborted");
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) fail("agent_file_time_invalid");
-    const record = this.stateStore.get<RenewalIntentRecord>(STATE_KIND, input.fileId, now.getTime());
+    const record = this.intentState.get<RenewalIntentRecord>(input.fileId, now.getTime());
     if (!record) fail("agent_file_walrus_renewal_expired_or_replayed");
     assertIntentTenant(record, input);
     const preview = record.preview;
@@ -554,7 +566,7 @@ export class MatterhornAgentFileWalrusRenewalService {
       publication: renewedPublication,
       now: finalizedAt,
       consumePendingIntent: () => {
-        const consumed = this.stateStore.take<RenewalIntentRecord>(STATE_KIND, input.fileId, finalizedAt.getTime());
+        const consumed = this.intentState.take<RenewalIntentRecord>(input.fileId, finalizedAt.getTime());
         if (!consumed) fail("agent_file_walrus_renewal_expired_or_replayed");
         assertIntentTenant(consumed, input);
         if (consumed.claimId !== record.claimId

@@ -196,6 +196,7 @@ async function fixture(input: {
   const service = new MatterhornCryptoEvidenceWalrusRenewalService(
     store,
     state,
+    authority,
     buildTransaction,
     verifyTransaction,
     verifyCertification,
@@ -237,6 +238,7 @@ describe("Walrus encrypted evidence renewal airlock", () => {
       const secondService = new MatterhornCryptoEvidenceWalrusRenewalService(
         secondStore,
         secondState,
+        testDurableStateAuthority(),
         value.buildTransaction,
         value.verifyTransaction,
         value.verifyCertification,
@@ -343,6 +345,11 @@ describe("Walrus encrypted evidence renewal airlock", () => {
         },
       });
       expect(prepared.preview.intentHash).toMatch(/^[a-f0-9]{64}$/);
+      const originalIntent = value.state.getRecord<unknown>(
+        "crypto_evidence_renewal_intent",
+        value.published.id,
+        new Date("2026-09-02T00:01:00.000Z").getTime(),
+      )!;
 
       value.setValidUntilEpoch(20);
       const confirmed = await value.service.confirm({
@@ -385,6 +392,15 @@ describe("Walrus encrypted evidence renewal airlock", () => {
         claimId: nextClaim.claimId,
         now: new Date("2026-09-02T00:02:00.000Z"),
       })).toBe(true);
+      value.state.put({
+        kind: originalIntent.kind,
+        key: originalIntent.key,
+        workspaceId: originalIntent.workspaceId,
+        sessionId: originalIntent.sessionId,
+        value: originalIntent.value,
+        expiresAtMs: originalIntent.expiresAtMs,
+        nowMs: originalIntent.updatedAtMs,
+      });
       await expect(value.service.confirm({
         workspaceId: "workspace_alpha",
         ownerId: "owner_alpha",
@@ -397,6 +413,49 @@ describe("Walrus encrypted evidence renewal airlock", () => {
       })).rejects.toThrow("crypto_evidence_walrus_renewal_expired_or_replayed");
     } finally {
       value.state.close();
+    }
+  });
+
+  test("rejects mutated and unsealed restored renewal intents before wallet verification", async () => {
+    for (const mutation of ["seal", "legacy"] as const) {
+      const value = await fixture();
+      try {
+        const prepared = await value.service.prepare({
+          workspaceId: "workspace_alpha",
+          ownerId: "owner_alpha",
+          evidenceId: value.published.id,
+          expectedRevision: value.published.revision,
+          signer: SIGNER,
+          signal: new AbortController().signal,
+          now: new Date("2026-09-02T00:00:00.000Z"),
+        });
+        const row = value.state.getRecord<Record<string, unknown>>(
+          "crypto_evidence_renewal_intent",
+          value.published.id,
+          new Date("2026-09-02T00:01:00.000Z").getTime(),
+        )!;
+        value.state.put({
+          kind: row.kind,
+          key: row.key,
+          workspaceId: row.workspaceId,
+          sessionId: row.sessionId,
+          value: mutation === "seal" ? { ...row.value, authoritySeal: "A".repeat(43) } : { restored: true },
+          expiresAtMs: row.expiresAtMs,
+          nowMs: row.updatedAtMs,
+        });
+        await expect(value.service.confirm({
+          workspaceId: "workspace_alpha",
+          ownerId: "owner_alpha",
+          evidenceId: value.published.id,
+          intentId: prepared.preview.intentId,
+          intentHash: prepared.preview.intentHash,
+          transactionDigest: prepared.preview.transactionDigest,
+          signal: new AbortController().signal,
+          now: new Date("2026-09-02T00:01:00.000Z"),
+        })).rejects.toThrow("crypto_evidence_walrus_renewal_intent_integrity_invalid");
+      } finally {
+        value.state.close();
+      }
     }
   });
 

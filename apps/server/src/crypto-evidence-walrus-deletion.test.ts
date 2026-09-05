@@ -199,6 +199,7 @@ async function fixture(input: {
   const service = new MatterhornCryptoEvidenceWalrusDeletionService(
     store,
     state,
+    authority,
     buildTransaction,
     verifyTransaction,
     verifyCertification,
@@ -235,6 +236,40 @@ async function prepare(value: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("Walrus encrypted evidence deletion airlock", () => {
+  test("rejects restored deletion intent metadata transplantation before wallet verification", async () => {
+    const value = await fixture();
+    try {
+      const prepared = await prepare(value);
+      const row = value.state.getRecord<unknown>(
+        "crypto_evidence_deletion_intent",
+        value.published.id,
+        new Date("2026-09-02T00:01:00.000Z").getTime(),
+      )!;
+      value.state.put({
+        kind: row.kind,
+        key: row.key,
+        workspaceId: "workspace_transplanted",
+        sessionId: row.sessionId,
+        value: row.value,
+        expiresAtMs: row.expiresAtMs,
+        nowMs: row.updatedAtMs,
+      });
+      await expect(value.service.confirm({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        evidenceId: value.published.id,
+        intentId: prepared.preview.intentId,
+        intentHash: prepared.preview.intentHash,
+        transactionDigest: prepared.preview.transactionDigest,
+        signal: new AbortController().signal,
+        now: new Date("2026-09-02T00:01:00.000Z"),
+      })).rejects.toThrow("crypto_evidence_walrus_deletion_intent_integrity_invalid");
+      expect(value.destroyCalls()).toBe(0);
+    } finally {
+      value.state.close();
+    }
+  });
+
   test("serializes deletion preparation across SQLite connections and protects replacement claims", async () => {
     let releaseBuild!: () => void;
     let buildStarted!: () => void;
@@ -252,6 +287,7 @@ describe("Walrus encrypted evidence deletion airlock", () => {
       const secondService = new MatterhornCryptoEvidenceWalrusDeletionService(
         secondStore,
         secondState,
+        testDurableStateAuthority(),
         value.buildTransaction,
         value.verifyTransaction,
         value.verifyCertification,

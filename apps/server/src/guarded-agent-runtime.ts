@@ -957,9 +957,11 @@ export class MatterhornGuardedAgentRuntime {
     verifyCertification: MatterhornWalrusCertificationVerifier;
     extensionEpochs: number;
   }): MatterhornAgentFileWalrusRenewalService {
+    if (!this.durableStateAuthority) throw new Error("durable_state_integrity_unavailable");
     return new MatterhornAgentFileWalrusRenewalService(
       input.store,
       this.stateStore,
+      this.durableStateAuthority,
       input.buildTransaction,
       input.verifyTransaction,
       input.verifyCertification,
@@ -974,9 +976,11 @@ export class MatterhornGuardedAgentRuntime {
     verifyCertification: MatterhornWalrusCertificationVerifier;
     extensionEpochs: number;
   }): MatterhornCryptoEvidenceWalrusRenewalService {
+    if (!this.durableStateAuthority) throw new Error("durable_state_integrity_unavailable");
     return new MatterhornCryptoEvidenceWalrusRenewalService(
       input.store,
       this.stateStore,
+      this.durableStateAuthority,
       input.buildTransaction,
       input.verifyTransaction,
       input.verifyCertification,
@@ -990,9 +994,11 @@ export class MatterhornGuardedAgentRuntime {
     verifyTransaction: MatterhornSuiTransactionStatusVerifier;
     verifyCertification: MatterhornWalrusCertificationVerifier;
   }): MatterhornCryptoEvidenceWalrusDeletionService {
+    if (!this.durableStateAuthority) throw new Error("durable_state_integrity_unavailable");
     return new MatterhornCryptoEvidenceWalrusDeletionService(
       input.store,
       this.stateStore,
+      this.durableStateAuthority,
       input.buildTransaction,
       input.verifyTransaction,
       input.verifyCertification,
@@ -1006,9 +1012,11 @@ export class MatterhornGuardedAgentRuntime {
     verifyTransaction: MatterhornSuiEvidenceAnchorTransactionVerifier;
     verifyCertification: MatterhornWalrusCertificationVerifier;
   }): MatterhornCryptoEvidenceSuiAnchorService {
+    if (!this.durableStateAuthority) throw new Error("durable_state_integrity_unavailable");
     return new MatterhornCryptoEvidenceSuiAnchorService(
       input.store,
       this.stateStore,
+      this.durableStateAuthority,
       input.packageId,
       input.buildTransaction,
       input.verifyTransaction,
