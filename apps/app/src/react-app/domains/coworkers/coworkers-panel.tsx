@@ -308,6 +308,44 @@ function CoworkerBoundary(props: { coworker: MatterhornCoworkerAccountProfile })
   );
 }
 
+export function CoworkerResourceSaveActions(props: {
+  busy: boolean;
+  continuingToChat: boolean;
+  selectedAppCount: number;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const appRequired = props.continuingToChat && props.selectedAppCount === 0;
+  const statusId = "coworker-resource-app-required";
+  return (
+    <div className="grid gap-2">
+      {appRequired ? (
+        <p id={statusId} className="text-xs leading-5 text-dls-secondary" role="status">
+          Choose one app above. Then you can continue to chat.
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          disabled={props.busy || appRequired}
+          aria-busy={props.busy}
+          aria-describedby={appRequired ? statusId : undefined}
+          onClick={props.onSave}
+        >
+          {props.busy
+            ? "Saving…"
+            : appRequired
+              ? "Choose an app above"
+              : props.continuingToChat
+                ? "Save and continue"
+                : "Save choices"}
+        </Button>
+        <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancel}>Cancel</Button>
+      </div>
+    </div>
+  );
+}
+
 function WatchRow(props: {
   watch: MatterhornCoworkerAccountWatch;
   busy: boolean;
@@ -1346,8 +1384,11 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       The suggestions are selected below. Uncheck anything you do not want to share, then save.
                     </p>
                   ) : null}
-                  <fieldset>
+                  <fieldset aria-describedby="coworker-apps-help">
                     <legend className="text-xs font-medium text-dls-text">Apps</legend>
+                    <p id="coworker-apps-help" className="mt-1 text-xs leading-5 text-dls-secondary">
+                      Choose one app for this coworker. Nothing is shared until you save.
+                    </p>
                     {!resourceQuery.data.connectionsAvailable ? (
                       <p className="mt-2 text-xs leading-5 text-dls-secondary">App connections aren't available here yet.</p>
                     ) : resourceQuery.data.connections.length ? (
@@ -1519,25 +1560,13 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                     </div>
                   </details>
 
-                  {pendingOutcome && resourceDraft.connectionIds.length === 0 ? (
-                    <p className="text-xs leading-5 text-dls-secondary" role="status">
-                      Choose one app above to continue to your chat.
-                    </p>
-                  ) : null}
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      disabled={busyAction !== null || Boolean(pendingOutcome && resourceDraft.connectionIds.length === 0)}
-                      onClick={() => void saveResources()}
-                    >
-                      {busyAction === `resources:${selectedCoworker.id}`
-                        ? "Saving…"
-                        : pendingOutcome
-                          ? "Save and continue"
-                          : "Save choices"}
-                    </Button>
-                    <Button size="sm" variant="ghost" disabled={busyAction !== null} onClick={() => setResourcesOpen(false)}>Cancel</Button>
-                  </div>
+                  <CoworkerResourceSaveActions
+                    busy={busyAction === `resources:${selectedCoworker.id}`}
+                    continuingToChat={Boolean(pendingOutcome)}
+                    selectedAppCount={resourceDraft.connectionIds.length}
+                    onSave={() => void saveResources()}
+                    onCancel={() => setResourcesOpen(false)}
+                  />
                 </div>
               ) : null}
             </section>

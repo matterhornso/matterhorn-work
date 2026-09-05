@@ -38,6 +38,16 @@ Home and Coworkers now use `Research markets`, `Watch risk`, `Prepare a wallet r
 
 The model picker and Venice Private control now change the active chat only. A deliberate chat fork inherits that choice; another chat keeps its own model, and deleting the chat removes the saved choice. The workspace default remains available for new chats without being silently changed by a private conversation.
 
+### Resolved — The app-access gate explains exactly what is missing
+
+When a first outcome is waiting, the access step now asks for one app and says
+that nothing is shared until the user saves. If no app is selected, the primary
+button says `Choose an app above`, remains safely disabled, and is linked to a
+live status explanation for assistive technology. After one app is selected,
+the same control becomes `Save and continue`; during persistence it becomes
+`Saving…` and prevents duplicate submission. A rendered React contract covers
+all three states without weakening the server-owned resource-scope check.
+
 ### P2 — Hosted assistive-technology verification remains
 
 Local rendered acceptance now passes at 320, 375, 768, 1024, and 1440 px with no horizontal overflow, one main landmark, visible primary headings, and no unnamed visible links or buttons. The compact navigation and Coworkers detail remain usable at phone width, and unavailable app connections fail closed with a plain-language next step. The attachment control now carries an explicit accessible name instead of depending on its tooltip fallback.
@@ -46,4 +56,7 @@ Authenticated Safari and Firefox checks plus manual keyboard and screen-reader a
 
 ## Decision for this PR
 
-The direct first-visit P1 issue and the user-facing role terminology are resolved in separate reviewable changes. Neither change alters coworker templates, permissions, app scopes, privacy classification, transaction preparation, wallet signing, or submission behavior.
+The direct first-visit P1 issue, user-facing role terminology, and explicit
+app-access gate are resolved in separate reviewable changes. None alters
+coworker templates, permissions, app scopes, privacy classification,
+transaction preparation, wallet signing, or submission behavior.
