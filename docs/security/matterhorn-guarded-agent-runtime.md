@@ -62,6 +62,16 @@ contact. Consent is bound to every canonical stored message hash, provider,
 model, workspace, and session; a concurrent message, edit, tool result, revert,
 provider change, or token replay fails closed.
 
+Normal message turns apply the same exact-history boundary. Matterhorn records
+only a content-free privacy floor for each tenant-scoped chat. A newly created
+public-research chat remains public; once an accepted request includes private
+workspace or wallet/transaction context, later history can never be downgraded.
+Legacy chats with stored history and no trustworthy floor are treated as private
+workspace context. The server hashes and scans every stored turn during
+preflight, re-reads the transcript immediately before run creation, and rejects
+changed consent, stored secrets, or a history too large to inspect safely. The
+floor is purged with the chat or workspace and otherwise expires after 365 days.
+
 Trusted local clients may still use the raw OpenCode prompt route, but its
 `system` field is not outside this boundary. Matterhorn scans and SHA-256 binds
 the exact final string forwarded upstream, including its enforced execution-mode

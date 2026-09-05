@@ -40,6 +40,86 @@ afterAll(async () => {
 });
 
 describe("guarded agent runtime transport", () => {
+  test("persists a monotonic session privacy floor and purges it with the chat", async () => {
+    const path = join(dataDir, "session-privacy-floor.db");
+    const first = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    expect(first.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: false,
+    })).toBe("public");
+    expect(first.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_legacy_history",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+
+    await first.acceptPrompt({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      parts: [{ type: "text", text: "Compare public Sui activity" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      executionMode: "work",
+    });
+    expect(first.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: true,
+    })).toBe("public");
+
+    await first.acceptPrompt({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      parts: [{ type: "text", text: "Use the private workspace report" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "private_workspace",
+      executionMode: "work",
+    });
+    first.close();
+
+    const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    expect(restored.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+    expect(() => restored.resolveSessionHistoryLabel({
+      workspaceId: "ws_other",
+      sessionId: "ses_history",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+
+    await restored.acceptPrompt({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      parts: [{ type: "text", text: "Continue with public market data" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "public_research",
+      executionMode: "work",
+    });
+    expect(restored.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+
+    restored.purgeSessionPrivacyState({ workspaceId: "ws_history", sessionId: "ses_history" });
+    expect(restored.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+    expect(restored.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: false,
+    })).toBe("public");
+    restored.close();
+  });
+
   test("records selected context as counts without retaining file identifiers", async () => {
     const path = join(dataDir, "run-context-counts.db");
     const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
