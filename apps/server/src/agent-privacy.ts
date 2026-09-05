@@ -6,6 +6,8 @@ import type {
   MatterhornAgentPrivacyPart,
   MatterhornAgentPrivacyPreflightResponse,
 } from "@matterhorn-work/types/guarded-agent-runtime";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
+import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import { resolveModelProviderPrivacyPolicy } from "./provider-privacy.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import type {
@@ -369,8 +371,30 @@ export function agentPrivacyRequestHash(input: PrivacyInput): string {
 export class MatterhornPrivacyFirewall {
   private readonly challenges = new Map<string, ChallengeRecord>();
   private readonly consents = new Map<string, ConsentRecord>();
+  private readonly challengeState: MatterhornDurableAuthorizedState | null;
+  private readonly consentState: MatterhornDurableAuthorizedState | null;
 
-  constructor(private readonly stateStore?: MatterhornGuardedRuntimeStateStore) {}
+  constructor(
+    private readonly stateStore?: MatterhornGuardedRuntimeStateStore,
+    authority?: MatterhornDurableStateAuthority,
+  ) {
+    this.challengeState = stateStore && authority
+      ? new MatterhornDurableAuthorizedState(
+        stateStore,
+        authority,
+        "privacy_challenge",
+        "privacy_persisted_challenge_invalid",
+      )
+      : null;
+    this.consentState = stateStore && authority
+      ? new MatterhornDurableAuthorizedState(
+        stateStore,
+        authority,
+        "privacy_consent",
+        "privacy_persisted_consent_invalid",
+      )
+      : null;
+  }
 
   preflight(input: PrivacyInput, options: { issueChallenge?: boolean; now?: Date } = {}): MatterhornPrivacyEvaluation {
     const now = options.now ?? new Date();
@@ -419,8 +443,7 @@ export class MatterhornPrivacyFirewall {
         confirmed: false,
       };
       this.challenges.set(id, record);
-      this.stateStore?.put({
-        kind: "privacy_challenge",
+      this.challengeState?.put({
         key: id,
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
@@ -493,16 +516,17 @@ export class MatterhornPrivacyFirewall {
       return { challenge, consent, token };
     };
     const stateStore = this.stateStore;
-    const converted = stateStore
+    const challengeState = this.challengeState;
+    const consentState = this.consentState;
+    const converted = stateStore && challengeState && consentState
       ? stateStore.transaction(() => {
           const challenge = assertPersistedChallenge(
-            stateStore.takeRecord<ChallengeRecord>("privacy_challenge", input.challengeId, nowMs),
+            challengeState.takeRecord<ChallengeRecord>(input.challengeId, nowMs),
             input.challengeId,
             nowMs,
           );
           const result = convertChallenge(challenge);
-          const stored = stateStore.putIfAbsent({
-            kind: "privacy_consent",
+          const stored = consentState.putIfAbsent({
             key: result.consent.tokenHash,
             workspaceId: result.challenge.workspaceId,
             sessionId: result.challenge.sessionId,
@@ -537,9 +561,9 @@ export class MatterhornPrivacyFirewall {
     const nowMs = (input.now ?? new Date()).getTime();
     this.cleanup(nowMs);
     const tokenHash = sha256(input.token);
-    const candidate = this.stateStore
+    const candidate = this.consentState
       ? assertPersistedConsent(
-          this.stateStore.getRecord<ConsentRecord>("privacy_consent", tokenHash, nowMs),
+          this.consentState.getRecord<ConsentRecord>(tokenHash, nowMs),
           tokenHash,
           nowMs,
         )
@@ -552,9 +576,9 @@ export class MatterhornPrivacyFirewall {
       || candidate.sessionId !== input.sessionId
       || !equalDigest(candidate.requestHash, input.requestHash)
     ) return false;
-    const record = this.stateStore
+    const record = this.consentState
       ? assertPersistedConsent(
-          this.stateStore.takeRecord<ConsentRecord>("privacy_consent", tokenHash, nowMs),
+          this.consentState.takeRecord<ConsentRecord>(tokenHash, nowMs),
           tokenHash,
           nowMs,
         )
@@ -582,9 +606,9 @@ export class MatterhornPrivacyFirewall {
     const nowMs = (input.now ?? new Date()).getTime();
     this.cleanup(nowMs);
     const tokenHash = sha256(input.token);
-    const candidate = this.stateStore
+    const candidate = this.consentState
       ? assertPersistedConsent(
-          this.stateStore.getRecord<ConsentRecord>("privacy_consent", tokenHash, nowMs),
+          this.consentState.getRecord<ConsentRecord>(tokenHash, nowMs),
           tokenHash,
           nowMs,
         )

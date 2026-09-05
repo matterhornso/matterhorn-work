@@ -957,7 +957,10 @@ export class MatterhornGuardedAgentRuntime {
     this.durableStateAuthority = integritySecret.length > 0
       ? new MatterhornDurableStateAuthority(integritySecret)
       : null;
-    this.privacy = new MatterhornPrivacyFirewall(stateStore);
+    this.privacy = new MatterhornPrivacyFirewall(
+      stateStore,
+      this.durableStateAuthority ?? undefined,
+    );
     this.capabilities = new MatterhornAgentCapabilityBroker(undefined, stateStore);
     this.receipts = new MatterhornAgentRunReceiptStore(
       stateStore,

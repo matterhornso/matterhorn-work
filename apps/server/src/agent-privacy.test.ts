@@ -8,6 +8,7 @@ import {
   compileMatterhornCoworkerSystemContext,
 } from "./crypto-coworker-context-compiler.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import { configureVenicePrivateModelRegistry } from "./venice-provider.js";
 
 function baseInput() {
@@ -380,13 +381,14 @@ describe("agent privacy firewall", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-privacy-state-"));
     const path = join(root, "state.db");
     const request = { ...baseInput(), memoryIds: ["memory_private"] };
+    const authority = testDurableStateAuthority();
     const firstStore = new MatterhornGuardedRuntimeStateStore(path);
-    const first = new MatterhornPrivacyFirewall(firstStore);
+    const first = new MatterhornPrivacyFirewall(firstStore, authority);
     const preflight = first.preflight(request);
     firstStore.close();
 
     const secondStore = new MatterhornGuardedRuntimeStateStore(path);
-    const second = new MatterhornPrivacyFirewall(secondStore);
+    const second = new MatterhornPrivacyFirewall(secondStore, authority);
     const consent = second.confirm({
       challengeId: preflight.response.challenge?.id ?? "",
       requestHash: preflight.response.requestHash,
@@ -394,7 +396,7 @@ describe("agent privacy firewall", () => {
       sessionId: request.sessionId,
     });
     const competingStore = new MatterhornGuardedRuntimeStateStore(path);
-    const competing = new MatterhornPrivacyFirewall(competingStore);
+    const competing = new MatterhornPrivacyFirewall(competingStore, authority);
     expect(second.consumeConsent({
       token: consent.consentToken,
       requestHash: consent.requestHash,
@@ -409,6 +411,8 @@ describe("agent privacy firewall", () => {
     })).toBe(false);
     secondStore.close();
     competingStore.close();
+    authority.close();
+    rmSync(root, { recursive: true, force: true });
   });
 
   test("rejects a restored challenge whose durable tenant scope was changed", () => {
@@ -417,8 +421,9 @@ describe("agent privacy firewall", () => {
     const now = new Date("2026-09-04T12:00:00.000Z");
     const request = { ...baseInput(), memoryIds: ["memory_private"] };
     const store = new MatterhornGuardedRuntimeStateStore(path);
+    const authority = testDurableStateAuthority();
     try {
-      const firewall = new MatterhornPrivacyFirewall(store);
+      const firewall = new MatterhornPrivacyFirewall(store, authority);
       const preflight = firewall.preflight(request, { now }).response;
       const challengeId = preflight.challenge?.id ?? "";
       const persisted = store.getRecord<Record<string, unknown>>(
@@ -444,6 +449,79 @@ describe("agent privacy firewall", () => {
         now: new Date(now.getTime() + 1),
       })).toThrow("privacy_persisted_challenge_invalid");
     } finally {
+      authority.close();
+      store.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects unsealed and wrong-key privacy authority without consuming valid state", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-privacy-authority-"));
+    const path = join(root, "state.db");
+    const now = new Date("2026-09-04T12:00:00.000Z");
+    const request = { ...baseInput(), memoryIds: ["memory_private"] };
+    const authority = testDurableStateAuthority();
+    const wrongAuthority = testDurableStateAuthority(
+      "different-matterhorn-privacy-authority-secret-at-least-32-bytes",
+    );
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    try {
+      const firewall = new MatterhornPrivacyFirewall(store, authority);
+      const unsealed = firewall.preflight(request, { now }).response;
+      const unsealedId = unsealed.challenge?.id ?? "";
+      const unsealedRecord = store.getRecord<unknown>("privacy_challenge", unsealedId, now.getTime());
+      if (!unsealedRecord) throw new Error("test privacy challenge missing");
+      const unsealedValue = authority.open<Record<string, unknown>>(
+        unsealedRecord,
+        "privacy_persisted_challenge_invalid",
+      );
+      if (!unsealedValue) throw new Error("test privacy challenge did not open");
+      store.put({
+        kind: "privacy_challenge",
+        key: unsealedId,
+        workspaceId: unsealedRecord.workspaceId,
+        sessionId: unsealedRecord.sessionId,
+        value: unsealedValue,
+        expiresAtMs: unsealedRecord.expiresAtMs,
+        nowMs: unsealedRecord.updatedAtMs,
+      });
+      expect(() => firewall.confirm({
+        challengeId: unsealedId,
+        requestHash: unsealed.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+        now: new Date(now.getTime() + 1),
+      })).toThrow("privacy_persisted_challenge_invalid");
+
+      const sealed = firewall.preflight({
+        ...request,
+        parts: [{ type: "text", text: "Use my other selected Memory" }],
+      }, { now }).response;
+      const wrong = new MatterhornPrivacyFirewall(store, wrongAuthority);
+      expect(() => wrong.confirm({
+        challengeId: sealed.challenge?.id ?? "",
+        requestHash: sealed.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+        now: new Date(now.getTime() + 1),
+      })).toThrow("privacy_persisted_challenge_invalid");
+      const consent = firewall.confirm({
+        challengeId: sealed.challenge?.id ?? "",
+        requestHash: sealed.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+        now: new Date(now.getTime() + 1),
+      });
+      expect(firewall.consumeConsent({
+        token: consent.consentToken,
+        requestHash: consent.requestHash,
+        workspaceId: request.workspaceId,
+        sessionId: request.sessionId,
+        now: new Date(now.getTime() + 2),
+      })).toBe(true);
+    } finally {
+      wrongAuthority.close();
+      authority.close();
       store.close();
       rmSync(root, { recursive: true, force: true });
     }
@@ -455,8 +533,9 @@ describe("agent privacy firewall", () => {
     const now = new Date("2026-09-04T12:00:00.000Z");
     const request = { ...baseInput(), memoryIds: ["memory_private"] };
     const store = new MatterhornGuardedRuntimeStateStore(path);
+    const authority = testDurableStateAuthority();
     try {
-      const firewall = new MatterhornPrivacyFirewall(store);
+      const firewall = new MatterhornPrivacyFirewall(store, authority);
       const preflight = firewall.preflight(request, { now }).response;
       const consent = firewall.confirm({
         challengeId: preflight.challenge?.id ?? "",
@@ -470,12 +549,25 @@ describe("agent privacy firewall", () => {
         { workspaceId: request.workspaceId, nowMs: now.getTime() },
       )[0];
       if (!persisted) throw new Error("test privacy consent missing");
+      const opened = authority.open<Record<string, unknown>>(
+        persisted,
+        "privacy_persisted_consent_invalid",
+      );
+      if (!opened) throw new Error("test privacy consent did not open");
       store.put({
         kind: "privacy_consent",
         key: persisted.key,
         workspaceId: persisted.workspaceId,
         sessionId: persisted.sessionId,
-        value: { ...persisted.value, authority: "broadened" },
+        value: authority.seal({
+          kind: "privacy_consent",
+          key: persisted.key,
+          workspaceId: persisted.workspaceId,
+          sessionId: persisted.sessionId,
+          value: { ...opened, authority: "broadened" },
+          expiresAtMs: persisted.expiresAtMs,
+          updatedAtMs: persisted.updatedAtMs,
+        }),
         expiresAtMs: persisted.expiresAtMs,
         nowMs: persisted.updatedAtMs,
       });
@@ -487,6 +579,7 @@ describe("agent privacy firewall", () => {
         now: new Date(now.getTime() + 1),
       })).toThrow("privacy_persisted_consent_invalid");
     } finally {
+      authority.close();
       store.close();
       rmSync(root, { recursive: true, force: true });
     }
@@ -498,8 +591,9 @@ describe("agent privacy firewall", () => {
     const now = new Date("2026-09-04T12:00:00.000Z");
     const request = { ...baseInput(), memoryIds: ["memory_private"] };
     const store = new MatterhornGuardedRuntimeStateStore(path);
+    const authority = testDurableStateAuthority();
     try {
-      const firewall = new MatterhornPrivacyFirewall(store);
+      const firewall = new MatterhornPrivacyFirewall(store, authority);
       const preflight = firewall.preflight(request, { now }).response;
       const consent = firewall.confirm({
         challengeId: preflight.challenge?.id ?? "",
@@ -513,13 +607,26 @@ describe("agent privacy firewall", () => {
         { workspaceId: request.workspaceId, nowMs: now.getTime() },
       )[0];
       if (!persisted) throw new Error("test privacy consent missing");
+      const opened = authority.open<Record<string, unknown>>(
+        persisted,
+        "privacy_persisted_consent_invalid",
+      );
+      if (!opened) throw new Error("test privacy consent did not open");
       const extendedExpiry = now.getTime() + 10 * 60_000;
       store.put({
         kind: "privacy_consent",
         key: persisted.key,
         workspaceId: persisted.workspaceId,
         sessionId: persisted.sessionId,
-        value: { ...persisted.value, expiresAtMs: extendedExpiry },
+        value: authority.seal({
+          kind: "privacy_consent",
+          key: persisted.key,
+          workspaceId: persisted.workspaceId,
+          sessionId: persisted.sessionId,
+          value: { ...opened, expiresAtMs: extendedExpiry },
+          expiresAtMs: extendedExpiry,
+          updatedAtMs: persisted.updatedAtMs,
+        }),
         expiresAtMs: extendedExpiry,
         nowMs: persisted.updatedAtMs,
       });
@@ -531,6 +638,7 @@ describe("agent privacy firewall", () => {
         now: new Date(now.getTime() + 1),
       })).toThrow("privacy_persisted_consent_invalid");
     } finally {
+      authority.close();
       store.close();
       rmSync(root, { recursive: true, force: true });
     }
@@ -540,8 +648,9 @@ describe("agent privacy firewall", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-privacy-confirm-rollback-"));
     const path = join(root, "state.db");
     const request = { ...baseInput(), memoryIds: ["memory_private"] };
+    const authority = testDurableStateAuthority();
     const firstStore = new MatterhornGuardedRuntimeStateStore(path);
-    const first = new MatterhornPrivacyFirewall(firstStore);
+    const first = new MatterhornPrivacyFirewall(firstStore, authority);
     const preflight = first.preflight(request).response;
     const originalPutIfAbsent = firstStore.putIfAbsent.bind(firstStore);
     let failNextConsentWrite = true;
@@ -575,7 +684,7 @@ describe("agent privacy firewall", () => {
 
     const retryStore = new MatterhornGuardedRuntimeStateStore(path);
     try {
-      const retry = new MatterhornPrivacyFirewall(retryStore);
+      const retry = new MatterhornPrivacyFirewall(retryStore, authority);
       const consent = retry.confirm({
         challengeId: preflight.challenge?.id ?? "",
         requestHash: preflight.requestHash,
@@ -596,6 +705,7 @@ describe("agent privacy firewall", () => {
       })).toThrow("privacy_consent_challenge_invalid");
     } finally {
       retryStore.close();
+      authority.close();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -603,8 +713,9 @@ describe("agent privacy firewall", () => {
   test("does not consume exact-request consent when a mutated request is rejected", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-agent-privacy-mutation-"));
     const store = new MatterhornGuardedRuntimeStateStore(join(root, "guarded.db"));
+    const authority = testDurableStateAuthority();
     try {
-      const firewall = new MatterhornPrivacyFirewall(store);
+      const firewall = new MatterhornPrivacyFirewall(store, authority);
       const original = { ...baseInput(), memoryIds: ["memory_private"] };
       const preflight = firewall.preflight(original).response;
       const consent = firewall.confirm({
@@ -626,6 +737,7 @@ describe("agent privacy firewall", () => {
         sessionId: original.sessionId,
       })).toBe(true);
     } finally {
+      authority.close();
       store.close();
       rmSync(root, { recursive: true, force: true });
     }

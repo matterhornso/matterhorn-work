@@ -39,6 +39,17 @@ move it to another tenant, extend its lifetime, or add fields without failing
 closed. Updates and tenant-bound deletion run atomically; unsealed legacy rows
 must be discarded with the chat rather than promoted into disclosure authority.
 
+One-request privacy consent is authenticated at rest as well. Pending challenges
+and hashed consent records are sealed over the exact request hash, detected data
+categories, workspace, session, storage key, expiry, and SQLite update metadata.
+Raw or wrong-key records, valid-looking tenant or request substitution, added
+fields, expiry extension, and replay fail closed before consent can authorize a
+provider request. The user-facing consent token is returned once and is never
+persisted; only its SHA-256 digest is stored inside the authenticated envelope.
+Hosted readiness requires this authority even when guarded capability mode is
+off. A local process without the server key may use memory-only consent, but it
+cannot restore or trust durable consent after restart.
+
 Capability history is authenticated before it can restore runtime authority or
 prove that an exact call already spent its bearer capability. Durable run grants
 and consumed-capability proofs are sealed over their complete closed payload,
