@@ -149,7 +149,7 @@ export function WorkspaceCoworkerStart({
 
         <div className="mt-3 flex flex-col gap-3 border-t border-dls-border/40 pt-3 sm:flex-row sm:items-center sm:justify-between">
           <p id="workspace-coworker-safety" className="max-w-2xl text-xs leading-5 text-dls-secondary">
-            Next, you review the apps and information it can use. It cannot see private keys or send funds on its own.
+            Next, choose what it can use. It cannot see private keys or send funds on its own.
           </p>
           <button
             type="submit"
@@ -157,7 +157,7 @@ export function WorkspaceCoworkerStart({
             className="inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-dls-text px-4 text-sm font-medium text-dls-background transition-colors hover:bg-dls-text/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-45"
             disabled={disabled || !trimmedOutcome}
           >
-            Review access
+            Choose what it can use
           </button>
         </div>
       </form>

@@ -67,7 +67,8 @@ describe("chat-operated coworker UI", () => {
     expect(start).toContain("setChoicesOpen(false)");
     expect(start).toContain('type="submit"');
     expect(start).toContain('aria-describedby="workspace-coworker-safety"');
-    expect(start).toContain("Review access");
+    expect(start).toContain("Choose what it can use");
+    expect(start).not.toContain("Review access");
     expect(start).toContain("Research markets");
     expect(start).toContain("Watch risk");
     expect(start).toContain("Prepare a wallet review");
@@ -331,7 +332,7 @@ describe("chat-operated coworker UI", () => {
       loadFailed: false,
       connectionsAvailable: true,
       connectedAppCount: 1,
-    })).toMatchObject({ action: "review", label: "Choose access" });
+    })).toMatchObject({ action: "review", label: "Choose what it can use" });
     expect(resolveCoworkerNextStep({
       coworkerState: "paused",
       ready: false,
@@ -377,7 +378,7 @@ describe("chat-operated coworker UI", () => {
       panel.indexOf(") : selectedCoworker ?"),
     );
     expect(emptyState).toContain("What do you want help with?");
-    expect(emptyState).toContain("Choose one to continue. You will review its access before it starts.");
+    expect(emptyState).toContain("Choose one to continue. You will choose what it can use before it starts.");
     expect(emptyState).toContain("{choice.summary}");
     expect(emptyState).toContain('className="h-auto min-h-14 justify-start whitespace-normal px-3 py-2 text-left"');
     expect(emptyState).not.toContain('variant={index === 0 ? "default" : "outline"}');
@@ -507,23 +508,25 @@ describe("chat-operated coworker UI", () => {
   test("lets the user approve an exact resource sandbox without privacy bypasses", () => {
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
     const client = appSource("app/lib/matterhorn-server.ts");
-    expect(panel).toContain("Apps and information");
+    expect(panel).toContain("What it can use");
+    expect(panel).not.toContain("Apps and information");
     expect(panel).toContain("Nothing is shared until you choose.");
     expect(panel).toContain("Connect at least one app before starting chat.");
     expect(panel).toContain("ready: canStartCoworker");
-    expect(panel).toContain("Suggested access");
-    expect(panel).toContain("Nothing changes until you review and save.");
+    expect(panel).toContain("Suggested for this coworker");
+    expect(panel).toContain("Nothing changes until you save.");
     expect(panel).toContain("Review");
-    expect(panel).toContain("Save access");
+    expect(panel).toContain("Save choices");
+    expect(panel).not.toContain("Save access");
     expect(panel).toContain("This coworker cannot change that.");
     expect(panel).toContain("App connections aren't available here yet.");
     expect(panel).toContain("Private files are not enabled in this environment.");
     expect(panel).toContain("const cryptoAppsRequest = loadOptionalCoworkerResource(Promise.all([");
     expect(panel).toContain("Choose an app");
-    expect(panel).toContain("Nothing is shared until you save access.");
+    expect(panel).toContain("Nothing is shared until you save.");
     expect(panel).toContain("createCryptoAppConnection");
     expect(panel).toContain("transitionCryptoAppConnection");
-    expect(panel).toContain("Review the selected access, then save it for this coworker.");
+    expect(panel).toContain("Review these choices, then save them for this coworker.");
     expect(panel).toContain("onClick={props.onBrowseApps}");
     expect(panel).toContain("setCoworkerResources");
     expect(client).toContain("getCoworkerResources:");
