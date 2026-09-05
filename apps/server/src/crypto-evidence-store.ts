@@ -17,6 +17,7 @@ import type {
   MatterhornSealedEvidence,
 } from "./crypto-evidence-sealer.js";
 import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
 import type {
   GuardedRuntimeStateRecord,
@@ -156,17 +157,44 @@ function validateSealedEvidence(sealed: MatterhornSealedEvidence): void {
 }
 
 export class MatterhornCryptoEvidenceStore {
+  private readonly operationClaims: MatterhornDurableAuthorizedState | null;
+
   constructor(
     private readonly stateStore: MatterhornGuardedRuntimeStateStore,
     private readonly keyManager: MatterhornEvidenceKeyManager,
     private readonly options: { allowMainnet?: boolean } = {},
     private readonly erasureLedger: MatterhornRecoveryErasureLedger | null = null,
     private readonly authority?: MatterhornDurableStateAuthority,
-  ) {}
+  ) {
+    this.operationClaims = authority
+      ? new MatterhornDurableAuthorizedState(
+        stateStore,
+        authority,
+        OPERATION_CLAIM_KIND,
+        "crypto_evidence_operation_claim_integrity_invalid",
+      )
+      : null;
+  }
 
   private requireAuthority(): MatterhornDurableStateAuthority {
     if (!this.authority) throw new Error("crypto_evidence_state_integrity_unavailable");
     return this.authority;
+  }
+
+  private requireOperationClaims(): MatterhornDurableAuthorizedState {
+    if (!this.operationClaims) throw new Error("crypto_evidence_state_integrity_unavailable");
+    return this.operationClaims;
+  }
+
+  private activeOperationClaim(input: {
+    workspaceId: string;
+    evidenceId: string;
+    nowMs?: number;
+  }): MatterhornCryptoEvidenceOperationClaim | null {
+    return this.requireOperationClaims().get<MatterhornCryptoEvidenceOperationClaim>(
+      this.operationClaimKey(input),
+      input.nowMs ?? Date.now(),
+    );
   }
 
   private admitRecord(
@@ -405,8 +433,7 @@ export class MatterhornCryptoEvidenceStore {
         createdAt: now.toISOString(),
         expiresAt: new Date(expiresAtMs).toISOString(),
       };
-      const claimed = this.stateStore.putIfAbsent({
-        kind: OPERATION_CLAIM_KIND,
+      const claimed = this.requireOperationClaims().putIfAbsent({
         key: this.operationClaimKey(input),
         workspaceId: input.workspaceId,
         value: claim,
@@ -414,11 +441,7 @@ export class MatterhornCryptoEvidenceStore {
         nowMs: now.getTime(),
       });
       if (!claimed) {
-        const activeClaim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
-          OPERATION_CLAIM_KIND,
-          this.operationClaimKey(input),
-          now.getTime(),
-        );
+        const activeClaim = this.activeOperationClaim({ ...input, nowMs: now.getTime() });
         throw new Error(input.operation === "publish" && activeClaim?.operation === "publish"
           ? "crypto_evidence_walrus_publication_in_progress"
           : input.operation === "renew" && activeClaim?.operation === "renew"
@@ -449,13 +472,9 @@ export class MatterhornCryptoEvidenceStore {
     now: Date;
   }): boolean {
     const key = this.operationClaimKey(input);
-    const claim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
-      OPERATION_CLAIM_KIND,
-      key,
-      input.now.getTime(),
-    );
+    const claim = this.activeOperationClaim({ ...input, nowMs: input.now.getTime() });
     if (!claim || claim.claimId !== input.claimId || claim.evidenceId !== input.evidenceId) return false;
-    return this.stateStore.delete(OPERATION_CLAIM_KIND, key);
+    return this.requireOperationClaims().delete(key);
   }
 
   findByRun(input: {
@@ -787,11 +806,7 @@ export class MatterhornCryptoEvidenceStore {
   }): boolean {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
-    const claim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
-      OPERATION_CLAIM_KIND,
-      this.operationClaimKey(input),
-      now.getTime(),
-    );
+    const claim = this.activeOperationClaim({ ...input, nowMs: now.getTime() });
     return claim?.version === "matterhorn.crypto-evidence-operation-claim.v1"
       && claim.claimId === input.claimId
       && claim.evidenceId === input.evidenceId
@@ -836,11 +851,7 @@ export class MatterhornCryptoEvidenceStore {
   }): boolean {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
-    const claim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
-      OPERATION_CLAIM_KIND,
-      this.operationClaimKey(input),
-      now.getTime(),
-    );
+    const claim = this.activeOperationClaim({ ...input, nowMs: now.getTime() });
     return claim?.version === "matterhorn.crypto-evidence-operation-claim.v1"
       && claim.claimId === input.claimId
       && claim.evidenceId === input.evidenceId
@@ -897,11 +908,7 @@ export class MatterhornCryptoEvidenceStore {
   }): boolean {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
-    const claim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
-      OPERATION_CLAIM_KIND,
-      this.operationClaimKey(input),
-      now.getTime(),
-    );
+    const claim = this.activeOperationClaim({ ...input, nowMs: now.getTime() });
     return claim?.version === "matterhorn.crypto-evidence-operation-claim.v1"
       && claim.claimId === input.claimId
       && claim.evidenceId === input.evidenceId
@@ -957,11 +964,7 @@ export class MatterhornCryptoEvidenceStore {
   }): boolean {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
-    const claim = this.stateStore.get<MatterhornCryptoEvidenceOperationClaim>(
-      OPERATION_CLAIM_KIND,
-      this.operationClaimKey(input),
-      now.getTime(),
-    );
+    const claim = this.activeOperationClaim({ ...input, nowMs: now.getTime() });
     return claim?.version === "matterhorn.crypto-evidence-operation-claim.v1"
       && claim.claimId === input.claimId
       && claim.evidenceId === input.evidenceId

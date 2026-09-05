@@ -24,6 +24,7 @@ import {
 } from "./agent-file-boundary.js";
 import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 import type {
   GuardedRuntimeStateRecord,
@@ -254,18 +255,37 @@ function assertTenant(record: MatterhornAgentFileRecord, input: { workspaceId: s
 }
 
 export class MatterhornAgentFileStore {
+  private readonly operationClaims: MatterhornDurableAuthorizedState | null;
+
   constructor(
     private readonly stateStore: MatterhornGuardedRuntimeStateStore,
     private readonly keyManager: MatterhornEvidenceKeyManager,
     private readonly erasureLedger: MatterhornRecoveryErasureLedger | null = null,
     private readonly authority?: MatterhornDurableStateAuthority,
-  ) {}
+  ) {
+    this.operationClaims = authority
+      ? new MatterhornDurableAuthorizedState(
+        stateStore,
+        authority,
+        OPERATION_CLAIM_KIND,
+        "agent_file_operation_claim_integrity_invalid",
+        () => new MatterhornAgentFileStoreError("agent_file_operation_claim_integrity_invalid"),
+      )
+      : null;
+  }
 
   private requireAuthority(): MatterhornDurableStateAuthority {
     if (!this.authority) {
       throw new MatterhornAgentFileStoreError("agent_file_state_integrity_unavailable");
     }
     return this.authority;
+  }
+
+  private requireOperationClaims(): MatterhornDurableAuthorizedState {
+    if (!this.operationClaims) {
+      throw new MatterhornAgentFileStoreError("agent_file_state_integrity_unavailable");
+    }
+    return this.operationClaims;
   }
 
   private admitRecord(
@@ -358,10 +378,9 @@ export class MatterhornAgentFileStore {
     fileId: string;
     nowMs?: number;
   }): AgentFileOperationClaim | null {
-    return this.stateStore.get<AgentFileOperationClaim>(
-      OPERATION_CLAIM_KIND,
+    return this.requireOperationClaims().get<AgentFileOperationClaim>(
       this.operationClaimKey(input),
-      input.nowMs,
+      input.nowMs ?? Date.now(),
     );
   }
 
@@ -400,8 +419,7 @@ export class MatterhornAgentFileStore {
         createdAt: input.now.toISOString(),
         expiresAt: new Date(expiresAtMs).toISOString(),
       };
-      if (!this.stateStore.putIfAbsent({
-        kind: OPERATION_CLAIM_KIND,
+      if (!this.requireOperationClaims().putIfAbsent({
         key: this.operationClaimKey(input),
         workspaceId: input.workspaceId,
         value: claim,
@@ -431,7 +449,7 @@ export class MatterhornAgentFileStore {
         || claim.version !== "matterhorn.agent-file-operation-claim.v1"
         || claim.claimId !== input.claimId
         || claim.fileId !== input.fileId) return false;
-      return this.stateStore.delete(OPERATION_CLAIM_KIND, this.operationClaimKey(input));
+      return this.requireOperationClaims().delete(this.operationClaimKey(input));
     });
   }
 
@@ -777,7 +795,7 @@ export class MatterhornAgentFileStore {
         updatedAt: now.toISOString(),
       };
       this.persistRecord(next, now.getTime());
-      if (!this.stateStore.delete(OPERATION_CLAIM_KIND, this.operationClaimKey(input))) {
+      if (!this.requireOperationClaims().delete(this.operationClaimKey(input))) {
         throw new MatterhornAgentFileStoreError("agent_file_walrus_publication_claim_invalid");
       }
       return accountView(next);
@@ -837,7 +855,7 @@ export class MatterhornAgentFileStore {
         updatedAt: now.toISOString(),
       };
       this.persistRecord(next, now.getTime());
-      if (!this.stateStore.delete(OPERATION_CLAIM_KIND, this.operationClaimKey(input))) {
+      if (!this.requireOperationClaims().delete(this.operationClaimKey(input))) {
         throw new MatterhornAgentFileStoreError("agent_file_walrus_renewal_claim_invalid");
       }
       return accountView(next);
