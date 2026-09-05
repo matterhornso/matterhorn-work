@@ -3,7 +3,23 @@ import {
   createPublicKey,
   verify as verifySignature,
 } from "node:crypto";
+import {
+  closeSync,
+  constants as fsConstants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { isIP } from "node:net";
+import {
+  dirname,
+  isAbsolute,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 
 export const ACCEPTANCE_REPORT_VERSION = "matterhorn.crypto-coworkers-acceptance-report.v1";
 export const ACCEPTANCE_REPORT_SIGNATURE_DOMAIN = "matterhorn:crypto-coworkers-acceptance-report:v1";
@@ -15,6 +31,7 @@ const MAX_WINDOW_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_REPORT_BYTES = 256 * 1024;
 const MAX_OUTCOMES = 64;
 const MAX_ARTIFACTS = 32;
+const MAX_REFERENCE_PATH_LENGTH = 512;
 const COMMIT_PATTERN = /^[a-f0-9]{40}$/;
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const GROUP_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
@@ -87,6 +104,7 @@ const WINDOW_KEYS = Object.freeze(["startedAt", "completedAt"]);
 const PRODUCER_KEYS = Object.freeze(["kind", "runnerVersion", "runId"]);
 const ARTIFACT_KEYS = Object.freeze(["kind", "sha256"]);
 const ATTESTATION_KEYS = Object.freeze(["algorithm", "keyId", "signature"]);
+const REFERENCE_KEYS = Object.freeze(["version", "group", "path", "sha256"]);
 
 export class MatterhornAcceptanceReportError extends Error {
   constructor(code) {
@@ -161,6 +179,10 @@ export function canonicalAcceptanceReportPayload(report) {
 
 function reportHash(report) {
   return createHash("sha256").update(canonicalJson(report), "utf8").digest("hex");
+}
+
+function sha256Bytes(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function normalizeFieldName(value) {
@@ -427,21 +449,226 @@ export function verifyCryptoCoworkersAcceptanceReport(report, options) {
   });
 }
 
+function relativePathEscapesBase(offset) {
+  return !offset || offset === ".." || offset.startsWith(`..${sep}`) || isAbsolute(offset);
+}
+
+function resolveReportTarget(referencePath, packetPath) {
+  if (typeof packetPath !== "string" || !isAbsolute(packetPath)) {
+    fail("acceptance_report_packet_path_invalid");
+  }
+  const base = resolve(dirname(packetPath));
+  const target = resolve(base, referencePath);
+  const offset = relative(base, target);
+  if (relativePathEscapesBase(offset)) fail("acceptance_report_path_invalid");
+
+  let cursor = base;
+  try {
+    for (const component of offset.split(sep)) {
+      cursor = resolve(cursor, component);
+      if (lstatSync(cursor).isSymbolicLink()) fail("acceptance_report_path_invalid");
+    }
+    const canonicalBase = realpathSync(base);
+    const canonicalTarget = realpathSync(target);
+    if (relativePathEscapesBase(relative(canonicalBase, canonicalTarget))) {
+      fail("acceptance_report_path_invalid");
+    }
+    return { target, canonicalTarget };
+  } catch (error) {
+    if (error instanceof MatterhornAcceptanceReportError) throw error;
+    fail("acceptance_report_file_unavailable");
+  }
+}
+
+function validateReference(reference, expectedGroup) {
+  requireExactKeys(reference, REFERENCE_KEYS, "acceptance_report_reference_invalid");
+  if (reference.version !== ACCEPTANCE_REPORT_VERSION) fail("acceptance_report_reference_version_invalid");
+  if (!GROUP_PATTERN.test(reference.group ?? "") || reference.group !== expectedGroup) {
+    fail("acceptance_report_reference_group_mismatch");
+  }
+  if (typeof reference.path !== "string"
+    || reference.path.length < 1
+    || reference.path.length > MAX_REFERENCE_PATH_LENGTH
+    || reference.path.includes("\0")
+    || isAbsolute(reference.path)) {
+    fail("acceptance_report_path_invalid");
+  }
+  if (!HASH_PATTERN.test(reference.sha256 ?? "")) fail("acceptance_report_reference_hash_invalid");
+}
+
+function rejectDuplicateJsonKeys(text) {
+  let cursor = 0;
+  const whitespace = /\s/u;
+
+  function skipWhitespace() {
+    while (cursor < text.length && whitespace.test(text[cursor])) cursor += 1;
+  }
+
+  function readString() {
+    const start = cursor;
+    cursor += 1;
+    let escaped = false;
+    while (cursor < text.length) {
+      const character = text[cursor];
+      cursor += 1;
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === "\"") {
+        return JSON.parse(text.slice(start, cursor));
+      }
+    }
+    fail("acceptance_report_json_invalid");
+  }
+
+  function readScalar() {
+    while (cursor < text.length && !/[\s,}\]]/u.test(text[cursor])) cursor += 1;
+  }
+
+  function readValue() {
+    skipWhitespace();
+    if (text[cursor] === "{") {
+      readObject();
+      return;
+    }
+    if (text[cursor] === "[") {
+      cursor += 1;
+      skipWhitespace();
+      if (text[cursor] === "]") {
+        cursor += 1;
+        return;
+      }
+      while (cursor < text.length) {
+        readValue();
+        skipWhitespace();
+        if (text[cursor] === "]") {
+          cursor += 1;
+          return;
+        }
+        cursor += 1;
+      }
+      return;
+    }
+    if (text[cursor] === "\"") {
+      readString();
+      return;
+    }
+    readScalar();
+  }
+
+  function readObject() {
+    cursor += 1;
+    const keys = new Set();
+    skipWhitespace();
+    if (text[cursor] === "}") {
+      cursor += 1;
+      return;
+    }
+    while (cursor < text.length) {
+      skipWhitespace();
+      const key = readString();
+      if (keys.has(key)) fail("acceptance_report_duplicate_json_key");
+      keys.add(key);
+      skipWhitespace();
+      cursor += 1;
+      readValue();
+      skipWhitespace();
+      if (text[cursor] === "}") {
+        cursor += 1;
+        return;
+      }
+      cursor += 1;
+    }
+  }
+
+  readValue();
+}
+
+function readReportFile(reference, packetPath) {
+  const resolved = resolveReportTarget(reference.path, packetPath);
+  let descriptor;
+  try {
+    descriptor = openSync(resolved.target, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+    const stat = fstatSync(descriptor);
+    if (!stat.isFile() || stat.size < 1 || stat.size > MAX_REPORT_BYTES) {
+      fail("acceptance_report_file_size_invalid");
+    }
+    const pathStat = lstatSync(resolved.target);
+    if (pathStat.isSymbolicLink() || pathStat.dev !== stat.dev || pathStat.ino !== stat.ino) {
+      fail("acceptance_report_path_invalid");
+    }
+    const content = readFileSync(descriptor);
+    if (sha256Bytes(content) !== reference.sha256) fail("acceptance_report_reference_hash_mismatch");
+    let text;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(content);
+    } catch {
+      fail("acceptance_report_json_invalid");
+    }
+    let report;
+    try {
+      report = JSON.parse(text);
+      rejectDuplicateJsonKeys(text);
+    } catch (error) {
+      if (error instanceof MatterhornAcceptanceReportError) throw error;
+      fail("acceptance_report_json_invalid");
+    }
+    const finalStat = lstatSync(resolved.target);
+    if (finalStat.isSymbolicLink() || finalStat.dev !== stat.dev || finalStat.ino !== stat.ino) {
+      fail("acceptance_report_path_invalid");
+    }
+    if (realpathSync(resolved.target) !== resolved.canonicalTarget) fail("acceptance_report_path_invalid");
+    return { report, canonicalTarget: resolved.canonicalTarget };
+  } catch (error) {
+    if (error instanceof MatterhornAcceptanceReportError) throw error;
+    fail("acceptance_report_file_unavailable");
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
+function loadAndVerifyReference(reference, options) {
+  requireOptions(options);
+  validateReference(reference, options.expectedGroup);
+  const loaded = readReportFile(reference, options.packetPath);
+  const verified = verifyCryptoCoworkersAcceptanceReport(loaded.report, options);
+  return {
+    verified: Object.freeze({ ...verified, evidenceHash: reference.sha256 }),
+    canonicalTarget: loaded.canonicalTarget,
+  };
+}
+
+export function verifyCryptoCoworkersAcceptanceReportReference(reference, options) {
+  return loadAndVerifyReference(reference, options).verified;
+}
+
 function rejectReuse(seen, value, code) {
   if (seen.has(value)) fail(code);
   seen.add(value);
+}
+
+function enforceVerifiedSetUniqueness(verified) {
+  const groups = new Set();
+  const runIds = new Set();
+  const reportHashes = new Set();
+  const attestations = new Set();
+  const artifactHashes = new Set();
+  for (const result of verified) {
+    rejectReuse(groups, result.group, "acceptance_report_group_reused");
+    rejectReuse(runIds, result.runId, "acceptance_report_run_reused");
+    rejectReuse(reportHashes, result.reportHash, "acceptance_report_hash_reused");
+    rejectReuse(attestations, result.attestationHash, "acceptance_report_signature_reused");
+    result.artifactHashes.forEach((hash) => rejectReuse(artifactHashes, hash, "acceptance_report_artifact_reused"));
+  }
+  return Object.freeze(verified);
 }
 
 export function verifyCryptoCoworkersAcceptanceReportSet(entries, options) {
   if (!Array.isArray(entries) || entries.length < 1 || entries.length > 64) {
     fail("acceptance_report_set_invalid");
   }
-  const groups = new Set();
-  const runIds = new Set();
-  const reportHashes = new Set();
-  const attestations = new Set();
-  const artifactHashes = new Set();
-  return Object.freeze(entries.map((entry) => {
+  const verified = entries.map((entry) => {
     if (!isRecord(entry)) fail("acceptance_report_set_invalid");
     requireAllowedKeys(
       entry,
@@ -449,18 +676,40 @@ export function verifyCryptoCoworkersAcceptanceReportSet(entries, options) {
       ["report", "expectedGroup", "expectedOutcomes", "maxAgeMs", "minDurationMs"],
       "acceptance_report_set_invalid",
     );
-    const verified = verifyCryptoCoworkersAcceptanceReport(entry.report, {
+    return verifyCryptoCoworkersAcceptanceReport(entry.report, {
       ...options,
       expectedGroup: entry.expectedGroup,
       expectedOutcomes: entry.expectedOutcomes,
       maxAgeMs: entry.maxAgeMs,
       minDurationMs: entry.minDurationMs,
     });
-    rejectReuse(groups, verified.group, "acceptance_report_group_reused");
-    rejectReuse(runIds, verified.runId, "acceptance_report_run_reused");
-    rejectReuse(reportHashes, verified.reportHash, "acceptance_report_hash_reused");
-    rejectReuse(attestations, verified.attestationHash, "acceptance_report_signature_reused");
-    verified.artifactHashes.forEach((hash) => rejectReuse(artifactHashes, hash, "acceptance_report_artifact_reused"));
-    return verified;
-  }));
+  });
+  return enforceVerifiedSetUniqueness(verified);
+}
+
+export function verifyCryptoCoworkersAcceptanceReportReferenceSet(entries, options) {
+  if (!Array.isArray(entries) || entries.length < 1 || entries.length > 64) {
+    fail("acceptance_report_set_invalid");
+  }
+  const targets = new Set();
+  const evidenceHashes = new Set();
+  const loaded = entries.map((entry) => {
+    requireAllowedKeys(
+      entry,
+      ["reference", "expectedGroup", "expectedOutcomes"],
+      ["reference", "expectedGroup", "expectedOutcomes", "maxAgeMs", "minDurationMs"],
+      "acceptance_report_set_invalid",
+    );
+    const result = loadAndVerifyReference(entry.reference, {
+      ...options,
+      expectedGroup: entry.expectedGroup,
+      expectedOutcomes: entry.expectedOutcomes,
+      maxAgeMs: entry.maxAgeMs,
+      minDurationMs: entry.minDurationMs,
+    });
+    rejectReuse(targets, result.canonicalTarget, "acceptance_report_path_reused");
+    rejectReuse(evidenceHashes, result.verified.evidenceHash, "acceptance_report_evidence_hash_reused");
+    return result.verified;
+  });
+  return enforceVerifiedSetUniqueness(loaded);
 }

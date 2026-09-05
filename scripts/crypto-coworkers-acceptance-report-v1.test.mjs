@@ -1,9 +1,19 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import {
+  createHash,
   generateKeyPairSync,
   sign,
 } from "node:crypto";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -12,6 +22,8 @@ import {
   ACCEPTANCE_REPORT_VERSION,
   canonicalAcceptanceReportPayload,
   verifyCryptoCoworkersAcceptanceReport,
+  verifyCryptoCoworkersAcceptanceReportReference,
+  verifyCryptoCoworkersAcceptanceReportReferenceSet,
   verifyCryptoCoworkersAcceptanceReportSet,
 } from "./lib/crypto-coworkers-acceptance-report-v1.mjs";
 
@@ -88,6 +100,29 @@ function options(overrides = {}) {
 
 function expectCode(code, callback) {
   assert.throws(callback, (error) => error?.code === code && error?.message === code);
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function reportPacket(t, report = signedReport(), name = "runtime.json") {
+  const directory = mkdtempSync(join(tmpdir(), "matterhorn-acceptance-report-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const reports = join(directory, "reports");
+  mkdirSync(reports);
+  const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`, "utf8");
+  writeFileSync(join(reports, name), content, { mode: 0o600 });
+  return {
+    directory,
+    packetPath: join(directory, "acceptance.json"),
+    reference: {
+      version: ACCEPTANCE_REPORT_VERSION,
+      group: report.group,
+      path: `reports/${name}`,
+      sha256: sha256(content),
+    },
+  };
 }
 
 test("verifies a closed exact-release Ed25519 report without returning report content", () => {
@@ -371,6 +406,121 @@ test("verifies a report set and rejects group, run, report, signature, or artifa
     capturedAt: CAPTURED_AT,
     now: NOW,
     trustedKeys: options().trustedKeys,
+  }));
+});
+
+test("loads one content-addressed report without returning its filesystem path", (t) => {
+  const packet = reportPacket(t);
+  const verified = verifyCryptoCoworkersAcceptanceReportReference(packet.reference, {
+    ...options(),
+    packetPath: packet.packetPath,
+  });
+  assert.equal(verified.group, "runtime");
+  assert.equal(verified.evidenceHash, packet.reference.sha256);
+  assert.equal(JSON.stringify(verified).includes(packet.directory), false);
+  assert.equal(Object.hasOwn(verified, "path"), false);
+});
+
+test("rejects changed bytes, wrong reference metadata, traversal, absolute paths, and symlinks", (t) => {
+  const packet = reportPacket(t);
+  expectCode("acceptance_report_reference_hash_mismatch", () => verifyCryptoCoworkersAcceptanceReportReference({
+    ...packet.reference,
+    sha256: "f".repeat(64),
+  }, { ...options(), packetPath: packet.packetPath }));
+  expectCode("acceptance_report_reference_version_invalid", () => verifyCryptoCoworkersAcceptanceReportReference({
+    ...packet.reference,
+    version: "matterhorn.crypto-coworkers-acceptance-report.v0",
+  }, { ...options(), packetPath: packet.packetPath }));
+  expectCode("acceptance_report_reference_group_mismatch", () => verifyCryptoCoworkersAcceptanceReportReference({
+    ...packet.reference,
+    group: "operations",
+  }, { ...options(), packetPath: packet.packetPath }));
+  expectCode("acceptance_report_reference_invalid", () => verifyCryptoCoworkersAcceptanceReportReference({
+    ...packet.reference,
+    url: "https://candidate.example/report",
+  }, { ...options(), packetPath: packet.packetPath }));
+  for (const path of ["../runtime.json", packet.packetPath, "", `reports/${"x".repeat(513)}`]) {
+    expectCode("acceptance_report_path_invalid", () => verifyCryptoCoworkersAcceptanceReportReference({
+      ...packet.reference,
+      path,
+    }, { ...options(), packetPath: packet.packetPath }));
+  }
+
+  const fileLink = join(packet.directory, "reports", "linked.json");
+  symlinkSync(join(packet.directory, "reports", "runtime.json"), fileLink);
+  expectCode("acceptance_report_path_invalid", () => verifyCryptoCoworkersAcceptanceReportReference({
+    ...packet.reference,
+    path: "reports/linked.json",
+  }, { ...options(), packetPath: packet.packetPath }));
+
+  const linkedDirectory = join(packet.directory, "linked-reports");
+  symlinkSync(join(packet.directory, "reports"), linkedDirectory);
+  expectCode("acceptance_report_path_invalid", () => verifyCryptoCoworkersAcceptanceReportReference({
+    ...packet.reference,
+    path: "linked-reports/runtime.json",
+  }, { ...options(), packetPath: packet.packetPath }));
+});
+
+test("rejects malformed UTF-8, invalid JSON, duplicate JSON keys, empty files, and oversized files", (t) => {
+  const packet = reportPacket(t);
+  const cases = [
+    ["invalid-utf8.json", Buffer.from([0xc3, 0x28]), "acceptance_report_json_invalid"],
+    ["invalid-json.json", Buffer.from("{", "utf8"), "acceptance_report_json_invalid"],
+    [
+      "duplicate-key.json",
+      Buffer.from(`{"version":"${ACCEPTANCE_REPORT_VERSION}","version":"${ACCEPTANCE_REPORT_VERSION}"}`, "utf8"),
+      "acceptance_report_duplicate_json_key",
+    ],
+    ["empty.json", Buffer.alloc(0), "acceptance_report_file_size_invalid"],
+    ["oversized.json", Buffer.alloc(256 * 1024 + 1, 0x20), "acceptance_report_file_size_invalid"],
+  ];
+  for (const [name, content, code] of cases) {
+    writeFileSync(join(packet.directory, "reports", name), content);
+    expectCode(code, () => verifyCryptoCoworkersAcceptanceReportReference({
+      ...packet.reference,
+      path: `reports/${name}`,
+      sha256: sha256(content),
+    }, { ...options(), packetPath: packet.packetPath }));
+  }
+});
+
+test("rejects report-file path and evidence-hash replay across one packet", (t) => {
+  const packet = reportPacket(t);
+  const entry = {
+    reference: packet.reference,
+    expectedGroup: "runtime",
+    expectedOutcomes: OUTCOMES,
+  };
+  expectCode("acceptance_report_path_reused", () => verifyCryptoCoworkersAcceptanceReportReferenceSet([
+    entry,
+    entry,
+  ], {
+    expectedCommit: COMMIT,
+    expectedAppOrigin: APP_ORIGIN,
+    capturedAt: CAPTURED_AT,
+    now: NOW,
+    trustedKeys: options().trustedKeys,
+    packetPath: packet.packetPath,
+  }));
+
+  const duplicatePath = join(packet.directory, "reports", "runtime-copy.json");
+  const content = Buffer.from(`${JSON.stringify(signedReport(), null, 2)}\n`, "utf8");
+  writeFileSync(duplicatePath, content);
+  const duplicateReference = {
+    ...packet.reference,
+    path: "reports/runtime-copy.json",
+    sha256: sha256(content),
+  };
+  expectCode("acceptance_report_evidence_hash_reused", () => verifyCryptoCoworkersAcceptanceReportReferenceSet([
+    entry,
+    { ...entry, reference: duplicateReference },
+  ], {
+    expectedCommit: COMMIT,
+    expectedAppOrigin: APP_ORIGIN,
+    capturedAt: CAPTURED_AT,
+    now: NOW,
+    trustedKeys: options().trustedKeys,
+    packetPath: packet.packetPath,
   }));
 });
 
