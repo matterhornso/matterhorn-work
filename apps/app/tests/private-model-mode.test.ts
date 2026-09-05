@@ -142,16 +142,16 @@ describe("private model mode", () => {
     );
 
     expect(composer).toContain('"Set up a private model"');
-    expect(composer).toContain('"Private model unavailable"');
-    expect(composer).toContain('"Private unavailable"');
-    expect(composer).toContain('aria-label={props.privateModeEnabled ? "Turn off private model" : "Turn on private model"}');
+    expect(composer).toContain('"Review private model setup"');
+    expect(composer).toContain('"Review Private"');
+    expect(composer).toContain('"Turn off private model"');
+    expect(composer).toContain('"Turn on private model"');
     expect(composer).toContain('role="switch"');
     expect(composer).toContain("aria-checked={Boolean(props.privateModeEnabled)}");
     expect(composer).toContain('<span>{props.privateModeEnabled ? "Private on" : "Private"}</span>');
     expect(composer).toContain("props.onPrivateModeChange?.(true)");
     expect(sessionSurface).toContain('mode: "private_workspace"');
-    expect(sessionSurface).toContain("Private mode · Venice does not retain this prompt or response.");
-    expect(sessionSurface).toContain("Matterhorn does not train on your chats");
+    expect(sessionSurface).toContain("PrivateModePrivacyNotice");
     expect(sessionRoute).toContain("selectedPrivateModeVerified");
     expect(sessionRoute).toContain("Model privacy not verified");
     expect(sessionRoute).toContain("privateModePrivacyPolicy?.verificationExpiresAt");

@@ -26,7 +26,7 @@ describe("Private model control rendered behavior", () => {
 
     expect(html).toContain('aria-label="Set up a private model"');
     expect(html).toContain('title="Set up a Venice private model"');
-    expect(html).toContain("Private setup");
+    expect(html).toContain("Set up Private");
     expect(html).not.toContain('role="switch"');
     expect(html).not.toContain("Private on");
   });
@@ -35,12 +35,12 @@ describe("Private model control rendered behavior", () => {
     const reason = "Matterhorn could not verify the current Venice model list.";
     const html = renderControl({ privateModeUnavailableReason: reason });
 
-    expect(html).toContain('aria-label="Private model unavailable"');
+    expect(html).toContain('aria-label="Review private model setup"');
     expect(html).toContain('aria-describedby="composer-private-model-unavailable"');
     expect(html).toContain('id="composer-private-model-unavailable"');
     expect(html).toContain('class="sr-only"');
     expect(html).toContain(reason);
-    expect(html).toContain("Private unavailable");
+    expect(html).toContain("Review Private");
     expect(html).not.toContain('role="switch"');
   });
 
@@ -67,6 +67,6 @@ describe("Private model control rendered behavior", () => {
     expect(html).toContain('aria-label="Turn off private model"');
     expect(html).toContain("disabled");
     expect(html).toContain("Private on");
-    expect(html).toContain("Venice does not retain this prompt or response.");
+    expect(html).toContain("Venice does not retain this request or response.");
   });
 });
