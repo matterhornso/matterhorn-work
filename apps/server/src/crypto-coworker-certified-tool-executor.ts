@@ -1,7 +1,11 @@
 import { getMatterhornCryptoTool } from "@matterhorn-work/types/crypto-action-registry";
 import type { MatterhornWalletSafetyPolicy } from "@matterhorn-work/types/wallet-safety-policy";
 
-import type { MatterhornCryptoAppAdapterRouter } from "./crypto-app-adapter-router.js";
+import {
+  MatterhornCryptoAppAdapterError,
+  type MatterhornCryptoAppAdapterRouter,
+} from "./crypto-app-adapter-router.js";
+import { verifyCryptoAppResultEvidence } from "./crypto-app-evidence-identity.js";
 import type { MatterhornCoworkers } from "./crypto-coworkers.js";
 import {
   firstPartyCryptoAppAdapterArguments,
@@ -76,7 +80,7 @@ export function createMatterhornCertifiedCoworkerToolExecutor(
       arguments: args,
     };
     if (tool.access === "read") {
-      return options.router.execute({
+      const result = await options.router.execute({
         workspaceId,
         sessionId,
         runId,
@@ -87,6 +91,10 @@ export function createMatterhornCertifiedCoworkerToolExecutor(
         arguments: adapterArguments,
         consumedCapability,
       });
+      if (!verifyCryptoAppResultEvidence(result)) {
+        throw new MatterhornCryptoAppAdapterError("adapter_output_invalid");
+      }
+      return result;
     }
     if (tool.access !== "prepare") throw new Error("coworker_certified_access_denied");
     const workspace = await options.resolveWorkspace(workspaceId);

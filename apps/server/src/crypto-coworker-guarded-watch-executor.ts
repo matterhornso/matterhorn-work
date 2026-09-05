@@ -13,6 +13,7 @@ import { MatterhornCryptoAppAdapterError } from "./crypto-app-adapter-router.js"
 import type { MatterhornCryptoAppRuntimeServices } from "./crypto-app-runtime.js";
 import type { MatterhornCoworkerWatchExecutor } from "./crypto-coworker-watch-runner.js";
 import type { MatterhornCoworkers } from "./crypto-coworkers.js";
+import { verifyCryptoAppResultEvidence } from "./crypto-app-evidence-identity.js";
 import { firstPartyCryptoAppProxyTool } from "./first-party-crypto-apps.js";
 import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 
@@ -131,6 +132,9 @@ export function createGuardedCoworkerWatchExecutor(options: Options): Matterhorn
         network: watch.network,
         arguments: structuredClone(watch.parameters),
       });
+      if (!verifyCryptoAppResultEvidence(result)) {
+        throw new MatterhornCryptoAppAdapterError("adapter_output_invalid");
+      }
       if (result.metering.costMicros > watch.budgets.maxCostMicrosPerCheck) {
         throw new MatterhornCryptoAppAdapterError("adapter_cost_limit_exceeded");
       }

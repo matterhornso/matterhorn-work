@@ -143,6 +143,7 @@ async function authorization(input: {
   manifestRevision: string;
   connectionId: string;
   agentId: string;
+  access?: "read" | "prepare";
 }): Promise<ManagedMcpToolAuthorization> {
   const runId = `run_${input.profile.id}`;
   const sessionId = `ses_${input.profile.id}`;
@@ -171,7 +172,7 @@ async function authorization(input: {
         actionId: input.profile.allowedActionIds[0]!,
         network: input.profile.allowedNetworks[0]!,
         proxyToolName: input.toolName,
-        access: "prepare",
+        access: input.access ?? "prepare",
       }],
       allowedDataLabels: input.profile.privacy.allowedDataLabels,
       allowUnverifiedProviderConsent: false,
@@ -274,6 +275,37 @@ function suiResult(): MatterhornCryptoAppResult {
   });
 }
 
+function suiReadResult(): MatterhornCryptoAppResult {
+  return certifyResult({
+    version: "matterhorn.crypto-app-result.v1",
+    app: { id: "matterhorn.sui-testnet", manifestRevision: "1.0.0", connectionId: "cxc_sui" },
+    action: { id: "sui_account_read", access: "read", network: "sui:testnet" },
+    timing: {
+      startedAt: "2026-09-01T12:00:00.000Z",
+      completedAt: "2026-09-01T12:00:00.050Z",
+      durationMs: 50,
+    },
+    observation: {
+      source: "sui.grpc",
+      observedAt: "2026-09-01T12:00:00.025Z",
+      blockOrVersion: "checkpoint:100",
+      ageMs: 25,
+      freshnessMaxAgeMs: 15_000,
+    },
+    provenance: {
+      trust: "untrusted_external",
+      sanitization: "typed_projection",
+      evidenceReference: `sha256:${"a".repeat(64)}`,
+    },
+    metering: { costMicros: 0, reservationId: "reservation_sui_read" },
+    result: {
+      address: SENDER,
+      balanceAtomic: "1000000000",
+      coinType: "0x2::sui::SUI",
+    },
+  });
+}
+
 function hyperliquidResult(): MatterhornCryptoAppResult {
   return certifyResult({
     version: "matterhorn.crypto-app-result.v1",
@@ -371,6 +403,96 @@ function bittensorResult(
 }
 
 describe("certified coworker tool executor", () => {
+  test("returns a direct certified read only when its exact evidence proof verifies", async () => {
+    const guardedRuntime = runtime();
+    const coworker = profile("sui", {
+      id: "cw_sui_read",
+      role: "market_analyst",
+      allowedActionIds: ["sui_account_read"],
+      automaticAuthorities: ["read"],
+      limits: {
+        ...profile("sui").limits,
+        maxPrepareCallsPerFamily: 0,
+      },
+    });
+    const rawArguments = { address: SENDER };
+    const auth = await authorization({
+      guardedRuntime,
+      profile: coworker,
+      toolName: "matterhorn_sui_get_balance",
+      rawArguments,
+      manifestRevision: "1.0.0",
+      connectionId: "cxc_sui",
+      agentId: "matterhorn-sui",
+      access: "read",
+    });
+    const routed: unknown[] = [];
+    const expected = suiReadResult();
+    const execute = createMatterhornCertifiedCoworkerToolExecutor({
+      router: { execute: async (request) => { routed.push(request); return expected; } },
+      coworkers: { get: () => coworker },
+      guardedRuntime,
+      resolveWorkspace: async () => workspace(roots.at(-1)!),
+      now: () => NOW,
+    });
+
+    expect(await execute({
+      toolName: "matterhorn_sui_get_balance",
+      args: rawArguments,
+      authorization: auth,
+    })).toEqual(expected);
+    expect(routed).toEqual([expect.objectContaining({
+      workspaceId: "ws_crypto",
+      connectionId: "cxc_sui",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+      arguments: { address: SENDER },
+    })]);
+  });
+
+  test("rejects a mutated certified read before exposing it to the agent", async () => {
+    const guardedRuntime = runtime();
+    const coworker = profile("sui", {
+      id: "cw_sui_read_invalid",
+      role: "market_analyst",
+      allowedActionIds: ["sui_account_read"],
+      automaticAuthorities: ["read"],
+      limits: {
+        ...profile("sui").limits,
+        maxPrepareCallsPerFamily: 0,
+      },
+    });
+    const rawArguments = { address: SENDER };
+    const auth = await authorization({
+      guardedRuntime,
+      profile: coworker,
+      toolName: "matterhorn_sui_get_balance",
+      rawArguments,
+      manifestRevision: "1.0.0",
+      connectionId: "cxc_sui",
+      agentId: "matterhorn-sui",
+      access: "read",
+    });
+    const tampered = suiReadResult();
+    tampered.result = {
+      ...tampered.result as Record<string, unknown>,
+      balanceAtomic: "2000000000",
+    };
+    const execute = createMatterhornCertifiedCoworkerToolExecutor({
+      router: { execute: async () => tampered },
+      coworkers: { get: () => coworker },
+      guardedRuntime,
+      resolveWorkspace: async () => workspace(roots.at(-1)!),
+      now: () => NOW,
+    });
+
+    await expect(execute({
+      toolName: "matterhorn_sui_get_balance",
+      args: rawArguments,
+      authorization: auth,
+    })).rejects.toThrow("adapter_output_invalid");
+  });
+
   test("turns Sui terms into a tenant-bound wallet review and never submit authority", async () => {
     const guardedRuntime = runtime();
     const coworker = profile("sui");
