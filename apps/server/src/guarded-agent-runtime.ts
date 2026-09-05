@@ -98,6 +98,82 @@ export type GuardedPromptAuthorization = {
   consentRequired: boolean;
 };
 
+export type GuardedProviderSystemContext = {
+  /**
+   * Exact, already-classified sections that the trusted OpenCode plugin may
+   * send as provider system context. The runtime keeps these bytes in memory
+   * only for the lifetime of the active run.
+   */
+  sections: readonly string[];
+  purpose: "message" | "compaction";
+};
+
+const PROVIDER_SYSTEM_MAX_SECTIONS = 16;
+const PROVIDER_SYSTEM_MAX_BYTES = 256 * 1_024;
+
+function normalizeProviderSystemContext(
+  context: GuardedProviderSystemContext | undefined,
+  privacyParts: readonly MatterhornAgentPrivacyPart[],
+): { system: string; systemHash: string; purpose: GuardedProviderSystemContext["purpose"] } | null {
+  if (!context) return null;
+  if (
+    !Array.isArray(context.sections)
+    || context.sections.length === 0
+    || context.sections.length > PROVIDER_SYSTEM_MAX_SECTIONS
+    || (context.purpose !== "message" && context.purpose !== "compaction")
+  ) {
+    throw new GuardedRuntimeError(
+      400,
+      "agent_provider_system_invalid",
+      "The provider system context is invalid.",
+    );
+  }
+  const sections = context.sections.filter((section) => typeof section === "string" && section.length > 0);
+  if (sections.length !== context.sections.length) {
+    throw new GuardedRuntimeError(
+      400,
+      "agent_provider_system_invalid",
+      "The provider system context is invalid.",
+    );
+  }
+  const system = sections.join("\n");
+  if (Buffer.byteLength(system, "utf8") > PROVIDER_SYSTEM_MAX_BYTES) {
+    throw new GuardedRuntimeError(
+      413,
+      "agent_provider_system_too_large",
+      "The provider system context is too large to verify safely.",
+    );
+  }
+  for (const section of sections) {
+    const sectionHash = sha256(section);
+    const classified = privacyParts.some((part) => (
+      typeof part.contentHash === "string" && equalDigest(part.contentHash, sectionHash)
+    ));
+    if (!classified) {
+      throw new GuardedRuntimeError(
+        409,
+        "agent_provider_system_unclassified",
+        "Provider system context changed after privacy review.",
+      );
+    }
+  }
+  const systemHash = sha256(system);
+  const manifestBound = privacyParts.some((part) => (
+    part.type === "provider_system_manifest"
+    && typeof part.contentHash === "string"
+    && equalDigest(part.contentHash, systemHash)
+    && part.version === `matterhorn.provider-system.${context.purpose}.v1`
+  ));
+  if (!manifestBound) {
+    throw new GuardedRuntimeError(
+      409,
+      "agent_provider_system_unbound",
+      "Provider system context order changed after privacy review.",
+    );
+  }
+  return { system, systemHash, purpose: context.purpose };
+}
+
 function selectedContextCounts(input: GuardedPromptInput): NonNullable<MatterhornAgentRunReceipt["context"]> {
   const coworkerFiles = new Set((input.agentFileIds ?? []).map((id) => id.trim()).filter(Boolean));
   const chatFiles = new Set(
@@ -181,6 +257,16 @@ export class MatterhornGuardedAgentRuntime {
     argsHash: string;
   }>();
   private readonly observations = new Map<string, GuardedRuntimeObservationMetric>();
+  private readonly providerSystemByRunId = new Map<string, {
+    workspaceId: string;
+    sessionId: string;
+    providerId: string;
+    modelId: string;
+    purpose: GuardedProviderSystemContext["purpose"];
+    system: string;
+    systemHash: string;
+    expiresAtMs: number;
+  }>();
   private finalizedRunHandler: ((input: MatterhornFinalizedCoworkerRun) => Promise<void>) | null = null;
 
   constructor(private readonly stateStore = new MatterhornGuardedRuntimeStateStore()) {
@@ -192,6 +278,10 @@ export class MatterhornGuardedAgentRuntime {
 
   ready(): boolean {
     return this.capabilities.ready();
+  }
+
+  authenticateRuntime(runtimeSecret: string): void {
+    this.assertRuntimeSecret(runtimeSecret);
   }
 
   createCryptoAppAuthorization(options: {
@@ -486,7 +576,9 @@ export class MatterhornGuardedAgentRuntime {
   async startAuthorizedPrompt(
     input: GuardedPromptInput,
     authorization: GuardedPromptAuthorization,
+    providerSystem?: GuardedProviderSystemContext,
   ): Promise<GuardedPromptAcceptance> {
+    const normalizedProviderSystem = normalizeProviderSystemContext(providerSystem, input.parts);
     const current = this.privacy.preflight(input, { issueChallenge: false }).response;
     if (!equalDigest(current.requestHash, authorization.preflight.requestHash)) {
       throw new GuardedRuntimeError(
@@ -560,6 +652,16 @@ export class MatterhornGuardedAgentRuntime {
       jurisdictionPolicy,
       expiresAtMs,
     });
+    if (normalizedProviderSystem) {
+      this.providerSystemByRunId.set(runId, {
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        providerId: input.providerId,
+        modelId: input.modelId,
+        ...normalizedProviderSystem,
+        expiresAtMs,
+      });
+    }
     try {
       await this.receipts.start({
         runId,
@@ -603,6 +705,40 @@ export class MatterhornGuardedAgentRuntime {
     if (!stored) {
       throw new GuardedRuntimeError(409, "agent_run_message_already_bound", "The user message is already bound to another Matterhorn run.");
     }
+  }
+
+  resolveRuntimeProviderSystem(input: {
+    runtimeSecret: string;
+    workspaceId: string;
+    sessionId: string;
+    providerId: string;
+    modelId: string;
+    purpose: GuardedProviderSystemContext["purpose"];
+  }): { runId: string; system: string[]; systemHash: string } {
+    this.assertRuntimeSecret(input.runtimeSecret);
+    const runId = this.activeRun(input.sessionId);
+    const context = runId ? this.providerSystemByRunId.get(runId) : undefined;
+    const scope = runId ? this.runScope(runId) : null;
+    if (
+      !runId
+      || !context
+      || !scope
+      || context.expiresAtMs <= Date.now()
+      || context.workspaceId !== input.workspaceId
+      || scope.workspaceId !== input.workspaceId
+      || scope.sessionId !== input.sessionId
+      || context.sessionId !== input.sessionId
+      || context.providerId !== input.providerId
+      || context.modelId !== input.modelId
+      || context.purpose !== input.purpose
+    ) {
+      throw new GuardedRuntimeError(
+        409,
+        "agent_provider_system_not_bound",
+        "Provider system context is not bound to this active Matterhorn run.",
+      );
+    }
+    return { runId, system: [context.system], systemHash: context.systemHash };
   }
 
   bindRuntimeMessage(input: {
@@ -959,6 +1095,9 @@ export class MatterhornGuardedAgentRuntime {
 
   private cleanupStagedCapabilities(nowMs = Date.now()): void {
     this.stateStore.deleteExpired(nowMs);
+    for (const [runId, context] of this.providerSystemByRunId) {
+      if (context.expiresAtMs <= nowMs) this.providerSystemByRunId.delete(runId);
+    }
     for (const [callId, staged] of this.stagedCapabilities) {
       if (staged.expiresAtMs <= nowMs) this.stagedCapabilities.delete(callId);
     }
@@ -969,6 +1108,7 @@ export class MatterhornGuardedAgentRuntime {
 
   private revokeRun(runId: string): void {
     this.capabilities.closeRun(runId);
+    this.providerSystemByRunId.delete(runId);
     const scope = this.runScope(runId);
     if (scope) {
       const active = this.stateStore.get<{ runId: string }>("active_agent_run", scope.sessionId);

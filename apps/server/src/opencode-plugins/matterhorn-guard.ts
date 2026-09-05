@@ -15,6 +15,19 @@ type ToolHookOutput = {
   args: Record<string, unknown>;
 };
 
+type SystemHookInput = {
+  sessionID: string;
+  model: {
+    providerID: string;
+    id?: string;
+    modelID?: string;
+  };
+};
+
+type SystemHookOutput = {
+  system: string[];
+};
+
 type OpenCodeEvent = {
   type?: string;
   properties?: Record<string, unknown>;
@@ -33,6 +46,18 @@ const CAPABILITY_CALL_ARGUMENT = "_matterhornCallId";
 const pendingUsage = new Map<string, AssistantUsage>();
 const runIdByAssistantMessage = new Map<string, string>();
 const runIdByCall = new Map<string, string>();
+const pendingCompactionSessions = new Set<string>();
+
+const PROVIDER_SYSTEM_MAX_BYTES = 256 * 1_024;
+
+function authoritativeMessageGatewayRequired(): boolean {
+  return String(process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED || "").trim() === "1";
+}
+
+async function sha256Text(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 function guardedMode(): "off" | "shadow" | "enforce" {
   const mode = String(process.env.MATTERHORN_GUARDED_RUNTIME_MODE || "").trim().toLowerCase();
@@ -149,6 +174,46 @@ async function bindAssistantMessage(input: ReturnType<typeof assistantUsage> & {
 }
 
 export const MatterhornGuard = async (context: PluginContext) => ({
+  "experimental.chat.system.transform": async (input: SystemHookInput, output: SystemHookOutput) => {
+    if (!authoritativeMessageGatewayRequired()) return;
+    const sessionId = input.sessionID.trim();
+    const providerId = input.model.providerID.trim();
+    const modelId = (input.model.id ?? input.model.modelID ?? "").trim();
+    const purpose = pendingCompactionSessions.delete(sessionId) ? "compaction" : "message";
+    if (!sessionId || !providerId || !modelId) {
+      throw new Error("Matterhorn could not bind the provider request to an exact accepted run.");
+    }
+    const payload = await postInternal("/internal/agent-runs/provider-system", {
+      workspaceDirectory: context.directory ?? null,
+      sessionId,
+      providerId,
+      modelId,
+      purpose,
+    });
+    const system = payload.system;
+    const runId = payload.runId;
+    const systemHash = payload.systemHash;
+    if (
+      !Array.isArray(system)
+      || system.length !== 1
+      || typeof system[0] !== "string"
+      || system[0].length === 0
+      || Buffer.byteLength(system[0], "utf8") > PROVIDER_SYSTEM_MAX_BYTES
+      || typeof runId !== "string"
+      || runId.length === 0
+      || typeof systemHash !== "string"
+      || systemHash.length === 0
+    ) {
+      throw new Error("Matterhorn provider system binding response was invalid.");
+    }
+    if (await sha256Text(system[0]) !== systemHash) {
+      throw new Error("Matterhorn provider system binding hash did not match its content.");
+    }
+    // This hook runs last in the managed plugin list. Replace every late
+    // OpenCode/provider addition with only the exact system bytes already
+    // classified and authorized by the Matterhorn message gateway.
+    output.system.splice(0, output.system.length, system[0]);
+  },
   "tool.execute.before": async (input: ToolHookInput, output: ToolHookOutput) => {
     if (guardedMode() === "off" || !input.tool.startsWith("matterhorn-work_")) return;
     try {
@@ -198,9 +263,10 @@ export const MatterhornGuard = async (context: PluginContext) => ({
     }
   },
   "experimental.session.compacting": async (
-    _input: { sessionID: string },
+    input: { sessionID: string },
     output: { context: string[]; prompt?: string },
   ) => {
+    pendingCompactionSessions.add(input.sessionID);
     output.context.push(MATTERHORN_CRYPTO_COMPACTION_CONTEXT);
   },
 });

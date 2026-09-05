@@ -1094,6 +1094,18 @@ describe("public account authentication", () => {
     const readiness = await jsonRequest(app.base, "/health/ready");
     expect(readiness.response.status).toBe(503);
     expect(readiness.payload.checks.accountMessageGatewayReady).toBe(false);
+    expect(readiness.payload.checks.providerSystemBoundaryReady).toBe(false);
+  });
+
+  test("fails hosted Public Beta readiness without the managed provider-system boundary", async () => {
+    process.env.MATTERHORN_HOSTED_PUBLIC_BETA = "1";
+    process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED = "1";
+    process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "trusted-runtime-secret-for-readiness-tests";
+    const app = await boot();
+    const readiness = await jsonRequest(app.base, "/health/ready");
+    expect(readiness.response.status).toBe(503);
+    expect(readiness.payload.checks.accountMessageGatewayReady).toBe(true);
+    expect(readiness.payload.checks.providerSystemBoundaryReady).toBe(false);
   });
 
   test("rejects invalid, duplicate, and incorrect credentials safely", async () => {

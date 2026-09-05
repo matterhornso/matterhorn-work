@@ -8,6 +8,9 @@ tool access, reviewed transaction terms, retention, and security receipts.
 
 - The server runs privacy preflight before usage reservation, audit creation,
   OpenCode dispatch, or provider contact.
+- In hosted mode, the last managed OpenCode plugin replaces the final provider
+  system array with only the exact server-authorized bytes. Late environment,
+  skill, MCP, workspace, or provider additions are not forwarded.
 - The OpenCode plugin receives a server-generated non-secret call id after model
   arguments exist. Signed capabilities remain inside the Matterhorn server.
 - The managed MCP bridge strips the reserved call id and atomically consumes the
@@ -43,6 +46,14 @@ is hashable and preflighted.
 
 The internal capability and completion routes require
 `X-Matterhorn-Agent-Runtime-Secret`. They are not client APIs.
+
+The same runtime-only credential protects the provider-system binding route.
+Its response is bound to the active workspace, session, provider, model, request
+purpose, and run; carries a SHA-256 digest checked by the plugin; and is held in
+memory only until the run ends. A restart discards these private bytes and makes
+the in-flight request fail closed. Hosted readiness requires the authoritative
+gateway, the managed OpenCode plugin, and a valid runtime credential even while
+per-tool capability rollout is `off`.
 
 Stored chats are private workspace context during compaction even when the
 original turn began as public research. Secret-shaped content in any stored
@@ -81,6 +92,10 @@ usage reservation or provider contact, and a pre-dispatch re-read fails with
 `agent_context_changed` if the hidden prompt changes after authorization. The
 canonical prompt is versioned with the pinned OpenCode runtime so an upgrade
 cannot silently change provider-bound instructions.
+Managed OpenCode automatic compaction is disabled. Summaries may contact a
+provider only through Matterhorn's explicit compact endpoint, which binds the
+stored transcript and the `compaction` provider-system purpose to one protected
+run.
 
 ## Retention and deletion
 

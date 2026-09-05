@@ -2113,6 +2113,48 @@ describe("workspace session read APIs", () => {
     expect(mock.requests.findIndex((request) => request.pathname === "/session/ses_1/abort"))
       .toBeLessThan(mock.requests.findIndex((request) => request.pathname === "/session/ses_1/prompt_async"));
 
+    const providerSystemResponse = await fetch(`${base}/internal/agent-runs/provider-system`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Matterhorn-Agent-Runtime-Secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      },
+      body: JSON.stringify({
+        workspaceDirectory: workspaceRoot,
+        sessionId: "ses_1",
+        providerId: "openai",
+        modelId: "gpt-4.1",
+        purpose: "message",
+      }),
+    });
+    expect(providerSystemResponse.status).toBe(200);
+    expect(providerSystemResponse.headers.get("cache-control")).toBe("no-store");
+    const providerSystem = await providerSystemResponse.json();
+    expect(providerSystem.runId).toBe(accepted.runId);
+    expect(Array.isArray(providerSystem.system)).toBe(true);
+    expect(providerSystem.system).toHaveLength(1);
+    expect(typeof providerSystem.system[0]).toBe("string");
+    expect(String(providerSystem.system[0])).toContain("Prefer validators with stable emissions and low take.");
+    expect(String(providerSystem.system[0])).toContain("## Matterhorn Crypto Context");
+    expect(String(providerSystem.system[0])).toContain("Bittensor");
+
+    const wrongModelResponse = await fetch(`${base}/internal/agent-runs/provider-system`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Matterhorn-Agent-Runtime-Secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      },
+      body: JSON.stringify({
+        workspaceDirectory: workspaceRoot,
+        sessionId: "ses_1",
+        providerId: "openai",
+        modelId: "gpt-4.1-mutated",
+        purpose: "message",
+      }),
+    });
+    expect(wrongModelResponse.status).toBe(409);
+    await expect(wrongModelResponse.json()).resolves.toMatchObject({ code: "agent_provider_system_not_bound" });
+
     const receiptResponse = await fetch(
       `${base}/workspace/ws_1/agent-run-receipts/${encodeURIComponent(accepted.runId)}`,
       { headers: auth(openwork.token) },
