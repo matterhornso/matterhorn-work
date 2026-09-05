@@ -1394,7 +1394,11 @@ describe("Data-map contract: must not leak secrets", () => {
       privateKey: "0xdeadbeef1234567890abcdef",
       seedPhrase: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
       apiSecret: "sk_live_abcdef1234567890",
+      apiKey: "provider-key-value",
+      accessToken: "provider-access-value",
       bearerToken: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      password: "provider-password-value",
+      connectors: [{ api_key: "nested-provider-key" }],
       ss58Address: "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1routeFixture",
     };
 
@@ -1403,7 +1407,11 @@ describe("Data-map contract: must not leak secrets", () => {
     expect(found).toContain("body.privateKey");
     expect(found).toContain("body.seedPhrase");
     expect(found).toContain("body.apiSecret");
+    expect(found).toContain("body.apiKey");
+    expect(found).toContain("body.accessToken");
     expect(found).toContain("body.bearerToken");
+    expect(found).toContain("body.password");
+    expect(found).toContain("body.connectors.0.api_key");
 
     // Safe fields should NOT be flagged.
     expect(found).not.toContain("body.walletName");
@@ -1465,6 +1473,10 @@ describe("Data-map contract: must not leak secrets", () => {
       objectDigest: `0x${"b".repeat(64)}`,
       suiAddress: `0x${"c".repeat(64)}`,
       publicKey: `0x${"d".repeat(64)}`,
+      signer: `0x${"e".repeat(64)}`,
+      recipient: `0x${"f".repeat(64)}`,
+      objectIds: [`0x${"1".repeat(64)}`, `0x${"2".repeat(64)}`],
+      tokenId: "1".repeat(64),
     };
 
     expect(containsForbiddenMemorySecretMaterial(publicEvidence)).toBe(false);
