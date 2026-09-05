@@ -153,6 +153,7 @@ import { useQuickJot } from "../../notes";
 import type { BittensorPublicEvidenceCard } from "./message-list";
 import { buildResultCardMemoryRecord } from "./result-card-memory";
 import { PrivateModePrivacyNotice } from "./private-mode-privacy-notice";
+import { privacyConsentDetail } from "./privacy-consent-copy";
 
 const SessionTranscript = lazy(() => import("./message-list").then((module) => ({
   default: module.SessionTranscript,
@@ -1055,12 +1056,9 @@ export function parseSessionError(thrown: unknown): SessionError {
   }
   const privacyPreflight = findPrivacyPreflightInError(parsed ?? raw);
   if (privacyPreflight?.decision === "consent_required" && privacyPreflight.challenge) {
-    const categories = privacyPreflight.detectedData.categories.length
-      ? privacyPreflight.detectedData.categories.join(", ")
-      : "private workspace context";
     return {
-      message: `Allow ${privacyPreflight.provider.name} for this request?`,
-      detail: `This request includes ${categories}. It leaves Matterhorn for ${privacyPreflight.provider.name} and this one-time approval expires in five minutes.`,
+      message: `Share private context with ${privacyPreflight.provider.name} once?`,
+      detail: privacyConsentDetail(privacyPreflight),
       kind: "privacy-consent",
       retryable: false,
       privacyPreflight,
@@ -1164,7 +1162,7 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
   };
 }
 
-function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfirmPrivacy, confirmingPrivacy, onChangeModel, onOpenModelPicker, onOpenAiProviders, onOpenPrivacyDetails }: {
+export function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfirmPrivacy, confirmingPrivacy, onChangeModel, onOpenModelPicker, onOpenAiProviders, onOpenPrivacyDetails }: {
   error: SessionError;
   onDismiss: () => void;
   onRetry?: () => void | Promise<void>;
@@ -1245,7 +1243,7 @@ function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfirmPrivac
                   onClick={() => void onConfirmPrivacy()}
                   disabled={confirmingPrivacy}
                 >
-                  {confirmingPrivacy ? "Authorizing…" : "Allow this request"}
+                  {confirmingPrivacy ? "Sending…" : "Share once and send"}
                 </button>
                 {onOpenPrivacyDetails ? (
                   <button
@@ -1303,7 +1301,7 @@ function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfirmPrivac
           <button
             type="button"
             className={cn(
-              "shrink-0 rounded-full p-1 transition-colors",
+              "-mr-2 -mt-2 grid size-10 shrink-0 place-items-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/30",
               cancelled
                 ? "text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
                 : "text-red-10 hover:bg-red-3 hover:text-red-11",
