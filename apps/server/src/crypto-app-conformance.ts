@@ -164,6 +164,19 @@ export function runCryptoAppManifestConformance(
       && action.access !== "simulate") {
       finding(findings, "error", "authority", "financial_risk_requires_prepare_or_simulate", action.id);
     }
+    if (action.cachePolicy === "block_bound_public") {
+      if (action.access !== "read" || action.risk !== "informational") {
+        finding(findings, "error", "privacy", "public_cache_requires_informational_read", action.id);
+      }
+      if (!action.requiresFreshness || action.freshnessMaxAgeMs === null) {
+        finding(findings, "error", "privacy", "public_cache_requires_freshness", action.id);
+      }
+      if (manifest.authentication.type !== "none"
+        || manifest.authentication.scopes.length > 0
+        || action.requiredScopes.length > 0) {
+        finding(findings, "error", "privacy", "public_cache_requires_anonymous_scope_free_action", action.id);
+      }
+    }
   }
 
   const normalizedFindings = uniqueFindings(findings);

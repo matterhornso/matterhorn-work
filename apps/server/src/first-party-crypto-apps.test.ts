@@ -126,6 +126,7 @@ describe("Matterhorn first-party crypto app contracts", () => {
       id: "polymarket_market_search",
       access: "read",
       risk: "informational",
+      cachePolicy: "block_bound_public",
       simulationRequired: false,
       walletSubmissionOnly: true,
       agentMaySubmit: false,
@@ -141,7 +142,7 @@ describe("Matterhorn first-party crypto app contracts", () => {
     expect(report.passed).toBe(true);
     expect(firstPartyCryptoAppCapabilityBindings([app])).toEqual([{
       appId: "matterhorn.polymarket-research",
-      manifestRevision: "1.1.0",
+      manifestRevision: "1.2.0",
       actionId: "polymarket_market_search",
       proxyToolName: "matterhorn_polymarket_search_markets",
     }]);
@@ -156,6 +157,7 @@ describe("Matterhorn first-party crypto app contracts", () => {
       id: "polymarket_orderbook_read",
       access: "read",
       risk: "informational",
+      cachePolicy: "block_bound_public",
       requiredScopes: [],
       simulationRequired: false,
       walletSubmissionOnly: true,
@@ -171,7 +173,7 @@ describe("Matterhorn first-party crypto app contracts", () => {
     expect(report.passed).toBe(true);
     expect(firstPartyCryptoAppCapabilityBindings([app])).toEqual([{
       appId: "matterhorn.polymarket-clob-research",
-      manifestRevision: "1.0.0",
+      manifestRevision: "1.1.0",
       actionId: "polymarket_orderbook_read",
       proxyToolName: "matterhorn_polymarket_get_orderbook",
     }]);
@@ -218,7 +220,9 @@ describe("Matterhorn first-party crypto app contracts", () => {
       "bittensor_prepare_unstake",
     ]);
     expect(app.actions.filter((action) => action.access === "read").every((action) => (
-      action.risk === "informational" && !action.simulationRequired
+      action.risk === "informational"
+      && action.cachePolicy === "block_bound_public"
+      && !action.simulationRequired
     ))).toBe(true);
     expect(app.actions.filter((action) => action.access === "prepare").every((action) => (
       action.risk === "financial_high" && action.simulationRequired
@@ -237,31 +241,31 @@ describe("Matterhorn first-party crypto app contracts", () => {
     expect(firstPartyCryptoAppCapabilityBindings([app])).toEqual([
       {
         appId: "matterhorn.bittensor-testnet",
-        manifestRevision: "1.1.0",
+        manifestRevision: "1.2.0",
         actionId: "bittensor_subnet_list",
         proxyToolName: "matterhorn_bittensor_chat",
       },
       {
         appId: "matterhorn.bittensor-testnet",
-        manifestRevision: "1.1.0",
+        manifestRevision: "1.2.0",
         actionId: "bittensor_subnet_read",
         proxyToolName: "matterhorn_bittensor_chat",
       },
       {
         appId: "matterhorn.bittensor-testnet",
-        manifestRevision: "1.1.0",
+        manifestRevision: "1.2.0",
         actionId: "bittensor_prepare_transfer",
         proxyToolName: "matterhorn_bittensor_prepare_action",
       },
       {
         appId: "matterhorn.bittensor-testnet",
-        manifestRevision: "1.1.0",
+        manifestRevision: "1.2.0",
         actionId: "bittensor_prepare_stake",
         proxyToolName: "matterhorn_bittensor_prepare_action",
       },
       {
         appId: "matterhorn.bittensor-testnet",
-        manifestRevision: "1.1.0",
+        manifestRevision: "1.2.0",
         actionId: "bittensor_prepare_unstake",
         proxyToolName: "matterhorn_bittensor_prepare_action",
       },

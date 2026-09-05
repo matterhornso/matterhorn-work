@@ -70,6 +70,7 @@ export type MatterhornCryptoAppOperationalPolicy = {
     actionId: string;
     runId: string;
     callId: string;
+    reservationClass?: "upstream" | "public_block_cache";
   }): { reservationId: string; reservedCostMicros: number };
   reconcile(input: {
     reservationId: string;
@@ -307,11 +308,15 @@ export class MatterhornCryptoAppOperationalPolicyStore implements MatterhornCryp
     actionId: string;
     runId: string;
     callId: string;
+    reservationClass?: "upstream" | "public_block_cache";
   }): { reservationId: string; reservedCostMicros: number } {
     const now = this.#now();
     const nowMs = now.getTime();
     const dayBucket = utcDay(now);
     const reservationId = this.#id();
+    const reservedCostMicros = input.reservationClass === "public_block_cache"
+      ? 0
+      : this.#maxCallCostMicros;
     this.#db.exec("BEGIN IMMEDIATE;");
     try {
       statement(this.#db, `
@@ -336,7 +341,7 @@ export class MatterhornCryptoAppOperationalPolicyStore implements MatterhornCryp
         Number(row?.usage_micros ?? 0),
         "crypto_app_policy_state_corrupt",
       );
-      if (usageMicros + this.#maxCallCostMicros > this.#dailyWorkspaceLimitMicros) {
+      if (usageMicros + reservedCostMicros > this.#dailyWorkspaceLimitMicros) {
         throw new MatterhornCryptoAppOperationalPolicyError("crypto_app_daily_quota_exceeded");
       }
       statement(this.#db, `
@@ -355,12 +360,12 @@ export class MatterhornCryptoAppOperationalPolicyStore implements MatterhornCryp
         input.runId,
         input.callId,
         dayBucket,
-        this.#maxCallCostMicros,
+        reservedCostMicros,
         nowMs,
         nowMs + this.#reservationTtlMs,
       );
       this.#db.exec("COMMIT;");
-      return { reservationId, reservedCostMicros: this.#maxCallCostMicros };
+      return { reservationId, reservedCostMicros };
     } catch (error) {
       this.#db.exec("ROLLBACK;");
       throw error;
@@ -386,7 +391,7 @@ export class MatterhornCryptoAppOperationalPolicyStore implements MatterhornCryp
       input.reservationId,
     ) as { reserved_cost_micros: number } | undefined;
     if (!row) throw new MatterhornCryptoAppOperationalPolicyError("crypto_app_operational_reservation_unavailable");
-    const reservedCostMicros = positiveSafeInteger(
+    const reservedCostMicros = nonNegativeSafeInteger(
       Number(row.reserved_cost_micros),
       "crypto_app_policy_state_corrupt",
     );

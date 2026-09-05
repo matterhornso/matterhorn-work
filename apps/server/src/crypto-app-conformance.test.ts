@@ -307,6 +307,42 @@ describe("crypto app manifest conformance", () => {
     expect(codes).toContain("financial_action_risk_required");
   });
 
+  test("requires an explicit public-only contract before cache admission", () => {
+    const value = manifest();
+    value.actions[0] = {
+      ...value.actions[0]!,
+      cachePolicy: "block_bound_public",
+      requiresFreshness: false,
+      freshnessMaxAgeMs: null,
+    };
+    value.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(value), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    expect(conformance(value).findings.map((item) => item.code)).toEqual(expect.arrayContaining([
+      "public_cache_requires_informational_read",
+      "public_cache_requires_freshness",
+      "public_cache_requires_anonymous_scope_free_action",
+    ]));
+  });
+
+  test("rejects unknown signed cache policy values", () => {
+    const value = manifest();
+    (value.actions[0] as unknown as Record<string, unknown>).cachePolicy = "always";
+    value.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(value), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    expect(conformance(value).findings).toContainEqual(expect.objectContaining({
+      severity: "error",
+      category: "schema",
+      code: "action_cache_policy_invalid",
+      actionId: null,
+    }));
+  });
+
   test("hashes the full report so policy or finding changes are detectable", () => {
     const first = conformance(manifest());
     const second = runCryptoAppManifestConformance(manifest(), {

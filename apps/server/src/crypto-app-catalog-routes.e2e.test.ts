@@ -142,6 +142,7 @@ function configureCatalog(root: string) {
   const authenticatedManifest = manifests.find((manifest) => manifest.appId === "matterhorn.hyperliquid-testnet");
   if (!authenticatedManifest) throw new Error("Hyperliquid test manifest is required.");
   authenticatedManifest.authentication = { type: "api_key_vault", scopes: [] };
+  for (const action of authenticatedManifest.actions) delete action.cachePolicy;
   authenticatedManifest.publisher.signature = sign(
     null,
     Buffer.from(canonicalCryptoAppManifestPayload(authenticatedManifest)),

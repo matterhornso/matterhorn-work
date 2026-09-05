@@ -51,6 +51,7 @@ function actionView(action: MatterhornCryptoAppRegistryEntry["manifest"]["action
     description: action.description,
     access: action.access,
     risk: action.risk,
+    cachePolicy: action.cachePolicy ?? null,
     requiredScopes: [...action.requiredScopes],
     requiresFreshness: action.requiresFreshness,
     freshnessMaxAgeMs: action.freshnessMaxAgeMs,
