@@ -16,17 +16,17 @@ export const MATTERHORN_EXECUTION_MODE_OPTIONS: ReadonlyArray<{
   {
     value: "discuss",
     label: "Discuss",
-    description: "Answer and inspect read-only context. No edits or commands.",
+    description: "Answer questions and look up information. Nothing is changed.",
   },
   {
     value: "plan",
     label: "Plan",
-    description: "Research and produce a plan. No edits or commands.",
+    description: "Research the request and suggest next steps. Nothing is changed.",
   },
   {
     value: "work",
     label: "Work",
-    description: "Edit this project and use approved tools within its safety limits.",
+    description: "Use approved tools to complete the task. Wallet actions still need your approval.",
   },
 ];
 
