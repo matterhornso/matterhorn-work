@@ -209,6 +209,10 @@ export type MatterhornAgentToolReceipt = {
     observedAt: string | null;
     ageMs: number | null;
     freshnessMaxAgeMs: number | null;
+    /** Domain-separated SHA-256 of the exact typed, quarantined model-facing result. Optional only on legacy receipts. */
+    projectionHash?: string;
+    /** Domain-separated SHA-256 of the app/action/network observation identity. Optional only on legacy receipts. */
+    observationHash?: string;
   };
 };
 

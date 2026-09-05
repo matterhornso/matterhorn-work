@@ -84,6 +84,8 @@ const completedReceipt: MatterhornAgentRunReceipt = {
       observedAt: "2026-09-04T11:59:50.000Z",
       ageMs: 10_000,
       freshnessMaxAgeMs: 30_000,
+      projectionHash: "a".repeat(64),
+      observationHash: "b".repeat(64),
     },
   }],
   memory: {
@@ -180,6 +182,8 @@ describe("plain-language response details", () => {
     expect(html).toContain("Context compiler: matterhorn.coworker-context-compiler.v2");
     expect(html).toContain("matterhorn_work_hyperliquid_markets · read · untrusted_external · success · 80ms");
     expect(html).toContain("certified_cache · age 10000ms · freshness limit 30000ms");
+    expect(html).toContain(`evidence proof ${"a".repeat(64)}`);
+    expect(html).toContain(`observation proof ${"b".repeat(64)}`);
     expect(html).toContain("Intent intent-proof · policy policy-proof · simulation simulation-proof · not sent");
     expect(html).not.toContain("workspace_private");
   });
@@ -221,5 +225,26 @@ describe("plain-language response details", () => {
     expect(html).toContain("Hyperliquid: Completed · Data observed 10 seconds ago");
     expect(html).not.toContain("Fetched from the app");
     expect(html).not.toContain("Used recently checked public data");
+  });
+
+  test("keeps earlier delivery receipts readable without inventing missing proofs", () => {
+    const html = renderReceipt({
+      ...completedReceipt,
+      tools: completedReceipt.tools.map((tool) => ({
+        ...tool,
+        evidence: tool.evidence ? {
+          delivery: tool.evidence.delivery,
+          observedAt: tool.evidence.observedAt,
+          ageMs: tool.evidence.ageMs,
+          freshnessMaxAgeMs: tool.evidence.freshnessMaxAgeMs,
+        } : undefined,
+      })),
+    });
+
+    expect(html).toContain("Used recently checked public data");
+    expect(html).toContain("certified_cache · age 10000ms · freshness limit 30000ms");
+    expect(html).not.toContain("evidence proof");
+    expect(html).not.toContain("observation proof");
+    expect(html).not.toContain("undefined");
   });
 });

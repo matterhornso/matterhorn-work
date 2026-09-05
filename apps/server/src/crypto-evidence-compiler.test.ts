@@ -56,6 +56,8 @@ function finalizedReceipt(): MatterhornAgentRunReceipt {
         observedAt: "2026-09-01T00:00:00.900Z",
         ageMs: 100,
         freshnessMaxAgeMs: 30_000,
+        projectionHash: "a".repeat(64),
+        observationHash: "b".repeat(64),
       },
     }],
     memory: {
@@ -156,6 +158,35 @@ describe("crypto evidence compiler", () => {
     expect(live.receipt.toolOutcomeHashes).not.toEqual(cached.receipt.toolOutcomeHashes);
     expect(live.receipt.evidenceReferenceHashes).not.toEqual(cached.receipt.evidenceReferenceHashes);
     expect(JSON.stringify(cached)).not.toContain("query");
+  });
+
+  test("binds the exact typed projection and observation proofs into encrypted evidence", () => {
+    const base = finalizedReceipt();
+    const shared = {
+      coworkerId: "coworker_private_alpha",
+      keyReference: "kms://matterhorn/evidence/key-1",
+      recipientKeyIds: ["workspace-recipient-1"],
+      now: new Date("2026-09-01T01:00:00.000Z"),
+      correlationSalt: Buffer.alloc(32, 6),
+      idEntropy: Buffer.alloc(24, 7),
+    };
+    const original = compileMatterhornEvidenceBundle({ receipt: base, ...shared });
+    const changed = compileMatterhornEvidenceBundle({
+      receipt: {
+        ...base,
+        tools: base.tools.map((tool) => ({
+          ...tool,
+          evidence: tool.evidence
+            ? { ...tool.evidence, projectionHash: "c".repeat(64), observationHash: "d".repeat(64) }
+            : undefined,
+        })),
+      },
+      ...shared,
+    });
+
+    expect(original.receipt.toolOutcomeHashes).not.toEqual(changed.receipt.toolOutcomeHashes);
+    expect(original.receipt.evidenceReferenceHashes).not.toEqual(changed.receipt.evidenceReferenceHashes);
+    expect(JSON.stringify(changed)).not.toContain("credential=must-not-survive-projection");
   });
 
   test("refuses pending receipts and evidence schemas with forbidden or unknown content fields", () => {
