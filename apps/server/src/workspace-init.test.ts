@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile, mkdir, stat } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ensureWorkspaceFiles } from "./workspace-init.js";
+import { ensureWorkspaceFiles, resolveMatterhornManagedAgentPrompt } from "./workspace-init.js";
 import { openworkExtensionsPreviewPluginPath } from "./openwork-extensions-plugin-path.js";
 
 async function withWorkspace(fn: (root: string) => Promise<void>) {
@@ -22,6 +22,12 @@ function agentFrontmatter(source: string): string {
 }
 
 describe("ensureWorkspaceFiles", () => {
+  test("exposes only canonical Matterhorn agent prompt bodies as managed policy", () => {
+    expect(resolveMatterhornManagedAgentPrompt("matterhorn")).toContain("You are Matterhorn Desks.");
+    expect(resolveMatterhornManagedAgentPrompt("matterhorn-bittensor")).toContain("# Bittensor Agent");
+    expect(resolveMatterhornManagedAgentPrompt("custom-agent")).toBeNull();
+  });
+
   test("creates default agent with artifact guidance for new workspaces", async () => {
     await withWorkspace(async (root) => {
       const result = await ensureWorkspaceFiles(root, "starter");

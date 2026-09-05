@@ -140,6 +140,9 @@ function classify(input: PrivacyInput): {
     labels.add(part.label);
     if (part.label === "workspace_private") {
       effectiveMode = maxMode(effectiveMode, "private_workspace");
+      if (part.type === "agent_instructions") {
+        categories.add("workspace_agent_instructions");
+      }
     } else if (part.label === "wallet_private") {
       effectiveMode = "transaction";
     } else if (part.label === "secret") {
