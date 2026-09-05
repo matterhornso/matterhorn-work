@@ -431,6 +431,59 @@ describe("durable crypto evidence store", () => {
         expectedRevision: created.revision,
         now: firstNow,
       });
+      const claimRow = stateA.listRecords<unknown>("crypto_evidence_operation_claim", {
+        workspaceId: "workspace_claim",
+        nowMs: firstNow.getTime(),
+      })[0];
+      if (!claimRow) throw new Error("test operation claim missing");
+      const wrongAuthority = testDurableStateAuthority(
+        "wrong-evidence-operation-authority-key-00000000000000000000",
+      );
+      try {
+        const wrongStore = new MatterhornCryptoEvidenceStore(
+          stateB,
+          keyManager,
+          {},
+          null,
+          wrongAuthority,
+        );
+        expect(() => wrongStore.hasWalrusPublicationClaim({
+          workspaceId: "workspace_claim",
+          evidenceId: created.id,
+          expectedRevision: created.revision,
+          claimId: first.claimId,
+          now: firstNow,
+        })).toThrow("crypto_evidence_operation_claim_integrity_invalid");
+      } finally {
+        wrongAuthority.close();
+      }
+      for (const mutation of ["tenant", "payload", "updated_at"] as const) {
+        stateA.put({
+          kind: claimRow.kind,
+          key: claimRow.key,
+          workspaceId: mutation === "tenant" ? "workspace_transplanted" : claimRow.workspaceId,
+          sessionId: claimRow.sessionId,
+          value: mutation === "payload" ? { legacy: true } : claimRow.value,
+          expiresAtMs: claimRow.expiresAtMs,
+          nowMs: mutation === "updated_at" ? claimRow.updatedAtMs + 1 : claimRow.updatedAtMs,
+        });
+        expect(() => storeB.hasWalrusPublicationClaim({
+          workspaceId: "workspace_claim",
+          evidenceId: created.id,
+          expectedRevision: created.revision,
+          claimId: first.claimId,
+          now: firstNow,
+        })).toThrow("crypto_evidence_operation_claim_integrity_invalid");
+        stateA.put({
+          kind: claimRow.kind,
+          key: claimRow.key,
+          workspaceId: claimRow.workspaceId,
+          sessionId: claimRow.sessionId,
+          value: claimRow.value,
+          expiresAtMs: claimRow.expiresAtMs,
+          nowMs: claimRow.updatedAtMs,
+        });
+      }
       expect(() => storeB.beginWalrusPublication({
         workspaceId: "workspace_claim",
         ownerId: "owner_claim",

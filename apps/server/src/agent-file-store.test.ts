@@ -394,6 +394,51 @@ describe("encrypted Agent Files store", () => {
         expectedRevision: created.revision,
         now: firstNow,
       });
+      const claimRow = stateA.listRecords<unknown>("agent_file_operation_claim", {
+        workspaceId: "ws_alpha",
+        nowMs: firstNow.getTime(),
+      })[0];
+      if (!claimRow) throw new Error("test operation claim missing");
+      const wrongAuthority = testDurableStateAuthority(
+        "wrong-agent-file-operation-authority-key-000000000000000000",
+      );
+      try {
+        const wrongStore = new MatterhornAgentFileStore(stateB, keys, null, wrongAuthority);
+        expect(() => wrongStore.endWalrusPublication({
+          workspaceId: "ws_alpha",
+          fileId: created.id,
+          claimId: first.claimId,
+          now: firstNow,
+        })).toThrow("agent_file_operation_claim_integrity_invalid");
+      } finally {
+        wrongAuthority.close();
+      }
+      for (const mutation of ["tenant", "payload", "updated_at"] as const) {
+        stateA.put({
+          kind: claimRow.kind,
+          key: claimRow.key,
+          workspaceId: mutation === "tenant" ? "ws_transplanted" : claimRow.workspaceId,
+          sessionId: claimRow.sessionId,
+          value: mutation === "payload" ? { legacy: true } : claimRow.value,
+          expiresAtMs: claimRow.expiresAtMs,
+          nowMs: mutation === "updated_at" ? claimRow.updatedAtMs + 1 : claimRow.updatedAtMs,
+        });
+        expect(() => storeB.endWalrusPublication({
+          workspaceId: "ws_alpha",
+          fileId: created.id,
+          claimId: first.claimId,
+          now: firstNow,
+        })).toThrow("agent_file_operation_claim_integrity_invalid");
+        stateA.put({
+          kind: claimRow.kind,
+          key: claimRow.key,
+          workspaceId: claimRow.workspaceId,
+          sessionId: claimRow.sessionId,
+          value: claimRow.value,
+          expiresAtMs: claimRow.expiresAtMs,
+          nowMs: claimRow.updatedAtMs,
+        });
+      }
       expect(() => storeB.beginWalrusPublication({
         workspaceId: "ws_alpha",
         ownerId: "owner_alpha",
