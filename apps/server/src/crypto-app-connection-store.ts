@@ -304,23 +304,23 @@ function connectionAuthorityDigest(connection: MatterhornCryptoAppConnection): s
   // connection id, never a password, token, key, signature, or credential value.
   // It is deliberately included in this non-authenticating content checksum so
   // restored connection authority cannot be changed without detection.
-  // codeql[js/insufficient-password-hash]
-  return createHash("sha256").update(canonicalJson({
-    domain: "matterhorn:crypto-app-connection-authority:v1",
-    version: connection.version,
-    id: connection.id,
-    workspaceId: connection.workspaceId,
-    appId: connection.appId,
-    manifestRevision: connection.manifestRevision,
-    state: connection.state,
-    grantedActionIds: connection.grantedActionIds,
-    grantedScopes: connection.grantedScopes,
-    grantedNetworks: connection.grantedNetworks,
-    credential: connection.credential,
-    createdBy: connection.createdBy,
-    createdAt: connection.createdAt,
-    updatedAt: connection.updatedAt,
-  }), "utf8").digest("hex");
+  return createHash("sha256") // codeql[js/insufficient-password-hash]
+    .update(canonicalJson({
+      domain: "matterhorn:crypto-app-connection-authority:v1",
+      version: connection.version,
+      id: connection.id,
+      workspaceId: connection.workspaceId,
+      appId: connection.appId,
+      manifestRevision: connection.manifestRevision,
+      state: connection.state,
+      grantedActionIds: connection.grantedActionIds,
+      grantedScopes: connection.grantedScopes,
+      grantedNetworks: connection.grantedNetworks,
+      credential: connection.credential,
+      createdBy: connection.createdBy,
+      createdAt: connection.createdAt,
+      updatedAt: connection.updatedAt,
+    }), "utf8").digest("hex");
 }
 
 const CONNECTION_KEYS = [
