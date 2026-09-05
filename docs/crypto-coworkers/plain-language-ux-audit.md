@@ -52,7 +52,9 @@ all three states without weakening the server-owned resource-scope check.
 
 Local rendered acceptance now passes at 320, 375, 768, 1024, and 1440 px with no horizontal overflow, one main landmark, visible primary headings, and no unnamed visible links or buttons. The compact navigation and Coworkers detail remain usable at phone width, and unavailable app connections fail closed with a plain-language next step. The attachment control now carries an explicit accessible name instead of depending on its tooltip fallback.
 
-Authenticated Safari and Firefox checks plus manual keyboard and screen-reader acceptance still need to run against the release candidate. Walrus, Sui, hashes, manifests, and certification detail remain behind secondary disclosures until that hosted pass is complete.
+The full-platform browser audit can now run the same authenticated surface, interaction, responsive, console, runtime, and network checks under Chromium, Firefox, or Playwright WebKit. Select an engine with `--browser chromium`, `--browser firefox`, or `--browser webkit`; each engine writes to a separate evidence directory by default. The report keeps two precisely scoped compatibility notices separate from blocking errors: WebKit ignoring Chromium's optional `interactive-widget` viewport directive, and Firefox blocking Vite's loopback-only development prebundle `eval` under the app's production-style content-security policy. Neither exception applies to hosted assets, provider calls, API failures, route crashes, or other console errors. A WebKit pass is useful regression evidence but is not represented as a native Safari pass.
+
+Authenticated runs against the exact hosted release candidate plus manual keyboard, native Safari, Firefox, and screen-reader acceptance still need to be completed by the release operator. Walrus, Sui, hashes, manifests, and certification detail remain behind secondary disclosures until that hosted pass is complete.
 
 ## Decision for this PR
 
