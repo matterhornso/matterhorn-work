@@ -7,9 +7,11 @@ import {
   MATTERHORN_CRYPTO_ACTION_REGISTRY,
   type MatterhornCryptoToolDefinition,
 } from "@matterhorn-work/types/crypto-action-registry";
+import type { MatterhornAgentToolReceipt } from "@matterhorn-work/types/guarded-agent-runtime";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 
 const SECRET_KEY = /(?:seed|mnemonic|private.?key|secret|password|passphrase|api.?key|bearer|signature|wallet.?export)/i;
+const EXACT_EVIDENCE_HASH = /^[a-f0-9]{64}$/;
 
 export type MatterhornCryptoStructuredState = {
   decisions?: string[];
@@ -44,6 +46,39 @@ export function compileMatterhornCryptoState(state: MatterhornCryptoStructuredSt
     throw new Error("crypto_context_state_contains_forbidden_secret_key");
   }
   return json;
+}
+
+/**
+ * Convert receipt evidence into content-free references for later runs.
+ * Current receipts retain the exact projection and observation identities.
+ * Legacy receipts get one domain-separated digest instead of replaying their
+ * externally sourced provenance strings into model context.
+ */
+export function receiptEvidenceReferences(
+  tools: readonly MatterhornAgentToolReceipt[],
+): string[] {
+  return tools.flatMap((tool) => {
+    const projectionHash = tool.evidence?.projectionHash;
+    const observationHash = tool.evidence?.observationHash;
+    if (projectionHash !== undefined || observationHash !== undefined) {
+      if (projectionHash && observationHash
+        && EXACT_EVIDENCE_HASH.test(projectionHash)
+        && EXACT_EVIDENCE_HASH.test(observationHash)) {
+        return [
+          `projection:${projectionHash}`,
+          `observation:${observationHash}`,
+        ];
+      }
+      return [];
+    }
+    if (!tool.source && !tool.freshness) return [];
+    return [`legacy:${sha256({
+      domain: "matterhorn:legacy-tool-evidence-reference:v1",
+      toolName: tool.name,
+      source: tool.source,
+      freshness: tool.freshness,
+    })}`];
+  });
 }
 
 export function activeDeskToolDefinitions(deskId: MatterhornDeskAgentDeskId): MatterhornCryptoToolDefinition[] {

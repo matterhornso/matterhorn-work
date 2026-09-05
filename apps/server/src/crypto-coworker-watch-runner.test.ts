@@ -62,6 +62,8 @@ function result(balance: string, now: Date): MatterhornCryptoAppResult {
       trust: "untrusted_external",
       sanitization: "typed_projection",
       evidenceReference: `sha256:${"a".repeat(64)}`,
+      projectionHash: "b".repeat(64),
+      observationHash: "c".repeat(64),
     },
     metering: { costMicros: 0, reservationId: "reservation_sui" },
     result: { balanceAtomic: balance, observedAt: completedAt },
@@ -155,6 +157,7 @@ describe("crypto coworker watch runner", () => {
       })[0]).toMatchObject({
         kind: "alert",
         reasonCodes: ["balance_changed"],
+        source: { evidenceReferenceHash: "c".repeat(64) },
         budgetImpact: { readCallsConsumed: 1, modelTokensConsumed: 0, costMicros: 0 },
       });
       expect(setup.coworkers.getWatch("ws_alpha", "account_alpha", setup.profile.id, setup.watch.id)?.schedule)
@@ -243,6 +246,34 @@ describe("crypto coworker watch runner", () => {
       })[0];
       expect(item).toMatchObject({ kind: "notice", reasonCodes: ["watch_execution_failed"] });
       expect(JSON.stringify(item)).not.toContain("private key leaked by upstream");
+    } finally {
+      setup.store.close();
+    }
+  });
+
+  test("fails closed when certified evidence proofs are incomplete or malformed", async () => {
+    const setup = fixture();
+    let balance = "10";
+    const runner = new MatterhornCoworkerWatchRunner({
+      coworkers: setup.coworkers,
+      now: setup.now,
+      execute: async () => {
+        const candidate = result(balance, setup.now());
+        candidate.provenance.observationHash = "malformed";
+        return candidate;
+      },
+    });
+    try {
+      setup.advance("2026-09-01T12:05:00.000Z");
+      expect(await runner.tick()).toEqual({ claimed: 1, completed: 1, alerted: 0, failed: 0 });
+      balance = "11";
+      setup.advance("2026-09-01T12:10:00.000Z");
+      expect(await runner.tick()).toEqual({ claimed: 1, completed: 0, alerted: 0, failed: 1 });
+      expect(setup.coworkers.listInbox({
+        workspaceId: "ws_alpha",
+        ownerId: "account_alpha",
+        coworkerId: setup.profile.id,
+      })[0]).toMatchObject({ kind: "notice", reasonCodes: ["adapter_output_invalid"] });
     } finally {
       setup.store.close();
     }

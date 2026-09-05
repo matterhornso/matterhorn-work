@@ -186,7 +186,10 @@ function evidenceReceiptMetadata(input: {
   network: string;
   result: unknown;
   observation: MatterhornCryptoAppResult["observation"];
-}): NonNullable<MatterhornAgentToolReceipt["evidence"]> {
+}): NonNullable<MatterhornAgentToolReceipt["evidence"]> & {
+  projectionHash: string;
+  observationHash: string;
+} {
   const projectionHash = sha256({
     domain: "matterhorn:crypto-app-projection:v1",
     appId: input.appId,
@@ -458,21 +461,22 @@ export class MatterhornCryptoAppAdapterRouter {
         ageMs,
         freshnessMaxAgeMs: action.freshnessMaxAgeMs,
       };
+      const evidence = evidenceReceiptMetadata({
+        delivery: "certified_cache",
+        appId: connection.appId,
+        manifestRevision: connection.manifestRevision,
+        actionId: action.id,
+        network: request.network,
+        result: cached.value.result,
+        observation,
+      });
       await this.#reconcile(
         reservationId,
         operationalReservation,
         "success",
         0,
         durationMs,
-        evidenceReceiptMetadata({
-          delivery: "certified_cache",
-          appId: connection.appId,
-          manifestRevision: connection.manifestRevision,
-          actionId: action.id,
-          network: request.network,
-          result: cached.value.result,
-          observation,
-        }),
+        evidence,
       );
       return {
         version: MATTERHORN_CRYPTO_APP_RESULT_VERSION,
@@ -490,6 +494,8 @@ export class MatterhornCryptoAppAdapterRouter {
         observation,
         provenance: {
           ...structuredClone(cached.value.provenance),
+          projectionHash: evidence.projectionHash,
+          observationHash: evidence.observationHash,
           delivery: "certified_cache",
         },
         metering: { costMicros: 0, reservationId },
@@ -614,21 +620,22 @@ export class MatterhornCryptoAppAdapterRouter {
       ageMs,
       freshnessMaxAgeMs: action.freshnessMaxAgeMs,
     };
+    const evidence = evidenceReceiptMetadata({
+      delivery: "live",
+      appId: connection.appId,
+      manifestRevision: connection.manifestRevision,
+      actionId: action.id,
+      network: request.network,
+      result: quarantined,
+      observation,
+    });
     await this.#reconcile(
       reservationId,
       operationalReservation,
       "success",
       execution.costMicros,
       durationMs,
-      evidenceReceiptMetadata({
-        delivery: "live",
-        appId: connection.appId,
-        manifestRevision: connection.manifestRevision,
-        actionId: action.id,
-        network: request.network,
-        result: quarantined,
-        observation,
-      }),
+      evidence,
     );
     if (!this.#recordSuccess(request.workspaceId, circuitKey)) {
       throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
@@ -651,6 +658,8 @@ export class MatterhornCryptoAppAdapterRouter {
         trust: "untrusted_external",
         sanitization: untrustedContentChanged(projected.value, quarantined) ? "quarantined" : "typed_projection",
         evidenceReference: `sha256:${sha256(execution.data)}`,
+        projectionHash: evidence.projectionHash,
+        observationHash: evidence.observationHash,
         delivery: "live",
       },
       metering: { costMicros: execution.costMicros, reservationId },

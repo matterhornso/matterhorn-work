@@ -276,6 +276,10 @@ export type MatterhornCryptoAppResult = {
     trust: "untrusted_external";
     sanitization: "typed_projection" | "quarantined";
     evidenceReference: string;
+    /** Domain-separated identity of the exact typed, quarantined result. */
+    projectionHash?: string;
+    /** Domain-separated identity of the result's certified observation. */
+    observationHash?: string;
     /**
      * Content-free delivery provenance. Legacy v1 results may omit this
      * additive field; current certified executions always set it.

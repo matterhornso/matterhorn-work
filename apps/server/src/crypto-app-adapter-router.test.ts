@@ -247,6 +247,8 @@ describe("certified crypto app adapter router", () => {
       trust: "untrusted_external",
       sanitization: "quarantined",
       evidenceReference: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+      projectionHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      observationHash: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
     expect(result.result).toEqual({
       market: "SUI",
@@ -305,6 +307,10 @@ describe("certified crypto app adapter router", () => {
     expect(cachedReconciliation?.evidence.observationHash).toBe(liveReconciliation?.evidence.observationHash);
     expect(first.provenance.delivery).toBe("live");
     expect(second.provenance.delivery).toBe("certified_cache");
+    expect(first.provenance.projectionHash).toBe(liveReconciliation?.evidence.projectionHash);
+    expect(first.provenance.observationHash).toBe(liveReconciliation?.evidence.observationHash);
+    expect(second.provenance.projectionHash).toBe(first.provenance.projectionHash);
+    expect(second.provenance.observationHash).toBe(first.provenance.observationHash);
     expect(second).toMatchObject({
       metering: { reservationId: "reservation_2", costMicros: 0 },
       observation: first.observation,

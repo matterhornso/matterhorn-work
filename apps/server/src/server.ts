@@ -369,6 +369,7 @@ import { buildMatterhornGeneralCryptoToolProfile } from "./agent-tool-routing.js
 import {
   activeDeskToolDefinitions,
   compileMatterhornCryptoState,
+  receiptEvidenceReferences,
 } from "./crypto-context-compiler.js";
 import {
   createMatterhornCryptoAppRuntime,
@@ -21569,10 +21570,7 @@ async function resolveCryptoRunContext(input: {
       .filter((action) => !action.publicReceipt)
       .map((action) => action.intentHash))
     : [];
-  const evidenceReferences = recent.flatMap((receipt) => receipt.tools.flatMap((tool) => [
-    tool.source ? `${tool.name}:source:${tool.source}` : "",
-    tool.freshness ? `${tool.name}:freshness:${tool.freshness}` : "",
-  ])).filter(Boolean);
+  const evidenceReferences = recent.flatMap((receipt) => receiptEvidenceReferences(receipt.tools));
   const state = compileMatterhornCryptoState({ pendingActionIds, evidenceReferences });
   const modelText = [
     "## Matterhorn Crypto Context",
