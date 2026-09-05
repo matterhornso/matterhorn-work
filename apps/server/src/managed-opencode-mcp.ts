@@ -415,6 +415,7 @@ const MODEL_SAFE_MCP_ERROR_CODES = new Set([
   "coworker_certified_tool_unknown",
   "coworker_transaction_authority_changed",
   "coworker_transaction_workspace_mismatch",
+  "compliance_unavailable",
   "matterhorn_read_tool_cannot_prepare_action",
   "polymarket_token_id_invalid",
   "reviewed_action_receipt_unavailable",
@@ -436,6 +437,23 @@ function modelSafeMcpErrorMessage(error: unknown): string {
   if (MODEL_SAFE_MCP_ERROR_CODES.has(explicitCode)) return explicitCode;
   const exactMessage = error instanceof Error ? error.message.trim() : "";
   if (MODEL_SAFE_MCP_ERROR_CODES.has(exactMessage)) return exactMessage;
+  return "matterhorn_tool_failed";
+}
+
+function modelSafeMcpHttpFailureCode(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "matterhorn_tool_failed";
+  }
+  const record = value as JsonObject;
+  const nestedError = record.error && typeof record.error === "object" && !Array.isArray(record.error)
+    ? record.error as JsonObject
+    : null;
+  const candidates = [record.code, typeof record.error === "string" ? record.error : null, nestedError?.code];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && MODEL_SAFE_MCP_ERROR_CODES.has(candidate.trim())) {
+      return candidate.trim();
+    }
+  }
   return "matterhorn_tool_failed";
 }
 
@@ -843,9 +861,9 @@ async function callBackendTool(input: {
     outcome = response.ok ? "success" : "error";
     const completedAtMs = Date.now();
     const parsedResult = parseToolPayload(text);
-    source = findEvidenceString(parsedResult, ["source", "provider", "venue"]);
-    freshness = findEvidenceString(parsedResult, ["freshness", "freshnessStatus", "dataStatus", "observedAt", "asOf"]);
     if (response.ok) {
+      source = findEvidenceString(parsedResult, ["source", "provider", "venue"]);
+      freshness = findEvidenceString(parsedResult, ["freshness", "freshnessStatus", "dataStatus", "observedAt", "asOf"]);
       reviewedAction = buildGuardedReviewedAction({
         toolName: input.tool.name,
         args: input.args,
@@ -854,12 +872,14 @@ async function callBackendTool(input: {
         completedAtMs,
       });
     }
-    const resultText = reviewedAction
-      ? JSON.stringify(attachReviewedActionToToolResult(parsedResult, reviewedAction))
-      : text;
+    const resultText = !response.ok
+      ? JSON.stringify({ code: modelSafeMcpHttpFailureCode(parsedResult) })
+      : reviewedAction
+        ? JSON.stringify(attachReviewedActionToToolResult(parsedResult, reviewedAction))
+        : text;
     return toolCallResult({
       tool: input.tool,
-      text: resultText || (!response.ok ? `Matterhorn backend returned HTTP ${response.status}` : "{}"),
+      text: resultText || "{}",
       ok: response.ok,
       startedAtMs,
       completedAtMs,
