@@ -599,6 +599,7 @@ function createScopedFirstPartyCryptoAppCertificationDriver(
         const directory = makeTempDirectory();
         const path = join(directory, "operational.db");
         const policyOptions: MatterhornCryptoAppOperationalPolicyOptions = {
+          integritySecret: "certification-operational-integrity-secret-at-least-32-bytes",
           dailyWorkspaceLimitMicros: 100,
           maxCallCostMicros: 100,
           circuitFailureThreshold: 1,

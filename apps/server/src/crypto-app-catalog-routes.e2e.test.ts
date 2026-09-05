@@ -27,6 +27,7 @@ const ENV_KEYS = [
   "MATTERHORN_CRYPTO_APP_REGISTRY_DB",
   "MATTERHORN_CRYPTO_APP_CONNECTION_DB",
   "MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET",
+  "MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_MANAGED_CREDENTIALS_JSON",
   "MATTERHORN_CRYPTO_APP_SECRET_HYPERLIQUID_TEST",
   "MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET",
@@ -129,6 +130,8 @@ function configureCatalog(root: string) {
   process.env.MATTERHORN_CRYPTO_APP_CONNECTION_DB = join(root, "connections.db");
   process.env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET =
     "catalog-route-connection-integrity-secret-at-least-32-bytes";
+  process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET =
+    "catalog-route-operational-integrity-secret-at-least-32-bytes";
   process.env.MATTERHORN_COWORKER_MODE = "internal";
   process.env.MATTERHORN_COWORKER_POLICY_VERSION = "coworker-policy-1";
   process.env.MATTERHORN_COWORKER_DB = join(root, "coworkers.db");

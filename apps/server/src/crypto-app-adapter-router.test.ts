@@ -32,6 +32,7 @@ import { MatterhornCryptoAppRegistry, canonicalCryptoAppManifestPayload } from "
 
 const keys = generateKeyPairSync("ed25519");
 const CONNECTION_INTEGRITY_SECRET = "test-connection-integrity-secret-at-least-32-bytes";
+const OPERATIONAL_INTEGRITY_SECRET = "test-operational-integrity-secret-at-least-32-bytes";
 
 function manifest(
   authentication: MatterhornCryptoAppManifest["authentication"] = { type: "none", scopes: [] },
@@ -626,6 +627,7 @@ describe("certified crypto app adapter router", () => {
       mkdtempSync(join(tmpdir(), "matterhorn-adapter-policy-")),
       "operational.db",
     ), {
+      integritySecret: OPERATIONAL_INTEGRITY_SECRET,
       dailyWorkspaceLimitMicros: 600,
       maxCallCostMicros: 600,
       now: () => new Date("2026-09-01T12:00:00.000Z"),
@@ -652,6 +654,7 @@ describe("certified crypto app adapter router", () => {
       mkdtempSync(join(tmpdir(), "matterhorn-adapter-policy-")),
       "operational.db",
     ), {
+      integritySecret: OPERATIONAL_INTEGRITY_SECRET,
       dailyWorkspaceLimitMicros: 600,
       maxCallCostMicros: 600,
       now: () => new Date("2026-09-01T12:00:00.000Z"),
@@ -678,6 +681,7 @@ describe("certified crypto app adapter router", () => {
       mkdtempSync(join(tmpdir(), "matterhorn-adapter-policy-")),
       "operational.db",
     ), {
+      integritySecret: OPERATIONAL_INTEGRITY_SECRET,
       dailyWorkspaceLimitMicros: 10_000,
       maxCallCostMicros: 500,
       now: () => new Date("2026-09-01T12:00:00.000Z"),
@@ -696,6 +700,7 @@ describe("certified crypto app adapter router", () => {
       mkdtempSync(join(tmpdir(), "matterhorn-adapter-policy-")),
       "operational.db",
     ), {
+      integritySecret: OPERATIONAL_INTEGRITY_SECRET,
       now: () => new Date("2026-09-01T12:00:00.000Z"),
       id: () => "operational_authorization_denied",
     });
@@ -717,6 +722,7 @@ describe("certified crypto app adapter router", () => {
     const databasePath = join(mkdtempSync(join(tmpdir(), "matterhorn-adapter-policy-")), "operational.db");
     let operationalSequence = 0;
     const policyOptions = {
+      integritySecret: OPERATIONAL_INTEGRITY_SECRET,
       circuitFailureThreshold: 2,
       now: () => new Date("2026-09-01T12:00:00.000Z"),
       id: () => `operational_${++operationalSequence}`,
