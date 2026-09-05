@@ -66,6 +66,7 @@ export class MatterhornCryptoAppRuntimeConfigurationError extends Error {
     | "crypto_app_publisher_keys_invalid"
     | "crypto_app_publisher_key_duplicate"
     | "crypto_app_private_key_forbidden"
+    | "crypto_app_connection_integrity_secret_required"
     | "crypto_app_oauth_encryption_key_required"
     | "crypto_app_wallet_proof_secret_required") {
     super(code);
@@ -169,11 +170,15 @@ export function createMatterhornCryptoAppRuntime(
     throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_policy_version_required");
   }
   const walletProofSecret = env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET;
+  const connectionIntegritySecret = env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET;
   const oauthConfigured = Boolean(env.MATTERHORN_CRYPTO_APP_OAUTH_CLIENTS_JSON?.trim());
   const oauthEncryptionKey = env.MATTERHORN_CRYPTO_APP_OAUTH_ENCRYPTION_KEY;
   if (feature.cryptoAppGatewayMode === "enforce"
     && (!walletProofSecret || Buffer.byteLength(walletProofSecret, "utf8") < 32)) {
     throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_wallet_proof_secret_required");
+  }
+  if (!connectionIntegritySecret || Buffer.byteLength(connectionIntegritySecret, "utf8") < 32) {
+    throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_connection_integrity_secret_required");
   }
   if (feature.cryptoAppGatewayMode === "enforce"
     && oauthConfigured
@@ -193,7 +198,10 @@ export function createMatterhornCryptoAppRuntime(
       policyVersion,
       store: registryStore,
     });
-    const activeConnectionStore = new MatterhornCryptoAppConnectionStore(connectionPath || undefined);
+    const activeConnectionStore = new MatterhornCryptoAppConnectionStore(
+      connectionPath || undefined,
+      connectionIntegritySecret,
+    );
     connectionStore = activeConnectionStore;
     const connections = new MatterhornCryptoAppConnections({ registry, store: activeConnectionStore });
     const managedCredentials = new MatterhornManagedCryptoAppCredentials(env);

@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -10,13 +11,17 @@ import {
   type MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
 
-import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
+import {
+  MatterhornCryptoAppConnectionStore,
+  MatterhornCryptoAppConnectionStoreError,
+} from "./crypto-app-connection-store.js";
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
 import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certification-test-support.js";
 import { MatterhornCryptoAppRegistry, canonicalCryptoAppManifestPayload } from "./crypto-app-registry.js";
 
 const keys = generateKeyPairSync("ed25519");
+const CONNECTION_INTEGRITY_SECRET = "test-connection-integrity-secret-at-least-32-bytes";
 
 function signedManifest(): MatterhornCryptoAppManifest {
   const value: MatterhornCryptoAppManifest = {
@@ -103,7 +108,7 @@ function fixture(path?: string) {
   const store = new MatterhornCryptoAppConnectionStore(path ?? join(
     mkdtempSync(join(tmpdir(), "matterhorn-crypto-connections-")),
     "connections.db",
-  ));
+  ), CONNECTION_INTEGRITY_SECRET);
   let sequence = 0;
   const service = new MatterhornCryptoAppConnections({
     registry,
@@ -188,7 +193,7 @@ describe("workspace-scoped crypto app connections", () => {
     expect(first.service.resolveActive("ws_a", connection.id)).toBeNull();
     first.store.close();
 
-    const secondStore = new MatterhornCryptoAppConnectionStore(path);
+    const secondStore = new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET);
     const second = new MatterhornCryptoAppConnections({
       registry: first.registry,
       store: secondStore,
@@ -199,6 +204,265 @@ describe("workspace-scoped crypto app connections", () => {
     expect(() => second.transition("ws_a", connection.id, "active"))
       .toThrowError(expect.objectContaining({ code: "connection_transition_invalid" }));
     secondStore.close();
+  });
+
+  test("migrates and seals a valid legacy connection without widening it", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "matterhorn-crypto-connection-migration-")), "connections.db");
+    const legacy = new Database(path);
+    legacy.exec(`
+      CREATE TABLE crypto_app_connections (
+        workspace_id TEXT NOT NULL,
+        connection_id TEXT NOT NULL,
+        app_id TEXT NOT NULL,
+        manifest_revision TEXT NOT NULL,
+        state TEXT NOT NULL,
+        action_ids_json TEXT NOT NULL,
+        scopes_json TEXT NOT NULL,
+        networks_json TEXT NOT NULL,
+        credential_json TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, connection_id)
+      );
+    `);
+    legacy.query(`
+      INSERT INTO crypto_app_connections VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "ws_a",
+      "cxc_legacy",
+      "matterhorn.sui",
+      "1.0.0",
+      "active",
+      JSON.stringify(["read_balance"]),
+      JSON.stringify(["sui:read"]),
+      JSON.stringify(["sui:testnet"]),
+      JSON.stringify({ type: "wallet_connection", walletConnectionId: "wallet_connection_a" }),
+      "account_a",
+      "2026-09-01T12:00:00.000Z",
+      "2026-09-01T12:00:00.000Z",
+    );
+    legacy.close();
+
+    const migrated = new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET);
+    try {
+      expect(migrated.get("ws_a", "cxc_legacy")).toMatchObject({
+        id: "cxc_legacy",
+        grantedActionIds: ["read_balance"],
+      });
+    } finally {
+      migrated.close();
+    }
+    const inspected = new Database(path);
+    try {
+      const row = inspected.query(`
+        SELECT authority_seal FROM crypto_app_connections WHERE connection_id = ?
+      `).get("cxc_legacy") as { authority_seal: string };
+      expect(row.authority_seal).toMatch(/^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}$/);
+    } finally {
+      inspected.close();
+    }
+  });
+
+  test("never treats a missing seal in an already migrated store as legacy authority", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "matterhorn-crypto-connection-null-seal-")), "connections.db");
+    const database = new Database(path);
+    database.exec(`
+      CREATE TABLE crypto_app_connections (
+        workspace_id TEXT NOT NULL,
+        connection_id TEXT NOT NULL,
+        app_id TEXT NOT NULL,
+        manifest_revision TEXT NOT NULL,
+        state TEXT NOT NULL,
+        action_ids_json TEXT NOT NULL,
+        scopes_json TEXT NOT NULL,
+        networks_json TEXT NOT NULL,
+        credential_json TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        authority_seal TEXT,
+        PRIMARY KEY (workspace_id, connection_id)
+      );
+    `);
+    database.query(`
+      INSERT INTO crypto_app_connections VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "ws_a",
+      "cxc_missing_seal",
+      "matterhorn.sui",
+      "1.0.0",
+      "active",
+      JSON.stringify(["read_balance"]),
+      JSON.stringify(["sui:read"]),
+      JSON.stringify(["sui:testnet"]),
+      JSON.stringify({ type: "wallet_connection", walletConnectionId: "wallet_connection_a" }),
+      "account_a",
+      "2026-09-01T12:00:00.000Z",
+      "2026-09-01T12:00:00.000Z",
+      null,
+    );
+    database.close();
+
+    expect(() => new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET))
+      .toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+  });
+
+  test("rejects a restored connection when the authority seal key changes", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "matterhorn-crypto-connection-wrong-key-")), "connections.db");
+    const first = fixture(path);
+    first.service.create(createInput());
+    first.store.close();
+
+    expect(() => new MatterhornCryptoAppConnectionStore(
+      path,
+      "different-connection-integrity-secret-at-least-32-bytes",
+    )).toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+  });
+
+  test("rejects restored connection authority mutation before it can resolve", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "matterhorn-crypto-connection-integrity-")), "connections.db");
+    const first = fixture(path);
+    const connection = first.service.create({
+      ...createInput(),
+      grantedActionIds: ["read_balance"],
+    });
+    first.store.close();
+
+    const database = new Database(path);
+    const original = database.query(`
+      SELECT action_ids_json, scopes_json, networks_json, credential_json, updated_at
+      FROM crypto_app_connections WHERE workspace_id = ? AND connection_id = ?
+    `).get("ws_a", connection.id) as Record<string, string>;
+    database.close();
+
+    const mutations = [
+      // prepare_transfer is valid for this manifest, but the user did not grant it.
+      ["action_ids_json", JSON.stringify(["read_balance", "prepare_transfer"])],
+      ["scopes_json", JSON.stringify(["sui:read", "sui:prepare", "sui:admin"])],
+      ["networks_json", JSON.stringify(["sui:testnet", "sui:mainnet"])],
+      ["credential_json", JSON.stringify({
+        type: "wallet_connection",
+        walletConnectionId: "wallet_connection_a",
+        submitAuthority: true,
+      })],
+      ["updated_at", "2026-08-31T11:59:59.000Z"],
+    ] as const;
+
+    for (const [column, value] of mutations) {
+      const editor = new Database(path);
+      editor.query(`UPDATE crypto_app_connections SET ${column} = ? WHERE workspace_id = ? AND connection_id = ?`)
+        .run(value, "ws_a", connection.id);
+      editor.close();
+
+      expect(() => new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET))
+        .toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+
+      const restore = new Database(path);
+      restore.query(`UPDATE crypto_app_connections SET ${column} = ? WHERE workspace_id = ? AND connection_id = ?`)
+        .run(original[column]!, "ws_a", connection.id);
+      restore.close();
+    }
+
+    const reopenedStore = new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET);
+    try {
+      const reopened = new MatterhornCryptoAppConnections({ registry: first.registry, store: reopenedStore });
+      expect(reopened.resolveActive("ws_a", connection.id)?.id).toBe(connection.id);
+    } finally {
+      reopenedStore.close();
+    }
+  });
+
+  test("rejects malformed restored setup and token records", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "matterhorn-crypto-setup-integrity-")), "connections.db");
+    const { store } = fixture(path);
+    store.createWalletChallenge({
+      workspaceId: "ws_a",
+      challengeId: "cwc_integrity",
+      accountId: "account_a",
+      appId: "matterhorn.sui",
+      manifestRevision: "1.0.0",
+      walletFamily: "sui",
+      addressDigest: "a".repeat(64),
+      actionIds: ["read_balance"],
+      scopes: ["sui:read"],
+      networks: ["sui:testnet"],
+      issuedAt: "2026-09-01T11:00:00.000Z",
+      expiresAt: "2026-09-01T11:05:00.000Z",
+      state: "pending",
+      consumedAt: null,
+    });
+    store.createOAuthFlow({
+      workspaceId: "ws_a",
+      flowId: "flow_integrity",
+      accountId: "account_a",
+      appId: "matterhorn.sui",
+      manifestRevision: "1.0.0",
+      bindingId: "SUI_BINDING",
+      stateDigest: "b".repeat(64),
+      verifierEnvelope: "encrypted-verifier",
+      actionIds: ["read_balance"],
+      scopes: ["sui:read"],
+      networks: ["sui:testnet"],
+      issuer: "https://issuer.example/",
+      resource: "https://api.example/",
+      audience: "matterhorn",
+      redirectUri: "https://matterhorn.example/oauth/crypto-apps/callback",
+      issuedAt: "2026-09-01T11:00:00.000Z",
+      expiresAt: "2026-09-01T11:10:00.000Z",
+      state: "pending",
+      errorCode: null,
+      connectionId: null,
+      consumedAt: null,
+    });
+    store.close();
+
+    const database = new Database(path);
+    database.query("UPDATE crypto_app_wallet_challenges SET action_ids_json = ? WHERE challenge_id = ?")
+      .run(JSON.stringify(["read_balance", { submit: true }]), "cwc_integrity");
+    database.query("UPDATE crypto_app_oauth_flows SET issuer = ? WHERE flow_id = ?")
+      .run("https://127.0.0.1/", "flow_integrity");
+    database.query(`
+      INSERT INTO crypto_app_oauth_tokens(
+        workspace_id, oauth_token_id, connection_id, account_id, app_id,
+        manifest_revision, binding_id, resource, audience, token_envelope,
+        scopes_json, expires_at, refreshable, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "ws_a",
+      "token_integrity",
+      "connection_integrity",
+      "account_a",
+      "matterhorn.sui",
+      "1.0.0",
+      "SUI_BINDING",
+      "https://api.example/",
+      "matterhorn",
+      "encrypted-token",
+      JSON.stringify(["sui:read"]),
+      "2026-09-01T12:00:00.000Z",
+      2,
+      "2026-09-01T11:00:00.000Z",
+      "2026-09-01T11:00:00.000Z",
+    );
+    database.close();
+
+    const reopened = new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET);
+    try {
+      expect(() => reopened.getWalletChallenge("ws_a", "account_a", "cwc_integrity"))
+        .toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+      expect(() => reopened.getOAuthFlow("ws_a", "account_a", "flow_integrity"))
+        .toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+      expect(() => reopened.resolveOAuthToken({
+        workspaceId: "ws_a",
+        connectionId: "connection_integrity",
+        oauthTokenId: "token_integrity",
+        appId: "matterhorn.sui",
+        manifestRevision: "1.0.0",
+      })).toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+    } finally {
+      reopened.close();
+    }
   });
 
   test("registry revocation immediately disables active connections", () => {

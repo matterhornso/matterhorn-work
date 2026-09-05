@@ -1,14 +1,24 @@
+import {
+  createCipheriv,
+  createDecipheriv,
+  hkdfSync,
+  randomBytes,
+} from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
+  MATTERHORN_CRYPTO_APP_CONNECTION_VERSION,
   type MatterhornCryptoAppConnection,
   type MatterhornCryptoAppConnectionCredential,
   type MatterhornCryptoAppConnectionState,
   type MatterhornCryptoAppWalletFamily,
 } from "@matterhorn-work/types/crypto-coworkers";
+
+import { canonicalJson } from "./guarded-runtime-crypto.js";
+import { isPublicHttpsCryptoAdapterEndpoint } from "./crypto-app-egress.js";
 
 type SqliteRunResult = { changes?: number };
 type SqliteStatement = {
@@ -37,6 +47,7 @@ type ConnectionRow = {
   created_by: string;
   created_at: string;
   updated_at: string;
+  authority_seal: string | null;
 };
 
 type WalletChallengeRow = {
@@ -188,10 +199,103 @@ function statement(db: SqliteDatabase, sql: string): SqliteStatement {
 }
 
 function parseJson<T>(value: string): T {
+  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > 32 * 1_024) {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
   try {
     return JSON.parse(value) as T;
   } catch {
     throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length
+    && actual.every((key, index) => key === expected[index]);
+}
+
+function safeIdentifier(value: unknown, maxLength = 256): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= maxLength
+    && value === value.trim()
+    && /^[A-Za-z0-9][A-Za-z0-9._:@+/-]*$/.test(value);
+}
+
+function safeOpaque(value: unknown, maxLength = 32 * 1_024, allowEmpty = false): value is string {
+  return typeof value === "string"
+    && (allowEmpty || value.length > 0)
+    && Buffer.byteLength(value, "utf8") <= maxLength
+    && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function exactIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || value.length !== 24) return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+function digest(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
+function stringList(value: string, options: { allowEmpty?: boolean } = {}): string[] {
+  const parsed = parseJson<unknown>(value);
+  if (!Array.isArray(parsed)
+    || parsed.length > 64
+    || (!options.allowEmpty && parsed.length === 0)
+    || parsed.some((entry) => !safeIdentifier(entry, 160))
+    || new Set(parsed).size !== parsed.length) {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
+  return parsed as string[];
+}
+
+function storedCredential(value: string): MatterhornCryptoAppConnectionCredential {
+  const parsed = parseJson<unknown>(value);
+  if (!isRecord(parsed) || typeof parsed.type !== "string") {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
+  if (parsed.type === "none" && exactKeys(parsed, ["type"])) return { type: "none" };
+  if ((parsed.type === "oauth2" || parsed.type === "api_key_vault")
+    && exactKeys(parsed, ["type", "secretReference"])
+    && typeof parsed.secretReference === "string"
+    && /^vault:\/\/[A-Za-z0-9][A-Za-z0-9._/-]{2,255}$/.test(parsed.secretReference)
+    && parsed.secretReference.replace(/^vault:\/\//, "").split("/")
+      .every((segment) => segment.length > 0 && segment !== "." && segment !== "..")) {
+    return { type: parsed.type, secretReference: parsed.secretReference };
+  }
+  if (parsed.type === "wallet_connection"
+    && exactKeys(parsed, ["type", "walletConnectionId"])
+    && typeof parsed.walletConnectionId === "string"
+    && /^[A-Za-z0-9][A-Za-z0-9._-]{2,255}$/.test(parsed.walletConnectionId)) {
+    return { type: "wallet_connection", walletConnectionId: parsed.walletConnectionId };
+  }
+  throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+}
+
+function publicHttpsUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 2_048 || value !== value.trim()) return false;
+  try {
+    const url = new URL(value);
+    const canonicalRootWithoutSlash = url.pathname === "/" && !url.search && !url.hash
+      ? url.origin
+      : null;
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && !url.search
+      && !url.hash
+      && isPublicHttpsCryptoAdapterEndpoint(value)
+      && (url.href === value || canonicalRootWithoutSlash === value);
+  } catch {
+    return false;
   }
 }
 
@@ -200,7 +304,141 @@ function connectionState(value: string): MatterhornCryptoAppConnectionState {
   throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
 }
 
-function toConnection(row: ConnectionRow): MatterhornCryptoAppConnection {
+const CONNECTION_AUTHORITY_KEY_SALT = "matterhorn:crypto-app-connection-authority-key:v1";
+const CONNECTION_AUTHORITY_AAD_DOMAIN = "matterhorn:crypto-app-connection-authority:v1";
+const CONNECTION_AUTHORITY_SECRET_MINIMUM_BYTES = 32;
+const CONNECTION_AUTHORITY_SEAL_PATTERN = /^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}$/;
+
+function connectionAuthorityKey(secret: string): Buffer {
+  const input = Buffer.from(secret, "utf8");
+  if (input.byteLength < CONNECTION_AUTHORITY_SECRET_MINIMUM_BYTES) {
+    input.fill(0);
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_integrity_secret_invalid");
+  }
+  const key = Buffer.from(hkdfSync(
+    "sha256",
+    input,
+    CONNECTION_AUTHORITY_KEY_SALT,
+    CONNECTION_AUTHORITY_AAD_DOMAIN,
+    32,
+  ));
+  input.fill(0);
+  return key;
+}
+
+function connectionAuthorityAad(connection: MatterhornCryptoAppConnection): Buffer {
+  return Buffer.from(canonicalJson({
+    domain: CONNECTION_AUTHORITY_AAD_DOMAIN,
+    version: connection.version,
+    id: connection.id,
+    workspaceId: connection.workspaceId,
+    appId: connection.appId,
+    manifestRevision: connection.manifestRevision,
+    state: connection.state,
+    grantedActionIds: connection.grantedActionIds,
+    grantedScopes: connection.grantedScopes,
+    grantedNetworks: connection.grantedNetworks,
+    credential: connection.credential,
+    createdBy: connection.createdBy,
+    createdAt: connection.createdAt,
+    updatedAt: connection.updatedAt,
+  }), "utf8");
+}
+
+function sealConnectionAuthority(
+  connection: MatterhornCryptoAppConnection,
+  key: Buffer,
+): string {
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, nonce);
+  const aad = connectionAuthorityAad(connection);
+  cipher.setAAD(aad);
+  cipher.final();
+  const tag = cipher.getAuthTag();
+  const seal = `${nonce.toString("base64url")}.${tag.toString("base64url")}`;
+  aad.fill(0);
+  nonce.fill(0);
+  tag.fill(0);
+  return seal;
+}
+
+function connectionAuthoritySealValid(
+  connection: MatterhornCryptoAppConnection,
+  seal: string | null,
+  key: Buffer,
+): boolean {
+  if (!seal || !CONNECTION_AUTHORITY_SEAL_PATTERN.test(seal)) return false;
+  const [encodedNonce, encodedTag] = seal.split(".");
+  const nonce = Buffer.from(encodedNonce!, "base64url");
+  const tag = Buffer.from(encodedTag!, "base64url");
+  const aad = connectionAuthorityAad(connection);
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", key, nonce);
+    decipher.setAAD(aad);
+    decipher.setAuthTag(tag);
+    decipher.final();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    aad.fill(0);
+    nonce.fill(0);
+    tag.fill(0);
+  }
+}
+
+const CONNECTION_KEYS = [
+  "version",
+  "id",
+  "workspaceId",
+  "appId",
+  "manifestRevision",
+  "state",
+  "grantedActionIds",
+  "grantedScopes",
+  "grantedNetworks",
+  "credential",
+  "createdBy",
+  "createdAt",
+  "updatedAt",
+] as const;
+
+function connectionRow(connection: MatterhornCryptoAppConnection, authorityKey: Buffer): ConnectionRow {
+  if (!isRecord(connection)
+    || !exactKeys(connection, CONNECTION_KEYS)
+    || connection.version !== MATTERHORN_CRYPTO_APP_CONNECTION_VERSION) {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
+  const row: ConnectionRow = {
+    connection_id: connection.id,
+    workspace_id: connection.workspaceId,
+    app_id: connection.appId,
+    manifest_revision: connection.manifestRevision,
+    state: connection.state,
+    action_ids_json: JSON.stringify(connection.grantedActionIds),
+    scopes_json: JSON.stringify(connection.grantedScopes),
+    networks_json: JSON.stringify(connection.grantedNetworks),
+    credential_json: JSON.stringify(connection.credential),
+    created_by: connection.createdBy,
+    created_at: connection.createdAt,
+    updated_at: connection.updatedAt,
+    authority_seal: sealConnectionAuthority(connection, authorityKey),
+  };
+  toConnection(row, authorityKey);
+  return row;
+}
+
+function connectionValue(row: ConnectionRow): MatterhornCryptoAppConnection {
+  if (!safeIdentifier(row.connection_id)
+    || !safeIdentifier(row.workspace_id)
+    || !safeIdentifier(row.app_id, 128)
+    || !safeIdentifier(row.manifest_revision, 160)
+    || !safeIdentifier(row.created_by)
+    || !exactIsoTimestamp(row.created_at)
+    || !exactIsoTimestamp(row.updated_at)
+    || row.updated_at < row.created_at) {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
   return {
     version: "matterhorn.crypto-app-connection.v1",
     id: row.connection_id,
@@ -208,14 +446,22 @@ function toConnection(row: ConnectionRow): MatterhornCryptoAppConnection {
     appId: row.app_id,
     manifestRevision: row.manifest_revision,
     state: connectionState(row.state),
-    grantedActionIds: parseJson<string[]>(row.action_ids_json),
-    grantedScopes: parseJson<string[]>(row.scopes_json),
-    grantedNetworks: parseJson<string[]>(row.networks_json),
-    credential: parseJson<MatterhornCryptoAppConnectionCredential>(row.credential_json),
+    grantedActionIds: stringList(row.action_ids_json),
+    grantedScopes: stringList(row.scopes_json, { allowEmpty: true }),
+    grantedNetworks: stringList(row.networks_json),
+    credential: storedCredential(row.credential_json),
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function toConnection(row: ConnectionRow, authorityKey: Buffer): MatterhornCryptoAppConnection {
+  const connection = connectionValue(row);
+  if (!connectionAuthoritySealValid(connection, row.authority_seal, authorityKey)) {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
+  return connection;
 }
 
 function walletFamily(value: string): MatterhornCryptoAppWalletFamily {
@@ -227,6 +473,21 @@ function toWalletChallenge(row: WalletChallengeRow): MatterhornCryptoAppWalletCh
   if (row.state !== "pending" && row.state !== "consumed") {
     throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
   }
+  if (!safeIdentifier(row.workspace_id)
+    || !safeIdentifier(row.challenge_id)
+    || !safeIdentifier(row.account_id)
+    || !safeIdentifier(row.app_id, 128)
+    || !safeIdentifier(row.manifest_revision, 160)
+    || !digest(row.address_digest)
+    || !exactIsoTimestamp(row.issued_at)
+    || !exactIsoTimestamp(row.expires_at)
+    || row.expires_at <= row.issued_at
+    || (row.state === "pending" && row.consumed_at !== null)
+    || (row.state === "consumed" && (!exactIsoTimestamp(row.consumed_at)
+      || row.consumed_at < row.issued_at
+      || row.consumed_at >= row.expires_at))) {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
   return {
     workspaceId: row.workspace_id,
     challengeId: row.challenge_id,
@@ -235,9 +496,9 @@ function toWalletChallenge(row: WalletChallengeRow): MatterhornCryptoAppWalletCh
     manifestRevision: row.manifest_revision,
     walletFamily: walletFamily(row.wallet_family),
     addressDigest: row.address_digest,
-    actionIds: parseJson<string[]>(row.action_ids_json),
-    scopes: parseJson<string[]>(row.scopes_json),
-    networks: parseJson<string[]>(row.networks_json),
+    actionIds: stringList(row.action_ids_json),
+    scopes: stringList(row.scopes_json, { allowEmpty: true }),
+    networks: stringList(row.networks_json),
     issuedAt: row.issued_at,
     expiresAt: row.expires_at,
     state: row.state,
@@ -254,6 +515,32 @@ function toOAuthFlow(row: OAuthFlowRow): MatterhornCryptoAppOAuthFlowRecord {
     && row.error_code !== "connection_failed") {
     throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
   }
+  const consumedAtValid = exactIsoTimestamp(row.consumed_at)
+    && row.consumed_at >= row.issued_at
+    && row.consumed_at < row.expires_at;
+  const stateFieldsValid = row.state === "pending"
+    ? row.error_code === null && row.connection_id === null && row.consumed_at === null
+    : row.state === "failed"
+      ? row.error_code !== null && row.connection_id === null && consumedAtValid
+      : row.error_code === null && safeIdentifier(row.connection_id) && consumedAtValid;
+  if (!safeIdentifier(row.workspace_id)
+    || !safeIdentifier(row.flow_id)
+    || !safeIdentifier(row.account_id)
+    || !safeIdentifier(row.app_id, 128)
+    || !safeIdentifier(row.manifest_revision, 160)
+    || !safeIdentifier(row.binding_id, 128)
+    || !digest(row.state_digest)
+    || !safeOpaque(row.verifier_envelope, 32 * 1_024, true)
+    || !publicHttpsUrl(row.issuer)
+    || !publicHttpsUrl(row.resource)
+    || !safeIdentifier(row.audience, 512)
+    || !publicHttpsUrl(row.redirect_uri)
+    || !exactIsoTimestamp(row.issued_at)
+    || !exactIsoTimestamp(row.expires_at)
+    || row.expires_at <= row.issued_at
+    || !stateFieldsValid) {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
   return {
     workspaceId: row.workspace_id,
     flowId: row.flow_id,
@@ -263,9 +550,9 @@ function toOAuthFlow(row: OAuthFlowRow): MatterhornCryptoAppOAuthFlowRecord {
     bindingId: row.binding_id,
     stateDigest: row.state_digest,
     verifierEnvelope: row.verifier_envelope,
-    actionIds: parseJson<string[]>(row.action_ids_json),
-    scopes: parseJson<string[]>(row.scopes_json),
-    networks: parseJson<string[]>(row.networks_json),
+    actionIds: stringList(row.action_ids_json),
+    scopes: stringList(row.scopes_json, { allowEmpty: true }),
+    networks: stringList(row.networks_json),
     issuer: row.issuer,
     resource: row.resource,
     audience: row.audience,
@@ -283,6 +570,24 @@ function toOAuthToken(row: OAuthTokenRow): MatterhornCryptoAppOAuthTokenRecord {
   if (row.refreshable !== 0 && row.refreshable !== 1) {
     throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
   }
+  if (!safeIdentifier(row.workspace_id)
+    || !safeIdentifier(row.oauth_token_id)
+    || !safeIdentifier(row.connection_id)
+    || !safeIdentifier(row.account_id)
+    || !safeIdentifier(row.app_id, 128)
+    || !safeIdentifier(row.manifest_revision, 160)
+    || !safeIdentifier(row.binding_id, 128)
+    || !publicHttpsUrl(row.resource)
+    || !safeIdentifier(row.audience, 512)
+    || !safeOpaque(row.token_envelope, 64 * 1_024)
+    || !exactIsoTimestamp(row.expires_at)
+    || !exactIsoTimestamp(row.created_at)
+    || !exactIsoTimestamp(row.updated_at)
+    || row.expires_at <= row.created_at
+    || row.expires_at <= row.updated_at
+    || row.updated_at < row.created_at) {
+    throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+  }
   return {
     workspaceId: row.workspace_id,
     oauthTokenId: row.oauth_token_id,
@@ -294,7 +599,7 @@ function toOAuthToken(row: OAuthTokenRow): MatterhornCryptoAppOAuthTokenRecord {
     resource: row.resource,
     audience: row.audience,
     tokenEnvelope: row.token_envelope,
-    scopes: parseJson<string[]>(row.scopes_json),
+    scopes: stringList(row.scopes_json, { allowEmpty: true }),
     expiresAt: row.expires_at,
     refreshable: row.refreshable === 1,
     createdAt: row.created_at,
@@ -320,12 +625,18 @@ export function cryptoAppConnectionPath(): string {
 
 export class MatterhornCryptoAppConnectionStore {
   readonly #db: SqliteDatabase;
+  readonly #authorityKey: Buffer;
 
-  constructor(readonly path = cryptoAppConnectionPath()) {
+  constructor(
+    readonly path = cryptoAppConnectionPath(),
+    integritySecret = process.env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET ?? "",
+  ) {
+    this.#authorityKey = connectionAuthorityKey(integritySecret);
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     this.#db = openSqliteDatabase(path);
-    this.#db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;");
-    this.#db.exec(`
+    try {
+      this.#db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;");
+      this.#db.exec(`
       CREATE TABLE IF NOT EXISTS crypto_app_connections (
         workspace_id TEXT NOT NULL,
         connection_id TEXT NOT NULL,
@@ -339,6 +650,7 @@ export class MatterhornCryptoAppConnectionStore {
         created_by TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        authority_seal TEXT NOT NULL,
         PRIMARY KEY (workspace_id, connection_id)
       );
       CREATE INDEX IF NOT EXISTS crypto_app_connections_workspace_idx
@@ -423,31 +735,45 @@ export class MatterhornCryptoAppConnectionStore {
       CREATE INDEX IF NOT EXISTS crypto_app_oauth_tokens_binding_idx
         ON crypto_app_oauth_tokens(workspace_id, app_id, manifest_revision);
     `);
-    chmodSync(path, 0o600);
+      const connectionColumns = statement(this.#db, "PRAGMA table_info(crypto_app_connections)")
+        .all() as Array<{ name?: unknown }>;
+      const legacyConnectionTable = !connectionColumns.some((column) => column.name === "authority_seal");
+      if (legacyConnectionTable) {
+        this.#db.exec("ALTER TABLE crypto_app_connections ADD COLUMN authority_seal TEXT;");
+        this.#backfillConnectionAuthoritySeals();
+      }
+      for (const row of statement(this.#db, "SELECT * FROM crypto_app_connections").all() as ConnectionRow[]) {
+        toConnection(row, this.#authorityKey);
+      }
+      this.#db.exec(`
+        CREATE TRIGGER IF NOT EXISTS crypto_app_connections_authority_seal_insert
+        BEFORE INSERT ON crypto_app_connections
+        WHEN NEW.authority_seal IS NULL
+          OR length(NEW.authority_seal) <> 39
+          OR NEW.authority_seal NOT GLOB '[A-Za-z0-9_-]*.[A-Za-z0-9_-]*'
+        BEGIN
+          SELECT RAISE(ABORT, 'crypto_app_connection_state_corrupt');
+        END;
+        CREATE TRIGGER IF NOT EXISTS crypto_app_connections_authority_seal_update
+        BEFORE UPDATE OF authority_seal ON crypto_app_connections
+        WHEN NEW.authority_seal IS NULL
+          OR length(NEW.authority_seal) <> 39
+          OR NEW.authority_seal NOT GLOB '[A-Za-z0-9_-]*.[A-Za-z0-9_-]*'
+        BEGIN
+          SELECT RAISE(ABORT, 'crypto_app_connection_state_corrupt');
+        END;
+      `);
+      chmodSync(path, 0o600);
+    } catch (error) {
+      this.#db.close();
+      this.#authorityKey.fill(0);
+      throw error;
+    }
   }
 
   create(connection: MatterhornCryptoAppConnection): void {
     try {
-      statement(this.#db, `
-        INSERT INTO crypto_app_connections(
-          workspace_id, connection_id, app_id, manifest_revision, state,
-          action_ids_json, scopes_json, networks_json, credential_json,
-          created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        connection.workspaceId,
-        connection.id,
-        connection.appId,
-        connection.manifestRevision,
-        connection.state,
-        JSON.stringify(connection.grantedActionIds),
-        JSON.stringify(connection.grantedScopes),
-        JSON.stringify(connection.grantedNetworks),
-        JSON.stringify(connection.credential),
-        connection.createdBy,
-        connection.createdAt,
-        connection.updatedAt,
-      );
+      this.#insertConnection(connection);
     } catch (error) {
       const code = typeof error === "object" && error !== null && "code" in error
         ? String(error.code)
@@ -608,7 +934,11 @@ export class MatterhornCryptoAppConnectionStore {
       input.appId,
       input.manifestRevision,
     ) as WalletProofRow | undefined;
-    return row ? { walletFamily: walletFamily(row.wallet_family), addressDigest: row.address_digest } : null;
+    if (!row) return null;
+    if (!safeIdentifier(row.wallet_connection_id) || !digest(row.address_digest)) {
+      throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+    }
+    return { walletFamily: walletFamily(row.wallet_family), addressDigest: row.address_digest };
   }
 
   createOAuthFlow(flow: MatterhornCryptoAppOAuthFlowRecord): void {
@@ -814,14 +1144,14 @@ export class MatterhornCryptoAppConnectionStore {
       SELECT * FROM crypto_app_connections
       WHERE workspace_id = ? AND connection_id = ? LIMIT 1
     `).get(workspaceId, connectionId) as ConnectionRow | undefined;
-    return row ? toConnection(row) : null;
+    return row ? toConnection(row, this.#authorityKey) : null;
   }
 
   list(workspaceId: string): MatterhornCryptoAppConnection[] {
     return (statement(this.#db, `
       SELECT * FROM crypto_app_connections
       WHERE workspace_id = ? ORDER BY created_at ASC, connection_id ASC
-    `).all(workspaceId) as ConnectionRow[]).map(toConnection);
+    `).all(workspaceId) as ConnectionRow[]).map((row) => toConnection(row, this.#authorityKey));
   }
 
   transition(input: {
@@ -834,18 +1164,44 @@ export class MatterhornCryptoAppConnectionStore {
     this.#db.exec("BEGIN IMMEDIATE");
     try {
       const row = statement(this.#db, `
-        UPDATE crypto_app_connections
-        SET state = ?, updated_at = ?
-        WHERE workspace_id = ? AND connection_id = ? AND state = ?
-        RETURNING *
+        SELECT * FROM crypto_app_connections
+        WHERE workspace_id = ? AND connection_id = ? AND state = ? LIMIT 1
       `).get(
-        input.nextState,
-        input.updatedAt,
         input.workspaceId,
         input.connectionId,
         input.expectedState,
       ) as ConnectionRow | undefined;
-      if (row && input.nextState === "revoked") {
+      if (!row) {
+        this.#db.exec("COMMIT");
+        return null;
+      }
+      const current = toConnection(row, this.#authorityKey);
+      const next: MatterhornCryptoAppConnection = {
+        ...current,
+        state: input.nextState,
+        updatedAt: input.updatedAt,
+      };
+      if (!exactIsoTimestamp(input.updatedAt) || input.updatedAt < current.updatedAt) {
+        throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+      }
+      const nextRow = connectionRow(next, this.#authorityKey);
+      const changed = statement(this.#db, `
+        UPDATE crypto_app_connections
+        SET state = ?, updated_at = ?, authority_seal = ?
+        WHERE workspace_id = ? AND connection_id = ? AND state = ?
+      `).run(
+        input.nextState,
+        input.updatedAt,
+        nextRow.authority_seal,
+        input.workspaceId,
+        input.connectionId,
+        input.expectedState,
+      ).changes ?? 0;
+      if (changed !== 1) {
+        this.#db.exec("ROLLBACK");
+        return null;
+      }
+      if (input.nextState === "revoked") {
         statement(this.#db, `
           DELETE FROM crypto_app_oauth_tokens WHERE workspace_id = ? AND connection_id = ?
         `).run(input.workspaceId, input.connectionId);
@@ -854,7 +1210,7 @@ export class MatterhornCryptoAppConnectionStore {
         `).run(input.workspaceId, input.connectionId);
       }
       this.#db.exec("COMMIT");
-      return row ? toConnection(row) : null;
+      return next;
     } catch (error) {
       this.#db.exec("ROLLBACK");
       throw error;
@@ -909,29 +1265,60 @@ export class MatterhornCryptoAppConnectionStore {
 
   close(): void {
     this.#db.close();
+    this.#authorityKey.fill(0);
   }
 
   #insertConnection(connection: MatterhornCryptoAppConnection): void {
+    const row = connectionRow(connection, this.#authorityKey);
     statement(this.#db, `
       INSERT INTO crypto_app_connections(
         workspace_id, connection_id, app_id, manifest_revision, state,
         action_ids_json, scopes_json, networks_json, credential_json,
-        created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_by, created_at, updated_at, authority_seal
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      connection.workspaceId,
-      connection.id,
-      connection.appId,
-      connection.manifestRevision,
-      connection.state,
-      JSON.stringify(connection.grantedActionIds),
-      JSON.stringify(connection.grantedScopes),
-      JSON.stringify(connection.grantedNetworks),
-      JSON.stringify(connection.credential),
-      connection.createdBy,
-      connection.createdAt,
-      connection.updatedAt,
+      row.workspace_id,
+      row.connection_id,
+      row.app_id,
+      row.manifest_revision,
+      row.state,
+      row.action_ids_json,
+      row.scopes_json,
+      row.networks_json,
+      row.credential_json,
+      row.created_by,
+      row.created_at,
+      row.updated_at,
+      row.authority_seal,
     );
+  }
+
+  #backfillConnectionAuthoritySeals(): void {
+    const rows = statement(this.#db, `
+      SELECT * FROM crypto_app_connections WHERE authority_seal IS NULL
+    `).all() as ConnectionRow[];
+    if (rows.length === 0) return;
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const row of rows) {
+        const connection = connectionValue(row);
+        const changed = statement(this.#db, `
+          UPDATE crypto_app_connections SET authority_seal = ?
+          WHERE workspace_id = ? AND connection_id = ? AND authority_seal IS NULL
+        `).run(
+          sealConnectionAuthority(connection, this.#authorityKey),
+          connection.workspaceId,
+          connection.id,
+        ).changes ?? 0;
+        if (changed !== 1) {
+          throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+        }
+      }
+      this.#db.exec("COMMIT");
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   #insertOAuthToken(token: MatterhornCryptoAppOAuthTokenRecord): void {

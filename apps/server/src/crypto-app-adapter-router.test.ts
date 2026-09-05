@@ -31,6 +31,7 @@ import {
 import { MatterhornCryptoAppRegistry, canonicalCryptoAppManifestPayload } from "./crypto-app-registry.js";
 
 const keys = generateKeyPairSync("ed25519");
+const CONNECTION_INTEGRITY_SECRET = "test-connection-integrity-secret-at-least-32-bytes";
 
 function manifest(
   authentication: MatterhornCryptoAppManifest["authentication"] = { type: "none", scopes: [] },
@@ -139,7 +140,7 @@ function fixture(options: {
   const store = new MatterhornCryptoAppConnectionStore(join(
     mkdtempSync(join(tmpdir(), "matterhorn-adapter-router-")),
     "connections.db",
-  ));
+  ), CONNECTION_INTEGRITY_SECRET);
   const connections = new MatterhornCryptoAppConnections({
     registry,
     store,

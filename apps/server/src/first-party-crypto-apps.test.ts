@@ -30,6 +30,7 @@ import {
 } from "./first-party-crypto-apps.js";
 
 const keys = generateKeyPairSync("ed25519");
+const CONNECTION_INTEGRITY_SECRET = "test-connection-integrity-secret-at-least-32-bytes";
 
 function manifests() {
   return buildMatterhornFirstPartyTestnetManifests({
@@ -510,7 +511,7 @@ describe("Matterhorn first-party crypto app contracts", () => {
     const store = new MatterhornCryptoAppConnectionStore(join(
       mkdtempSync(join(tmpdir(), "matterhorn-first-party-apps-")),
       "connections.db",
-    ));
+    ), CONNECTION_INTEGRITY_SECRET);
     let id = 0;
     const connections = new MatterhornCryptoAppConnections({
       registry,

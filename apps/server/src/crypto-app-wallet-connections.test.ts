@@ -19,6 +19,7 @@ import { MatterhornCryptoAppWalletConnections } from "./crypto-app-wallet-connec
 import { MatterhornCryptoAppRegistry, canonicalCryptoAppManifestPayload } from "./crypto-app-registry.js";
 
 const publisherKeys = generateKeyPairSync("ed25519");
+const CONNECTION_INTEGRITY_SECRET = "test-connection-integrity-secret-at-least-32-bytes";
 
 function manifest(protocol: "ethereum" | "sui", chainId: string): MatterhornCryptoAppManifest {
   const value: MatterhornCryptoAppManifest = {
@@ -111,7 +112,7 @@ function fixture(protocol: "ethereum" | "sui", chainId: string, path?: string) {
   const value = manifest(protocol, chainId);
   const registry = registryFor(value);
   const dbPath = path ?? join(mkdtempSync(join(tmpdir(), "matterhorn-wallet-proof-")), "connections.db");
-  const store = new MatterhornCryptoAppConnectionStore(dbPath);
+  const store = new MatterhornCryptoAppConnectionStore(dbPath, CONNECTION_INTEGRITY_SECRET);
   const clock = { now: new Date("2026-09-02T12:00:00.000Z") };
   let connectionSequence = 0;
   let challengeSequence = 0;
@@ -276,7 +277,10 @@ describe("crypto app wallet connection proof", () => {
     const signature = await account.signMessage({ message: challenge.message });
     setup.store.close();
 
-    const restartedStore = new MatterhornCryptoAppConnectionStore(setup.dbPath);
+    const restartedStore = new MatterhornCryptoAppConnectionStore(
+      setup.dbPath,
+      CONNECTION_INTEGRITY_SECRET,
+    );
     const restartedConnections = new MatterhornCryptoAppConnections({
       registry: setup.registry,
       store: restartedStore,
