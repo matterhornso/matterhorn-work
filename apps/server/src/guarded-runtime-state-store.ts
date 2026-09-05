@@ -56,6 +56,17 @@ type StateRow = {
   updated_at: number;
 };
 
+export type GuardedRuntimeConsumedCapabilityRecord<T> = {
+  jti: string;
+  runId: string;
+  callId: string;
+  workspaceId: string;
+  sessionId: string;
+  claims: T;
+  consumedAtMs: number;
+  expiresAtMs: number;
+};
+
 const require = createRequire(import.meta.url);
 
 function openSqliteDatabase(path: string): SqliteDatabase {
@@ -122,6 +133,8 @@ export class MatterhornGuardedRuntimeStateStore {
       );
       CREATE INDEX IF NOT EXISTS consumed_capabilities_workspace_idx
         ON consumed_capabilities(workspace_id, expires_at);
+      CREATE UNIQUE INDEX IF NOT EXISTS consumed_capabilities_run_call_idx
+        ON consumed_capabilities(run_id, call_id);
     `);
     chmodSync(path, 0o600);
   }
@@ -297,12 +310,42 @@ export class MatterhornGuardedRuntimeStateStore {
   }
 
   listConsumedCapabilities<T>(nowMs = Date.now()): T[] {
+    return this.listConsumedCapabilityRecords<T>(nowMs).map((record) => record.claims);
+  }
+
+  listConsumedCapabilityRecords<T>(nowMs = Date.now()): Array<GuardedRuntimeConsumedCapabilityRecord<T>> {
     const rows = statement(this.db, `
-      SELECT claims_json FROM consumed_capabilities
+      SELECT jti, run_id, call_id, workspace_id, session_id, claims_json, consumed_at, expires_at
+      FROM consumed_capabilities
       WHERE expires_at > ?
       ORDER BY consumed_at ASC
     `).all(nowMs);
-    return rows.map((row) => JSON.parse((row as { claims_json: string }).claims_json) as T);
+    return rows.map((rawRow) => {
+      const row = rawRow as {
+        jti: string;
+        run_id: string;
+        call_id: string;
+        workspace_id: string;
+        session_id: string;
+        claims_json: string;
+        consumed_at: number;
+        expires_at: number;
+      };
+      try {
+        return {
+          jti: row.jti,
+          runId: row.run_id,
+          callId: row.call_id,
+          workspaceId: row.workspace_id,
+          sessionId: row.session_id,
+          claims: JSON.parse(row.claims_json) as T,
+          consumedAtMs: row.consumed_at,
+          expiresAtMs: row.expires_at,
+        };
+      } catch {
+        throw new Error("guarded_runtime_state_corrupt");
+      }
+    });
   }
 
   purgeWorkspace(

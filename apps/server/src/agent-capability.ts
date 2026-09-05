@@ -28,6 +28,20 @@ const CAPABILITY_TTL_MS = 60_000;
 const MAX_READ_CALLS = 12;
 const MAX_PREPARE_ATTEMPTS_PER_FAMILY = 2;
 const GUARDED_CRYPTO_DESKS = new Set(["bittensor", "hyperliquid", "polymarket", "sui"]);
+const MAX_CAPABILITY_TOKEN_BYTES = 16_384;
+const MAX_RUN_STATE_ITEMS = 128;
+const CLOCK_SKEW_MS = 5_000;
+const CAPABILITY_CLAIM_KEYS = new Set([
+  "version", "jti", "runId", "workspaceId", "sessionId", "callId", "agentId", "deskId",
+  "toolName", "access", "argsHash", "issuedAt", "expiresAt", "policyVersion", "registryVersion",
+  "jurisdictionEvidenceHash", "jurisdictionPolicy", "coworker",
+]);
+const STORED_RUN_GRANT_KEYS = new Set([
+  "runId", "workspaceId", "sessionId", "agentId", "deskId", "executionMode", "coworker",
+  "allowedTools", "maxReadCalls", "maxPrepareAttemptsPerFamily", "readIssues", "prepareAttempts",
+  "successfulPrepareFamilies", "issuedPrepareFamilies", "issuedCallIds", "jurisdictionEvidenceHash",
+  "jurisdictionPolicy", "expiresAtMs", "decisions",
+]);
 
 type RunGrant = {
   runId: string;
@@ -120,6 +134,50 @@ function deserializeGrant(stored: StoredRunGrant): RunGrant {
     jurisdictionEvidenceHash: stored.jurisdictionEvidenceHash ?? null,
     jurisdictionPolicy: stored.jurisdictionPolicy ?? null,
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: ReadonlySet<string>): boolean {
+  return Object.keys(value).every((key) => allowed.has(key));
+}
+
+function isBoundedId(value: unknown, max = 256): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= max
+    && /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/.test(value);
+}
+
+function isBoundedStringArray(value: unknown, maxItems = MAX_RUN_STATE_ITEMS): value is string[] {
+  return Array.isArray(value)
+    && value.length <= maxItems
+    && value.every((item) => isBoundedId(item, 256))
+    && new Set(value).size === value.length;
+}
+
+function isBoundedPairArray(value: unknown, maxValue: number): value is Array<[string, number]> {
+  return Array.isArray(value)
+    && value.length <= MAX_RUN_STATE_ITEMS
+    && value.every((entry) => Array.isArray(entry)
+      && entry.length === 2
+      && isBoundedId(entry[0], 256)
+      && Number.isSafeInteger(entry[1])
+      && entry[1] >= 0
+      && entry[1] <= maxValue)
+    && new Set(value.map((entry) => entry[0])).size === value.length;
+}
+
+function isBoundedStringPairArray(value: unknown): value is Array<[string, string]> {
+  return Array.isArray(value)
+    && value.length <= MAX_RUN_STATE_ITEMS
+    && value.every((entry) => Array.isArray(entry)
+      && entry.length === 2
+      && isBoundedId(entry[0], 256)
+      && isBoundedId(entry[1], 256))
+    && new Set(value.map((entry) => entry[0])).size === value.length;
 }
 
 function guardedMode(value = process.env.MATTERHORN_GUARDED_RUNTIME_MODE): MatterhornGuardedRuntimeMode {
@@ -253,6 +311,11 @@ function allowedToolsForRun(input: {
 }
 
 function validCoworkerBinding(binding: MatterhornCoworkerRunBinding, workspaceId: string): boolean {
+  if (!isRecord(binding) || !hasOnlyKeys(binding, new Set([
+    "id", "workspaceId", "ownerId", "revision", "policyVersion", "allowedAppIds", "allowedActionIds",
+    "allowedNetworks", "automaticAuthorities", "actionBindings", "allowedDataLabels",
+    "allowUnverifiedProviderConsent", "maxReadCallsPerRun", "maxPrepareCallsPerFamily",
+  ]))) return false;
   const arrays = [
     binding.allowedAppIds,
     binding.allowedActionIds,
@@ -336,6 +399,138 @@ function validJurisdictionPolicyContext(
     && typeof context.polymarketOpenPositionAllowed === "boolean";
 }
 
+function validCapabilityCoworkerClaims(value: unknown): value is NonNullable<MatterhornAgentCapabilityClaims["coworker"]> {
+  if (!isRecord(value) || !hasOnlyKeys(value, new Set([
+    "id", "ownerId", "revision", "policyVersion", "connectionId", "appId", "manifestRevision", "actionId", "network",
+  ]))) return false;
+  return isBoundedId(value.id)
+    && isBoundedId(value.ownerId)
+    && Number.isSafeInteger(value.revision)
+    && (value.revision as number) >= 1
+    && isBoundedId(value.policyVersion, 128)
+    && isBoundedId(value.connectionId)
+    && isBoundedId(value.appId)
+    && isBoundedId(value.manifestRevision, 128)
+    && isBoundedId(value.actionId, 160)
+    && isBoundedId(value.network, 160);
+}
+
+function validCapabilityClaims(value: unknown, nowMs: number): value is MatterhornAgentCapabilityClaims {
+  if (!isRecord(value) || !hasOnlyKeys(value, CAPABILITY_CLAIM_KEYS)) return false;
+  const issuedAtMs = typeof value.issuedAt === "string" ? Date.parse(value.issuedAt) : Number.NaN;
+  const expiresAtMs = typeof value.expiresAt === "string" ? Date.parse(value.expiresAt) : Number.NaN;
+  const definition = typeof value.toolName === "string" ? getMatterhornCryptoTool(value.toolName) : undefined;
+  const jurisdictionEvidenceHash = typeof value.jurisdictionEvidenceHash === "string"
+    && /^[a-f0-9]{64}$/.test(value.jurisdictionEvidenceHash)
+    ? value.jurisdictionEvidenceHash
+    : value.jurisdictionEvidenceHash === undefined ? null : undefined;
+  return value.version === "matterhorn.agent-capability.v1"
+    && isBoundedId(value.jti)
+    && isBoundedId(value.runId)
+    && isBoundedId(value.workspaceId)
+    && isBoundedId(value.sessionId)
+    && isBoundedId(value.callId)
+    && isBoundedId(value.agentId)
+    && isBoundedId(value.deskId, 160)
+    && isBoundedId(value.toolName)
+    && normalizedToolName(value.toolName) === value.toolName
+    && Boolean(definition)
+    && (value.access === "read" || value.access === "prepare")
+    && definition?.access === value.access
+    && typeof value.argsHash === "string"
+    && /^[a-f0-9]{64}$/.test(value.argsHash)
+    && Number.isFinite(issuedAtMs)
+    && Number.isFinite(expiresAtMs)
+    && new Date(issuedAtMs).toISOString() === value.issuedAt
+    && new Date(expiresAtMs).toISOString() === value.expiresAt
+    && issuedAtMs <= nowMs + CLOCK_SKEW_MS
+    && expiresAtMs > issuedAtMs
+    && expiresAtMs - issuedAtMs <= CAPABILITY_TTL_MS
+    && value.policyVersion === MATTERHORN_CAPABILITY_POLICY_VERSION
+    && value.registryVersion === MATTERHORN_CRYPTO_REGISTRY_VERSION
+    && jurisdictionEvidenceHash !== undefined
+    && (value.jurisdictionPolicy === undefined
+      || validJurisdictionPolicyContext(value.jurisdictionPolicy, jurisdictionEvidenceHash))
+    && (value.coworker === undefined || validCapabilityCoworkerClaims(value.coworker));
+}
+
+function validCapabilityDecision(value: unknown): value is MatterhornAgentCapabilityDecision {
+  if (!isRecord(value) || !hasOnlyKeys(value, new Set([
+    "toolName", "access", "decision", "reason", "callId", "decidedAt", "latencyMs",
+  ]))) return false;
+  const decidedAtMs = typeof value.decidedAt === "string" ? Date.parse(value.decidedAt) : Number.NaN;
+  const latencyMs = typeof value.latencyMs === "number" ? value.latencyMs : Number.NaN;
+  return isBoundedId(value.toolName)
+    && normalizedToolName(value.toolName) === value.toolName
+    && Boolean(getMatterhornCryptoTool(value.toolName))
+    && (value.access === "read" || value.access === "prepare")
+    && (value.decision === "issued" || value.decision === "allowed" || value.decision === "denied")
+    && typeof value.reason === "string"
+    && value.reason.length > 0
+    && value.reason.length <= 160
+    && isBoundedId(value.callId)
+    && Number.isFinite(decidedAtMs)
+    && new Date(decidedAtMs).toISOString() === value.decidedAt
+    && Number.isSafeInteger(latencyMs)
+    && latencyMs >= 0
+    && latencyMs <= 3_600_000;
+}
+
+function restoreStoredRunGrant(value: unknown, nowMs: number): RunGrant | null {
+  if (!isRecord(value) || !hasOnlyKeys(value, STORED_RUN_GRANT_KEYS)) return null;
+  const stored = value as unknown as StoredRunGrant;
+  const maxReadCalls = stored.maxReadCalls ?? MAX_READ_CALLS;
+  const maxPrepareAttemptsPerFamily = stored.maxPrepareAttemptsPerFamily ?? MAX_PREPARE_ATTEMPTS_PER_FAMILY;
+  if (!isBoundedId(stored.runId)
+    || !isBoundedId(stored.workspaceId)
+    || !isBoundedId(stored.sessionId)
+    || !isBoundedId(stored.agentId)
+    || !isBoundedId(stored.deskId, 160)
+    || !["discuss", "plan", "work"].includes(stored.executionMode)
+    || !Number.isSafeInteger(stored.expiresAtMs)
+    || stored.expiresAtMs <= nowMs
+    || stored.expiresAtMs > nowMs + 6 * 60 * 60 * 1_000
+    || !Number.isSafeInteger(maxReadCalls)
+    || maxReadCalls < 0
+    || maxReadCalls > MAX_READ_CALLS
+    || !Number.isSafeInteger(maxPrepareAttemptsPerFamily)
+    || maxPrepareAttemptsPerFamily < 0
+    || maxPrepareAttemptsPerFamily > MAX_PREPARE_ATTEMPTS_PER_FAMILY
+    || !Number.isSafeInteger(stored.readIssues)
+    || stored.readIssues < 0
+    || stored.readIssues > maxReadCalls
+    || !isBoundedStringArray(stored.allowedTools)
+    || !isBoundedPairArray(stored.prepareAttempts, maxPrepareAttemptsPerFamily)
+    || !isBoundedStringArray(stored.successfulPrepareFamilies)
+    || !isBoundedStringPairArray(stored.issuedPrepareFamilies)
+    || !isBoundedStringArray(stored.issuedCallIds)
+    || !Array.isArray(stored.decisions)
+    || stored.decisions.length > 100
+    || !stored.decisions.every(validCapabilityDecision)) return null;
+  const coworker = stored.coworker ?? null;
+  if (coworker && !validCoworkerBinding(coworker, stored.workspaceId)) return null;
+  const jurisdictionEvidenceHash = stored.jurisdictionEvidenceHash ?? null;
+  if (jurisdictionEvidenceHash !== null && !/^[a-f0-9]{64}$/.test(jurisdictionEvidenceHash)) return null;
+  const jurisdictionPolicy = stored.jurisdictionPolicy ?? null;
+  if (jurisdictionPolicy && !validJurisdictionPolicyContext(jurisdictionPolicy, jurisdictionEvidenceHash)) return null;
+  const baseline = allowedToolsForRun({ agentId: stored.agentId });
+  if (stored.allowedTools.some((toolName) => {
+    const definition = getMatterhornCryptoTool(toolName);
+    return !definition
+      || normalizedToolName(toolName) !== toolName
+      || !baseline.has(toolName)
+      || (stored.executionMode !== "work" && definition.access === "prepare")
+      || (coworker && !coworker.actionBindings.some((binding) => normalizedToolName(binding.proxyToolName) === toolName));
+  })) return null;
+  const firstTool = stored.allowedTools.map((name) => getMatterhornCryptoTool(name)).find(Boolean);
+  if (stored.deskId !== deskForAgent(stored.agentId, firstTool?.deskIds ?? [])) return null;
+  if (coworker && (maxReadCalls !== coworker.maxReadCallsPerRun
+    || maxPrepareAttemptsPerFamily !== coworker.maxPrepareCallsPerFamily)) return null;
+  const issuedCallIds = new Set(stored.issuedCallIds);
+  if (stored.issuedPrepareFamilies.some(([callId]) => !issuedCallIds.has(callId))) return null;
+  return deserializeGrant(stored);
+}
+
 function signingSecret(): string {
   const value = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET?.trim() ?? "";
   return value.length >= 32 ? value : "";
@@ -351,54 +546,12 @@ function encodeClaims(claims: MatterhornAgentCapabilityClaims, secret: string): 
 }
 
 function decodeClaims(token: string, secret: string): MatterhornAgentCapabilityClaims | null {
+  if (Buffer.byteLength(token, "utf8") > MAX_CAPABILITY_TOKEN_BYTES) return null;
   const [payload, suppliedSignature, extra] = token.split(".");
   if (!payload || !suppliedSignature || extra || !equalDigest(signature(payload, secret), suppliedSignature)) return null;
   try {
     const decoded: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) return null;
-    const claims = decoded as Record<string, unknown>;
-    if (
-      claims.version !== "matterhorn.agent-capability.v1"
-      || typeof claims.jti !== "string"
-      || typeof claims.runId !== "string"
-      || typeof claims.workspaceId !== "string"
-      || typeof claims.sessionId !== "string"
-      || typeof claims.callId !== "string"
-      || typeof claims.agentId !== "string"
-      || typeof claims.deskId !== "string"
-      || typeof claims.toolName !== "string"
-      || (claims.access !== "read" && claims.access !== "prepare")
-      || typeof claims.argsHash !== "string"
-      || typeof claims.issuedAt !== "string"
-      || typeof claims.expiresAt !== "string"
-      || typeof claims.policyVersion !== "string"
-      || typeof claims.registryVersion !== "string"
-    ) return null;
-    const jurisdictionEvidenceHash = typeof claims.jurisdictionEvidenceHash === "string"
-      && /^[a-f0-9]{64}$/.test(claims.jurisdictionEvidenceHash)
-      ? claims.jurisdictionEvidenceHash
-      : claims.jurisdictionEvidenceHash === undefined ? null : undefined;
-    if (jurisdictionEvidenceHash === undefined) return null;
-    if (claims.jurisdictionPolicy !== undefined
-      && !validJurisdictionPolicyContext(claims.jurisdictionPolicy, jurisdictionEvidenceHash)) return null;
-    if (claims.coworker !== undefined) {
-      if (!claims.coworker || typeof claims.coworker !== "object" || Array.isArray(claims.coworker)) return null;
-      const coworker = claims.coworker as Record<string, unknown>;
-      if (Object.keys(coworker).some((key) => ![
-        "id", "ownerId", "revision", "policyVersion", "connectionId", "appId", "manifestRevision", "actionId", "network",
-      ].includes(key))
-        || typeof coworker.id !== "string"
-        || typeof coworker.ownerId !== "string"
-        || !Number.isSafeInteger(coworker.revision)
-        || (coworker.revision as number) < 1
-        || typeof coworker.policyVersion !== "string"
-        || typeof coworker.connectionId !== "string"
-        || typeof coworker.appId !== "string"
-        || typeof coworker.manifestRevision !== "string"
-        || typeof coworker.actionId !== "string"
-        || typeof coworker.network !== "string") return null;
-    }
-    return decoded as MatterhornAgentCapabilityClaims;
+    return validCapabilityClaims(decoded, Date.now()) ? decoded : null;
   } catch {
     return null;
   }
@@ -421,14 +574,33 @@ export class MatterhornAgentCapabilityBroker {
   ) {
     this.mode = mode;
     if (!stateStore) return;
-    for (const stored of stateStore.list<StoredRunGrant>("run_grant")) {
-      const grant = deserializeGrant(stored);
+    const nowMs = Date.now();
+    for (const stored of stateStore.list<unknown>("run_grant", { nowMs })) {
+      const grant = restoreStoredRunGrant(stored, nowMs);
+      if (!grant || this.grants.has(grant.runId) || this.activeRunBySession.has(grant.sessionId)) {
+        throw new Error("capability_persisted_grant_invalid");
+      }
       this.grants.set(grant.runId, grant);
       this.activeRunBySession.set(grant.sessionId, grant.runId);
-      if (stored.decisions.length) this.decisions.set(grant.runId, stored.decisions.slice(-100));
+      const decisions = (stored as StoredRunGrant).decisions;
+      if (decisions.length) this.decisions.set(grant.runId, decisions.slice(-100));
     }
-    for (const claims of stateStore.listConsumedCapabilities<MatterhornAgentCapabilityClaims>()) {
-      this.consumed.set(claims.jti, { claims, consumedAtMs: Date.parse(claims.issuedAt) });
+    for (const record of stateStore.listConsumedCapabilityRecords<unknown>(nowMs)) {
+      const claims = record.claims;
+      const expiresAtMs = isRecord(claims) && typeof claims.expiresAt === "string" ? Date.parse(claims.expiresAt) : Number.NaN;
+      if (!validCapabilityClaims(claims, nowMs)
+        || record.jti !== claims.jti
+        || record.runId !== claims.runId
+        || record.callId !== claims.callId
+        || record.workspaceId !== claims.workspaceId
+        || record.sessionId !== claims.sessionId
+        || !Number.isSafeInteger(record.consumedAtMs)
+        || record.consumedAtMs < Date.parse(claims.issuedAt) - CLOCK_SKEW_MS
+        || record.consumedAtMs > expiresAtMs
+        || record.expiresAtMs !== expiresAtMs + CAPABILITY_TTL_MS) {
+        throw new Error("capability_persisted_consumption_invalid");
+      }
+      this.consumed.set(claims.jti, { claims, consumedAtMs: record.consumedAtMs });
       this.consumedByCallId.set(claims.callId, claims);
     }
   }
@@ -464,6 +636,12 @@ export class MatterhornAgentCapabilityBroker {
     const expiresAtMs = input.expiresAtMs ?? maximumExpiresAtMs;
     if (!Number.isSafeInteger(expiresAtMs) || expiresAtMs <= nowMs || expiresAtMs > maximumExpiresAtMs) {
       throw new Error("capability_run_expiry_invalid");
+    }
+    if (this.grants.has(input.runId)) {
+      throw new Error("capability_run_already_exists");
+    }
+    if (this.activeRunBySession.has(input.sessionId)) {
+      throw new Error("capability_session_already_active");
     }
     const agentId = input.agentId?.trim() || "matterhorn";
     if (input.coworker && !validCoworkerBinding(input.coworker, input.workspaceId)) {
