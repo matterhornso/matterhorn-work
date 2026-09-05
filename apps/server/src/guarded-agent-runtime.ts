@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   MatterhornAgentCapabilityClaims,
+  MatterhornAgentDataLabel,
   MatterhornAgentJurisdictionPolicyContext,
   MatterhornAgentPrivacyMode,
   MatterhornAgentPrivacyPart,
@@ -110,6 +111,28 @@ export type GuardedProviderSystemContext = {
 
 const PROVIDER_SYSTEM_MAX_SECTIONS = 16;
 const PROVIDER_SYSTEM_MAX_BYTES = 256 * 1_024;
+const SESSION_PRIVACY_FLOOR_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
+
+type GuardedSessionPrivacyFloor = {
+  workspaceId: string;
+  sessionId: string;
+  mode: MatterhornAgentPrivacyMode;
+  updatedAt: string;
+};
+
+function privacyModeRank(mode: MatterhornAgentPrivacyMode): number {
+  if (mode === "transaction") return 2;
+  if (mode === "private_workspace") return 1;
+  return 0;
+}
+
+function sessionHistoryLabel(
+  mode: MatterhornAgentPrivacyMode,
+): Extract<MatterhornAgentDataLabel, "public" | "workspace_private" | "wallet_private"> {
+  if (mode === "transaction") return "wallet_private";
+  if (mode === "private_workspace") return "workspace_private";
+  return "public";
+}
 
 function normalizeProviderSystemContext(
   context: GuardedProviderSystemContext | undefined,
@@ -672,6 +695,11 @@ export class MatterhornGuardedAgentRuntime {
         memoryReadIds: input.memoryIds,
         context: selectedContextCounts(input),
       });
+      this.raiseSessionPrivacyFloor({
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        mode: current.effectiveMode,
+      });
     } catch (error) {
       this.revokeRun(runId);
       try {
@@ -739,6 +767,46 @@ export class MatterhornGuardedAgentRuntime {
       );
     }
     return { runId, system: [context.system], systemHash: context.systemHash };
+  }
+
+  resolveSessionHistoryLabel(input: {
+    workspaceId: string;
+    sessionId: string;
+    hasStoredHistory: boolean;
+  }): Extract<MatterhornAgentDataLabel, "public" | "workspace_private" | "wallet_private"> {
+    const floor = this.stateStore.get<GuardedSessionPrivacyFloor>(
+      "session_privacy_floor",
+      input.sessionId,
+    );
+    if (!floor) {
+      // Existing sessions created before this boundary have no trustworthy
+      // disclosure record. Treat their history as private instead of guessing.
+      return input.hasStoredHistory ? "workspace_private" : "public";
+    }
+    if (
+      floor.workspaceId !== input.workspaceId
+      || floor.sessionId !== input.sessionId
+      || (floor.mode !== "public_research"
+        && floor.mode !== "private_workspace"
+        && floor.mode !== "transaction")
+    ) {
+      throw new GuardedRuntimeError(
+        409,
+        "session_privacy_state_invalid",
+        "Matterhorn could not verify this chat's privacy history.",
+      );
+    }
+    return sessionHistoryLabel(floor.mode);
+  }
+
+  purgeSessionPrivacyState(input: { workspaceId: string; sessionId: string }): void {
+    const floor = this.stateStore.get<GuardedSessionPrivacyFloor>(
+      "session_privacy_floor",
+      input.sessionId,
+    );
+    if (floor?.workspaceId === input.workspaceId && floor.sessionId === input.sessionId) {
+      this.stateStore.delete("session_privacy_floor", input.sessionId);
+    }
   }
 
   bindRuntimeMessage(input: {
@@ -1074,7 +1142,7 @@ export class MatterhornGuardedAgentRuntime {
     for (const callId of capabilities.callIds) this.stagedCapabilities.delete(callId);
     this.stateStore.purgeWorkspace(
       workspaceId,
-      ["active_agent_run", "agent_run_scope", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_publication_claim", "crypto_evidence_operation_claim", "crypto_evidence_finalization", "crypto_evidence_renewal_intent", "crypto_evidence_deletion_intent"],
+      ["active_agent_run", "agent_run_scope", "session_privacy_floor", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_publication_claim", "crypto_evidence_operation_claim", "crypto_evidence_finalization", "crypto_evidence_renewal_intent", "crypto_evidence_deletion_intent"],
       { includeConsumedCapabilities: false },
     );
     return {
@@ -1091,6 +1159,42 @@ export class MatterhornGuardedAgentRuntime {
     if (expected.length < 32 || !supplied || !equalDigest(sha256(expected), sha256(supplied))) {
       throw new GuardedRuntimeError(401, "agent_runtime_unauthorized", "The guarded runtime credential is missing or invalid.");
     }
+  }
+
+  private raiseSessionPrivacyFloor(input: {
+    workspaceId: string;
+    sessionId: string;
+    mode: MatterhornAgentPrivacyMode;
+  }): void {
+    const existing = this.stateStore.get<GuardedSessionPrivacyFloor>(
+      "session_privacy_floor",
+      input.sessionId,
+    );
+    if (existing && (existing.workspaceId !== input.workspaceId || existing.sessionId !== input.sessionId)) {
+      throw new GuardedRuntimeError(
+        409,
+        "session_privacy_state_invalid",
+        "Matterhorn could not verify this chat's privacy history.",
+      );
+    }
+    const mode = existing && privacyModeRank(existing.mode) >= privacyModeRank(input.mode)
+      ? existing.mode
+      : input.mode;
+    const nowMs = Date.now();
+    this.stateStore.put({
+      kind: "session_privacy_floor",
+      key: input.sessionId,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      value: {
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        mode,
+        updatedAt: new Date(nowMs).toISOString(),
+      } satisfies GuardedSessionPrivacyFloor,
+      expiresAtMs: nowMs + SESSION_PRIVACY_FLOOR_RETENTION_MS,
+      nowMs,
+    });
   }
 
   private cleanupStagedCapabilities(nowMs = Date.now()): void {

@@ -25,6 +25,7 @@ export type GuardedRuntimeStateKind =
   | "rollout_bypass"
   | "active_agent_run"
   | "agent_run_scope"
+  | "session_privacy_floor"
   | "user_message_binding"
   | "assistant_message_binding"
   | "crypto_app_reservation"

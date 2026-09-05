@@ -2908,6 +2908,7 @@ async function proxyOpencodeRequest(input: {
   let guardedPromptStart: {
     input: GuardedPromptInput;
     authorization: GuardedPromptAuthorization;
+    requestPrivacyParts: MatterhornAgentPrivacyPart[];
     providerSystem: GuardedProviderSystemContext;
   } | null = null;
   let guardedSummaryStart: {
@@ -3027,14 +3028,24 @@ async function proxyOpencodeRequest(input: {
         [agentContext.prompt, typeof payload.system === "string" ? payload.system : ""],
         "message",
       );
+      const requestPrivacyParts = [
+        ...normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
+        ...rawPromptSystemPrivacyParts(payload.system),
+        ...agentContext.privacyParts,
+        guardedProviderSystemPrivacyPart(providerSystem),
+      ];
+      const historyPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+        config: input.config,
+        workspace,
+        sessionId,
+        guardedRuntime: input.guardedRuntime,
+      });
       const guardedInput: GuardedPromptInput = {
         workspaceId: workspace.id,
         sessionId,
         parts: [
-          ...normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
-          ...rawPromptSystemPrivacyParts(payload.system),
-          ...agentContext.privacyParts,
-          guardedProviderSystemPrivacyPart(providerSystem),
+          ...historyPrivacyParts,
+          ...requestPrivacyParts,
         ],
         providerId: modelResolution.model.providerID,
         modelId: modelResolution.model.modelID,
@@ -3050,6 +3061,7 @@ async function proxyOpencodeRequest(input: {
         guardedPromptStart = {
           input: guardedInput,
           authorization: input.guardedRuntime.authorizePrompt(guardedInput),
+          requestPrivacyParts,
           providerSystem,
         };
       } catch (error) {
@@ -3109,14 +3121,24 @@ async function proxyOpencodeRequest(input: {
       const commandSystem = buildMatterhornExecutionModeSystemPrompt("work");
       const providerSystem = guardedProviderSystemContext([agentContext.prompt, commandSystem], "message");
       try {
+        const requestPrivacyParts: MatterhornAgentPrivacyPart[] = [
+          { type: "text", text: `/${command}${commandArguments ? ` ${commandArguments}` : ""}` },
+          ...rawPromptSystemPrivacyParts(commandSystem),
+          ...agentContext.privacyParts,
+          guardedProviderSystemPrivacyPart(providerSystem),
+        ];
+        const historyPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+          config: input.config,
+          workspace,
+          sessionId,
+          guardedRuntime: input.guardedRuntime,
+        });
         const guardedInput: GuardedPromptInput = {
           workspaceId: workspace.id,
           sessionId,
           parts: [
-            { type: "text", text: `/${command}${commandArguments ? ` ${commandArguments}` : ""}` },
-            ...rawPromptSystemPrivacyParts(commandSystem),
-            ...agentContext.privacyParts,
-            guardedProviderSystemPrivacyPart(providerSystem),
+            ...historyPrivacyParts,
+            ...requestPrivacyParts,
           ],
           providerId: modelResolution.model.providerID,
           modelId: modelResolution.model.modelID,
@@ -3148,8 +3170,17 @@ async function proxyOpencodeRequest(input: {
           usageSubject = usage.subject;
         }
         await abortWorkspaceSessionBeforeReplacement(input.config, workspace, sessionId);
+        const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+          config: input.config,
+          workspace,
+          sessionId,
+          guardedRuntime: input.guardedRuntime,
+        });
         const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
-          guardedInput,
+          {
+            ...guardedInput,
+            parts: [...currentHistoryPrivacyParts, ...requestPrivacyParts],
+          },
           authorization,
           providerSystem,
         );
@@ -3283,8 +3314,17 @@ async function proxyOpencodeRequest(input: {
   if (guardedPromptStart && workspace && promptAudit) {
     try {
       await abortWorkspaceSessionBeforeReplacement(input.config, workspace, promptAudit.sessionId);
+      const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+        config: input.config,
+        workspace,
+        sessionId: promptAudit.sessionId,
+        guardedRuntime: input.guardedRuntime,
+      });
       const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
-        guardedPromptStart.input,
+        {
+          ...guardedPromptStart.input,
+          parts: [...currentHistoryPrivacyParts, ...guardedPromptStart.requestPrivacyParts],
+        },
         guardedPromptStart.authorization,
         guardedPromptStart.providerSystem,
       );
@@ -14689,10 +14729,17 @@ function createRoutes(
     });
     const jurisdiction = resolveTrustedRequestJurisdiction(ctx.request, config.trustedProxySecret);
     const providerSystem = guardedProviderSystemContext([agentContext.prompt, resolved.system], "message");
+    const historyPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+      config,
+      workspace,
+      sessionId,
+      guardedRuntime,
+    });
     const response = guardedRuntime.preflight({
       workspaceId: workspace.id,
       sessionId,
       parts: [
+        ...historyPrivacyParts,
         ...resolved.privacyParts,
         ...agentContext.privacyParts,
         guardedProviderSystemPrivacyPart(providerSystem),
@@ -15062,13 +15109,23 @@ function createRoutes(
     });
     const jurisdiction = resolveTrustedRequestJurisdiction(ctx.request, config.trustedProxySecret);
     const providerSystem = guardedProviderSystemContext([agentContext.prompt, resolved.system], "message");
+    const requestPrivacyParts = [
+      ...resolved.privacyParts,
+      ...agentContext.privacyParts,
+      guardedProviderSystemPrivacyPart(providerSystem),
+    ];
+    const historyPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+      config,
+      workspace,
+      sessionId,
+      guardedRuntime,
+    });
     const guardedInput = {
       workspaceId: workspace.id,
       sessionId,
       parts: [
-        ...resolved.privacyParts,
-        ...agentContext.privacyParts,
-        guardedProviderSystemPrivacyPart(providerSystem),
+        ...historyPrivacyParts,
+        ...requestPrivacyParts,
       ],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
@@ -15119,8 +15176,17 @@ function createRoutes(
 
     let guardedAcceptance: GuardedPromptAcceptance;
     try {
+      const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+        config,
+        workspace,
+        sessionId,
+        guardedRuntime,
+      });
       guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
-        guardedInput,
+        {
+          ...guardedInput,
+          parts: [...currentHistoryPrivacyParts, ...requestPrivacyParts],
+        },
         guardedAuthorization,
         providerSystem,
       );
@@ -15336,6 +15402,7 @@ function createRoutes(
       cryptoAppCreatedBy(ctx),
       sessionId,
     );
+    guardedRuntime.purgeSessionPrivacyState({ workspaceId: workspace.id, sessionId });
 
     return jsonResponse({ ok: true });
   });
@@ -21017,9 +21084,36 @@ function sessionCompactionInspectionText(value: unknown): string {
   return lines.join("\n");
 }
 
+const SESSION_HISTORY_PRIVACY_MAX_MESSAGES = 2_048;
+const SESSION_HISTORY_PRIVACY_MAX_BYTES = 16 * 1024 * 1024;
+
+function assertSessionHistoryWithinPrivacyLimits(
+  messages: Awaited<ReturnType<typeof readWorkspaceSessionMessages>>,
+): void {
+  if (messages.length > SESSION_HISTORY_PRIVACY_MAX_MESSAGES) {
+    throw new ApiError(
+      413,
+      "session_history_too_large",
+      "This chat is too large to verify safely. Compact it or start a new chat.",
+    );
+  }
+  let totalBytes = 0;
+  for (const message of messages) {
+    totalBytes += Buffer.byteLength(canonicalJson(message), "utf8");
+    if (totalBytes > SESSION_HISTORY_PRIVACY_MAX_BYTES) {
+      throw new ApiError(
+        413,
+        "session_history_too_large",
+        "This chat is too large to verify safely. Compact it or start a new chat.",
+      );
+    }
+  }
+}
+
 function sessionCompactionPrivacyParts(
   messages: Awaited<ReturnType<typeof readWorkspaceSessionMessages>>,
 ): MatterhornAgentPrivacyPart[] {
+  assertSessionHistoryWithinPrivacyLimits(messages);
   const messageParts = messages.map((message, index): MatterhornAgentPrivacyPart => {
     const canonical = canonicalJson(message);
     const messageId = typeof message.info.id === "string" && message.info.id.trim()
@@ -21062,6 +21156,75 @@ function sessionCompactionPrivacyParts(
     sizeBytes: Buffer.byteLength(manifest, "utf8"),
     version: "matterhorn.session-compaction.v1",
   }, ...messageParts, ...toolParts];
+}
+
+function sessionPromptHistoryPrivacyParts(
+  messages: Awaited<ReturnType<typeof readWorkspaceSessionMessages>>,
+  label: Extract<MatterhornAgentDataLabel, "public" | "workspace_private" | "wallet_private">,
+): MatterhornAgentPrivacyPart[] {
+  assertSessionHistoryWithinPrivacyLimits(messages);
+  const messageParts = messages.map((message, index): MatterhornAgentPrivacyPart => {
+    const canonical = canonicalJson(message);
+    const messageId = typeof message.info.id === "string" && message.info.id.trim()
+      ? message.info.id.trim()
+      : `turn-${index + 1}`;
+    return {
+      type: "session_history",
+      name: `Stored chat turn ${index + 1}`,
+      text: sessionCompactionInspectionText(message),
+      source: "system",
+      label,
+      contentHash: sha256Bytes(canonical),
+      sizeBytes: Buffer.byteLength(canonical, "utf8"),
+      version: messageId,
+    };
+  });
+  const toolParts = messages.flatMap((message, messageIndex) => (
+    Array.isArray(message.parts)
+      ? message.parts.flatMap((part, partIndex): MatterhornAgentPrivacyPart[] => {
+          if (!isRecord(part) || part.type !== "tool") return [];
+          const canonical = canonicalJson(part);
+          return [{
+            type: "session_tool_history",
+            name: `Stored tool result ${messageIndex + 1}.${partIndex + 1}`,
+            source: "tool",
+            label: "untrusted_external",
+            contentHash: sha256Bytes(canonical),
+            sizeBytes: Buffer.byteLength(canonical, "utf8"),
+          }];
+        })
+      : []
+  ));
+  const manifest = canonicalJson(messages.map((message) => sha256Bytes(canonicalJson(message))));
+  return [{
+    type: "session_history_manifest",
+    name: "Exact stored chat included with this request",
+    source: "system",
+    label,
+    contentHash: sha256Bytes(manifest),
+    sizeBytes: Buffer.byteLength(manifest, "utf8"),
+    version: "matterhorn.session-history.v1",
+  }, ...messageParts, ...toolParts];
+}
+
+async function guardedSessionPromptHistoryPrivacyParts(input: {
+  config: ServerConfig;
+  workspace: WorkspaceInfo;
+  sessionId: string;
+  guardedRuntime: MatterhornGuardedAgentRuntime;
+}): Promise<MatterhornAgentPrivacyPart[]> {
+  const messages = await readWorkspaceSessionMessages(
+    input.config,
+    input.workspace,
+    input.sessionId,
+    {},
+  );
+  const label = input.guardedRuntime.resolveSessionHistoryLabel({
+    workspaceId: input.workspace.id,
+    sessionId: input.sessionId,
+    hasStoredHistory: messages.length > 0,
+  });
+  return sessionPromptHistoryPrivacyParts(messages, label);
 }
 
 function decodeInlineAttachmentData(url: string): { bytes: Uint8Array; mimeFromUrl: string | null } {

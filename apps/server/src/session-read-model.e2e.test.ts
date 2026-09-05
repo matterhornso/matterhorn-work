@@ -143,6 +143,36 @@ function privateMemoryRecord(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function defaultSessionMessages() {
+  return [{
+    info: {
+      id: "msg_1",
+      sessionID: "ses_1",
+      role: "assistant",
+      time: { created: 200, completed: 250 },
+    },
+    parts: [
+      {
+        id: "prt_1",
+        messageID: "msg_1",
+        sessionID: "ses_1",
+        type: "text",
+        text: "hostname: mock-host",
+      },
+      {
+        id: "prt_2",
+        messageID: "msg_1",
+        sessionID: "ses_1",
+        type: "tool",
+        toolCallID: "tool_1",
+        toolName: "workspace.read",
+        status: "completed",
+        result: { ok: true, bytes: 12 },
+      },
+    ],
+  }];
+}
+
 function startMockOpencode(input?: {
   abortStatus?: number;
   invalidList?: boolean;
@@ -338,35 +368,7 @@ function startMockOpencode(input?: {
         const sessionMessages = typeof input?.sessionMessages === "function"
           ? input.sessionMessages()
           : input?.sessionMessages;
-        return Response.json(sessionMessages ?? [
-          {
-            info: {
-              id: "msg_1",
-              sessionID: "ses_1",
-              role: "assistant",
-              time: { created: 200, completed: 250 },
-            },
-            parts: [
-              {
-                id: "prt_1",
-                messageID: "msg_1",
-                sessionID: "ses_1",
-                type: "text",
-                text: "hostname: mock-host",
-              },
-              {
-                id: "prt_2",
-                messageID: "msg_1",
-                sessionID: "ses_1",
-                type: "tool",
-                toolCallID: "tool_1",
-                toolName: "workspace.read",
-                status: "completed",
-                result: { ok: true, bytes: 12 },
-              },
-            ],
-          },
-        ]);
+        return Response.json(sessionMessages ?? []);
       }
 
       if (url.pathname === "/session/ses_1/todo") {
@@ -413,6 +415,9 @@ async function startOpenworkServer(input: {
   hardModelUsageLimit?: number;
   trustedProxySecret?: string;
 }) {
+  // Keep every test's durable guarded-runtime state isolated from both the
+  // developer machine and other tests that reuse the same workspace/session IDs.
+  process.env.OPENWORK_DATA_DIR = join(input.workspaceRoot, ".openwork-test-data");
   if (input.hardModelUsageLimit) {
     process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT = "hard";
     process.env.MATTERHORN_MODEL_USAGE_DAILY_LIMIT = String(input.hardModelUsageLimit);
@@ -493,7 +498,7 @@ describe("workspace session read APIs", () => {
     const workspaceRoot = await createWorkspaceRoot();
     await mkdir(join(workspaceRoot, "outputs", "bittensor"), { recursive: true });
     await writeFile(join(workspaceRoot, "outputs", "bittensor", "validator-report.md"), "# Validator report\n");
-    const mock = startMockOpencode();
+    const mock = startMockOpencode({ sessionMessages: defaultSessionMessages() });
     const openwork = await startOpenworkServer({
       workspaceRoot,
       opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
@@ -553,7 +558,7 @@ describe("workspace session read APIs", () => {
 
   test("lists sessions and returns session details, messages, and snapshot", async () => {
     const workspaceRoot = await createWorkspaceRoot();
-    const mock = startMockOpencode();
+    const mock = startMockOpencode({ sessionMessages: defaultSessionMessages() });
     const openwork = await startOpenworkServer({
       workspaceRoot,
       opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
@@ -731,7 +736,7 @@ describe("workspace session read APIs", () => {
 
   test("streams optional message, tool, and todo detail events from the initial snapshot", async () => {
     const workspaceRoot = await createWorkspaceRoot();
-    const mock = startMockOpencode();
+    const mock = startMockOpencode({ sessionMessages: defaultSessionMessages() });
     const openwork = await startOpenworkServer({
       workspaceRoot,
       opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
@@ -1640,6 +1645,193 @@ describe("workspace session read APIs", () => {
     expect(upstream?.body).toMatchObject({ system: expect.stringContaining(walletAddress) });
     expect(upstream?.body).not.toHaveProperty("privacyConsentToken");
     expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/prompt_async")).toHaveLength(1);
+  });
+
+  test("keeps a public chat low-friction while binding later requests to its exact history", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const sessionMessages: unknown[] = [];
+    const mock = startMockOpencode({ sessionMessages: () => sessionMessages });
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const first = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Compare public Bittensor validator performance",
+        model: { providerID: "openai", modelID: "gpt-4.1" },
+      }),
+    });
+    expect(first.status).toBe(202);
+
+    sessionMessages.push(
+      {
+        info: { id: "msg_public_user", sessionID: "ses_1", role: "user" },
+        parts: [{
+          id: "prt_public_user",
+          messageID: "msg_public_user",
+          sessionID: "ses_1",
+          type: "text",
+          text: "Compare public Bittensor validator performance",
+        }],
+      },
+      {
+        info: { id: "msg_public_assistant", sessionID: "ses_1", role: "assistant" },
+        parts: [{
+          id: "prt_public_assistant",
+          messageID: "msg_public_assistant",
+          sessionID: "ses_1",
+          type: "text",
+          text: "Validator 1 has the strongest public metrics.",
+        }],
+      },
+    );
+    const preflight = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages/preflight`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Now compare validator 2",
+        model: { providerID: "openai", modelID: "gpt-4.1" },
+      }),
+    });
+    expect(preflight.status).toBe(200);
+    await expect(preflight.json()).resolves.toMatchObject({
+      decision: "allow",
+      effectiveMode: "public_research",
+    });
+  });
+
+  test("requires consent for legacy history and invalidates it when one stored byte changes", async () => {
+    process.env.MATTERHORN_PROVIDER_PRIVACY_MODE = "verified-only";
+    const workspaceRoot = await createWorkspaceRoot();
+    const sessionMessages = [{
+      info: { id: "msg_legacy_user", sessionID: "ses_1", role: "user" },
+      parts: [{
+        id: "prt_legacy_user",
+        messageID: "msg_legacy_user",
+        sessionID: "ses_1",
+        type: "text",
+        text: "Use my private research preference.",
+      }],
+    }];
+    const mock = startMockOpencode({ sessionMessages: () => sessionMessages });
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const body = (privacyConsentToken?: string) => JSON.stringify({
+      message: "Continue with public market data",
+      model: { providerID: "openai", modelID: "gpt-4.1" },
+      ...(privacyConsentToken ? { privacyConsentToken } : {}),
+    });
+    const preflightResponse = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages/preflight`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: body(),
+    });
+    const preflight = await preflightResponse.json();
+    expect(preflight).toMatchObject({
+      decision: "consent_required",
+      effectiveMode: "private_workspace",
+      detectedData: { labels: expect.arrayContaining(["workspace_private"]) },
+    });
+    const confirmed = await fetch(
+      `${base}/workspace/ws_1/privacy-consents/${encodeURIComponent(preflight.challenge.id)}/confirm`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: "ses_1", requestHash: preflight.requestHash }),
+      },
+    );
+    const consent = await confirmed.json();
+
+    sessionMessages[0]!.parts[0]!.text = "Use my private research preference!";
+    const changed = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: body(consent.consentToken),
+    });
+    expect(changed.status).toBe(409);
+    await expect(changed.json()).resolves.toMatchObject({ code: "agent_privacy_consent_required" });
+    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/prompt_async")).toHaveLength(0);
+  });
+
+  test("blocks secrets already present in chat history before provider dispatch", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const secret = "history-secret-that-must-not-leave";
+    const mock = startMockOpencode({
+      sessionMessages: [{
+        info: { id: "msg_secret_history", sessionID: "ses_1", role: "user" },
+        parts: [{
+          id: "prt_secret_history",
+          messageID: "msg_secret_history",
+          sessionID: "ses_1",
+          type: "text",
+          text: `PRIVATE_KEY=${secret}`,
+        }],
+      }],
+    });
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const blocked = await fetch(
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/messages`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Continue",
+          model: { providerID: "openai", modelID: "gpt-4.1" },
+        }),
+      },
+    );
+    expect(blocked.status).toBe(422);
+    const payload = await blocked.json();
+    expect(payload).toMatchObject({ code: "agent_privacy_blocked" });
+    expect(JSON.stringify(payload)).not.toContain(secret);
+    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/prompt_async")).toHaveLength(0);
+  });
+
+  test("rejects chat history that is too large to verify without provider traffic", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode({
+      sessionMessages: Array.from({ length: 2_049 }, (_, index) => ({
+        info: { id: `msg_${index}`, sessionID: "ses_1", role: "user" },
+        parts: [{
+          id: `prt_${index}`,
+          messageID: `msg_${index}`,
+          sessionID: "ses_1",
+          type: "text",
+          text: "public market research",
+        }],
+      })),
+    });
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const response = await fetch(
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/messages`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Continue",
+          model: { providerID: "openai", modelID: "gpt-4.1" },
+        }),
+      },
+    );
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toMatchObject({ code: "session_history_too_large" });
+    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/prompt_async")).toHaveLength(0);
   });
 
   test("keeps canonical Matterhorn agent policy public and sends the resolved agent explicitly", async () => {
