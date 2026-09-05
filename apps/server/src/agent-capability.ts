@@ -94,6 +94,15 @@ type ConsumedCapability = {
   consumedAtMs: number;
 };
 
+export type MatterhornConsumedToolProof = {
+  access: "read" | "prepare";
+  argsHash: string;
+  expiresAt: string;
+  reconciliationExpiresAt: string;
+  coworker: MatterhornAgentCapabilityClaims["coworker"] | null;
+  jurisdictionPolicy: MatterhornAgentJurisdictionPolicyContext | null;
+};
+
 type StoredRunGrant = Omit<RunGrant,
   "allowedTools" | "prepareAttempts" | "successfulPrepareFamilies" | "issuedPrepareFamilies" | "issuedCallIds"
 > & {
@@ -931,30 +940,110 @@ export class MatterhornAgentCapabilityBroker {
     network: string;
     toolName: string;
     args: Record<string, unknown>;
+    now?: Date;
   }): {
     access: "read" | "prepare";
     expiresAt: string;
     jurisdictionPolicy: MatterhornAgentJurisdictionPolicyContext | null;
   } | null {
+    const proof = this.consumedToolProof({
+      runId: input.runId,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      callId: input.callId,
+      toolName: input.toolName,
+      args: input.args,
+      now: input.now,
+    });
+    if (!proof
+      || proof.coworker?.id !== input.coworkerId
+      || proof.coworker.connectionId !== input.connectionId
+      || proof.coworker.appId !== input.appId
+      || proof.coworker.manifestRevision !== input.manifestRevision
+      || proof.coworker.actionId !== input.actionId
+      || proof.coworker.network !== input.network) return null;
+    return {
+      access: proof.access,
+      expiresAt: proof.expiresAt,
+      jurisdictionPolicy: proof.jurisdictionPolicy,
+    };
+  }
+
+  consumedToolProof(input: {
+    runId: string;
+    workspaceId: string;
+    sessionId: string;
+    callId: string;
+    toolName: string;
+    args?: Record<string, unknown>;
+    now?: Date;
+  }): MatterhornConsumedToolProof | null {
     const claims = this.consumedByCallId.get(input.callId);
     if (!claims
       || claims.runId !== input.runId
       || claims.workspaceId !== input.workspaceId
       || claims.sessionId !== input.sessionId
       || claims.callId !== input.callId
-      || claims.coworker?.id !== input.coworkerId
-      || claims.coworker.connectionId !== input.connectionId
-      || claims.coworker.appId !== input.appId
-      || claims.coworker.manifestRevision !== input.manifestRevision
-      || claims.coworker.actionId !== input.actionId
-      || claims.coworker.network !== input.network
       || claims.toolName !== normalizedToolName(input.toolName)
-      || !equalDigest(claims.argsHash, capabilityArgsHash(input.args))) return null;
+      || (input.args !== undefined && !equalDigest(claims.argsHash, capabilityArgsHash(input.args)))) return null;
+    const reconciliationExpiresAtMs = Date.parse(claims.expiresAt) + CAPABILITY_TTL_MS;
+    if (reconciliationExpiresAtMs <= (input.now ?? new Date()).getTime()) return null;
     return {
       access: claims.access,
+      argsHash: claims.argsHash,
       expiresAt: claims.expiresAt,
+      reconciliationExpiresAt: new Date(reconciliationExpiresAtMs).toISOString(),
+      coworker: claims.coworker ? structuredClone(claims.coworker) : null,
       jurisdictionPolicy: claims.jurisdictionPolicy ? structuredClone(claims.jurisdictionPolicy) : null,
     };
+  }
+
+  sealConsumedToolContext(input: {
+    runId: string;
+    workspaceId: string;
+    sessionId: string;
+    callId: string;
+    toolName: string;
+    context: unknown;
+    now?: Date;
+  }): { proof: MatterhornConsumedToolProof; seal: string } | null {
+    const proof = this.consumedToolProof(input);
+    const claims = this.consumedByCallId.get(input.callId);
+    const secret = this.resolveSigningSecret();
+    if (!proof || !claims || !secret) return null;
+    return {
+      proof,
+      seal: signature(canonicalJson({
+        version: "matterhorn.consumed-tool-context.v1",
+        jti: claims.jti,
+        runId: claims.runId,
+        workspaceId: claims.workspaceId,
+        sessionId: claims.sessionId,
+        callId: claims.callId,
+        toolName: claims.toolName,
+        access: claims.access,
+        argsHash: claims.argsHash,
+        expiresAt: claims.expiresAt,
+        reconciliationExpiresAt: proof.reconciliationExpiresAt,
+        contextHash: sha256(input.context),
+      }), secret),
+    };
+  }
+
+  verifyConsumedToolContext(input: {
+    runId: string;
+    workspaceId: string;
+    sessionId: string;
+    callId: string;
+    toolName: string;
+    context: unknown;
+    seal: string;
+    now?: Date;
+  }): MatterhornConsumedToolProof | null {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(input.seal)) return null;
+    const sealed = this.sealConsumedToolContext(input);
+    if (!sealed || !equalDigest(sealed.seal, input.seal)) return null;
+    return sealed.proof;
   }
 
   activeRun(sessionId: string): string | null {
