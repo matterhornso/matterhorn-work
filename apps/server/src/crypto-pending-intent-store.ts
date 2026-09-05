@@ -10,15 +10,24 @@ import {
 } from "@matterhorn-work/types/crypto-coworkers";
 import type { ReviewedActionHandoffV2 } from "@matterhorn-work/types/reviewed-actions";
 import { isReviewedActionHandoffV2 } from "@matterhorn-work/types/reviewed-actions";
+import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
 
 import {
   cryptoIntentToReviewedActionHandoffV2,
   validateCryptoIntentIntegrity,
 } from "./crypto-transaction-coordinator.js";
-import { sha256 } from "./guarded-runtime-crypto.js";
-import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
+import {
+  MatterhornGuardedRuntimeStateStore,
+  type GuardedRuntimeStateRecord,
+} from "./guarded-runtime-state-store.js";
 
 export const MATTERHORN_PENDING_CRYPTO_INTENT_VERSION = "matterhorn.pending-crypto-intent.v1";
+const MATTERHORN_PENDING_CRYPTO_INTENT_ENVELOPE_VERSION = "matterhorn.pending-crypto-intent-envelope.v1";
+const PENDING_INTENT_AUTHORITY_DOMAIN = "matterhorn.pending-crypto-intent.authority.v1";
+const PENDING_INTENT_AUTHORITY_SALT = Buffer.from("matterhorn.pending-crypto-intent.key.v1", "utf8");
+const PENDING_INTENT_AUTHORITY_SECRET_MINIMUM_BYTES = 32;
+const AUTHORITY_SEAL_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 export type MatterhornPendingCryptoIntentState =
   | "wallet_review"
@@ -61,6 +70,12 @@ type CreateInput = {
   previousIntentHash?: string | null;
 };
 
+type StoredPendingCryptoIntentEnvelope = {
+  version: typeof MATTERHORN_PENDING_CRYPTO_INTENT_ENVELOPE_VERSION;
+  record: MatterhornPendingCryptoIntent;
+  authoritySeal: string;
+};
+
 const RETENTION_AFTER_CREATION_MS = 7 * 24 * 60 * 60_000;
 
 const TRANSITIONS: Readonly<Record<MatterhornPendingCryptoIntentState, ReadonlySet<MatterhornPendingCryptoIntentState>>> = {
@@ -77,6 +92,62 @@ const TRANSITIONS: Readonly<Record<MatterhornPendingCryptoIntentState, ReadonlyS
 
 function storageKey(workspaceId: string, id: string): string {
   return `pending_${sha256({ workspaceId, id })}`;
+}
+
+function exactObjectKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return actual.length === sortedExpected.length
+    && actual.every((key, index) => key === sortedExpected[index]);
+}
+
+function pendingIntentAuthorityKey(secret: string): Buffer {
+  const input = Buffer.from(secret, "utf8");
+  if (input.byteLength < PENDING_INTENT_AUTHORITY_SECRET_MINIMUM_BYTES) {
+    input.fill(0);
+    throw new Error("pending_crypto_intent_integrity_secret_invalid");
+  }
+  const key = Buffer.from(hkdfSync(
+    "sha256",
+    input,
+    PENDING_INTENT_AUTHORITY_SALT,
+    PENDING_INTENT_AUTHORITY_DOMAIN,
+    32,
+  ));
+  input.fill(0);
+  return key;
+}
+
+function pendingIntentAuthorityValue(input: {
+  key: string;
+  workspaceId: string;
+  sessionId: string | null;
+  expiresAtMs: number | null;
+  updatedAtMs: number;
+  record: MatterhornPendingCryptoIntent;
+}) {
+  return {
+    domain: PENDING_INTENT_AUTHORITY_DOMAIN,
+    kind: "crypto_pending_intent",
+    ...input,
+  };
+}
+
+function sealPendingIntentAuthority(value: unknown, key: Buffer): string {
+  return createHmac("sha256", key).update(canonicalJson(value), "utf8").digest("base64url");
+}
+
+function pendingIntentAuthoritySealValid(value: unknown, seal: string, key: Buffer): boolean {
+  if (!AUTHORITY_SEAL_PATTERN.test(seal)) return false;
+  const expected = Buffer.from(sealPendingIntentAuthority(value, key), "base64url");
+  const actual = Buffer.from(seal, "base64url");
+  try {
+    return expected.byteLength === actual.byteLength && timingSafeEqual(expected, actual);
+  } finally {
+    expected.fill(0);
+    actual.fill(0);
+  }
 }
 
 function validDate(value: string): boolean {
@@ -143,18 +214,126 @@ function clone(record: MatterhornPendingCryptoIntent): MatterhornPendingCryptoIn
   return structuredClone(record);
 }
 
-function normalizeRecord(record: MatterhornPendingCryptoIntent): MatterhornPendingCryptoIntent {
-  // Pending-intent v1 records created before public receipt reconciliation did
-  // not persist this additive field. Treat them as having no receipt so an
-  // upgrade cannot strand an already-reviewed wallet action.
-  return record.receipt === undefined ? { ...record, receipt: null } : record;
-}
-
 export class MatterhornPendingCryptoIntentStore {
+  readonly #authorityKey: Buffer | null;
+
   constructor(
     private readonly stateStore: MatterhornGuardedRuntimeStateStore,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+    integritySecret = process.env.MATTERHORN_COWORKER_INTEGRITY_SECRET ?? "",
+  ) {
+    this.#authorityKey = integritySecret.length > 0
+      ? pendingIntentAuthorityKey(integritySecret)
+      : null;
+  }
+
+  #requireAuthorityKey(): Buffer {
+    if (!this.#authorityKey) throw new Error("pending_crypto_intent_integrity_secret_invalid");
+    return this.#authorityKey;
+  }
+
+  #recordFromStored(
+    stored: GuardedRuntimeStateRecord<unknown>,
+  ): MatterhornPendingCryptoIntent {
+    const value = stored.value;
+    if (!exactObjectKeys(value, ["version", "record", "authoritySeal"])
+      || value.version !== MATTERHORN_PENDING_CRYPTO_INTENT_ENVELOPE_VERSION
+      || typeof value.authoritySeal !== "string"
+      || !exactObjectKeys(value.record, [
+        "version",
+        "id",
+        "workspaceId",
+        "sessionId",
+        "ownerId",
+        "coworkerId",
+        "revision",
+        "state",
+        "intent",
+        "policyDecision",
+        "reviewedAction",
+        "receipt",
+        "previousIntentHash",
+        "createdAt",
+        "updatedAt",
+        "expiresAt",
+      ])) {
+      throw new Error("pending_crypto_intent_state_corrupt");
+    }
+    const record = value.record as MatterhornPendingCryptoIntent;
+    try {
+      validateRecord(record);
+    } catch {
+      throw new Error("pending_crypto_intent_state_corrupt");
+    }
+    const expectedKey = storageKey(record.workspaceId, record.id);
+    const expectedRetentionExpiry = Date.parse(record.createdAt) + RETENTION_AFTER_CREATION_MS;
+    const expectedUpdatedAt = Date.parse(record.updatedAt);
+    if (stored.kind !== "crypto_pending_intent"
+      || stored.key !== expectedKey
+      || stored.workspaceId !== record.workspaceId
+      || stored.sessionId !== record.sessionId
+      || stored.expiresAtMs !== expectedRetentionExpiry
+      || stored.updatedAtMs !== expectedUpdatedAt) {
+      throw new Error("pending_crypto_intent_state_corrupt");
+    }
+    const authorityValue = pendingIntentAuthorityValue({
+      key: stored.key,
+      workspaceId: stored.workspaceId,
+      sessionId: stored.sessionId,
+      expiresAtMs: stored.expiresAtMs,
+      updatedAtMs: stored.updatedAtMs,
+      record,
+    });
+    if (!pendingIntentAuthoritySealValid(
+      authorityValue,
+      value.authoritySeal,
+      this.#requireAuthorityKey(),
+    )) {
+      throw new Error("pending_crypto_intent_state_corrupt");
+    }
+    return clone(record);
+  }
+
+  #putRecord(record: MatterhornPendingCryptoIntent): void {
+    validateRecord(record);
+    const key = storageKey(record.workspaceId, record.id);
+    const expiresAtMs = Date.parse(record.createdAt) + RETENTION_AFTER_CREATION_MS;
+    const updatedAtMs = Date.parse(record.updatedAt);
+    const authorityValue = pendingIntentAuthorityValue({
+      key,
+      workspaceId: record.workspaceId,
+      sessionId: record.sessionId,
+      expiresAtMs,
+      updatedAtMs,
+      record,
+    });
+    const envelope: StoredPendingCryptoIntentEnvelope = {
+      version: MATTERHORN_PENDING_CRYPTO_INTENT_ENVELOPE_VERSION,
+      record: clone(record),
+      authoritySeal: sealPendingIntentAuthority(authorityValue, this.#requireAuthorityKey()),
+    };
+    this.stateStore.put({
+      kind: "crypto_pending_intent",
+      key,
+      workspaceId: record.workspaceId,
+      sessionId: record.sessionId,
+      value: envelope,
+      expiresAtMs,
+      nowMs: updatedAtMs,
+    });
+  }
+
+  #takeRecord(key: string, nowMs: number): MatterhornPendingCryptoIntent | null {
+    const stored = this.stateStore.takeRecord<unknown>("crypto_pending_intent", key, nowMs);
+    return stored ? this.#recordFromStored(stored) : null;
+  }
+
+  #listRecords(workspaceId: string, nowMs: number): MatterhornPendingCryptoIntent[] {
+    return this.stateStore.listRecords<unknown>("crypto_pending_intent", {
+      workspaceId,
+      nowMs,
+    }).map((stored) => this.#recordFromStored(stored));
+  }
 
   create(input: CreateInput): MatterhornPendingCryptoIntent {
     const now = this.now();
@@ -178,8 +357,8 @@ export class MatterhornPendingCryptoIntentStore {
     };
     validateRecord(record);
     const key = storageKey(record.workspaceId, record.id);
-    const existingValue = this.stateStore.get<MatterhornPendingCryptoIntent>("crypto_pending_intent", key, now.getTime());
-    const existing = existingValue ? normalizeRecord(existingValue) : null;
+    const existingValue = this.stateStore.getRecord<unknown>("crypto_pending_intent", key, now.getTime());
+    const existing = existingValue ? this.#recordFromStored(existingValue) : null;
     if (existing) {
       validateRecord(existing);
       if (existing.ownerId !== record.ownerId
@@ -194,27 +373,18 @@ export class MatterhornPendingCryptoIntentStore {
       }
       return clone(existing);
     }
-    this.stateStore.put({
-      kind: "crypto_pending_intent",
-      key,
-      workspaceId: record.workspaceId,
-      sessionId: record.sessionId,
-      value: record,
-      expiresAtMs: now.getTime() + RETENTION_AFTER_CREATION_MS,
-      nowMs: now.getTime(),
-    });
+    this.#putRecord(record);
     return clone(record);
   }
 
   get(workspaceId: string, ownerId: string, coworkerId: string, id: string): MatterhornPendingCryptoIntent | null {
-    const stored = this.stateStore.get<MatterhornPendingCryptoIntent>(
+    const stored = this.stateStore.getRecord<unknown>(
       "crypto_pending_intent",
       storageKey(workspaceId, id),
       this.now().getTime(),
     );
     if (!stored) return null;
-    const record = normalizeRecord(stored);
-    validateRecord(record);
+    const record = this.#recordFromStored(stored);
     if (record.workspaceId !== workspaceId
       || record.ownerId !== ownerId
       || record.coworkerId !== coworkerId) return null;
@@ -233,14 +403,8 @@ export class MatterhornPendingCryptoIntentStore {
   }
 
   list(workspaceId: string, ownerId: string, coworkerId: string): MatterhornPendingCryptoIntent[] {
-    const records = this.stateStore.list<MatterhornPendingCryptoIntent>("crypto_pending_intent", {
-      workspaceId,
-      nowMs: this.now().getTime(),
-    }).map((stored) => {
-      const record = normalizeRecord(stored);
-      validateRecord(record);
-      return record;
-    }).filter((record) => record.ownerId === ownerId && record.coworkerId === coworkerId);
+    const records = this.#listRecords(workspaceId, this.now().getTime())
+      .filter((record) => record.ownerId === ownerId && record.coworkerId === coworkerId);
     return records.map((record) => this.get(
       workspaceId,
       ownerId,
@@ -250,14 +414,8 @@ export class MatterhornPendingCryptoIntentStore {
   }
 
   listForOwner(workspaceId: string, ownerId: string): MatterhornPendingCryptoIntent[] {
-    const records = this.stateStore.list<MatterhornPendingCryptoIntent>("crypto_pending_intent", {
-      workspaceId,
-      nowMs: this.now().getTime(),
-    }).map((stored) => {
-      const record = normalizeRecord(stored);
-      validateRecord(record);
-      return record;
-    }).filter((record) => record.ownerId === ownerId);
+    const records = this.#listRecords(workspaceId, this.now().getTime())
+      .filter((record) => record.ownerId === ownerId);
     return records.map((record) => this.get(
       workspaceId,
       ownerId,
@@ -277,14 +435,9 @@ export class MatterhornPendingCryptoIntentStore {
     const now = this.now();
     const key = storageKey(input.workspaceId, input.id);
     return this.stateStore.transaction(() => {
-      const stored = this.stateStore.take<MatterhornPendingCryptoIntent>(
-        "crypto_pending_intent",
-        key,
-        now.getTime(),
-      );
+      const stored = this.#takeRecord(key, now.getTime());
       if (!stored) throw new Error("pending_crypto_intent_not_found");
-      const current = normalizeRecord(stored);
-      validateRecord(current);
+      const current = stored;
       if (current.workspaceId !== input.workspaceId
         || current.ownerId !== input.ownerId
         || current.coworkerId !== input.coworkerId) {
@@ -299,15 +452,7 @@ export class MatterhornPendingCryptoIntentStore {
         updatedAt: now.toISOString(),
       };
       validateRecord(next);
-      this.stateStore.put({
-        kind: "crypto_pending_intent",
-        key,
-        workspaceId: next.workspaceId,
-        sessionId: next.sessionId,
-        value: next,
-        expiresAtMs: Date.parse(next.createdAt) + RETENTION_AFTER_CREATION_MS,
-        nowMs: now.getTime(),
-      });
+      this.#putRecord(next);
       return clone(next);
     });
   }
@@ -331,23 +476,10 @@ export class MatterhornPendingCryptoIntentStore {
     const key = storageKey(input.workspaceId, input.id);
     let expiredTransition = false;
     const record = this.stateStore.transaction(() => {
-      const stored = this.stateStore.take<MatterhornPendingCryptoIntent>(
-        "crypto_pending_intent",
-        key,
-        now.getTime(),
-      );
+      const stored = this.#takeRecord(key, now.getTime());
       if (!stored) throw new Error("pending_crypto_intent_not_found");
-      const current = normalizeRecord(stored);
-      validateRecord(current);
-      const restore = (record: MatterhornPendingCryptoIntent) => this.stateStore.put({
-        kind: "crypto_pending_intent",
-        key,
-        workspaceId: record.workspaceId,
-        sessionId: record.sessionId,
-        value: record,
-        expiresAtMs: Date.parse(record.createdAt) + RETENTION_AFTER_CREATION_MS,
-        nowMs: now.getTime(),
-      });
+      const current = stored;
+      const restore = (record: MatterhornPendingCryptoIntent) => this.#putRecord(record);
       if (Date.parse(current.expiresAt) <= now.getTime()
         && TRANSITIONS[current.state].has("expired")) {
         const expiredRecord: MatterhornPendingCryptoIntent = {
@@ -462,23 +594,10 @@ export class MatterhornPendingCryptoIntentStore {
     const now = this.now();
     const key = storageKey(input.workspaceId, input.id);
     return this.stateStore.transaction(() => {
-      const stored = this.stateStore.take<MatterhornPendingCryptoIntent>(
-        "crypto_pending_intent",
-        key,
-        now.getTime(),
-      );
+      const stored = this.#takeRecord(key, now.getTime());
       if (!stored) throw new Error("pending_crypto_intent_not_found");
-      const current = normalizeRecord(stored);
-      validateRecord(current);
-      const restore = (record: MatterhornPendingCryptoIntent) => this.stateStore.put({
-        kind: "crypto_pending_intent",
-        key,
-        workspaceId: record.workspaceId,
-        sessionId: record.sessionId,
-        value: record,
-        expiresAtMs: Date.parse(record.createdAt) + RETENTION_AFTER_CREATION_MS,
-        nowMs: now.getTime(),
-      });
+      const current = stored;
+      const restore = (record: MatterhornPendingCryptoIntent) => this.#putRecord(record);
       const canonical = current.intent.canonicalArguments;
       const amountSui = typeof canonical.amountSui === "string" ? canonical.amountSui : "";
       const recipient = typeof canonical.recipient === "string" ? canonical.recipient : "";
@@ -586,14 +705,8 @@ export class MatterhornPendingCryptoIntentStore {
   }
 
   invalidateConnection(input: { workspaceId: string; connectionId: string }): number {
-    const records = this.stateStore.list<MatterhornPendingCryptoIntent>("crypto_pending_intent", {
-      workspaceId: input.workspaceId,
-      nowMs: this.now().getTime(),
-    }).map((stored) => {
-      const record = normalizeRecord(stored);
-      validateRecord(record);
-      return record;
-    }).filter((record) => record.intent.connectionId === input.connectionId);
+    const records = this.#listRecords(input.workspaceId, this.now().getTime())
+      .filter((record) => record.intent.connectionId === input.connectionId);
     let invalidated = 0;
     for (const record of records) {
       if (!TRANSITIONS[record.state].has("cancelled")) continue;

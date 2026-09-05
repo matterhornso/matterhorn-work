@@ -29,6 +29,7 @@ const SENDER = `0x${"1".repeat(64)}`;
 const RECIPIENT = `0x${"2".repeat(64)}`;
 const BITTENSOR_SENDER = `5${"C".repeat(47)}`;
 const BITTENSOR_HOTKEY = `5${"E".repeat(47)}`;
+const PENDING_INTENT_INTEGRITY_SECRET = "pending-intent-integrity-secret-at-least-32-bytes";
 const stateStores: MatterhornGuardedRuntimeStateStore[] = [];
 
 afterEach(() => {
@@ -47,7 +48,11 @@ function pendingStoreWithState(now: () => Date = () => NOW): {
   const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));
   stateStores.push(state);
   return {
-    pendingIntents: new MatterhornPendingCryptoIntentStore(state, now),
+    pendingIntents: new MatterhornPendingCryptoIntentStore(
+      state,
+      now,
+      PENDING_INTENT_INTEGRITY_SECRET,
+    ),
     state,
   };
 }
@@ -939,7 +944,7 @@ describe("guarded crypto transaction service", () => {
 
   test("durably expires a stale wallet review before rejecting receipt reconciliation", async () => {
     let clock = NOW;
-    const { pendingIntents, state } = pendingStoreWithState(() => clock);
+    const pendingIntents = pendingStore(() => clock);
     const input = request();
     const service = new MatterhornCryptoTransactionService({
       router: { execute: async () => adapterResult() },
@@ -980,10 +985,8 @@ describe("guarded crypto transaction service", () => {
       authorizedArgumentsHash: prepared.intent.authorizedArgumentsHash,
     })).toThrow("pending_crypto_intent_expired");
 
-    expect(state.list<{ id: string; state: string; revision: number }>(
-      "crypto_pending_intent",
-      { workspaceId: "ws_alpha", nowMs: clock.getTime() },
-    )).toContainEqual(expect.objectContaining({ id, state: "expired", revision: 2 }));
+    expect(pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", id))
+      .toMatchObject({ id, state: "expired", revision: 2 });
   });
 
   test("reconciles only exact wallet-reported Sui metadata without claiming chain verification", async () => {
@@ -1303,5 +1306,117 @@ describe("guarded crypto transaction service", () => {
     })).toThrow("injected_pending_intent_write_failure");
     restorePut();
     expect(pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", id)).toEqual(submitted);
+  });
+
+  test("rejects restored wallet reviews whose tenant authority or row metadata was changed", async () => {
+    const input = request();
+    const { pendingIntents, state } = pendingStoreWithState();
+    const service = new MatterhornCryptoTransactionService({
+      router: { execute: async () => adapterResult() },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents,
+      recordReviewedAction: async () => undefined,
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 25,
+        dailySpendUsdBefore: 10,
+        weeklySpendUsdBefore: 20,
+        projectedReserveUsd: 75,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 1,
+        regionCode: "ch",
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    const prepared = await service.prepare(input);
+    const id = prepared.pendingIntent?.id ?? "missing";
+    const stored = state.listRecords<Record<string, unknown>>("crypto_pending_intent", {
+      workspaceId: "ws_alpha",
+      nowMs: NOW.getTime(),
+    })[0];
+    if (!stored) throw new Error("expected_pending_intent_envelope");
+    const envelope = structuredClone(stored.value) as {
+      version: string;
+      record: { ownerId: string };
+      authoritySeal: string;
+    };
+    envelope.record.ownerId = "account_attacker";
+    state.put({
+      kind: "crypto_pending_intent",
+      key: stored.key,
+      workspaceId: stored.workspaceId,
+      sessionId: stored.sessionId,
+      value: envelope,
+      expiresAtMs: stored.expiresAtMs,
+      nowMs: stored.updatedAtMs,
+    });
+    expect(() => pendingIntents.get("ws_alpha", "account_attacker", "cw_sui", id))
+      .toThrow("pending_crypto_intent_state_corrupt");
+
+    state.put({
+      kind: "crypto_pending_intent",
+      key: stored.key,
+      workspaceId: stored.workspaceId,
+      sessionId: stored.sessionId,
+      value: stored.value,
+      expiresAtMs: stored.expiresAtMs,
+      nowMs: stored.updatedAtMs + 1,
+    });
+    expect(() => pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", id))
+      .toThrow("pending_crypto_intent_state_corrupt");
+  });
+
+  test("rejects unsealed and wrong-key restored wallet reviews", async () => {
+    const input = request();
+    const { pendingIntents, state } = pendingStoreWithState();
+    const service = new MatterhornCryptoTransactionService({
+      router: { execute: async () => adapterResult() },
+      capabilities: brokerWithConsumedCapability(input),
+      pendingIntents,
+      recordReviewedAction: async () => undefined,
+      resolveTrustedFacts: async () => ({
+        notionalUsd: 25,
+        dailySpendUsdBefore: 10,
+        weeklySpendUsdBefore: 20,
+        projectedReserveUsd: 75,
+        leverage: null,
+        transactionsLastHour: 0,
+        transactionsToday: 1,
+        regionCode: "ch",
+        complianceAllowed: true,
+      }),
+      now: () => NOW,
+    });
+    const prepared = await service.prepare(input);
+    const id = prepared.pendingIntent?.id ?? "missing";
+    const wrongKeyStore = new MatterhornPendingCryptoIntentStore(
+      state,
+      () => NOW,
+      "different-pending-intent-integrity-secret-at-least-32-bytes",
+    );
+    expect(() => wrongKeyStore.get("ws_alpha", "account_alpha", "cw_sui", id))
+      .toThrow("pending_crypto_intent_state_corrupt");
+    const missingKeyStore = new MatterhornPendingCryptoIntentStore(state, () => NOW, "");
+    expect(() => missingKeyStore.get("ws_alpha", "account_alpha", "cw_sui", id))
+      .toThrow("pending_crypto_intent_integrity_secret_invalid");
+
+    const stored = state.listRecords<Record<string, unknown>>("crypto_pending_intent", {
+      workspaceId: "ws_alpha",
+      nowMs: NOW.getTime(),
+    })[0];
+    if (!stored) throw new Error("expected_pending_intent_envelope");
+    const envelope = stored.value as { record: unknown };
+    state.put({
+      kind: "crypto_pending_intent",
+      key: stored.key,
+      workspaceId: stored.workspaceId,
+      sessionId: stored.sessionId,
+      value: envelope.record,
+      expiresAtMs: stored.expiresAtMs,
+      nowMs: stored.updatedAtMs,
+    });
+    expect(() => pendingIntents.get("ws_alpha", "account_alpha", "cw_sui", id))
+      .toThrow("pending_crypto_intent_state_corrupt");
   });
 });

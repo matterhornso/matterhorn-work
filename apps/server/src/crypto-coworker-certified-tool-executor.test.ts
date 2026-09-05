@@ -27,6 +27,7 @@ const roots: string[] = [];
 const runtimes: MatterhornGuardedAgentRuntime[] = [];
 const priorMode = process.env.MATTERHORN_GUARDED_RUNTIME_MODE;
 const priorSecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+const priorCoworkerIntegritySecret = process.env.MATTERHORN_COWORKER_INTEGRITY_SECRET;
 const priorDataDir = process.env.MATTERHORN_WORK_DATA_DIR;
 
 afterEach(() => {
@@ -36,6 +37,8 @@ afterEach(() => {
   else process.env.MATTERHORN_GUARDED_RUNTIME_MODE = priorMode;
   if (priorSecret === undefined) delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
   else process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = priorSecret;
+  if (priorCoworkerIntegritySecret === undefined) delete process.env.MATTERHORN_COWORKER_INTEGRITY_SECRET;
+  else process.env.MATTERHORN_COWORKER_INTEGRITY_SECRET = priorCoworkerIntegritySecret;
   if (priorDataDir === undefined) delete process.env.MATTERHORN_WORK_DATA_DIR;
   else process.env.MATTERHORN_WORK_DATA_DIR = priorDataDir;
 });
@@ -43,6 +46,7 @@ afterEach(() => {
 function runtime(): MatterhornGuardedAgentRuntime {
   process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
   process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "c".repeat(64);
+  process.env.MATTERHORN_COWORKER_INTEGRITY_SECRET = "w".repeat(64);
   const root = mkdtempSync(join(tmpdir(), "matterhorn-certified-tool-"));
   roots.push(root);
   process.env.MATTERHORN_WORK_DATA_DIR = root;
