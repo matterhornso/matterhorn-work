@@ -1,6 +1,7 @@
 import {
   MATTERHORN_CRYPTO_APP_RESULT_VERSION,
   type MatterhornCryptoAppAction,
+  type MatterhornCryptoAppActionAccess,
   type MatterhornCryptoAppConnectionCredential,
   type MatterhornCryptoAppOpenApiOperation,
   type MatterhornCryptoAppResult,
@@ -183,7 +184,9 @@ function evidenceReceiptMetadata(input: {
   delivery: "live" | "certified_cache";
   appId: string;
   manifestRevision: string;
+  connectionId: string;
   actionId: string;
+  access: MatterhornCryptoAppActionAccess;
   network: string;
   result: unknown;
   observation: MatterhornCryptoAppResult["observation"];
@@ -194,7 +197,9 @@ function evidenceReceiptMetadata(input: {
   const identity = cryptoAppEvidenceIdentity({
     appId: input.appId,
     manifestRevision: input.manifestRevision,
+    connectionId: input.connectionId,
     actionId: input.actionId,
+    access: input.access,
     network: input.network,
     result: input.result,
     observation: input.observation,
@@ -453,7 +458,9 @@ export class MatterhornCryptoAppAdapterRouter {
         delivery: "certified_cache",
         appId: connection.appId,
         manifestRevision: connection.manifestRevision,
+        connectionId: connection.id,
         actionId: action.id,
+        access: action.access,
         network: request.network,
         result: cached.value.result,
         observation,
@@ -612,7 +619,9 @@ export class MatterhornCryptoAppAdapterRouter {
       delivery: "live",
       appId: connection.appId,
       manifestRevision: connection.manifestRevision,
+      connectionId: connection.id,
       actionId: action.id,
+      access: action.access,
       network: request.network,
       result: quarantined,
       observation,
