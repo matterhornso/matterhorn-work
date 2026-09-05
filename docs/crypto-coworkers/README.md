@@ -30,6 +30,15 @@ The design extends these existing boundaries rather than replacing them:
 - Redacted, hash-chained agent run receipts.
 - Managed MCP transport with server-side authorization.
 
+Session privacy history is durable authority, not trusted database input. Every
+persisted privacy floor is sealed with a domain-separated HMAC key derived from
+the server-only capability-signing secret. The seal binds the exact workspace,
+session, mode, storage key, SQLite tenant metadata, update time, and 365-day
+expiry. A restored row cannot lower a chat from transaction or private mode,
+move it to another tenant, extend its lifetime, or add fields without failing
+closed. Updates and tenant-bound deletion run atomically; unsealed legacy rows
+must be discarded with the chat rather than promoted into disclosure authority.
+
 ## Phase 0 contracts
 
 The public types are exported from `@matterhorn-work/types/crypto-coworkers`:

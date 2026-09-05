@@ -132,6 +132,51 @@ describe("operational probes and metrics", () => {
     }
   });
 
+  test("hosted readiness reports the session privacy sealing key even when guarded capabilities are off", async () => {
+    const previous = {
+      hosted: process.env.MATTERHORN_HOSTED_PUBLIC_BETA,
+      gateway: process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED,
+      mode: process.env.MATTERHORN_GUARDED_RUNTIME_MODE,
+      runtime: process.env.MATTERHORN_AGENT_RUNTIME_SECRET,
+      capability: process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET,
+    };
+    process.env.MATTERHORN_HOSTED_PUBLIC_BETA = "1";
+    process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED = "1";
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "off";
+    process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "runtime-secret-at-least-32-characters";
+    delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    try {
+      const missingBase = await boot();
+      const missing = await fetch(`${missingBase}/health/ready`);
+      expect(missing.status).toBe(503);
+      expect(await missing.json()).toMatchObject({
+        checks: {
+          guardedRuntimeMode: "off",
+          guardedRuntimeReady: true,
+          sessionPrivacyStateReady: false,
+        },
+      });
+
+      process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "capability-secret-at-least-32-characters";
+      const configuredBase = await boot();
+      const configured = await fetch(`${configuredBase}/health/ready`);
+      expect(await configured.json()).toMatchObject({
+        checks: { sessionPrivacyStateReady: true },
+      });
+    } finally {
+      for (const [key, value] of Object.entries({
+        MATTERHORN_HOSTED_PUBLIC_BETA: previous.hosted,
+        MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED: previous.gateway,
+        MATTERHORN_GUARDED_RUNTIME_MODE: previous.mode,
+        MATTERHORN_AGENT_RUNTIME_SECRET: previous.runtime,
+        MATTERHORN_CAPABILITY_SIGNING_SECRET: previous.capability,
+      })) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   test("shadow and enforced guarded runtime require an explicit single-instance topology", async () => {
     const previous = {
       mode: process.env.MATTERHORN_GUARDED_RUNTIME_MODE,

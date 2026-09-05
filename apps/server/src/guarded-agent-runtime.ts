@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, hkdfSync, randomUUID, timingSafeEqual } from "node:crypto";
 import type {
   MatterhornAgentCapabilityClaims,
   MatterhornAgentDataLabel,
@@ -46,7 +46,7 @@ import {
 } from "./crypto-evidence-sui-anchor.js";
 import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
 import type { MatterhornFinalizedCoworkerRun } from "./crypto-evidence-finalizer.js";
-import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
+import { canonicalJson, equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import {
   MatterhornGuardedRuntimeStateStore,
   type GuardedRuntimeStateRecord,
@@ -120,6 +120,11 @@ const PROVIDER_MESSAGES_MAX_COUNT = 2_048;
 const PROVIDER_MESSAGES_MAX_BYTES = 16 * 1_024 * 1_024;
 const PROVIDER_MESSAGES_VALIDATION_TTL_MS = 30_000;
 const SESSION_PRIVACY_FLOOR_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
+const SESSION_PRIVACY_FLOOR_ENVELOPE_VERSION = "matterhorn.session-privacy-floor-envelope.v1";
+const SESSION_PRIVACY_FLOOR_AUTHORITY_DOMAIN = "matterhorn.session-privacy-floor.authority.v1";
+const SESSION_PRIVACY_FLOOR_AUTHORITY_SALT = Buffer.from("matterhorn.session-privacy-floor.key.v1", "utf8");
+const SESSION_PRIVACY_FLOOR_AUTHORITY_SECRET_MINIMUM_BYTES = 32;
+const SESSION_PRIVACY_FLOOR_AUTHORITY_SEAL_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const GUARDED_RUN_AUTHORITY_TTL_MS = 6 * 60 * 60 * 1_000;
 const GUARDED_STAGED_CALL_TTL_MS = 60_000;
 const GUARDED_CAPABILITY_TOKEN_MAX_BYTES = 16_384;
@@ -167,6 +172,117 @@ type GuardedSessionPrivacyFloor = {
   mode: MatterhornAgentPrivacyMode;
   updatedAt: string;
 };
+
+type GuardedSessionPrivacyFloorEnvelope = {
+  version: typeof SESSION_PRIVACY_FLOOR_ENVELOPE_VERSION;
+  floor: GuardedSessionPrivacyFloor;
+  authoritySeal: string;
+};
+
+function sessionPrivacyFloorAuthorityKey(secret: string): Buffer {
+  const input = Buffer.from(secret, "utf8");
+  if (input.byteLength < SESSION_PRIVACY_FLOOR_AUTHORITY_SECRET_MINIMUM_BYTES) {
+    input.fill(0);
+    throw new Error("session_privacy_integrity_secret_invalid");
+  }
+  const key = Buffer.from(hkdfSync(
+    "sha256",
+    input,
+    SESSION_PRIVACY_FLOOR_AUTHORITY_SALT,
+    SESSION_PRIVACY_FLOOR_AUTHORITY_DOMAIN,
+    32,
+  ));
+  input.fill(0);
+  return key;
+}
+
+function exactSessionPrivacyObjectKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return actual.length === sortedExpected.length
+    && actual.every((key, index) => key === sortedExpected[index]);
+}
+
+function sessionPrivacyFloorAuthorityValue(input: {
+  key: string;
+  workspaceId: string;
+  sessionId: string | null;
+  expiresAtMs: number | null;
+  updatedAtMs: number;
+  floor: GuardedSessionPrivacyFloor;
+}) {
+  return {
+    domain: SESSION_PRIVACY_FLOOR_AUTHORITY_DOMAIN,
+    kind: "session_privacy_floor",
+    ...input,
+  };
+}
+
+function sealSessionPrivacyFloorAuthority(value: unknown, key: Buffer): string {
+  return createHmac("sha256", key).update(canonicalJson(value), "utf8").digest("base64url");
+}
+
+function sessionPrivacyFloorAuthoritySealValid(value: unknown, seal: string, key: Buffer): boolean {
+  if (!SESSION_PRIVACY_FLOOR_AUTHORITY_SEAL_PATTERN.test(seal)) return false;
+  const expected = Buffer.from(sealSessionPrivacyFloorAuthority(value, key), "base64url");
+  const actual = Buffer.from(seal, "base64url");
+  try {
+    return expected.byteLength === actual.byteLength && timingSafeEqual(expected, actual);
+  } finally {
+    expected.fill(0);
+    actual.fill(0);
+  }
+}
+
+function assertSessionPrivacyFloorState(
+  state: GuardedRuntimeStateRecord<unknown> | null,
+  key: string,
+  authorityKey: Buffer,
+): GuardedSessionPrivacyFloor | null {
+  if (!state) return null;
+  const value = state.value;
+  if (!exactSessionPrivacyObjectKeys(value, ["version", "floor", "authoritySeal"])
+    || value.version !== SESSION_PRIVACY_FLOOR_ENVELOPE_VERSION
+    || typeof value.authoritySeal !== "string"
+    || !exactSessionPrivacyObjectKeys(value.floor, ["workspaceId", "sessionId", "mode", "updatedAt"])) {
+    throw new Error("session_privacy_state_invalid");
+  }
+  const floor = value.floor as GuardedSessionPrivacyFloor;
+  const updatedAtMs = Date.parse(floor.updatedAt);
+  if (state.kind !== "session_privacy_floor"
+    || state.key !== key
+    || !guardedRunIdentifier(floor.workspaceId)
+    || !guardedRunIdentifier(floor.sessionId)
+    || floor.sessionId !== key
+    || (floor.mode !== "public_research"
+      && floor.mode !== "private_workspace"
+      && floor.mode !== "transaction")
+    || !Number.isSafeInteger(updatedAtMs)
+    || new Date(updatedAtMs).toISOString() !== floor.updatedAt
+    || state.workspaceId !== floor.workspaceId
+    || state.sessionId !== floor.sessionId
+    || state.updatedAtMs !== updatedAtMs
+    || state.expiresAtMs !== updatedAtMs + SESSION_PRIVACY_FLOOR_RETENTION_MS) {
+    throw new Error("session_privacy_state_invalid");
+  }
+  const authorityValue = sessionPrivacyFloorAuthorityValue({
+    key: state.key,
+    workspaceId: state.workspaceId,
+    sessionId: state.sessionId,
+    expiresAtMs: state.expiresAtMs,
+    updatedAtMs: state.updatedAtMs,
+    floor,
+  });
+  if (!sessionPrivacyFloorAuthoritySealValid(
+    authorityValue,
+    value.authoritySeal,
+    authorityKey,
+  )) {
+    throw new Error("session_privacy_state_invalid");
+  }
+  return structuredClone(floor);
+}
 
 const GUARDED_RUN_ID = /^(?:agent_run(?:_off)?|coworker_run)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -622,6 +738,7 @@ export class MatterhornGuardedAgentRuntime {
   private readonly stagedCapabilities = new Map<string, GuardedStagedCapabilityState>();
   private readonly rolloutBypassCallIds = new Map<string, GuardedRolloutBypassState>();
   private readonly observations = new Map<string, GuardedRuntimeObservationMetric>();
+  private readonly sessionPrivacyFloorAuthorityKey: Buffer | null;
   private readonly providerSystemByRunId = new Map<string, {
     workspaceId: string;
     sessionId: string;
@@ -639,6 +756,10 @@ export class MatterhornGuardedAgentRuntime {
   private finalizedRunHandler: ((input: MatterhornFinalizedCoworkerRun) => Promise<void>) | null = null;
 
   constructor(private readonly stateStore = new MatterhornGuardedRuntimeStateStore()) {
+    const integritySecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET?.trim() ?? "";
+    this.sessionPrivacyFloorAuthorityKey = integritySecret.length > 0
+      ? sessionPrivacyFloorAuthorityKey(integritySecret)
+      : null;
     this.privacy = new MatterhornPrivacyFirewall(stateStore);
     this.capabilities = new MatterhornAgentCapabilityBroker(undefined, stateStore);
     this.receipts = new MatterhornAgentRunReceiptStore(stateStore);
@@ -647,6 +768,10 @@ export class MatterhornGuardedAgentRuntime {
 
   ready(): boolean {
     return this.capabilities.ready();
+  }
+
+  sessionPrivacyStateReady(): boolean {
+    return Boolean(this.sessionPrivacyFloorAuthorityKey);
   }
 
   authenticateRuntime(runtimeSecret: string): void {
@@ -1241,22 +1366,13 @@ export class MatterhornGuardedAgentRuntime {
     sessionId: string;
     hasStoredHistory: boolean;
   }): Extract<MatterhornAgentDataLabel, "public" | "workspace_private" | "wallet_private"> {
-    const floor = this.stateStore.get<GuardedSessionPrivacyFloor>(
-      "session_privacy_floor",
-      input.sessionId,
-    );
+    const floor = this.readSessionPrivacyFloor(input.sessionId);
     if (!floor) {
       // Existing sessions created before this boundary have no trustworthy
       // disclosure record. Treat their history as private instead of guessing.
       return input.hasStoredHistory ? "workspace_private" : "public";
     }
-    if (
-      floor.workspaceId !== input.workspaceId
-      || floor.sessionId !== input.sessionId
-      || (floor.mode !== "public_research"
-        && floor.mode !== "private_workspace"
-        && floor.mode !== "transaction")
-    ) {
+    if (floor.workspaceId !== input.workspaceId || floor.sessionId !== input.sessionId) {
       throw new GuardedRuntimeError(
         409,
         "session_privacy_state_invalid",
@@ -1267,12 +1383,30 @@ export class MatterhornGuardedAgentRuntime {
   }
 
   purgeSessionPrivacyState(input: { workspaceId: string; sessionId: string }): void {
-    const floor = this.stateStore.get<GuardedSessionPrivacyFloor>(
-      "session_privacy_floor",
-      input.sessionId,
-    );
-    if (floor?.workspaceId === input.workspaceId && floor.sessionId === input.sessionId) {
-      this.stateStore.delete("session_privacy_floor", input.sessionId);
+    try {
+      this.stateStore.transaction(() => {
+        const stored = this.stateStore.takeRecord<unknown>(
+          "session_privacy_floor",
+          input.sessionId,
+          0,
+        );
+        if (!stored) return;
+        const floor = this.sessionPrivacyFloorFromStored(stored, input.sessionId);
+        if (floor.workspaceId !== input.workspaceId || floor.sessionId !== input.sessionId) {
+          throw new GuardedRuntimeError(
+            409,
+            "session_privacy_state_invalid",
+            "Matterhorn could not verify this chat's privacy history.",
+          );
+        }
+      });
+    } catch (error) {
+      if (error instanceof GuardedRuntimeError) throw error;
+      throw new GuardedRuntimeError(
+        409,
+        "session_privacy_state_invalid",
+        "Matterhorn could not verify this chat's privacy history.",
+      );
     }
   }
 
@@ -1741,35 +1875,99 @@ export class MatterhornGuardedAgentRuntime {
     sessionId: string;
     mode: MatterhornAgentPrivacyMode;
   }): void {
-    const existing = this.stateStore.get<GuardedSessionPrivacyFloor>(
-      "session_privacy_floor",
-      input.sessionId,
-    );
-    if (existing && (existing.workspaceId !== input.workspaceId || existing.sessionId !== input.sessionId)) {
+    this.stateStore.transaction(() => {
+      const existing = this.readSessionPrivacyFloor(input.sessionId);
+      if (existing && (existing.workspaceId !== input.workspaceId || existing.sessionId !== input.sessionId)) {
+        throw new GuardedRuntimeError(
+          409,
+          "session_privacy_state_invalid",
+          "Matterhorn could not verify this chat's privacy history.",
+        );
+      }
+      const mode = existing && privacyModeRank(existing.mode) >= privacyModeRank(input.mode)
+        ? existing.mode
+        : input.mode;
+      const nowMs = Date.now();
+      const floor: GuardedSessionPrivacyFloor = {
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        mode,
+        updatedAt: new Date(nowMs).toISOString(),
+      };
+      const expiresAtMs = nowMs + SESSION_PRIVACY_FLOOR_RETENTION_MS;
+      const authorityValue = sessionPrivacyFloorAuthorityValue({
+        key: input.sessionId,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        expiresAtMs,
+        updatedAtMs: nowMs,
+        floor,
+      });
+      const envelope: GuardedSessionPrivacyFloorEnvelope = {
+        version: SESSION_PRIVACY_FLOOR_ENVELOPE_VERSION,
+        floor,
+        authoritySeal: sealSessionPrivacyFloorAuthority(
+          authorityValue,
+          this.requireSessionPrivacyFloorAuthorityKey(),
+        ),
+      };
+      this.stateStore.put({
+        kind: "session_privacy_floor",
+        key: input.sessionId,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        value: envelope,
+        expiresAtMs,
+        nowMs,
+      });
+    });
+  }
+
+  private requireSessionPrivacyFloorAuthorityKey(): Buffer {
+    if (!this.sessionPrivacyFloorAuthorityKey) {
+      throw new GuardedRuntimeError(
+        503,
+        "session_privacy_integrity_unavailable",
+        "Matterhorn cannot safely persist this chat's privacy history.",
+      );
+    }
+    return this.sessionPrivacyFloorAuthorityKey;
+  }
+
+  private sessionPrivacyFloorFromStored(
+    stored: GuardedRuntimeStateRecord<unknown>,
+    sessionId: string,
+  ): GuardedSessionPrivacyFloor {
+    try {
+      const floor = assertSessionPrivacyFloorState(
+        stored,
+        sessionId,
+        this.requireSessionPrivacyFloorAuthorityKey(),
+      );
+      if (!floor) throw new Error("session_privacy_state_invalid");
+      return floor;
+    } catch (error) {
+      if (error instanceof GuardedRuntimeError) throw error;
       throw new GuardedRuntimeError(
         409,
         "session_privacy_state_invalid",
         "Matterhorn could not verify this chat's privacy history.",
       );
     }
-    const mode = existing && privacyModeRank(existing.mode) >= privacyModeRank(input.mode)
-      ? existing.mode
-      : input.mode;
-    const nowMs = Date.now();
-    this.stateStore.put({
-      kind: "session_privacy_floor",
-      key: input.sessionId,
-      workspaceId: input.workspaceId,
-      sessionId: input.sessionId,
-      value: {
-        workspaceId: input.workspaceId,
-        sessionId: input.sessionId,
-        mode,
-        updatedAt: new Date(nowMs).toISOString(),
-      } satisfies GuardedSessionPrivacyFloor,
-      expiresAtMs: nowMs + SESSION_PRIVACY_FLOOR_RETENTION_MS,
-      nowMs,
-    });
+  }
+
+  private readSessionPrivacyFloor(sessionId: string): GuardedSessionPrivacyFloor | null {
+    try {
+      const stored = this.stateStore.getRecord<unknown>("session_privacy_floor", sessionId);
+      return stored ? this.sessionPrivacyFloorFromStored(stored, sessionId) : null;
+    } catch (error) {
+      if (error instanceof GuardedRuntimeError) throw error;
+      throw new GuardedRuntimeError(
+        409,
+        "session_privacy_state_invalid",
+        "Matterhorn could not verify this chat's privacy history.",
+      );
+    }
   }
 
   private cleanupStagedCapabilities(nowMs = Date.now()): void {
@@ -1804,6 +2002,7 @@ export class MatterhornGuardedAgentRuntime {
   }
 
   close(): void {
+    this.sessionPrivacyFloorAuthorityKey?.fill(0);
     this.stateStore.close();
   }
 

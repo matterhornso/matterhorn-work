@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash, createHmac } from "node:crypto";
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -45,6 +45,12 @@ function restoreEnv(name: string, value: string | undefined) {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
 }
+
+beforeEach(() => {
+  // Account-facing messages persist an authenticated session privacy floor.
+  // This fixture key is isolated to the disposable test database.
+  process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "session-read-model-capability-signing-secret-for-tests";
+});
 
 afterEach(async () => {
   configureVenicePrivateModelRegistry([]);
