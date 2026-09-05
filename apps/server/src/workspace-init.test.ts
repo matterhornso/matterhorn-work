@@ -25,6 +25,7 @@ describe("ensureWorkspaceFiles", () => {
   test("exposes only canonical Matterhorn agent prompt bodies as managed policy", () => {
     expect(resolveMatterhornManagedAgentPrompt("matterhorn")).toContain("You are Matterhorn Desks.");
     expect(resolveMatterhornManagedAgentPrompt("matterhorn-bittensor")).toContain("# Bittensor Agent");
+    expect(resolveMatterhornManagedAgentPrompt("compaction")).toContain("context summarization agent");
     expect(resolveMatterhornManagedAgentPrompt("custom-agent")).toBeNull();
   });
 

@@ -212,6 +212,9 @@ function startMockOpencode(input?: {
         const agentPrompts = typeof input?.agentPrompts === "function"
           ? input.agentPrompts()
           : input?.agentPrompts ?? {};
+        const compactionPrompt = Object.prototype.hasOwnProperty.call(agentPrompts, "compaction")
+          ? agentPrompts.compaction
+          : resolveMatterhornManagedAgentPrompt("compaction") ?? "";
         const basePermission = [
           { permission: "*", pattern: "*", action: "deny" },
           { permission: "read", pattern: "*", action: "allow" },
@@ -221,6 +224,15 @@ function startMockOpencode(input?: {
           { name: "matterhorn", mode: "primary", permission: basePermission, options: {}, ...(agentPrompts.matterhorn ? { prompt: agentPrompts.matterhorn } : {}) },
           { name: "build", mode: "primary", permission: basePermission, options: {}, ...(agentPrompts.build ? { prompt: agentPrompts.build } : {}) },
           { name: "custom-agent", mode: "primary", permission: basePermission, options: {}, ...(agentPrompts["custom-agent"] ? { prompt: agentPrompts["custom-agent"] } : {}) },
+          {
+            name: "compaction",
+            mode: "primary",
+            hidden: true,
+            native: true,
+            permission: [{ permission: "*", pattern: "*", action: "deny" }],
+            options: {},
+            prompt: compactionPrompt,
+          },
           {
             name: "matterhorn-sui",
             mode: "primary",
@@ -1140,6 +1152,162 @@ describe("workspace session read APIs", () => {
     expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(1);
     expect(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/abort"))
       .toBeLessThan(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/summarize"));
+  });
+
+  test("binds compaction consent to the hidden agent prompt and rejects one-byte changes", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    let compactionPrompt = "Custom compaction policy A";
+    const mock = startMockOpencode({
+      sessionMessages: [{
+        info: { id: "msg_compaction_private", sessionID: "ses_1", role: "user" },
+        parts: [{
+          id: "prt_compaction_private",
+          messageID: "msg_compaction_private",
+          sessionID: "ses_1",
+          type: "text",
+          text: "Private workspace note",
+        }],
+      }],
+      agentPrompts: () => ({ compaction: compactionPrompt }),
+    });
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const compact = (privacyConsentToken?: string) => fetch(
+      `${base}/workspace/ws_1/sessions/ses_1/compact`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: { providerID: "openai", modelID: "gpt-4.1" },
+          ...(privacyConsentToken ? { privacyConsentToken } : {}),
+        }),
+      },
+    );
+
+    const challenged = await compact();
+    expect(challenged.status).toBe(409);
+    const preflight = await challenged.json();
+    expect(preflight).toMatchObject({
+      code: "agent_privacy_consent_required",
+      details: {
+        detectedData: {
+          categories: expect.arrayContaining(["workspace_agent_instructions"]),
+        },
+      },
+    });
+    const confirmed = await fetch(
+      `${base}/workspace/ws_1/privacy-consents/${encodeURIComponent(preflight.details.challenge.id)}/confirm`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: "ses_1", requestHash: preflight.details.requestHash }),
+      },
+    );
+    const consent = await confirmed.json();
+
+    compactionPrompt = "Custom compaction policy B";
+    const mutated = await compact(consent.consentToken);
+    expect(mutated.status).toBe(409);
+    const mutatedBody = await mutated.json();
+    expect(mutatedBody).toMatchObject({ code: "agent_privacy_consent_required" });
+    expect(mutatedBody.details.requestHash).not.toBe(preflight.details.requestHash);
+    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(0);
+
+    compactionPrompt = "Custom compaction policy A";
+    const accepted = await compact(consent.consentToken);
+    expect(accepted.status).toBe(202);
+    await expect(accepted.json()).resolves.toMatchObject({
+      accepted: true,
+      privacy: {
+        requestHash: preflight.details.requestHash,
+        consentUsed: true,
+      },
+    });
+    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(1);
+  });
+
+  test("blocks secrets in the hidden compaction agent on stable and trusted summarize paths", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const secret = `private_key: 0x${"d".repeat(64)}`;
+    const mock = startMockOpencode({ agentPrompts: { compaction: secret } });
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+      hardModelUsageLimit: 32_000,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const body = JSON.stringify({ model: { providerID: "ollama", modelID: "local-private" } });
+
+    const stable = await fetch(`${base}/workspace/ws_1/sessions/ses_1/compact`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body,
+    });
+    expect(stable.status).toBe(422);
+    expect(JSON.stringify(await stable.json())).not.toContain(secret);
+
+    const trusted = await fetch(`${base}/workspace/ws_1/opencode/session/ses_1/summarize`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ providerID: "ollama", modelID: "local-private" }),
+    });
+    expect(trusted.status).toBe(422);
+    expect(JSON.stringify(await trusted.json())).not.toContain(secret);
+    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(0);
+    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/abort")).toHaveLength(0);
+
+    const usage = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(openwork.token) });
+    expect(usage.status).toBe(200);
+    await expect(usage.json()).resolves.toMatchObject({
+      status: {
+        daily: { chargedTokens: 0 },
+        monthly: { chargedTokens: 0 },
+        pendingRequests: 0,
+      },
+    });
+  });
+
+  test("fails compaction closed when its hidden agent changes immediately before dispatch", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    let reads = 0;
+    const mock = startMockOpencode({
+      agentPrompts: () => ({
+        compaction: ++reads === 1 ? "Stable custom compaction policy" : "Changed custom compaction policy",
+      }),
+    });
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+      hardModelUsageLimit: 32_000,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const response = await fetch(`${base}/workspace/ws_1/sessions/ses_1/compact`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ model: { providerID: "ollama", modelID: "local-private" } }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      code: "agent_context_changed",
+      message: "The selected agent changed after privacy review. Review the request again before sending.",
+    });
+    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(0);
+    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/abort")).toHaveLength(0);
+    const usage = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(openwork.token) });
+    await expect(usage.json()).resolves.toMatchObject({
+      status: {
+        daily: { chargedTokens: 0 },
+        monthly: { chargedTokens: 0 },
+        pendingRequests: 0,
+      },
+    });
   });
 
   test("replaces trusted proxy prompts only after the previous response is stopped", async () => {
