@@ -2412,6 +2412,19 @@ describe("workspace session read APIs", () => {
       item: {
         privacy: { requestHash: preflight.requestHash },
         context: { chatFiles: 0, coworkerFiles: 0, savedMemories: 1 },
+        contextOptimization: {
+          compilerVersion: "matterhorn.coworker-context-compiler.v2",
+          systemChars: expect.any(Number),
+          policyChars: expect.any(Number),
+          dataChars: expect.any(Number),
+          activeCryptoTools: expect.any(Number),
+          availableCryptoTools: expect.any(Number),
+          activeToolSchemaChars: expect.any(Number),
+          availableToolSchemaChars: expect.any(Number),
+          dataSectionsIncluded: expect.any(Number),
+          dataSectionsShortened: expect.any(Number),
+          dataSectionsOmitted: expect.any(Number),
+        },
         memory: { readIds: ["mem_agent_gateway_private"] },
       },
     });

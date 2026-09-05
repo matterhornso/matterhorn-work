@@ -69,6 +69,16 @@ function selectedContextLabel(receipt: MatterhornAgentRunReceipt): string | null
   return entries.length > 0 ? entries.join(" · ") : "No files or saved memories";
 }
 
+function focusedContextLabel(receipt: MatterhornAgentRunReceipt): string | null {
+  const optimization = receipt.contextOptimization;
+  if (!optimization || optimization.availableCryptoTools === 0) return null;
+  const shortened = optimization.dataSectionsShortened + optimization.dataSectionsOmitted;
+  return [
+    `Matterhorn made ${plural(optimization.activeCryptoTools, "crypto action")} available for this answer instead of the full ${optimization.availableCryptoTools}.`,
+    shortened > 0 ? `${plural(shortened, "older context section")} shortened or left out.` : null,
+  ].filter((entry): entry is string => entry !== null).join(" ");
+}
+
 function friendlyIdentifier(value: string): string {
   return value
     .replace(/^matterhorn[._-]?/i, "")
@@ -104,6 +114,7 @@ export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgen
   const totalTokens = receipt.usage.inputTokens + receipt.usage.outputTokens + receipt.usage.reasoningTokens;
   const capabilityDenials = receipt.capabilities.filter((decision) => decision.decision === "denied").length;
   const contextLabel = selectedContextLabel(receipt);
+  const focusedContext = focusedContextLabel(receipt);
   const providerName = receipt.provider.name || receipt.provider.id;
   const secretWasBlocked = receipt.privacy.dataCategories.includes("secret");
   const sharedCategories = [
@@ -172,6 +183,7 @@ export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgen
             <p>
               Run limit: up to {plural(receipt.usage.toolCallBudget.reads, "app lookup")} and {plural(receipt.usage.toolCallBudget.preparesPerFamily, "wallet draft")} per action type. Sending transactions was disabled.
             </p>
+            {focusedContext ? <p>{focusedContext}</p> : null}
           </div>
         </section>
 
@@ -209,6 +221,11 @@ export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgen
             <p className="mt-1 break-all">Request proof: {receipt.privacy.requestHash ?? "Unavailable for this older response"}</p>
             <p className="break-all">Receipt proof: {receipt.integrity.recordHash}</p>
             <p>Cache: {plural(receipt.usage.cacheReadTokens, "token")} read · {plural(receipt.usage.cacheWriteTokens, "token")} written</p>
+            {receipt.contextOptimization ? (
+              <p>
+                Context compiler: {receipt.contextOptimization.compilerVersion} · {receipt.contextOptimization.systemChars.toLocaleString()} characters · {receipt.contextOptimization.activeToolSchemaChars.toLocaleString()} of {receipt.contextOptimization.availableToolSchemaChars.toLocaleString()} crypto-tool schema characters
+              </p>
+            ) : null}
           </div>
           <div>
             <p className="font-medium text-dls-text">Safety checks</p>

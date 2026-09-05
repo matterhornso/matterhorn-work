@@ -313,6 +313,7 @@ import type {
   MatterhornAgentDataLabel,
   MatterhornAgentPrivacyMode,
   MatterhornAgentPrivacyPart,
+  MatterhornAgentRunReceipt,
 } from "@matterhorn-work/types/guarded-agent-runtime";
 import type {
   MatterhornBackendModelCatalogErrorCode,
@@ -343,7 +344,10 @@ import {
   getMatterhornDeskAgent,
   getMatterhornDeskAgentById,
 } from "@matterhorn-work/types/desk-agents";
-import { getMatterhornCryptoTool } from "@matterhorn-work/types/crypto-action-registry";
+import {
+  getMatterhornCryptoTool,
+  MATTERHORN_CRYPTO_ACTION_REGISTRY,
+} from "@matterhorn-work/types/crypto-action-registry";
 import {
   MATTERHORN_EXECUTION_MODE_HEADER,
   buildMatterhornExecutionModeSystemPrompt,
@@ -15171,6 +15175,7 @@ function createRoutes(
       requestToolProfiles,
       coworker: coworker?.binding,
       authorizationContextHash,
+      contextOptimization: resolved.contextOptimization,
       ...(jurisdiction ? { jurisdiction } : {}),
     };
     let guardedAuthorization: ReturnType<typeof guardedRuntime.authorizePrompt>;
@@ -21053,11 +21058,18 @@ type ResolvedAgentMessageContext = {
   attachmentIds: string[];
   memoryIds: string[];
   agentFileIds: string[];
+  contextOptimization: NonNullable<MatterhornAgentRunReceipt["contextOptimization"]>;
 };
 
 type ResolvedCryptoRunContext = {
   modelText: string;
   privacyParts: MatterhornAgentPrivacyPart[];
+  optimization?: {
+    activeCryptoTools: number;
+    availableCryptoTools: number;
+    activeToolSchemaChars: number;
+    availableToolSchemaChars: number;
+  };
 };
 
 function sha256Bytes(value: Uint8Array | string): string {
@@ -21538,13 +21550,14 @@ async function resolveCryptoRunContext(input: {
   )) {
     return { modelText: "", privacyParts: [] };
   }
-  const toolNames = activeDeskToolDefinitions(desk.deskId)
+  const deskTools = activeDeskToolDefinitions(desk.deskId);
+  const activeTools = deskTools.filter((tool) => input.requestToolProfiles.every((profile) => {
+    const permission = `matterhorn-work_${tool.name}`;
+    if (profile[permission] === false) return false;
+    return profile["*"] !== false || profile[permission] === true;
+  }));
+  const toolNames = activeTools
     .map((tool) => tool.name)
-    .filter((toolName) => input.requestToolProfiles.every((profile) => {
-      const permission = `matterhorn-work_${toolName}`;
-      if (profile[permission] === false) return false;
-      return profile["*"] !== false || profile[permission] === true;
-    }))
     .sort();
   const recent = await input.guardedRuntime.receipts.list(input.workspaceId, {
     sessionId: input.sessionId,
@@ -21578,6 +21591,12 @@ async function resolveCryptoRunContext(input: {
       contentHash: sha256Bytes(modelText),
       version: "matterhorn.crypto-context-compiler.v1",
     }],
+    optimization: {
+      activeCryptoTools: activeTools.length,
+      availableCryptoTools: MATTERHORN_CRYPTO_ACTION_REGISTRY.length,
+      activeToolSchemaChars: JSON.stringify(activeTools).length,
+      availableToolSchemaChars: JSON.stringify(MATTERHORN_CRYPTO_ACTION_REGISTRY).length,
+    },
   };
 }
 
@@ -21620,7 +21639,12 @@ function buildAuthoritativeAgentSystemContext(input: {
   cryptoStateText: string;
   agentFileText: string;
   coworker?: MatterhornCoworkerProfile;
-}): { system: string; privacyParts: MatterhornAgentPrivacyPart[] } {
+  cryptoOptimization?: ResolvedCryptoRunContext["optimization"];
+}): {
+  system: string;
+  privacyParts: MatterhornAgentPrivacyPart[];
+  contextOptimization: NonNullable<MatterhornAgentRunReceipt["contextOptimization"]>;
+} {
   const desk = getMatterhornDeskAgentById(input.agentId);
   const policySections = [
     buildMatterhornExecutionModeSystemPrompt(input.executionMode),
@@ -21666,6 +21690,19 @@ function buildAuthoritativeAgentSystemContext(input: {
   }] : [];
   return {
     system,
+    contextOptimization: {
+      compilerVersion: MATTERHORN_COWORKER_CONTEXT_COMPILER_VERSION,
+      systemChars: compilation.totalChars,
+      policyChars: compilation.policyChars,
+      dataChars: compilation.dataChars,
+      activeCryptoTools: input.cryptoOptimization?.activeCryptoTools ?? 0,
+      availableCryptoTools: input.cryptoOptimization?.availableCryptoTools ?? 0,
+      activeToolSchemaChars: input.cryptoOptimization?.activeToolSchemaChars ?? 0,
+      availableToolSchemaChars: input.cryptoOptimization?.availableToolSchemaChars ?? 0,
+      dataSectionsIncluded: compilation.includedSections.length,
+      dataSectionsShortened: compilation.truncatedSections.length,
+      dataSectionsOmitted: compilation.omittedSections.length,
+    },
     privacyParts: [
       {
         type: "compiled_system_context",
@@ -21777,6 +21814,7 @@ async function resolveAuthoritativeAgentMessage(input: {
     cryptoStateText: [crypto.modelText, coworkerStateText].filter(Boolean).join("\n\n"),
     agentFileText: agentFiles.modelText,
     coworker: input.coworker,
+    cryptoOptimization: crypto.optimization,
   });
   const toolProfilePart: MatterhornAgentPrivacyPart = {
     type: "tool_profile",
@@ -21817,6 +21855,7 @@ async function resolveAuthoritativeAgentMessage(input: {
     attachmentIds,
     memoryIds,
     agentFileIds,
+    contextOptimization: authoritativeSystem.contextOptimization,
   };
 }
 
