@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -413,7 +414,10 @@ function createScopedFirstPartyCryptoAppCertificationDriver(
 
       if (probeId === "tenant_isolation") {
         const directory = makeTempDirectory();
-        const store = new MatterhornCryptoAppConnectionStore(join(directory, "connections.db"));
+        const store = new MatterhornCryptoAppConnectionStore(
+          join(directory, "connections.db"),
+          randomBytes(32).toString("base64url"),
+        );
         try {
           const createdAt = now().toISOString();
           const connection = (workspaceId: string, createdBy: string): MatterhornCryptoAppConnection => ({

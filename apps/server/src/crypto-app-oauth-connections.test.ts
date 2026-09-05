@@ -24,6 +24,7 @@ const keys = generateKeyPairSync("ed25519");
 const TOKEN = "access-token-never-plaintext";
 const REFRESH_TOKEN = "refresh-token-never-plaintext";
 const OAUTH_SECRET = "oauth-encryption-key-with-more-than-thirty-two-bytes";
+const CONNECTION_INTEGRITY_SECRET = "test-connection-integrity-secret-at-least-32-bytes";
 
 function signedManifest(): MatterhornCryptoAppManifest {
   const manifest: MatterhornCryptoAppManifest = {
@@ -126,7 +127,7 @@ function fixture(options: {
 } = {}) {
   let now = new Date("2026-09-01T12:00:00.000Z");
   const dbPath = options.dbPath ?? join(mkdtempSync(join(tmpdir(), "matterhorn-crypto-oauth-")), "connections.db");
-  const store = new MatterhornCryptoAppConnectionStore(dbPath);
+  const store = new MatterhornCryptoAppConnectionStore(dbPath, CONNECTION_INTEGRITY_SECRET);
   const connections = new MatterhornCryptoAppConnections({
     registry: certifiedRegistry(),
     store,

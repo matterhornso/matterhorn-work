@@ -25,6 +25,8 @@ function environment(mode: "off" | "shadow" | "enforce" = "shadow") {
     }]),
     MATTERHORN_CRYPTO_APP_REGISTRY_DB: join(root, "registry.db"),
     MATTERHORN_CRYPTO_APP_CONNECTION_DB: join(root, "connections.db"),
+    MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET:
+      "connection-integrity-runtime-secret-with-at-least-32-characters",
     MATTERHORN_CRYPTO_APP_DEVELOPER_DB: join(root, "developer.db"),
     MATTERHORN_CRYPTO_APP_OPERATIONAL_DB: join(root, "operational.db"),
     ...(mode === "enforce" ? {
@@ -98,6 +100,11 @@ describe("crypto app runtime startup", () => {
     delete missingWalletProofSecret.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET;
     expect(() => createMatterhornCryptoAppRuntime(missingWalletProofSecret))
       .toThrowError(expect.objectContaining({ code: "crypto_app_wallet_proof_secret_required" }));
+
+    const missingConnectionIntegritySecret = environment("shadow");
+    delete missingConnectionIntegritySecret.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET;
+    expect(() => createMatterhornCryptoAppRuntime(missingConnectionIntegritySecret))
+      .toThrowError(expect.objectContaining({ code: "crypto_app_connection_integrity_secret_required" }));
 
     const missingOAuthKey = environment("enforce");
     missingOAuthKey.MATTERHORN_CRYPTO_APP_OAUTH_CLIENTS_JSON = JSON.stringify([{

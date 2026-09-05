@@ -21,6 +21,7 @@ import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certi
 import { MatterhornCryptoAppRegistry, canonicalCryptoAppManifestPayload } from "./crypto-app-registry.js";
 
 const keys = generateKeyPairSync("ed25519");
+const CONNECTION_INTEGRITY_SECRET = "test-connection-integrity-secret-at-least-32-bytes";
 
 function signedManifest(): MatterhornCryptoAppManifest {
   const value: MatterhornCryptoAppManifest = {
@@ -107,7 +108,7 @@ function fixture(path?: string) {
   const store = new MatterhornCryptoAppConnectionStore(path ?? join(
     mkdtempSync(join(tmpdir(), "matterhorn-crypto-connections-")),
     "connections.db",
-  ));
+  ), CONNECTION_INTEGRITY_SECRET);
   let sequence = 0;
   const service = new MatterhornCryptoAppConnections({
     registry,
@@ -192,7 +193,7 @@ describe("workspace-scoped crypto app connections", () => {
     expect(first.service.resolveActive("ws_a", connection.id)).toBeNull();
     first.store.close();
 
-    const secondStore = new MatterhornCryptoAppConnectionStore(path);
+    const secondStore = new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET);
     const second = new MatterhornCryptoAppConnections({
       registry: first.registry,
       store: secondStore,
@@ -243,7 +244,7 @@ describe("workspace-scoped crypto app connections", () => {
     );
     legacy.close();
 
-    const migrated = new MatterhornCryptoAppConnectionStore(path);
+    const migrated = new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET);
     try {
       expect(migrated.get("ws_a", "cxc_legacy")).toMatchObject({
         id: "cxc_legacy",
@@ -255,16 +256,16 @@ describe("workspace-scoped crypto app connections", () => {
     const inspected = new Database(path);
     try {
       const row = inspected.query(`
-        SELECT authority_digest FROM crypto_app_connections WHERE connection_id = ?
-      `).get("cxc_legacy") as { authority_digest: string };
-      expect(row.authority_digest).toMatch(/^[a-f0-9]{64}$/);
+        SELECT authority_seal FROM crypto_app_connections WHERE connection_id = ?
+      `).get("cxc_legacy") as { authority_seal: string };
+      expect(row.authority_seal).toMatch(/^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}$/);
     } finally {
       inspected.close();
     }
   });
 
-  test("never treats a missing digest in an already migrated store as legacy authority", () => {
-    const path = join(mkdtempSync(join(tmpdir(), "matterhorn-crypto-connection-null-digest-")), "connections.db");
+  test("never treats a missing seal in an already migrated store as legacy authority", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "matterhorn-crypto-connection-null-seal-")), "connections.db");
     const database = new Database(path);
     database.exec(`
       CREATE TABLE crypto_app_connections (
@@ -280,7 +281,7 @@ describe("workspace-scoped crypto app connections", () => {
         created_by TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        authority_digest TEXT,
+        authority_seal TEXT,
         PRIMARY KEY (workspace_id, connection_id)
       );
     `);
@@ -288,7 +289,7 @@ describe("workspace-scoped crypto app connections", () => {
       INSERT INTO crypto_app_connections VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       "ws_a",
-      "cxc_missing_digest",
+      "cxc_missing_seal",
       "matterhorn.sui",
       "1.0.0",
       "active",
@@ -303,8 +304,20 @@ describe("workspace-scoped crypto app connections", () => {
     );
     database.close();
 
-    expect(() => new MatterhornCryptoAppConnectionStore(path))
+    expect(() => new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET))
       .toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+  });
+
+  test("rejects a restored connection when the authority seal key changes", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "matterhorn-crypto-connection-wrong-key-")), "connections.db");
+    const first = fixture(path);
+    first.service.create(createInput());
+    first.store.close();
+
+    expect(() => new MatterhornCryptoAppConnectionStore(
+      path,
+      "different-connection-integrity-secret-at-least-32-bytes",
+    )).toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
   });
 
   test("rejects restored connection authority mutation before it can resolve", () => {
@@ -342,7 +355,7 @@ describe("workspace-scoped crypto app connections", () => {
         .run(value, "ws_a", connection.id);
       editor.close();
 
-      expect(() => new MatterhornCryptoAppConnectionStore(path))
+      expect(() => new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET))
         .toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
 
       const restore = new Database(path);
@@ -351,7 +364,7 @@ describe("workspace-scoped crypto app connections", () => {
       restore.close();
     }
 
-    const reopenedStore = new MatterhornCryptoAppConnectionStore(path);
+    const reopenedStore = new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET);
     try {
       const reopened = new MatterhornCryptoAppConnections({ registry: first.registry, store: reopenedStore });
       expect(reopened.resolveActive("ws_a", connection.id)?.id).toBe(connection.id);
@@ -434,7 +447,7 @@ describe("workspace-scoped crypto app connections", () => {
     );
     database.close();
 
-    const reopened = new MatterhornCryptoAppConnectionStore(path);
+    const reopened = new MatterhornCryptoAppConnectionStore(path, CONNECTION_INTEGRITY_SECRET);
     try {
       expect(() => reopened.getWalletChallenge("ws_a", "account_a", "cwc_integrity"))
         .toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
