@@ -11,6 +11,7 @@ import type {
   MatterhornCryptoAppAdapterRequest,
   MatterhornCryptoAppAdapterRouter,
 } from "./crypto-app-adapter-router.js";
+import { verifyCryptoAppResultEvidence } from "./crypto-app-evidence-identity.js";
 import type {
   MatterhornPendingCryptoIntent,
   MatterhornPendingCryptoIntentStore,
@@ -75,6 +76,7 @@ export class MatterhornCryptoTransactionError extends Error {
   constructor(
     public readonly code:
       | "transaction_context_invalid"
+      | "transaction_evidence_invalid"
       | "transaction_regeneration_invalid"
       | "transaction_regeneration_denied"
       | "transaction_policy_preflight_denied"
@@ -159,6 +161,9 @@ export class MatterhornCryptoTransactionService {
       arguments: exactArguments,
       consumedCapability: request.consumedCapability,
     });
+    if (!verifyCryptoAppResultEvidence(adapterResult)) {
+      throw new MatterhornCryptoTransactionError("transaction_evidence_invalid");
+    }
     if (adapterResult.app.id !== request.appId
       || adapterResult.app.connectionId !== request.connectionId
       || adapterResult.action.id !== request.actionId

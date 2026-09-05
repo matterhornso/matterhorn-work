@@ -11,6 +11,7 @@ import type {
 import {
   createMatterhornCertifiedCoworkerToolExecutor,
 } from "./crypto-coworker-certified-tool-executor.js";
+import { cryptoAppEvidenceIdentity } from "./crypto-app-evidence-identity.js";
 import { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 import type { ManagedMcpToolAuthorization } from "./managed-opencode-mcp.js";
@@ -112,6 +113,25 @@ function workspace(root: string): WorkspaceInfo {
     path: root,
     preset: "default",
     workspaceType: "local",
+  };
+}
+
+function certifyResult(result: MatterhornCryptoAppResult): MatterhornCryptoAppResult {
+  const identity = cryptoAppEvidenceIdentity({
+    appId: result.app.id,
+    manifestRevision: result.app.manifestRevision,
+    actionId: result.action.id,
+    network: result.action.network,
+    result: result.result,
+    observation: result.observation,
+  });
+  return {
+    ...result,
+    provenance: {
+      ...result.provenance,
+      projectionHash: identity.projectionHash,
+      observationHash: identity.observationHash,
+    },
   };
 }
 
@@ -219,7 +239,7 @@ async function authorization(input: {
 }
 
 function suiResult(): MatterhornCryptoAppResult {
-  return {
+  return certifyResult({
     version: "matterhorn.crypto-app-result.v1",
     app: { id: "matterhorn.sui-testnet", manifestRevision: "1.0.0", connectionId: "cxc_sui" },
     action: { id: "sui_transfer_preview", access: "prepare", network: "sui:testnet" },
@@ -251,11 +271,11 @@ function suiResult(): MatterhornCryptoAppResult {
       simulationReference: `sha256:${"c".repeat(64)}`,
       expiresAt: "2026-09-01T12:00:30.000Z",
     },
-  };
+  });
 }
 
 function hyperliquidResult(): MatterhornCryptoAppResult {
-  return {
+  return certifyResult({
     version: "matterhorn.crypto-app-result.v1",
     app: { id: "matterhorn.hyperliquid-testnet", manifestRevision: "1.1.0", connectionId: "cxc_hl" },
     action: { id: "hyperliquid_preview_order", access: "prepare", network: "hyperliquid:testnet" },
@@ -296,7 +316,7 @@ function hyperliquidResult(): MatterhornCryptoAppResult {
       simulationReference: `sha256:${"e".repeat(64)}`,
       expiresAt: "2026-09-01T12:00:30.000Z",
     },
-  };
+  });
 }
 
 function bittensorResult(
@@ -306,7 +326,7 @@ function bittensorResult(
     ? "transfer"
     : actionId === "bittensor_prepare_stake" ? "stake" : "unstake";
   const transfer = action === "transfer";
-  return {
+  return certifyResult({
     version: "matterhorn.crypto-app-result.v1",
     app: { id: "matterhorn.bittensor-testnet", manifestRevision: "1.1.0", connectionId: "cxc_bittensor" },
     action: { id: actionId, access: "prepare", network: "bittensor:test" },
@@ -347,7 +367,7 @@ function bittensorResult(
       simulationReference: `sha256:${"9".repeat(64)}`,
       expiresAt: "2026-09-01T12:00:15.250Z",
     },
-  };
+  });
 }
 
 describe("certified coworker tool executor", () => {
