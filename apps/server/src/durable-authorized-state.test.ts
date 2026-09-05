@@ -49,6 +49,54 @@ describe("durable authorized state", () => {
     }
   });
 
+  test("authenticates replacement writes and every listed row", () => {
+    const value = fixture();
+    try {
+      value.state.put({
+        key: "evidence_1",
+        workspaceId: "workspace_a",
+        value: { ownerId: "owner_a", revision: 1 },
+        expiresAtMs: 2_000,
+        nowMs: 1_000,
+      });
+      value.state.put({
+        key: "evidence_1",
+        workspaceId: "workspace_a",
+        value: { ownerId: "owner_a", revision: 2 },
+        expiresAtMs: 2_500,
+        nowMs: 1_500,
+      });
+      value.state.put({
+        key: "evidence_2",
+        workspaceId: "workspace_a",
+        value: { ownerId: "owner_a", revision: 1 },
+        expiresAtMs: 2_500,
+        nowMs: 1_500,
+      });
+      expect(value.state.list<{ ownerId: string; revision: number }>({
+        workspaceId: "workspace_a",
+        nowMs: 2_000,
+      })).toEqual([
+        { ownerId: "owner_a", revision: 2 },
+        { ownerId: "owner_a", revision: 1 },
+      ]);
+
+      value.store.put({
+        kind: "crypto_evidence_renewal_intent",
+        key: "legacy",
+        workspaceId: "workspace_a",
+        value: { ownerId: "owner_a", revision: 1 },
+        expiresAtMs: 2_500,
+        nowMs: 1_500,
+      });
+      expect(() => value.state.list({ workspaceId: "workspace_a", nowMs: 2_000 }))
+        .toThrow("test_intent_integrity_invalid");
+    } finally {
+      value.authority.close();
+      value.store.close();
+    }
+  });
+
   test("rejects raw legacy state, tenant transplantation, row mutation, and a wrong key", () => {
     const value = fixture();
     try {

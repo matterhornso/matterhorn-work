@@ -39,6 +39,16 @@ move it to another tenant, extend its lifetime, or add fields without failing
 closed. Updates and tenant-bound deletion run atomically; unsealed legacy rows
 must be discarded with the chat rather than promoted into disclosure authority.
 
+Capability history is authenticated before it can restore runtime authority or
+prove that an exact call already spent its bearer capability. Durable run grants
+and consumed-capability proofs are sealed over their complete closed payload,
+storage key, workspace, session, expiry, and SQLite update metadata. Payload,
+tenant, session, key, expiry, timestamp, or signing-key substitution therefore
+fails closed on restart, as do unsealed legacy rows. The bearer capability itself
+is never stored. A consumed proof remains available only for the bounded
+60-second reconciliation window needed to finish the corresponding tool call;
+it cannot be replayed to authorize another call.
+
 ## Phase 0 contracts
 
 The public types are exported from `@matterhorn-work/types/crypto-coworkers`:

@@ -4,6 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MatterhornAgentCapabilityBroker } from "./agent-capability.js";
+import type { MatterhornDurableStateAuthorityEnvelope } from "./durable-state-authority.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 import { evaluatePolymarketOpenPositionJurisdiction } from "./polymarket-jurisdiction-policy.js";
 import type { MatterhornTrustedJurisdiction } from "./trusted-jurisdiction.js";
@@ -139,9 +140,8 @@ describe("agent capability broker", () => {
       expiresAtMs,
       now,
     });
-    expect(state.list<{ expiresAtMs: number }>("run_grant", { nowMs: now.getTime() })).toEqual([
-      expect.objectContaining({ expiresAtMs }),
-    ]);
+    const [stored] = state.listRecords("run_grant", { nowMs: now.getTime() });
+    expect(stored?.expiresAtMs).toBe(expiresAtMs);
     expect(() => broker.createRunGrant({
       runId: "run_too_long",
       workspaceId: "ws_short_lived",
@@ -151,6 +151,7 @@ describe("agent capability broker", () => {
       expiresAtMs: now.getTime() + 6 * 60 * 60 * 1_000 + 1,
       now,
     })).toThrow("capability_run_expiry_invalid");
+    broker.close();
     state.close();
   });
 
@@ -887,11 +888,59 @@ describe("agent capability broker", () => {
     expect(second.activeRun("ses_durable")).toBe("run_durable");
     expect(second.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args }).runId).toBe("run_durable");
     expect(() => first.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args })).toThrow("capability_replayed");
+    first.close();
+    second.close();
     firstState.close();
     secondState.close();
   });
 
-  test("fails closed when a restored run grant broadens its persisted tool authority", () => {
+  test("restores an authenticated consumed proof through its bounded reconciliation window", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-reconciliation-window-"));
+    const path = join(root, "state.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const broker = new MatterhornAgentCapabilityBroker("enforce", state);
+    const issuedAt = new Date(Date.now() - 70_000);
+    broker.createRunGrant({
+      runId: "run_reconciliation_window",
+      workspaceId: "ws_reconciliation_window",
+      sessionId: "ses_reconciliation_window",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, matterhorn_sui_get_balance: true }],
+      now: issuedAt,
+    });
+    const args = { address: `0x${"4".repeat(64)}`, network: "testnet" };
+    const capability = broker.issue({
+      runId: "run_reconciliation_window",
+      workspaceId: "ws_reconciliation_window",
+      sessionId: "ses_reconciliation_window",
+      callId: "call_reconciliation_window",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+      now: issuedAt,
+    });
+    broker.consume({
+      token: capability.token,
+      toolName: "matterhorn_sui_get_balance",
+      args,
+      now: new Date(issuedAt.getTime() + 30_000),
+    });
+    broker.close();
+
+    const restored = new MatterhornAgentCapabilityBroker("enforce", state);
+    expect(restored.consumedToolProof({
+      runId: capability.claims.runId,
+      workspaceId: capability.claims.workspaceId,
+      sessionId: capability.claims.sessionId,
+      callId: capability.claims.callId,
+      toolName: capability.claims.toolName,
+      args,
+    })?.argsHash).toBe(capability.claims.argsHash);
+    restored.close();
+    state.close();
+  });
+
+  test("fails closed when a restored run grant is mutated, transplanted, unsealed, or opened with the wrong key", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-corrupt-grant-"));
     const path = join(root, "state.db");
     const state = new MatterhornGuardedRuntimeStateStore(path);
@@ -904,18 +953,59 @@ describe("agent capability broker", () => {
       executionMode: "work",
       requestToolProfiles: [{ "*": false, matterhorn_sui_get_balance: true }],
     });
-    const stored = state.get<Record<string, unknown>>("run_grant", "run_corrupt");
-    expect(stored).not.toBeNull();
-    state.put({
-      kind: "run_grant",
-      key: "run_corrupt",
-      workspaceId: "ws_corrupt",
-      sessionId: "ses_corrupt",
-      value: { ...stored, allowedTools: ["matterhorn_sui_get_balance", "matterhorn_unknown_submit"] },
-      expiresAtMs: Date.now() + 60_000,
-    });
-    expect(() => new MatterhornAgentCapabilityBroker("enforce", state))
-      .toThrow("capability_persisted_grant_invalid");
+    const stored = state.getRecord<MatterhornDurableStateAuthorityEnvelope<Record<string, unknown>>>(
+      "run_grant",
+      "run_corrupt",
+    );
+    if (!stored) throw new Error("test run grant missing");
+    const attempts = [
+      {
+        ...stored,
+        value: {
+          ...stored.value,
+          value: {
+            ...stored.value.value,
+            allowedTools: ["matterhorn_sui_get_balance", "matterhorn_unknown_submit"],
+          },
+        },
+      },
+      { ...stored, key: "run_transplanted" },
+      { ...stored, workspaceId: "ws_transplanted" },
+      { ...stored, sessionId: "ses_transplanted" },
+      { ...stored, expiresAtMs: (stored.expiresAtMs ?? 0) + 1 },
+      { ...stored, updatedAtMs: stored.updatedAtMs + 1 },
+      { ...stored, value: stored.value.value },
+    ];
+    for (const attempt of attempts) {
+      state.put({
+        kind: attempt.kind,
+        key: attempt.key,
+        workspaceId: attempt.workspaceId,
+        sessionId: attempt.sessionId,
+        value: attempt.value,
+        expiresAtMs: attempt.expiresAtMs,
+        nowMs: attempt.updatedAtMs,
+      });
+      expect(() => new MatterhornAgentCapabilityBroker("enforce", state))
+        .toThrow("capability_persisted_grant_invalid");
+      state.put({
+        kind: stored.kind,
+        key: stored.key,
+        workspaceId: stored.workspaceId,
+        sessionId: stored.sessionId,
+        value: stored.value,
+        expiresAtMs: stored.expiresAtMs,
+        nowMs: stored.updatedAtMs,
+      });
+    }
+    process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "wrong-capability-state-key-at-least-32-characters";
+    try {
+      expect(() => new MatterhornAgentCapabilityBroker("enforce", state))
+        .toThrow("capability_persisted_grant_invalid");
+    } finally {
+      process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "capability-test-secret-at-least-32-characters";
+    }
+    broker.close();
     state.close();
   });
 
@@ -954,6 +1044,86 @@ describe("agent capability broker", () => {
     })).toBe(true);
     expect(() => new MatterhornAgentCapabilityBroker("enforce", state))
       .toThrow("capability_persisted_consumption_invalid");
+    broker.close();
     state.close();
+  });
+
+  test("authenticates restored consumed-capability proofs against mutation, transplantation, and wrong keys", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-sealed-consumption-"));
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
+    const broker = new MatterhornAgentCapabilityBroker("enforce", state);
+    broker.createRunGrant({
+      runId: "run_sealed_consumption",
+      workspaceId: "ws_sealed_consumption",
+      sessionId: "ses_sealed_consumption",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, matterhorn_sui_get_balance: true }],
+    });
+    const args = { address: `0x${"3".repeat(64)}`, network: "testnet" };
+    const capability = broker.issue({
+      runId: "run_sealed_consumption",
+      workspaceId: "ws_sealed_consumption",
+      sessionId: "ses_sealed_consumption",
+      callId: "call_sealed_consumption",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    });
+    broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args });
+    const [stored] = state.listConsumedCapabilityRecords<unknown>();
+    if (!stored) throw new Error("test consumed capability missing");
+    const envelope = stored.claims;
+    if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
+      throw new Error("test consumed capability envelope invalid");
+    }
+    const exactRoot = mkdtempSync(join(tmpdir(), "matterhorn-capability-consumption-exact-"));
+    const exactState = new MatterhornGuardedRuntimeStateStore(join(exactRoot, "state.db"));
+    expect(exactState.consumeCapability(stored)).toBe(true);
+    const restored = new MatterhornAgentCapabilityBroker("enforce", exactState);
+    expect(restored.consumedToolProof({
+      runId: capability.claims.runId,
+      workspaceId: capability.claims.workspaceId,
+      sessionId: capability.claims.sessionId,
+      callId: capability.claims.callId,
+      toolName: capability.claims.toolName,
+      args,
+    })?.argsHash).toBe(capability.claims.argsHash);
+    restored.close();
+    exactState.close();
+
+    const corruptEnvelope = { ...envelope, authoritySeal: "A".repeat(43) };
+    const attempts = [
+      { ...stored, jti: "cap_transplanted" },
+      { ...stored, workspaceId: "ws_transplanted" },
+      { ...stored, sessionId: "ses_transplanted" },
+      { ...stored, runId: "run_transplanted" },
+      { ...stored, callId: "call_transplanted" },
+      { ...stored, expiresAtMs: stored.expiresAtMs + 1 },
+      { ...stored, consumedAtMs: stored.consumedAtMs + 1 },
+      { ...stored, claims: corruptEnvelope },
+      { ...stored, claims: capability.claims },
+    ];
+    for (const [index, attempt] of attempts.entries()) {
+      const targetRoot = mkdtempSync(join(tmpdir(), `matterhorn-capability-consumption-mutation-${index}-`));
+      const target = new MatterhornGuardedRuntimeStateStore(join(targetRoot, "state.db"));
+      expect(target.consumeCapability(attempt)).toBe(true);
+      expect(() => new MatterhornAgentCapabilityBroker("enforce", target))
+        .toThrow("capability_persisted_consumption_invalid");
+      target.close();
+    }
+
+    const wrongRoot = mkdtempSync(join(tmpdir(), "matterhorn-capability-consumption-wrong-key-"));
+    const wrongState = new MatterhornGuardedRuntimeStateStore(join(wrongRoot, "state.db"));
+    expect(wrongState.consumeCapability(stored)).toBe(true);
+    process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "wrong-consumption-state-key-at-least-32-characters";
+    try {
+      expect(() => new MatterhornAgentCapabilityBroker("enforce", wrongState))
+        .toThrow("capability_persisted_consumption_invalid");
+    } finally {
+      process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "capability-test-secret-at-least-32-characters";
+    }
+    broker.close();
+    state.close();
+    wrongState.close();
   });
 });
