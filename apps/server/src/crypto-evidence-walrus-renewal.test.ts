@@ -15,6 +15,7 @@ import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import { sealMatterhornRunEvidence } from "./crypto-evidence-sealer.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import { MatterhornCryptoEvidenceWalrusRenewalService } from "./crypto-evidence-walrus-renewal.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import {
   matterhornWalrusOwnerAddressHash,
   type MatterhornWalrusCertification,
@@ -120,7 +121,8 @@ async function fixture(input: {
     correlationSalt: Buffer.alloc(32, 8),
     idEntropy: Buffer.alloc(24, 9),
   });
-  const store = new MatterhornCryptoEvidenceStore(state, keyManager);
+  const authority = testDurableStateAuthority();
+  const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, authority);
   const created = store.create({
     workspaceId: "workspace_alpha",
     ownerId: "owner_alpha",
@@ -210,6 +212,7 @@ async function fixture(input: {
     buildTransaction,
     verifyTransaction,
     verifyCertification,
+    authority,
     buildCalls: () => buildCalls,
     setValidUntilEpoch: (value: number) => { validUntilEpoch = value; },
     setTransactionStatus: (value: "confirmed" | "failed") => { transactionStatus = value; },
@@ -230,7 +233,7 @@ describe("Walrus encrypted evidence renewal airlock", () => {
     });
     const secondState = new MatterhornGuardedRuntimeStateStore(value.statePath);
     try {
-      const secondStore = new MatterhornCryptoEvidenceStore(secondState, value.keyManager);
+      const secondStore = new MatterhornCryptoEvidenceStore(secondState, value.keyManager, {}, null, testDurableStateAuthority());
       const secondService = new MatterhornCryptoEvidenceWalrusRenewalService(
         secondStore,
         secondState,
@@ -471,17 +474,32 @@ describe("Walrus encrypted evidence renewal airlock", () => {
         signal: new AbortController().signal,
         now: new Date("2026-09-02T00:00:00.000Z"),
       });
-      const stored = value.state.get<typeof value.published>(
-        "crypto_evidence_record",
-        value.published.id,
-      );
+      const stored = value.store.get({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        evidenceId: value.published.id,
+      });
       if (!stored) throw new Error("test_evidence_missing");
+      const updatedAtMs = Date.parse("2026-09-02T00:00:30.000Z");
+      const next = {
+        ...stored,
+        revision: stored.revision + 1,
+        updatedAt: new Date(updatedAtMs).toISOString(),
+      };
       value.state.put({
         kind: "crypto_evidence_record",
         key: stored.id,
         workspaceId: stored.workspaceId,
-        value: { ...stored, revision: stored.revision + 1 },
-        nowMs: Date.parse("2026-09-02T00:00:30.000Z"),
+        value: value.authority.seal({
+          kind: "crypto_evidence_record",
+          key: next.id,
+          workspaceId: next.workspaceId,
+          sessionId: null,
+          expiresAtMs: null,
+          updatedAtMs,
+          value: next,
+        }),
+        nowMs: updatedAtMs,
       });
       value.setValidUntilEpoch(20);
       await expect(value.service.confirm({

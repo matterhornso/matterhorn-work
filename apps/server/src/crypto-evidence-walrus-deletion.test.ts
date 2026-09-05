@@ -15,6 +15,7 @@ import {
   MatterhornCryptoEvidenceWalrusDeletionService,
   type MatterhornWalrusDeletionTransactionBuilder,
 } from "./crypto-evidence-walrus-deletion.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import {
   matterhornWalrusOwnerAddressHash,
   type MatterhornWalrusCertification,
@@ -125,7 +126,8 @@ async function fixture(input: {
     correlationSalt: Buffer.alloc(32, 8),
     idEntropy: Buffer.alloc(24, 9),
   });
-  const store = new MatterhornCryptoEvidenceStore(state, keyManager);
+  const authority = testDurableStateAuthority();
+  const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, authority);
   const created = store.create({
     workspaceId: "workspace_alpha",
     ownerId: "owner_alpha",
@@ -212,6 +214,7 @@ async function fixture(input: {
     buildTransaction,
     verifyTransaction,
     verifyCertification,
+    authority,
     buildCalls: () => buildCalls,
     destroyCalls: () => destroyCalls,
     setDestroyFails: (value: boolean) => { destroyFails = value; },
@@ -245,7 +248,7 @@ describe("Walrus encrypted evidence deletion airlock", () => {
     });
     const secondState = new MatterhornGuardedRuntimeStateStore(value.statePath);
     try {
-      const secondStore = new MatterhornCryptoEvidenceStore(secondState, value.keyManager);
+      const secondStore = new MatterhornCryptoEvidenceStore(secondState, value.keyManager, {}, null, testDurableStateAuthority());
       const secondService = new MatterhornCryptoEvidenceWalrusDeletionService(
         secondStore,
         secondState,
@@ -495,12 +498,26 @@ describe("Walrus encrypted evidence deletion airlock", () => {
       });
       if (!current) throw new Error("test_evidence_missing");
       if (current.revision === value.published.revision) {
+        const updatedAtMs = Date.parse("2026-09-02T00:01:30.000Z");
+        const next = {
+          ...current,
+          revision: current.revision + 1,
+          updatedAt: new Date(updatedAtMs).toISOString(),
+        };
         value.state.put({
           kind: "crypto_evidence_record",
           key: current.id,
           workspaceId: current.workspaceId,
-          value: { ...current, revision: current.revision + 1 },
-          nowMs: Date.parse("2026-09-02T00:01:30.000Z"),
+          value: value.authority.seal({
+            kind: "crypto_evidence_record",
+            key: next.id,
+            workspaceId: next.workspaceId,
+            sessionId: null,
+            expiresAtMs: null,
+            updatedAtMs,
+            value: next,
+          }),
+          nowMs: updatedAtMs,
         });
       }
       await expect(value.service.confirm({

@@ -14,6 +14,8 @@ import type {
   MatterhornEvidenceDataKeyLease,
   MatterhornEvidenceKeyManager,
 } from "./crypto-evidence-sealer.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
+import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import {
   MatterhornGuardedRuntimeStateStore,
   type GuardedRuntimeStateKind,
@@ -81,14 +83,22 @@ async function withStore(
     store: MatterhornAgentFileStore;
     state: MatterhornGuardedRuntimeStateStore;
     keys: TestKeyManager;
+    authority: MatterhornDurableStateAuthority;
   }) => Promise<void>,
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-agent-files-"));
   const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
   const keys = new TestKeyManager();
+  const authority = testDurableStateAuthority();
   try {
-    await run({ store: new MatterhornAgentFileStore(state, keys), state, keys });
+    await run({
+      store: new MatterhornAgentFileStore(state, keys, null, authority),
+      state,
+      keys,
+      authority,
+    });
   } finally {
+    authority.close();
     state.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -204,24 +214,121 @@ describe("encrypted Agent Files store", () => {
         now: new Date("2026-10-01T00:00:00.000Z"),
       })).toBeNull();
 
-      const persisted = state.get<MatterhornAgentFileRecord>("agent_file_record", created.id);
+      const persisted = state.getRecord<{
+        version: string;
+        value: MatterhornAgentFileRecord;
+        authoritySeal: string;
+      }>("agent_file_record", created.id);
       if (!persisted) throw new Error("test record missing");
-      const replacement = persisted.envelope.ciphertext[0] === "A" ? "B" : "A";
+      const replacement = persisted.value.value.envelope.ciphertext[0] === "A" ? "B" : "A";
       const tampered: MatterhornAgentFileRecord = {
-        ...persisted,
+        ...persisted.value.value,
         envelope: {
-          ...persisted.envelope,
-          ciphertext: `${replacement}${persisted.envelope.ciphertext.slice(1)}`,
+          ...persisted.value.value.envelope,
+          ciphertext: `${replacement}${persisted.value.value.envelope.ciphertext.slice(1)}`,
         },
       };
-      state.put({ kind: "agent_file_record", key: tampered.id, workspaceId: tampered.workspaceId, value: tampered });
+      state.put({
+        kind: "agent_file_record",
+        key: persisted.key,
+        workspaceId: persisted.workspaceId,
+        value: { ...persisted.value, value: tampered },
+        nowMs: persisted.updatedAtMs,
+      });
       await expect(store.readContext({
         workspaceId: "ws_alpha",
         ownerId: "owner_alpha",
         coworkerId: "risk_monitor",
         fileId: created.id,
         now: new Date("2026-09-02T00:00:00.000Z"),
-      })).rejects.toMatchObject({ code: "agent_file_envelope_invalid" });
+      })).rejects.toMatchObject({ code: "agent_file_state_integrity_invalid" });
+
+      const mutations: MatterhornAgentFileRecord[] = [
+        { ...persisted.value.value, revision: persisted.value.value.revision + 1 },
+        {
+          ...persisted.value.value,
+          ownerId: "owner_substituted",
+        },
+        {
+          ...persisted.value.value,
+          file: {
+            ...persisted.value.value.file,
+            access: {
+              ...persisted.value.value.file.access,
+              coworkerIds: ["attacker_coworker"],
+            },
+          },
+        },
+        {
+          ...persisted.value.value,
+          key: { ...persisted.value.value.key, wrappedKey: "mutated-wrapped-key" },
+        },
+      ];
+      for (const mutation of mutations) {
+        state.put({
+          kind: "agent_file_record",
+          key: persisted.key,
+          workspaceId: persisted.workspaceId,
+          value: { ...persisted.value, value: mutation },
+          nowMs: persisted.updatedAtMs,
+        });
+        expect(() => store.get({
+          workspaceId: "ws_alpha",
+          ownerId: "owner_alpha",
+          fileId: created.id,
+          now: new Date("2026-09-02T00:00:00.000Z"),
+        })).toThrow("agent_file_state_integrity_invalid");
+      }
+
+      state.put({
+        kind: "agent_file_record",
+        key: persisted.key,
+        workspaceId: "ws_transplanted",
+        value: persisted.value,
+        nowMs: persisted.updatedAtMs,
+      });
+      expect(() => store.get({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      })).toThrow("agent_file_state_integrity_invalid");
+
+      state.put({
+        kind: "agent_file_record",
+        key: persisted.key,
+        workspaceId: persisted.workspaceId,
+        value: persisted.value.value,
+        nowMs: persisted.updatedAtMs,
+      });
+      expect(() => store.get({
+        workspaceId: "ws_alpha",
+        ownerId: "owner_alpha",
+        fileId: created.id,
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      })).toThrow("agent_file_state_integrity_invalid");
+
+      state.put({
+        kind: "agent_file_record",
+        key: persisted.key,
+        workspaceId: persisted.workspaceId,
+        value: persisted.value,
+        nowMs: persisted.updatedAtMs,
+      });
+      const wrongAuthority = testDurableStateAuthority(
+        "different-agent-file-authority-secret-at-least-32-bytes",
+      );
+      try {
+        const wrongKeyStore = new MatterhornAgentFileStore(state, new TestKeyManager(), null, wrongAuthority);
+        expect(() => wrongKeyStore.get({
+          workspaceId: "ws_alpha",
+          ownerId: "owner_alpha",
+          fileId: created.id,
+          now: new Date("2026-09-02T00:00:00.000Z"),
+        })).toThrow("agent_file_state_integrity_invalid");
+      } finally {
+        wrongAuthority.close();
+      }
     });
   });
 
@@ -269,8 +376,8 @@ describe("encrypted Agent Files store", () => {
     const stateA = new MatterhornGuardedRuntimeStateStore(databasePath);
     const stateB = new MatterhornGuardedRuntimeStateStore(databasePath);
     const keys = new TestKeyManager();
-    const storeA = new MatterhornAgentFileStore(stateA, keys);
-    const storeB = new MatterhornAgentFileStore(stateB, keys);
+    const storeA = new MatterhornAgentFileStore(stateA, keys, null, testDurableStateAuthority());
+    const storeB = new MatterhornAgentFileStore(stateB, keys, null, testDurableStateAuthority());
     try {
       const created = await storeA.create({
         workspaceId: "ws_alpha",
@@ -407,7 +514,7 @@ describe("encrypted Agent Files store", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-agent-file-renewal-atomic-"));
     const state = new FailingClaimDeleteStateStore(join(root, "state.db"));
     const keys = new TestKeyManager();
-    const store = new MatterhornAgentFileStore(state, keys);
+    const store = new MatterhornAgentFileStore(state, keys, null, testDurableStateAuthority());
     try {
       const created = await store.create({
         workspaceId: "ws_alpha",

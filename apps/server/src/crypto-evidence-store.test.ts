@@ -11,7 +11,11 @@ import type { MatterhornAgentRunReceipt } from "@matterhorn-work/types/guarded-a
 
 import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import { sealMatterhornRunEvidence } from "./crypto-evidence-sealer.js";
-import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
+import {
+  MatterhornCryptoEvidenceStore,
+  type MatterhornCryptoEvidenceRecord,
+} from "./crypto-evidence-store.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 function receipt(input: { id?: string; runId?: string; workspaceId?: string } = {}): MatterhornAgentRunReceipt {
@@ -93,7 +97,7 @@ describe("durable crypto evidence store", () => {
         correlationSalt: Buffer.alloc(32, 8),
         idEntropy: Buffer.alloc(24, 9),
       });
-      const store = new MatterhornCryptoEvidenceStore(state, keyManager);
+      const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, testDurableStateAuthority());
       const created = store.create({
         workspaceId: "workspace_store",
         ownerId: "owner_store",
@@ -242,7 +246,7 @@ describe("durable crypto evidence store", () => {
         Date.now() + 366 * 24 * 60 * 60 * 1_000,
       )).toBeNull();
 
-      const reloaded = new MatterhornCryptoEvidenceStore(state, keyManager);
+      const reloaded = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, testDurableStateAuthority());
       expect(reloaded.get({
         workspaceId: "workspace_store",
         ownerId: "owner_store",
@@ -250,6 +254,134 @@ describe("durable crypto evidence store", () => {
         evidenceId: created.id,
       })?.state).toBe("key_destroyed");
     } finally {
+      state.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects mutated authority, publication, key, revision, tenant, and legacy state before use", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "matterhorn-evidence-authority-"));
+    const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));
+    const authority = testDurableStateAuthority();
+    const keyManager: MatterhornEvidenceKeyManager = {
+      createDataKey: async ({ recipientKeyIds }) => ({
+        plaintextKey: Buffer.alloc(32, 21),
+        keyReference: "arn:aws:kms:test:key/authority",
+        wrappedKey: Buffer.from("authority-wrapped-key").toString("base64"),
+        keyContext: "e".repeat(64),
+        recipientKeyIds,
+      }),
+      decryptDataKey: async () => Buffer.alloc(32, 21),
+      destroyKey: async () => {},
+    };
+    try {
+      const sealed = await sealMatterhornRunEvidence({
+        receipt: receipt({ id: "receipt_authority", runId: "run_authority", workspaceId: "workspace_authority" }),
+        coworkerId: "coworker_authority",
+        recipientKeyIds: ["recipient-authority"],
+        keyManager,
+        now: new Date("2026-09-01T00:02:00.000Z"),
+        correlationSalt: Buffer.alloc(32, 22),
+        idEntropy: Buffer.alloc(24, 23),
+      });
+      const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, authority);
+      const created = store.create({
+        workspaceId: "workspace_authority",
+        ownerId: "owner_authority",
+        runId: "run_authority",
+        coworkerId: "coworker_authority",
+        sealed,
+      });
+      const persisted = state.getRecord<{
+        version: string;
+        value: MatterhornCryptoEvidenceRecord;
+        authoritySeal: string;
+      }>("crypto_evidence_record", created.id);
+      if (!persisted) throw new Error("test evidence record missing");
+
+      const mutations: MatterhornCryptoEvidenceRecord[] = [
+        { ...persisted.value.value, revision: 2 },
+        { ...persisted.value.value, ownerId: "owner_substituted" },
+        { ...persisted.value.value, workspaceId: "workspace_substituted" },
+        {
+          ...persisted.value.value,
+          key: { ...persisted.value.value.key, wrappedKey: "mutated-wrapped-key" },
+        },
+        { ...persisted.value.value, state: "published" },
+      ];
+      for (const mutation of mutations) {
+        state.put({
+          kind: "crypto_evidence_record",
+          key: persisted.key,
+          workspaceId: persisted.workspaceId,
+          value: { ...persisted.value, value: mutation },
+          nowMs: persisted.updatedAtMs,
+        });
+        expect(() => store.get({
+          workspaceId: "workspace_authority",
+          ownerId: "owner_authority",
+          coworkerId: "coworker_authority",
+          evidenceId: created.id,
+        })).toThrow("crypto_evidence_state_integrity_invalid");
+      }
+
+      state.put({
+        kind: "crypto_evidence_record",
+        key: persisted.key,
+        workspaceId: "workspace_transplanted",
+        value: persisted.value,
+        nowMs: persisted.updatedAtMs,
+      });
+      expect(() => store.get({
+        workspaceId: "workspace_authority",
+        ownerId: "owner_authority",
+        coworkerId: "coworker_authority",
+        evidenceId: created.id,
+      })).toThrow("crypto_evidence_state_integrity_invalid");
+
+      state.put({
+        kind: "crypto_evidence_record",
+        key: persisted.key,
+        workspaceId: persisted.workspaceId,
+        value: persisted.value.value,
+        nowMs: persisted.updatedAtMs,
+      });
+      expect(() => store.get({
+        workspaceId: "workspace_authority",
+        ownerId: "owner_authority",
+        coworkerId: "coworker_authority",
+        evidenceId: created.id,
+      })).toThrow("crypto_evidence_state_integrity_invalid");
+
+      state.put({
+        kind: "crypto_evidence_record",
+        key: persisted.key,
+        workspaceId: persisted.workspaceId,
+        value: persisted.value,
+        nowMs: persisted.updatedAtMs,
+      });
+      const wrongAuthority = testDurableStateAuthority(
+        "different-authority-secret-that-is-more-than-32-bytes",
+      );
+      const wrongKeyStore = new MatterhornCryptoEvidenceStore(
+        state,
+        keyManager,
+        {},
+        null,
+        wrongAuthority,
+      );
+      try {
+        expect(() => wrongKeyStore.get({
+          workspaceId: "workspace_authority",
+          ownerId: "owner_authority",
+          coworkerId: "coworker_authority",
+          evidenceId: created.id,
+        })).toThrow("crypto_evidence_state_integrity_invalid");
+      } finally {
+        wrongAuthority.close();
+      }
+    } finally {
+      authority.close();
       state.close();
       await rm(directory, { recursive: true, force: true });
     }
@@ -282,8 +414,8 @@ describe("durable crypto evidence store", () => {
         correlationSalt: Buffer.alloc(32, 4),
         idEntropy: Buffer.alloc(24, 5),
       });
-      const storeA = new MatterhornCryptoEvidenceStore(stateA, keyManager);
-      const storeB = new MatterhornCryptoEvidenceStore(stateB, keyManager);
+      const storeA = new MatterhornCryptoEvidenceStore(stateA, keyManager, {}, null, testDurableStateAuthority());
+      const storeB = new MatterhornCryptoEvidenceStore(stateB, keyManager, {}, null, testDurableStateAuthority());
       const created = storeA.create({
         workspaceId: "workspace_claim",
         ownerId: "owner_claim",
@@ -379,7 +511,7 @@ describe("durable crypto evidence store", () => {
       destroyKey: async () => { destroyed += 1; },
     };
     try {
-      const store = new MatterhornCryptoEvidenceStore(state, keyManager);
+      const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, testDurableStateAuthority());
       const seed = async (input: {
         workspaceId: string;
         ownerId: string;

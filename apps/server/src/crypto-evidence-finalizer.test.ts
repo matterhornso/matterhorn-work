@@ -9,6 +9,7 @@ import type { MatterhornCoworkerRunBinding } from "./agent-capability.js";
 import { sealFinalizedCoworkerRunEvidence } from "./crypto-evidence-finalizer.js";
 import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 function receipt(workspaceId = "workspace_finalizer"): MatterhornAgentRunReceipt {
@@ -103,7 +104,7 @@ describe("finalized coworker evidence", () => {
       destroyKey: async () => undefined,
     };
     try {
-      const store = new MatterhornCryptoEvidenceStore(state, keyManager);
+      const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, testDurableStateAuthority());
       const finalizedRun = { receipt: receipt(), coworker: coworker() };
       const first = await sealFinalizedCoworkerRunEvidence({ finalizedRun, store, keyManager });
       const repeated = await sealFinalizedCoworkerRunEvidence({ finalizedRun, store, keyManager });
@@ -150,7 +151,7 @@ describe("finalized coworker evidence", () => {
     const directory = await mkdtemp(join(tmpdir(), "matterhorn-finalizer-tenant-"));
     const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));
     try {
-      const store = new MatterhornCryptoEvidenceStore(state, keyManager);
+      const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, testDurableStateAuthority());
       await expect(sealFinalizedCoworkerRunEvidence({
         finalizedRun: { receipt: receipt("workspace_receipt"), coworker: coworker("workspace_other") },
         store,

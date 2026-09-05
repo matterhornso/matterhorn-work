@@ -46,6 +46,7 @@ import {
 } from "./crypto-evidence-sui-anchor.js";
 import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
 import type { MatterhornFinalizedCoworkerRun } from "./crypto-evidence-finalizer.js";
+import { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import { canonicalJson, equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import {
   MatterhornGuardedRuntimeStateStore,
@@ -855,6 +856,7 @@ export class MatterhornGuardedAgentRuntime {
   private readonly observations = new Map<string, GuardedRuntimeObservationMetric>();
   private readonly sessionPrivacyFloorAuthorityKey: Buffer | null;
   private readonly finalizedRunAuthorityKey: Buffer | null;
+  private readonly durableStateAuthority: MatterhornDurableStateAuthority | null;
   private readonly providerSystemByRunId = new Map<string, {
     workspaceId: string;
     sessionId: string;
@@ -878,6 +880,9 @@ export class MatterhornGuardedAgentRuntime {
       : null;
     this.finalizedRunAuthorityKey = integritySecret.length > 0
       ? finalizedRunAuthorityKey(integritySecret)
+      : null;
+    this.durableStateAuthority = integritySecret.length > 0
+      ? new MatterhornDurableStateAuthority(integritySecret)
       : null;
     this.privacy = new MatterhornPrivacyFirewall(stateStore);
     this.capabilities = new MatterhornAgentCapabilityBroker(undefined, stateStore);
@@ -915,20 +920,34 @@ export class MatterhornGuardedAgentRuntime {
     options: { allowMainnet?: boolean } = {},
     erasureLedger: MatterhornRecoveryErasureLedger | null = null,
   ): MatterhornCryptoEvidenceStore {
-    return new MatterhornCryptoEvidenceStore(this.stateStore, keyManager, options, erasureLedger);
+    if (!this.durableStateAuthority) throw new Error("crypto_evidence_state_integrity_unavailable");
+    return new MatterhornCryptoEvidenceStore(
+      this.stateStore,
+      keyManager,
+      options,
+      erasureLedger,
+      this.durableStateAuthority,
+    );
   }
 
   createAgentFileStore(
     keyManager: MatterhornEvidenceKeyManager,
     erasureLedger: MatterhornRecoveryErasureLedger | null = null,
   ): MatterhornAgentFileStore {
-    return new MatterhornAgentFileStore(this.stateStore, keyManager, erasureLedger);
+    if (!this.durableStateAuthority) throw new Error("agent_file_state_integrity_unavailable");
+    return new MatterhornAgentFileStore(
+      this.stateStore,
+      keyManager,
+      erasureLedger,
+      this.durableStateAuthority,
+    );
   }
 
   reconcileRecoveryErasures(
     erasureLedger: MatterhornRecoveryErasureLedger,
   ): MatterhornRecoveryErasureReconciliation {
-    return erasureLedger.reconcile(this.stateStore);
+    if (!this.durableStateAuthority) throw new Error("durable_state_integrity_unavailable");
+    return erasureLedger.reconcile(this.stateStore, this.durableStateAuthority);
   }
 
   createAgentFileWalrusRenewalService(input: {
@@ -2150,6 +2169,7 @@ export class MatterhornGuardedAgentRuntime {
   close(): void {
     this.sessionPrivacyFloorAuthorityKey?.fill(0);
     this.finalizedRunAuthorityKey?.fill(0);
+    this.durableStateAuthority?.close();
     this.stateStore.close();
   }
 

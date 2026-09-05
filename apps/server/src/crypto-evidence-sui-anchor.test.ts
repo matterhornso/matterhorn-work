@@ -19,6 +19,7 @@ import {
   type MatterhornSuiEvidenceAnchorTransactionVerifier,
 } from "./crypto-evidence-sui-anchor.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import type { MatterhornWalrusCertification } from "./crypto-evidence-walrus-publisher.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
@@ -246,7 +247,7 @@ async function serviceFixture(input: {
     correlationSalt: Buffer.alloc(32, 8),
     idEntropy: Buffer.alloc(24, 9),
   });
-  const store = new MatterhornCryptoEvidenceStore(state, keyManager);
+  const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, testDurableStateAuthority());
   const created = store.create({
     workspaceId: "workspace_alpha",
     ownerId: "owner_alpha",
@@ -340,7 +341,7 @@ describe("Sui evidence anchor wallet airlock", () => {
     });
     const secondState = new MatterhornGuardedRuntimeStateStore(fixture.statePath);
     try {
-      const secondStore = new MatterhornCryptoEvidenceStore(secondState, fixture.keyManager);
+      const secondStore = new MatterhornCryptoEvidenceStore(secondState, fixture.keyManager, {}, null, testDurableStateAuthority());
       const secondService = new MatterhornCryptoEvidenceSuiAnchorService(
         secondStore,
         secondState,
