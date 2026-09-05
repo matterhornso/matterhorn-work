@@ -3287,6 +3287,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   ) : null}
                   <DeskWorkflowStagePanel
                     deskId={activeDeskMode}
+                    presentation="chat-first"
+                    showAgentHeader={false}
                     taskStatus={effectiveActivityStatus === "idle" ? "idle" : effectiveActivityStatus === "waiting" ? "waiting" : "running"}
                     stageActionDisabled={activeDeskStartBlocked}
                     stageActionLabel="Platform setup"
