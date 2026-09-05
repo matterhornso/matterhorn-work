@@ -304,7 +304,9 @@ function connectionAuthorityDigest(connection: MatterhornCryptoAppConnection): s
   // connection id, never a password, token, key, signature, or credential value.
   // It is deliberately included in this non-authenticating content checksum so
   // restored connection authority cannot be changed without detection.
-  return createHash("sha256") // codeql[js/insufficient-password-hash]
+
+  // codeql[js/insufficient-password-hash]
+  return createHash("sha256")
     .update(canonicalJson({
       domain: "matterhorn:crypto-app-connection-authority:v1",
       version: connection.version,
