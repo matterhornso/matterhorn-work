@@ -121,6 +121,8 @@ const PROVIDER_MESSAGES_MAX_BYTES = 16 * 1_024 * 1_024;
 const PROVIDER_MESSAGES_VALIDATION_TTL_MS = 30_000;
 const SESSION_PRIVACY_FLOOR_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
 const GUARDED_RUN_AUTHORITY_TTL_MS = 6 * 60 * 60 * 1_000;
+const GUARDED_STAGED_CALL_TTL_MS = 60_000;
+const GUARDED_CAPABILITY_TOKEN_MAX_BYTES = 16_384;
 
 type GuardedRunState = {
   runId: string;
@@ -135,6 +137,28 @@ type GuardedMessageBindingState = {
   workspaceId: string;
   sessionId: string;
   messageId: string;
+};
+
+type GuardedStagedCapabilityState = {
+  callId: string;
+  runId: string;
+  workspaceId: string;
+  sessionId: string;
+  token: string;
+  expiresAtMs: number;
+};
+
+type GuardedRolloutBypassState = {
+  callId: string;
+  runId: string;
+  workspaceId: string;
+  sessionId: string;
+  agentId: string | null;
+  toolName: string;
+  argsHash: string;
+  reason: string;
+  issuedMode: "shadow" | "enforce";
+  expiresAtMs: number;
 };
 
 type GuardedSessionPrivacyFloor = {
@@ -252,6 +276,111 @@ function assertGuardedMessageBindingState(
     throw new Error("guarded_message_binding_state_invalid");
   }
   return value as GuardedMessageBindingState;
+}
+
+function guardedStagedCapabilityHasExactKeys(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const expected = ["callId", "expiresAtMs", "runId", "sessionId", "token", "workspaceId"];
+  const keys = Object.keys(value).sort();
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+}
+
+function assertGuardedStagedCapabilityState(
+  state: GuardedRuntimeStateRecord<unknown> | null,
+  callId: string,
+  nowMs: number,
+): GuardedStagedCapabilityState | null {
+  if (!state) return null;
+  const value = state.value;
+  if (!guardedStagedCapabilityHasExactKeys(value)) {
+    throw new Error("guarded_staged_capability_state_invalid");
+  }
+  if (
+    state.kind !== "staged_capability"
+    || state.key !== callId
+    || !guardedRunIdentifier(value.callId)
+    || value.callId !== callId
+    || !guardedRunIdentifier(value.runId)
+    || !GUARDED_RUN_ID.test(value.runId)
+    || !guardedRunIdentifier(value.workspaceId)
+    || !guardedRunIdentifier(value.sessionId)
+    || typeof value.token !== "string"
+    || value.token.length === 0
+    || value.token.length > GUARDED_CAPABILITY_TOKEN_MAX_BYTES
+    || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value.token)
+    || !Number.isSafeInteger(value.expiresAtMs)
+    || state.workspaceId !== value.workspaceId
+    || state.sessionId !== value.sessionId
+    || state.expiresAtMs !== value.expiresAtMs
+    || !Number.isSafeInteger(state.updatedAtMs)
+    || state.updatedAtMs > nowMs
+    || (state.expiresAtMs as number) <= nowMs
+    || (state.expiresAtMs as number) - state.updatedAtMs > GUARDED_STAGED_CALL_TTL_MS
+  ) {
+    throw new Error("guarded_staged_capability_state_invalid");
+  }
+  return value as GuardedStagedCapabilityState;
+}
+
+function guardedRolloutBypassHasExactKeys(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const expected = [
+    "agentId",
+    "argsHash",
+    "callId",
+    "expiresAtMs",
+    "issuedMode",
+    "reason",
+    "runId",
+    "sessionId",
+    "toolName",
+    "workspaceId",
+  ];
+  const keys = Object.keys(value).sort();
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+}
+
+function assertGuardedRolloutBypassState(
+  state: GuardedRuntimeStateRecord<unknown> | null,
+  callId: string,
+  nowMs: number,
+): GuardedRolloutBypassState | null {
+  if (!state) return null;
+  const value = state.value;
+  if (!guardedRolloutBypassHasExactKeys(value)) {
+    throw new Error("guarded_rollout_bypass_state_invalid");
+  }
+  const issuedMode = value.issuedMode;
+  const reason = value.reason;
+  if (
+    state.kind !== "rollout_bypass"
+    || state.key !== callId
+    || !guardedRunIdentifier(value.callId)
+    || value.callId !== callId
+    || !guardedRunIdentifier(value.runId)
+    || (issuedMode === "enforce" && !GUARDED_RUN_ID.test(value.runId))
+    || !guardedRunIdentifier(value.workspaceId)
+    || !guardedRunIdentifier(value.sessionId)
+    || !(value.agentId === null || guardedRunIdentifier(value.agentId))
+    || !guardedRunIdentifier(value.toolName)
+    || typeof value.argsHash !== "string"
+    || !/^[a-f0-9]{64}$/.test(value.argsHash)
+    || typeof reason !== "string"
+    || !(reason === "capability_denied" || GUARDED_OBSERVATION_REASONS.has(reason))
+    || (issuedMode !== "shadow" && issuedMode !== "enforce")
+    || (issuedMode === "enforce" && reason !== "rollout_not_enforced")
+    || !Number.isSafeInteger(value.expiresAtMs)
+    || state.workspaceId !== value.workspaceId
+    || state.sessionId !== value.sessionId
+    || state.expiresAtMs !== value.expiresAtMs
+    || !Number.isSafeInteger(state.updatedAtMs)
+    || state.updatedAtMs > nowMs
+    || (state.expiresAtMs as number) <= nowMs
+    || (state.expiresAtMs as number) - state.updatedAtMs > GUARDED_STAGED_CALL_TTL_MS
+  ) {
+    throw new Error("guarded_rollout_bypass_state_invalid");
+  }
+  return value as GuardedRolloutBypassState;
 }
 
 function privacyModeRank(mode: MatterhornAgentPrivacyMode): number {
@@ -461,7 +590,9 @@ const GUARDED_OBSERVATION_REASONS = new Set([
   "capability_tool_not_in_run_grant",
   "capability_wrong_desk",
   "capability_wrong_tool",
+  "guarded_rollout_bypass_state_invalid",
   "guarded_run_state_invalid",
+  "guarded_staged_capability_state_invalid",
   "missing_call_id",
   "policy_allowed",
   "rollout_not_enforced",
@@ -488,14 +619,8 @@ export class MatterhornGuardedAgentRuntime {
   readonly capabilities: MatterhornAgentCapabilityBroker;
   readonly receipts: MatterhornAgentRunReceiptStore;
   readonly pendingCryptoIntents: MatterhornPendingCryptoIntentStore;
-  private readonly stagedCapabilities = new Map<string, { token: string; expiresAtMs: number; runId: string }>();
-  private readonly rolloutBypassCallIds = new Map<string, {
-    expiresAtMs: number;
-    reason: string;
-    runId: string | null;
-    toolName: string;
-    argsHash: string;
-  }>();
+  private readonly stagedCapabilities = new Map<string, GuardedStagedCapabilityState>();
+  private readonly rolloutBypassCallIds = new Map<string, GuardedRolloutBypassState>();
   private readonly observations = new Map<string, GuardedRuntimeObservationMetric>();
   private readonly providerSystemByRunId = new Map<string, {
     workspaceId: string;
@@ -1226,40 +1351,53 @@ export class MatterhornGuardedAgentRuntime {
         toolName: input.toolName,
         agentId: input.agentId,
       })) {
-        const expiresAtMs = Date.now() + 60_000;
+        const expiresAtMs = Date.now() + GUARDED_STAGED_CALL_TTL_MS;
         this.rolloutBypassCallIds.set(input.callId, {
+          callId: input.callId,
           expiresAtMs,
           reason: "rollout_not_enforced",
           runId,
+          workspaceId: input.workspaceId,
+          sessionId: input.sessionId,
+          agentId: input.agentId?.trim() || null,
           toolName,
           argsHash,
+          issuedMode: "enforce",
         });
-        this.persistRolloutBypass(input.callId, input.workspaceId, input.sessionId);
+        this.persistRolloutBypass(input.callId);
         this.observe("issue", "bypassed", "rollout_not_enforced");
         return { accepted: true, callId: input.callId, expiresAt: new Date(expiresAtMs).toISOString() };
       }
       const capability = this.capabilities.issue(input);
       const expiresAtMs = Date.parse(capability.claims.expiresAt);
       this.stagedCapabilities.set(capability.claims.callId, {
+        callId: capability.claims.callId,
         token: capability.token,
         expiresAtMs,
         runId: capability.claims.runId,
+        workspaceId: capability.claims.workspaceId,
+        sessionId: capability.claims.sessionId,
       });
-      this.persistStagedCapability(capability.claims.callId, capability.claims.workspaceId, capability.claims.sessionId);
+      this.persistStagedCapability(capability.claims.callId);
       this.observe("issue", this.capabilities.mode === "shadow" ? "would_allow" : "allowed", "policy_allowed");
       return { accepted: true, callId: capability.claims.callId, expiresAt: capability.claims.expiresAt };
     } catch (error) {
       const reason = guardedObservationReason(error);
       if (this.capabilities.mode === "shadow") {
-        const expiresAtMs = Date.now() + 60_000;
+        const expiresAtMs = Date.now() + GUARDED_STAGED_CALL_TTL_MS;
         this.rolloutBypassCallIds.set(input.callId, {
+          callId: input.callId,
           expiresAtMs,
           reason,
           runId,
+          workspaceId: input.workspaceId,
+          sessionId: input.sessionId,
+          agentId: input.agentId?.trim() || null,
           toolName,
           argsHash,
+          issuedMode: "shadow",
         });
-        this.persistRolloutBypass(input.callId, input.workspaceId, input.sessionId);
+        this.persistRolloutBypass(input.callId);
         this.observe("issue", "would_deny", reason);
         return { accepted: true, callId: input.callId, expiresAt: new Date(expiresAtMs).toISOString() };
       }
@@ -1287,15 +1425,30 @@ export class MatterhornGuardedAgentRuntime {
     if (this.capabilities.mode === "off") {
       return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
     }
-    const bypass = callId
-      ? this.stateStore.take<{
-          expiresAtMs: number;
-          reason: string;
-          runId: string | null;
-          toolName: string;
-          argsHash: string;
-        }>("rollout_bypass", callId) ?? this.rolloutBypassCallIds.get(callId)
-      : undefined;
+    let bypass: GuardedRolloutBypassState | undefined;
+    if (callId) {
+      try {
+        const persisted = this.stateStore.takeRecord<unknown>("rollout_bypass", callId);
+        bypass = persisted
+          ? assertGuardedRolloutBypassState(persisted, callId, Date.now()) ?? undefined
+          : this.rolloutBypassCallIds.get(callId);
+      } catch {
+        this.rolloutBypassCallIds.delete(callId);
+        this.observe(
+          "consume",
+          this.capabilities.mode === "shadow" ? "would_deny" : "denied",
+          "guarded_rollout_bypass_state_invalid",
+        );
+        if (this.capabilities.mode === "enforce") {
+          throw new GuardedRuntimeError(
+            403,
+            "agent_capability_denied",
+            "Matterhorn rejected an invalid persisted rollout authorization.",
+          );
+        }
+        return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
+      }
+    }
     if (callId && bypass) {
       this.rolloutBypassCallIds.delete(callId);
       const exactTool = input.toolName.replace(/^matterhorn-work_/, "").trim() === bypass.toolName;
@@ -1310,6 +1463,46 @@ export class MatterhornGuardedAgentRuntime {
           );
         }
         return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
+      }
+      const modeMatches = bypass.issuedMode === this.capabilities.mode;
+      const currentRolloutAllowsBypass = this.capabilities.mode === "shadow"
+        ? bypass.issuedMode === "shadow"
+        : bypass.issuedMode === "enforce"
+          && bypass.reason === "rollout_not_enforced"
+          && !guardedCapabilityEnforcementActive({
+            toolName: input.toolName,
+            agentId: bypass.agentId ?? undefined,
+          });
+      if (!modeMatches || !currentRolloutAllowsBypass) {
+        this.observe(
+          "consume",
+          this.capabilities.mode === "shadow" ? "would_deny" : "denied",
+          "guarded_rollout_bypass_state_invalid",
+        );
+        if (this.capabilities.mode === "enforce") {
+          throw new GuardedRuntimeError(
+            403,
+            "agent_capability_denied",
+            "Matterhorn rejected rollout authority that no longer matches the active enforcement policy.",
+          );
+        }
+        return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
+      }
+      if (this.capabilities.mode === "enforce") {
+        try {
+          this.assertRunDispatchReady({
+            runId: bypass.runId,
+            workspaceId: bypass.workspaceId,
+            sessionId: bypass.sessionId,
+          });
+        } catch {
+          this.observe("consume", "denied", "guarded_rollout_bypass_state_invalid");
+          throw new GuardedRuntimeError(
+            403,
+            "agent_capability_denied",
+            "Matterhorn rejected rollout authority for an inactive or mismatched run.",
+          );
+        }
       }
       this.observe("consume", "bypassed", bypass.reason);
       return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
@@ -1328,8 +1521,28 @@ export class MatterhornGuardedAgentRuntime {
       this.observe("consume", "denied", "missing_call_id");
       throw new GuardedRuntimeError(403, "agent_capability_required", "This crypto tool call did not include a Matterhorn run capability.");
     }
-    const staged = this.stateStore.take<{ token: string; expiresAtMs: number; runId: string }>("staged_capability", callId)
-      ?? this.stagedCapabilities.get(callId);
+    let staged: GuardedStagedCapabilityState | undefined;
+    try {
+      const persisted = this.stateStore.takeRecord<unknown>("staged_capability", callId);
+      staged = persisted
+        ? assertGuardedStagedCapabilityState(persisted, callId, Date.now()) ?? undefined
+        : this.stagedCapabilities.get(callId);
+    } catch {
+      this.stagedCapabilities.delete(callId);
+      this.observe(
+        "consume",
+        this.capabilities.mode === "shadow" ? "would_deny" : "denied",
+        "guarded_staged_capability_state_invalid",
+      );
+      if (this.capabilities.mode === "enforce") {
+        throw new GuardedRuntimeError(
+          403,
+          "agent_capability_denied",
+          "Matterhorn rejected an invalid persisted tool capability.",
+        );
+      }
+      return { args, runId: null, callId: null, workspaceId: null, sessionId: null, coworker: null, jurisdictionPolicy: null };
+    }
     this.stagedCapabilities.delete(callId);
     if (!staged) {
       if (this.capabilities.mode === "shadow") {
@@ -1341,6 +1554,13 @@ export class MatterhornGuardedAgentRuntime {
     }
     try {
       const claims = this.capabilities.consume({ token: staged.token, toolName: input.toolName, args });
+      if (staged.callId !== claims.callId
+        || staged.runId !== claims.runId
+        || staged.workspaceId !== claims.workspaceId
+        || staged.sessionId !== claims.sessionId
+        || staged.expiresAtMs !== Date.parse(claims.expiresAt)) {
+        throw new Error("guarded_staged_capability_state_invalid");
+      }
       this.observe("consume", this.capabilities.mode === "shadow" ? "would_allow" : "allowed", "policy_allowed");
       return {
         args,
@@ -1656,15 +1876,15 @@ export class MatterhornGuardedAgentRuntime {
     }
   }
 
-  private persistStagedCapability(callId: string, workspaceId: string, sessionId: string): void {
+  private persistStagedCapability(callId: string): void {
     const staged = this.stagedCapabilities.get(callId);
     if (!staged) return;
     this.stateStore.put({
       kind: "staged_capability",
       key: callId,
-      workspaceId,
-      sessionId,
-      value: { ...staged, callId },
+      workspaceId: staged.workspaceId,
+      sessionId: staged.sessionId,
+      value: staged,
       expiresAtMs: staged.expiresAtMs,
     });
   }
@@ -1697,15 +1917,15 @@ export class MatterhornGuardedAgentRuntime {
     }
   }
 
-  private persistRolloutBypass(callId: string, workspaceId: string, sessionId: string): void {
+  private persistRolloutBypass(callId: string): void {
     const bypass = this.rolloutBypassCallIds.get(callId);
     if (!bypass) return;
     this.stateStore.put({
       kind: "rollout_bypass",
       key: callId,
-      workspaceId,
-      sessionId,
-      value: { ...bypass, callId },
+      workspaceId: bypass.workspaceId,
+      sessionId: bypass.sessionId,
+      value: bypass,
       expiresAtMs: bypass.expiresAtMs,
     });
   }
