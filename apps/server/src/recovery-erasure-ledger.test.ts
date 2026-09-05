@@ -10,6 +10,8 @@ import {
   type MatterhornAgentFileRecord,
 } from "./agent-file-store.js";
 import {
+  matterhornCryptoEvidenceRunIndexKey,
+  type MatterhornCryptoEvidenceRunIndexRecord,
   MatterhornCryptoEvidenceStore,
   type MatterhornCryptoEvidenceRecord,
 } from "./crypto-evidence-store.js";
@@ -232,6 +234,22 @@ describe("recovery erasure ledger", () => {
         revision: 2,
         envelope: null,
         key: { keyReference: null, wrappedKey: null, keyContext: null, recipientKeyIds: [] },
+        updatedAt: destroyedAt.toISOString(),
+      });
+      const erasedRunIndex = authority.open<MatterhornCryptoEvidenceRunIndexRecord>(
+        state.getRecord(
+          "crypto_evidence_run_index",
+          matterhornCryptoEvidenceRunIndexKey(evidence),
+          destroyedAt.getTime(),
+        ),
+      );
+      expect(erasedRunIndex).toMatchObject({
+        version: "matterhorn.crypto-evidence-run-index.v1",
+        evidenceId: evidence.id,
+        workspaceIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        ownerIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        coworkerIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        runIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         updatedAt: destroyedAt.toISOString(),
       });
       expect(state.get("agent_file_record", file.id)).toBeNull();

@@ -13,7 +13,9 @@ import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import { sealMatterhornRunEvidence } from "./crypto-evidence-sealer.js";
 import {
   MatterhornCryptoEvidenceStore,
+  type MatterhornCryptoEvidenceAccessEvent,
   type MatterhornCryptoEvidenceRecord,
+  type MatterhornCryptoEvidenceRunIndexRecord,
 } from "./crypto-evidence-store.js";
 import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
@@ -380,6 +382,278 @@ describe("durable crypto evidence store", () => {
       } finally {
         wrongAuthority.close();
       }
+    } finally {
+      authority.close();
+      state.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("authenticates run indexes, verification status, and access-audit custody", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "matterhorn-evidence-auxiliary-authority-"));
+    const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));
+    const authority = testDurableStateAuthority();
+    const keyManager: MatterhornEvidenceKeyManager = {
+      createDataKey: async ({ recipientKeyIds }) => ({
+        plaintextKey: Buffer.alloc(32, 31),
+        keyReference: "arn:aws:kms:test:key/auxiliary-authority",
+        wrappedKey: Buffer.from("auxiliary-authority-wrapped-key").toString("base64"),
+        keyContext: "f".repeat(64),
+        recipientKeyIds,
+      }),
+      decryptDataKey: async () => Buffer.alloc(32, 31),
+      destroyKey: async () => {},
+    };
+    const now = new Date("2026-09-01T00:10:00.000Z");
+    try {
+      const sealed = await sealMatterhornRunEvidence({
+        receipt: receipt({
+          id: "receipt_auxiliary_authority",
+          runId: "run_auxiliary_authority",
+          workspaceId: "workspace_auxiliary_authority",
+        }),
+        coworkerId: "coworker_auxiliary_authority",
+        recipientKeyIds: ["recipient-auxiliary-authority"],
+        keyManager,
+        now,
+        correlationSalt: Buffer.alloc(32, 32),
+        idEntropy: Buffer.alloc(24, 33),
+      });
+      const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, authority);
+      const created = store.create({
+        workspaceId: "workspace_auxiliary_authority",
+        ownerId: "owner_auxiliary_authority",
+        runId: "run_auxiliary_authority",
+        coworkerId: "coworker_auxiliary_authority",
+        sealed,
+        now,
+      });
+      const lookup = {
+        workspaceId: created.workspaceId,
+        ownerId: created.ownerId,
+        coworkerId: created.coworkerId,
+        runId: created.runId,
+      };
+      const runIndex = state.listRecords<unknown>("crypto_evidence_run_index", {
+        workspaceId: created.workspaceId,
+      })[0];
+      if (!runIndex) throw new Error("test run index missing");
+      expect(authority.open<MatterhornCryptoEvidenceRunIndexRecord>(runIndex)).toMatchObject({
+        version: "matterhorn.crypto-evidence-run-index.v1",
+        evidenceId: created.id,
+        workspaceIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        ownerIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        coworkerIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        runIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+      const openedRunIndex = authority.open<MatterhornCryptoEvidenceRunIndexRecord>(runIndex)!;
+      state.put({
+        kind: runIndex.kind,
+        key: runIndex.key,
+        workspaceId: runIndex.workspaceId,
+        sessionId: runIndex.sessionId,
+        value: authority.seal({
+          kind: runIndex.kind,
+          key: runIndex.key,
+          workspaceId: runIndex.workspaceId,
+          sessionId: runIndex.sessionId,
+          expiresAtMs: runIndex.expiresAtMs,
+          updatedAtMs: runIndex.updatedAtMs,
+          value: { ...openedRunIndex, ownerIdHash: "0".repeat(64) },
+        }),
+        expiresAtMs: runIndex.expiresAtMs,
+        nowMs: runIndex.updatedAtMs,
+      });
+      expect(() => store.findByRun(lookup)).toThrow("crypto_evidence_run_index_integrity_invalid");
+      state.put({
+        kind: runIndex.kind,
+        key: runIndex.key,
+        workspaceId: runIndex.workspaceId,
+        sessionId: runIndex.sessionId,
+        value: runIndex.value,
+        expiresAtMs: runIndex.expiresAtMs,
+        nowMs: runIndex.updatedAtMs,
+      });
+      expect(store.findByRun(lookup)?.id).toBe(created.id);
+      const wrongAuthority = testDurableStateAuthority(
+        "wrong-auxiliary-authority-key-that-is-at-least-thirty-two-bytes",
+      );
+      try {
+        const wrongStore = new MatterhornCryptoEvidenceStore(
+          state,
+          keyManager,
+          {},
+          null,
+          wrongAuthority,
+        );
+        expect(() => wrongStore.findByRun(lookup))
+          .toThrow("crypto_evidence_run_index_integrity_invalid");
+      } finally {
+        wrongAuthority.close();
+      }
+      state.put({
+        kind: runIndex.kind,
+        key: runIndex.key,
+        workspaceId: runIndex.workspaceId,
+        sessionId: runIndex.sessionId,
+        value: openedRunIndex,
+        expiresAtMs: runIndex.expiresAtMs,
+        nowMs: runIndex.updatedAtMs,
+      });
+      expect(() => store.findByRun(lookup)).toThrow("crypto_evidence_run_index_integrity_invalid");
+      state.put({
+        kind: runIndex.kind,
+        key: runIndex.key,
+        workspaceId: runIndex.workspaceId,
+        sessionId: runIndex.sessionId,
+        value: runIndex.value,
+        expiresAtMs: runIndex.expiresAtMs,
+        nowMs: runIndex.updatedAtMs,
+      });
+      state.delete("crypto_evidence_run_index", runIndex.key);
+      expect(store.findByRun(lookup)?.id).toBe(created.id);
+      const rebuiltIndex = state.listRecords<unknown>("crypto_evidence_run_index", {
+        workspaceId: created.workspaceId,
+      })[0];
+      expect(authority.open<MatterhornCryptoEvidenceRunIndexRecord>(rebuiltIndex ?? null)?.evidenceId)
+        .toBe(created.id);
+
+      store.recordVerificationStatus({
+        workspaceId: created.workspaceId,
+        ownerId: created.ownerId,
+        evidenceId: created.id,
+        expectedRevision: created.revision,
+        verification: {
+          status: "sealed_local",
+          verifiedAt: new Date(now.getTime() + 1_000).toISOString(),
+          checks: {
+            tenantScope: true,
+            ciphertextHash: true,
+            merkleInclusion: false,
+            suiCertification: false,
+            walrusReadback: false,
+          },
+          currentEpoch: null,
+          reason: "walrus_publication_not_attached",
+        },
+      });
+      const statusRow = state.listRecords<unknown>("crypto_evidence_verification_status", {
+        workspaceId: created.workspaceId,
+      })[0];
+      if (!statusRow) throw new Error("test verification status missing");
+      const openedStatus = authority.open<Record<string, unknown>>(statusRow)!;
+      state.put({
+        kind: statusRow.kind,
+        key: statusRow.key,
+        workspaceId: statusRow.workspaceId,
+        sessionId: statusRow.sessionId,
+        value: openedStatus,
+        expiresAtMs: statusRow.expiresAtMs,
+        nowMs: statusRow.updatedAtMs,
+      });
+      expect(() => store.getVerificationStatus({
+        workspaceId: created.workspaceId,
+        ownerId: created.ownerId,
+        evidenceId: created.id,
+      })).toThrow("crypto_evidence_verification_status_integrity_invalid");
+      state.put({
+        kind: statusRow.kind,
+        key: statusRow.key,
+        workspaceId: statusRow.workspaceId,
+        sessionId: statusRow.sessionId,
+        value: authority.seal({
+          kind: statusRow.kind,
+          key: statusRow.key,
+          workspaceId: statusRow.workspaceId,
+          sessionId: statusRow.sessionId,
+          expiresAtMs: statusRow.expiresAtMs,
+          updatedAtMs: statusRow.updatedAtMs,
+          value: {
+            ...openedStatus,
+            verification: {
+              status: "verified",
+              verifiedAt: new Date(statusRow.updatedAtMs).toISOString(),
+              checks: {
+                tenantScope: true,
+                ciphertextHash: true,
+                merkleInclusion: true,
+                suiCertification: true,
+                walrusReadback: true,
+              },
+              currentEpoch: 10,
+              reason: null,
+            },
+          },
+        }),
+        expiresAtMs: statusRow.expiresAtMs,
+        nowMs: statusRow.updatedAtMs,
+      });
+      expect(() => store.getVerificationStatus({
+        workspaceId: created.workspaceId,
+        ownerId: created.ownerId,
+        evidenceId: created.id,
+      })).toThrow("crypto_evidence_verification_status_integrity_invalid");
+
+      const auditRows = state.listRecords<unknown>("crypto_evidence_audit", {
+        workspaceId: created.workspaceId,
+      });
+      expect(auditRows).toHaveLength(1);
+      const auditRow = auditRows[0]!;
+      const openedAudit = authority.open<MatterhornCryptoEvidenceAccessEvent>(auditRow)!;
+      state.put({
+        kind: auditRow.kind,
+        key: auditRow.key,
+        workspaceId: auditRow.workspaceId,
+        sessionId: auditRow.sessionId,
+        value: authority.seal({
+          kind: auditRow.kind,
+          key: auditRow.key,
+          workspaceId: auditRow.workspaceId,
+          sessionId: auditRow.sessionId,
+          expiresAtMs: auditRow.expiresAtMs,
+          updatedAtMs: auditRow.updatedAtMs,
+          value: { ...openedAudit, unexpectedAuthority: true },
+        }),
+        expiresAtMs: auditRow.expiresAtMs,
+        nowMs: auditRow.updatedAtMs,
+      });
+      expect(() => store.listAccessAudit({
+        workspaceId: created.workspaceId,
+        ownerId: created.ownerId,
+      })).toThrow("crypto_evidence_audit_corrupt");
+      state.put({
+        kind: auditRow.kind,
+        key: auditRow.key,
+        workspaceId: auditRow.workspaceId,
+        sessionId: auditRow.sessionId,
+        value: auditRow.value,
+        expiresAtMs: auditRow.expiresAtMs,
+        nowMs: auditRow.updatedAtMs,
+      });
+      await store.decrypt({
+        workspaceId: created.workspaceId,
+        ownerId: created.ownerId,
+        coworkerId: created.coworkerId,
+        evidenceId: created.id,
+      });
+      await store.decrypt({
+        workspaceId: created.workspaceId,
+        ownerId: created.ownerId,
+        coworkerId: created.coworkerId,
+        evidenceId: created.id,
+      });
+      const chainedRows = state.listRecords<unknown>("crypto_evidence_audit", {
+        workspaceId: created.workspaceId,
+      });
+      const middleRow = chainedRows.find((row) => (
+        authority.open<MatterhornCryptoEvidenceAccessEvent>(row)?.sequence === 2
+      ));
+      if (!middleRow) throw new Error("test middle audit row missing");
+      state.delete("crypto_evidence_audit", middleRow.key);
+      expect(() => store.listAccessAudit({
+        workspaceId: created.workspaceId,
+        ownerId: created.ownerId,
+      })).toThrow("crypto_evidence_audit_chain_broken");
     } finally {
       authority.close();
       state.close();

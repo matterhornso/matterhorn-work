@@ -5,7 +5,13 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import type { MatterhornAgentFileRecord } from "./agent-file-store.js";
-import type { MatterhornCryptoEvidenceRecord } from "./crypto-evidence-store.js";
+import {
+  matterhornCryptoEvidenceRunIndexExpiry,
+  matterhornCryptoEvidenceRunIndexKey,
+  matterhornCryptoEvidenceRunIndexValue,
+  type MatterhornCryptoEvidenceRecord,
+} from "./crypto-evidence-store.js";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
 import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
@@ -332,6 +338,12 @@ export class MatterhornRecoveryErasureLedger {
     authority: MatterhornDurableStateAuthority,
   ): MatterhornRecoveryErasureReconciliation {
     const ledger = this.verify();
+    const evidenceRunIndexes = new MatterhornDurableAuthorizedState(
+      stateStore,
+      authority,
+      "crypto_evidence_run_index",
+      "recovery_erasure_state_corrupt",
+    );
     const evidence = stateStore.listRecords("crypto_evidence_record").map((state) => {
       const record = authority.open<MatterhornCryptoEvidenceRecord>(
         state,
@@ -409,19 +421,11 @@ export class MatterhornRecoveryErasureLedger {
           expiresAtMs,
           nowMs: destroyedAtMs,
         });
-        const runIndexKey = sha256({
-          domain: "matterhorn:crypto-evidence-run-index:v1",
+        evidenceRunIndexes.put({
+          key: matterhornCryptoEvidenceRunIndexKey(next),
           workspaceId: next.workspaceId,
-          ownerId: next.ownerId,
-          coworkerId: next.coworkerId,
-          runId: next.runId,
-        });
-        stateStore.put({
-          kind: "crypto_evidence_run_index",
-          key: runIndexKey,
-          workspaceId: next.workspaceId,
-          value: { evidenceId: next.id },
-          expiresAtMs: destroyedAtMs + SECURITY_RETENTION_MS,
+          value: matterhornCryptoEvidenceRunIndexValue(next, destroyedAtMs),
+          expiresAtMs: matterhornCryptoEvidenceRunIndexExpiry(next),
           nowMs: destroyedAtMs,
         });
         stateStore.delete("crypto_evidence_renewal_intent", next.id);
