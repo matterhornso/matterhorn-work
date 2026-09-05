@@ -521,7 +521,11 @@ import { startReloadWatchers } from "./reload-watcher.js";
 import { opencodeConfigPath, openworkConfigPath, projectCommandsDir, projectSkillsDir } from "./workspace-files.js";
 import { ensureDir, exists, hashToken, shortId, timingSafeTokenEqual } from "./utils.js";
 import { workspaceIdForPath } from "./workspaces.js";
-import { ensureWorkspaceFiles, readRawOpencodeConfig } from "./workspace-init.js";
+import {
+  ensureWorkspaceFiles,
+  readRawOpencodeConfig,
+  resolveMatterhornManagedAgentPrompt,
+} from "./workspace-init.js";
 import { sanitizeCommandName, validateMcpName } from "./validators.js";
 import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
@@ -2325,13 +2329,18 @@ function createWorkspaceOpencodeClient(config: ServerConfig, workspace: Workspac
   });
 }
 
-async function ensureMatterhornSessionPermissionProfile(input: {
+const MATTERHORN_AGENT_PROMPT_MAX_CHARS = 128_000;
+
+function comparableAgentPrompt(value: string): string {
+  return value.replace(/\r\n/g, "\n").trim();
+}
+
+async function resolveMatterhornSessionAgentContext(input: {
   config: ServerConfig;
   workspace: WorkspaceInfo;
   sessionId: string;
   agentId?: string;
-  requestToolProfiles?: readonly Record<string, boolean>[];
-}): Promise<void> {
+}) {
   const opencode = createWorkspaceOpencodeClient(input.config, input.workspace);
   const directory = resolveOpencodeDirectory(input.workspace) ?? undefined;
   const [session, agents] = await Promise.all([
@@ -2347,15 +2356,61 @@ async function ensureMatterhornSessionPermissionProfile(input: {
     }).then((result) => unwrapOpencodeResult(result, "/agent")),
   ]);
 
-  const effectiveAgentId = input.agentId?.trim() || session.agent?.trim() || "matterhorn";
-  const agent = agents.find((candidate) => candidate.name === effectiveAgentId);
+  const agentId = input.agentId?.trim() || session.agent?.trim() || "matterhorn";
+  const agent = agents.find((candidate) => candidate.name === agentId);
   if (!agent) {
-    throw new ApiError(400, "agent_unavailable", `Agent ${effectiveAgentId} is not available in this workspace`);
+    throw new ApiError(400, "agent_unavailable", `Agent ${agentId} is not available in this workspace`);
   }
+  const prompt = typeof agent.prompt === "string" ? agent.prompt : "";
+  if (prompt.length > MATTERHORN_AGENT_PROMPT_MAX_CHARS) {
+    throw new ApiError(
+      413,
+      "agent_context_too_large",
+      "The selected agent instructions are too large to verify safely.",
+    );
+  }
+  const promptHash = sha256Bytes(prompt);
+  const canonicalPrompt = resolveMatterhornManagedAgentPrompt(agentId);
+  const managed = canonicalPrompt !== null
+    && comparableAgentPrompt(prompt) === comparableAgentPrompt(canonicalPrompt);
+  const privacyParts: MatterhornAgentPrivacyPart[] = prompt ? [{
+    type: "agent_instructions",
+    name: `Selected agent instructions: ${agentId}`,
+    text: prompt,
+    source: "system",
+    label: managed ? "public" : "workspace_private",
+    contentHash: promptHash,
+    sizeBytes: Buffer.byteLength(prompt, "utf8"),
+    version: "matterhorn.opencode-agent-context.v1",
+  }] : [];
 
-  const agentPermission = normalizeMatterhornPermissionRules(agent.permission);
+  return { opencode, directory, session, agentId, agent, promptHash, privacyParts };
+}
+
+async function ensureMatterhornSessionPermissionProfile(input: {
+  config: ServerConfig;
+  workspace: WorkspaceInfo;
+  sessionId: string;
+  agentId?: string;
+  expectedAgentId?: string;
+  expectedAgentPromptHash?: string;
+  requestToolProfiles?: readonly Record<string, boolean>[];
+}): Promise<void> {
+  const context = await resolveMatterhornSessionAgentContext(input);
+  if (
+    (input.expectedAgentId && context.agentId !== input.expectedAgentId)
+    || (input.expectedAgentPromptHash && context.promptHash !== input.expectedAgentPromptHash)
+  ) {
+    throw new ApiError(
+      409,
+      "agent_context_changed",
+      "The selected agent changed after privacy review. Review the request again before sending.",
+    );
+  }
+  const { opencode, directory, session } = context;
+  const agentPermission = normalizeMatterhornPermissionRules(context.agent.permission);
   if (agentPermission.length === 0) {
-    throw new ApiError(503, "agent_permission_unavailable", `Agent ${effectiveAgentId} has no runtime permission policy`);
+    throw new ApiError(503, "agent_permission_unavailable", `Agent ${context.agentId} has no runtime permission policy`);
   }
   const profile = buildMatterhornSessionPermissionProfile({
     agentPermission,
@@ -2774,6 +2829,8 @@ async function proxyOpencodeRequest(input: {
     workspace: WorkspaceInfo;
     sessionId: string;
     agentId?: string;
+    expectedAgentId?: string;
+    expectedAgentPromptHash?: string;
     requestToolProfiles?: readonly Record<string, boolean>[];
   } | null = null;
   let usageReservationId: string | null = null;
@@ -2863,6 +2920,14 @@ async function proxyOpencodeRequest(input: {
     const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
     promptAudit = { executionMode: bodyExecutionMode, agent, sessionId };
     if (workspace) {
+      const agentContext = await resolveMatterhornSessionAgentContext({
+        config: input.config,
+        workspace,
+        sessionId,
+        ...(agent ? { agentId: agent } : {}),
+      });
+      payload.agent = agentContext.agentId;
+      promptAudit = { executionMode: bodyExecutionMode, agent: agentContext.agentId, sessionId };
       // The server owns the upstream message identifier so the OpenCode guard
       // can bind provider events and tool calls to this exact guarded run.
       // Never accept a caller-supplied id: it could alias an earlier run.
@@ -2872,7 +2937,9 @@ async function proxyOpencodeRequest(input: {
       promptPermissionRequest = {
         workspace,
         sessionId,
-        ...(agent ? { agentId: agent } : {}),
+        agentId: agentContext.agentId,
+        expectedAgentId: agentContext.agentId,
+        expectedAgentPromptHash: agentContext.promptHash,
         ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
       };
       const modelResolution = await resolveSessionPromptModel(
@@ -2889,10 +2956,11 @@ async function proxyOpencodeRequest(input: {
         parts: [
           ...normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
           ...rawPromptSystemPrivacyParts(payload.system),
+          ...agentContext.privacyParts,
         ],
         providerId: modelResolution.model.providerID,
         modelId: modelResolution.model.modelID,
-        agentId: agent,
+        agentId: agentContext.agentId,
         attachmentIds,
         memoryIds,
         privacyMode,
@@ -2941,6 +3009,16 @@ async function proxyOpencodeRequest(input: {
         modelResolution.model.modelID,
       );
       const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
+      const requestedAgentId = typeof payload.agent === "string" && payload.agent.trim()
+        ? payload.agent.trim()
+        : undefined;
+      const agentContext = await resolveMatterhornSessionAgentContext({
+        config: input.config,
+        workspace,
+        sessionId,
+        ...(requestedAgentId ? { agentId: requestedAgentId } : {}),
+      });
+      payload.agent = agentContext.agentId;
       const command = typeof payload.command === "string" ? payload.command.trim() : "";
       const commandArguments = typeof payload.arguments === "string" ? payload.arguments.trim() : "";
       const privacyMode = parseAgentPrivacyMode(payload.privacyMode);
@@ -2953,15 +3031,26 @@ async function proxyOpencodeRequest(input: {
         const guardedInput: GuardedPromptInput = {
           workspaceId: workspace.id,
           sessionId,
-          parts: [{ type: "text", text: `/${command}${commandArguments ? ` ${commandArguments}` : ""}` }],
+          parts: [
+            { type: "text", text: `/${command}${commandArguments ? ` ${commandArguments}` : ""}` },
+            ...agentContext.privacyParts,
+          ],
           providerId: modelResolution.model.providerID,
           modelId: modelResolution.model.modelID,
-          agentId: typeof payload.agent === "string" ? payload.agent.trim() : undefined,
+          agentId: agentContext.agentId,
           privacyMode,
           privacyConsentToken,
           executionMode: "work",
         };
         const authorization = input.guardedRuntime.authorizePrompt(guardedInput);
+        await ensureMatterhornSessionPermissionProfile({
+          config: input.config,
+          workspace,
+          sessionId,
+          agentId: agentContext.agentId,
+          expectedAgentId: agentContext.agentId,
+          expectedAgentPromptHash: agentContext.promptHash,
+        });
         if (input.access && input.modelUsageStore) {
           const usage = await reserveModelUsage({
             config: input.config,
@@ -14381,7 +14470,7 @@ function createRoutes(
     ) {
       throw new ApiError(400, "execution_mode_mismatch", "Prompt execution mode does not match the request header");
     }
-    const agentId = typeof body.agentId === "string" && body.agentId.trim()
+    const requestedAgentId = typeof body.agentId === "string" && body.agentId.trim()
       ? body.agentId.trim()
       : typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
     const coworker = resolveMessageCoworker({
@@ -14393,6 +14482,13 @@ function createRoutes(
       cryptoAppRuntime,
       guardedRuntime,
     });
+    const agentContext = await resolveMatterhornSessionAgentContext({
+      config,
+      workspace,
+      sessionId,
+      ...(requestedAgentId ? { agentId: requestedAgentId } : {}),
+    });
+    const agentId = agentContext.agentId;
     const coworkerState = activeCoworkerWorkingState(coworkerRuntime, coworker?.profile);
     const rawParts = parseSessionPromptParts(body);
     const modeTools = buildMatterhornExecutionModeTools(executionMode, agentId);
@@ -14437,7 +14533,7 @@ function createRoutes(
     const response = guardedRuntime.preflight({
       workspaceId: workspace.id,
       sessionId,
-      parts: resolved.privacyParts,
+      parts: [...resolved.privacyParts, ...agentContext.privacyParts],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
       agentId,
@@ -14707,7 +14803,7 @@ function createRoutes(
       abort: (parameters: { sessionID: string; directory?: string }) => Promise<OpencodeClientResult<unknown, unknown>>;
     };
 
-    const agent = typeof body.agentId === "string" && body.agentId.trim()
+    const requestedAgent = typeof body.agentId === "string" && body.agentId.trim()
       ? body.agentId.trim()
       : typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
     const coworker = resolveMessageCoworker({
@@ -14719,6 +14815,14 @@ function createRoutes(
       cryptoAppRuntime,
       guardedRuntime,
     });
+    const agentContext = await resolveMatterhornSessionAgentContext({
+      config,
+      workspace,
+      sessionId,
+      ...(requestedAgent ? { agentId: requestedAgent } : {}),
+    });
+    const agent = agentContext.agentId;
+    auditMetadata.agent = agent;
     const coworkerState = activeCoworkerWorkingState(coworkerRuntime, coworker?.profile);
     const modeTools = buildMatterhornExecutionModeTools(executionMode, agent);
     const routedTools = modeTools ?? (executionMode === "work"
@@ -14765,7 +14869,7 @@ function createRoutes(
     const guardedInput = {
       workspaceId: workspace.id,
       sessionId,
-      parts: resolved.privacyParts,
+      parts: [...resolved.privacyParts, ...agentContext.privacyParts],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
       agentId: agent,
@@ -14843,7 +14947,9 @@ function createRoutes(
         config,
         workspace,
         sessionId,
-        ...(agent ? { agentId: agent } : {}),
+        agentId: agent,
+        expectedAgentId: agentContext.agentId,
+        expectedAgentPromptHash: agentContext.promptHash,
         ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
       });
       if (reasoningEffort) {

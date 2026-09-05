@@ -61,6 +61,18 @@ before allowance reservation or provider contact, and changing one byte after
 consent invalidates that consent. Hosted account clients cannot author system
 context at all; the authoritative message gateway builds it server-side.
 
+Selected OpenCode agent instructions are also provider-bound context, even
+though OpenCode resolves them after accepting a prompt. Matterhorn therefore
+reads the effective session agent before preflight, includes the exact prompt
+hash and bytes in secret scanning and one-request consent, and sends that agent
+id explicitly upstream. An exact shipped Matterhorn agent prompt is public
+platform policy; any workspace-authored or modified agent prompt is
+workspace-private. Matterhorn re-reads the agent immediately before dispatch
+and returns `agent_context_changed` without contacting the provider if its id or
+prompt hash changed. The same boundary applies to trusted raw prompts and
+commands, so an agent file cannot hide secret or unconsented private context
+behind OpenCode's later prompt expansion.
+
 ## Retention and deletion
 
 Run receipts contain provider policy, categories, content-free counts of chat files,
