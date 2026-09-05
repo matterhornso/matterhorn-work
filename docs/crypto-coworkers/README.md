@@ -71,6 +71,17 @@ validation. Mutation, transplantation, replay, extended lifetime, unknown
 fields, unsealed legacy data, or a wrong signing key fails closed. Neither the
 bearer capability nor its signing secret is written to durable runtime state.
 
+The Crypto App bridge extends that authority to the final adapter boundary.
+Its one-shot consumed-dispatch marker and short-lived reconciliation reservation
+are authenticated over the exact tenant, run, call, app revision, connection,
+action, network, access class, argument hashes, proxy tool, capability proof, and
+expiry. Raw, wrong-key, transplanted, extended, or open-shaped rows fail closed;
+reservation and dispatch creation are atomic, so a failed reservation write does
+not strand or silently reuse a consumed interactive call. Reconciliation still
+requires the independent consumed-capability context seal before a tool result
+can enter a run receipt. No signing, relay, broadcast, or wallet submission
+authority is added to the bridge.
+
 ## Phase 0 contracts
 
 The public types are exported from `@matterhorn-work/types/crypto-coworkers`:

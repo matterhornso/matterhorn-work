@@ -1006,9 +1006,17 @@ export class MatterhornGuardedAgentRuntime {
     runtimeSecret?: () => string;
     now?: () => Date;
   }): MatterhornGuardedCryptoAppAuthorization {
+    if (!this.durableStateAuthority) {
+      throw new GuardedRuntimeError(
+        503,
+        "durable_state_integrity_unavailable",
+        "Matterhorn cannot safely authorize this Crypto App operation.",
+      );
+    }
     return new MatterhornGuardedCryptoAppAuthorization({
       runtime: this,
       stateStore: this.stateStore,
+      stateAuthority: this.durableStateAuthority,
       ...options,
     });
   }
@@ -2452,16 +2460,20 @@ export class MatterhornGuardedAgentRuntime {
         if (record.value.runId === runId) state.delete(record.key);
       }
     }
-    for (const kind of ["crypto_app_reservation", "crypto_app_consumed_dispatch"] as const) {
-      for (const entry of this.stateStore.list<{
+    for (const [kind, invalidCode] of [
+      ["crypto_app_reservation", "crypto_app_persisted_reservation_invalid"],
+      ["crypto_app_consumed_dispatch", "crypto_app_persisted_dispatch_invalid"],
+    ] as const) {
+      const state = this.authorizedState(kind, invalidCode);
+      for (const entry of state.list<{
         runId: string;
         callId?: string;
         messageId?: string;
         reservationId?: string;
-      }>(kind, { workspaceId })) {
+      }>({ workspaceId })) {
         if (entry.runId !== runId) continue;
         const key = entry.reservationId ?? entry.callId ?? entry.messageId;
-        if (key) this.stateStore.delete(kind, key);
+        if (key) state.delete(key);
       }
     }
   }
