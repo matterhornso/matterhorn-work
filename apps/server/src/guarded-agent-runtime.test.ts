@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
+import type { MatterhornCoworkerRunBinding } from "./agent-capability.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
@@ -38,6 +39,33 @@ afterAll(async () => {
   }
   await rm(dataDir, { recursive: true, force: true });
 });
+
+function finalizedRunCoworker(id: string, workspaceId: string): MatterhornCoworkerRunBinding {
+  return {
+    id,
+    workspaceId,
+    ownerId: `account_${id}`,
+    revision: 1,
+    policyVersion: "coworker-policy-1",
+    allowedAppIds: ["matterhorn.sui-testnet"],
+    allowedActionIds: ["sui_account_read"],
+    allowedNetworks: ["sui:testnet"],
+    automaticAuthorities: ["read"],
+    actionBindings: [{
+      connectionId: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+      proxyToolName: "matterhorn_sui_get_balance",
+      access: "read",
+    }],
+    allowedDataLabels: ["public", "untrusted_external"],
+    allowUnverifiedProviderConsent: false,
+    maxReadCallsPerRun: 4,
+    maxPrepareCallsPerFamily: 0,
+  };
+}
 
 describe("guarded agent runtime transport", () => {
   test("persists a monotonic session privacy floor and purges it with the chat", async () => {
@@ -1472,6 +1500,157 @@ describe("guarded agent runtime transport", () => {
     expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 0, failed: 1 });
     runtime.purgeWorkspace("ws_coworker_retry");
     expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+  });
+
+  test("authenticates a pending coworker evidence finalization after restart", async () => {
+    const path = join(dataDir, "finalization-restart.db");
+    const coworker = finalizedRunCoworker("cw_finalization_restart", "ws_finalization_restart");
+    const first = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    first.setCoworkerResolver(() => true);
+    first.setFinalizedRunHandler(async () => { throw new Error("kms_temporarily_unavailable"); });
+    const accepted = await first.acceptPrompt({
+      workspaceId: coworker.workspaceId,
+      sessionId: "ses_finalization_restart",
+      parts: [{ type: "text", text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker,
+    });
+    await first.completeRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      status: "success",
+    });
+    first.close();
+
+    const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    const finalized: string[] = [];
+    restored.setFinalizedRunHandler(async ({ receipt }) => { finalized.push(receipt.runId); });
+    expect(await restored.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 1, failed: 0 });
+    expect(finalized).toEqual([accepted.runId]);
+    expect(await restored.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+    restored.close();
+  });
+
+  test("rejects tenant, receipt, and SQLite metadata mutation in a pending evidence finalization", async () => {
+    const variants = ["receipt", "workspace_row", "expiry"] as const;
+    for (const variant of variants) {
+      const path = join(dataDir, `finalization-tamper-${variant}.db`);
+      const store = new MatterhornGuardedRuntimeStateStore(path);
+      const runtime = new MatterhornGuardedAgentRuntime(store);
+      const coworker = finalizedRunCoworker(`cw_finalization_${variant}`, `ws_finalization_${variant}`);
+      runtime.setCoworkerResolver(() => true);
+      let calls = 0;
+      runtime.setFinalizedRunHandler(async () => {
+        calls += 1;
+        throw new Error("kms_temporarily_unavailable");
+      });
+      const accepted = await runtime.acceptPrompt({
+        workspaceId: coworker.workspaceId,
+        sessionId: `ses_finalization_${variant}`,
+        parts: [{ type: "text", text: "Read public Sui state" }],
+        providerId: "cudos",
+        modelId: "asi1-mini",
+        agentId: "matterhorn-sui",
+        executionMode: "work",
+        requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+        coworker,
+      });
+      await runtime.completeRun({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        runId: accepted.runId,
+        status: "success",
+      });
+      const record = store.getRecord<unknown>("crypto_evidence_finalization", accepted.runId)!;
+      const tampered = structuredClone(record.value) as {
+        finalizedRun: { receipt: { workspaceId: string } };
+      };
+      if (variant === "receipt") {
+        tampered.finalizedRun.receipt.workspaceId = "ws_other";
+      }
+      store.put({
+        kind: "crypto_evidence_finalization",
+        key: record.key,
+        workspaceId: variant === "workspace_row" ? "ws_other" : record.workspaceId,
+        sessionId: record.sessionId,
+        value: tampered,
+        expiresAtMs: variant === "expiry" ? (record.expiresAtMs ?? 0) + 1 : record.expiresAtMs,
+        nowMs: record.updatedAtMs,
+      });
+
+      await expect(runtime.retryPendingFinalizedRuns()).rejects.toMatchObject({
+        code: "crypto_evidence_finalization_state_invalid",
+      });
+      expect(calls).toBe(1);
+      expect(store.getRecord("crypto_evidence_finalization", accepted.runId)).not.toBeNull();
+      runtime.close();
+    }
+  });
+
+  test("rejects unsealed legacy and wrong-key evidence finalization state", async () => {
+    const path = join(dataDir, "finalization-legacy-wrong-key.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornGuardedAgentRuntime(store);
+    const coworker = finalizedRunCoworker("cw_finalization_legacy", "ws_finalization_legacy");
+    first.setCoworkerResolver(() => true);
+    first.setFinalizedRunHandler(async () => { throw new Error("kms_temporarily_unavailable"); });
+    const accepted = await first.acceptPrompt({
+      workspaceId: coworker.workspaceId,
+      sessionId: "ses_finalization_legacy",
+      parts: [{ type: "text", text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker,
+    });
+    await first.completeRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      status: "success",
+    });
+    const record = store.getRecord<unknown>("crypto_evidence_finalization", accepted.runId)!;
+    const sealed = structuredClone(record.value) as { finalizedRun: unknown };
+    store.put({
+      kind: "crypto_evidence_finalization",
+      key: record.key,
+      workspaceId: record.workspaceId,
+      sessionId: record.sessionId,
+      value: sealed.finalizedRun,
+      expiresAtMs: record.expiresAtMs,
+      nowMs: record.updatedAtMs,
+    });
+    await expect(first.retryPendingFinalizedRuns()).rejects.toMatchObject({
+      code: "crypto_evidence_finalization_state_invalid",
+    });
+    store.put({
+      kind: "crypto_evidence_finalization",
+      key: record.key,
+      workspaceId: record.workspaceId,
+      sessionId: record.sessionId,
+      value: sealed,
+      expiresAtMs: record.expiresAtMs,
+      nowMs: record.updatedAtMs,
+    });
+    first.close();
+
+    const signingSecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "different-capability-signing-secret-at-least-32-bytes";
+    try {
+      const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+      restored.setFinalizedRunHandler(async () => undefined);
+      await expect(restored.retryPendingFinalizedRuns()).rejects.toMatchObject({
+        code: "crypto_evidence_finalization_state_invalid",
+      });
+      restored.close();
+    } finally {
+      if (signingSecret === undefined) delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+      else process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = signingSecret;
+    }
   });
 
   test("does not run the coworker evidence finalizer for an unbound chat", async () => {

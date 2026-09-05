@@ -125,6 +125,11 @@ const SESSION_PRIVACY_FLOOR_AUTHORITY_DOMAIN = "matterhorn.session-privacy-floor
 const SESSION_PRIVACY_FLOOR_AUTHORITY_SALT = Buffer.from("matterhorn.session-privacy-floor.key.v1", "utf8");
 const SESSION_PRIVACY_FLOOR_AUTHORITY_SECRET_MINIMUM_BYTES = 32;
 const SESSION_PRIVACY_FLOOR_AUTHORITY_SEAL_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const FINALIZED_RUN_ENVELOPE_VERSION = "matterhorn.finalized-coworker-run-envelope.v1";
+const FINALIZED_RUN_AUTHORITY_DOMAIN = "matterhorn.finalized-coworker-run.authority.v1";
+const FINALIZED_RUN_AUTHORITY_SALT = Buffer.from("matterhorn.finalized-coworker-run.key.v1", "utf8");
+const FINALIZED_RUN_AUTHORITY_SECRET_MINIMUM_BYTES = 32;
+const FINALIZED_RUN_AUTHORITY_SEAL_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const GUARDED_RUN_AUTHORITY_TTL_MS = 6 * 60 * 60 * 1_000;
 const GUARDED_STAGED_CALL_TTL_MS = 60_000;
 const GUARDED_CAPABILITY_TOKEN_MAX_BYTES = 16_384;
@@ -179,6 +184,12 @@ type GuardedSessionPrivacyFloorEnvelope = {
   authoritySeal: string;
 };
 
+type GuardedFinalizedCoworkerRunEnvelope = {
+  version: typeof FINALIZED_RUN_ENVELOPE_VERSION;
+  finalizedRun: MatterhornFinalizedCoworkerRun;
+  authoritySeal: string;
+};
+
 function sessionPrivacyFloorAuthorityKey(secret: string): Buffer {
   const input = Buffer.from(secret, "utf8");
   if (input.byteLength < SESSION_PRIVACY_FLOOR_AUTHORITY_SECRET_MINIMUM_BYTES) {
@@ -196,7 +207,7 @@ function sessionPrivacyFloorAuthorityKey(secret: string): Buffer {
   return key;
 }
 
-function exactSessionPrivacyObjectKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+function exactGuardedObjectKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const actual = Object.keys(value).sort();
   const sortedExpected = [...expected].sort();
@@ -242,10 +253,10 @@ function assertSessionPrivacyFloorState(
 ): GuardedSessionPrivacyFloor | null {
   if (!state) return null;
   const value = state.value;
-  if (!exactSessionPrivacyObjectKeys(value, ["version", "floor", "authoritySeal"])
+  if (!exactGuardedObjectKeys(value, ["version", "floor", "authoritySeal"])
     || value.version !== SESSION_PRIVACY_FLOOR_ENVELOPE_VERSION
     || typeof value.authoritySeal !== "string"
-    || !exactSessionPrivacyObjectKeys(value.floor, ["workspaceId", "sessionId", "mode", "updatedAt"])) {
+    || !exactGuardedObjectKeys(value.floor, ["workspaceId", "sessionId", "mode", "updatedAt"])) {
     throw new Error("session_privacy_state_invalid");
   }
   const floor = value.floor as GuardedSessionPrivacyFloor;
@@ -282,6 +293,54 @@ function assertSessionPrivacyFloorState(
     throw new Error("session_privacy_state_invalid");
   }
   return structuredClone(floor);
+}
+
+function finalizedRunAuthorityKey(secret: string): Buffer {
+  const input = Buffer.from(secret, "utf8");
+  if (input.byteLength < FINALIZED_RUN_AUTHORITY_SECRET_MINIMUM_BYTES) {
+    input.fill(0);
+    throw new Error("crypto_evidence_finalization_integrity_secret_invalid");
+  }
+  const key = Buffer.from(hkdfSync(
+    "sha256",
+    input,
+    FINALIZED_RUN_AUTHORITY_SALT,
+    FINALIZED_RUN_AUTHORITY_DOMAIN,
+    32,
+  ));
+  input.fill(0);
+  return key;
+}
+
+function finalizedRunAuthorityValue(input: {
+  key: string;
+  workspaceId: string;
+  sessionId: string | null;
+  expiresAtMs: number | null;
+  updatedAtMs: number;
+  finalizedRun: MatterhornFinalizedCoworkerRun;
+}) {
+  return {
+    domain: FINALIZED_RUN_AUTHORITY_DOMAIN,
+    kind: "crypto_evidence_finalization",
+    ...input,
+  };
+}
+
+function sealFinalizedRunAuthority(value: unknown, key: Buffer): string {
+  return createHmac("sha256", key).update(canonicalJson(value), "utf8").digest("base64url");
+}
+
+function finalizedRunAuthoritySealValid(value: unknown, seal: string, key: Buffer): boolean {
+  if (!FINALIZED_RUN_AUTHORITY_SEAL_PATTERN.test(seal)) return false;
+  const expected = Buffer.from(sealFinalizedRunAuthority(value, key), "base64url");
+  const actual = Buffer.from(seal, "base64url");
+  try {
+    return expected.byteLength === actual.byteLength && timingSafeEqual(expected, actual);
+  } finally {
+    expected.fill(0);
+    actual.fill(0);
+  }
 }
 
 const GUARDED_RUN_ID = /^(?:agent_run(?:_off)?|coworker_run)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -716,6 +775,62 @@ const GUARDED_OBSERVATION_REASONS = new Set([
 ]);
 const EVIDENCE_FINALIZATION_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
 
+function assertFinalizedCoworkerRunState(
+  state: GuardedRuntimeStateRecord<unknown>,
+  authorityKey: Buffer,
+  nowMs: number,
+): MatterhornFinalizedCoworkerRun {
+  const value = state.value;
+  if (!exactGuardedObjectKeys(value, ["version", "finalizedRun", "authoritySeal"])
+    || value.version !== FINALIZED_RUN_ENVELOPE_VERSION
+    || typeof value.authoritySeal !== "string"
+    || !exactGuardedObjectKeys(value.finalizedRun, ["receipt", "coworker"])) {
+    throw new Error("crypto_evidence_finalization_state_invalid");
+  }
+  const finalizedRun = value.finalizedRun as MatterhornFinalizedCoworkerRun;
+  const { receipt, coworker } = finalizedRun;
+  const completedAtMs = Date.parse(receipt?.completedAt ?? "");
+  if (state.kind !== "crypto_evidence_finalization"
+    || !receipt
+    || !coworker
+    || receipt.version !== "matterhorn.agent-run-receipt.v1"
+    || !GUARDED_RUN_ID.test(receipt.runId)
+    || state.key !== receipt.runId
+    || !guardedRunIdentifier(receipt.id)
+    || !guardedRunIdentifier(receipt.workspaceId)
+    || !guardedRunIdentifier(receipt.sessionId)
+    || receipt.status === "pending"
+    || !Number.isSafeInteger(completedAtMs)
+    || new Date(completedAtMs).toISOString() !== receipt.completedAt
+    || typeof receipt.integrity?.recordHash !== "string"
+    || !/^[a-f0-9]{64}$/.test(receipt.integrity.recordHash)
+    || !guardedRunIdentifier(coworker.id)
+    || !guardedRunIdentifier(coworker.ownerId)
+    || coworker.workspaceId !== receipt.workspaceId
+    || !Number.isSafeInteger(coworker.revision)
+    || coworker.revision < 1
+    || state.workspaceId !== receipt.workspaceId
+    || state.sessionId !== receipt.sessionId
+    || !Number.isSafeInteger(state.updatedAtMs)
+    || state.updatedAtMs > nowMs
+    || state.expiresAtMs !== state.updatedAtMs + EVIDENCE_FINALIZATION_RETENTION_MS
+    || (state.expiresAtMs as number) <= nowMs) {
+    throw new Error("crypto_evidence_finalization_state_invalid");
+  }
+  const authorityValue = finalizedRunAuthorityValue({
+    key: state.key,
+    workspaceId: state.workspaceId,
+    sessionId: state.sessionId,
+    expiresAtMs: state.expiresAtMs,
+    updatedAtMs: state.updatedAtMs,
+    finalizedRun,
+  });
+  if (!finalizedRunAuthoritySealValid(authorityValue, value.authoritySeal, authorityKey)) {
+    throw new Error("crypto_evidence_finalization_state_invalid");
+  }
+  return structuredClone(finalizedRun);
+}
+
 function coworkerDisallowedDataLabels(
   input: Pick<GuardedPromptInput, "coworker">,
   response: MatterhornAgentPrivacyPreflightResponse,
@@ -739,6 +854,7 @@ export class MatterhornGuardedAgentRuntime {
   private readonly rolloutBypassCallIds = new Map<string, GuardedRolloutBypassState>();
   private readonly observations = new Map<string, GuardedRuntimeObservationMetric>();
   private readonly sessionPrivacyFloorAuthorityKey: Buffer | null;
+  private readonly finalizedRunAuthorityKey: Buffer | null;
   private readonly providerSystemByRunId = new Map<string, {
     workspaceId: string;
     sessionId: string;
@@ -759,6 +875,9 @@ export class MatterhornGuardedAgentRuntime {
     const integritySecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET?.trim() ?? "";
     this.sessionPrivacyFloorAuthorityKey = integritySecret.length > 0
       ? sessionPrivacyFloorAuthorityKey(integritySecret)
+      : null;
+    this.finalizedRunAuthorityKey = integritySecret.length > 0
+      ? finalizedRunAuthorityKey(integritySecret)
       : null;
     this.privacy = new MatterhornPrivacyFirewall(stateStore);
     this.capabilities = new MatterhornAgentCapabilityBroker(undefined, stateStore);
@@ -1811,8 +1930,24 @@ export class MatterhornGuardedAgentRuntime {
 
   async retryPendingFinalizedRuns(limit = 50): Promise<{ checked: number; sealed: number; failed: number }> {
     if (!this.finalizedRunHandler) return { checked: 0, sealed: 0, failed: 0 };
-    const pending = this.stateStore.list<MatterhornFinalizedCoworkerRun>("crypto_evidence_finalization")
-      .slice(0, Math.max(1, Math.min(limit, 200)));
+    const nowMs = Date.now();
+    let pending: MatterhornFinalizedCoworkerRun[];
+    try {
+      pending = this.stateStore.listRecords<unknown>("crypto_evidence_finalization", { nowMs })
+        .map((record) => assertFinalizedCoworkerRunState(
+          record,
+          this.requireFinalizedRunAuthorityKey(),
+          nowMs,
+        ))
+        .slice(0, Math.max(1, Math.min(limit, 200)));
+    } catch (error) {
+      if (error instanceof GuardedRuntimeError) throw error;
+      throw new GuardedRuntimeError(
+        409,
+        "crypto_evidence_finalization_state_invalid",
+        "Matterhorn could not verify pending encrypted evidence.",
+      );
+    }
     let sealed = 0;
     let failed = 0;
     for (const finalizedRun of pending) {
@@ -1934,6 +2069,17 @@ export class MatterhornGuardedAgentRuntime {
     return this.sessionPrivacyFloorAuthorityKey;
   }
 
+  private requireFinalizedRunAuthorityKey(): Buffer {
+    if (!this.finalizedRunAuthorityKey) {
+      throw new GuardedRuntimeError(
+        503,
+        "crypto_evidence_finalization_integrity_unavailable",
+        "Matterhorn cannot safely persist pending encrypted evidence.",
+      );
+    }
+    return this.finalizedRunAuthorityKey;
+  }
+
   private sessionPrivacyFloorFromStored(
     stored: GuardedRuntimeStateRecord<unknown>,
     sessionId: string,
@@ -2003,6 +2149,7 @@ export class MatterhornGuardedAgentRuntime {
 
   close(): void {
     this.sessionPrivacyFloorAuthorityKey?.fill(0);
+    this.finalizedRunAuthorityKey?.fill(0);
     this.stateStore.close();
   }
 
@@ -2166,13 +2313,32 @@ export class MatterhornGuardedAgentRuntime {
         const receipt = await this.receipts.get(scope.workspaceId, runId);
         if (receipt) {
           const finalizedRun = { receipt, coworker };
+          const nowMs = Date.now();
+          const expiresAtMs = nowMs + EVIDENCE_FINALIZATION_RETENTION_MS;
+          const authorityValue = finalizedRunAuthorityValue({
+            key: runId,
+            workspaceId: scope.workspaceId,
+            sessionId: scope.sessionId,
+            expiresAtMs,
+            updatedAtMs: nowMs,
+            finalizedRun,
+          });
+          const envelope: GuardedFinalizedCoworkerRunEnvelope = {
+            version: FINALIZED_RUN_ENVELOPE_VERSION,
+            finalizedRun,
+            authoritySeal: sealFinalizedRunAuthority(
+              authorityValue,
+              this.requireFinalizedRunAuthorityKey(),
+            ),
+          };
           this.stateStore.put({
             kind: "crypto_evidence_finalization",
             key: runId,
             workspaceId: scope.workspaceId,
             sessionId: scope.sessionId,
-            value: finalizedRun,
-            expiresAtMs: Date.now() + EVIDENCE_FINALIZATION_RETENTION_MS,
+            value: envelope,
+            expiresAtMs,
+            nowMs,
           });
           if (this.finalizedRunHandler) {
             try {
