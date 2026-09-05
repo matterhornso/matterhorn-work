@@ -79,7 +79,7 @@ describe("Private mode privacy notice rendered behavior", () => {
     const html = renderNotice({ privateModeUnavailableReason: reason });
 
     expect(html).toContain("Private is unavailable");
-    expect(html).toContain(reason.replace("'", "&#x27;"));
+    expect(html).toContain(reason.replaceAll("'", "&#x27;"));
     expect(html).not.toContain(">Review Private</button>");
     expect(html).toContain(">Privacy details</button>");
   });
