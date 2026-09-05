@@ -34,6 +34,7 @@ const ENV_KEYS = [
   "MATTERHORN_CRYPTO_APP_CONNECTION_DB",
   "MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_DEVELOPER_DB",
+  "MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_OPERATIONAL_DB",
   "MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET",
 ] as const;
@@ -101,6 +102,8 @@ async function boot(mode: "off" | "shadow") {
     process.env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET =
       "developer-route-connection-integrity-secret-at-least-32-bytes";
     process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB = join(root, "developer.db");
+    process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET =
+      "developer-route-state-integrity-secret-at-least-32-bytes";
     process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB = join(root, "operational.db");
     process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET =
       "developer-route-operational-integrity-secret-at-least-32-bytes";

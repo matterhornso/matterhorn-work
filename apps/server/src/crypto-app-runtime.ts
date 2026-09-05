@@ -67,6 +67,7 @@ export class MatterhornCryptoAppRuntimeConfigurationError extends Error {
     | "crypto_app_publisher_key_duplicate"
     | "crypto_app_private_key_forbidden"
     | "crypto_app_connection_integrity_secret_required"
+    | "crypto_app_developer_integrity_secret_required"
     | "crypto_app_operational_integrity_secret_required"
     | "crypto_app_oauth_encryption_key_required"
     | "crypto_app_wallet_proof_secret_required") {
@@ -172,6 +173,7 @@ export function createMatterhornCryptoAppRuntime(
   }
   const walletProofSecret = env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET;
   const connectionIntegritySecret = env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET;
+  const developerIntegritySecret = env.MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET;
   const operationalIntegritySecret = env.MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET;
   const oauthConfigured = Boolean(env.MATTERHORN_CRYPTO_APP_OAUTH_CLIENTS_JSON?.trim());
   const oauthEncryptionKey = env.MATTERHORN_CRYPTO_APP_OAUTH_ENCRYPTION_KEY;
@@ -181,6 +183,9 @@ export function createMatterhornCryptoAppRuntime(
   }
   if (!connectionIntegritySecret || Buffer.byteLength(connectionIntegritySecret, "utf8") < 32) {
     throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_connection_integrity_secret_required");
+  }
+  if (!developerIntegritySecret || Buffer.byteLength(developerIntegritySecret, "utf8") < 32) {
+    throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_developer_integrity_secret_required");
   }
   if (!operationalIntegritySecret || Buffer.byteLength(operationalIntegritySecret, "utf8") < 32) {
     throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_operational_integrity_secret_required");
@@ -231,7 +236,10 @@ export function createMatterhornCryptoAppRuntime(
     });
     const operator = new MatterhornCryptoAppOperator(registry);
     const developerPath = env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB?.trim();
-    developerPortalStore = new MatterhornCryptoDeveloperPortalStore(developerPath || undefined);
+    developerPortalStore = new MatterhornCryptoDeveloperPortalStore(
+      developerPath || undefined,
+      developerIntegritySecret,
+    );
     const developerPortal = new MatterhornCryptoDeveloperPortal({
       store: developerPortalStore,
       policyVersion,
