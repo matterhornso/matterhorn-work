@@ -1,4 +1,5 @@
 import { getMatterhornCryptoTool } from "@matterhorn-work/types/crypto-action-registry";
+import type { ReviewedActionHandoffV2 } from "@matterhorn-work/types/reviewed-actions";
 import type { MatterhornWalletSafetyPolicy } from "@matterhorn-work/types/wallet-safety-policy";
 
 import {
@@ -26,6 +27,9 @@ import { readWorkspaceWalletSafetyPolicySync } from "./wallet-safety-policy.js";
 export const MATTERHORN_CRYPTO_WALLET_REVIEW_RESULT_VERSION =
   "matterhorn.crypto-wallet-review-result.v1";
 
+const MATTERHORN_CRYPTO_APP_MODEL_RESULT_VERSION =
+  "matterhorn.crypto-app-model-result.v1";
+
 type Options = {
   router: Pick<MatterhornCryptoAppAdapterRouter, "execute"> | null;
   coworkers: Pick<MatterhornCoworkers, "get"> | null;
@@ -40,6 +44,49 @@ function transactionError(error: unknown): Error {
     return error instanceof Error ? error : new Error("coworker_transaction_failed");
   }
   return new Error(`${error.code}${error.reasonCodes.length ? `:${error.reasonCodes.join(",")}` : ""}`);
+}
+
+/**
+ * Crypto App results contain tenant and runtime bookkeeping that the policy
+ * kernel needs but the model never does. Keep those fields inside Matterhorn
+ * and return only the public evidence projection plus human-useful provenance.
+ */
+function modelFacingAdapterResult(result: Awaited<ReturnType<MatterhornCryptoAppAdapterRouter["execute"]>>) {
+  return {
+    version: MATTERHORN_CRYPTO_APP_MODEL_RESULT_VERSION,
+    app: { id: result.app.id },
+    action: { id: result.action.id, network: result.action.network },
+    observation: structuredClone(result.observation),
+    provenance: {
+      trust: result.provenance.trust,
+      sanitization: result.provenance.sanitization,
+      delivery: result.provenance.delivery ?? "live",
+    },
+    result: structuredClone(result.result),
+  };
+}
+
+function modelFacingReviewedAction(action: ReviewedActionHandoffV2) {
+  return {
+    version: action.version,
+    protocol: action.protocol,
+    source: action.source,
+    network: action.network,
+    operation: action.operation,
+    signer: action.signer,
+    amount: action.amount,
+    asset: action.asset,
+    recipient: action.recipient,
+    slippage: action.slippage,
+    expiresAt: action.expiresAt,
+    simulation: {
+      block: action.simulation.block,
+      simulatedAt: action.simulation.simulatedAt,
+    },
+    preparedAt: action.preparedAt,
+    capabilityClass: action.capabilityClass,
+    draft: structuredClone(action.draft),
+  };
 }
 
 /**
@@ -94,7 +141,7 @@ export function createMatterhornCertifiedCoworkerToolExecutor(
       if (!verifyCryptoAppResultEvidence(result)) {
         throw new MatterhornCryptoAppAdapterError("adapter_output_invalid");
       }
-      return result;
+      return modelFacingAdapterResult(result);
     }
     if (tool.access !== "prepare") throw new Error("coworker_certified_access_denied");
     const workspace = await options.resolveWorkspace(workspaceId);
@@ -184,22 +231,21 @@ export function createMatterhornCertifiedCoworkerToolExecutor(
         version: MATTERHORN_CRYPTO_WALLET_REVIEW_RESULT_VERSION,
         status: "blocked",
         blocked: true,
-        adapterResult: transaction.adapterResult,
+        adapterResult: modelFacingAdapterResult(transaction.adapterResult),
         policy,
       };
     }
     return {
       version: MATTERHORN_CRYPTO_WALLET_REVIEW_RESULT_VERSION,
       status: "wallet_review_required",
-      adapterResult: transaction.adapterResult,
+      adapterResult: modelFacingAdapterResult(transaction.adapterResult),
       policy,
-      reviewedAction: transaction.reviewedAction,
+      reviewedAction: modelFacingReviewedAction(transaction.reviewedAction),
       pendingIntent: {
-        id: transaction.pendingIntent.id,
-        revision: transaction.pendingIntent.revision,
         state: transaction.pendingIntent.state,
         expiresAt: transaction.pendingIntent.expiresAt,
       },
+      walletControl: "connected_wallet_approval_and_submission_required",
     };
   };
 }

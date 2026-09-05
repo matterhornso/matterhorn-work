@@ -438,11 +438,26 @@ describe("certified coworker tool executor", () => {
       now: () => NOW,
     });
 
-    expect(await execute({
+    const modelResult = await execute({
       toolName: "matterhorn_sui_get_balance",
       args: rawArguments,
       authorization: auth,
-    })).toEqual(expected);
+    });
+    expect(modelResult).toEqual({
+      version: "matterhorn.crypto-app-model-result.v1",
+      app: { id: "matterhorn.sui-testnet" },
+      action: { id: "sui_account_read", network: "sui:testnet" },
+      observation: expected.observation,
+      provenance: {
+        trust: "untrusted_external",
+        sanitization: "typed_projection",
+        delivery: "live",
+      },
+      result: expected.result,
+    });
+    expect(JSON.stringify(modelResult)).not.toMatch(
+      /cxc_sui|reservation_sui_read|connectionId|reservationId|projectionHash|observationHash|evidenceReference/,
+    );
     expect(routed).toEqual([expect.objectContaining({
       workspaceId: "ws_crypto",
       connectionId: "cxc_sui",
@@ -542,9 +557,12 @@ describe("certified coworker tool executor", () => {
         operation: "transfer_sui",
         capabilityClass: "wallet_review_only",
       },
-      pendingIntent: { state: "wallet_review", revision: 1 },
+      pendingIntent: { state: "wallet_review" },
+      walletControl: "connected_wallet_approval_and_submission_required",
     });
-    expect(JSON.stringify(result)).not.toMatch(/private.?key|signature|submitAuthority/i);
+    expect(JSON.stringify(result)).not.toMatch(
+      /private.?key|signature|submitAuthority|cxc_sui|reservation_sui|connectionId|reservationId|runId|intentHash|policyHash|projectionHash|observationHash|cpending_/i,
+    );
     expect(routed).toEqual([expect.objectContaining({
       workspaceId: "ws_crypto",
       connectionId: "cxc_sui",
@@ -559,9 +577,10 @@ describe("certified coworker tool executor", () => {
     expect(guardedRuntime.pendingCryptoIntents.list("ws_crypto", "account_b", "cw_sui")).toEqual([]);
     const receipt = await guardedRuntime.receipts.get("ws_crypto", String(auth.runId));
     expect(receipt?.reviewedActions).toEqual([expect.objectContaining({
-      intentHash: result.reviewedAction.intentHash,
-      policyHash: result.reviewedAction.policyHash,
+      intentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      policyHash: expect.stringMatching(/^[a-f0-9]{64}$/),
     })]);
+    expect(JSON.stringify(result)).not.toContain(receipt?.reviewedActions[0]?.intentHash ?? "missing");
   });
 
   test("normalizes and policy-checks Hyperliquid economics before wallet review", async () => {
@@ -686,7 +705,8 @@ describe("certified coworker tool executor", () => {
           operation: action,
           capabilityClass: "wallet_review_only",
         },
-        pendingIntent: { state: "wallet_review", revision: 1 },
+        pendingIntent: { state: "wallet_review" },
+        walletControl: "connected_wallet_approval_and_submission_required",
       });
       expect(result.policy.limits).toEqual(expect.arrayContaining([
         expect.objectContaining({ name: "per_action_usd", observed: "0", passed: true }),
@@ -700,7 +720,9 @@ describe("certified coworker tool executor", () => {
           ? { sender: BITTENSOR_SENDER, destination: BITTENSOR_DESTINATION, amountTao: "0.1" }
           : { sender: BITTENSOR_SENDER, hotkey: BITTENSOR_HOTKEY, netuid: 14, amountTao: "0.1" },
       })]);
-      expect(JSON.stringify(result)).not.toMatch(/private.?key|signature|submitAuthority/i);
+      expect(JSON.stringify(result)).not.toMatch(
+        /private.?key|signature|submitAuthority|cxc_bittensor|reservation_|connectionId|reservationId|runId|intentHash|policyHash|projectionHash|observationHash|cpending_/i,
+      );
     }
   });
 
