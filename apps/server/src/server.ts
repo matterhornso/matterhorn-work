@@ -2217,6 +2217,8 @@ function operationalReadiness(
   const hostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA === "1";
   const accountMessageGatewayReady = !hostedPublicBeta
     || process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED === "1";
+  const sessionPrivacyStateReady = !hostedPublicBeta
+    || Boolean(guardedRuntime?.sessionPrivacyStateReady());
   const providerSystemBoundaryReady = !hostedPublicBeta || Boolean(
     accountMessageGatewayReady
     && config.managedOpencodeMcp
@@ -2241,6 +2243,7 @@ function operationalReadiness(
       && recoveryErasureLedgerReady
       && hostedBrowserOpencodePolicyReady
       && accountMessageGatewayReady
+      && sessionPrivacyStateReady
       && providerSystemBoundaryReady
       && hostBackupFreshCheck
       && cryptoEvidenceSuiAnchorPackageReady,
@@ -2268,6 +2271,7 @@ function operationalReadiness(
       hostedBrowserOpencodePolicy: HOSTED_BROWSER_OPENCODE_POLICY,
       hostedBrowserOpencodePolicyReady,
       accountMessageGatewayReady,
+      sessionPrivacyStateReady,
       providerSystemBoundaryReady,
       hostBackupRequired,
       hostBackupFresh: hostBackupFreshCheck,

@@ -120,6 +120,212 @@ describe("guarded agent runtime transport", () => {
     restored.close();
   });
 
+  test("rejects privacy-floor downgrades and SQLite metadata mutation before reuse", async () => {
+    const path = join(dataDir, "session-privacy-floor-tamper.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(state);
+    await runtime.acceptPrompt({
+      workspaceId: "ws_floor_tamper",
+      sessionId: "ses_floor_tamper",
+      parts: [{ type: "text", text: "Use my private wallet context for this transaction" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "transaction",
+      executionMode: "work",
+    });
+    const stored = state.getRecord<unknown>("session_privacy_floor", "ses_floor_tamper");
+    if (!stored) throw new Error("expected_session_privacy_floor");
+    const downgraded = structuredClone(stored.value) as {
+      version: string;
+      floor: { mode: string };
+      authoritySeal: string;
+    };
+    downgraded.floor.mode = "public_research";
+    state.put({
+      kind: "session_privacy_floor",
+      key: stored.key,
+      workspaceId: stored.workspaceId,
+      sessionId: stored.sessionId,
+      value: downgraded,
+      expiresAtMs: stored.expiresAtMs,
+      nowMs: stored.updatedAtMs,
+    });
+    expect(() => runtime.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_tamper",
+      sessionId: "ses_floor_tamper",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+
+    state.put({
+      kind: "session_privacy_floor",
+      key: stored.key,
+      workspaceId: stored.workspaceId,
+      sessionId: stored.sessionId,
+      value: stored.value,
+      expiresAtMs: (stored.expiresAtMs ?? 0) + 1,
+      nowMs: stored.updatedAtMs,
+    });
+    expect(() => runtime.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_tamper",
+      sessionId: "ses_floor_tamper",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+
+    state.put({
+      kind: "session_privacy_floor",
+      key: stored.key,
+      workspaceId: "ws_floor_attacker",
+      sessionId: stored.sessionId,
+      value: stored.value,
+      expiresAtMs: stored.expiresAtMs,
+      nowMs: stored.updatedAtMs,
+    });
+    expect(() => runtime.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_tamper",
+      sessionId: "ses_floor_tamper",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+    runtime.close();
+  });
+
+  test("rejects wrong-key and unsealed restored privacy floors", async () => {
+    const path = join(dataDir, "session-privacy-floor-key.db");
+    const initialState = new MatterhornGuardedRuntimeStateStore(path);
+    const initial = new MatterhornGuardedAgentRuntime(initialState);
+    await initial.acceptPrompt({
+      workspaceId: "ws_floor_key",
+      sessionId: "ses_floor_key",
+      parts: [{ type: "text", text: "Use my private workspace report" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "private_workspace",
+      executionMode: "work",
+    });
+    const stored = initialState.getRecord<unknown>("session_privacy_floor", "ses_floor_key");
+    if (!stored) throw new Error("expected_session_privacy_floor");
+    initial.close();
+
+    const expectedSigningSecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "different-capability-signing-secret-with-at-least-32-characters";
+    const wrongKey = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    expect(() => wrongKey.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_key",
+      sessionId: "ses_floor_key",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+    wrongKey.close();
+
+    delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    const missingKey = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    expect(() => missingKey.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_key",
+      sessionId: "ses_floor_key",
+      hasStoredHistory: true,
+    })).toThrow("cannot safely persist this chat's privacy history");
+    missingKey.close();
+
+    if (expectedSigningSecret === undefined) delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    else process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = expectedSigningSecret;
+    const unsealedState = new MatterhornGuardedRuntimeStateStore(path);
+    const envelope = stored.value as { floor: unknown };
+    unsealedState.put({
+      kind: "session_privacy_floor",
+      key: stored.key,
+      workspaceId: stored.workspaceId,
+      sessionId: stored.sessionId,
+      value: envelope.floor,
+      expiresAtMs: stored.expiresAtMs,
+      nowMs: stored.updatedAtMs,
+    });
+    const unsealed = new MatterhornGuardedAgentRuntime(unsealedState);
+    expect(() => unsealed.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_key",
+      sessionId: "ses_floor_key",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+    unsealed.close();
+  });
+
+  test("rolls back a sealed privacy-floor update when persistence fails", async () => {
+    const path = join(dataDir, "session-privacy-floor-rollback.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(state);
+    await runtime.acceptPrompt({
+      workspaceId: "ws_floor_rollback",
+      sessionId: "ses_floor_rollback",
+      parts: [{ type: "text", text: "Use my private workspace report" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "private_workspace",
+      executionMode: "work",
+    });
+    const before = state.getRecord<unknown>("session_privacy_floor", "ses_floor_rollback");
+    if (!before) throw new Error("expected_session_privacy_floor");
+    const originalPut = state.put.bind(state);
+    let failUpdate = true;
+    Object.defineProperty(state, "put", {
+      configurable: true,
+      value: (input: Parameters<MatterhornGuardedRuntimeStateStore["put"]>[0]) => {
+        originalPut(input);
+        if (failUpdate && input.kind === "session_privacy_floor") {
+          failUpdate = false;
+          throw new Error("injected_session_privacy_floor_write_failure");
+        }
+      },
+    });
+
+    await expect(runtime.acceptPrompt({
+      workspaceId: "ws_floor_rollback",
+      sessionId: "ses_floor_rollback",
+      parts: [{ type: "text", text: "Continue with public market data" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "public_research",
+      executionMode: "work",
+    })).rejects.toThrow("injected_session_privacy_floor_write_failure");
+    Object.defineProperty(state, "put", { configurable: true, value: originalPut });
+
+    expect(state.getRecord<unknown>("session_privacy_floor", "ses_floor_rollback")).toEqual(before);
+    expect(runtime.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_rollback",
+      sessionId: "ses_floor_rollback",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+    runtime.close();
+  });
+
+  test("authenticates privacy-floor deletion and rolls it back for the wrong tenant", async () => {
+    const path = join(dataDir, "session-privacy-floor-purge.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(state);
+    await runtime.acceptPrompt({
+      workspaceId: "ws_floor_purge",
+      sessionId: "ses_floor_purge",
+      parts: [{ type: "text", text: "Use my private workspace report" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "private_workspace",
+      executionMode: "work",
+    });
+
+    expect(() => runtime.purgeSessionPrivacyState({
+      workspaceId: "ws_other",
+      sessionId: "ses_floor_purge",
+    })).toThrow("could not verify this chat's privacy history");
+    expect(runtime.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_purge",
+      sessionId: "ses_floor_purge",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+
+    runtime.purgeSessionPrivacyState({
+      workspaceId: "ws_floor_purge",
+      sessionId: "ses_floor_purge",
+    });
+    expect(state.getRecord("session_privacy_floor", "ses_floor_purge", 0)).toBeNull();
+    runtime.close();
+  });
+
   test("records selected context as counts without retaining file identifiers", async () => {
     const path = join(dataDir, "run-context-counts.db");
     const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
