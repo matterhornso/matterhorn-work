@@ -8,6 +8,7 @@ import { normalizeSuiAddress } from "@mysten/sui/utils";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { MatterhornAgentFileStore } from "./agent-file-store.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import {
   MatterhornAgentFileWalrusRenewalService,
   type MatterhornSuiTransactionStatusVerifier,
@@ -78,7 +79,7 @@ async function fixture(input: { currentEpoch?: number; validUntilEpoch?: number 
   roots.push(root);
   const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
   const keys = new TestKeyManager();
-  const store = new MatterhornAgentFileStore(state, keys);
+  const store = new MatterhornAgentFileStore(state, keys, null, testDurableStateAuthority());
   const item = await store.create({
     workspaceId: "workspace_alpha",
     ownerId: "owner_alpha",
@@ -340,7 +341,7 @@ describe("Walrus Agent File renewal airlock", () => {
   test("serializes renewal preparation and deletion across SQLite connections", async () => {
     const value = await fixture();
     const stateB = new MatterhornGuardedRuntimeStateStore(join(value.root, "state.db"));
-    const storeB = new MatterhornAgentFileStore(stateB, value.keys);
+    const storeB = new MatterhornAgentFileStore(stateB, value.keys, null, testDurableStateAuthority());
     let releaseBuild!: () => void;
     let buildStarted!: () => void;
     const buildGate = new Promise<void>((resolve) => { releaseBuild = resolve; });
@@ -429,7 +430,7 @@ describe("Walrus Agent File renewal airlock", () => {
   test("does not let a stale renewal worker clear or finalize a replacement claim", async () => {
     const value = await fixture();
     const stateB = new MatterhornGuardedRuntimeStateStore(join(value.root, "state.db"));
-    const storeB = new MatterhornAgentFileStore(stateB, value.keys);
+    const storeB = new MatterhornAgentFileStore(stateB, value.keys, null, testDurableStateAuthority());
     try {
       const first = value.store.beginWalrusRenewal({
         workspaceId: "workspace_alpha",

@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 
 import { MatterhornAgentFileStore } from "./agent-file-store.js";
 import { MatterhornAgentFileWalrusPublisher } from "./agent-file-walrus-publisher.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import type {
   MatterhornEvidenceDataKeyLease,
   MatterhornEvidenceKeyManager,
@@ -69,7 +70,7 @@ async function fixture() {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-agent-file-walrus-"));
   const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
   const keys = new TestKeyManager();
-  const store = new MatterhornAgentFileStore(state, keys);
+  const store = new MatterhornAgentFileStore(state, keys, null, testDurableStateAuthority());
   const item = await store.create({
     workspaceId: "workspace_alpha",
     ownerId: "owner_alpha",

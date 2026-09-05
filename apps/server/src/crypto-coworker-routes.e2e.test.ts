@@ -34,6 +34,7 @@ import type {
 } from "./crypto-evidence-sealer.js";
 import { sealMatterhornRunEvidence } from "./crypto-evidence-sealer.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
 import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
 import { MatterhornCryptoAppRegistryStore } from "./crypto-app-registry-store.js";
@@ -805,7 +806,13 @@ async function seedCryptoEvidence(input: {
   runId: string;
 }) {
   const state = new MatterhornGuardedRuntimeStateStore(input.guardedDb);
-  const store = new MatterhornCryptoEvidenceStore(state, input.keyManager);
+  const store = new MatterhornCryptoEvidenceStore(
+    state,
+    input.keyManager,
+    {},
+    null,
+    testDurableStateAuthority(process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET),
+  );
   const sealed = await sealMatterhornRunEvidence({
     receipt: completedEvidenceReceipt({
       workspaceId: input.workspaceId,
