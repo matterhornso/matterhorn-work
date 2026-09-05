@@ -130,7 +130,7 @@ const COWORKER_CHOICES: ReadonlyArray<{
 
 function coworkerSummary(role: string): string {
   return COWORKER_CHOICES.find((choice) => choice.id === role)?.summary
-    ?? "Helps with the crypto work and access you approve.";
+    ?? "Helps with crypto work using only what you choose.";
 }
 
 type CoworkerNextStepAction = "start" | "wait" | "reload" | "connect" | "review" | "resume" | "none";
@@ -153,7 +153,7 @@ export function resolveCoworkerNextStep(input: {
     return { action: "start", label: "Start chat", message: "Ready. Start a chat and describe what you need." };
   }
   if (input.loadFailed) {
-    return { action: "reload", label: "Try again", message: "We couldn't check this coworker's access." };
+    return { action: "reload", label: "Try again", message: "We couldn't check what this coworker can use." };
   }
   if (input.loading || input.connectionsAvailable === undefined) {
     return { action: "wait", label: "Checking…", message: "Checking what this coworker can use…" };
@@ -164,7 +164,7 @@ export function resolveCoworkerNextStep(input: {
   if (input.connectedAppCount === 0) {
     return { action: "connect", label: "Choose an app", message: "Choose an app for this coworker." };
   }
-  return { action: "review", label: "Choose access", message: "Choose its apps, files, and saved memory, then save." };
+  return { action: "review", label: "Choose what it can use", message: "Choose its apps, files, and saved Memory, then save." };
 }
 
 export function coworkerActivitySummary(input: {
@@ -231,16 +231,16 @@ function coworkerErrorMessage(error: unknown): string {
     if (error.code === "coworker_revision_conflict") return "This coworker changed. Refresh and try again.";
     if (error.code === "coworker_working_state_invalid") return "This coworker's remembered work changed. Refresh and try again.";
     if (error.code === "coworker_resource_scope_invalid") return "One of these files, memories, or apps is no longer available. Refresh and choose again.";
-    if (error.code === "coworker_resource_recommendation_stale") return "The suggested access changed. Review the latest suggestion before saving.";
-    if (error.code === "coworker_resources_stale") return "This access list changed. Review it again before starting work.";
+    if (error.code === "coworker_resource_recommendation_stale") return "The suggestions changed. Review the latest choices before saving.";
+    if (error.code === "coworker_resources_stale") return "These choices changed. Review them again before starting work.";
     if (error.code === "coworker_session_binding_required") return "Choose this coworker again to connect it to the chat.";
     if (error.code === "coworker_session_binding_conflict") return "A different coworker is connected to this chat. Refresh and try again.";
-    if (error.code === "coworker_session_binding_stale") return "This coworker's app access changed. Review access before continuing.";
+    if (error.code === "coworker_session_binding_stale") return "This coworker's app choices changed. Choose again before continuing.";
     if (error.code === "coworker_transition_invalid") return "That change is no longer available for this coworker.";
-    if (error.code === "coworker_watch_invalid") return "This check no longer matches the app you chose. Check access and try again.";
+    if (error.code === "coworker_watch_invalid") return "This check no longer matches the app you chose. Check your choices and try again.";
     if (error.code === "coworker_watch_limit") return "This coworker has reached its active check limit. Pause or remove a check first.";
     if (error.code === "coworker_watch_not_found") return "This check is no longer available. Refresh and try again.";
-    if (error.code === "coworker_watch_transition_invalid") return "This check cannot be resumed with its current app access.";
+    if (error.code === "coworker_watch_transition_invalid") return "This check cannot be resumed with the apps currently selected.";
     if (error.code === "coworker_inbox_state_conflict") return "This alert changed. Refresh and try again.";
     if (error.code === "crypto_app_gateway_disabled") return "App connections are currently unavailable.";
     if (error.code === "app_certification_unavailable") return "This app did not pass its latest safety check. Refresh before connecting it.";
@@ -250,7 +250,7 @@ function coworkerErrorMessage(error: unknown): string {
     if (error.code === "connection_action_not_allowed"
       || error.code === "connection_scope_not_allowed"
       || error.code === "connection_network_not_allowed") {
-      return "This app's available access changed. Refresh and review it again.";
+      return "What this app can do changed. Refresh and review it again.";
     }
     if (error.code === "pending_crypto_intent_revision_conflict") return "This wallet review changed. Refresh and try again.";
     if (error.code === "pending_crypto_intent_expired" || error.code === "pending_crypto_intent_transition_invalid") {
@@ -292,7 +292,7 @@ function CoworkerBoundary(props: { coworker: MatterhornCoworkerAccountProfile })
         <div>
           <p className="text-xs font-medium text-dls-text">Can do automatically</p>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            {automatic.length ? automatic.join(" · ") : "Nothing until you choose access"}
+            {automatic.length ? automatic.join(" · ") : "Nothing until you choose"}
           </p>
         </div>
         <div>
@@ -789,7 +789,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       await queryClient.invalidateQueries({ queryKey: resourceKey });
       showToast({
         title: `${app.displayName} connected`,
-        description: "Review the selected access, then save it for this coworker.",
+        description: "Review these choices, then save them for this coworker.",
         tone: "success",
       });
     } catch (cause) {
@@ -812,7 +812,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       await queryClient.invalidateQueries({ queryKey: resourceKey });
       showToast({
         title: `${app.displayName} resumed`,
-        description: "Review the selected access, then save it for this coworker.",
+        description: "Review these choices, then save them for this coworker.",
         tone: "success",
       });
     } catch (cause) {
@@ -1106,7 +1106,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
           <div className="min-w-0">
             <h2 className={cn("text-base font-semibold text-dls-text", props.compactHeader && "sr-only")}>Coworkers</h2>
             <p className={cn("text-xs leading-5 text-dls-secondary", !props.compactHeader && "mt-1")}>
-              Pick who helps. You choose what it can access.
+              Choose who helps. You decide what they can see and use.
             </p>
           </div>
           <Button
@@ -1140,7 +1140,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
             <UserRound aria-hidden="true" className="size-5 text-dls-secondary" />
             <h3 className="mt-3 text-sm font-semibold text-dls-text">What do you want help with?</h3>
             <p className="mt-2 text-sm leading-6 text-dls-secondary">
-              Choose one to continue. You will review its access before it starts. Anything involving funds stops for your wallet approval.
+              Choose one to continue. You will choose what it can use before it starts. Anything involving funds stops for your wallet approval.
             </p>
             <div className="mt-4 grid gap-2">
               {COWORKER_CHOICES.map((choice) => (
@@ -1297,16 +1297,16 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
             <section className="border-b border-dls-border/70 py-4" aria-labelledby="coworker-resources-title">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 id="coworker-resources-title" className="text-sm font-semibold text-dls-text">Apps and information</h3>
+                  <h3 id="coworker-resources-title" className="text-sm font-semibold text-dls-text">What it can use</h3>
                   <p className="mt-1 text-xs leading-5 text-dls-secondary">
                     {resourceQuery.isLoading
-                      ? "Loading access…"
+                      ? "Loading choices…"
                       : resourceQuery.isError
-                        ? "Setup could not be loaded."
+                        ? "These choices could not be loaded."
                         : !resourceQuery.data?.scope.resources
                           ? "Nothing is shared until you choose."
                           : !resourceQuery.data.scope.active
-                            ? "Review access again because this coworker changed."
+                            ? "Choose again because this coworker changed."
                             : resourceQuery.data.scope.resources.connections.length === 0
                               ? "Connect at least one app before starting chat."
                             : `${resourceQuery.data.scope.resources.agentFiles.length} files · ${resourceQuery.data.scope.resources.memories.length} memories · ${resourceQuery.data.scope.resources.connections.length} apps`}
@@ -1326,13 +1326,13 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
               {resourceSuggestionAvailable && resourceQuery.data ? (
                 <div className="mt-4 flex items-start justify-between gap-3 border-t border-dls-border/70 pt-4">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-dls-text">Suggested access</p>
+                    <p className="text-xs font-medium text-dls-text">Suggested for this coworker</p>
                     <p className="mt-1 text-xs leading-5 text-dls-secondary">
                       Matterhorn found {
                         resourceQuery.data.recommendation.agentFiles.length
                         + resourceQuery.data.recommendation.memories.length
                         + resourceQuery.data.recommendation.connections.length
-                      } items that match this coworker. Nothing changes until you review and save.
+                      } items that match this coworker. Nothing changes until you save.
                     </p>
                   </div>
                   <Button size="sm" variant="ghost" onClick={reviewResourceRecommendation}>Review</Button>
@@ -1375,7 +1375,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       <div className="mt-3 border-t border-dls-border/70 pt-3">
                         <p className="text-xs font-medium text-dls-text">Connect an app</p>
                         <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                          Choose only what this coworker needs. Nothing is shared until you save access.
+                          Choose only what this coworker needs. Nothing is shared until you save.
                         </p>
                         <ul className="mt-2 divide-y divide-dls-border/60">
                           {appsNeedingConnection.map((app) => {
@@ -1534,7 +1534,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                         ? "Saving…"
                         : pendingOutcome
                           ? "Save and continue"
-                          : "Save access"}
+                          : "Save choices"}
                     </Button>
                     <Button size="sm" variant="ghost" disabled={busyAction !== null} onClick={() => setResourcesOpen(false)}>Cancel</Button>
                   </div>
@@ -1815,7 +1815,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                             <Skeleton className="h-9 w-full rounded-md" />
                           </div>
                         ) : watchDetailQuery.isError ? (
-                          <p className="text-xs leading-5 text-destructive" role="alert">This app changed. Refresh access before adding the check.</p>
+                          <p className="text-xs leading-5 text-destructive" role="alert">This app changed. Refresh your choices before adding the check.</p>
                         ) : watchFieldResult.supported ? watchFieldResult.fields.filter((field) => field.kind !== "constant").map((field) => (
                           field.kind === "boolean" ? (
                             <label key={field.name} className="flex min-h-9 cursor-pointer items-center gap-2 text-xs font-medium text-dls-text">
