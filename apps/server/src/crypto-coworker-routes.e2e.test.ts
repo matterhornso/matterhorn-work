@@ -69,6 +69,7 @@ const ENV_KEYS = [
   "MATTERHORN_CRYPTO_APP_CONNECTION_DB",
   "MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_DEVELOPER_DB",
+  "MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_OPERATIONAL_DB",
   "MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET",
@@ -234,6 +235,8 @@ async function boot(
     process.env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET =
       "coworker-route-connection-integrity-secret-at-least-32-bytes";
     process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB = join(root, "crypto-app-developers.db");
+    process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET =
+      "coworker-route-developer-integrity-secret-at-least-32-bytes";
     process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB = join(root, "crypto-app-operations.db");
     process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET =
       "coworker-route-operational-integrity-secret-at-least-32-bytes";
@@ -287,6 +290,7 @@ async function boot(
     delete process.env.MATTERHORN_CRYPTO_APP_CONNECTION_DB;
     delete process.env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET;
     delete process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB;
+    delete process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET;
     delete process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB;
     delete process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET;
     delete process.env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET;

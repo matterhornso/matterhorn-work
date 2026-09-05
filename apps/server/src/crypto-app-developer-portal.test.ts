@@ -18,12 +18,13 @@ import {
 import { sha256 } from "./guarded-runtime-crypto.js";
 
 const roots: string[] = [];
+const DEVELOPER_INTEGRITY_SECRET = "developer-portal-test-integrity-secret-at-least-32-bytes";
 
 function harness(now = new Date("2026-09-01T00:00:00.000Z")) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-crypto-developer-"));
   roots.push(root);
   const path = join(root, "developer.db");
-  const store = new MatterhornCryptoDeveloperPortalStore(path);
+  const store = new MatterhornCryptoDeveloperPortalStore(path, DEVELOPER_INTEGRITY_SECRET);
   const portal = new MatterhornCryptoDeveloperPortal({
     store,
     policyVersion: "policy-1",
@@ -90,7 +91,7 @@ describe("invite-only crypto developer portal", () => {
     `);
     legacy.close();
 
-    const store = new MatterhornCryptoDeveloperPortalStore(path);
+    const store = new MatterhornCryptoDeveloperPortalStore(path, DEVELOPER_INTEGRITY_SECRET);
     store.close();
     const migrated = new Database(path, { readonly: true });
     const columns = (migrated.query("PRAGMA table_info(crypto_developer_submissions)").all() as Array<{ name: string }>)
@@ -98,6 +99,129 @@ describe("invite-only crypto developer portal", () => {
     migrated.close();
     expect(columns).toContain("runtime_report_json");
     expect(columns).toContain("certification_decided_at");
+  });
+
+  test("backfills authenticated authority seals only for structurally valid legacy rows", () => {
+    const { path, store, portal } = harness();
+    const invite = portal.issueInvite();
+    portal.enroll("account-a", {
+      inviteToken: invite.token,
+      publisherId: "acme.crypto",
+      displayName: "Acme Crypto",
+    });
+    const keys = generateKeyPairSync("ed25519");
+    portal.registerPublisherKey("account-a", {
+      keyId: "key-1",
+      algorithm: "ed25519",
+      publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    });
+    const manifest = signedManifest("acme.crypto", "key-1", keys.privateKey);
+    portal.submitManifest("account-a", manifest, "testnet");
+    store.close();
+
+    const legacy = new Database(path);
+    legacy.exec(`
+      DROP TRIGGER crypto_developer_invite_seal_insert;
+      DROP TRIGGER crypto_developer_invite_seal_update;
+      DROP TRIGGER crypto_developer_profile_seal_insert;
+      DROP TRIGGER crypto_developer_profile_seal_update;
+      DROP TRIGGER crypto_developer_key_seal_insert;
+      DROP TRIGGER crypto_developer_key_seal_update;
+      DROP TRIGGER crypto_developer_submission_seal_insert;
+      DROP TRIGGER crypto_developer_submission_seal_update;
+      ALTER TABLE crypto_developer_invites DROP COLUMN authority_seal;
+      ALTER TABLE crypto_developers DROP COLUMN authority_seal;
+      ALTER TABLE crypto_developer_publisher_keys DROP COLUMN authority_seal;
+      ALTER TABLE crypto_developer_submissions DROP COLUMN authority_seal;
+    `);
+    legacy.close();
+
+    const migrated = new MatterhornCryptoDeveloperPortalStore(path, DEVELOPER_INTEGRITY_SECRET);
+    expect(migrated.getDeveloperByAccount("account-a")?.publisherId).toBe("acme.crypto");
+    expect(migrated.getSubmission(manifest.appId, manifest.manifestRevision)?.manifestHash).toHaveLength(64);
+    migrated.close();
+    const database = new Database(path, { readonly: true });
+    for (const table of [
+      "crypto_developer_invites",
+      "crypto_developers",
+      "crypto_developer_publisher_keys",
+      "crypto_developer_submissions",
+    ]) {
+      const seals = database.query(`SELECT authority_seal FROM ${table}`).all() as Array<{ authority_seal: string }>;
+      expect(seals).not.toHaveLength(0);
+      expect(seals.every((row) => /^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}$/.test(row.authority_seal))).toBe(true);
+    }
+    database.close();
+  });
+
+  test("fails closed when restored invite, owner, publisher-key, or submission authority is mutated", () => {
+    const mutations = [
+      {
+        trigger: "crypto_developer_invite_seal_update",
+        sql: "UPDATE crypto_developer_invites SET expires_at = '2026-09-07T01:00:00.000Z'",
+      },
+      {
+        trigger: "crypto_developer_profile_seal_update",
+        sql: "UPDATE crypto_developers SET account_id = 'account-b'",
+      },
+      {
+        trigger: "crypto_developer_key_seal_update",
+        sql: "UPDATE crypto_developer_publisher_keys SET created_at = '2026-09-01T00:00:01.000Z'",
+      },
+      {
+        trigger: "crypto_developer_submission_seal_update",
+        sql: "UPDATE crypto_developer_submissions SET updated_at = '2026-09-01T00:00:01.000Z'",
+      },
+    ] as const;
+    for (const mutation of mutations) {
+      const { path, store, portal } = harness();
+      const invite = portal.issueInvite();
+      portal.enroll("account-a", {
+        inviteToken: invite.token,
+        publisherId: "acme.crypto",
+        displayName: "Acme Crypto",
+      });
+      const keys = generateKeyPairSync("ed25519");
+      portal.registerPublisherKey("account-a", {
+        keyId: "key-1",
+        algorithm: "ed25519",
+        publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      });
+      portal.submitManifest("account-a", signedManifest("acme.crypto", "key-1", keys.privateKey), "testnet");
+      store.close();
+      const database = new Database(path);
+      database.exec(`DROP TRIGGER ${mutation.trigger}; ${mutation.sql};`);
+      database.close();
+      expect(() => new MatterhornCryptoDeveloperPortalStore(path, DEVELOPER_INTEGRITY_SECRET))
+        .toThrowError(expect.objectContaining({ code: "developer_store_corrupt" }));
+    }
+  });
+
+  test("rejects the wrong restore key and re-verifies live rows before account access", () => {
+    const { path, store, portal } = harness();
+    const invite = portal.issueInvite();
+    portal.enroll("account-a", {
+      inviteToken: invite.token,
+      publisherId: "acme.crypto",
+      displayName: "Acme Crypto",
+    });
+    store.close();
+    expect(() => new MatterhornCryptoDeveloperPortalStore(
+      path,
+      "different-developer-integrity-secret-at-least-32-bytes",
+    )).toThrowError(expect.objectContaining({ code: "developer_store_corrupt" }));
+
+    const live = new MatterhornCryptoDeveloperPortalStore(path, DEVELOPER_INTEGRITY_SECRET);
+    const database = new Database(path);
+    database.exec(`
+      UPDATE crypto_developers
+      SET account_id = 'account-b', authority_seal = 'AAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB'
+      WHERE account_id = 'account-a'
+    `);
+    database.close();
+    expect(() => live.getDeveloperByAccount("account-b"))
+      .toThrowError(expect.objectContaining({ code: "developer_store_corrupt" }));
+    live.close();
   });
 
   test("stores only a one-way invite hash and consumes the invite once", () => {
@@ -370,7 +494,7 @@ describe("invite-only crypto developer portal", () => {
     const report = runtimeReport(manifest, submitted.staticReport);
     store.close();
 
-    const reopenedStore = new MatterhornCryptoDeveloperPortalStore(path);
+    const reopenedStore = new MatterhornCryptoDeveloperPortalStore(path, DEVELOPER_INTEGRITY_SECRET);
     const newPolicy = new MatterhornCryptoDeveloperPortal({
       store: reopenedStore,
       policyVersion: "policy-2",
