@@ -10,7 +10,7 @@ import { WorkflowStageCard, type WorkflowStageStatus } from "./workflow-stage-ca
 
 export type DeskWorkflowStagePanelProps = {
   deskId: CustomerProtocolDeskId | string;
-  presentation?: "default" | "guided";
+  presentation?: "default" | "guided" | "chat-first";
   showAgentHeader?: boolean;
   currentStageId?: string;
   taskStatus?: "idle" | "staged" | "running" | "waiting" | "completed" | "failed" | "cancelled";
@@ -175,6 +175,137 @@ export function DeskWorkflowStagePanel({
     : -1;
   const activeStageIndex = currentStageIndex >= 0 ? currentStageIndex : 0;
   const guidedSequence = presentation === "guided";
+  const chatFirstSequence = presentation === "chat-first";
+
+  if (chatFirstSequence) {
+    const primarySteps = visibleSteps.slice(0, 3);
+    const moreSteps = visibleSteps.slice(3);
+    const taskDisabled = stageActionDisabled || !onStartStage;
+
+    const renderTaskButton = (step: MatterhornWorkflowStep) => (
+      <button
+        key={step.id}
+        type="button"
+        disabled={taskDisabled}
+        title={stageActionTitle}
+        onClick={() => onStartStage?.(step.id, buildStagePrompt(deskId, step, manifest))}
+        className="group flex min-h-12 w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] disabled:cursor-not-allowed disabled:opacity-45"
+      >
+        <span className="min-w-0">
+          <span className="block text-[13px] font-semibold leading-5 text-dls-text">{step.name}</span>
+          <span className="line-clamp-1 block text-[11px] leading-4 text-dls-secondary">
+            {step.description}
+          </span>
+          {step.requiresExternalSigner ? (
+            <span className="mt-0.5 block text-[10px] font-medium text-[var(--matterhorn-desk-color)]">
+              Continues in your wallet
+            </span>
+          ) : null}
+          {stageActionDisabled ? (
+            <span className="mt-0.5 block text-[10px] font-medium text-dls-secondary">{stageActionLabel}</span>
+          ) : null}
+        </span>
+        <ChevronRight
+          className="size-3.5 shrink-0 text-dls-muted transition-colors group-hover:text-[var(--matterhorn-desk-color)]"
+          aria-hidden="true"
+        />
+      </button>
+    );
+
+    return (
+      <div className="w-full space-y-3 px-2 py-3 sm:px-3 sm:py-4" style={deskToneStyle(deskId)}>
+        {showAgentHeader ? (
+          <div className="flex min-w-0 items-start gap-3 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.06)] px-3.5 py-3.5">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[rgb(var(--matterhorn-desk-rgb)/0.14)] text-[var(--matterhorn-desk-color)]">
+              <ProtocolDeskMark id={deskId} size={30} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[14px] font-semibold text-dls-text">{visual.agentName}</span>
+                <Popover>
+                  <PopoverTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label={`${visual.displayName} safety info`}
+                        className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35 sm:size-6"
+                      >
+                        <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
+                      </button>
+                    }
+                  />
+                  <PopoverContent
+                    side="right"
+                    align="start"
+                    className="w-72 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-xs leading-5 text-dls-secondary shadow-none"
+                  >
+                    <p>{visual.sessionBoundary}</p>
+                  </PopoverContent>
+                </Popover>
+                {taskStatus !== "idle" ? (
+                  <span className={`text-[11px] font-semibold ${STATUS_TONE[taskStatus] ?? STATUS_TONE.idle}`}>
+                    {STATUS_LABELS[taskStatus] ?? taskStatus}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 text-[12px] leading-5 text-dls-secondary">{visual.agentDescription}</p>
+            </div>
+          </div>
+        ) : null}
+
+        <section aria-label={`${visual.displayName} starting points`}>
+          <div className="px-1 pb-1">
+            <p className="text-[13px] font-semibold text-dls-text">What would you like to do?</p>
+            <p className="mt-0.5 text-[11px] leading-5 text-dls-secondary">
+              Ask in your own words below, or choose a starting point.
+            </p>
+          </div>
+          <div className="mt-1 grid divide-y divide-dls-border/55 overflow-hidden rounded-lg bg-dls-surface-muted/20 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            {primarySteps.map(renderTaskButton)}
+          </div>
+        </section>
+
+        {moreSteps.length || requiredInputs.length || optionalInputs.length || visibleArtifacts.length ? (
+          <details className="group border-t border-dls-border/55 pt-1">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-2 text-[11px] font-medium text-dls-secondary marker:hidden hover:bg-dls-surface-muted/20 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]">
+              <span>More ways to use this desk</span>
+              <ChevronRight
+                className="size-3.5 transition-transform duration-150 group-open:rotate-90"
+                aria-hidden="true"
+              />
+            </summary>
+            <div className="mt-1 space-y-3 px-1 pb-1">
+              {moreSteps.length ? (
+                <div className="divide-y divide-dls-border/55 rounded-lg bg-dls-surface-muted/15">
+                  {moreSteps.map(renderTaskButton)}
+                </div>
+              ) : null}
+              {requiredInputs.length || optionalInputs.length ? (
+                <div>
+                  <p className="text-[11px] font-semibold text-dls-text">Helpful details</p>
+                  <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] leading-4 text-dls-secondary">
+                    {[...requiredInputs, ...optionalInputs].map((input) => (
+                      <li key={input.id}>{input.label}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {visibleArtifacts.length ? (
+                <div>
+                  <p className="text-[11px] font-semibold text-dls-text">What Matterhorn can save</p>
+                  <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] leading-4 text-dls-secondary">
+                    {visibleArtifacts.map((artifact) => (
+                      <li key={artifact.id}>{artifact.name}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          </details>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="w-full space-y-3 px-2 py-3 sm:px-3 sm:py-4" style={deskToneStyle(deskId)}>

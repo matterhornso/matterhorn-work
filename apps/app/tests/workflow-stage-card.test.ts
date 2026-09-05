@@ -210,6 +210,25 @@ describe("DeskWorkflowStagePanel — uses WorkflowStageCard", () => {
     expect(pageSrc).toContain("showAgentHeader={false}");
   });
 
+  test("new protocol chats lead with three plain-language choices and keep the full workflow optional", () => {
+    const panelSrc = readAppSource("domains/session/workflows/desk-workflow-stage-panel.tsx");
+    const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
+    const chatFirstStart = surfaceSrc.indexOf("<DeskWorkflowStagePanel\n                    deskId={activeDeskMode}");
+    const chatFirstBlock = surfaceSrc.slice(chatFirstStart, surfaceSrc.indexOf("/>", chatFirstStart));
+
+    expect(panelSrc).toContain('presentation?: "default" | "guided" | "chat-first"');
+    expect(panelSrc).toContain('const chatFirstSequence = presentation === "chat-first"');
+    expect(panelSrc).toContain("visibleSteps.slice(0, 3)");
+    expect(panelSrc).toContain("visibleSteps.slice(3)");
+    expect(panelSrc).toContain("What would you like to do?");
+    expect(panelSrc).toContain("Ask in your own words below, or choose a starting point.");
+    expect(panelSrc).toContain("More ways to use this desk");
+    expect(panelSrc).toContain("Continues in your wallet");
+    expect(chatFirstStart).toBeGreaterThan(-1);
+    expect(chatFirstBlock).toContain('presentation="chat-first"');
+    expect(chatFirstBlock).toContain("showAgentHeader={false}");
+  });
+
   test("derives outputs from step.outputArtifactIds and manifest.generatedArtifacts", () => {
     const panelSrc = readAppSource("domains/session/workflows/desk-workflow-stage-panel.tsx");
     expect(panelSrc).toContain("outputArtifactIds");
