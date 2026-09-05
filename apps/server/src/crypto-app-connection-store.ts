@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -299,10 +299,14 @@ function connectionState(value: string): MatterhornCryptoAppConnectionState {
   throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
 }
 
+// This is an explicit public domain key, not secret authentication material.
+// HMAC gives this content checksum a distinct construction without implying
+// resistance to a process or filesystem owner that can rewrite the database.
+const CONNECTION_AUTHORITY_DIGEST_DOMAIN = "matterhorn:crypto-app-connection-authority:v1";
+
 function connectionAuthorityDigest(connection: MatterhornCryptoAppConnection): string {
-  return createHash("sha256")
+  return createHmac("sha256", CONNECTION_AUTHORITY_DIGEST_DOMAIN)
     .update(canonicalJson({
-      domain: "matterhorn:crypto-app-connection-authority:v1",
       version: connection.version,
       id: connection.id,
       workspaceId: connection.workspaceId,
@@ -312,7 +316,7 @@ function connectionAuthorityDigest(connection: MatterhornCryptoAppConnection): s
       grantedActionIds: connection.grantedActionIds,
       grantedScopes: connection.grantedScopes,
       grantedNetworks: connection.grantedNetworks,
-      credentialClass: connection.credential.type,
+      credential: connection.credential,
       createdBy: connection.createdBy,
       createdAt: connection.createdAt,
       updatedAt: connection.updatedAt,
