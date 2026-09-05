@@ -10,6 +10,7 @@ import {
 import { ensureDir, exists } from "./utils.js";
 import { ApiError } from "./errors.js";
 import { parseFrontmatter } from "./frontmatter.js";
+import { OPEN_CODE_1_18_27_COMPACTION_AGENT_PROMPT } from "./opencode-compaction-policy.js";
 import { openworkConfigPath, opencodeConfigPath } from "./workspace-files.js";
 import { readJsoncFile, updateJsoncPath, updateJsoncTopLevel, writeJsoncFile } from "./jsonc.js";
 import type { ReloadReason } from "./types.js";
@@ -179,6 +180,9 @@ function managedAgentPromptBody(source: string): string {
  */
 export function resolveMatterhornManagedAgentPrompt(agentId: string): string | null {
   const normalizedAgentId = agentId.trim();
+  if (normalizedAgentId === "compaction") {
+    return OPEN_CODE_1_18_27_COMPACTION_AGENT_PROMPT;
+  }
   if (normalizedAgentId === "matterhorn") {
     return managedAgentPromptBody(resolveAgentTemplate());
   }

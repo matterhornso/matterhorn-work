@@ -73,6 +73,15 @@ prompt hash changed. The same boundary applies to trusted raw prompts and
 commands, so an agent file cannot hide secret or unconsented private context
 behind OpenCode's later prompt expansion.
 
+Compaction is a separate provider request and has its own hidden OpenCode agent.
+Matterhorn binds the exact pinned compaction-agent prompt and its first-party
+crypto compaction contract alongside the exact stored transcript. A custom or
+modified compaction prompt is workspace-private, secrets are blocked before
+usage reservation or provider contact, and a pre-dispatch re-read fails with
+`agent_context_changed` if the hidden prompt changes after authorization. The
+canonical prompt is versioned with the pinned OpenCode runtime so an upgrade
+cannot silently change provider-bound instructions.
+
 ## Retention and deletion
 
 Run receipts contain provider policy, categories, content-free counts of chat files,

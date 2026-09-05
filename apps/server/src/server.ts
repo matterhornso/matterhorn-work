@@ -526,6 +526,7 @@ import {
   readRawOpencodeConfig,
   resolveMatterhornManagedAgentPrompt,
 } from "./workspace-init.js";
+import { MATTERHORN_CRYPTO_COMPACTION_CONTEXT } from "./opencode-compaction-policy.js";
 import { sanitizeCommandName, validateMcpName } from "./validators.js";
 import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
@@ -2387,6 +2388,42 @@ async function resolveMatterhornSessionAgentContext(input: {
   return { opencode, directory, session, agentId, agent, promptHash, privacyParts };
 }
 
+function matterhornCompactionPrivacyParts(
+  agentContext: Awaited<ReturnType<typeof resolveMatterhornSessionAgentContext>>,
+): MatterhornAgentPrivacyPart[] {
+  return [
+    ...agentContext.privacyParts,
+    {
+      type: "system_context",
+      name: "Matterhorn crypto compaction contract",
+      text: MATTERHORN_CRYPTO_COMPACTION_CONTEXT,
+      source: "system",
+      label: "public",
+      contentHash: sha256Bytes(MATTERHORN_CRYPTO_COMPACTION_CONTEXT),
+      sizeBytes: Buffer.byteLength(MATTERHORN_CRYPTO_COMPACTION_CONTEXT, "utf8"),
+      version: "matterhorn.crypto-compaction-context.v1",
+    },
+  ];
+}
+
+async function assertMatterhornSessionAgentContextUnchanged(input: {
+  config: ServerConfig;
+  workspace: WorkspaceInfo;
+  sessionId: string;
+  agentId: string;
+  expectedAgentPromptHash: string;
+}) {
+  const context = await resolveMatterhornSessionAgentContext(input);
+  if (context.agentId !== input.agentId || context.promptHash !== input.expectedAgentPromptHash) {
+    throw new ApiError(
+      409,
+      "agent_context_changed",
+      "The selected agent changed after privacy review. Review the request again before sending.",
+    );
+  }
+  return context;
+}
+
 async function ensureMatterhornSessionPermissionProfile(input: {
   config: ServerConfig;
   workspace: WorkspaceInfo;
@@ -2396,17 +2433,15 @@ async function ensureMatterhornSessionPermissionProfile(input: {
   expectedAgentPromptHash?: string;
   requestToolProfiles?: readonly Record<string, boolean>[];
 }): Promise<void> {
-  const context = await resolveMatterhornSessionAgentContext(input);
-  if (
-    (input.expectedAgentId && context.agentId !== input.expectedAgentId)
-    || (input.expectedAgentPromptHash && context.promptHash !== input.expectedAgentPromptHash)
-  ) {
-    throw new ApiError(
-      409,
-      "agent_context_changed",
-      "The selected agent changed after privacy review. Review the request again before sending.",
-    );
-  }
+  const context = input.expectedAgentId && input.expectedAgentPromptHash
+    ? await assertMatterhornSessionAgentContextUnchanged({
+        config: input.config,
+        workspace: input.workspace,
+        sessionId: input.sessionId,
+        agentId: input.expectedAgentId,
+        expectedAgentPromptHash: input.expectedAgentPromptHash,
+      })
+    : await resolveMatterhornSessionAgentContext(input);
   const { opencode, directory, session } = context;
   const agentPermission = normalizeMatterhornPermissionRules(context.agent.permission);
   if (agentPermission.length === 0) {
@@ -2845,6 +2880,9 @@ async function proxyOpencodeRequest(input: {
     input: GuardedPromptInput;
     authorization: GuardedPromptAuthorization;
     sessionId: string;
+    agentId: string;
+    agentPromptHash: string;
+    privacyParts: MatterhornAgentPrivacyPart[];
   } | null = null;
   let completeGuardedRunAfterResponse = false;
   if (isSessionPromptProxyRequest(method, proxyPath)) {
@@ -3126,13 +3164,21 @@ async function proxyOpencodeRequest(input: {
     delete payload.privacyConsentToken;
     body = JSON.stringify(payload);
     headers.delete("content-length");
+    const compactionAgentContext = await resolveMatterhornSessionAgentContext({
+      config: input.config,
+      workspace,
+      sessionId,
+      agentId: "compaction",
+    });
+    const compactionPrivacyParts = matterhornCompactionPrivacyParts(compactionAgentContext);
     const messages = await readWorkspaceSessionMessages(input.config, workspace, sessionId, {});
     const guardedInput: GuardedPromptInput = {
       workspaceId: workspace.id,
       sessionId,
-      parts: sessionCompactionPrivacyParts(messages),
+      parts: [...sessionCompactionPrivacyParts(messages), ...compactionPrivacyParts],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
+      agentId: compactionAgentContext.agentId,
       privacyMode,
       privacyConsentToken,
       executionMode: "work",
@@ -3143,6 +3189,9 @@ async function proxyOpencodeRequest(input: {
         input: guardedInput,
         authorization: input.guardedRuntime.authorizePrompt(guardedInput),
         sessionId,
+        agentId: compactionAgentContext.agentId,
+        agentPromptHash: compactionAgentContext.promptHash,
+        privacyParts: compactionPrivacyParts,
       };
     } catch (error) {
       throw guardedRuntimeApiError(error);
@@ -3204,11 +3253,21 @@ async function proxyOpencodeRequest(input: {
         guardedSummaryStart.sessionId,
         {},
       );
+      await assertMatterhornSessionAgentContextUnchanged({
+        config: input.config,
+        workspace,
+        sessionId: guardedSummaryStart.sessionId,
+        agentId: guardedSummaryStart.agentId,
+        expectedAgentPromptHash: guardedSummaryStart.agentPromptHash,
+      });
       await abortWorkspaceSessionBeforeReplacement(input.config, workspace, guardedSummaryStart.sessionId);
       const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
         {
           ...guardedSummaryStart.input,
-          parts: sessionCompactionPrivacyParts(currentMessages),
+          parts: [
+            ...sessionCompactionPrivacyParts(currentMessages),
+            ...guardedSummaryStart.privacyParts,
+          ],
         },
         guardedSummaryStart.authorization,
       );
@@ -14632,6 +14691,12 @@ function createRoutes(
     }
     const body = await readJsonBody(ctx.request, 16_384, "Session compaction");
     const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
+    const compactionAgentContext = await resolveMatterhornSessionAgentContext({
+      config,
+      workspace,
+      sessionId,
+      agentId: "compaction",
+    });
     const privacyMode = parseAgentPrivacyMode(body.privacyMode);
     const privacyConsentToken = typeof body.privacyConsentToken === "string"
       ? body.privacyConsentToken.trim()
@@ -14640,9 +14705,13 @@ function createRoutes(
     const guardedInput = {
       workspaceId: workspace.id,
       sessionId,
-      parts: sessionCompactionPrivacyParts(messages),
+      parts: [
+        ...sessionCompactionPrivacyParts(messages),
+        ...matterhornCompactionPrivacyParts(compactionAgentContext),
+      ],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
+      agentId: compactionAgentContext.agentId,
       privacyMode,
       privacyConsentToken,
       executionMode: "discuss" as const,
@@ -14687,10 +14756,20 @@ function createRoutes(
       // before dispatch so a concurrent message, tool result, edit, or revert
       // invalidates the authorization instead of being silently compacted.
       const currentMessages = await readWorkspaceSessionMessages(config, workspace, sessionId, {});
+      await assertMatterhornSessionAgentContextUnchanged({
+        config,
+        workspace,
+        sessionId,
+        agentId: compactionAgentContext.agentId,
+        expectedAgentPromptHash: compactionAgentContext.promptHash,
+      });
       await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
       guardedAcceptance = await guardedRuntime.startAuthorizedPrompt({
         ...guardedInput,
-        parts: sessionCompactionPrivacyParts(currentMessages),
+        parts: [
+          ...sessionCompactionPrivacyParts(currentMessages),
+          ...matterhornCompactionPrivacyParts(compactionAgentContext),
+        ],
       }, guardedAuthorization);
       unwrapOpencodeResult(
         await sessionApi.summarize({
