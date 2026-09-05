@@ -77,6 +77,19 @@ describe("guarded agent run receipts", () => {
         reason: sensitivePrompt,
       },
       context: { chatFiles: 2, coworkerFiles: 1, savedMemories: 1 },
+      contextOptimization: {
+        compilerVersion: "matterhorn.coworker-context-compiler.v2",
+        systemChars: 2_000,
+        policyChars: 700,
+        dataChars: 1_298,
+        activeCryptoTools: 4,
+        availableCryptoTools: 20,
+        activeToolSchemaChars: 1_200,
+        availableToolSchemaChars: 8_000,
+        dataSectionsIncluded: 3,
+        dataSectionsShortened: 1,
+        dataSectionsOmitted: 1,
+      },
     });
     await store.complete({
       runId: "run_receipt_1",
@@ -90,6 +103,13 @@ describe("guarded agent run receipts", () => {
     expect(items[0]?.provider).toMatchObject({ name: "ASI:Cloud", policyUrl: null });
     expect(items[0]?.privacy.requestHash).toBe("hash-only");
     expect(items[0]?.context).toEqual({ chatFiles: 2, coworkerFiles: 1, savedMemories: 1 });
+    expect(items[0]?.contextOptimization).toMatchObject({
+      compilerVersion: "matterhorn.coworker-context-compiler.v2",
+      activeCryptoTools: 4,
+      availableCryptoTools: 20,
+      dataSectionsShortened: 1,
+      dataSectionsOmitted: 1,
+    });
     expect(items[0]?.memory.writtenIds).toEqual(["memory_saved_from_run"]);
     expect(items[0]?.integrity.recordHash).toHaveLength(64);
     const files = await readFile(join(root, "security-receipts", "ws_receipt", `${new Date().toISOString().slice(0, 10)}.jsonl`), "utf8");
@@ -98,6 +118,35 @@ describe("guarded agent run receipts", () => {
     expect(files).not.toContain("agentFileIds");
     expect(files).toContain('"requestHash":"hash-only"');
     expect(files.trim().split("\n").length).toBe(3);
+  });
+
+  test("rejects contradictory or unbounded context optimization metadata", async () => {
+    const store = new MatterhornAgentRunReceiptStore();
+    const start = (contextOptimization: NonNullable<Parameters<typeof store.start>[0]["contextOptimization"]>) => store.start({
+      runId: `run_bad_optimization_${Math.random()}`,
+      workspaceId: "ws_bad_optimization",
+      sessionId: "ses_bad_optimization",
+      consentUsed: false,
+      preflight: publicPreflight("ws_bad_optimization", "ses_bad_optimization"),
+      contextOptimization,
+    });
+    const valid = {
+      compilerVersion: "matterhorn.coworker-context-compiler.v2",
+      systemChars: 2_000,
+      policyChars: 700,
+      dataChars: 1_298,
+      activeCryptoTools: 4,
+      availableCryptoTools: 20,
+      activeToolSchemaChars: 1_200,
+      availableToolSchemaChars: 8_000,
+      dataSectionsIncluded: 3,
+      dataSectionsShortened: 1,
+      dataSectionsOmitted: 1,
+    };
+    await expect(start({ ...valid, activeCryptoTools: 21 })).rejects.toThrow("agent_run_context_optimization_invalid");
+    await expect(start({ ...valid, activeToolSchemaChars: 8_001 })).rejects.toThrow("agent_run_context_optimization_invalid");
+    await expect(start({ ...valid, systemChars: Number.MAX_SAFE_INTEGER })).rejects.toThrow("agent_run_context_optimization_invalid");
+    await expect(start({ ...valid, compilerVersion: "bad\nversion" })).rejects.toThrow("agent_run_context_optimization_invalid");
   });
 
   test("continues a persisted chain and rejects a tampered tail", async () => {

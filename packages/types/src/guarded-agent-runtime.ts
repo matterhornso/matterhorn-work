@@ -242,6 +242,25 @@ export type MatterhornAgentRunReceipt = {
     coworkerFiles: number;
     savedMemories: number;
   };
+  /**
+   * Content-free measurements from the authoritative context compiler. These
+   * explain how narrowly Matterhorn scoped a run without retaining prompt,
+   * Memory, file, tool-argument, or tool-result content. Legacy v1 receipts
+   * may omit this additive field.
+   */
+  contextOptimization?: {
+    compilerVersion: string;
+    systemChars: number;
+    policyChars: number;
+    dataChars: number;
+    activeCryptoTools: number;
+    availableCryptoTools: number;
+    activeToolSchemaChars: number;
+    availableToolSchemaChars: number;
+    dataSectionsIncluded: number;
+    dataSectionsShortened: number;
+    dataSectionsOmitted: number;
+  };
   usage: {
     inputTokens: number;
     outputTokens: number;

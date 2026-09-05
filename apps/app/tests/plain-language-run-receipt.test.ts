@@ -49,6 +49,19 @@ const completedReceipt: MatterhornAgentRunReceipt = {
     coworkerFiles: 2,
     savedMemories: 1,
   },
+  contextOptimization: {
+    compilerVersion: "matterhorn.coworker-context-compiler.v2",
+    systemChars: 2_000,
+    policyChars: 700,
+    dataChars: 1_298,
+    activeCryptoTools: 4,
+    availableCryptoTools: 20,
+    activeToolSchemaChars: 1_200,
+    availableToolSchemaChars: 8_000,
+    dataSectionsIncluded: 3,
+    dataSectionsShortened: 1,
+    dataSectionsOmitted: 1,
+  },
   usage: {
     inputTokens: 120,
     outputTokens: 30,
@@ -156,6 +169,9 @@ describe("plain-language response details", () => {
     expect(html).toContain("Hyperliquid: Completed · Data observed 10 seconds ago");
     expect(html).toContain("1 wallet action prepared for review. None was sent.");
     expect(html).toContain("Your connected wallet is the only place that can approve and send a transaction.");
+    expect(html).toContain("Matterhorn made 4 crypto actions available for this answer instead of the full 20.");
+    expect(html).toContain("2 older context sections shortened or left out.");
+    expect(html).toContain("Context compiler: matterhorn.coworker-context-compiler.v2");
     expect(html).toContain("matterhorn_work_hyperliquid_markets · read · untrusted_external · success · 80ms");
     expect(html).toContain("Intent intent-proof · policy policy-proof · simulation simulation-proof · not sent");
     expect(html).not.toContain("workspace_private");

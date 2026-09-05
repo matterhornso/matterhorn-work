@@ -78,6 +78,8 @@ export type GuardedPromptInput = {
   /** Selected encrypted Agent Files. Included separately for content-free receipt counts. */
   agentFileIds?: string[];
   memoryIds?: string[];
+  /** Server-derived, content-free context compiler measurements. */
+  contextOptimization?: MatterhornAgentRunReceipt["contextOptimization"];
   privacyMode?: MatterhornAgentPrivacyMode;
   privacyConsentToken?: string;
   executionMode: MatterhornExecutionMode;
@@ -785,6 +787,7 @@ export class MatterhornGuardedAgentRuntime {
         consentUsed,
         memoryReadIds: input.memoryIds,
         context: selectedContextCounts(input),
+        contextOptimization: input.contextOptimization,
       });
       this.raiseSessionPrivacyFloor({
         workspaceId: input.workspaceId,
