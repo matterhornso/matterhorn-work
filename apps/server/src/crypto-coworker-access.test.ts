@@ -11,10 +11,12 @@ import {
 } from "./crypto-coworker-access.js";
 import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
 
+const COWORKER_INTEGRITY_SECRET = "coworker-access-integrity-secret-at-least-32-bytes";
+
 function fixture(now = new Date("2026-09-03T08:00:00.000Z")) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-access-"));
   const path = join(root, "coworkers.db");
-  const store = new MatterhornCoworkerStore(path);
+  const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
   let clock = now;
   const access = new MatterhornCoworkerAccess({ store, now: () => clock });
   return {
@@ -49,7 +51,7 @@ describe("crypto coworker invite access", () => {
       );
     `);
     legacy.close();
-    const store = new MatterhornCoworkerStore(path);
+    const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
     try {
       const access = new MatterhornCoworkerAccess({ store });
       const listed = access.list();
@@ -170,6 +172,64 @@ describe("crypto coworker invite access", () => {
       }
     } finally {
       state.close();
+    }
+  });
+
+  test("rejects restored invite expiry mutation before access can be consumed", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-invite-integrity-"));
+    const path = join(root, "coworkers.db");
+    const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    const access = new MatterhornCoworkerAccess({
+      store,
+      now: () => new Date("2026-09-03T08:00:00.000Z"),
+    });
+    access.issueInvite();
+    store.close();
+    const database = new Database(path);
+    database.exec("DROP TRIGGER crypto_coworker_access_invite_seal_update;");
+    database.query(`
+      UPDATE crypto_coworker_access_invites SET expires_at = ?
+    `).run("2026-09-05T08:00:00.000Z");
+    database.close();
+    try {
+      expect(() => new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET))
+        .toThrow(new Error("coworker_state_corrupt"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects fabricated active access and wrong-key restoration", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-access-integrity-"));
+    const path = join(root, "coworkers.db");
+    const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    const access = new MatterhornCoworkerAccess({
+      store,
+      now: () => new Date("2026-09-03T08:00:00.000Z"),
+    });
+    const invite = access.issueInvite();
+    access.accept("account-a", invite.token);
+    access.revoke("account-a");
+    store.close();
+
+    expect(() => new MatterhornCoworkerStore(
+      path,
+      "different-coworker-integrity-secret-at-least-32-bytes",
+    )).toThrow(new Error("coworker_state_corrupt"));
+
+    const database = new Database(path);
+    database.exec("DROP TRIGGER crypto_coworker_account_access_seal_update;");
+    database.query(`
+      UPDATE crypto_coworker_account_access
+      SET state = 'active', revoked_at = NULL, updated_at = granted_at
+      WHERE owner_id = 'account-a'
+    `).run();
+    database.close();
+    try {
+      expect(() => new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET))
+        .toThrow(new Error("coworker_state_corrupt"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

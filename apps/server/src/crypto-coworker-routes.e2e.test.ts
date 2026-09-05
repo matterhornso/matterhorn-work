@@ -62,6 +62,7 @@ const ENV_KEYS = [
   "MATTERHORN_COWORKER_MODE",
   "MATTERHORN_COWORKER_POLICY_VERSION",
   "MATTERHORN_COWORKER_DB",
+  "MATTERHORN_COWORKER_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_GATEWAY_MODE",
   "MATTERHORN_CRYPTO_APP_POLICY_VERSION",
   "MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON",
@@ -217,6 +218,8 @@ async function boot(
   const coworkerDb = join(root, "coworkers.db");
   const guardedDb = join(root, "guarded-runtime.db");
   process.env.MATTERHORN_COWORKER_DB = coworkerDb;
+  process.env.MATTERHORN_COWORKER_INTEGRITY_SECRET =
+    "coworker-route-state-integrity-secret-at-least-32-bytes";
   process.env.MATTERHORN_GUARDED_RUNTIME_DB = guardedDb;
   process.env.MATTERHORN_CRYPTO_APP_GATEWAY_MODE = mode === "invite" ? "enforce" : "off";
   process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode === "invite" ? "enforce" : "off";

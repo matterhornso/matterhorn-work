@@ -17,6 +17,7 @@ import { MatterhornCoworkers } from "./crypto-coworkers.js";
 import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 
 const roots: string[] = [];
+const COWORKER_INTEGRITY_SECRET = "coworker-watch-executor-integrity-secret-at-least-32-bytes";
 
 afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
@@ -82,7 +83,7 @@ describe("guarded coworker watch executor", () => {
   test("binds one certified Sui read to one model-free guarded run", async () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-watch-executor-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     const coworkers = new MatterhornCoworkers({
       store,
       policyVersion: "coworker-policy-1",

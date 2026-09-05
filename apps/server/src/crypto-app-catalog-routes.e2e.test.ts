@@ -37,6 +37,7 @@ const ENV_KEYS = [
   "MATTERHORN_COWORKER_MODE",
   "MATTERHORN_COWORKER_POLICY_VERSION",
   "MATTERHORN_COWORKER_DB",
+  "MATTERHORN_COWORKER_INTEGRITY_SECRET",
   "MATTERHORN_WORK_DATA_DIR",
 ] as const;
 const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -138,6 +139,8 @@ function configureCatalog(root: string) {
   process.env.MATTERHORN_COWORKER_MODE = "internal";
   process.env.MATTERHORN_COWORKER_POLICY_VERSION = "coworker-policy-1";
   process.env.MATTERHORN_COWORKER_DB = join(root, "coworkers.db");
+  process.env.MATTERHORN_COWORKER_INTEGRITY_SECRET =
+    "catalog-route-coworker-integrity-secret-at-least-32-bytes";
   const manifests = buildMatterhornFirstPartyTestnetManifests({
     publisherId: "matterhorn",
     publisherKeyId: "publisher-1",
