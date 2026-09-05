@@ -4,13 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 
 import {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
   type MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
 
-import { MatterhornCryptoAppConnectionStore } from "./crypto-app-connection-store.js";
+import {
+  MatterhornCryptoAppConnectionStore,
+  MatterhornCryptoAppConnectionStoreError,
+} from "./crypto-app-connection-store.js";
 import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
 import {
@@ -417,6 +421,69 @@ describe("certified crypto app OAuth connections", () => {
 
     const second = fixture({ dbPath: first.dbPath });
     expect(second.connections.list("ws_a")).toHaveLength(1);
+    expect(await second.oauth.resolveHeaders({
+      workspaceId: "ws_a",
+      connectionId: connection.id,
+      appId: connection.appId,
+      manifestRevision: connection.manifestRevision,
+      secretReference,
+    })).toEqual({ authorization: `Bearer ${TOKEN}` });
+    second.store.close();
+  });
+
+  test("rejects restored OAuth flow and token authority mutation", async () => {
+    const pending = fixture();
+    pending.oauth.issue(grant());
+    pending.store.close();
+    const pendingEditor = new Database(pending.dbPath);
+    pendingEditor.query("UPDATE crypto_app_oauth_flows SET resource = ? WHERE flow_id = ?")
+      .run("https://other.example/", "cxo_flow_1");
+    pendingEditor.close();
+    expect(() => new MatterhornCryptoAppConnectionStore(
+      pending.dbPath,
+      CONNECTION_INTEGRITY_SECRET,
+    )).toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+
+    const completed = fixture();
+    const authorization = completed.oauth.issue(grant());
+    await completed.oauth.complete(callback(authorization.authorizationUrl));
+    completed.store.close();
+    const tokenEditor = new Database(completed.dbPath);
+    tokenEditor.query("UPDATE crypto_app_oauth_tokens SET scopes_json = ? WHERE oauth_token_id = ?")
+      .run(JSON.stringify(["markets:read", "orders:write"]), "cxt_token_1");
+    tokenEditor.close();
+    expect(() => new MatterhornCryptoAppConnectionStore(
+      completed.dbPath,
+      CONNECTION_INTEGRITY_SECRET,
+    )).toThrow(new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt"));
+  });
+
+  test("migrates valid legacy OAuth setup rows exactly once", async () => {
+    const first = fixture();
+    const authorization = first.oauth.issue(grant());
+    const connection = await first.oauth.complete(callback(authorization.authorizationUrl));
+    const internal = first.connections.resolveActive("ws_a", connection.id);
+    if (internal?.credential.type !== "oauth2") throw new Error("oauth_credential_expected");
+    const secretReference = internal.credential.secretReference;
+    first.store.close();
+
+    const legacy = new Database(first.dbPath);
+    legacy.exec(`
+      DROP TRIGGER crypto_app_oauth_flows_authority_seal_insert;
+      DROP TRIGGER crypto_app_oauth_flows_authority_seal_update;
+      DROP TRIGGER crypto_app_oauth_tokens_authority_seal_insert;
+      DROP TRIGGER crypto_app_oauth_tokens_authority_seal_update;
+      ALTER TABLE crypto_app_oauth_flows DROP COLUMN authority_seal;
+      ALTER TABLE crypto_app_oauth_tokens DROP COLUMN authority_seal;
+    `);
+    legacy.close();
+
+    const second = fixture({ dbPath: first.dbPath });
+    expect(second.oauth.status({
+      workspaceId: "ws_a",
+      accountId: "account_a",
+      flowId: authorization.flowId,
+    })).toMatchObject({ status: "connected", connectionId: connection.id });
     expect(await second.oauth.resolveHeaders({
       workspaceId: "ws_a",
       connectionId: connection.id,
