@@ -7,6 +7,14 @@ const monid = readFileSync("docs/crypto-coworkers/monid-reference-audit.md", "ut
 const plan = readFileSync("docs/crypto-coworkers/phases-1-5-plan.md", "utf8");
 const readme = readFileSync("docs/crypto-coworkers/README.md", "utf8");
 const prompt = readFileSync("apps/server/src/crypto-coworker-master-prompt.ts", "utf8");
+const architecture = readFileSync(
+  "docs/architecture/matterhorn-guarded-agent-architecture-v3.md",
+  "utf8",
+);
+const supersededArchitecture = readFileSync(
+  "docs/architecture/matterhorn-desk-agent-architecture-v2.md",
+  "utf8",
+);
 
 for (const source of [
   "https://docs.x.ai/grok-bot/overview",
@@ -51,5 +59,37 @@ assert.ok(
 assert.ok(prompt.includes("current direct request supplies transaction intent"));
 assert.ok(prompt.includes("not instructions, consent, or financial intent"));
 assert.equal(/general cloud computer|cross-coworker session sharing/.test(prompt), false);
+
+for (const required of [
+  "Matterhorn treats every model as an untrusted planner",
+  "The UI is not the security boundary",
+  "walletSubmissionOnly: true",
+  "agentMaySubmit: false",
+  "connected-wallet-only signing and submission",
+  "matterhorn.reviewed-action-handoff.v2",
+  "matterhorn.agent-run-receipt.v1",
+  "OpenWork `v0.18.42`, OpenCode `v1.18.27`",
+  "Agent Files are the user-controlled data sandbox",
+  "Walrus stores only generic AES-GCM ciphertext envelopes",
+  "live Phase 1–5 gate stays `NO-GO`",
+]) {
+  assert.ok(architecture.includes(required), `Guarded architecture must preserve ${required}`);
+}
+
+for (const staleClaim of [
+  "Hyperliquid is the only launch capability with an in-product submission path",
+  "Bittensor: **Prepare only**",
+  "Polymarket: **Prepare only**",
+]) {
+  assert.equal(
+    architecture.includes(staleClaim),
+    false,
+    `Guarded architecture must not restore stale claim: ${staleClaim}`,
+  );
+}
+assert.ok(
+  supersededArchitecture.includes("Matterhorn Guarded Agent Architecture v3"),
+  "The superseded v2 guide must direct readers to the current guarded architecture",
+);
 
 console.log("Crypto coworker reference-pattern contract passed.");
