@@ -648,6 +648,110 @@ describe("guarded agent runtime transport", () => {
     second.close();
   });
 
+  test("rejects restored message bindings with added authority fields", async () => {
+    const path = join(dataDir, "message-binding-open-contract.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_binding_contract",
+      sessionId: "ses_binding_contract",
+      parts: [{ type: "text", text: "Read public Bittensor state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-bittensor",
+      executionMode: "work",
+    });
+    runtime.bindUserMessage({
+      runId: accepted.runId,
+      sessionId: "ses_binding_contract",
+      messageId: "msg_binding_contract_user",
+    });
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "user_message_binding",
+      "msg_binding_contract_user",
+    );
+    if (!persisted) throw new Error("test message binding missing");
+    store.put({
+      kind: "user_message_binding",
+      key: persisted.key,
+      workspaceId: persisted.workspaceId,
+      sessionId: persisted.sessionId,
+      value: { ...persisted.value, submit: true },
+      expiresAtMs: persisted.expiresAtMs,
+      nowMs: persisted.updatedAtMs,
+    });
+
+    expect(() => runtime.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_binding_contract",
+      userMessageId: "msg_binding_contract_user",
+      assistantMessageId: "msg_binding_contract_assistant",
+    })).toThrow("guarded_message_binding_state_invalid");
+    expect(store.getRecord("user_message_binding", "msg_binding_contract_user")).not.toBeNull();
+    expect(store.getRecord("assistant_message_binding", "msg_binding_contract_assistant")).toBeNull();
+    runtime.close();
+  });
+
+  test("rejects restored message bindings with tenant substitution or prolonged authority", async () => {
+    const path = join(dataDir, "message-binding-tenant-substitution.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_binding_tenant",
+      sessionId: "ses_binding_tenant",
+      parts: [{ type: "text", text: "Read public Hyperliquid state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-hyperliquid",
+      executionMode: "work",
+    });
+    runtime.bindUserMessage({
+      runId: accepted.runId,
+      sessionId: "ses_binding_tenant",
+      messageId: "msg_binding_tenant_user",
+    });
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "user_message_binding",
+      "msg_binding_tenant_user",
+    );
+    if (!persisted) throw new Error("test message binding missing");
+    store.put({
+      kind: "user_message_binding",
+      key: persisted.key,
+      workspaceId: "ws_binding_other",
+      sessionId: persisted.sessionId,
+      value: { ...persisted.value, workspaceId: "ws_binding_other" },
+      expiresAtMs: persisted.updatedAtMs + 12 * 60 * 60 * 1_000,
+      nowMs: persisted.updatedAtMs,
+    });
+
+    expect(() => runtime.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_binding_tenant",
+      userMessageId: "msg_binding_tenant_user",
+      assistantMessageId: "msg_binding_tenant_assistant",
+    })).toThrow("guarded_message_binding_state_invalid");
+    expect(store.getRecord("assistant_message_binding", "msg_binding_tenant_assistant")).toBeNull();
+
+    store.put({
+      kind: "user_message_binding",
+      key: persisted.key,
+      workspaceId: persisted.workspaceId,
+      sessionId: persisted.sessionId,
+      value: persisted.value,
+      expiresAtMs: persisted.updatedAtMs + 12 * 60 * 60 * 1_000,
+      nowMs: persisted.updatedAtMs,
+    });
+    expect(() => runtime.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_binding_tenant",
+      userMessageId: "msg_binding_tenant_user",
+      assistantMessageId: "msg_binding_prolonged_assistant",
+    })).toThrow("guarded_message_binding_state_invalid");
+    expect(store.getRecord("assistant_message_binding", "msg_binding_prolonged_assistant")).toBeNull();
+    runtime.close();
+  });
+
   test("revokes the active grant and staged calls when a run completes", async () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     const accepted = await runtime.acceptPrompt({
