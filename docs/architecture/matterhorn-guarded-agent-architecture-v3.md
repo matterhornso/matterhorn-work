@@ -239,11 +239,11 @@ Matterhorn uses two distinct layers:
 1. **Data first:** coworker profile, structured state, explicitly selected
    Memory, and selected Agent Files, each bounded and marked as data.
 2. **Authoritative policy last:** immutable common rules plus role-specific
-   rules from `matterhorn.coworker-master-prompt.v4`.
+   rules from `matterhorn.coworker-master-prompt.v5`.
 
 Reserved control markers in data are escaped. The policy suffix is never
 truncated. The compiler hashes the exact final string for privacy binding. The
-master prompt is intentionally short: it teaches source/freshness discipline,
+master prompt is intentionally short: it teaches minimal tool use, source/freshness discipline,
 current-request-only financial intent, secret refusal, connected-wallet review,
 and plain-language answer structure; deterministic code enforces the boundary.
 
