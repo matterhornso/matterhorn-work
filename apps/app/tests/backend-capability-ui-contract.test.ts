@@ -326,20 +326,20 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("Models could not load");
     expect(source).toContain("buildModelReadinessSummary");
     expect(source).toContain(
-      "<LayoutSectionTitle>Model provider</LayoutSectionTitle>",
+      "<LayoutSectionTitle>Choose a model</LayoutSectionTitle>",
     );
     expect(source).toContain(
-      "Connect a provider, then choose what answers chats and desk tasks",
+      "Pick the AI that answers your chats. You can change it any time.",
     );
     expect(source).toContain("onOpenModelPicker");
     expect(source).toContain("Choose model");
-    expect(source).toContain("Use workspace default");
-    expect(source).toContain("Save for workspace");
+    expect(source).toContain("Use saved default");
+    expect(source).toContain("Use for new chats");
     expect(source).toContain("modelReadiness.workspaceDefault");
     expect(source).toContain("modelReadiness.effectiveModel");
     expect(source).toContain("modelReadiness.providerCatalog");
     expect(source).toContain("ModelRoutingRow");
-    expect(source).toContain("How models work");
+    expect(source).toContain("More model settings");
     expect(source).toContain("modelReadiness.catalogRows");
     expect(source).toContain("Available providers");
     expect(source).toContain("row.modelCountLabel");
