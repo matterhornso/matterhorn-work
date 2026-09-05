@@ -8,6 +8,7 @@ import type {
 import { MATTERHORN_POLICY_DECISION_VERSION } from "@matterhorn-work/types/crypto-coworkers";
 import { isReviewedActionHandoffV2 } from "@matterhorn-work/types/reviewed-actions";
 
+import { cryptoAppEvidenceIdentity } from "./crypto-app-evidence-identity.js";
 import {
   compileCertifiedCryptoIntent,
   cryptoIntentToReviewedActionHandoffV2,
@@ -29,6 +30,18 @@ function policyDecision(intent: MatterhornCryptoIntent): MatterhornPolicyDecisio
   };
 }
 
+function certifyResult(candidate: MatterhornCryptoAppResult): MatterhornCryptoAppResult {
+  Object.assign(candidate.provenance, cryptoAppEvidenceIdentity({
+    appId: candidate.app.id,
+    manifestRevision: candidate.app.manifestRevision,
+    actionId: candidate.action.id,
+    network: candidate.action.network,
+    result: candidate.result,
+    observation: candidate.observation,
+  }));
+  return candidate;
+}
+
 function envelope(input: {
   appId: string;
   connectionId: string;
@@ -37,7 +50,7 @@ function envelope(input: {
   result: Record<string, unknown>;
   blockOrVersion?: string | null;
 }): MatterhornCryptoAppResult {
-  return {
+  return certifyResult({
     version: "matterhorn.crypto-app-result.v1",
     app: { id: input.appId, manifestRevision: "1.0.0", connectionId: input.connectionId },
     action: { id: input.actionId, access: "prepare", network: input.network },
@@ -60,10 +73,52 @@ function envelope(input: {
     },
     metering: { costMicros: 0, reservationId: "reservation_prepare" },
     result: input.result,
-  };
+  });
 }
 
 describe("deterministic crypto transaction coordinator", () => {
+  test("rejects proof-less or mutated evidence at the wallet-intent compiler boundary", () => {
+    const request = {
+      sender: `0x${"1".repeat(64)}`,
+      recipient: `0x${"2".repeat(64)}`,
+      amountSui: "1.25",
+    };
+    const resultFor = () => envelope({
+      appId: "matterhorn.sui-testnet",
+      connectionId: "cxc_sui",
+      actionId: "sui_transfer_preview",
+      network: "sui:testnet",
+      result: {
+        preparedActionId: "sui_preview_evidence",
+        network: "sui:testnet",
+        sender: request.sender,
+        recipient: request.recipient,
+        amountSui: request.amountSui,
+        estimatedGasMist: "1000",
+        simulationReference: `sha256:${"b".repeat(64)}`,
+        expiresAt: "2026-09-01T12:00:15.000Z",
+      },
+    });
+    const compile = (result: MatterhornCryptoAppResult) => compileCertifiedCryptoIntent({
+      workspaceId: "ws_alpha",
+      runId: "run_sui_evidence",
+      coworkerId: "cw_transaction_coordinator",
+      policyHash: "a".repeat(64),
+      canonicalRequestArguments: request,
+      result,
+      now: NOW,
+    });
+
+    const proofless = resultFor();
+    delete proofless.provenance.projectionHash;
+    delete proofless.provenance.observationHash;
+    expect(() => compile(proofless)).toThrow("crypto_intent_evidence_invalid");
+
+    const tampered = resultFor();
+    (tampered.result as Record<string, unknown>).amountSui = "2.5";
+    expect(() => compile(tampered)).toThrow("crypto_intent_evidence_invalid");
+  });
+
   test("compiles exact certified Sui terms and produces a wallet-only v2 handoff", () => {
     const request = {
       sender: `0x${"1".repeat(64)}`,
@@ -416,6 +471,7 @@ describe("deterministic crypto transaction coordinator", () => {
     })).toThrow("crypto_intent_request_result_mismatch");
     (result.result as Record<string, unknown>).amountTao = "1";
     (result.result as Record<string, unknown>).destination = `5${"F".repeat(47)}`;
+    certifyResult(result);
     expect(() => compileCertifiedCryptoIntent({
       workspaceId: "ws_alpha",
       runId: "run_bittensor_prepare",
@@ -460,6 +516,7 @@ describe("deterministic crypto transaction coordinator", () => {
     })).toThrow("crypto_intent_request_result_mismatch");
 
     certified.result = { ...(certified.result as Record<string, unknown>), amountSui: "1.25" };
+    certifyResult(certified);
     certified.observation.ageMs = 20_000;
     expect(() => compileCertifiedCryptoIntent({
       workspaceId: "ws_alpha",

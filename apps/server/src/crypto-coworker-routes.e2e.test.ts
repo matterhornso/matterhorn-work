@@ -18,6 +18,7 @@ import type {
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import { MatterhornAgentRunReceiptStore } from "./agent-run-receipts.js";
+import { cryptoAppEvidenceIdentity } from "./crypto-app-evidence-identity.js";
 import {
   compileCertifiedCryptoIntent,
   cryptoIntentToReviewedActionHandoffV2,
@@ -589,7 +590,7 @@ function transactionCoworkerInput() {
 }
 
 function certifiedSuiResult(now: Date): MatterhornCryptoAppResult {
-  return {
+  const candidate: MatterhornCryptoAppResult = {
     version: "matterhorn.crypto-app-result.v1",
     app: {
       id: "matterhorn.sui-testnet",
@@ -626,6 +627,15 @@ function certifiedSuiResult(now: Date): MatterhornCryptoAppResult {
       expiresAt: new Date(now.getTime() + 5 * 60_000).toISOString(),
     },
   };
+  Object.assign(candidate.provenance, cryptoAppEvidenceIdentity({
+    appId: candidate.app.id,
+    manifestRevision: candidate.app.manifestRevision,
+    actionId: candidate.action.id,
+    network: candidate.action.network,
+    result: candidate.result,
+    observation: candidate.observation,
+  }));
+  return candidate;
 }
 
 async function seedPendingSuiIntent(input: {
