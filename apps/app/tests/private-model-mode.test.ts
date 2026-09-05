@@ -6,6 +6,7 @@ import {
   isVerifiedPrivateModePolicy,
   privateModeModelFromProviders,
   standardModeModelFromProviders,
+  verifiedPrivateModeModelFromProviders,
 } from "../src/react-app/domains/session/private-model-mode";
 
 describe("private model mode", () => {
@@ -71,6 +72,50 @@ describe("private model mode", () => {
     expect(isVerifiedPrivateModePolicy(policy, { ...model, modelID: "removed-private-model" }, Date.parse("2026-09-02T13:00:00.000Z"))).toBe(false);
     expect(isVerifiedPrivateModePolicy({ ...policy, status: "unverified" }, model, Date.parse("2026-09-02T13:00:00.000Z"))).toBe(false);
     expect(isVerifiedPrivateModePolicy({ ...policy, providerId: "cudos" }, model, Date.parse("2026-09-02T13:00:00.000Z"))).toBe(false);
+  });
+
+  test("selects the first connected model in the exact current server proof", () => {
+    const providers = [{
+      id: "venice",
+      models: {
+        "newly-discovered-unverified": {},
+        "private-tools": {},
+        "another-private-model": {},
+      },
+    }];
+    const policy = {
+      providerId: "venice",
+      providerName: "Venice Private",
+      status: "verified_no_training" as const,
+      trainingUse: "none" as const,
+      retentionDays: 0,
+      policyUrl: "https://docs.venice.ai/overview/privacy",
+      verifiedAt: "2026-09-02T12:00:00.000Z",
+      verificationExpiresAt: "2026-09-03T12:00:00.000Z",
+      verifiedModelIds: ["private-tools", "another-private-model"],
+      allowed: true,
+      label: "Private model · zero retention",
+      description: "Verified private model.",
+    };
+    const now = Date.parse("2026-09-02T13:00:00.000Z");
+
+    expect(verifiedPrivateModeModelFromProviders(providers, ["venice"], policy, now)).toEqual({
+      providerID: "venice",
+      modelID: "private-tools",
+    });
+    expect(verifiedPrivateModeModelFromProviders(providers, [], policy, now)).toBeNull();
+    expect(verifiedPrivateModeModelFromProviders(
+      providers,
+      ["venice"],
+      { ...policy, verificationExpiresAt: "2026-09-02T13:00:00.000Z" },
+      now,
+    )).toBeNull();
+    expect(verifiedPrivateModeModelFromProviders(
+      providers,
+      ["venice"],
+      { ...policy, verifiedModelIds: [] },
+      now,
+    )).toBeNull();
   });
 
   test("keeps private mode discoverable, accessible, and bound to private workspace mode", () => {
