@@ -43,6 +43,11 @@ describe("Matterhorn execution modes", () => {
     expect(buildMatterhornExecutionModeSystemPrompt("discuss")).toContain("Lead with the answer");
     expect(buildMatterhornExecutionModeSystemPrompt("plan")).toContain("decision-ready");
     expect(buildMatterhornExecutionModeSystemPrompt("work")).toContain("Act before narrating");
+    expect(MATTERHORN_EXECUTION_MODE_OPTIONS.map((option) => option.description)).toEqual([
+      "Answer questions and look up information. Nothing is changed.",
+      "Research the request and suggest next steps. Nothing is changed.",
+      "Use approved tools to complete the task. Wallet actions still need your approval.",
+    ]);
     for (const option of MATTERHORN_EXECUTION_MODE_OPTIONS) {
       expect(buildMatterhornExecutionModeSystemPrompt(option.value)).toContain("never weakens desk allowlists");
       expect(buildMatterhornExecutionModeSystemPrompt(option.value)).toContain("connected-wallet boundaries");
@@ -132,14 +137,15 @@ describe("Matterhorn execution modes", () => {
     const route = readReactSource("shell/session-route.tsx");
     const surface = readReactSource("domains/session/surface/session-surface.tsx");
     const composer = readReactSource("domains/session/surface/composer/composer.tsx");
+    const chatOptions = readReactSource("domains/session/surface/composer/chat-options-control.tsx");
 
     expect(route).toContain("buildMatterhornPromptTools({");
     expect(route).toContain("writeMatterhornExecutionMode(selectedWorkspaceId, selectedSessionId, mode)");
     expect(route).toContain("recordSessionExecutionMode(selectedWorkspaceId, selectedSessionId, mode, previousMode)");
     expect(route).toContain("executionMode !== \"work\"");
     expect(surface).toContain("executionMode: props.executionMode");
-    expect(composer).toContain('aria-label="Execution mode"');
-    expect(composer).toContain("disabled={props.busy}");
+    expect(chatOptions).toContain('aria-label="Execution mode"');
+    expect(chatOptions).toContain("disabled={props.busy}");
     expect(composer).toContain("Start work");
     expect(composer).toContain('props.onExecutionModeChange("work")');
   });

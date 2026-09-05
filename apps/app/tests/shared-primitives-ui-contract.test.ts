@@ -317,9 +317,13 @@ describe("Shared primitives UI contract", () => {
       'entry.config.type === "remote" ? "Remote server connection" : "Local process connection"',
     );
     expect(composer).toContain("props.agentSelectionLocked");
+    expect(composer).toContain("props.hideLockedAgentLabel ? null");
     expect(composer).toContain("<LockKeyhole");
     expect(sessionSurface).toContain(
       "agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode)}",
+    );
+    expect(sessionSurface).toContain(
+      "hideLockedAgentLabel={Boolean(activeDeskMode)}",
     );
     expect(sessionSurface).toContain(
       'linkedWorkflowRun?.deskId === "blank"',

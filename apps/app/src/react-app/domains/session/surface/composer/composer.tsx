@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
-import { ArrowUp, Check, ChevronDown, FileText, Hammer, ListChecks, LockKeyhole, MessageCircle, Paperclip, Play, Plug, Puzzle, Settings, SlidersHorizontal, Square, Terminal, X, Zap } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, FileText, LockKeyhole, Paperclip, Play, Plug, Puzzle, Settings, Square, Terminal, X, Zap } from "lucide-react";
 import { getMatterhornDeskAgentById } from "@matterhorn-work/types/desk-agents";
 import fuzzysort from "fuzzysort";
 import { cn } from "@/lib/utils";
@@ -22,18 +22,13 @@ import {
   ReactComposerNotice,
   type ReactComposerNotice as ReactComposerNoticeData,
 } from "./notice";
-import {
-  RESPONSE_PERSPECTIVE_OPTIONS,
-  type ResponsePerspective,
-} from "../../perspectives/response-perspective";
-import {
-  MATTERHORN_EXECUTION_MODE_OPTIONS,
-  type MatterhornExecutionMode,
-} from "../../modes/execution-mode";
+import type { ResponsePerspective } from "../../perspectives/response-perspective";
+import type { MatterhornExecutionMode } from "../../modes/execution-mode";
 import {
   getComposerExtensionReadiness,
   type ComposerExtensionReadiness,
 } from "./extension-readiness";
+import { ChatOptionsControl } from "./chat-options-control";
 
 type MentionItem = {
   id: string;
@@ -69,12 +64,6 @@ function formatComposerMcpName(serverName: string) {
 function formatComposerMcpConnection(entry: McpServerEntry) {
   if (entry.name === "matterhorn-work") return "Local Matterhorn Desks engine";
   return entry.config.type === "remote" ? "Remote server connection" : "Local process connection";
-}
-
-function ExecutionModeIcon({ mode, size = 13 }: { mode: MatterhornExecutionMode; size?: number }) {
-  if (mode === "discuss") return <MessageCircle size={size} />;
-  if (mode === "plan") return <ListChecks size={size} />;
-  return <Hammer size={size} />;
 }
 
 type ComposerProps = {
@@ -118,6 +107,7 @@ type ComposerProps = {
   agentLabel: string;
   agentSelectionLocked?: boolean;
   agentSelectionLockedReason?: string;
+  hideLockedAgentLabel?: boolean;
   selectedAgent: string | null;
   listAgents: () => Promise<Agent[]>;
   onSelectAgent: (agent: string | null) => void;
@@ -1683,68 +1673,24 @@ export function ReactSessionComposer(props: ComposerProps) {
           </div>
         </div>
 
-        {/* Below-panel control strip: agent + model + behavior variant */}
+        {/* Keep the primary chat path quiet; secondary behavior choices live in Chat options. */}
         <div className="mt-1.5 flex items-center justify-between px-1">
           <div
             className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5 [@media(max-height:640px)]:flex-nowrap [@media(max-height:640px)]:overflow-x-auto [@media(max-height:640px)]:overscroll-x-contain [@media(max-height:640px)]:pb-1 [@media(max-height:640px)]:[&>*]:shrink-0"
             aria-label="Composer controls"
           >
-            {props.executionModesEnabled ? <div ref={modeMenuRef} className="relative">
-              <button
-                type="button"
-                className="inline-flex min-h-8 items-center gap-1.5 rounded-md bg-dls-surface-muted/[0.18] px-2 text-[12px] font-medium text-dls-text transition-colors duration-150 hover:bg-dls-surface-muted/[0.28] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none"
-                onClick={() => setModeMenuOpen((value) => !value)}
-                disabled={props.busy}
-                aria-haspopup="menu"
-                aria-expanded={modeMenuOpen}
-                title={`Mode: ${MATTERHORN_EXECUTION_MODE_OPTIONS.find((option) => option.value === props.executionMode)?.label ?? "Work"}`}
-              >
-                <ExecutionModeIcon mode={props.executionMode} />
-                <span className="hidden text-dls-muted sm:inline">Mode</span>
-                <span>{MATTERHORN_EXECUTION_MODE_OPTIONS.find((option) => option.value === props.executionMode)?.label ?? "Work"}</span>
-                <ChevronDown size={12} aria-hidden="true" />
-              </button>
-              {modeMenuOpen ? (
-                <div
-                  role="menu"
-                  aria-label="Execution mode"
-                  className="absolute bottom-full left-0 z-40 mb-2 w-[min(19rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-dls-border bg-dls-surface p-1.5 shadow-[var(--dls-shell-shadow)]"
-                >
-                  {MATTERHORN_EXECUTION_MODE_OPTIONS.map((option) => {
-                    const active = props.executionMode === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={active}
-                        className={cn(
-                          "flex w-full items-start gap-3 rounded-md px-2.5 py-2.5 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] motion-reduce:transition-none",
-                          active ? "bg-dls-surface-muted/[0.3]" : "hover:bg-dls-surface-muted/[0.2]",
-                        )}
-                        onClick={() => {
-                          props.onExecutionModeChange(option.value);
-                          setModeMenuOpen(false);
-                        }}
-                      >
-                        <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center text-dls-secondary">
-                          <ExecutionModeIcon mode={option.value} size={14} />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center justify-between gap-3 text-[12px] font-semibold text-dls-text">
-                            {option.label}
-                            {active ? <Check size={13} className="shrink-0 text-dls-secondary" aria-hidden="true" /> : null}
-                          </span>
-                          <span className="mt-0.5 block text-[11px] leading-4 text-dls-secondary">
-                            {option.description}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div> : null}
+            <div ref={modeMenuRef}>
+              <ChatOptionsControl
+                busy={props.busy}
+                executionMode={props.executionMode}
+                executionModesEnabled={props.executionModesEnabled}
+                onExecutionModeChange={props.onExecutionModeChange}
+                responsePerspective={props.responsePerspective}
+                onResponsePerspectiveChange={props.onResponsePerspectiveChange}
+                open={modeMenuOpen}
+                onOpenChange={setModeMenuOpen}
+              />
+            </div>
             {props.executionModesEnabled && props.executionMode === "plan" && !props.busy ? (
               <button
                 type="button"
@@ -1756,53 +1702,18 @@ export function ReactSessionComposer(props: ComposerProps) {
                 Start work
               </button>
             ) : null}
-            <div className="flex items-center gap-2.5">
-              <span
-                aria-hidden="true"
-                className="hidden h-7 select-none items-center gap-1.5 px-0.5 text-[10px] font-normal text-dls-secondary lg:inline-flex"
-              >
-                <SlidersHorizontal size={12} strokeWidth={1.7} />
-                <span>Perspective</span>
-              </span>
-              <div
-                role="radiogroup"
-                aria-label="Response perspective"
-                className="grid grid-cols-3 gap-0.5 rounded-md bg-dls-surface-muted/[0.16] p-0.5"
-              >
-                {RESPONSE_PERSPECTIVE_OPTIONS.map((option) => {
-                  const active = props.responsePerspective === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      title={option.description}
-                      disabled={props.busy}
-                      className={cn(
-                        "min-h-7 rounded-[5px] px-2 text-[11px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] motion-reduce:transition-none",
-                        active
-                          ? "bg-dls-canvas text-dls-text shadow-[0_1px_3px_rgba(0,0,0,0.24)]"
-                          : "text-dls-secondary hover:bg-dls-surface-muted/[0.2] hover:text-dls-text",
-                      )}
-                      onClick={() => props.onResponsePerspectiveChange(option.value)}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
             <div ref={agentMenuRef} className="relative">
               {props.agentSelectionLocked ? (
-                <span
-                  className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-11"
-                  title={props.agentSelectionLockedReason}
-                  aria-label={`${props.agentLabel}. ${props.agentSelectionLockedReason ?? "This desk uses its specialist agent."}`}
-                >
-                  <LockKeyhole size={12} aria-hidden="true" />
-                  <span className="max-w-[140px] truncate">{props.agentLabel}</span>
-                </span>
+                props.hideLockedAgentLabel ? null : (
+                  <span
+                    className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-11"
+                    title={props.agentSelectionLockedReason}
+                    aria-label={`${props.agentLabel}. ${props.agentSelectionLockedReason ?? "This chat keeps its selected agent."}`}
+                  >
+                    <LockKeyhole size={12} aria-hidden="true" />
+                    <span className="max-w-[140px] truncate">{props.agentLabel}</span>
+                  </span>
+                )
               ) : (
                 <button
                   type="button"

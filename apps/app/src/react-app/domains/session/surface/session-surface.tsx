@@ -3484,6 +3484,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         onExecutionModeChange={props.onExecutionModeChange}
         agentLabel={props.agentLabel}
         agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode)}
+        hideLockedAgentLabel={Boolean(activeDeskMode)}
         agentSelectionLockedReason={
           linkedWorkflowRun?.deskId === "blank"
             ? "This chat keeps the agent selected when it started."

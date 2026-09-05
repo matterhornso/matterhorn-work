@@ -31,13 +31,17 @@ describe("Matterhorn response perspectives", () => {
 
   test("exposes the perspective selector at the composer and sends it through system context", () => {
     const composer = readReactSource("domains/session/surface/composer/composer.tsx");
+    const chatOptions = readReactSource("domains/session/surface/composer/chat-options-control.tsx");
     const route = readReactSource("shell/session-route.tsx");
 
-    expect(composer).toContain('aria-label="Response perspective"');
-    expect(composer).toContain("RESPONSE_PERSPECTIVE_OPTIONS.map");
-    expect(composer).toContain("<SlidersHorizontal");
-    expect(composer).toContain('aria-hidden="true"');
-    expect(composer).toContain("text-[10px] font-normal text-dls-secondary");
+    expect(composer).toContain("<ChatOptionsControl");
+    expect(chatOptions).toContain('aria-label="Response perspective"');
+    expect(chatOptions).toContain("RESPONSE_PERSPECTIVE_OPTIONS.map");
+    expect(chatOptions).toContain("<SlidersHorizontal");
+    expect(chatOptions).toContain('aria-hidden="true"');
+    expect(chatOptions).toContain("Chat options");
+    expect(chatOptions).toContain("Response style");
+    expect(chatOptions).not.toContain("grid grid-cols-3");
     expect(route).toContain("buildResponsePerspectiveSystemPrompt(responsePerspective)");
     expect(route).toContain("writeResponsePerspective(selectedWorkspaceId, selectedSessionId, perspective)");
   });
