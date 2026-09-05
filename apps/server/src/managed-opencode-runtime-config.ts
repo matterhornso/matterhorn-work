@@ -65,12 +65,12 @@ export function buildManagedOpencodeRuntimeConfig(input: {
 
   return JSON.stringify({
     permission: MANAGED_OPENCODE_PERMISSION_POLICY,
-    // OpenCode defaults auto-compaction on, but old tool outputs are retained
-    // unless pruning is explicit. Pruning starts only after protected recent
-    // turns and preserves the full output on disk, reducing repeat input
-    // tokens without weakening the audit trail.
+    // Automatic OpenCode compaction can contact the provider without the
+    // Matterhorn privacy gateway. Keep pruning enabled, but allow summaries
+    // only through the explicit workspace compact endpoint so the exact
+    // transcript and system context are classified and consent-bound first.
     compaction: {
-      auto: true,
+      auto: false,
       prune: true,
     },
     plugin: [

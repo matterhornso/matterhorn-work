@@ -634,6 +634,7 @@ import {
   type GuardedPromptAcceptance,
   type GuardedPromptAuthorization,
   type GuardedPromptInput,
+  type GuardedProviderSystemContext,
 } from "./guarded-agent-runtime.js";
 import { canonicalJson } from "./guarded-runtime-crypto.js";
 import { resolveTrustedRequestJurisdiction } from "./trusted-jurisdiction.js";
@@ -2211,6 +2212,11 @@ function operationalReadiness(
   const hostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA === "1";
   const accountMessageGatewayReady = !hostedPublicBeta
     || process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED === "1";
+  const providerSystemBoundaryReady = !hostedPublicBeta || Boolean(
+    accountMessageGatewayReady
+    && config.managedOpencodeMcp
+    && (process.env.MATTERHORN_AGENT_RUNTIME_SECRET?.trim().length ?? 0) >= 32
+  );
   const hostBackupRequired = process.env.MATTERHORN_HOST_BACKUP_REQUIRED === "1";
   const hostBackupFreshCheck = !hostBackupRequired || hostBackupFresh();
   const cryptoEvidenceSuiAnchorPackageReady = !cryptoEvidenceSuiAnchorPackageState.configured
@@ -2230,6 +2236,7 @@ function operationalReadiness(
       && recoveryErasureLedgerReady
       && hostedBrowserOpencodePolicyReady
       && accountMessageGatewayReady
+      && providerSystemBoundaryReady
       && hostBackupFreshCheck
       && cryptoEvidenceSuiAnchorPackageReady,
     checks: {
@@ -2256,6 +2263,7 @@ function operationalReadiness(
       hostedBrowserOpencodePolicy: HOSTED_BROWSER_OPENCODE_POLICY,
       hostedBrowserOpencodePolicyReady,
       accountMessageGatewayReady,
+      providerSystemBoundaryReady,
       hostBackupRequired,
       hostBackupFresh: hostBackupFreshCheck,
       cryptoEvidenceSuiAnchorPackageConfigured: cryptoEvidenceSuiAnchorPackageState.configured,
@@ -2385,7 +2393,32 @@ async function resolveMatterhornSessionAgentContext(input: {
     version: "matterhorn.opencode-agent-context.v1",
   }] : [];
 
-  return { opencode, directory, session, agentId, agent, promptHash, privacyParts };
+  return { opencode, directory, session, agentId, agent, prompt, promptHash, privacyParts };
+}
+
+function guardedProviderSystemContext(
+  sections: readonly string[],
+  purpose: GuardedProviderSystemContext["purpose"],
+): GuardedProviderSystemContext {
+  return {
+    sections: sections.filter((section) => section.length > 0),
+    purpose,
+  };
+}
+
+function guardedProviderSystemPrivacyPart(
+  context: GuardedProviderSystemContext,
+): MatterhornAgentPrivacyPart {
+  const system = context.sections.join("\n");
+  return {
+    type: "provider_system_manifest",
+    name: "Exact provider system manifest",
+    source: "system",
+    label: "public",
+    contentHash: sha256Bytes(system),
+    sizeBytes: Buffer.byteLength(system, "utf8"),
+    version: `matterhorn.provider-system.${context.purpose}.v1`,
+  };
 }
 
 function matterhornCompactionPrivacyParts(
@@ -2875,6 +2908,7 @@ async function proxyOpencodeRequest(input: {
   let guardedPromptStart: {
     input: GuardedPromptInput;
     authorization: GuardedPromptAuthorization;
+    providerSystem: GuardedProviderSystemContext;
   } | null = null;
   let guardedSummaryStart: {
     input: GuardedPromptInput;
@@ -2883,6 +2917,7 @@ async function proxyOpencodeRequest(input: {
     agentId: string;
     agentPromptHash: string;
     privacyParts: MatterhornAgentPrivacyPart[];
+    providerSystem: GuardedProviderSystemContext;
   } | null = null;
   let completeGuardedRunAfterResponse = false;
   if (isSessionPromptProxyRequest(method, proxyPath)) {
@@ -2988,6 +3023,10 @@ async function proxyOpencodeRequest(input: {
       if (input.guardedRuntime.capabilities.mode === "off") {
         assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
       }
+      const providerSystem = guardedProviderSystemContext(
+        [agentContext.prompt, typeof payload.system === "string" ? payload.system : ""],
+        "message",
+      );
       const guardedInput: GuardedPromptInput = {
         workspaceId: workspace.id,
         sessionId,
@@ -2995,6 +3034,7 @@ async function proxyOpencodeRequest(input: {
           ...normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
           ...rawPromptSystemPrivacyParts(payload.system),
           ...agentContext.privacyParts,
+          guardedProviderSystemPrivacyPart(providerSystem),
         ],
         providerId: modelResolution.model.providerID,
         modelId: modelResolution.model.modelID,
@@ -3010,6 +3050,7 @@ async function proxyOpencodeRequest(input: {
         guardedPromptStart = {
           input: guardedInput,
           authorization: input.guardedRuntime.authorizePrompt(guardedInput),
+          providerSystem,
         };
       } catch (error) {
         throw guardedRuntimeApiError(error);
@@ -3065,13 +3106,17 @@ async function proxyOpencodeRequest(input: {
       delete payload.privacyConsentToken;
       const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
       payload.messageID = userMessageId;
+      const commandSystem = buildMatterhornExecutionModeSystemPrompt("work");
+      const providerSystem = guardedProviderSystemContext([agentContext.prompt, commandSystem], "message");
       try {
         const guardedInput: GuardedPromptInput = {
           workspaceId: workspace.id,
           sessionId,
           parts: [
             { type: "text", text: `/${command}${commandArguments ? ` ${commandArguments}` : ""}` },
+            ...rawPromptSystemPrivacyParts(commandSystem),
             ...agentContext.privacyParts,
+            guardedProviderSystemPrivacyPart(providerSystem),
           ],
           providerId: modelResolution.model.providerID,
           modelId: modelResolution.model.modelID,
@@ -3103,7 +3148,11 @@ async function proxyOpencodeRequest(input: {
           usageSubject = usage.subject;
         }
         await abortWorkspaceSessionBeforeReplacement(input.config, workspace, sessionId);
-        const acceptance = await input.guardedRuntime.startAuthorizedPrompt(guardedInput, authorization);
+        const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
+          guardedInput,
+          authorization,
+          providerSystem,
+        );
         guardedRunId = acceptance.runId;
         input.guardedRuntime.bindUserMessage({
           runId: guardedRunId,
@@ -3171,11 +3220,19 @@ async function proxyOpencodeRequest(input: {
       agentId: "compaction",
     });
     const compactionPrivacyParts = matterhornCompactionPrivacyParts(compactionAgentContext);
+    const providerSystem = guardedProviderSystemContext(
+      [compactionAgentContext.prompt, MATTERHORN_CRYPTO_COMPACTION_CONTEXT],
+      "compaction",
+    );
+    const guardedCompactionPrivacyParts = [
+      ...compactionPrivacyParts,
+      guardedProviderSystemPrivacyPart(providerSystem),
+    ];
     const messages = await readWorkspaceSessionMessages(input.config, workspace, sessionId, {});
     const guardedInput: GuardedPromptInput = {
       workspaceId: workspace.id,
       sessionId,
-      parts: [...sessionCompactionPrivacyParts(messages), ...compactionPrivacyParts],
+      parts: [...sessionCompactionPrivacyParts(messages), ...guardedCompactionPrivacyParts],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
       agentId: compactionAgentContext.agentId,
@@ -3191,7 +3248,8 @@ async function proxyOpencodeRequest(input: {
         sessionId,
         agentId: compactionAgentContext.agentId,
         agentPromptHash: compactionAgentContext.promptHash,
-        privacyParts: compactionPrivacyParts,
+        privacyParts: guardedCompactionPrivacyParts,
+        providerSystem,
       };
     } catch (error) {
       throw guardedRuntimeApiError(error);
@@ -3228,6 +3286,7 @@ async function proxyOpencodeRequest(input: {
       const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
         guardedPromptStart.input,
         guardedPromptStart.authorization,
+        guardedPromptStart.providerSystem,
       );
       guardedRunId = acceptance.runId;
       if (!guardedPromptMessageId) {
@@ -3270,6 +3329,7 @@ async function proxyOpencodeRequest(input: {
           ],
         },
         guardedSummaryStart.authorization,
+        guardedSummaryStart.providerSystem,
       );
       guardedRunId = acceptance.runId;
       completeGuardedRunAfterResponse = true;
@@ -10495,6 +10555,45 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/internal/agent-runs/provider-system", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 32_000, "Agent provider system context");
+    const runtimeSecret = ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "";
+    try {
+      guardedRuntime.authenticateRuntime(runtimeSecret);
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+    const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const providerId = typeof body.providerId === "string" ? body.providerId.trim() : "";
+    const modelId = typeof body.modelId === "string" ? body.modelId.trim() : "";
+    const purpose = body.purpose === "message" || body.purpose === "compaction"
+      ? body.purpose
+      : null;
+    if (!sessionId || !providerId || !modelId || !purpose) {
+      throw new ApiError(
+        400,
+        "invalid_payload",
+        "sessionId, providerId, modelId, and a valid purpose are required",
+      );
+    }
+    try {
+      const bound = guardedRuntime.resolveRuntimeProviderSystem({
+        runtimeSecret,
+        workspaceId: workspace.id,
+        sessionId,
+        providerId,
+        modelId,
+        purpose,
+      });
+      const response = jsonResponse(bound);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+  });
+
   addRoute(routes, "POST", "/internal/agent-runs/bind-message", "none", async (ctx) => {
     const body = await readJsonBody(ctx.request, 32_000, "Agent run message binding");
     const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
@@ -14589,10 +14688,15 @@ function createRoutes(
       resourceScopeHash: coworker?.resourceScope?.scopeHash,
     });
     const jurisdiction = resolveTrustedRequestJurisdiction(ctx.request, config.trustedProxySecret);
+    const providerSystem = guardedProviderSystemContext([agentContext.prompt, resolved.system], "message");
     const response = guardedRuntime.preflight({
       workspaceId: workspace.id,
       sessionId,
-      parts: [...resolved.privacyParts, ...agentContext.privacyParts],
+      parts: [
+        ...resolved.privacyParts,
+        ...agentContext.privacyParts,
+        guardedProviderSystemPrivacyPart(providerSystem),
+      ],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
       agentId,
@@ -14702,12 +14806,20 @@ function createRoutes(
       ? body.privacyConsentToken.trim()
       : undefined;
     const messages = await readWorkspaceSessionMessages(config, workspace, sessionId, {});
+    const providerSystem = guardedProviderSystemContext(
+      [compactionAgentContext.prompt, MATTERHORN_CRYPTO_COMPACTION_CONTEXT],
+      "compaction",
+    );
+    const compactionPrivacyParts = [
+      ...matterhornCompactionPrivacyParts(compactionAgentContext),
+      guardedProviderSystemPrivacyPart(providerSystem),
+    ];
     const guardedInput = {
       workspaceId: workspace.id,
       sessionId,
       parts: [
         ...sessionCompactionPrivacyParts(messages),
-        ...matterhornCompactionPrivacyParts(compactionAgentContext),
+        ...compactionPrivacyParts,
       ],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
@@ -14764,13 +14876,17 @@ function createRoutes(
         expectedAgentPromptHash: compactionAgentContext.promptHash,
       });
       await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
-      guardedAcceptance = await guardedRuntime.startAuthorizedPrompt({
-        ...guardedInput,
-        parts: [
-          ...sessionCompactionPrivacyParts(currentMessages),
-          ...matterhornCompactionPrivacyParts(compactionAgentContext),
-        ],
-      }, guardedAuthorization);
+      guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
+        {
+          ...guardedInput,
+          parts: [
+            ...sessionCompactionPrivacyParts(currentMessages),
+            ...compactionPrivacyParts,
+          ],
+        },
+        guardedAuthorization,
+        providerSystem,
+      );
       unwrapOpencodeResult(
         await sessionApi.summarize({
           sessionID: sessionId,
@@ -14945,10 +15061,15 @@ function createRoutes(
       resourceScopeHash: coworker?.resourceScope?.scopeHash,
     });
     const jurisdiction = resolveTrustedRequestJurisdiction(ctx.request, config.trustedProxySecret);
+    const providerSystem = guardedProviderSystemContext([agentContext.prompt, resolved.system], "message");
     const guardedInput = {
       workspaceId: workspace.id,
       sessionId,
-      parts: [...resolved.privacyParts, ...agentContext.privacyParts],
+      parts: [
+        ...resolved.privacyParts,
+        ...agentContext.privacyParts,
+        guardedProviderSystemPrivacyPart(providerSystem),
+      ],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
       agentId: agent,
@@ -14998,7 +15119,11 @@ function createRoutes(
 
     let guardedAcceptance: GuardedPromptAcceptance;
     try {
-      guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(guardedInput, guardedAuthorization);
+      guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
+        guardedInput,
+        guardedAuthorization,
+        providerSystem,
+      );
     } catch (error) {
       modelUsageStore.cancel(usage.reservation.reservationId);
       throw guardedRuntimeApiError(error);
