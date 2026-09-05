@@ -380,6 +380,65 @@ function jsonRpcError(id: unknown, code: number, message: string) {
   return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
 }
 
+/**
+ * Only stable, content-free Matterhorn failure codes may return to OpenCode.
+ * A thrown error can originate below the adapter, transport, persistence, or
+ * policy boundary and its message is not a safe model-facing channel.
+ */
+const MODEL_SAFE_MCP_ERROR_CODES = new Set([
+  "agent_capability_denied",
+  "agent_run_not_active",
+  "agent_tool_outcome_not_bound",
+  "adapter_action_not_allowed",
+  "adapter_arguments_invalid",
+  "adapter_authorization_denied",
+  "adapter_circuit_open",
+  "adapter_connected_address_invalid",
+  "adapter_connection_unavailable",
+  "adapter_cost_limit_exceeded",
+  "adapter_endpoint_blocked",
+  "adapter_network_not_allowed",
+  "adapter_output_invalid",
+  "adapter_output_stale",
+  "adapter_policy_unavailable",
+  "adapter_quota_exceeded",
+  "adapter_request_invalid",
+  "adapter_result_too_large",
+  "adapter_timeout",
+  "adapter_transport_unavailable",
+  "adapter_upstream_failed",
+  "adapter_usage_reconciliation_failed",
+  "certified_crypto_app_required",
+  "coworker_certified_access_denied",
+  "coworker_certified_arguments_invalid",
+  "coworker_certified_gateway_unavailable",
+  "coworker_certified_tool_unknown",
+  "coworker_transaction_authority_changed",
+  "coworker_transaction_workspace_mismatch",
+  "matterhorn_read_tool_cannot_prepare_action",
+  "polymarket_token_id_invalid",
+  "reviewed_action_receipt_unavailable",
+  "transaction_capability_proof_missing",
+  "transaction_context_invalid",
+  "transaction_evidence_invalid",
+  "transaction_policy_preflight_denied",
+  "transaction_proxy_tool_unavailable",
+  "transaction_receipt_record_failed",
+  "transaction_regeneration_denied",
+  "transaction_regeneration_invalid",
+]);
+
+function modelSafeMcpErrorMessage(error: unknown): string {
+  const explicitCode = error && typeof error === "object" && !Array.isArray(error)
+    && typeof (error as { code?: unknown }).code === "string"
+    ? (error as { code: string }).code
+    : "";
+  if (MODEL_SAFE_MCP_ERROR_CODES.has(explicitCode)) return explicitCode;
+  const exactMessage = error instanceof Error ? error.message.trim() : "";
+  if (MODEL_SAFE_MCP_ERROR_CODES.has(exactMessage)) return exactMessage;
+  return "matterhorn_tool_failed";
+}
+
 function argumentsObject(params: unknown): JsonObject {
   if (!params || typeof params !== "object" || Array.isArray(params)) return {};
   const value = (params as JsonObject).arguments;
@@ -855,7 +914,7 @@ async function mcpResult(message: JsonRpcRequest, options: {
       : {};
     const name = typeof params.name === "string" ? params.name : "";
     const tool = MANAGED_MCP_TOOLS.find((item) => item.name === name);
-    if (!tool) return { content: [{ type: "text", text: `Unknown Matterhorn tool: ${name || "(missing)"}` }], isError: true };
+    if (!tool) return { content: [{ type: "text", text: "Unknown Matterhorn tool." }], isError: true };
     const rawArgs = argumentsObject(params);
     const authorization = options.authorizeToolCall?.({ toolName: tool.name, args: rawArgs });
     return callBackendTool({
@@ -905,7 +964,7 @@ export async function handleManagedOpencodeMcp(input: {
         }),
       });
     } catch (error) {
-      responses.push(jsonRpcError(message.id, -32603, error instanceof Error ? error.message : "Matterhorn MCP call failed"));
+      responses.push(jsonRpcError(message.id, -32603, modelSafeMcpErrorMessage(error)));
     }
   }
   if (responses.length === 0) return { status: 202, body: null };
