@@ -49,6 +49,17 @@ is never stored. A consumed proof remains available only for the bounded
 60-second reconciliation window needed to finish the corresponding tool call;
 it cannot be replayed to authorize another call.
 
+The runtime dispatch ledger follows the same fail-closed rule. Active-run and
+run-scope records, user-to-assistant message bindings, shadow-rollout bypasses,
+staged tool calls, and pending receipt indexes are authenticated over their
+complete closed payload and SQLite row metadata before they can authorize or
+resume work. A staged call persists only its already-issued capability claims;
+the short-lived bearer token is reconstructed in server memory only after the
+record and claims pass current-key, expiry, tenant, run, session, call, and tool
+validation. Mutation, transplantation, replay, extended lifetime, unknown
+fields, unsealed legacy data, or a wrong signing key fails closed. Neither the
+bearer capability nor its signing secret is written to durable runtime state.
+
 ## Phase 0 contracts
 
 The public types are exported from `@matterhorn-work/types/crypto-coworkers`:

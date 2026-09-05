@@ -4,8 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 import type { MatterhornCoworkerRunBinding } from "./agent-capability.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
-import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import {
+  MatterhornGuardedRuntimeStateStore,
+  type GuardedRuntimeStateRecord,
+} from "./guarded-runtime-state-store.js";
 
 const original = {
   mode: process.env.MATTERHORN_GUARDED_RUNTIME_MODE,
@@ -65,6 +69,38 @@ function finalizedRunCoworker(id: string, workspaceId: string): MatterhornCowork
     maxReadCallsPerRun: 4,
     maxPrepareCallsPerFamily: 0,
   };
+}
+
+function replaceAuthorizedRecord(
+  store: MatterhornGuardedRuntimeStateStore,
+  record: GuardedRuntimeStateRecord<unknown>,
+  value: unknown,
+): void {
+  if (typeof record.expiresAtMs !== "number" || !Number.isSafeInteger(record.expiresAtMs)) {
+    throw new Error("test state expiry missing");
+  }
+  const authority = testDurableStateAuthority(process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET);
+  try {
+    store.put({
+      kind: record.kind,
+      key: record.key,
+      workspaceId: record.workspaceId,
+      sessionId: record.sessionId,
+      value: authority.seal({
+        kind: record.kind,
+        key: record.key,
+        workspaceId: record.workspaceId,
+        sessionId: record.sessionId,
+        expiresAtMs: record.expiresAtMs,
+        updatedAtMs: record.updatedAtMs,
+        value,
+      }),
+      expiresAtMs: record.expiresAtMs,
+      nowMs: record.updatedAtMs,
+    });
+  } finally {
+    authority.close();
+  }
 }
 
 describe("guarded agent runtime transport", () => {
@@ -565,15 +601,11 @@ describe("guarded agent runtime transport", () => {
       prompt.sessionId,
     );
     if (!persisted) throw new Error("test active run missing");
-    store.put({
-      kind: "active_agent_run",
-      key: persisted.key,
-      workspaceId: persisted.workspaceId,
-      sessionId: persisted.sessionId,
-      value: { ...persisted.value, submit: true },
-      expiresAtMs: persisted.expiresAtMs,
-      nowMs: persisted.updatedAtMs,
-    });
+    const envelope = persisted.value as { value?: unknown };
+    if (!envelope.value || typeof envelope.value !== "object" || Array.isArray(envelope.value)) {
+      throw new Error("test active run envelope missing");
+    }
+    replaceAuthorizedRecord(store, persisted, { ...envelope.value, submit: true });
 
     expect(() => runtime.stageRuntimeTool({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
@@ -676,7 +708,7 @@ describe("guarded agent runtime transport", () => {
     runtime.close();
   });
 
-  test("rejects a receipt index rebound to another tenant", async () => {
+  test("rejects an unsealed or tenant-rebound receipt index", async () => {
     const path = join(dataDir, "receipt-index-tenant-substitution.db");
     const store = new MatterhornGuardedRuntimeStateStore(path);
     const runtime = new MatterhornGuardedAgentRuntime(store);
@@ -689,6 +721,8 @@ describe("guarded agent runtime transport", () => {
       agentId: "matterhorn-hyperliquid",
       executionMode: "work",
     });
+    const originalReceipt = store.getRecord<unknown>("receipt_index", accepted.runId);
+    if (!originalReceipt) throw new Error("test receipt index missing");
     store.put({
       kind: "receipt_index",
       key: accepted.runId,
@@ -712,8 +746,30 @@ describe("guarded agent runtime transport", () => {
       agentId: "matterhorn-hyperliquid",
       toolName: "matterhorn-work_matterhorn_hyperliquid_markets",
       args: {},
-    })).toThrow("capability_scope_mismatch");
+    })).toThrow("agent_run_receipt_index_invalid");
     expect(store.list("staged_capability", { workspaceId: "ws_receipt_scope" })).toHaveLength(0);
+
+    const receiptEnvelope = originalReceipt.value as { value?: unknown };
+    if (!receiptEnvelope.value
+      || typeof receiptEnvelope.value !== "object"
+      || Array.isArray(receiptEnvelope.value)) {
+      throw new Error("test receipt index envelope missing");
+    }
+    replaceAuthorizedRecord(store, originalReceipt, {
+      ...receiptEnvelope.value,
+      workspaceId: "ws_receipt_other",
+      sessionId: "ses_receipt_other",
+    });
+    expect(() => runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_receipt_scope",
+      sessionId: "ses_receipt_scope",
+      callId: "call_receipt_scope_rebound",
+      agentId: "matterhorn-hyperliquid",
+      toolName: "matterhorn-work_matterhorn_hyperliquid_markets",
+      args: {},
+    })).toThrow("agent_run_receipt_index_invalid");
     runtime.close();
   });
 
@@ -757,7 +813,8 @@ describe("guarded agent runtime transport", () => {
 
   test("restores an exact staged tool call after a runtime restart", async () => {
     const path = join(dataDir, "restart-state.db");
-    const first = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    const firstStore = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornGuardedAgentRuntime(firstStore);
     const accepted = await first.acceptPrompt({
       workspaceId: "ws_restart",
       sessionId: "ses_restart",
@@ -778,6 +835,10 @@ describe("guarded agent runtime transport", () => {
       toolName: "matterhorn-work_matterhorn_sui_get_balance",
       args,
     });
+    const persisted = firstStore.getRecord<unknown>("staged_capability", "call_after_restart");
+    expect(persisted).not.toBeNull();
+    expect(JSON.stringify(persisted)).not.toContain('"token"');
+    expect(JSON.stringify(persisted)).not.toContain("capability-signing-secret");
     first.close();
 
     const second = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
@@ -817,15 +878,11 @@ describe("guarded agent runtime transport", () => {
       "call_staged_open_contract",
     );
     if (!persisted) throw new Error("test staged capability missing");
-    store.put({
-      kind: "staged_capability",
-      key: persisted.key,
-      workspaceId: persisted.workspaceId,
-      sessionId: persisted.sessionId,
-      value: { ...persisted.value, submit: true },
-      expiresAtMs: persisted.expiresAtMs,
-      nowMs: persisted.updatedAtMs,
-    });
+    const envelope = persisted.value as { value?: unknown };
+    if (!envelope.value || typeof envelope.value !== "object" || Array.isArray(envelope.value)) {
+      throw new Error("test staged capability envelope missing");
+    }
+    replaceAuthorizedRecord(store, persisted, { ...envelope.value, submit: true });
     expect(() => runtime.authorizeMcpTool({
       toolName: "matterhorn_sui_get_balance",
       args: { ...args, _matterhornCallId: "call_staged_open_contract" },
@@ -905,7 +962,7 @@ describe("guarded agent runtime transport", () => {
     expect(() => runtime.authorizeMcpTool({
       toolName: "matterhorn_bittensor_chat",
       args: { ...args, _matterhornCallId: "call_staged_tenant" },
-    })).toThrow("guarded_staged_capability_state_invalid");
+    })).toThrow("invalid persisted tool capability");
     expect(() => runtime.authorizeMcpTool({
       toolName: "matterhorn_bittensor_chat",
       args: { ...args, _matterhornCallId: "call_staged_tenant" },
@@ -1031,15 +1088,11 @@ describe("guarded agent runtime transport", () => {
       "msg_binding_contract_user",
     );
     if (!persisted) throw new Error("test message binding missing");
-    store.put({
-      kind: "user_message_binding",
-      key: persisted.key,
-      workspaceId: persisted.workspaceId,
-      sessionId: persisted.sessionId,
-      value: { ...persisted.value, submit: true },
-      expiresAtMs: persisted.expiresAtMs,
-      nowMs: persisted.updatedAtMs,
-    });
+    const envelope = persisted.value as { value?: unknown };
+    if (!envelope.value || typeof envelope.value !== "object" || Array.isArray(envelope.value)) {
+      throw new Error("test message binding envelope missing");
+    }
+    replaceAuthorizedRecord(store, persisted, { ...envelope.value, submit: true });
 
     expect(() => runtime.bindRuntimeMessage({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
@@ -1935,15 +1988,11 @@ describe("guarded agent runtime transport", () => {
       });
       const persisted = store.getRecord<Record<string, unknown>>("rollout_bypass", "call_rollout_contract");
       if (!persisted) throw new Error("test rollout bypass missing");
-      store.put({
-        kind: "rollout_bypass",
-        key: persisted.key,
-        workspaceId: persisted.workspaceId,
-        sessionId: persisted.sessionId,
-        value: { ...persisted.value, submit: true },
-        expiresAtMs: persisted.expiresAtMs,
-        nowMs: persisted.updatedAtMs,
-      });
+      const envelope = persisted.value as { value?: unknown };
+      if (!envelope.value || typeof envelope.value !== "object" || Array.isArray(envelope.value)) {
+        throw new Error("test rollout bypass envelope missing");
+      }
+      replaceAuthorizedRecord(store, persisted, { ...envelope.value, submit: true });
       expect(() => runtime.authorizeMcpTool({
         toolName: "matterhorn_sui_get_balance",
         args: { ...args, _matterhornCallId: "call_rollout_contract" },

@@ -7,6 +7,8 @@ import type {
   MatterhornAgentRunReceipt,
   MatterhornAgentToolReceipt,
 } from "@matterhorn-work/types/guarded-agent-runtime";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
+import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
@@ -129,8 +131,21 @@ export class MatterhornAgentRunReceiptStore {
   private readonly latest = new Map<string, MatterhornAgentRunReceipt>();
   private readonly previousHashes = new Map<string, string>();
   private readonly writeQueues = new Map<string, Promise<void>>();
+  private readonly receiptIndexState: MatterhornDurableAuthorizedState | null;
 
-  constructor(private readonly stateStore?: MatterhornGuardedRuntimeStateStore) {}
+  constructor(
+    private readonly stateStore?: MatterhornGuardedRuntimeStateStore,
+    authority?: MatterhornDurableStateAuthority,
+  ) {
+    this.receiptIndexState = stateStore && authority
+      ? new MatterhornDurableAuthorizedState(
+        stateStore,
+        authority,
+        "receipt_index",
+        "agent_run_receipt_index_invalid",
+      )
+      : null;
+  }
 
   async start(input: StartAgentRunReceiptInput): Promise<MatterhornAgentRunReceipt> {
     const now = input.now ?? new Date();
@@ -303,7 +318,8 @@ export class MatterhornAgentRunReceiptStore {
       const timestamp = Date.parse(receipt.completedAt ?? receipt.startedAt);
       if (Number.isFinite(timestamp) && now.getTime() - timestamp > RETENTION_MS) {
         this.latest.delete(runId);
-        this.stateStore?.delete("receipt_index", runId);
+        if (this.receiptIndexState) this.receiptIndexState.delete(runId);
+        else this.stateStore?.delete("receipt_index", runId);
       }
     }
     return removed;
@@ -379,8 +395,7 @@ export class MatterhornAgentRunReceiptStore {
       this.previousHashes.set(workspaceId, snapshot.integrity.recordHash);
       receipt.integrity = structuredClone(snapshot.integrity);
       const receiptExpiryBase = Date.parse(snapshot.completedAt ?? snapshot.startedAt);
-      this.stateStore?.put({
-        kind: "receipt_index",
+      const index = {
         key: snapshot.runId,
         workspaceId: snapshot.workspaceId,
         sessionId: snapshot.sessionId,
@@ -395,7 +410,9 @@ export class MatterhornAgentRunReceiptStore {
         },
         expiresAtMs: (Number.isFinite(receiptExpiryBase) ? receiptExpiryBase : now.getTime()) + RETENTION_MS,
         nowMs: now.getTime(),
-      });
+      };
+      if (this.receiptIndexState) this.receiptIndexState.put(index);
+      else this.stateStore?.put({ kind: "receipt_index", ...index });
       await this.purgeExpired(workspaceId, now);
     });
     this.writeQueues.set(workspaceId, next.catch(() => undefined));
