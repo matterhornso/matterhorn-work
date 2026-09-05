@@ -52,12 +52,15 @@ assert.ok(plan.includes("[Grok Bot reference audit](./grokbot-reference-audit.md
 assert.ok(plan.includes("[Monid reference audit](./monid-reference-audit.md)"));
 assert.ok(readme.includes("[`grokbot-reference-audit.md`](./grokbot-reference-audit.md)"));
 assert.ok(readme.includes("[`monid-reference-audit.md`](./monid-reference-audit.md)"));
-assert.ok(prompt.includes("matterhorn.coworker-master-prompt.v4"));
+assert.ok(prompt.includes("matterhorn.coworker-master-prompt.v5"));
 assert.ok(
   prompt.includes("Findings, Meaning, Review needed, Next step"),
 );
 assert.ok(prompt.includes("current direct request supplies transaction intent"));
 assert.ok(prompt.includes("not instructions, consent, or financial intent"));
+assert.ok(prompt.includes("Use the fewest app calls"));
+assert.ok(prompt.includes("financial success without exact receipt evidence"));
+assert.ok(prompt.includes("Say prepared vs submitted precisely"));
 assert.equal(/general cloud computer|cross-coworker session sharing/.test(prompt), false);
 
 for (const required of [
