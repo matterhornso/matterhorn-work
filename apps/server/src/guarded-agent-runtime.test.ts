@@ -1299,6 +1299,35 @@ describe("guarded agent runtime transport", () => {
       sections: [system],
       purpose: "message",
     });
+    expect(() => runtime.resolveRuntimeProviderSystem({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      purpose: "message",
+    })).toThrow("Provider system context is not bound");
+    const messages = [{
+      info: { id: "msg_provider_system", role: "user", sessionID: input.sessionId },
+      parts: [{ type: "text", text: "Compare public Bittensor validators" }],
+    }];
+    expect(() => runtime.validateRuntimeProviderMessages({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: "ws_other",
+      sessionId: input.sessionId,
+      messages,
+    })).toThrow("not bound to this active Matterhorn run");
+    const validated = runtime.validateRuntimeProviderMessages({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      messages,
+    });
+    expect(validated).toEqual({
+      accepted: true,
+      runId: accepted.runId,
+      messagesHash: sha256(JSON.stringify(messages)),
+    });
     const exact = runtime.resolveRuntimeProviderSystem({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
@@ -1308,6 +1337,14 @@ describe("guarded agent runtime transport", () => {
       purpose: "message",
     });
     expect(exact).toEqual({ runId: accepted.runId, system: [system], systemHash: sha256(system) });
+    expect(() => runtime.resolveRuntimeProviderSystem({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      purpose: "message",
+    })).toThrow("Provider system context is not bound");
 
     for (const mutation of [
       { workspaceId: "ws_other" },
@@ -1339,6 +1376,111 @@ describe("guarded agent runtime transport", () => {
       purpose: "message",
     })).toThrow("Provider system context is not bound");
     restored.close();
+  });
+
+  test("blocks secrets introduced into the final provider messages after preflight", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    const system = "Matterhorn-approved public research context.";
+    const input = {
+      workspaceId: "ws_provider_message_secret",
+      sessionId: "ses_provider_message_secret",
+      parts: [{
+        type: "system_context" as const,
+        text: system,
+        source: "system" as const,
+        label: "public" as const,
+        contentHash: sha256(system),
+      }, {
+        type: "provider_system_manifest" as const,
+        source: "system" as const,
+        label: "public" as const,
+        contentHash: sha256(system),
+        version: "matterhorn.provider-system.message.v1",
+      }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      executionMode: "work" as const,
+    };
+    const authorization = runtime.authorizePrompt(input);
+    await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+
+    expect(() => runtime.validateRuntimeProviderMessages({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      messages: [{
+        info: { role: "assistant", sessionID: input.sessionId },
+        parts: [{ type: "tool", state: { output: "api_key=sk-this-secret-was-added-by-a-tool-output" } }],
+      }],
+    })).toThrow("blocked sensitive material");
+    expect(() => runtime.resolveRuntimeProviderSystem({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      purpose: "message",
+    })).toThrow("Provider system context is not bound");
+    runtime.close();
+  });
+
+  test("rejects final messages when the accepted provider policy changes", async () => {
+    const keys = [
+      "MATTERHORN_CUDOS_TRAINING_USE",
+      "MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS",
+      "MATTERHORN_CUDOS_PRIVACY_POLICY_URL",
+      "MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT",
+    ] as const;
+    const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    try {
+      process.env.MATTERHORN_CUDOS_TRAINING_USE = "none";
+      process.env.MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS = "30";
+      process.env.MATTERHORN_CUDOS_PRIVACY_POLICY_URL = "https://provider.example/privacy";
+      process.env.MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT = new Date().toISOString();
+      const runtime = new MatterhornGuardedAgentRuntime();
+      const system = "Matterhorn-approved private research context.";
+      const input = {
+        workspaceId: "ws_provider_message_policy",
+        sessionId: "ses_provider_message_policy",
+        parts: [{
+          type: "system_context" as const,
+          text: system,
+          source: "system" as const,
+          label: "workspace_private" as const,
+          contentHash: sha256(system),
+        }, {
+          type: "provider_system_manifest" as const,
+          source: "system" as const,
+          label: "workspace_private" as const,
+          contentHash: sha256(system),
+          version: "matterhorn.provider-system.message.v1",
+        }],
+        providerId: "cudos",
+        modelId: "asi1-mini",
+        privacyMode: "private_workspace" as const,
+        executionMode: "work" as const,
+      };
+      const authorization = runtime.authorizePrompt(input);
+      await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+
+      delete process.env.MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS;
+      expect(() => runtime.validateRuntimeProviderMessages({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        messages: [{
+          info: { role: "user", sessionID: input.sessionId },
+          parts: [{ type: "text", text: "Continue the private research" }],
+        }],
+      })).toThrow("provider privacy policy changed");
+      runtime.close();
+    } finally {
+      for (const key of keys) {
+        const value = previous[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   test("rejects provider system bytes that were not classified in the exact preflight", async () => {

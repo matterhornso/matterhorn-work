@@ -111,6 +111,9 @@ export type GuardedProviderSystemContext = {
 
 const PROVIDER_SYSTEM_MAX_SECTIONS = 16;
 const PROVIDER_SYSTEM_MAX_BYTES = 256 * 1_024;
+const PROVIDER_MESSAGES_MAX_COUNT = 2_048;
+const PROVIDER_MESSAGES_MAX_BYTES = 16 * 1_024 * 1_024;
+const PROVIDER_MESSAGES_VALIDATION_TTL_MS = 30_000;
 const SESSION_PRIVACY_FLOOR_RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
 
 type GuardedSessionPrivacyFloor = {
@@ -195,6 +198,50 @@ function normalizeProviderSystemContext(
     );
   }
   return { system, systemHash, purpose: context.purpose };
+}
+
+function normalizeRuntimeProviderMessages(
+  messages: unknown,
+  expectedSessionId: string,
+): { inspectionText: string; messagesHash: string } {
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > PROVIDER_MESSAGES_MAX_COUNT) {
+    throw new GuardedRuntimeError(
+      400,
+      "agent_provider_messages_invalid",
+      "The final provider messages are invalid.",
+    );
+  }
+  for (const message of messages) {
+    if (!message || typeof message !== "object" || Array.isArray(message)) {
+      throw new GuardedRuntimeError(400, "agent_provider_messages_invalid", "The final provider messages are invalid.");
+    }
+    const info = Reflect.get(message, "info");
+    const parts = Reflect.get(message, "parts");
+    const sessionId = info && typeof info === "object" && !Array.isArray(info)
+      ? Reflect.get(info, "sessionID")
+      : null;
+    if (sessionId !== expectedSessionId || !Array.isArray(parts)) {
+      throw new GuardedRuntimeError(
+        409,
+        "agent_provider_messages_scope_mismatch",
+        "The final provider messages are not bound to this chat.",
+      );
+    }
+  }
+  let inspectionText = "";
+  try {
+    inspectionText = JSON.stringify(messages);
+  } catch {
+    throw new GuardedRuntimeError(400, "agent_provider_messages_invalid", "The final provider messages are invalid.");
+  }
+  if (!inspectionText || Buffer.byteLength(inspectionText, "utf8") > PROVIDER_MESSAGES_MAX_BYTES) {
+    throw new GuardedRuntimeError(
+      413,
+      "agent_provider_messages_too_large",
+      "The final provider messages are too large to verify safely.",
+    );
+  }
+  return { inspectionText, messagesHash: sha256(inspectionText) };
 }
 
 function selectedContextCounts(input: GuardedPromptInput): NonNullable<MatterhornAgentRunReceipt["context"]> {
@@ -288,6 +335,10 @@ export class MatterhornGuardedAgentRuntime {
     purpose: GuardedProviderSystemContext["purpose"];
     system: string;
     systemHash: string;
+    effectiveMode: MatterhornAgentPrivacyMode;
+    provider: MatterhornAgentPrivacyPreflightResponse["provider"];
+    validatedMessagesHash?: string;
+    validatedMessagesAtMs?: number;
     expiresAtMs: number;
   }>();
   private finalizedRunHandler: ((input: MatterhornFinalizedCoworkerRun) => Promise<void>) | null = null;
@@ -682,6 +733,8 @@ export class MatterhornGuardedAgentRuntime {
         providerId: input.providerId,
         modelId: input.modelId,
         ...normalizedProviderSystem,
+        effectiveMode: current.effectiveMode,
+        provider: structuredClone(current.provider),
         expiresAtMs,
       });
     }
@@ -747,6 +800,7 @@ export class MatterhornGuardedAgentRuntime {
     const runId = this.activeRun(input.sessionId);
     const context = runId ? this.providerSystemByRunId.get(runId) : undefined;
     const scope = runId ? this.runScope(runId) : null;
+    const nowMs = Date.now();
     if (
       !runId
       || !context
@@ -759,6 +813,9 @@ export class MatterhornGuardedAgentRuntime {
       || context.providerId !== input.providerId
       || context.modelId !== input.modelId
       || context.purpose !== input.purpose
+      || !context.validatedMessagesHash
+      || !context.validatedMessagesAtMs
+      || context.validatedMessagesAtMs + PROVIDER_MESSAGES_VALIDATION_TTL_MS <= nowMs
     ) {
       throw new GuardedRuntimeError(
         409,
@@ -766,7 +823,89 @@ export class MatterhornGuardedAgentRuntime {
         "Provider system context is not bound to this active Matterhorn run.",
       );
     }
+    // One final-message validation authorizes one immediate provider attempt.
+    // Tool continuations and retries must pass through the final-message hook
+    // again, so stale or mutated messages cannot reuse this release.
+    delete context.validatedMessagesHash;
+    delete context.validatedMessagesAtMs;
     return { runId, system: [context.system], systemHash: context.systemHash };
+  }
+
+  validateRuntimeProviderMessages(input: {
+    runtimeSecret: string;
+    workspaceId: string;
+    sessionId: string;
+    messages: unknown;
+  }): { accepted: true; runId: string; messagesHash: string } {
+    this.assertRuntimeSecret(input.runtimeSecret);
+    const runId = this.activeRun(input.sessionId);
+    const context = runId ? this.providerSystemByRunId.get(runId) : undefined;
+    const scope = runId ? this.runScope(runId) : null;
+    if (
+      !runId
+      || !context
+      || !scope
+      || context.expiresAtMs <= Date.now()
+      || context.workspaceId !== input.workspaceId
+      || context.sessionId !== input.sessionId
+      || scope.workspaceId !== input.workspaceId
+      || scope.sessionId !== input.sessionId
+    ) {
+      throw new GuardedRuntimeError(
+        409,
+        "agent_provider_messages_not_bound",
+        "Final provider messages are not bound to this active Matterhorn run.",
+      );
+    }
+    const normalized = normalizeRuntimeProviderMessages(input.messages, input.sessionId);
+    const evaluation = this.privacy.preflight({
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      parts: [{
+        type: "final_provider_messages",
+        text: normalized.inspectionText,
+        source: "system",
+        label: sessionHistoryLabel(context.effectiveMode),
+      }],
+      providerId: context.providerId,
+      providerName: context.provider.name,
+      modelId: context.modelId,
+      privacyMode: context.effectiveMode,
+    }, { issueChallenge: false }).response;
+    if (evaluation.decision === "blocked") {
+      throw new GuardedRuntimeError(
+        422,
+        "agent_provider_messages_blocked",
+        "Matterhorn blocked sensitive material added after privacy review.",
+      );
+    }
+    if (privacyModeRank(evaluation.effectiveMode) > privacyModeRank(context.effectiveMode)) {
+      throw new GuardedRuntimeError(
+        409,
+        "agent_provider_messages_privacy_changed",
+        "The final provider messages became more sensitive after privacy review.",
+      );
+    }
+    const expectedProvider = context.provider;
+    const currentProvider = evaluation.provider;
+    if (
+      currentProvider.id !== expectedProvider.id
+      || currentProvider.modelId !== expectedProvider.modelId
+      || currentProvider.privacyStatus !== expectedProvider.privacyStatus
+      || currentProvider.trainingUse !== expectedProvider.trainingUse
+      || currentProvider.retentionDays !== expectedProvider.retentionDays
+      || currentProvider.policyUrl !== expectedProvider.policyUrl
+      || currentProvider.dataLeavesMatterhorn !== expectedProvider.dataLeavesMatterhorn
+    ) {
+      throw new GuardedRuntimeError(
+        409,
+        "agent_privacy_policy_changed",
+        "The provider privacy policy changed after authorization. Run privacy preflight again.",
+      );
+    }
+    context.validatedMessagesHash = normalized.messagesHash;
+    context.validatedMessagesAtMs = Date.now();
+    return { accepted: true, runId, messagesHash: normalized.messagesHash };
   }
 
   resolveSessionHistoryLabel(input: {

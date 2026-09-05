@@ -28,6 +28,10 @@ type SystemHookOutput = {
   system: string[];
 };
 
+type MessagesHookOutput = {
+  messages: unknown[];
+};
+
 type OpenCodeEvent = {
   type?: string;
   properties?: Record<string, unknown>;
@@ -49,6 +53,8 @@ const runIdByCall = new Map<string, string>();
 const pendingCompactionSessions = new Set<string>();
 
 const PROVIDER_SYSTEM_MAX_BYTES = 256 * 1_024;
+const PROVIDER_MESSAGES_MAX_COUNT = 2_048;
+const PROVIDER_MESSAGES_MAX_BYTES = 16 * 1_024 * 1_024;
 
 function authoritativeMessageGatewayRequired(): boolean {
   return String(process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED || "").trim() === "1";
@@ -70,6 +76,31 @@ function serverSettings(): { url: string; secret: string } {
     url: String(process.env.OPENWORK_SERVER_URL || "").replace(/\/+$/, ""),
     secret: String(process.env.MATTERHORN_AGENT_RUNTIME_SECRET || ""),
   };
+}
+
+function providerMessageSessionId(messages: unknown[]): string {
+  if (messages.length === 0 || messages.length > PROVIDER_MESSAGES_MAX_COUNT) {
+    throw new Error("Matterhorn could not safely validate the final provider messages.");
+  }
+  let sessionId = "";
+  for (const message of messages) {
+    if (!message || typeof message !== "object" || Array.isArray(message)) {
+      throw new Error("Matterhorn could not safely validate the final provider messages.");
+    }
+    const info = Reflect.get(message, "info");
+    const parts = Reflect.get(message, "parts");
+    const candidate = info && typeof info === "object" && !Array.isArray(info)
+      ? Reflect.get(info, "sessionID")
+      : null;
+    if (typeof candidate !== "string" || !candidate.trim() || !Array.isArray(parts)) {
+      throw new Error("Matterhorn could not safely validate the final provider messages.");
+    }
+    if (!sessionId) sessionId = candidate.trim();
+    if (sessionId !== candidate.trim()) {
+      throw new Error("Matterhorn final provider messages crossed chat boundaries.");
+    }
+  }
+  return sessionId;
 }
 
 async function postInternal(path: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -174,9 +205,42 @@ async function bindAssistantMessage(input: ReturnType<typeof assistantUsage> & {
 }
 
 export const MatterhornGuard = async (context: PluginContext) => ({
+  "experimental.chat.messages.transform": async (_input: Record<string, never>, output: MessagesHookOutput) => {
+    if (!authoritativeMessageGatewayRequired()) return;
+    if (!Array.isArray(output.messages)) {
+      throw new Error("Matterhorn could not safely validate the final provider messages.");
+    }
+    const sessionId = providerMessageSessionId(output.messages);
+    let serialized = "";
+    try {
+      serialized = JSON.stringify(output.messages);
+    } catch {
+      throw new Error("Matterhorn could not safely validate the final provider messages.");
+    }
+    if (!serialized || Buffer.byteLength(serialized, "utf8") > PROVIDER_MESSAGES_MAX_BYTES) {
+      throw new Error("Matterhorn final provider messages are too large to validate safely.");
+    }
+    const payload = await postInternal("/internal/agent-runs/provider-messages", {
+      workspaceDirectory: context.directory ?? null,
+      sessionId,
+      messages: output.messages,
+    });
+    if (
+      payload.accepted !== true
+      || typeof payload.runId !== "string"
+      || !payload.runId
+      || typeof payload.messagesHash !== "string"
+      || !/^[a-f0-9]{64}$/.test(payload.messagesHash)
+    ) {
+      throw new Error("Matterhorn provider-message validation response was invalid.");
+    }
+    // This is the last managed message-transform hook. It does not rewrite or
+    // retain messages; it proves the exact final array was checked before the
+    // following system hook can release provider-bound system context.
+  },
   "experimental.chat.system.transform": async (input: SystemHookInput, output: SystemHookOutput) => {
     if (!authoritativeMessageGatewayRequired()) return;
-    const sessionId = input.sessionID.trim();
+    const sessionId = typeof input.sessionID === "string" ? input.sessionID.trim() : "";
     const providerId = input.model.providerID.trim();
     const modelId = (input.model.id ?? input.model.modelID ?? "").trim();
     const purpose = pendingCompactionSessions.delete(sessionId) ? "compaction" : "message";

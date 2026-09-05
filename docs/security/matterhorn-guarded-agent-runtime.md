@@ -11,6 +11,17 @@ tool access, reviewed transaction terms, retention, and security receipts.
 - In hosted mode, the last managed OpenCode plugin replaces the final provider
   system array with only the exact server-authorized bytes. Late environment,
   skill, MCP, workspace, or provider additions are not forwarded.
+- Immediately before that release, the same last plugin submits OpenCode's
+  exact final message array to a runtime-only endpoint. Matterhorn bounds and
+  scans every restored user/assistant part and tool result, rejects mixed-chat
+  arrays and late-added secrets, rechecks the accepted provider policy, and
+  records only a SHA-256 digest in transient memory. One validation authorizes
+  one immediate system release and expires after 30 seconds; a retry or tool
+  continuation must validate its new final array again.
+- OpenCode's provider-backed automatic title agent is disabled in hosted
+  configuration because upstream starts it before the final-message hook. Chat
+  names remain deterministic and user-editable; titles cannot race or bypass
+  the one-shot provider-message proof.
 - The OpenCode plugin receives a server-generated non-secret call id after model
   arguments exist. Signed capabilities remain inside the Matterhorn server.
 - The managed MCP bridge strips the reserved call id and atomically consumes the
@@ -47,11 +58,13 @@ is hashable and preflighted.
 The internal capability and completion routes require
 `X-Matterhorn-Agent-Runtime-Secret`. They are not client APIs.
 
-The same runtime-only credential protects the provider-system binding route.
-Its response is bound to the active workspace, session, provider, model, request
-purpose, and run; carries a SHA-256 digest checked by the plugin; and is held in
-memory only until the run ends. A restart discards these private bytes and makes
-the in-flight request fail closed. Hosted readiness requires the authoritative
+The same runtime-only credential protects the provider-message validation and
+provider-system binding routes. The final-message request is bound to one active
+workspace, session, and run. The following system response is additionally
+bound to provider, model, request purpose, and the single-use message-validation
+digest; it carries a SHA-256 digest checked by the plugin and is held in memory
+only until the run ends. A restart discards these private bytes and makes the
+in-flight request fail closed. Hosted readiness requires the authoritative
 gateway, the managed OpenCode plugin, and a valid runtime credential even while
 per-tool capability rollout is `off`.
 

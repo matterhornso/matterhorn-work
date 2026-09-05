@@ -37,6 +37,7 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(config.permission["*"]).toBe("deny");
     expect(config.permission["matterhorn-work_*"]).toBe("allow");
     expect(config.permission.edit).toBe("ask");
+    expect(config.agent).toEqual({ title: { disable: true } });
     expect(config.compaction).toEqual({ auto: false, prune: true });
     for (const denied of ["bash", "task", "webfetch", "websearch", "external_directory"]) {
       expect(config.permission[denied]).toBe("deny");

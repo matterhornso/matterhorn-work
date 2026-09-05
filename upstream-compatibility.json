@@ -30,6 +30,11 @@
     "repository": "https://github.com/anomalyco/opencode",
     "version": "v1.18.27",
     "commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
-    "sdkVersion": "1.18.27"
+    "sdkVersion": "1.18.27",
+    "requiredPluginHooks": [
+      "experimental.chat.messages.transform",
+      "experimental.chat.system.transform",
+      "tool.execute.before"
+    ]
   }
 }

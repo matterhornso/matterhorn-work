@@ -65,6 +65,13 @@ export function buildManagedOpencodeRuntimeConfig(input: {
 
   return JSON.stringify({
     permission: MANAGED_OPENCODE_PERMISSION_POLICY,
+    // OpenCode starts its provider-backed title generator before the final
+    // message-transform hook. Hosted titles therefore stay deterministic and
+    // user-editable instead of creating an unreviewed side-channel or racing
+    // the one-shot final-message proof used by the real response.
+    agent: {
+      title: { disable: true },
+    },
     // Automatic OpenCode compaction can contact the provider without the
     // Matterhorn privacy gateway. Keep pruning enabled, but allow summaries
     // only through the explicit workspace compact endpoint so the exact

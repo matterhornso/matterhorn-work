@@ -2305,6 +2305,62 @@ describe("workspace session read APIs", () => {
     expect(mock.requests.findIndex((request) => request.pathname === "/session/ses_1/abort"))
       .toBeLessThan(mock.requests.findIndex((request) => request.pathname === "/session/ses_1/prompt_async"));
 
+    const unvalidatedSystemResponse = await fetch(`${base}/internal/agent-runs/provider-system`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Matterhorn-Agent-Runtime-Secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      },
+      body: JSON.stringify({
+        workspaceDirectory: workspaceRoot,
+        sessionId: "ses_1",
+        providerId: "openai",
+        modelId: "gpt-4.1",
+        purpose: "message",
+      }),
+    });
+    expect(unvalidatedSystemResponse.status).toBe(409);
+    await expect(unvalidatedSystemResponse.json()).resolves.toMatchObject({
+      code: "agent_provider_system_not_bound",
+    });
+
+    const unauthenticatedMessagesResponse = await fetch(`${base}/internal/agent-runs/provider-messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Matterhorn-Agent-Runtime-Secret": "wrong-runtime-secret",
+      },
+      body: "not-json",
+    });
+    expect(unauthenticatedMessagesResponse.status).toBe(401);
+    await expect(unauthenticatedMessagesResponse.json()).resolves.toMatchObject({
+      code: "agent_runtime_unauthorized",
+    });
+
+    const providerMessages = [{
+      info: { id: "msg_provider_boundary", role: "user", sessionID: "ses_1" },
+      parts: [{ type: "text", text: "Compare public validator performance using my selected preference" }],
+    }];
+    const providerMessagesResponse = await fetch(`${base}/internal/agent-runs/provider-messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Matterhorn-Agent-Runtime-Secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      },
+      body: JSON.stringify({
+        workspaceDirectory: workspaceRoot,
+        sessionId: "ses_1",
+        messages: providerMessages,
+      }),
+    });
+    expect(providerMessagesResponse.status).toBe(200);
+    expect(providerMessagesResponse.headers.get("cache-control")).toBe("no-store");
+    await expect(providerMessagesResponse.json()).resolves.toMatchObject({
+      accepted: true,
+      runId: accepted.runId,
+      messagesHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+
     const providerSystemResponse = await fetch(`${base}/internal/agent-runs/provider-system`, {
       method: "POST",
       headers: {
