@@ -62,6 +62,45 @@ The release remains fail closed when:
   Venice model.
 - The request contains secret material.
 
+### Hosted acceptance
+
+The code-level privacy and rendering tests do not prove that an exact deployed
+candidate is correctly wired to Venice. Create a non-passing owner-only packet
+for the immutable frontend/backend commit:
+
+```bash
+pnpm template:venice-private-acceptance -- \
+  --expected-commit <full-40-character-candidate-sha> \
+  --app-url https://candidate.example/workspace/example/session \
+  --output /absolute/path/to/venice-private-acceptance.json
+```
+
+After testing with two real accounts, replace each pending outcome and report
+hash only from reviewed, redacted evidence. Then evaluate it:
+
+```bash
+pnpm gate:venice-private-acceptance -- \
+  --input /absolute/path/to/venice-private-acceptance.json \
+  --expected-commit <full-40-character-candidate-sha> \
+  --strict \
+  --json
+```
+
+The verifier requires matching frontend and backend commits, a current exact
+Venice model proof, every visible and keyboard state of the Private control,
+`private_workspace` dispatch, zero-retention receipt reconciliation, expired
+and substituted-model denials, zero provider calls and zero usage for a secret
+block, reload behavior, and cross-account isolation. Provider, UI, and request
+reports must be separate content-addressed files. They may contain bounded
+outcomes and public model/policy metadata, but not prompts, messages, account
+identity, credentials, signatures, private wallet data, or unrestricted tool
+output.
+
+This companion verifier is additive. It does not change the Phase 1–5 v2
+acceptance schema, enable Venice, alter guarded-runtime mode, or contact a
+provider. Integrating signed acceptance reports into the strict release gate
+remains a separate owner-approved migration.
+
 Primary provider references:
 
 - <https://docs.venice.ai/overview/about-venice>
