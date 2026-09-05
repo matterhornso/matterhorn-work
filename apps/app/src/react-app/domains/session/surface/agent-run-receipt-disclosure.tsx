@@ -93,10 +93,26 @@ function toolOutcomeLabel(outcome: MatterhornAgentRunReceipt["tools"][number]["o
   return "Did not complete";
 }
 
+function evidenceDeliveryLabel(tool: MatterhornAgentRunReceipt["tools"][number]): string | null {
+  if (tool.evidence?.delivery === "certified_cache") return "Used recently checked public data";
+  if (tool.evidence?.delivery === "live") return "Fetched from the app";
+  return null;
+}
+
+function evidenceAgeLabel(tool: MatterhornAgentRunReceipt["tools"][number]): string | null {
+  const ageMs = tool.evidence?.ageMs;
+  if (ageMs === null || ageMs === undefined) return null;
+  if (ageMs < 1_000) return "Observed just now";
+  if (ageMs < 60_000) return `Observed ${Math.round(ageMs / 1_000)}s earlier`;
+  return `Observed ${Math.round(ageMs / 60_000)}m earlier`;
+}
+
 function toolSummary(tool: MatterhornAgentRunReceipt["tools"][number]): string {
   const name = tool.source ? friendlyIdentifier(tool.source) : friendlyIdentifier(tool.name);
   return [
     `${name}: ${toolOutcomeLabel(tool.outcome)}`,
+    evidenceDeliveryLabel(tool),
+    evidenceAgeLabel(tool),
     tool.freshness ? `Data ${tool.freshness}` : null,
   ].filter((entry): entry is string => entry !== null).join(" · ");
 }
@@ -251,6 +267,7 @@ export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgen
                     {tool.name} · {tool.access} · {tool.trust} · {tool.outcome} · {tool.latencyMs}ms
                     {tool.source ? ` · ${tool.source}` : ""}
                     {tool.freshness ? ` · ${tool.freshness}` : ""}
+                    {tool.evidence ? ` · ${tool.evidence.delivery} · age ${tool.evidence.ageMs ?? "unknown"}ms · freshness limit ${tool.evidence.freshnessMaxAgeMs ?? "none"}ms` : ""}
                   </li>
                 ))}
               </ul>

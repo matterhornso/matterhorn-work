@@ -248,6 +248,12 @@ describe("guarded crypto app authorization bridge", () => {
       outcome: "success",
       costMicros: 25,
       durationMs: 12,
+      evidence: {
+        delivery: "certified_cache",
+        observedAt: "2026-09-01T12:00:00.000Z",
+        ageMs: 750,
+        freshnessMaxAgeMs: 30_000,
+      },
     });
     const receipt = await app.runtime.receipts.get("ws_sui", app.runId);
     expect(receipt?.tools).toContainEqual(expect.objectContaining({
@@ -255,6 +261,12 @@ describe("guarded crypto app authorization bridge", () => {
       access: "read",
       outcome: "success",
       source: "crypto_app:matterhorn.sui",
+      evidence: {
+        delivery: "certified_cache",
+        observedAt: "2026-09-01T12:00:00.000Z",
+        ageMs: 750,
+        freshnessMaxAgeMs: 30_000,
+      },
     }));
     expect(receipt?.capabilities.some((decision) => decision.callId === "call_sui_balance" && decision.decision === "allowed")).toBe(true);
     await expect(app.authorization.reconcile({
@@ -262,7 +274,51 @@ describe("guarded crypto app authorization bridge", () => {
       outcome: "success",
       costMicros: 25,
       durationMs: 12,
+      evidence: {
+        delivery: "certified_cache",
+        observedAt: "2026-09-01T12:00:00.000Z",
+        ageMs: 750,
+        freshnessMaxAgeMs: 30_000,
+      },
     })).rejects.toThrow("crypto_app_reservation_unknown_or_replayed");
+    app.reservationStore.close();
+    app.runtime.close();
+  });
+
+  test("rejects forged cache provenance without consuming the valid reconciliation", async () => {
+    const app = await fixture("forged-evidence");
+    const reserved = await app.authorization.authorize(request(app.runId, app.sessionId));
+    await expect(app.authorization.reconcile({
+      reservationId: reserved.reservationId,
+      outcome: "success",
+      costMicros: 0,
+      durationMs: 3,
+      evidence: {
+        delivery: "certified_cache",
+        observedAt: "2026-09-01T12:00:00.000Z",
+        ageMs: 100,
+        freshnessMaxAgeMs: 30_000,
+        query: "must never enter a receipt",
+      } as Parameters<typeof app.authorization.reconcile>[0]["evidence"],
+    })).rejects.toThrow("crypto_app_reconciliation_invalid");
+
+    await app.authorization.reconcile({
+      reservationId: reserved.reservationId,
+      outcome: "success",
+      costMicros: 0,
+      durationMs: 3,
+      evidence: {
+        delivery: "live",
+        observedAt: "2026-09-01T12:00:00.000Z",
+        ageMs: 100,
+        freshnessMaxAgeMs: 30_000,
+      },
+    });
+    const receipt = await app.runtime.receipts.get("ws_sui", app.runId);
+    expect(JSON.stringify(receipt)).not.toContain("must never enter a receipt");
+    expect(receipt?.tools).toContainEqual(expect.objectContaining({
+      evidence: expect.objectContaining({ delivery: "live", ageMs: 100 }),
+    }));
     app.reservationStore.close();
     app.runtime.close();
   });

@@ -6,6 +6,7 @@ import {
   type MatterhornCryptoAppResult,
   type MatterhornCryptoAppTransportKind,
 } from "@matterhorn-work/types/crypto-coworkers";
+import type { MatterhornAgentToolReceipt } from "@matterhorn-work/types/guarded-agent-runtime";
 
 import { MatterhornCryptoAppConnections } from "./crypto-app-connections.js";
 import { MatterhornBlockEvidenceCache } from "./crypto-context-compiler.js";
@@ -60,6 +61,7 @@ export type MatterhornCryptoAppAuthorization = {
     outcome: "success" | "error" | "timeout";
     costMicros: number;
     durationMs: number;
+    evidence?: MatterhornAgentToolReceipt["evidence"];
   }): Promise<void>;
 };
 
@@ -412,7 +414,19 @@ export class MatterhornCryptoAppAdapterRouter {
         throw new MatterhornCryptoAppAdapterError("adapter_output_stale");
       }
       const durationMs = Math.max(0, completedAt.getTime() - startedAt.getTime());
-      await this.#reconcile(reservationId, operationalReservation, "success", 0, durationMs);
+      await this.#reconcile(
+        reservationId,
+        operationalReservation,
+        "success",
+        0,
+        durationMs,
+        {
+          delivery: "certified_cache",
+          observedAt: cached.value.observation.observedAt,
+          ageMs,
+          freshnessMaxAgeMs: action.freshnessMaxAgeMs,
+        },
+      );
       return {
         version: MATTERHORN_CRYPTO_APP_RESULT_VERSION,
         app: {
@@ -431,7 +445,10 @@ export class MatterhornCryptoAppAdapterRouter {
           ageMs,
           freshnessMaxAgeMs: action.freshnessMaxAgeMs,
         },
-        provenance: structuredClone(cached.value.provenance),
+        provenance: {
+          ...structuredClone(cached.value.provenance),
+          delivery: "certified_cache",
+        },
         metering: { costMicros: 0, reservationId },
         result: structuredClone(cached.value.result),
       };
@@ -543,7 +560,19 @@ export class MatterhornCryptoAppAdapterRouter {
       throw new MatterhornCryptoAppAdapterError("adapter_output_stale");
     }
 
-    await this.#reconcile(reservationId, operationalReservation, "success", execution.costMicros, durationMs);
+    await this.#reconcile(
+      reservationId,
+      operationalReservation,
+      "success",
+      execution.costMicros,
+      durationMs,
+      {
+        delivery: "live",
+        observedAt: observedAt?.toISOString() ?? null,
+        ageMs,
+        freshnessMaxAgeMs: action.freshnessMaxAgeMs,
+      },
+    );
     if (!this.#recordSuccess(request.workspaceId, circuitKey)) {
       throw new MatterhornCryptoAppAdapterError("adapter_policy_unavailable");
     }
@@ -575,6 +604,7 @@ export class MatterhornCryptoAppAdapterRouter {
         trust: "untrusted_external",
         sanitization: untrustedContentChanged(projected.value, quarantined) ? "quarantined" : "typed_projection",
         evidenceReference: `sha256:${sha256(execution.data)}`,
+        delivery: "live",
       },
       metering: { costMicros: execution.costMicros, reservationId },
       result: quarantined,
@@ -658,10 +688,17 @@ export class MatterhornCryptoAppAdapterRouter {
     outcome: "success" | "error" | "timeout",
     costMicros: number,
     durationMs: number,
+    evidence?: MatterhornAgentToolReceipt["evidence"],
   ): Promise<void> {
     let authorizationFailed = false;
     try {
-      await this.#authorization.reconcile({ reservationId, outcome, costMicros, durationMs: Math.max(0, durationMs) });
+      await this.#authorization.reconcile({
+        reservationId,
+        outcome,
+        costMicros,
+        durationMs: Math.max(0, durationMs),
+        ...(evidence ? { evidence: structuredClone(evidence) } : {}),
+      });
     } catch {
       authorizationFailed = true;
     }

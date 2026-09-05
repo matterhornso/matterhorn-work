@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { MatterhornCryptoAppActionAccess } from "@matterhorn-work/types/crypto-coworkers";
 import { getMatterhornCryptoTool } from "@matterhorn-work/types/crypto-action-registry";
+import type { MatterhornAgentToolReceipt } from "@matterhorn-work/types/guarded-agent-runtime";
 
 import { MATTERHORN_CAPABILITY_CALL_ARGUMENT } from "./agent-capability.js";
 import type { MatterhornCryptoAppAuthorization } from "./crypto-app-adapter-router.js";
@@ -50,6 +51,27 @@ function bindingKey(input: { appId: string; manifestRevision: string; actionId: 
 
 function receiptToolName(appId: string, actionId: string): string {
   return `crypto_app:${appId}:${actionId}`;
+}
+
+function validEvidenceMetadata(value: MatterhornAgentToolReceipt["evidence"]): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (Object.keys(value).some((key) => ![
+    "delivery",
+    "observedAt",
+    "ageMs",
+    "freshnessMaxAgeMs",
+  ].includes(key))) return false;
+  if (value.delivery !== "live" && value.delivery !== "certified_cache") return false;
+  if (value.observedAt !== null) {
+    if (typeof value.observedAt !== "string") return false;
+    const observedAtMs = Date.parse(value.observedAt);
+    if (!Number.isFinite(observedAtMs) || new Date(observedAtMs).toISOString() !== value.observedAt) return false;
+  }
+  if (value.ageMs !== null
+    && (!Number.isSafeInteger(value.ageMs) || value.ageMs < -60_000)) return false;
+  if (value.freshnessMaxAgeMs !== null
+    && (!Number.isSafeInteger(value.freshnessMaxAgeMs) || value.freshnessMaxAgeMs < 1)) return false;
+  return true;
 }
 
 export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCryptoAppAuthorization {
@@ -193,6 +215,10 @@ export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCrypto
       || !Number.isFinite(input.durationMs) || input.durationMs < 0) {
       throw new Error("crypto_app_reconciliation_invalid");
     }
+    if (input.evidence !== undefined
+      && (input.outcome !== "success" || !validEvidenceMetadata(input.evidence))) {
+      throw new Error("crypto_app_reconciliation_invalid");
+    }
     const reservation = this.#stateStore.take<StoredReservation>("crypto_app_reservation", input.reservationId);
     if (!reservation || reservation.reservationId !== input.reservationId) {
       throw new Error("crypto_app_reservation_unknown_or_replayed");
@@ -209,6 +235,7 @@ export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCrypto
       },
       receiptToolName: receiptToolName(reservation.appId, reservation.actionId),
       source: `crypto_app:${reservation.appId}`,
+      ...(input.evidence ? { evidence: structuredClone(input.evidence) } : {}),
     });
   }
 }
