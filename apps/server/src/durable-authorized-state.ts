@@ -1,6 +1,7 @@
 import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import type {
   GuardedRuntimeStateKind,
+  GuardedRuntimeStateRecord,
   MatterhornGuardedRuntimeStateStore,
 } from "./guarded-runtime-state-store.js";
 
@@ -21,38 +22,44 @@ export class MatterhornDurableAuthorizedState {
     private readonly invalidError: () => Error = () => new Error(invalidCode),
   ) {}
 
-  get<T>(key: string, nowMs: number): T | null {
+  getRecord<T>(key: string, nowMs: number): GuardedRuntimeStateRecord<T> | null {
     try {
-      return this.authority.open<T>(
-        this.stateStore.getRecord<unknown>(this.kind, key, nowMs),
-        this.invalidCode,
-      );
+      return this.openRecord<T>(this.stateStore.getRecord<unknown>(this.kind, key, nowMs));
+    } catch (error) {
+      return this.rethrowIntegrityFailure(error);
+    }
+  }
+
+  get<T>(key: string, nowMs: number): T | null {
+    return this.getRecord<T>(key, nowMs)?.value ?? null;
+  }
+
+  takeRecord<T>(key: string, nowMs: number): GuardedRuntimeStateRecord<T> | null {
+    try {
+      return this.openRecord<T>(this.stateStore.takeRecord<unknown>(this.kind, key, nowMs));
     } catch (error) {
       return this.rethrowIntegrityFailure(error);
     }
   }
 
   take<T>(key: string, nowMs: number): T | null {
+    return this.takeRecord<T>(key, nowMs)?.value ?? null;
+  }
+
+  listRecords<T>(input: { workspaceId?: string; nowMs?: number } = {}): GuardedRuntimeStateRecord<T>[] {
     try {
-      return this.authority.open<T>(
-        this.stateStore.takeRecord<unknown>(this.kind, key, nowMs),
-        this.invalidCode,
-      );
+      return this.stateStore.listRecords<unknown>(this.kind, input).map((record) => {
+        const opened = this.openRecord<T>(record);
+        if (!opened) throw this.invalidError();
+        return opened;
+      });
     } catch (error) {
       return this.rethrowIntegrityFailure(error);
     }
   }
 
   list<T>(input: { workspaceId?: string; nowMs?: number } = {}): T[] {
-    try {
-      return this.stateStore.listRecords<unknown>(this.kind, input).map((record) => {
-        const value = this.authority.open<T>(record, this.invalidCode);
-        if (value === null) throw this.invalidError();
-        return value;
-      });
-    } catch (error) {
-      return this.rethrowIntegrityFailure(error);
-    }
+    return this.listRecords<T>(input).map((record) => record.value);
   }
 
   put<T>(input: {
@@ -130,6 +137,15 @@ export class MatterhornDurableAuthorizedState {
       || input.expiresAtMs <= input.nowMs) {
       throw this.invalidError();
     }
+  }
+
+  private openRecord<T>(
+    record: GuardedRuntimeStateRecord<unknown> | null,
+  ): GuardedRuntimeStateRecord<T> | null {
+    if (!record) return null;
+    const value = this.authority.open<T>(record, this.invalidCode);
+    if (value === null) throw this.invalidError();
+    return { ...record, value };
   }
 
   private rethrowIntegrityFailure(error: unknown): never {

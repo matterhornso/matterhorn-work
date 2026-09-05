@@ -7,6 +7,9 @@ import {
   MatterhornAgentRunReceiptStore,
   purgeAllExpiredAgentRunReceipts,
 } from "./agent-run-receipts.js";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
+import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 let root = "";
 const originalDataDir = process.env.OPENWORK_DATA_DIR;
@@ -47,6 +50,45 @@ function publicPreflight(workspaceId: string, sessionId: string) {
 }
 
 describe("guarded agent run receipts", () => {
+  test("authenticates the pending receipt index used by guarded dispatch", async () => {
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "receipt-index-authority.db"));
+    const authority = testDurableStateAuthority();
+    const index = new MatterhornDurableAuthorizedState(
+      state,
+      authority,
+      "receipt_index",
+      "agent_run_receipt_index_invalid",
+    );
+    const store = new MatterhornAgentRunReceiptStore(state, authority);
+    const runId = "agent_run_11111111-1111-4111-8111-111111111111";
+    try {
+      await store.start({
+        runId,
+        workspaceId: "workspace_receipt_index",
+        sessionId: "session_receipt_index",
+        preflight: publicPreflight("workspace_receipt_index", "session_receipt_index"),
+        consentUsed: false,
+      });
+      expect(index.get<{ status: string; runId: string }>(runId, Date.now()))
+        .toEqual(expect.objectContaining({ status: "pending", runId }));
+      const persisted = state.getRecord<unknown>("receipt_index", runId);
+      if (!persisted) throw new Error("test receipt index missing");
+      state.put({
+        kind: persisted.kind,
+        key: persisted.key,
+        workspaceId: persisted.workspaceId,
+        sessionId: persisted.sessionId,
+        value: { tampered: true },
+        expiresAtMs: persisted.expiresAtMs,
+        nowMs: persisted.updatedAtMs,
+      });
+      expect(() => index.get(runId, Date.now())).toThrow("agent_run_receipt_index_invalid");
+    } finally {
+      authority.close();
+      state.close();
+    }
+  });
+
   test("stores only bounded security metadata in a hash chain", async () => {
     const store = new MatterhornAgentRunReceiptStore();
     const sensitivePrompt = "do-not-store-this-prompt";

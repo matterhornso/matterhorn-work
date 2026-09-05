@@ -947,6 +947,17 @@ export class MatterhornAgentCapabilityBroker {
     return claims;
   }
 
+  restoreStagedToken(
+    claims: MatterhornAgentCapabilityClaims,
+    now = new Date(),
+  ): string {
+    const secret = this.resolveSigningSecret();
+    if (!secret || !validCapabilityClaims(claims, now.getTime())) {
+      throw new Error("capability_invalid");
+    }
+    return encodeClaims(structuredClone(claims), secret);
+  }
+
   recordToolOutcome(
     runId: string,
     callId: string,

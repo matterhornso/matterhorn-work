@@ -40,8 +40,15 @@ describe("durable authorized state", () => {
       })).toBe(true);
       expect(value.state.get<{ ownerId: string; revision: number }>("evidence_1", 1_500))
         .toEqual({ ownerId: "owner_a", revision: 1 });
-      expect(value.state.take<{ ownerId: string; revision: number }>("evidence_1", 1_500))
-        .toEqual({ ownerId: "owner_a", revision: 1 });
+      expect(value.state.getRecord<{ ownerId: string; revision: number }>("evidence_1", 1_500))
+        .toEqual(expect.objectContaining({
+          kind: "crypto_evidence_renewal_intent",
+          key: "evidence_1",
+          workspaceId: "workspace_a",
+          value: { ownerId: "owner_a", revision: 1 },
+        }));
+      expect(value.state.takeRecord<{ ownerId: string; revision: number }>("evidence_1", 1_500))
+        .toEqual(expect.objectContaining({ value: { ownerId: "owner_a", revision: 1 } }));
       expect(value.state.take("evidence_1", 1_500)).toBeNull();
     } finally {
       value.authority.close();
@@ -79,6 +86,13 @@ describe("durable authorized state", () => {
       })).toEqual([
         { ownerId: "owner_a", revision: 2 },
         { ownerId: "owner_a", revision: 1 },
+      ]);
+      expect(value.state.listRecords<{ ownerId: string; revision: number }>({
+        workspaceId: "workspace_a",
+        nowMs: 2_000,
+      }).map((record) => [record.key, record.value.revision])).toEqual([
+        ["evidence_1", 2],
+        ["evidence_2", 1],
       ]);
 
       value.store.put({
