@@ -12,6 +12,7 @@ import { MatterhornCoworkerWatchRunner } from "./crypto-coworker-watch-runner.js
 import { MatterhornCoworkers, type MatterhornCoworkerCreateInput } from "./crypto-coworkers.js";
 
 const roots: string[] = [];
+const COWORKER_INTEGRITY_SECRET = "coworker-watch-runner-integrity-secret-at-least-32-bytes";
 
 function profileInput(): MatterhornCoworkerCreateInput {
   return {
@@ -88,7 +89,7 @@ function fixture(condition: {
 } = { id: "balance_changed", metric: "balanceAtomic", operator: "changed", value: null }) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-watch-runner-"));
   roots.push(root);
-  const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+  const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
   let now = new Date("2026-09-01T12:00:00.000Z");
   const coworkers = new MatterhornCoworkers({
     store,

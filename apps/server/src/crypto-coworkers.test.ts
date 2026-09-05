@@ -20,6 +20,7 @@ import {
 } from "./crypto-coworkers.js";
 
 const NOW = "2026-09-01T12:00:00.000Z";
+const COWORKER_INTEGRITY_SECRET = "coworker-state-integrity-secret-at-least-32-bytes";
 const roots: string[] = [];
 
 function input(overrides: Partial<MatterhornCoworkerCreateInput> = {}): MatterhornCoworkerCreateInput {
@@ -178,7 +179,7 @@ function fixture(
 ) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-coworkers-"));
   roots.push(root);
-  const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+  const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
   const coworkers = new MatterhornCoworkers({
     store,
     policyVersion,
@@ -241,7 +242,7 @@ describe("durable crypto coworkers", () => {
   test("isolates identical coworker ids by both workspace and owner", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-isolation-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     let sequence = 0;
     const coworkers = new MatterhornCoworkers({
       store,
@@ -266,7 +267,7 @@ describe("durable crypto coworkers", () => {
   test("purges every owner profile in only the selected workspace", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-purge-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     let sequence = 0;
     const coworkers = new MatterhornCoworkers({
       store,
@@ -294,7 +295,7 @@ describe("durable crypto coworkers", () => {
   test("serializes edits with optimistic revisions and rebinds the policy version", () => {
     const { root, store, coworkers } = fixture("coworker-policy-1");
     const created = coworkers.create("ws_alpha", "account_alpha", input());
-    const secondStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const secondStore = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     const upgraded = new MatterhornCoworkers({
       store: secondStore,
       policyVersion: "coworker-policy-2",
@@ -388,7 +389,7 @@ describe("durable crypto coworkers", () => {
   test("persists structured state without transcript replay and isolates it by tenant", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-state-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     let sequence = 0;
     const coworkers = new MatterhornCoworkers({
       store,
@@ -408,7 +409,7 @@ describe("durable crypto coworkers", () => {
       expect(() => coworkers.getWorkingState("ws_shared", "account_beta", alpha.id))
         .toThrow(new MatterhornCoworkerError("coworker_not_found"));
 
-      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
       try {
         const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
         expect(reopened.getWorkingState("ws_shared", "account_alpha", alpha.id)?.approvedMemoryIds)
@@ -424,7 +425,7 @@ describe("durable crypto coworkers", () => {
   test("persists an exact private resource scope and isolates it by workspace and owner", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-resources-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     let sequence = 0;
     const coworkers = new MatterhornCoworkers({
       store,
@@ -461,7 +462,7 @@ describe("durable crypto coworkers", () => {
       expect(() => coworkers.getResourceScope("ws_shared", "account_beta", alpha.id))
         .toThrow(new MatterhornCoworkerError("coworker_not_found"));
 
-      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
       try {
         const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
         expect(reopened.getResourceScope("ws_shared", "account_alpha", alpha.id)?.connections)
@@ -561,7 +562,7 @@ describe("durable crypto coworkers", () => {
       expect(coworkers.getSessionBinding("ws_alpha", "account_beta", "ses_alpha")).toBeNull();
       store.close();
 
-      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
       try {
         const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
         expect(reopened.resolveActiveSessionBinding("ws_alpha", "account_alpha", "ses_alpha"))
@@ -648,7 +649,7 @@ describe("durable crypto coworkers", () => {
   test("purges a deleted chat binding after coworker access is revoked", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-session-purge-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     let accountAllowed = true;
     const coworkers = new MatterhornCoworkers({
       store,
@@ -727,7 +728,7 @@ describe("durable crypto coworkers", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-resource-integrity-"));
     roots.push(root);
     const path = join(root, "coworkers.db");
-    const store = new MatterhornCoworkerStore(path);
+    const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
     const coworkers = new MatterhornCoworkers({
       store,
       policyVersion: "coworker-policy-1",
@@ -752,7 +753,7 @@ describe("durable crypto coworkers", () => {
       .run(JSON.stringify(tampered));
     database.close();
 
-    const reopenedStore = new MatterhornCoworkerStore(path);
+    const reopenedStore = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
     try {
       const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
       expect(() => reopened.getResourceScope("ws_alpha", "account_alpha", profile.id))
@@ -837,7 +838,7 @@ describe("durable crypto coworkers", () => {
       expect(() => coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput({ name: "Second watch" })))
         .toThrow(new MatterhornCoworkerError("coworker_watch_limit"));
 
-      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
       try {
         const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
         expect(reopened.getWatch("ws_alpha", "account_alpha", profile.id, watch.id)?.conditions[0]?.operator)
@@ -979,7 +980,7 @@ describe("durable crypto coworkers", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-secret-rescan-"));
     roots.push(root);
     const path = join(root, "coworkers.db");
-    const store = new MatterhornCoworkerStore(path);
+    const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
     const coworkers = new MatterhornCoworkers({
       store,
       policyVersion: "coworker-policy-1",
@@ -1017,7 +1018,7 @@ describe("durable crypto coworkers", () => {
     }
     database.close();
 
-    const reopened = new MatterhornCoworkerStore(path);
+    const reopened = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
     try {
       expect(() => reopened.get("ws_alpha", "account_alpha", profile.id))
         .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
@@ -1129,7 +1130,7 @@ describe("durable crypto coworkers", () => {
   test("stops scheduled checks at claim and completion boundaries after invite revocation", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-access-watch-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     const access = new MatterhornCoworkerAccess({ store, now: () => new Date(NOW) });
     const invite = access.issueInvite();
     access.accept("account_alpha", invite.token);
