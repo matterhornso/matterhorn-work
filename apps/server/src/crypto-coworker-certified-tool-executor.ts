@@ -43,7 +43,9 @@ function transactionError(error: unknown): Error {
   if (!(error instanceof MatterhornCryptoTransactionError)) {
     return error instanceof Error ? error : new Error("coworker_transaction_failed");
   }
-  return new Error(`${error.code}${error.reasonCodes.length ? `:${error.reasonCodes.join(",")}` : ""}`);
+  // Policy reasons remain on Matterhorn's internal typed error. The MCP
+  // boundary exposes only the stable, content-free transaction code.
+  return error;
 }
 
 /**
