@@ -6,6 +6,8 @@ import type { MatterhornAgentToolReceipt } from "@matterhorn-work/types/guarded-
 
 import { MATTERHORN_CAPABILITY_CALL_ARGUMENT } from "./agent-capability.js";
 import type { MatterhornCryptoAppAuthorization } from "./crypto-app-adapter-router.js";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
+import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 import {
   MatterhornGuardedRuntimeStateStore,
@@ -41,9 +43,32 @@ type ReservationContext = {
 
 type StoredReservation = ReservationContext & { bindingSeal: string };
 
+const CONSUMED_DISPATCH_VERSION = "matterhorn.crypto-app-consumed-dispatch.v1" as const;
+
+type StoredConsumedDispatch = {
+  version: typeof CONSUMED_DISPATCH_VERSION;
+  workspaceId: string;
+  sessionId: string;
+  runId: string;
+  callId: string;
+  connectionId: string;
+  appId: string;
+  manifestRevision: string;
+  actionId: string;
+  requestAccess: MatterhornCryptoAppActionAccess;
+  network: string;
+  canonicalArgumentsHash: string;
+  proxyToolName: string;
+  access: "read" | "prepare";
+  capabilityArgsHash: string;
+  capabilityExpiresAt: string;
+  reconciliationExpiresAt: string;
+};
+
 type Options = {
   runtime: MatterhornGuardedAgentRuntime;
   stateStore: MatterhornGuardedRuntimeStateStore;
+  stateAuthority: MatterhornDurableStateAuthority;
   bindings?: MatterhornCryptoAppCapabilityBinding[];
   resolveBinding?: (
     input: { appId: string; manifestRevision: string; actionId: string },
@@ -58,6 +83,12 @@ const RESERVATION_KEYS = new Set([
   "appId", "manifestRevision", "actionId", "requestAccess", "network",
   "canonicalArgumentsHash", "proxyToolName", "access", "capabilityArgsHash",
   "capabilityExpiresAt", "reconciliationExpiresAt", "bindingSeal",
+]);
+const CONSUMED_DISPATCH_KEYS = new Set([
+  "version", "workspaceId", "sessionId", "runId", "callId", "connectionId",
+  "appId", "manifestRevision", "actionId", "requestAccess", "network",
+  "canonicalArgumentsHash", "proxyToolName", "access", "capabilityArgsHash",
+  "capabilityExpiresAt", "reconciliationExpiresAt",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -136,6 +167,57 @@ function validReservationRecord(
     && record.updatedAtMs <= reconciliationExpiresAtMs;
 }
 
+function validConsumedDispatchRecord(
+  record: GuardedRuntimeStateRecord<unknown>,
+  callId: string,
+): record is GuardedRuntimeStateRecord<StoredConsumedDispatch> {
+  if (record.kind !== "crypto_app_consumed_dispatch"
+    || record.key !== callId
+    || !isRecord(record.value)
+    || Object.keys(record.value).length !== CONSUMED_DISPATCH_KEYS.size
+    || Object.keys(record.value).some((key) => !CONSUMED_DISPATCH_KEYS.has(key))) return false;
+  const value = record.value;
+  const capabilityExpiresAtMs = typeof value.capabilityExpiresAt === "string"
+    ? Date.parse(value.capabilityExpiresAt)
+    : Number.NaN;
+  const reconciliationExpiresAtMs = typeof value.reconciliationExpiresAt === "string"
+    ? Date.parse(value.reconciliationExpiresAt)
+    : Number.NaN;
+  const tool = typeof value.proxyToolName === "string"
+    ? getMatterhornCryptoTool(value.proxyToolName)
+    : undefined;
+  return value.version === CONSUMED_DISPATCH_VERSION
+    && boundedId(value.workspaceId)
+    && boundedId(value.sessionId)
+    && boundedId(value.runId)
+    && boundedId(value.callId)
+    && value.callId === callId
+    && boundedId(value.connectionId)
+    && boundedId(value.appId)
+    && boundedId(value.manifestRevision, 128)
+    && boundedId(value.actionId, 160)
+    && (value.requestAccess === "read" || value.requestAccess === "watch"
+      || value.requestAccess === "prepare" || value.requestAccess === "simulate")
+    && boundedId(value.network, 160)
+    && typeof value.canonicalArgumentsHash === "string"
+    && /^[a-f0-9]{64}$/.test(value.canonicalArgumentsHash)
+    && boundedId(value.proxyToolName)
+    && Boolean(tool)
+    && (value.access === "read" || value.access === "prepare")
+    && tool?.access === value.access
+    && capabilityAccess(value.requestAccess) === value.access
+    && typeof value.capabilityArgsHash === "string"
+    && /^[a-f0-9]{64}$/.test(value.capabilityArgsHash)
+    && exactIso(value.capabilityExpiresAt)
+    && exactIso(value.reconciliationExpiresAt)
+    && reconciliationExpiresAtMs - capabilityExpiresAtMs === RECONCILIATION_GRACE_MS
+    && record.workspaceId === value.workspaceId
+    && record.sessionId === value.sessionId
+    && record.expiresAtMs === reconciliationExpiresAtMs
+    && Number.isSafeInteger(record.updatedAtMs)
+    && record.updatedAtMs <= reconciliationExpiresAtMs;
+}
+
 function capabilityAccess(access: MatterhornCryptoAppActionAccess): "read" | "prepare" {
   return access === "read" || access === "watch" ? "read" : "prepare";
 }
@@ -178,6 +260,8 @@ function validEvidenceMetadata(value: MatterhornAgentToolReceipt["evidence"]): b
 export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCryptoAppAuthorization {
   readonly #runtime: MatterhornGuardedAgentRuntime;
   readonly #stateStore: MatterhornGuardedRuntimeStateStore;
+  readonly #reservationState: MatterhornDurableAuthorizedState;
+  readonly #consumedDispatchState: MatterhornDurableAuthorizedState;
   readonly #bindings = new Map<string, MatterhornCryptoAppCapabilityBinding>();
   readonly #resolveBinding: Options["resolveBinding"];
   readonly #runtimeSecret: () => string;
@@ -186,6 +270,18 @@ export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCrypto
   constructor(options: Options) {
     this.#runtime = options.runtime;
     this.#stateStore = options.stateStore;
+    this.#reservationState = new MatterhornDurableAuthorizedState(
+      options.stateStore,
+      options.stateAuthority,
+      "crypto_app_reservation",
+      "crypto_app_persisted_reservation_invalid",
+    );
+    this.#consumedDispatchState = new MatterhornDurableAuthorizedState(
+      options.stateStore,
+      options.stateAuthority,
+      "crypto_app_consumed_dispatch",
+      "crypto_app_persisted_dispatch_invalid",
+    );
     this.#runtimeSecret = options.runtimeSecret
       ?? (() => process.env.MATTERHORN_AGENT_RUNTIME_SECRET?.trim() ?? "");
     this.#now = options.now ?? (() => new Date());
@@ -247,25 +343,6 @@ export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCrypto
       });
       if (!proof || proof.access !== tool.access) {
         throw new Error("crypto_app_capability_scope_mismatch");
-      }
-      if (!this.#stateStore.putIfAbsent({
-        kind: "crypto_app_consumed_dispatch",
-        key: input.callId,
-        workspaceId: input.workspaceId,
-        sessionId: input.sessionId,
-        value: {
-          runId: input.runId,
-          callId: input.callId,
-          connectionId: input.connectionId,
-          appId: input.appId,
-          manifestRevision: input.manifestRevision,
-          actionId: input.actionId,
-          network: input.network,
-        },
-        expiresAtMs: Date.parse(proof.expiresAt) + RECONCILIATION_GRACE_MS,
-        nowMs: this.#now().getTime(),
-      })) {
-        throw new Error("crypto_app_capability_already_dispatched");
       }
     } else {
       this.#runtime.stageRuntimeTool({
@@ -336,14 +413,55 @@ export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCrypto
     }
     const reservation: StoredReservation = { ...context, bindingSeal: sealed.seal };
     const nowMs = this.#now().getTime();
-    this.#stateStore.put({
-      kind: "crypto_app_reservation",
-      key: reservationId,
-      workspaceId: input.workspaceId,
-      sessionId: input.sessionId,
-      value: reservation,
-      expiresAtMs: Date.parse(context.reconciliationExpiresAt),
-      nowMs,
+    this.#stateStore.transaction(() => {
+      if (input.consumedCapability) {
+        const existing = this.#consumedDispatchState.getRecord<unknown>(input.callId, nowMs);
+        if (existing) {
+          if (!validConsumedDispatchRecord(existing, input.callId)) {
+            throw new Error("crypto_app_persisted_dispatch_invalid");
+          }
+          throw new Error("crypto_app_capability_already_dispatched");
+        }
+        const dispatch: StoredConsumedDispatch = {
+          version: CONSUMED_DISPATCH_VERSION,
+          workspaceId: input.workspaceId,
+          sessionId: input.sessionId,
+          runId: input.runId,
+          callId: input.callId,
+          connectionId: input.connectionId,
+          appId: input.appId,
+          manifestRevision: input.manifestRevision,
+          actionId: input.actionId,
+          requestAccess: input.access,
+          network: input.network,
+          canonicalArgumentsHash: input.canonicalArgumentsHash,
+          proxyToolName: tool.name,
+          access: tool.access,
+          capabilityArgsHash: proof.argsHash,
+          capabilityExpiresAt: proof.expiresAt,
+          reconciliationExpiresAt: proof.reconciliationExpiresAt,
+        };
+        if (!this.#consumedDispatchState.putIfAbsent({
+          key: input.callId,
+          workspaceId: input.workspaceId,
+          sessionId: input.sessionId,
+          value: dispatch,
+          expiresAtMs: Date.parse(proof.reconciliationExpiresAt),
+          nowMs,
+        })) {
+          throw new Error("crypto_app_capability_already_dispatched");
+        }
+      }
+      if (!this.#reservationState.putIfAbsent({
+        key: reservationId,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        value: reservation,
+        expiresAtMs: Date.parse(context.reconciliationExpiresAt),
+        nowMs,
+      })) {
+        throw new Error("crypto_app_reservation_conflict");
+      }
     });
     return { reservationId };
   }
@@ -357,7 +475,10 @@ export class MatterhornGuardedCryptoAppAuthorization implements MatterhornCrypto
       && (input.outcome !== "success" || !validEvidenceMetadata(input.evidence))) {
       throw new Error("crypto_app_reconciliation_invalid");
     }
-    const record = this.#stateStore.takeRecord<unknown>("crypto_app_reservation", input.reservationId);
+    const record = this.#reservationState.takeRecord<unknown>(
+      input.reservationId,
+      this.#now().getTime(),
+    );
     if (!record) {
       throw new Error("crypto_app_reservation_unknown_or_replayed");
     }
