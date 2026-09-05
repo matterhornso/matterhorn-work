@@ -149,6 +149,7 @@ async function fixture(input: { currentEpoch?: number; validUntilEpoch?: number 
   const service = new MatterhornAgentFileWalrusRenewalService(
     store,
     state,
+    testDurableStateAuthority(),
     buildTransaction,
     verifyTransaction,
     verifyCertification,
@@ -171,6 +172,47 @@ async function fixture(input: { currentEpoch?: number; validUntilEpoch?: number 
 }
 
 describe("Walrus Agent File renewal airlock", () => {
+  test("rejects restored renewal intent row metadata changes before wallet verification", async () => {
+    const value = await fixture();
+    try {
+      const prepared = await value.service.prepare({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        expectedRevision: value.published.revision,
+        signer: SIGNER,
+        signal: new AbortController().signal,
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      });
+      const row = value.state.getRecord<unknown>(
+        "agent_file_renewal_intent",
+        value.published.id,
+        new Date("2026-09-02T00:01:00.000Z").getTime(),
+      )!;
+      value.state.put({
+        kind: row.kind,
+        key: row.key,
+        workspaceId: row.workspaceId,
+        sessionId: row.sessionId,
+        value: row.value,
+        expiresAtMs: row.expiresAtMs,
+        nowMs: row.updatedAtMs + 1,
+      });
+      await expect(value.service.confirm({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        fileId: value.published.id,
+        intentId: prepared.preview.intentId,
+        intentHash: prepared.preview.intentHash,
+        transactionDigest: prepared.preview.transactionDigest,
+        signal: new AbortController().signal,
+        now: new Date("2026-09-02T00:01:00.000Z"),
+      })).rejects.toThrow("agent_file_walrus_renewal_intent_integrity_invalid");
+    } finally {
+      value.state.close();
+    }
+  });
+
   test("prepares one exact transaction and finalizes it once after connected-wallet confirmation", async () => {
     const value = await fixture();
     try {
@@ -350,6 +392,7 @@ describe("Walrus Agent File renewal airlock", () => {
     const serviceA = new MatterhornAgentFileWalrusRenewalService(
       value.store,
       value.state,
+      testDurableStateAuthority(),
       async (input) => {
         buildStarted();
         await buildGate;
@@ -362,6 +405,7 @@ describe("Walrus Agent File renewal airlock", () => {
     const serviceB = new MatterhornAgentFileWalrusRenewalService(
       storeB,
       stateB,
+      testDurableStateAuthority(),
       async (input) => {
         secondBuildCalls += 1;
         return value.buildTransaction(input);
