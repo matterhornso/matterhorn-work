@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   readSessionPanelFromSearch,
@@ -26,6 +28,7 @@ import {
   resolveCoworkerWatchSources,
 } from "../src/react-app/domains/coworkers/coworker-watch-form";
 import { suggestCoworkerTemplate } from "../src/react-app/domains/session/chat/workspace-coworker-suggestion";
+import { WorkspaceCoworkerStart } from "../src/react-app/domains/session/chat/workspace-coworker-start";
 
 function appSource(path: string): string {
   return readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
@@ -86,6 +89,39 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("setPendingOutcome(props.initialOutcome?.trim() ?? \"\")");
     expect(panel).toContain('pendingOutcome || "Ask what outcome I want, then help me take the safest next step."');
     expect(panel).toContain("Your goal");
+  });
+
+  test("renders one accessible first step before asking the user to choose details", () => {
+    const html = renderToStaticMarkup(React.createElement(WorkspaceCoworkerStart, {
+      onChoose: () => undefined,
+    }));
+    const submitStart = html.indexOf('<button type="submit"');
+    const submitEnd = html.indexOf(">", submitStart);
+    const submitTag = html.slice(submitStart, submitEnd + 1);
+
+    expect(html).toContain('aria-labelledby="workspace-coworker-start-title"');
+    expect(html).toContain('id="workspace-coworker-start-title"');
+    expect(html).toContain('<label for="workspace-coworker-outcome"');
+    expect(html).toContain('<textarea id="workspace-coworker-outcome"');
+    expect(html).toContain('maxLength="1200"');
+    expect(html).toContain("Describe your goal in one sentence.");
+    expect(submitTag).toContain('aria-describedby="workspace-coworker-safety"');
+    expect(submitTag).toContain("disabled");
+    expect(html).toContain('id="workspace-coworker-safety"');
+    expect(html).toContain("It cannot see private keys or send funds on its own.");
+    expect(html).toContain("Choose what it can use");
+    expect(html).not.toContain("Matterhorn suggests");
+    expect(html).not.toContain("Choose a coworker");
+    expect(html).not.toContain("Review access");
+    expect(html).not.toContain("Apps and information");
+
+    const disabledHtml = renderToStaticMarkup(React.createElement(WorkspaceCoworkerStart, {
+      disabled: true,
+      onChoose: () => undefined,
+    }));
+    const textareaStart = disabledHtml.indexOf('<textarea id="workspace-coworker-outcome"');
+    const textareaEnd = disabledHtml.indexOf(">", textareaStart);
+    expect(disabledHtml.slice(textareaStart, textareaEnd + 1)).toContain("disabled");
   });
 
   test("keeps first-run access focused on one app and continues with an unsent draft", () => {

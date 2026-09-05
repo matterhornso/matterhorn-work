@@ -20,11 +20,15 @@ The first useful moment is a completed, cited crypto research answer or a prepar
 
 ## Issues found
 
-### P1 — A direct first visit to Coworkers lacks enough decision context
+### Resolved — A direct first visit explains one decision at a time
 
-The empty panel presents four job names as equal-width buttons, but hides the short explanation already present in the source data. A newcomer opening Coworkers directly must guess the difference between market research, risk monitoring, wallet preparation, and treasury tracking.
-
-Recommended change: show the existing one-sentence explanation inside each choice, add a direct instruction to choose one, and remove the arbitrary visual preference for the first option. Preserve the immediate path into access review and the connected-wallet-only boundary.
+Home first asks for one outcome, keeps the next button disabled until the user
+provides it, and shows no coworker decision until there is something to route.
+Matterhorn then suggests one fit and keeps the alternatives behind `Change`.
+Opening Coworkers directly shows the same four jobs with one-sentence
+explanations and no arbitrary default. A rendered React contract now verifies
+the heading, input label, disabled first state, safety description, and absence
+of setup jargon before release.
 
 ### Resolved — Role language is consistent across surfaces
 
