@@ -269,6 +269,7 @@ Exit: coworkers can prepare exact financial work but no agent-facing path can si
 ### Phase 4 — Walrus evidence
 
 - Canonical minimal evidence receipt: local compiler complete for finalized guarded runs, with closed fields and per-bundle salted identity hashes.
+- Pending finalized-run recovery is authenticated before local evidence sealing: the complete receipt and coworker snapshot are HMAC-bound to their exact run, tenant, session, SQLite metadata, and 365-day retention window. Restored mutation, wrong-key state, and unsealed legacy queue entries fail before an evidence handler runs.
 - Envelope encryption before publication: AES-256-GCM sealing, exact recipient binding, and plaintext-key zeroization complete.
 - Public ciphertext boundary: Walrus-eligible bytes exclude local KMS references and plaintext hashes; deterministic Merkle batching and proof verification are complete.
 - Authenticated, peer-pinned testnet Walrus publisher and byte-exact readback gate: backend implementation complete. Account routes expose owner-scoped redacted packets, explicit per-revision ciphertext publication, and read-only verification.
