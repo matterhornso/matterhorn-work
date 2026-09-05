@@ -2,6 +2,9 @@
 
 Status: Phases 1–4 security foundations plus the invite-only testnet developer and workspace integration path. All runtime switches still default to `off`; no production adapter traffic is enabled by this work.
 
+The current end-to-end trust model is documented in the
+[Matterhorn Guarded Agent Architecture v3](../architecture/matterhorn-guarded-agent-architecture-v3.md).
+
 Live release proof is defined by the [Guarded Crypto Coworkers acceptance gate](./acceptance-evidence.md). Local tests do not satisfy that gate and do not authorize enabling any runtime switch.
 
 ## Product boundary

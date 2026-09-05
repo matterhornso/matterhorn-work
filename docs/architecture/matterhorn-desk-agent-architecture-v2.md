@@ -1,5 +1,11 @@
 # Matterhorn Desks Agent Architecture v2
 
+> **Superseded for guarded crypto behavior.** This document preserves the
+> earlier managed-desk design. Use
+> [Matterhorn Guarded Agent Architecture v3](matterhorn-guarded-agent-architecture-v3.md)
+> for the current privacy, coworker, capability, certified-app, transaction,
+> evidence, and rollout boundaries.
+
 ## Decision
 
 Matterhorn Desks uses one shared session orchestrator and seven managed desk
