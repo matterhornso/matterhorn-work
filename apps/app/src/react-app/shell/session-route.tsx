@@ -127,6 +127,7 @@ import {
   MATTERHORN_PRIVATE_MODEL_PROVIDER_ID,
   privateModeModelFromProviders,
   standardModeModelFromProviders,
+  verifiedPrivateModeModelFromProviders,
 } from "../domains/session/private-model-mode";
 import { buildOpenworkEnvSystemContext } from "../domains/session/sync/env-context";
 import {
@@ -1987,20 +1988,26 @@ export function SessionRoute() {
     workspaceModelSelection,
   }), [local.prefs.defaultModel, selectedSessionModelChoice?.model, workspaceModelSelection]);
   const selectedPromptModel = selectedPromptModelResolution.model;
-  const privateModeModel = useMemo(
+  const privateModePrivacyPolicy = workspaceModelSelection?.privacy?.providers?.find(
+    (policy) => policy.providerId.trim().toLowerCase() === MATTERHORN_PRIVATE_MODEL_PROVIDER_ID,
+  ) ?? null;
+  const configuredPrivateModeModel = useMemo(
     () => privateModeModelFromProviders(providers, providerConnectedIds),
     [providerConnectedIds, providers],
+  );
+  const privateModeModel = useMemo(
+    () => verifiedPrivateModeModelFromProviders(
+      providers,
+      providerConnectedIds,
+      privateModePrivacyPolicy,
+    ),
+    [privateModePrivacyPolicy, providerConnectedIds, providers],
   );
   const standardModeModel = useMemo(
     () => standardModeModelFromProviders(providers, providerConnectedIds),
     [providerConnectedIds, providers],
   );
-  const privateModePrivacyPolicy = workspaceModelSelection?.privacy?.providers?.find(
-    (policy) => policy.providerId.trim().toLowerCase() === MATTERHORN_PRIVATE_MODEL_PROVIDER_ID,
-  ) ?? null;
-  const privateModeVerified = Boolean(
-    privateModeModel && isVerifiedPrivateModePolicy(privateModePrivacyPolicy, privateModeModel),
-  );
+  const privateModeVerified = Boolean(privateModeModel);
   const selectedPrivateModeVerified = Boolean(
     selectedPromptModel
       && isVerifiedPrivateModePolicy(privateModePrivacyPolicy, selectedPromptModel),
@@ -2754,7 +2761,7 @@ export function SessionRoute() {
       providerPrivacyPolicy: selectedProviderPrivacyPolicy,
       privateModeAvailable: privateModeVerified,
       privateModeEnabled,
-      privateModeUnavailableReason: privateModeModel && !privateModeVerified
+      privateModeUnavailableReason: configuredPrivateModeModel && !privateModeVerified
         ? "Matterhorn could not verify Venice's current private-model list. Open model settings and try again."
         : null,
       onPrivateModeChange: (enabled: boolean) => {
