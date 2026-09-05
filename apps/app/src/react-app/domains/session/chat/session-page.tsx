@@ -81,7 +81,7 @@ import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
 import type { ProviderAuthModalProps } from "../../connections/provider-auth/provider-auth-modal";
 import { RenameSessionModal } from "../modals/rename-session-modal";
 import { AppSidebar } from "../sidebar/app-sidebar";
-import { SessionSurface, type SessionSurfaceProps } from "../surface/session-surface";
+import type { SessionSurfaceProps } from "../surface/session-surface";
 import { useMatterhornSessionMemoryContextStore } from "../surface/memory-context-store";
 import {
   SidebarInset,
@@ -183,6 +183,9 @@ import { getChatDraftConfig, type ReviewedActionOperation } from "@matterhorn-wo
 import { matterhornDeskAgentIdForDesk } from "@matterhorn-work/types/desk-agents";
 import type { MatterhornWorkflowRun } from "@matterhorn-work/types/workflow-runs";
 
+const SessionSurface = lazy(() => import("../surface/session-surface").then((module) => ({
+  default: module.SessionSurface,
+})));
 const ProviderAuthModal = lazy(() => import("../../connections/provider-auth/provider-auth-modal"));
 const ShareWorkspaceModal = lazy(() => import("../../workspace/share-workspace-modal").then((module) => ({
   default: module.ShareWorkspaceModal,
@@ -3129,34 +3132,36 @@ export function SessionPage(props: SessionPageProps) {
               ) : null}
 
               {!showDelayedSessionLoadingState && canRenderReactSurface ? (
-                <SessionSurface
-                  // Spread `surface` first so the explicit per-workspace
-                  // routing props below CAN'T be silently overridden by
-                  // anything that leaks into `surface`. SessionSurface's
-                  // server target (client/workspaceId/sessionId/opencodeBaseUrl/matterhornToken)
-                  // must come from the resolved workspace endpoint passed by
-                  // SessionRoute, not from anything in `surface`.
-                  {...props.surface!}
-                  client={props.matterhornServerClient!}
-                  workspaceId={props.runtimeWorkspaceId!}
-                  sessionId={props.selectedSessionId!}
-                  opencodeBaseUrl={reactSessionBaseUrl}
-                  matterhornToken={reactSessionToken}
-                  todos={props.todos}
-                  activePermission={props.activePermission}
-                  permissionReplyBusy={props.permissionReplyBusy}
-                  respondPermission={props.respondPermission}
-                  activeQuestion={props.activeQuestion}
-                  questionReplyBusy={props.questionReplyBusy}
-                  respondQuestion={props.respondQuestion}
-                  safeStringify={props.safeStringify}
-                  connectedProviderIds={props.providerConnectedIds}
-                  onOpenTarget={openTarget}
-                  onOpenTargetsChange={handleOpenTargetsChange}
-                  onCreateDeskTask={(prompt, options) => {
-                    return props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, options);
-                  }}
-                />
+                <Suspense fallback={<LazyPanelFallback label="Loading chat" />}>
+                  <SessionSurface
+                    // Spread `surface` first so the explicit per-workspace
+                    // routing props below CAN'T be silently overridden by
+                    // anything that leaks into `surface`. SessionSurface's
+                    // server target (client/workspaceId/sessionId/opencodeBaseUrl/matterhornToken)
+                    // must come from the resolved workspace endpoint passed by
+                    // SessionRoute, not from anything in `surface`.
+                    {...props.surface!}
+                    client={props.matterhornServerClient!}
+                    workspaceId={props.runtimeWorkspaceId!}
+                    sessionId={props.selectedSessionId!}
+                    opencodeBaseUrl={reactSessionBaseUrl}
+                    matterhornToken={reactSessionToken}
+                    todos={props.todos}
+                    activePermission={props.activePermission}
+                    permissionReplyBusy={props.permissionReplyBusy}
+                    respondPermission={props.respondPermission}
+                    activeQuestion={props.activeQuestion}
+                    questionReplyBusy={props.questionReplyBusy}
+                    respondQuestion={props.respondQuestion}
+                    safeStringify={props.safeStringify}
+                    connectedProviderIds={props.providerConnectedIds}
+                    onOpenTarget={openTarget}
+                    onOpenTargetsChange={handleOpenTargetsChange}
+                    onCreateDeskTask={(prompt, options) => {
+                      return props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, options);
+                    }}
+                  />
+                </Suspense>
               ) : null}
 
               {!showDelayedSessionLoadingState && !canRenderReactSurface && !showStartupSkeleton ? (
