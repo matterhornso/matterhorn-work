@@ -82,6 +82,25 @@ function request(runId: string, sessionId: string, overrides: Record<string, unk
   };
 }
 
+function rewriteReservation(
+  store: MatterhornGuardedRuntimeStateStore,
+  reservationId: string,
+  mutate: (value: Record<string, unknown>) => Record<string, unknown>,
+  metadata: { workspaceId?: string; sessionId?: string; expiresAtMs?: number } = {},
+): void {
+  const record = store.getRecord<Record<string, unknown>>("crypto_app_reservation", reservationId);
+  if (!record) throw new Error("test_reservation_missing");
+  store.put({
+    kind: "crypto_app_reservation",
+    key: reservationId,
+    workspaceId: metadata.workspaceId ?? record.workspaceId,
+    sessionId: metadata.sessionId ?? record.sessionId,
+    value: mutate(structuredClone(record.value)),
+    expiresAtMs: metadata.expiresAtMs ?? record.expiresAtMs,
+    nowMs: record.updatedAtMs,
+  });
+}
+
 describe("guarded crypto app authorization bridge", () => {
   test("accepts one already-consumed interactive coworker capability without issuing a second token", async () => {
     const path = join(root, "interactive-consumed.db");
@@ -353,6 +372,91 @@ describe("guarded crypto app authorization bridge", () => {
     }));
     app.reservationStore.close();
     app.runtime.close();
+  });
+
+  test("destroys malformed, cross-tenant, extended, or mutated durable reservations before receipt admission", async () => {
+    const cases: Array<{
+      name: string;
+      expected: string;
+      mutate: (value: Record<string, unknown>) => Record<string, unknown>;
+      metadata?: (value: Record<string, unknown>) => {
+        workspaceId?: string;
+        sessionId?: string;
+        expiresAtMs?: number;
+      };
+    }> = [
+      {
+        name: "unknown-field",
+        expected: "crypto_app_persisted_reservation_invalid",
+        mutate: (value) => ({ ...value, submitAuthority: true }),
+      },
+      {
+        name: "tenant-row",
+        expected: "crypto_app_persisted_reservation_invalid",
+        mutate: (value) => value,
+        metadata: () => ({ workspaceId: "ws_other" }),
+      },
+      {
+        name: "arguments-hash",
+        expected: "crypto_app_reservation_capability_mismatch",
+        mutate: (value) => ({ ...value, canonicalArgumentsHash: "f".repeat(64) }),
+      },
+      {
+        name: "app-substitution",
+        expected: "crypto_app_reservation_capability_mismatch",
+        mutate: (value) => ({ ...value, appId: "matterhorn.attacker" }),
+      },
+      {
+        name: "expiry-extension",
+        expected: "crypto_app_reservation_capability_mismatch",
+        mutate: (value) => {
+          const capabilityExpiresAtMs = Date.parse(String(value.capabilityExpiresAt)) + 60_000;
+          const reconciliationExpiresAtMs = Date.parse(String(value.reconciliationExpiresAt)) + 60_000;
+          return {
+            ...value,
+            capabilityExpiresAt: new Date(capabilityExpiresAtMs).toISOString(),
+            reconciliationExpiresAt: new Date(reconciliationExpiresAtMs).toISOString(),
+          };
+        },
+        metadata: (value) => ({
+          expiresAtMs: Date.parse(String(value.reconciliationExpiresAt)) + 60_000,
+        }),
+      },
+    ];
+
+    for (const item of cases) {
+      const app = await fixture(`reservation-${item.name}`);
+      const reserved = await app.authorization.authorize(request(app.runId, app.sessionId, {
+        callId: `call_${item.name}`,
+      }));
+      const before = app.reservationStore.get<Record<string, unknown>>(
+        "crypto_app_reservation",
+        reserved.reservationId,
+      );
+      if (!before) throw new Error("test_reservation_missing");
+      rewriteReservation(
+        app.reservationStore,
+        reserved.reservationId,
+        item.mutate,
+        item.metadata?.(before),
+      );
+      await expect(app.authorization.reconcile({
+        reservationId: reserved.reservationId,
+        outcome: "success",
+        costMicros: 0,
+        durationMs: 5,
+      })).rejects.toThrow(item.expected);
+      await expect(app.authorization.reconcile({
+        reservationId: reserved.reservationId,
+        outcome: "success",
+        costMicros: 0,
+        durationMs: 5,
+      })).rejects.toThrow("crypto_app_reservation_unknown_or_replayed");
+      const receipt = await app.runtime.receipts.get("ws_sui", app.runId);
+      expect(receipt?.tools.some((tool) => tool.name.startsWith("crypto_app:"))).toBe(false);
+      app.reservationStore.close();
+      app.runtime.close();
+    }
   });
 
   test("fails binding, access, tenant and call replay before adapter authority can be reused", async () => {

@@ -171,6 +171,80 @@ describe("agent capability broker", () => {
     expect(() => broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args })).toThrow("capability_replayed");
   });
 
+  test("seals durable tool context to the exact consumed call and bounded reconciliation window", () => {
+    const broker = brokerWithRun();
+    const now = new Date();
+    const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
+    const capability = broker.issue({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+      now,
+    });
+    broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args, now });
+    const context = {
+      reservationId: "crypto_app_reservation_test",
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_account_read",
+      canonicalArgumentsHash: "a".repeat(64),
+    };
+    const sealed = broker.sealConsumedToolContext({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      toolName: "matterhorn_sui_get_balance",
+      context,
+      now,
+    });
+    expect(sealed?.seal).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(sealed?.seal).not.toContain(process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET!);
+    expect(broker.verifyConsumedToolContext({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      toolName: "matterhorn_sui_get_balance",
+      context,
+      seal: sealed!.seal,
+      now,
+    })).toMatchObject({ access: "read", argsHash: capability.claims.argsHash });
+    expect(broker.verifyConsumedToolContext({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      toolName: "matterhorn_sui_get_balance",
+      context: { ...context, actionId: "sui_transfer_preview" },
+      seal: sealed!.seal,
+      now,
+    })).toBeNull();
+    expect(broker.verifyConsumedToolContext({
+      runId: "run_1",
+      workspaceId: "ws_other",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      toolName: "matterhorn_sui_get_balance",
+      context,
+      seal: sealed!.seal,
+      now,
+    })).toBeNull();
+    expect(broker.verifyConsumedToolContext({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      toolName: "matterhorn_sui_get_balance",
+      context,
+      seal: sealed!.seal,
+      now: new Date(now.getTime() + 2 * 60_000 + 1),
+    })).toBeNull();
+  });
+
   test("rejects correctly signed capabilities with open or invalid claim contracts", () => {
     const broker = brokerWithRun();
     const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
@@ -279,6 +353,7 @@ describe("agent capability broker", () => {
       network: "polygon:mainnet",
       toolName: "matterhorn_polymarket_preview_order",
       args,
+      now: JURISDICTION_NOW,
     })).toMatchObject({ jurisdictionPolicy: context });
   });
 

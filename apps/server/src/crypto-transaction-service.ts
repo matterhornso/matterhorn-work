@@ -204,6 +204,7 @@ export class MatterhornCryptoTransactionService {
       network: adapterResult.action.network,
       toolName: proxyToolName,
       args: capabilityArgs,
+      now: this.#now(),
     });
     if (!proof || proof.access !== "prepare") {
       throw new MatterhornCryptoTransactionError("transaction_capability_proof_missing");
