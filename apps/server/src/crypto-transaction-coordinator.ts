@@ -11,6 +11,7 @@ import type {
   ReviewedActionHandoffV2,
 } from "@matterhorn-work/types/reviewed-actions";
 
+import { verifyCryptoAppResultEvidence } from "./crypto-app-evidence-identity.js";
 import { canonicalJson, equalDigest, sha256 } from "./guarded-runtime-crypto.js";
 import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
 
@@ -344,6 +345,9 @@ export function compileCertifiedCryptoIntent(input: CertifiedCryptoIntentCompile
     || input.result.version !== "matterhorn.crypto-app-result.v1"
     || (input.result.action.access !== "prepare" && input.result.action.access !== "simulate")) {
     throw new Error("crypto_intent_context_invalid");
+  }
+  if (!verifyCryptoAppResultEvidence(input.result)) {
+    throw new Error("crypto_intent_evidence_invalid");
   }
   const preparedAt = new Date(input.result.timing.completedAt);
   const simulatedAt = new Date(input.result.observation.observedAt ?? "");

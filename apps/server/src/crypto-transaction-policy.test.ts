@@ -5,6 +5,7 @@ import type {
   MatterhornCryptoAppResult,
 } from "@matterhorn-work/types/crypto-coworkers";
 
+import { cryptoAppEvidenceIdentity } from "./crypto-app-evidence-identity.js";
 import {
   compileCertifiedCryptoIntent,
   cryptoIntentToReviewedActionHandoffV2,
@@ -76,7 +77,7 @@ function layers(changes: Partial<MatterhornTransactionPolicyLayers> = {}): Matte
 }
 
 function certifiedSuiResult(): MatterhornCryptoAppResult {
-  return {
+  const candidate: MatterhornCryptoAppResult = {
     version: "matterhorn.crypto-app-result.v1",
     app: {
       id: "matterhorn.sui-testnet",
@@ -113,6 +114,15 @@ function certifiedSuiResult(): MatterhornCryptoAppResult {
       expiresAt: "2026-09-01T12:00:15.000Z",
     },
   };
+  Object.assign(candidate.provenance, cryptoAppEvidenceIdentity({
+    appId: candidate.app.id,
+    manifestRevision: candidate.app.manifestRevision,
+    actionId: candidate.action.id,
+    network: candidate.action.network,
+    result: candidate.result,
+    observation: candidate.observation,
+  }));
+  return candidate;
 }
 
 function facts(changes: Partial<MatterhornTransactionExecutionFacts> = {}): MatterhornTransactionExecutionFacts {

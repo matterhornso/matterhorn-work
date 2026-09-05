@@ -9,6 +9,7 @@ import type {
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import { MatterhornAgentCapabilityBroker } from "./agent-capability.js";
+import { cryptoAppEvidenceIdentity } from "./crypto-app-evidence-identity.js";
 import { MatterhornPendingCryptoIntentStore } from "./crypto-pending-intent-store.js";
 import { firstPartyCryptoAppProxyTool } from "./first-party-crypto-apps.js";
 import {
@@ -145,8 +146,20 @@ function coworker(): MatterhornCoworkerProfile {
   };
 }
 
+function certifyResult(candidate: MatterhornCryptoAppResult): MatterhornCryptoAppResult {
+  Object.assign(candidate.provenance, cryptoAppEvidenceIdentity({
+    appId: candidate.app.id,
+    manifestRevision: candidate.app.manifestRevision,
+    actionId: candidate.action.id,
+    network: candidate.action.network,
+    result: candidate.result,
+    observation: candidate.observation,
+  }));
+  return candidate;
+}
+
 function adapterResult(): MatterhornCryptoAppResult {
-  return {
+  return certifyResult({
     version: "matterhorn.crypto-app-result.v1",
     app: {
       id: "matterhorn.sui-testnet",
@@ -182,7 +195,7 @@ function adapterResult(): MatterhornCryptoAppResult {
       simulationReference: `sha256:${"b".repeat(64)}`,
       expiresAt: "2026-09-01T12:00:15.000Z",
     },
-  };
+  });
 }
 
 function request(allowPrepare = true): MatterhornCryptoTransactionRequest {
@@ -279,7 +292,7 @@ function bittensorRequest(): MatterhornCryptoTransactionRequest {
 }
 
 function bittensorAdapterResult(): MatterhornCryptoAppResult {
-  return {
+  return certifyResult({
     ...adapterResult(),
     app: {
       id: "matterhorn.bittensor-testnet",
@@ -317,7 +330,7 @@ function bittensorAdapterResult(): MatterhornCryptoAppResult {
       simulationReference: `sha256:${"9".repeat(64)}`,
       expiresAt: "2026-09-01T12:00:15.000Z",
     },
-  };
+  });
 }
 
 function brokerWithConsumedCapability(input: MatterhornCryptoTransactionRequest): MatterhornAgentCapabilityBroker {
@@ -578,6 +591,52 @@ describe("guarded crypto transaction service", () => {
       .toMatchObject({ revision: 2, state: "refreshing" });
   });
 
+  test("rejects proof-less, malformed, or mutated certified results before wallet intent compilation", async () => {
+    const mutations: Array<(candidate: MatterhornCryptoAppResult) => void> = [
+      (candidate) => {
+        delete candidate.provenance.projectionHash;
+        delete candidate.provenance.observationHash;
+      },
+      (candidate) => { candidate.provenance.observationHash = "malformed"; },
+      (candidate) => { candidate.app.id = "matterhorn.other"; },
+      (candidate) => { candidate.app.manifestRevision = "1.0.1"; },
+      (candidate) => { candidate.action.id = "sui_other_preview"; },
+      (candidate) => { candidate.action.network = "sui:mainnet"; },
+      (candidate) => { candidate.observation.source = "other source"; },
+      (candidate) => { candidate.observation.blockOrVersion = "checkpoint:101"; },
+      (candidate) => { (candidate.result as { amountSui: string }).amountSui = "2.5"; },
+    ];
+    for (const mutate of mutations) {
+      const input = request();
+      const pendingIntents = pendingStore();
+      let recordedActions = 0;
+      const service = new MatterhornCryptoTransactionService({
+        router: {
+          execute: async () => {
+            const candidate = adapterResult();
+            mutate(candidate);
+            return candidate;
+          },
+        },
+        capabilities: brokerWithConsumedCapability(input),
+        pendingIntents,
+        recordReviewedAction: async () => { recordedActions += 1; },
+        resolveTrustedFacts: async () => { throw new Error("facts_must_not_run"); },
+        now: () => NOW,
+      });
+      try {
+        await service.prepare(input);
+        throw new Error("expected_evidence_denial");
+      } catch (error) {
+        expect(error).toBeInstanceOf(MatterhornCryptoTransactionError);
+        if (!(error instanceof MatterhornCryptoTransactionError)) throw error;
+        expect(error.code).toBe("transaction_evidence_invalid");
+      }
+      expect(recordedActions).toBe(0);
+      expect(pendingIntents.list("ws_alpha", "account_alpha", "cw_sui")).toEqual([]);
+    }
+  });
+
   test("cancels only wallet reviews bound to the disconnected app connection", async () => {
     const input = request();
     const pendingIntents = pendingStore();
@@ -732,7 +791,7 @@ describe("guarded crypto transaction service", () => {
         const result = adapterResult();
         return executions === 1
           ? result
-          : {
+          : certifyResult({
               ...result,
               observation: {
                 ...result.observation,
@@ -748,7 +807,7 @@ describe("guarded crypto transaction service", () => {
                 simulationReference: `sha256:${"c".repeat(64)}`,
                 expiresAt: "2026-09-01T12:00:15.000Z",
               },
-            };
+            });
       },
     };
     const service = new MatterhornCryptoTransactionService({
