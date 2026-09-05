@@ -30,6 +30,7 @@
     "test:matterhorn-product-browser-smoke": "node scripts/matterhorn-product-browser-smoke.test.mjs",
     "smoke:rc16-control-acceptance": "node scripts/rc16-control-acceptance.mjs --strict",
     "test:rc16-control-acceptance": "node scripts/rc16-control-acceptance.test.mjs",
+    "smoke:matterhorn-full-platform-browser-audit": "node scripts/matterhorn-full-platform-browser-audit.mjs --strict",
     "test:matterhorn-full-platform-browser-audit": "node scripts/matterhorn-full-platform-browser-audit.test.mjs",
     "smoke:generated-media-production-readiness": "node scripts/generated-media-production-readiness.mjs --require-production",
     "test:generated-media-production-readiness": "node scripts/generated-media-production-readiness.test.mjs",

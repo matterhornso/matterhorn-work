@@ -1,15 +1,63 @@
 #!/usr/bin/env node
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { chromium } from "playwright";
+import { chromium, firefox, webkit } from "playwright";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const baseUrl = process.env.MATTERHORN_FULL_AUDIT_URL
   ?? "http://127.0.0.1:5182/workspace/ws_d6a5b5572860/session";
+const browserTypes = Object.freeze({ chromium, firefox, webkit });
+
+function isLoopbackUrl(value) {
+  try {
+    const hostname = new URL(value).hostname;
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+function knownNonBlockingBrowserDiagnostic(message) {
+  if (
+    browserName === "webkit"
+    && message === 'Viewport argument key "interactive-widget" not recognized and ignored.'
+  ) {
+    return "webkit_viewport_option_unsupported";
+  }
+  if (
+    browserName === "firefox"
+    && isLoopbackUrl(baseUrl)
+    && /Content-Security-Policy:.*blocked a JavaScript eval/i.test(message)
+    && /\/node_modules\/\.vite\/deps\//.test(message)
+  ) {
+    return "vite_dev_csp_eval_blocked";
+  }
+  return null;
+}
+
+function argumentValue(name) {
+  const index = process.argv.indexOf(name);
+  if (index < 0) return null;
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value.`);
+  return value;
+}
+
+const browserName = (
+  argumentValue("--browser")
+  ?? process.env.MATTERHORN_FULL_AUDIT_BROWSER
+  ?? "chromium"
+).trim().toLowerCase();
+if (!(browserName in browserTypes)) {
+  throw new Error("Browser must be chromium, firefox, or webkit.");
+}
+const defaultOutputDirectory = browserName === "chromium"
+  ? "qa-reports/matterhorn-full-platform-browser-audit"
+  : `qa-reports/matterhorn-full-platform-browser-audit-${browserName}`;
 const outputDir = resolve(
   repoRoot,
   process.env.MATTERHORN_FULL_AUDIT_OUTPUT_DIR
-    ?? "qa-reports/matterhorn-full-platform-browser-audit",
+    ?? defaultOutputDirectory,
 );
 const strict = process.argv.includes("--strict") || process.env.MATTERHORN_FULL_AUDIT_STRICT === "1";
 const parsedSurfacePaceMs = Number(process.env.MATTERHORN_FULL_AUDIT_SURFACE_PACE_MS ?? "1500");
@@ -23,16 +71,18 @@ function printHelp() {
 
 Usage:
   MATTERHORN_FULL_AUDIT_URL=http://127.0.0.1:<port>/workspace/<id>/session \\
-    node scripts/matterhorn-full-platform-browser-audit.mjs --strict
+    node scripts/matterhorn-full-platform-browser-audit.mjs --strict --browser firefox
 
 Environment:
   MATTERHORN_FULL_AUDIT_URL                   Workspace session URL to audit.
   MATTERHORN_FULL_AUDIT_OUTPUT_DIR            Evidence directory.
+  MATTERHORN_FULL_AUDIT_BROWSER               chromium, firefox, or webkit. Defaults to chromium.
   MATTERHORN_FULL_AUDIT_STRICT=1              Fail on P0/P1, runtime, console, or network issues.
   MATTERHORN_FULL_AUDIT_SURFACE_PACE_MS=1500  Delay between surfaces.
   MATTERHORN_FULL_AUDIT_RESPONSIVE_VIEWPORTS  Optional responsive viewport selection.
 
 Options:
+  --browser  Select chromium, firefox, or webkit.
   --strict  Enable strict failure behavior.
   --help    Show this help without starting a browser.
 `);
@@ -174,6 +224,16 @@ async function waitForChatComposer(page, timeoutMs = 20_000) {
   return group;
 }
 
+async function waitForNotesPanel(page, timeoutMs = 20_000) {
+  const panel = page.locator(
+    '[role="region"][aria-label="Notes panel"], [role="region"][aria-label="Notes editor"]',
+  );
+  await panel.first().waitFor({ state: "visible", timeout: timeoutMs });
+  if (await panel.count() !== 1) {
+    throw new Error("Notes panel is missing or duplicated.");
+  }
+}
+
 async function waitForVisualSettle(page, timeoutMs = 2_000) {
   await page.waitForFunction(
     () => !document.getAnimations().some((animation) => {
@@ -263,6 +323,9 @@ async function inspectSurface(page, report, id, url, markers, viewportName) {
         undefined,
         { timeout: 20_000 },
       );
+    }
+    if (id.endsWith("panel-notes")) {
+      await waitForNotesPanel(page);
     }
     if (id.endsWith("desk-chat")) {
       await waitForChatComposer(page);
@@ -586,6 +649,7 @@ async function run() {
     version: "matterhorn.full-platform-browser-audit.v1",
     startedAt: new Date().toISOString(),
     baseUrl,
+    browserEngine: browserName,
     surfaces: [],
     interactions: [],
     controls: [],
@@ -593,11 +657,12 @@ async function run() {
     consoleErrors: [],
     pageErrors: [],
     networkFailures: [],
+    browserWarnings: [],
     screenshots: [],
     launchPolicies: [],
     auditArtifacts: [],
   };
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserTypes[browserName].launch({ headless: true });
   activeBrowser = browser;
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 960 }, acceptDownloads: true });
   await authenticateAuditContext(desktop);
@@ -605,13 +670,15 @@ async function run() {
 
   const attachDiagnostics = (target) => {
     target.on("console", (message) => {
-      if (
-        message.type() === "error"
-        && !/Failed to load resource.*404/i.test(message.text())
-        && !isTransientBrowserNetworkError(message.text())
-      ) {
-        report.consoleErrors.push({ url: target.url(), message: message.text() });
+      if (message.type() !== "error") return;
+      const text = message.text();
+      if (/Failed to load resource.*404/i.test(text) || isTransientBrowserNetworkError(text)) return;
+      const category = knownNonBlockingBrowserDiagnostic(text);
+      if (category) {
+        report.browserWarnings.push({ url: target.url(), category, message: text });
+        return;
       }
+      report.consoleErrors.push({ url: target.url(), message: text });
     });
     target.on("pageerror", (error) => report.pageErrors.push({ url: target.url(), message: error.message }));
     target.on("response", (response) => {
@@ -766,7 +833,7 @@ async function run() {
     );
     await clickUnique(openNotes, "Settings Overview Open notes");
     await page.waitForURL(workspaceUrl("session", "?panel=notes"), { timeout: 10_000 });
-    await visibleMarker(page, ["Notes"]);
+    await waitForNotesPanel(page);
 
     await gotoWithTransientRetry(page, workspaceUrl("settings/overview"), { waitUntil: "load" });
     await visibleMarker(page, ["Workspace health", "Data & privacy"]);
@@ -982,6 +1049,11 @@ async function run() {
     issueCount: report.issues.length,
     issuesBySeverity: Object.fromEntries(
       Object.entries(Object.groupBy(report.issues, (issue) => issue.severity))
+        .map(([key, values]) => [key, values.length]),
+    ),
+    browserWarningCount: report.browserWarnings.length,
+    browserWarningsByCategory: Object.fromEntries(
+      Object.entries(Object.groupBy(report.browserWarnings, (warning) => warning.category))
         .map(([key, values]) => [key, values.length]),
     ),
   };
