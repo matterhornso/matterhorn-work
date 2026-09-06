@@ -53,6 +53,7 @@ const priorAgentRuntimeSecret = process.env.MATTERHORN_AGENT_RUNTIME_SECRET;
 const priorHostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA;
 const priorHostedMcpAccessMode = process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE;
 const priorHostedMcpAccessAccountIds = process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS;
+const priorHostedMcpAccessIntegritySecret = process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET;
 
 function config(port: number, root: string): ServerConfig {
   return {
@@ -240,6 +241,8 @@ afterEach(async () => {
   else process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = priorHostedMcpAccessMode;
   if (priorHostedMcpAccessAccountIds === undefined) delete process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS;
   else process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS = priorHostedMcpAccessAccountIds;
+  if (priorHostedMcpAccessIntegritySecret === undefined) delete process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET;
+  else process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET = priorHostedMcpAccessIntegritySecret;
 });
 
 describe("public account authentication", () => {
@@ -695,6 +698,8 @@ describe("public account authentication", () => {
   });
 
   test("issues an invite-only MCP key that can reach only guarded workspace and chat routes", async () => {
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET =
+      "matterhorn-hosted-mcp-e2e-integrity-secret";
     const app = await boot();
     process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
     const owner = await jsonRequest(app.base, "/api/auth/sign-up/email", {
@@ -1223,6 +1228,27 @@ describe("public account authentication", () => {
     expect(readiness.payload.checks.hostedBrowserOpencodePolicy).toBe("restricted");
     expect(readiness.payload.checks.hostedBrowserOpencodePolicyReady).toBe(true);
     expect(readiness.payload.checks.accountMessageGatewayReady).toBe(true);
+  });
+
+  test("fails readiness when invite-only MCP access lacks authenticated durable state", async () => {
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "invite";
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS =
+      "usr_00000000000000000000000000000000";
+    delete process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET;
+    const unavailable = await boot();
+    const failed = await jsonRequest(unavailable.base, "/health/ready");
+    expect(failed.response.status).toBe(503);
+    expect(failed.payload.checks.hostedMcpAccessMode).toBe("invite");
+    expect(failed.payload.checks.hostedMcpAccessIntegrityReady).toBe(false);
+    await unavailable.stop();
+
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET =
+      "matterhorn-hosted-mcp-readiness-integrity-secret";
+    const available = await boot();
+    const ready = await jsonRequest(available.base, "/health/ready");
+    expect(ready.response.status).toBe(200);
+    expect(ready.payload.checks.hostedMcpAccessMode).toBe("invite");
+    expect(ready.payload.checks.hostedMcpAccessIntegrityReady).toBe(true);
   });
 
   test("fails hosted Public Beta readiness when the authoritative message gateway is disabled", async () => {

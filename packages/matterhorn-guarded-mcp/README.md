@@ -21,7 +21,10 @@ key is bound to the issuing account's active workspace and is rejected on raw
 OpenCode, host, configuration, protocol, wallet, signing, relay, and submission
 routes. Operators keep `MATTERHORN_HOSTED_MCP_ACCESS_MODE=off` until an account
 is explicitly added to `MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS` and the
-connector is ready for that tester.
+connector is ready for that tester. Invite mode also requires an independent
+`MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET` of at least 32 bytes; Matterhorn
+uses it only to authenticate restored key ownership, workspace scope, expiry,
+usage, and revocation state.
 
 Until the package is published, run the checked-out entrypoint with Node:
 

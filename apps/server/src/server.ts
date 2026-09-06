@@ -2184,6 +2184,7 @@ function providerForOperationalRoute(route: string, proxyService?: "opencode"): 
 
 function operationalReadiness(
   config: ServerConfig,
+  authStore: MatterhornAuthStore,
   guardedRuntime?: MatterhornGuardedAgentRuntime,
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices,
   coworkerRuntime?: MatterhornCoworkerRuntimeServices,
@@ -2236,6 +2237,9 @@ function operationalReadiness(
     && config.managedOpencodeMcp
     && (process.env.MATTERHORN_AGENT_RUNTIME_SECRET?.trim().length ?? 0) >= 32
   );
+  const hostedMcpAccessMode = matterhornHostedMcpAccessMode();
+  const hostedMcpAccessIntegrityReady = hostedMcpAccessMode === "off"
+    || authStore.hostedMcpAccessIntegrityReady();
   const hostBackupRequired = process.env.MATTERHORN_HOST_BACKUP_REQUIRED === "1";
   const hostBackupFreshCheck = !hostBackupRequired || hostBackupFresh();
   const cryptoEvidenceSuiAnchorPackageReady = !cryptoEvidenceSuiAnchorPackageState.configured
@@ -2257,6 +2261,7 @@ function operationalReadiness(
       && accountMessageGatewayReady
       && sessionPrivacyStateReady
       && providerSystemBoundaryReady
+      && hostedMcpAccessIntegrityReady
       && hostBackupFreshCheck
       && cryptoEvidenceSuiAnchorPackageReady,
     checks: {
@@ -2285,6 +2290,8 @@ function operationalReadiness(
       accountMessageGatewayReady,
       sessionPrivacyStateReady,
       providerSystemBoundaryReady,
+      hostedMcpAccessMode,
+      hostedMcpAccessIntegrityReady,
       hostBackupRequired,
       hostBackupFresh: hostBackupFreshCheck,
       cryptoEvidenceSuiAnchorPackageConfigured: cryptoEvidenceSuiAnchorPackageState.configured,
@@ -5197,6 +5204,8 @@ function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
             error.code === "organization_slug_taken" ||
             error.code === "hosted_mcp_access_limit_reached"
           ? 409
+          : error.code === "hosted_mcp_access_integrity_unavailable"
+            ? 503
           : error.code === "signup_capacity_reached"
             ? 503
           : 400;
@@ -10417,11 +10426,15 @@ function createRoutes(
   addRoute(routes, "GET", "/api/auth/account/mcp-access", "none", async ({ request }) => {
     const token = requireMatterhornCookieSessionToken(request, authStore);
     const session = authStore.getSession(token)!;
+    const allowed = matterhornHostedMcpAccountIsAllowed(session.user.id);
+    const integrityReady = authStore.hostedMcpAccessIntegrityReady();
     const response = jsonResponse({
       mode: matterhornHostedMcpAccessMode(),
-      eligible: matterhornHostedMcpAccountIsAllowed(session.user.id),
+      eligible: allowed && integrityReady,
       maxExpiresInDays: HOSTED_MCP_ACCESS_MAX_DAYS,
-      credentials: authStore.listHostedMcpAccessCredentials(token),
+      credentials: allowed && integrityReady
+        ? authStore.listHostedMcpAccessCredentials(token)
+        : [],
     });
     response.headers.set("Cache-Control", "no-store");
     return response;
@@ -10435,6 +10448,13 @@ function createRoutes(
         403,
         "hosted_mcp_access_unavailable",
         "Hosted MCP access is currently available to invited accounts only.",
+      );
+    }
+    if (!authStore.hostedMcpAccessIntegrityReady()) {
+      throw new ApiError(
+        503,
+        "hosted_mcp_access_integrity_unavailable",
+        "Hosted MCP access is not ready on this deployment.",
       );
     }
     const body = await readJsonBody(request, 4 * 1024, "Hosted MCP access key");
@@ -10653,6 +10673,7 @@ function createRoutes(
   addRoute(routes, "GET", "/health/ready", "none", async () => {
     const readiness = operationalReadiness(
       config,
+      authStore,
       guardedRuntime,
       cryptoAppRuntime,
       coworkerRuntime,
@@ -10695,6 +10716,7 @@ function createRoutes(
   addRoute(routes, "GET", "/health/launch", "none", async () => {
     const infrastructure = operationalReadiness(
       config,
+      authStore,
       guardedRuntime,
       cryptoAppRuntime,
       coworkerRuntime,
@@ -10721,6 +10743,7 @@ function createRoutes(
   addRoute(routes, "GET", "/metrics", "host", async () => {
     const readiness = operationalReadiness(
       config,
+      authStore,
       guardedRuntime,
       cryptoAppRuntime,
       coworkerRuntime,
