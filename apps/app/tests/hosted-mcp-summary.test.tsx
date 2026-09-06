@@ -4,7 +4,10 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MCPS_PROTOCOL_DESK_MANIFEST } from "@matterhorn-work/types";
 
-import { HostedMcpSummary } from "../src/react-app/domains/settings/pages/hosted-mcp-summary";
+import {
+  HostedMcpSummary,
+  resolveHostedMcpAccessView,
+} from "../src/react-app/domains/settings/pages/hosted-mcp-summary";
 
 describe("hosted MCP summary", () => {
   test("shows the exact guarded MCP inventory shipped to external clients", () => {
@@ -47,9 +50,16 @@ describe("hosted MCP summary", () => {
       "utf8",
     );
 
-    expect(summarySource).toContain("Create access key");
-    expect(summarySource).toContain("Copy this key now");
-    expect(summarySource).toContain("Matterhorn stores only its hash");
+    expect(summarySource).toContain("Create key");
+    expect(summarySource).toContain("Save this key before continuing");
+    expect(summarySource).toContain("Matterhorn stores only a secure fingerprint");
+    expect(summarySource).toContain('aria-label={tokenVisible ? "Hide access key" : "Show access key"}');
+    expect(summarySource).toContain('"•".repeat(16)');
+    expect(summarySource).toContain("Could not check external AI access");
+    expect(summarySource).toContain("External AI access is not open yet");
+    expect(summarySource).toContain("Use Matterhorn Desktop instead");
+    expect(summarySource).toContain("hosted connector is still an invite preview");
+    expect(summarySource).not.toContain("border-l-2");
     expect(summarySource).toContain("Revoke");
     expect(clientSource).toContain("/api/auth/account/mcp-access");
     expect(clientSource).toContain('credentials: "include"');
@@ -57,6 +67,18 @@ describe("hosted MCP summary", () => {
     expect(summarySource).not.toContain("sessionStorage");
     expect(clientSource).not.toContain("localStorage");
     expect(clientSource).not.toContain("sessionStorage");
+  });
+
+  test("distinguishes loading, failure, rollout, invitation, and ready states", () => {
+    const off = { mode: "off" as const, eligible: false, maxExpiresInDays: 30, credentials: [] };
+    const notInvited = { mode: "invite" as const, eligible: false, maxExpiresInDays: 30, credentials: [] };
+    const ready = { mode: "invite" as const, eligible: true, maxExpiresInDays: 30, credentials: [] };
+
+    expect(resolveHostedMcpAccessView(null, true, false)).toBe("loading");
+    expect(resolveHostedMcpAccessView(null, false, true)).toBe("error");
+    expect(resolveHostedMcpAccessView(off, false, false)).toBe("off");
+    expect(resolveHostedMcpAccessView(notInvited, false, false)).toBe("not_invited");
+    expect(resolveHostedMcpAccessView(ready, false, false)).toBe("ready");
   });
 
   test("keeps the shared manifest aligned with managed web capability", () => {
@@ -101,10 +123,7 @@ describe("hosted MCP summary", () => {
     expect(html).toContain("View all 11 tool names");
     expect(html).toContain("matterhorn_submit_session_prompt");
     expect(html).toContain("cannot approve wallet actions");
-    expect(html).toContain("Connecting an external client directly");
-    expect(html).toContain("Set up with Matterhorn Desktop");
-    expect(html).toContain("client-only token");
-    expect(html).toContain("not published to npm yet");
+    expect(html).toContain("Checking external AI app access");
     expect(html).toContain("<h2");
     expect(html).toContain("<h3");
     expect(html).toContain("<h4");
