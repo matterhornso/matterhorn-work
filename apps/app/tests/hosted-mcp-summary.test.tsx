@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MCPS_PROTOCOL_DESK_MANIFEST } from "@matterhorn-work/types";
@@ -6,6 +7,30 @@ import { MCPS_PROTOCOL_DESK_MANIFEST } from "@matterhorn-work/types";
 import { HostedMcpSummary } from "../src/react-app/domains/settings/pages/hosted-mcp-summary";
 
 describe("hosted MCP summary", () => {
+  test("shows the exact guarded MCP inventory shipped to external clients", () => {
+    const source = readFileSync(
+      new URL(
+        "../../../packages/matterhorn-guarded-mcp/index.mjs",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const shippedToolNames = Array.from(
+      source.matchAll(/\bname: "(matterhorn_[a-z_]+)"/g),
+      (match) => match[1]!,
+    );
+    const html = renderToStaticMarkup(
+      React.createElement(HostedMcpSummary, {
+        connections: [],
+      }),
+    );
+
+    expect(shippedToolNames).toHaveLength(11);
+    for (const toolName of shippedToolNames) {
+      expect(html).toContain(toolName);
+    }
+  });
+
   test("keeps the shared manifest aligned with managed web capability", () => {
     expect(MCPS_PROTOCOL_DESK_MANIFEST.status).toBe("beta_ready");
     expect(MCPS_PROTOCOL_DESK_MANIFEST.backendStatus).toBe("partial");
@@ -38,15 +63,28 @@ describe("hosted MCP summary", () => {
     expect(html).toContain("Workspace evidence");
     expect(html).toContain("Reviewed wallet actions");
     expect(html).toContain("Matterhorn Desktop");
-    expect(html).toContain("Use Matterhorn in Codex or Claude");
-    expect(html).toContain("Open MCP install guide");
-    expect(html).toContain("Public npm packages are not available yet");
+    expect(html).toContain("Use Matterhorn from another AI app");
+    expect(html).toContain("Supported AI apps");
+    expect(html).toContain("Codex");
+    expect(html).toContain("Claude Code");
+    expect(html).toContain("Claude Desktop");
+    expect(html).toContain("Cursor");
+    expect(html).toContain("What it can do");
+    expect(html).toContain("View all 11 tool names");
+    expect(html).toContain("matterhorn_submit_session_prompt");
+    expect(html).toContain("cannot approve wallet actions");
+    expect(html).toContain("Connecting an external client directly");
+    expect(html).toContain("Set up with Matterhorn Desktop");
+    expect(html).toContain("client-only token");
+    expect(html).toContain("not published to npm yet");
     expect(html).toContain("<h2");
     expect(html).toContain("<h3");
     expect(html).toContain("<h4");
     expect(html).not.toContain("Marketplace");
     expect(html).not.toContain("Add Custom MCP");
     expect(html).not.toContain("Copy command");
+    expect(html).not.toContain("host token");
+    expect(html).not.toContain("wallet submission");
   });
 
   test("continues the Settings shell heading hierarchy when embedded", () => {
