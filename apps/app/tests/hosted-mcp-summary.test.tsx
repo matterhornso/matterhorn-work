@@ -13,7 +13,7 @@ describe("hosted MCP summary", () => {
   test("shows the exact guarded MCP inventory shipped to external clients", () => {
     const source = readFileSync(
       new URL(
-        "../../../packages/matterhorn-guarded-mcp/index.mjs",
+        "../../../packages/matterhorn-guarded-mcp/tools.mjs",
         import.meta.url,
       ),
       "utf8",
@@ -53,6 +53,9 @@ describe("hosted MCP summary", () => {
     expect(summarySource).toContain("Create key");
     expect(summarySource).toContain("Save this key before continuing");
     expect(summarySource).toContain("Matterhorn stores only a secure fingerprint");
+    expect(summarySource).toContain("/mcp/guarded");
+    expect(summarySource).toContain("MCP address");
+    expect(summarySource).not.toContain('label: "Server"');
     expect(summarySource).toContain('aria-label={tokenVisible ? "Hide access key" : "Show access key"}');
     expect(summarySource).toContain('"•".repeat(16)');
     expect(summarySource).toContain("Could not check external AI access");

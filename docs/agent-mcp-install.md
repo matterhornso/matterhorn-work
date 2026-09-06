@@ -2,16 +2,57 @@
 
 This guide shows how to connect Matterhorn Desks to Codex, Claude Code, Claude Desktop, Cursor, and other MCP-capable clients.
 
+## Hosted invite setup
+
+Invited testers can connect without cloning Matterhorn or installing an npm
+package:
+
+1. Open **Settings → MCPs & Tools** in Matterhorn.
+2. Create an access key and copy it immediately; Matterhorn cannot show it again.
+3. Copy the displayed MCP address. It ends in `/mcp/guarded`.
+4. Configure a Streamable HTTP connection with the header
+   `Authorization: Bearer <one-time-key>`.
+5. Verify `matterhorn_status` and `matterhorn_list_workspaces`, then revoke the
+   key from Matterhorn when the test is finished.
+
+For Codex, keep the key in a private environment variable and register the
+remote endpoint:
+
+```bash
+export MATTERHORN_MCP_ACCESS_TOKEN="<one-time-key>"
+codex mcp add matterhorn \
+  --url https://<matterhorn-app>/mcp/guarded \
+  --bearer-token-env-var MATTERHORN_MCP_ACCESS_TOKEN
+```
+
+For Claude Code, its remote HTTP syntax is:
+
+```bash
+claude mcp add --transport http matterhorn \
+  https://<matterhorn-app>/mcp/guarded \
+  --header "Authorization: Bearer <one-time-key>"
+```
+
+Treat the key as a password: use a private user-scoped configuration, do not
+commit it, do not paste it into an AI chat, and remove it from shell history if
+the client required a literal value. Hosted access is an invite-only static-key
+preview, not OAuth 2.1. It exposes only the 11 account-scoped chat tools; it has
+no wallet, signing, transaction-submission, shell, file, Memory-write,
+configuration, host-approval, or operator authority.
+
+The remaining sections describe the local stdio setup for developers and
+trusted operators.
+
 The default setup uses a local stdio MCP server launched by the client. The
 standalone guarded MCP (`@matterhorn-work/guarded-mcp`) talks to a running
 Matterhorn Desks server over `MATTERHORN_WORK_SERVER_URL`. Its release artifact
 physically contains only the 11 account-scoped workspace and session tools.
 
-> **Current distribution:** the MCP packages are not published to npm yet. Clone
+> **Current local distribution:** the MCP packages are not published to npm yet. Clone
 > this repository and run `pnpm install` once, then use the absolute `index.mjs`
 > paths shown below. The package names are reserved for a later npm release;
 > do not use the older `npx -y matterhorn-work-*-mcp` examples until that release
-> is published.
+> is published. This does not affect the hosted invite endpoint above.
 
 The recommended guarded setup gives external agents only the Matterhorn chat tools they need. Trusted local operators can opt into the broader workflow in [Matterhorn Desks Agent Operator Workflow](./agent-operator-workflow.md).
 

@@ -8,6 +8,7 @@
   },
   "files": [
     "index.mjs",
+    "tools.mjs",
     "README.md"
   ],
   "sideEffects": false,

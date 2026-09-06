@@ -12,6 +12,7 @@ const ALLOWED_ROOTS = new Set([
   "experimental",
   "files",
   "health",
+  "mcp",
   "opencode",
   "runtime",
   "tokens",
@@ -53,7 +54,9 @@ export function normalizeProxyPath(value) {
   const segments = path.split("/").filter(Boolean);
   if (segments.some((segment) => segment === "." || segment === "..")) return null;
   if (!segments[0] || !ALLOWED_ROOTS.has(segments[0])) return null;
-  return `/${segments.join("/")}`;
+  const normalized = `/${segments.join("/")}`;
+  if (segments[0] === "mcp" && normalized !== "/mcp/guarded") return null;
+  return normalized;
 }
 
 export function resolveControlPlaneUrl(rawValue, allowHttp = false) {

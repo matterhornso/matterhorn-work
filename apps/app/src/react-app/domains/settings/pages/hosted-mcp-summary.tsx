@@ -134,7 +134,7 @@ function HostedMcpAccessPanel({ heading: Heading }: { heading: ElementType }) {
   const [newAccessToken, setNewAccessToken] = useState<string | null>(null);
   const [newCredentialId, setNewCredentialId] = useState<string | null>(null);
   const [tokenVisible, setTokenVisible] = useState(false);
-  const [copied, setCopied] = useState<"server" | "token" | null>(null);
+  const [copied, setCopied] = useState<"endpoint" | "token" | null>(null);
   const [clientLabel, setClientLabel] = useState<(typeof GUARDED_MCP_CLIENTS)[number]>("Codex");
 
   const loadAccess = useCallback(async () => {
@@ -201,7 +201,7 @@ function HostedMcpAccessPanel({ heading: Heading }: { heading: ElementType }) {
     }
   };
 
-  const copyValue = async (kind: "server" | "token", value: string) => {
+  const copyValue = async (kind: "endpoint" | "token", value: string) => {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(kind);
@@ -273,7 +273,9 @@ function HostedMcpAccessPanel({ heading: Heading }: { heading: ElementType }) {
   }
 
   if (!access) return null;
-  const serverUrl = typeof window === "undefined" ? "" : window.location.origin;
+  const mcpUrl = typeof window === "undefined"
+    ? ""
+    : `${window.location.origin}/mcp/guarded`;
   return (
     <div className="mt-5 border-y border-dls-border/70 py-4">
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
@@ -318,7 +320,7 @@ function HostedMcpAccessPanel({ heading: Heading }: { heading: ElementType }) {
           </p>
           <div className="mt-3 grid gap-2">
             {[
-              { kind: "server" as const, label: "Server", value: serverUrl },
+              { kind: "endpoint" as const, label: "MCP address", value: mcpUrl },
               { kind: "token" as const, label: "Access key", value: newAccessToken },
             ].map((item) => (
               <div key={item.kind} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
@@ -359,7 +361,7 @@ function HostedMcpAccessPanel({ heading: Heading }: { heading: ElementType }) {
             ))}
           </div>
           <p className="mt-3 text-[11px] leading-4 text-dls-secondary">
-            Next, open the connector guide and add the server address and key to {clientLabel}.
+            Next, add this MCP address and key to {clientLabel}. The connection can use Matterhorn chats only.
           </p>
         </div>
       ) : null}

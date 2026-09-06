@@ -15,6 +15,7 @@ assert.equal(normalizeProxyPath("/coworker-access/accept"), "/coworker-access/ac
 assert.equal(normalizeProxyPath("/crypto-apps"), "/crypto-apps");
 assert.equal(normalizeProxyPath("/crypto-apps/matterhorn.sui-testnet"), "/crypto-apps/matterhorn.sui-testnet");
 assert.equal(normalizeProxyPath("/developer/crypto-apps/status"), "/developer/crypto-apps/status");
+assert.equal(normalizeProxyPath("/mcp/guarded"), "/mcp/guarded");
 assert.equal(normalizeProxyPath("/workspace/ws_123/opencode/session"), "/workspace/ws_123/opencode/session");
 assert.equal(normalizeProxyPath("/opencode/global/health"), "/opencode/global/health");
 for (const rejected of [
@@ -152,6 +153,26 @@ try {
   assert.equal(forwardedRequest.init.headers.get("x-forwarded-host"), "app.example.com");
   assert.equal(forwardedRequest.init.headers.get("x-forwarded-proto"), "https");
   assert.equal(response.headers.get("x-matterhorn-proxy"), "same-origin");
+
+  const mcpResponse = await proxy(new Request(
+    "https://app.example.com/api/matterhorn-proxy?__matterhorn_path=%2Fmcp%2Fguarded",
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer mhmcp_test-only",
+        Accept: "application/json, text/event-stream",
+        "Content-Type": "application/json",
+        "MCP-Protocol-Version": "2025-11-25",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    },
+  ));
+  assert.equal(mcpResponse.status, 200);
+  assert.equal(forwardedRequest.url, "https://control.example.com/mcp/guarded");
+  assert.equal(forwardedRequest.init.headers.get("authorization"), "Bearer mhmcp_test-only");
+  assert.equal(forwardedRequest.init.headers.get("accept"), "application/json, text/event-stream");
+  assert.equal(forwardedRequest.init.headers.get("mcp-protocol-version"), "2025-11-25");
+  assert.equal(forwardedRequest.init.headers.get("x-matterhorn-proxy-secret"), "test-proxy-secret");
 } finally {
   globalThis.fetch = priorFetch;
   if (priorUrl === undefined) delete process.env.MATTERHORN_CONTROL_PLANE_URL;
@@ -181,6 +202,7 @@ for (const { configPath, config } of deploymentConfigs) {
     "/developer/:path*",
     "/workspaces",
     "/workspace/:path*",
+    "/mcp/guarded",
     "/opencode/:path*",
     "/health/:path*",
   ]) {

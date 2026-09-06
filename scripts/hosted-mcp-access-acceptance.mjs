@@ -10,6 +10,20 @@ const CREDENTIAL_ID_PATTERN = /^mcp_[0-9a-f]{32}$/;
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const REQUEST_TIMEOUT_MS = 15_000;
+const MCP_PROTOCOL_VERSION = "2025-11-25";
+const GUARDED_MCP_TOOL_NAMES = [
+  "matterhorn_status",
+  "matterhorn_list_workspaces",
+  "matterhorn_create_session",
+  "matterhorn_list_sessions",
+  "matterhorn_get_session",
+  "matterhorn_get_session_messages",
+  "matterhorn_submit_session_prompt",
+  "matterhorn_get_session_status",
+  "matterhorn_watch_session_events",
+  "matterhorn_get_session_snapshot",
+  "matterhorn_delete_session",
+];
 
 class AcceptanceFailure extends Error {
   constructor(code) {
@@ -117,13 +131,16 @@ async function requestJson({
   session,
   accessToken,
   body,
+  accept = "application/json",
+  extraHeaders = {},
 }) {
   if (session && accessToken) fail("request_auth_ambiguous");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const headers = {
-    Accept: "application/json",
+    Accept: accept,
     "Cache-Control": "no-store",
+    ...extraHeaders,
   };
   if (session) headers.Cookie = `mh_session=${session}`;
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
@@ -148,6 +165,53 @@ async function requestJson({
     fail(error?.name === "AbortError" ? "request_timeout" : "request_failed");
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function requestMcp({
+  fetchImpl,
+  origin,
+  accessToken,
+  id,
+  method,
+  params,
+  protocolVersion = MCP_PROTOCOL_VERSION,
+}) {
+  return requestJson({
+    fetchImpl,
+    origin,
+    path: "/mcp/guarded",
+    method: "POST",
+    accessToken,
+    accept: "application/json, text/event-stream",
+    extraHeaders: { "MCP-Protocol-Version": protocolVersion },
+    body: {
+      jsonrpc: "2.0",
+      id,
+      method,
+      ...(params === undefined ? {} : { params }),
+    },
+  });
+}
+
+function expectMcpResult(response, id) {
+  expectStatus(response, 200);
+  if (response.payload.jsonrpc !== "2.0" || response.payload.id !== id || response.payload.error) {
+    fail("mcp_response_invalid");
+  }
+  return response.payload.result;
+}
+
+function parseMcpToolText(result) {
+  const text = result?.content?.[0]?.text;
+  if (typeof text !== "string" || text.length > MAX_RESPONSE_BYTES) fail("mcp_tool_result_invalid");
+  try {
+    const value = JSON.parse(text);
+    if (!value || typeof value !== "object" || Array.isArray(value)) fail("mcp_tool_result_invalid");
+    return value;
+  } catch (error) {
+    if (error instanceof AcceptanceFailure) throw error;
+    fail("mcp_tool_result_invalid");
   }
 }
 
@@ -340,6 +404,83 @@ export async function runHostedMcpAccessAcceptance({
     }
   });
 
+  await record("mcp_protocol_and_tools", "The hosted endpoint completes the current MCP handshake and exposes exactly the 11 guarded chat tools.", async () => {
+    const credentialA = need(state.credentialA);
+    const initialized = await requestMcp({
+      fetchImpl,
+      origin: safeOrigin,
+      accessToken: credentialA.accessToken,
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: { name: "matterhorn-hosted-acceptance", version: "1.0.0" },
+      },
+    });
+    const initialization = expectMcpResult(initialized, 1);
+    if (
+      initialization?.protocolVersion !== MCP_PROTOCOL_VERSION
+      || initialization?.serverInfo?.name !== "matterhorn-hosted-guarded-mcp"
+      || !initialization?.capabilities?.tools
+    ) fail("mcp_initialize_invalid");
+
+    const listed = await requestMcp({
+      fetchImpl,
+      origin: safeOrigin,
+      accessToken: credentialA.accessToken,
+      id: 2,
+      method: "tools/list",
+      params: {},
+    });
+    const tools = expectMcpResult(listed, 2)?.tools;
+    const names = Array.isArray(tools) ? tools.map((tool) => tool?.name) : [];
+    if (JSON.stringify(names) !== JSON.stringify(GUARDED_MCP_TOOL_NAMES)) fail("mcp_tool_catalog_invalid");
+    if (names.some((name) => /(?:sign|relay|broadcast|wallet|shell|config|approval)/i.test(String(name)))) {
+      fail("mcp_forbidden_authority_advertised");
+    }
+  });
+
+  await record("mcp_workspace_isolation", "The MCP tools resolve each bearer key to only its bound account workspace.", async () => {
+    for (const [credential, expectedWorkspace] of [
+      [need(state.credentialA), need(state.workspaceA)],
+      [need(state.credentialB), need(state.workspaceB)],
+    ]) {
+      const response = await requestMcp({
+        fetchImpl,
+        origin: safeOrigin,
+        accessToken: credential.accessToken,
+        id: 3,
+        method: "tools/call",
+        params: { name: "matterhorn_list_workspaces", arguments: {} },
+      });
+      const result = parseMcpToolText(expectMcpResult(response, 3));
+      if (!Array.isArray(result.items) || result.items.length !== 1 || result.items[0]?.id !== expectedWorkspace) {
+        fail("mcp_workspace_scope_invalid");
+      }
+    }
+  });
+
+  await record("mcp_cross_account_denial", "A guarded MCP tool cannot substitute another account's workspace.", async () => {
+    const credentialA = need(state.credentialA);
+    const response = await requestMcp({
+      fetchImpl,
+      origin: safeOrigin,
+      accessToken: credentialA.accessToken,
+      id: 4,
+      method: "tools/call",
+      params: {
+        name: "matterhorn_list_sessions",
+        arguments: { workspaceId: need(state.workspaceB) },
+      },
+    });
+    const result = expectMcpResult(response, 4);
+    if (result?.isError !== true || typeof result?.content?.[0]?.text !== "string") {
+      fail("mcp_cross_account_denial_invalid");
+    }
+    if (result.content[0].text.includes(need(state.workspaceB))) fail("mcp_tenant_identifier_leaked");
+  });
+
   await record("session_create", "A guarded key can create one workspace-scoped chat.", async () => {
     const workspaceA = need(state.workspaceA);
     const credentialA = need(state.credentialA);
@@ -472,6 +613,15 @@ export async function runHostedMcpAccessAcceptance({
       accessToken: credentialA.accessToken,
     });
     expectDenied(denied, 401, "unauthorized");
+    const mcpDenied = await requestMcp({
+      fetchImpl,
+      origin: safeOrigin,
+      accessToken: credentialA.accessToken,
+      id: 5,
+      method: "tools/list",
+      params: {},
+    });
+    expectDenied(mcpDenied, 401, "unauthorized");
   });
 
   await record("independent_revocation", "Revoking one account's key does not affect the other account's valid key.", async () => {
@@ -532,8 +682,9 @@ function help() {
   return [
     "Matterhorn hosted MCP access acceptance",
     "",
-    "Exercises two invited accounts, exact release identity, guarded routes, tenant isolation,",
-    "tamper denial, immediate revocation, and cleanup. It never prints session or access tokens.",
+    "Exercises two invited accounts, exact release identity, the remote MCP handshake and tool",
+    "catalog, guarded routes, tenant isolation, tamper denial, immediate revocation, and cleanup.",
+    "It never prints session or access tokens.",
     "",
     "Set these secrets in the invoking process environment:",
     "  MATTERHORN_HOSTED_MCP_ACCEPTANCE_ACCOUNT_A_SESSION",

@@ -764,6 +764,122 @@ describe("public account authentication", () => {
     const workspaceId = workspaces.payload.items[0].id as string;
     expect(workspaceId).toMatch(/^ws_web_/);
 
+    const mcpHeaders = {
+      Accept: "application/json, text/event-stream",
+      "MCP-Protocol-Version": "2025-11-25",
+    };
+    for (const auth of [
+      { cookie: ownerCookie },
+      { bearer: TOKEN },
+    ]) {
+      const notInvitedTransport = await jsonRequest(app.base, "/mcp/guarded", {
+        ...auth,
+        headers: mcpHeaders,
+        body: { jsonrpc: "2.0", id: "not-invited", method: "tools/list", params: {} },
+      });
+      expect(notInvitedTransport.response.status).toBe(403);
+      expect(notInvitedTransport.payload.code).toBe("hosted_mcp_access_required");
+    }
+    const initialized = await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      headers: mcpHeaders,
+      body: {
+        jsonrpc: "2.0",
+        id: "initialize",
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-25",
+          capabilities: {},
+          clientInfo: { name: "hosted-mcp-e2e", version: "1.0.0" },
+        },
+      },
+    });
+    expect(initialized.response.status).toBe(200);
+    expect(initialized.payload.result).toMatchObject({
+      protocolVersion: "2025-11-25",
+      capabilities: { tools: {} },
+      serverInfo: { name: "matterhorn-hosted-guarded-mcp" },
+    });
+
+    const malformedMcp = await fetch(`${app.base}/mcp/guarded`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        ...mcpHeaders,
+      },
+      body: "{",
+    });
+    expect(malformedMcp.status).toBe(400);
+    expect(await malformedMcp.json()).toEqual({
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32700, message: "Invalid JSON." },
+    });
+
+    const untrustedMcpOrigin = await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      origin: "https://attacker.invalid",
+      headers: mcpHeaders,
+      body: { jsonrpc: "2.0", id: "origin", method: "tools/list" },
+    });
+    expect(untrustedMcpOrigin.response.status).toBe(403);
+    expect(untrustedMcpOrigin.payload.code).toBe("untrusted_origin");
+
+    const tools = await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      headers: mcpHeaders,
+      body: { jsonrpc: "2.0", id: "tools", method: "tools/list", params: {} },
+    });
+    expect(tools.response.status).toBe(200);
+    expect(tools.payload.result.tools).toHaveLength(11);
+    expect(tools.payload.result.tools.map((tool: { name: string }) => tool.name)).toContain(
+      "matterhorn_submit_session_prompt",
+    );
+    expect(JSON.stringify(tools.payload.result.tools)).not.toMatch(/wallet_(?:sign|submit)|transaction_submit/i);
+
+    const listedThroughMcp = await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      headers: mcpHeaders,
+      body: {
+        jsonrpc: "2.0",
+        id: "workspaces",
+        method: "tools/call",
+        params: { name: "matterhorn_list_workspaces", arguments: {} },
+      },
+    });
+    expect(listedThroughMcp.response.status).toBe(200);
+    expect(JSON.parse(listedThroughMcp.payload.result.content[0].text).items).toEqual([
+      expect.objectContaining({ id: workspaceId }),
+    ]);
+
+    const crossWorkspaceThroughMcp = await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      headers: mcpHeaders,
+      body: {
+        jsonrpc: "2.0",
+        id: "cross-workspace",
+        method: "tools/call",
+        params: {
+          name: "matterhorn_list_sessions",
+          arguments: { workspaceId: "ws_not_the_owner" },
+        },
+      },
+    });
+    expect(crossWorkspaceThroughMcp.response.status).toBe(200);
+    expect(crossWorkspaceThroughMcp.payload.result.isError).toBe(true);
+    expect(crossWorkspaceThroughMcp.payload.result.content[0].text).toContain("denied");
+    expect(JSON.stringify(crossWorkspaceThroughMcp.payload)).not.toContain("ws_web_");
+
+    for (const method of ["GET", "DELETE"] as const) {
+      const notAllowed = await jsonRequest(app.base, "/mcp/guarded", {
+        bearer: accessToken,
+        method,
+      });
+      expect(notAllowed.response.status).toBe(405);
+      expect(notAllowed.response.headers.get("allow")).toBe("POST");
+    }
+
     process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "off";
     expect((await jsonRequest(app.base, "/workspaces", { bearer: accessToken })).response.status)
       .toBe(401);
@@ -829,6 +945,11 @@ describe("public account authentication", () => {
     expect(revoked.payload).toEqual({ ok: true, revoked: true });
     expect((await jsonRequest(app.base, "/workspaces", { bearer: accessToken })).response.status)
       .toBe(401);
+    expect((await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      headers: mcpHeaders,
+      body: { jsonrpc: "2.0", id: "revoked", method: "tools/list" },
+    })).response.status).toBe(401);
   });
 
   test("manages sessions, rotates passwords, and deletes owned account data", async () => {
