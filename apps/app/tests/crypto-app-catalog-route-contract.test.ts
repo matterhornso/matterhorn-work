@@ -9,6 +9,12 @@ describe("invite-only crypto app catalog route", () => {
   test("is lazy, account-gated and workspace scoped", () => {
     const appRoot = readAppSource("react-app/shell/app-root.tsx");
     const viteConfig = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+    const rootVercel = JSON.parse(readFileSync(new URL("../../../vercel.json", import.meta.url), "utf8")) as {
+      rewrites: Array<{ source: string; destination: string }>;
+    };
+    const appVercel = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as {
+      rewrites: Array<{ source: string; destination: string }>;
+    };
 
     expect(appRoot).toContain('path="/workspace/:workspaceId/crypto-apps"');
     expect(appRoot).toContain('path="/workspace/:workspaceId/evidence-proofs"');
@@ -20,6 +26,16 @@ describe("invite-only crypto app catalog route", () => {
     expect(appRoot).not.toContain('pathname === "/workspace/:workspaceId/evidence-proofs"');
     expect(readAppSource("react-app/shell/providers.tsx")).toContain("evidence-proofs");
     expect(viteConfig).toContain('"/crypto-apps": sameOriginMatterhornProxy');
+    for (const deployment of [rootVercel, appVercel]) {
+      expect(deployment.rewrites).toContainEqual({
+        source: "/crypto-apps",
+        destination: "/api/matterhorn-proxy?__matterhorn_path=/crypto-apps",
+      });
+      expect(deployment.rewrites).toContainEqual({
+        source: "/crypto-apps/:path*",
+        destination: "/api/matterhorn-proxy?__matterhorn_path=/crypto-apps/:path*",
+      });
+    }
   });
 
   test("keeps encrypted evidence publication explicit, testnet-only and redacted", () => {
