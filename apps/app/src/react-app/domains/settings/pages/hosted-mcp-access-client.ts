@@ -17,6 +17,10 @@ export type IssuedHostedMcpAccessCredential = HostedMcpAccessCredential & {
   accessToken: string;
 };
 
+const HOSTED_MCP_CREDENTIAL_ID_PATTERN = /^mcp_[0-9a-f]{32}$/;
+const HOSTED_MCP_ACCESS_TOKEN_PATTERN = /^mhmcp_[A-Za-z0-9_-]{43}$/;
+const HOSTED_MCP_MAX_LIFETIME_MS = 30 * 24 * 60 * 60 * 1_000;
+
 async function responseBody(response: Response): Promise<Record<string, unknown> | null> {
   const value = await response.json().catch(() => null);
   return recordFromUnknown(value);
@@ -33,19 +37,27 @@ function parseCredential(value: unknown): HostedMcpAccessCredential | null {
   if (
     !credential
     || typeof credential.id !== "string"
-    || !credential.id.startsWith("mcp_")
+    || !HOSTED_MCP_CREDENTIAL_ID_PATTERN.test(credential.id)
     || typeof credential.label !== "string"
     || !credential.label.trim()
+    || credential.label.length > 80
+    || /[\u0000-\u001f\u007f]/.test(credential.label)
     || typeof credential.createdAt !== "number"
     || !Number.isSafeInteger(credential.createdAt)
+    || credential.createdAt < 0
+    || !Number.isFinite(new Date(credential.createdAt).getTime())
     || typeof credential.expiresAt !== "number"
     || !Number.isSafeInteger(credential.expiresAt)
     || credential.expiresAt <= credential.createdAt
+    || credential.expiresAt - credential.createdAt > HOSTED_MCP_MAX_LIFETIME_MS
+    || !Number.isFinite(new Date(credential.expiresAt).getTime())
     || (
       credential.lastUsedAt !== null
       && (
         typeof credential.lastUsedAt !== "number"
         || !Number.isSafeInteger(credential.lastUsedAt)
+        || credential.lastUsedAt < credential.createdAt
+        || credential.lastUsedAt > credential.expiresAt
       )
     )
   ) {
@@ -124,7 +136,7 @@ export async function createHostedMcpAccess(input: {
     !credential
     || !issued
     || typeof issued.accessToken !== "string"
-    || !issued.accessToken.startsWith("mhmcp_")
+    || !HOSTED_MCP_ACCESS_TOKEN_PATTERN.test(issued.accessToken)
   ) {
     throw new Error("Matterhorn did not return the new access key.");
   }

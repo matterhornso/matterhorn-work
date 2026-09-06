@@ -7,6 +7,8 @@ import {
 } from "../src/react-app/domains/settings/pages/hosted-mcp-access-client";
 
 const originalFetch = globalThis.fetch;
+const CREDENTIAL_ID = `mcp_${"a".repeat(32)}`;
+const ACCESS_TOKEN = `mhmcp_${"A".repeat(43)}`;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -40,18 +42,18 @@ describe("hosted MCP access client", () => {
   test("returns a newly issued secret once without writing browser storage", async () => {
     const fetchMock = mock(async () => new Response(JSON.stringify({
       credential: {
-        id: "mcp_123",
+        id: CREDENTIAL_ID,
         label: "Codex",
         createdAt: 1,
         expiresAt: 2,
         lastUsedAt: null,
-        accessToken: "mhmcp_once",
+        accessToken: ACCESS_TOKEN,
       },
     }), { status: 201 }));
     globalThis.fetch = fetchMock as typeof fetch;
 
     expect(await createHostedMcpAccess({ label: "Codex", expiresInDays: 30 }))
-      .toEqual(expect.objectContaining({ id: "mcp_123", accessToken: "mhmcp_once" }));
+      .toEqual(expect.objectContaining({ id: CREDENTIAL_ID, accessToken: ACCESS_TOKEN }));
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/account/mcp-access",
       expect.objectContaining({
@@ -75,6 +77,38 @@ describe("hosted MCP access client", () => {
       .rejects.toThrow("Matterhorn returned invalid external-access state.");
   });
 
+  test("rejects malformed or over-broad access material", async () => {
+    const malformedToken = mock(async () => new Response(JSON.stringify({
+      credential: {
+        id: CREDENTIAL_ID,
+        label: "Codex",
+        createdAt: 1,
+        expiresAt: 2,
+        lastUsedAt: null,
+        accessToken: `${ACCESS_TOKEN}extra`,
+      },
+    }), { status: 201 }));
+    globalThis.fetch = malformedToken as typeof fetch;
+    expect(createHostedMcpAccess({ label: "Codex", expiresInDays: 30 }))
+      .rejects.toThrow("Matterhorn did not return the new access key.");
+
+    const extendedLifetime = mock(async () => new Response(JSON.stringify({
+      mode: "invite",
+      eligible: true,
+      maxExpiresInDays: 30,
+      credentials: [{
+        id: CREDENTIAL_ID,
+        label: "Codex",
+        createdAt: 1,
+        expiresAt: 31 * 24 * 60 * 60 * 1_000,
+        lastUsedAt: null,
+      }],
+    }), { status: 200 }));
+    globalThis.fetch = extendedLifetime as typeof fetch;
+    expect(readHostedMcpAccess())
+      .rejects.toThrow("Matterhorn returned invalid external-access state.");
+  });
+
   test("revokes only the selected credential and surfaces safe server errors", async () => {
     const fetchMock = mock(async (input: RequestInfo | URL) => {
       if (String(input).endsWith("/mcp_missing")) {
@@ -84,9 +118,9 @@ describe("hosted MCP access client", () => {
     });
     globalThis.fetch = fetchMock as typeof fetch;
 
-    await revokeHostedMcpAccess("mcp_123");
+    await revokeHostedMcpAccess(CREDENTIAL_ID);
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/auth/account/mcp-access/mcp_123",
+      `/api/auth/account/mcp-access/${CREDENTIAL_ID}`,
       { method: "DELETE", credentials: "include", headers: { Accept: "application/json" } },
     );
     expect(revokeHostedMcpAccess("mcp_missing"))
