@@ -636,6 +636,13 @@ import {
 import { callExperimentalExtensionAction, listExperimentalExtensionActions } from "./extensions/index.js";
 import { handleManagedOpencodeMcp } from "./managed-opencode-mcp.js";
 import {
+  handleHostedGuardedMcpPost,
+  hostedGuardedMcpMethodNotAllowed,
+  hostedGuardedMcpParseError,
+  HostedGuardedMcpToolError,
+  type HostedGuardedMcpInvocation,
+} from "./hosted-guarded-mcp.js";
+import {
   GuardedRuntimeError,
   MatterhornGuardedAgentRuntime,
   type GuardedPromptAcceptance,
@@ -1406,6 +1413,7 @@ interface RequestContext {
   actor?: Actor;
   matterhornSession?: MatterhornAuthSession;
   matterhornWorkspace?: WorkspaceInfo;
+  hostedMcpAccess?: MatterhornHostedMcpAccessIdentity;
   peerAddress?: string;
 }
 
@@ -2088,6 +2096,7 @@ export async function startServer(
           actor,
           matterhornSession: clientAccess?.session,
           matterhornWorkspace: clientAccess?.workspace,
+          hostedMcpAccess: clientAccess?.hostedMcpAccess,
           peerAddress: rateLimitPeerAddress ?? undefined,
         });
         return finalize(response);
@@ -4953,6 +4962,9 @@ function bearerToken(request: Request): string | null {
 function matterhornHostedMcpRouteIsAllowed(request: Request): boolean {
   const method = request.method.toUpperCase();
   const pathname = new URL(request.url).pathname.replace(/\/+$/, "") || "/";
+  if (pathname === "/mcp/guarded") {
+    return method === "GET" || method === "POST" || method === "DELETE";
+  }
   if (method === "GET" && pathname === "/health/ready") return true;
   if (method === "GET" && pathname === "/workspaces") return true;
   if (/^\/workspace\/[^/]+\/sessions$/.test(pathname)) {
@@ -4966,6 +4978,138 @@ function matterhornHostedMcpRouteIsAllowed(request: Request): boolean {
   if (!operation) return method === "GET" || method === "DELETE";
   if (operation === "messages") return method === "GET" || method === "POST";
   return method === "GET";
+}
+
+const HOSTED_GUARDED_MCP_RESPONSE_MAX_BYTES = 1_048_576;
+const HOSTED_GUARDED_MCP_INVOCATION_TIMEOUT_MS = 20_000;
+
+const HOSTED_GUARDED_MCP_SAFE_ERRORS = new Map<string, string>([
+  ["provider_privacy_unverified", "This request needs privacy review in Matterhorn before it can be sent."],
+  ["consent_required", "This request needs one-time privacy review in Matterhorn before it can be sent."],
+  ["secret_detected", "Matterhorn blocked credential or signing material before provider contact."],
+  ["model_usage_exceeded", "This workspace has reached its current model-usage allowance."],
+  ["hosted_operation_not_allowed", "This operation is not available to hosted account clients."],
+  ["hosted_mcp_operation_not_allowed", "This operation is not available through Matterhorn's guarded connection."],
+  ["wallet_airlock_required", "Continue in Matterhorn's connected-wallet review to approve this action."],
+]);
+
+function hostedGuardedMcpToolError(error: unknown): HostedGuardedMcpToolError {
+  if (error instanceof HostedGuardedMcpToolError) return error;
+  if (error instanceof ApiError) {
+    const safe = HOSTED_GUARDED_MCP_SAFE_ERRORS.get(error.code);
+    if (safe) return new HostedGuardedMcpToolError(safe);
+    if (error.status === 401 || error.status === 403 || error.status === 404) {
+      return new HostedGuardedMcpToolError(
+        "Matterhorn denied this account-scoped request. Check the connection and workspace access.",
+      );
+    }
+    if (error.status >= 400 && error.status < 500) {
+      return new HostedGuardedMcpToolError("Matterhorn rejected this guarded request.");
+    }
+  }
+  return new HostedGuardedMcpToolError("Matterhorn could not complete this guarded request.");
+}
+
+async function readHostedGuardedMcpResponseText(response: Response): Promise<string> {
+  const declaredLength = Number.parseInt(response.headers.get("content-length") ?? "0", 10);
+  if (Number.isFinite(declaredLength) && declaredLength > HOSTED_GUARDED_MCP_RESPONSE_MAX_BYTES) {
+    throw new HostedGuardedMcpToolError("Matterhorn response exceeded the guarded size limit.");
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > HOSTED_GUARDED_MCP_RESPONSE_MAX_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new HostedGuardedMcpToolError("Matterhorn response exceeded the guarded size limit.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+function parseHostedGuardedMcpSse(text: string): Array<Record<string, unknown>> {
+  if (!text.trim()) return [];
+  return text
+    .trim()
+    .split(/\r?\n\r?\n+/)
+    .filter(Boolean)
+    .slice(0, 50)
+    .map((block) => {
+      const event: Record<string, unknown> = {};
+      const data: string[] = [];
+      for (const line of block.split(/\r?\n/)) {
+        if (line.startsWith("id:")) event.id = line.slice(3).trimStart();
+        else if (line.startsWith("event:")) event.event = line.slice(6).trimStart();
+        else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+      }
+      if (data.length > 0) {
+        const raw = data.join("\n");
+        try {
+          event.data = JSON.parse(raw) as unknown;
+        } catch {
+          event.data = raw;
+        }
+      }
+      return event;
+    });
+}
+
+async function hostedGuardedMcpInvocationResult(response: Response): Promise<unknown> {
+  const text = await readHostedGuardedMcpResponseText(response);
+  if (!response.ok) {
+    let code = "request_failed";
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (isRecord(parsed) && typeof parsed.code === "string") code = parsed.code;
+    } catch {
+      // Never forward an unstructured upstream response to an external client.
+    }
+    const safe = HOSTED_GUARDED_MCP_SAFE_ERRORS.get(code);
+    if (safe) throw new HostedGuardedMcpToolError(safe);
+    if (response.status === 401 || response.status === 403 || response.status === 404) {
+      throw new HostedGuardedMcpToolError(
+        "Matterhorn denied this account-scoped request. Check the connection and workspace access.",
+      );
+    }
+    throw new HostedGuardedMcpToolError(`Matterhorn request failed (${code}, HTTP ${response.status}).`);
+  }
+  if (response.headers.get("content-type")?.toLowerCase().includes("text/event-stream")) {
+    const events = parseHostedGuardedMcpSse(text);
+    const last = events.at(-1);
+    const lastData = isRecord(last?.data) ? last.data : null;
+    const lastCursor = typeof last?.id === "string"
+      ? last.id
+      : typeof lastData?.cursor === "string" ? lastData.cursor : null;
+    return {
+      ok: true,
+      events,
+      count: events.length,
+      lastCursor,
+      nextSince: lastCursor,
+    };
+  }
+  if (!text) return { ok: true };
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new HostedGuardedMcpToolError("Matterhorn returned an invalid guarded response.");
+  }
 }
 
 function resolveMatterhornHostedMcpAccess(
@@ -6405,7 +6549,7 @@ function withCors(response: Response, request: Request, config: ServerConfig) {
   headers.set("Access-Control-Allow-Origin", allowOrigin);
   headers.set(
     "Access-Control-Allow-Headers",
-    "Authorization, Content-Type, X-Matterhorn-Execution-Mode, X-Matterhorn-Host-Token, X-OpenWork-Host-Token, X-OpenWork-Client-Id, X-OpenCode-Directory, X-Opencode-Directory, x-opencode-directory",
+    "Authorization, Content-Type, MCP-Protocol-Version, Last-Event-ID, X-Matterhorn-Execution-Mode, X-Matterhorn-Host-Token, X-OpenWork-Host-Token, X-OpenWork-Client-Id, X-OpenCode-Directory, X-Opencode-Directory, x-opencode-directory",
   );
   headers.set("Access-Control-Expose-Headers", "X-Matterhorn-Build-Commit");
   headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
@@ -10775,6 +10919,103 @@ function createRoutes(
     coworkers: coworkerRuntime.coworkers,
     guardedRuntime,
     resolveWorkspace: (workspaceId) => resolveWorkspace(config, workspaceId),
+  });
+
+  const invokeHostedGuardedMcpRoute = async (
+    ctx: RequestContext,
+    invocation: HostedGuardedMcpInvocation,
+  ): Promise<unknown> => {
+    const targetUrl = new URL(invocation.path, ctx.url.origin);
+    for (const [name, value] of Object.entries(invocation.query ?? {})) {
+      if (value !== undefined) targetUrl.searchParams.set(name, String(value));
+    }
+    const headers = new Headers({
+      Accept: invocation.accept ?? "application/json",
+    });
+    const body = invocation.body === undefined ? undefined : JSON.stringify(invocation.body);
+    if (body !== undefined) headers.set("Content-Type", "application/json");
+
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    const timeout = setTimeout(abort, HOSTED_GUARDED_MCP_INVOCATION_TIMEOUT_MS);
+    ctx.request.signal.addEventListener("abort", abort, { once: true });
+    try {
+      const targetRequest = new Request(targetUrl, {
+        method: invocation.method,
+        headers,
+        ...(body !== undefined ? { body } : {}),
+        signal: controller.signal,
+      });
+      if (!matterhornHostedMcpRouteIsAllowed(targetRequest)) {
+        throw new HostedGuardedMcpToolError(
+          "This operation is not available through Matterhorn's guarded connection.",
+        );
+      }
+      const targetRoute = matchRoute(routes, invocation.method, targetUrl.pathname);
+      const readinessRoute = invocation.method === "GET" && targetUrl.pathname === "/health/ready";
+      if (!targetRoute || (targetRoute.auth !== "client" && !(readinessRoute && targetRoute.auth === "none"))) {
+        throw new HostedGuardedMcpToolError(
+          "This operation is not available through Matterhorn's guarded connection.",
+        );
+      }
+      const requestedWorkspaceId = targetRoute.path.startsWith("/workspace/:id")
+        ? targetRoute.params.id
+        : undefined;
+      assertMatterhornWorkspaceAccess(requestedWorkspaceId, {
+        actor: ctx.actor ?? { type: "remote", scope: "viewer" },
+        session: ctx.matterhornSession,
+        workspace: ctx.matterhornWorkspace,
+      });
+      const response = await targetRoute.handler({
+        ...ctx,
+        request: targetRequest,
+        url: targetUrl,
+        params: targetRoute.params,
+      });
+      return await hostedGuardedMcpInvocationResult(response);
+    } catch (error) {
+      throw hostedGuardedMcpToolError(error);
+    } finally {
+      clearTimeout(timeout);
+      ctx.request.signal.removeEventListener("abort", abort);
+    }
+  };
+
+  const requireHostedGuardedMcpTransport = (ctx: RequestContext): void => {
+    if (!ctx.hostedMcpAccess) {
+      throw new ApiError(
+        403,
+        "hosted_mcp_access_required",
+        "Create an invited MCP access key in Matterhorn before connecting an external client.",
+      );
+    }
+  };
+
+  addRoute(routes, "GET", "/mcp/guarded", "client", async (ctx) => {
+    requireHostedGuardedMcpTransport(ctx);
+    return hostedGuardedMcpMethodNotAllowed();
+  });
+
+  addRoute(routes, "DELETE", "/mcp/guarded", "client", async (ctx) => {
+    requireHostedGuardedMcpTransport(ctx);
+    return hostedGuardedMcpMethodNotAllowed();
+  });
+
+  addRoute(routes, "POST", "/mcp/guarded", "client", async (ctx) => {
+    requireHostedGuardedMcpTransport(ctx);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(await readBodyTextLimited(ctx.request, 524_288, "Hosted MCP")) as unknown;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 413) throw error;
+      return hostedGuardedMcpParseError();
+    }
+    return handleHostedGuardedMcpPost({
+      request: ctx.request,
+      payload,
+      serverVersion: SERVER_VERSION,
+      invoke: (invocation) => invokeHostedGuardedMcpRoute(ctx, invocation),
+    });
   });
 
   addRoute(routes, "POST", "/mcp/opencode", "client", async (ctx) => {

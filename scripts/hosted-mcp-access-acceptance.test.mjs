@@ -12,6 +12,19 @@ const TOKEN_A = `mhmcp_${"C".repeat(43)}`;
 const TOKEN_B = `mhmcp_${"D".repeat(43)}`;
 const ID_A = `mcp_${"a".repeat(32)}`;
 const ID_B = `mcp_${"b".repeat(32)}`;
+const GUARDED_TOOL_NAMES = [
+  "matterhorn_status",
+  "matterhorn_list_workspaces",
+  "matterhorn_create_session",
+  "matterhorn_list_sessions",
+  "matterhorn_get_session",
+  "matterhorn_get_session_messages",
+  "matterhorn_submit_session_prompt",
+  "matterhorn_get_session_status",
+  "matterhorn_watch_session_events",
+  "matterhorn_get_session_snapshot",
+  "matterhorn_delete_session",
+];
 
 function json(payload, status = 200, headers = {}) {
   return new Response(JSON.stringify(payload), {
@@ -109,6 +122,54 @@ function fakeHostedService(faults = {}) {
 
     const bearerOwner = ownerFromBearer(headers);
     if (!bearerOwner) return json({ code: "unauthorized" }, 401);
+    if (url.pathname === "/mcp/guarded") {
+      if (method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } });
+      if (
+        !headers.get("accept")?.includes("application/json")
+        || !headers.get("accept")?.includes("text/event-stream")
+        || headers.get("mcp-protocol-version") !== "2025-11-25"
+      ) return json({ code: "mcp_headers_invalid" }, 400);
+      const request = JSON.parse(String(init.body));
+      if (request.method === "initialize") {
+        return json({
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            protocolVersion: "2025-11-25",
+            capabilities: { tools: {} },
+            serverInfo: { name: "matterhorn-hosted-guarded-mcp", version: "test" },
+          },
+        });
+      }
+      if (request.method === "tools/list") {
+        return json({
+          jsonrpc: "2.0",
+          id: request.id,
+          result: { tools: GUARDED_TOOL_NAMES.map((name) => ({ name })) },
+        });
+      }
+      if (request.method === "tools/call" && request.params?.name === "matterhorn_list_workspaces") {
+        const value = account[bearerOwner];
+        return json({
+          jsonrpc: "2.0",
+          id: request.id,
+          result: { content: [{ type: "text", text: JSON.stringify({ items: [{ id: value.workspace }] }) }] },
+        });
+      }
+      if (request.method === "tools/call" && request.params?.name === "matterhorn_list_sessions") {
+        const value = account[bearerOwner];
+        const target = request.params?.arguments?.workspaceId;
+        const denied = target !== value.workspace && !faults.crossAccountLeak;
+        return json({
+          jsonrpc: "2.0",
+          id: request.id,
+          result: denied
+            ? { isError: true, content: [{ type: "text", text: "Matterhorn could not complete this guarded request." }] }
+            : { content: [{ type: "text", text: JSON.stringify({ items: [] }) }] },
+        });
+      }
+      return json({ jsonrpc: "2.0", id: request.id, error: { code: -32601, message: "Unavailable" } });
+    }
     if (!allowed(method, url.pathname) && !faults.allowForbidden) {
       return json({ code: "hosted_mcp_operation_not_allowed" }, 403);
     }
@@ -176,7 +237,7 @@ assert.throws(
 
 const passing = await run();
 assert.equal(passing.report.ok, true, JSON.stringify(passing.report.failures));
-assert.equal(passing.report.checks.length, 13);
+assert.equal(passing.report.checks.length, 16);
 assert.equal(passing.report.observedCommit, COMMIT);
 assert.equal(passing.state.sessionDeleted, true);
 assert.deepEqual([...passing.state.revoked].sort(), [ID_A, ID_B]);
