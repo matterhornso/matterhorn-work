@@ -42,6 +42,28 @@ const HOME_COWORKER_CHOICES: ReadonlyArray<{
   },
 ];
 
+const HOME_START_EXAMPLES: ReadonlyArray<{
+  label: string;
+  outcome: string;
+  templateId: MatterhornCoworkerTemplateId;
+}> = [
+  {
+    label: "Compare validators",
+    outcome: "Compare Bittensor validators and save a cited recommendation.",
+    templateId: "market_analyst",
+  },
+  {
+    label: "Review account risk",
+    outcome: "Review my Hyperliquid account risk and alert me to important changes.",
+    templateId: "risk_monitor",
+  },
+  {
+    label: "Prepare a transfer",
+    outcome: "Prepare a Sui testnet transfer for my wallet to review.",
+    templateId: "transaction_coordinator",
+  },
+];
+
 export function WorkspaceCoworkerStart({
   disabled,
   onChoose,
@@ -59,9 +81,9 @@ export function WorkspaceCoworkerStart({
 
   return (
     <section className="border-y border-dls-border/55 py-4" aria-labelledby="workspace-coworker-start-title">
-      <h3 id="workspace-coworker-start-title" className="text-base font-semibold text-dls-text">What should Matterhorn help you do?</h3>
+      <h3 id="workspace-coworker-start-title" className="text-base font-semibold text-dls-text">What do you want to do?</h3>
       <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-        Describe your goal in one sentence. Matterhorn will suggest the best fit, and you can change it.
+        Type a goal or choose an example. You can edit it before anything starts.
       </p>
       <form
         className="mt-4"
@@ -78,7 +100,7 @@ export function WorkspaceCoworkerStart({
           value={outcome}
           maxLength={1_200}
           disabled={disabled}
-          placeholder="For example: Compare Bittensor validators and save a cited recommendation."
+          placeholder="Compare Bittensor validators and save a recommendation."
           onChange={(event) => {
             const nextOutcome = event.currentTarget.value;
             setOutcome(nextOutcome);
@@ -88,6 +110,29 @@ export function WorkspaceCoworkerStart({
             }
           }}
         />
+
+        {!trimmedOutcome ? (
+          <div className="mt-3" role="group" aria-label="Example goals">
+            <p className="text-xs font-medium text-dls-secondary">Try an example</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {HOME_START_EXAMPLES.map((example) => (
+                <button
+                  key={example.label}
+                  type="button"
+                  className="inline-flex min-h-11 items-center rounded-md border border-dls-border/80 px-3 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9"
+                  disabled={disabled}
+                  onClick={() => {
+                    setOutcome(example.outcome);
+                    setChosenTemplateId(example.templateId);
+                    setChoicesOpen(false);
+                  }}
+                >
+                  {example.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {trimmedOutcome ? (
           <div className="mt-3 border-t border-dls-border/40 pt-3">
@@ -149,7 +194,7 @@ export function WorkspaceCoworkerStart({
 
         <div className="mt-3 flex flex-col gap-3 border-t border-dls-border/40 pt-3 sm:flex-row sm:items-center sm:justify-between">
           <p id="workspace-coworker-safety" className="max-w-2xl text-xs leading-5 text-dls-secondary">
-            Next, choose what it can use. It cannot see private keys or send funds on its own.
+            Next, choose the apps and information Matterhorn can use. It never sees private keys or sends funds on its own.
           </p>
           <button
             type="submit"
@@ -157,7 +202,7 @@ export function WorkspaceCoworkerStart({
             className="inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-dls-text px-4 text-sm font-medium text-dls-background transition-colors hover:bg-dls-text/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-45"
             disabled={disabled || !trimmedOutcome}
           >
-            Choose what it can use
+            Continue
           </button>
         </div>
       </form>

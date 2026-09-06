@@ -162,7 +162,8 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain('aria-label="Recommended next action"');
       expect(source).toContain('aria-label="Secondary creation actions"');
       expect(source).toContain("Describe an outcome, continue your work, or open a protocol desk.");
-      expect(coworkerStart).toContain("What should Matterhorn help you do?");
+      expect(coworkerStart).toContain("What do you want to do?");
+      expect(coworkerStart).toContain("Try an example");
       expect(source).toContain("Browse protocol desks");
       expect(source).toContain("Project folder");
       expect(source).toContain("Saved outputs");
