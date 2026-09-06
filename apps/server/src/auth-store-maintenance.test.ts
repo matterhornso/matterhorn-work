@@ -118,6 +118,7 @@ describe("account security metadata maintenance", () => {
       expiredEmailsTerminalized: 2,
       finalizedEmailsDeleted: 1,
       completedDeletionJobsDeleted: 1,
+      expiredHostedMcpCredentialsDeleted: 0,
     });
     expect(store.getSession(expiredSession.token)).toBeNull();
     expect(store.getSession(liveSession.token)?.user.email).toBe("live-session@example.com");
@@ -152,6 +153,7 @@ describe("account security metadata maintenance", () => {
       expiredEmailsTerminalized: 0,
       finalizedEmailsDeleted: 0,
       completedDeletionJobsDeleted: 0,
+      expiredHostedMcpCredentialsDeleted: 0,
     });
     expect(() => store.maintainEphemeralSecurityState(Number.NaN))
       .toThrow("auth_maintenance_time_invalid");

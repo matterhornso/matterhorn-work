@@ -505,10 +505,12 @@ import {
   verifyMatterhornTurnstile,
 } from "./turnstile.js";
 import {
+  HOSTED_MCP_ACCESS_MAX_DAYS,
   MatterhornAuthError,
   MatterhornAuthStore,
   resolveMatterhornDataRoot,
   type MatterhornAuthAccountDeletionJob,
+  type MatterhornHostedMcpAccessIdentity,
   type MatterhornAuthSession,
 } from "./auth-store.js";
 import {
@@ -1298,6 +1300,14 @@ function assertOpencodeProxyAllowed(access: ClientAccess, request: Request, prox
   const m = method.toUpperCase();
   const scope = access.actor.scope ?? "viewer";
 
+  if (access.hostedMcpAccess) {
+    throw new ApiError(
+      403,
+      "hosted_mcp_operation_not_allowed",
+      "This access key can only use Matterhorn's guarded workspace and chat tools.",
+    );
+  }
+
   if (
     isRawInferenceProxyRequest(m, proxyPath)
     && accountMessageGatewayRequired(access)
@@ -1403,6 +1413,7 @@ type ClientAccess = {
   actor: Actor;
   session?: MatterhornAuthSession;
   workspace?: WorkspaceInfo;
+  hostedMcpAccess?: MatterhornHostedMcpAccessIdentity;
 };
 
 type MatterhornSuiEvidenceAnchorPackageState = {
@@ -2033,6 +2044,7 @@ export async function startServer(
       routeTemplate = route.path;
       try {
         assertTrustedBrowserMutationOrigin(request, config);
+        assertMatterhornHostedMcpRouteAllowed(request, authStore);
         const clientAccess =
           route.auth === "client"
             ? await requireClientAccess(request, config, tokens, authStore)
@@ -4902,6 +4914,81 @@ function pendingCryptoIntentApiError(error: unknown): ApiError {
 
 const MATTERHORN_SESSION_COOKIE = "mh_session";
 const MATTERHORN_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const MATTERHORN_HOSTED_MCP_ACCESS_MODE = "MATTERHORN_HOSTED_MCP_ACCESS_MODE";
+const MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS =
+  "MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS";
+
+type MatterhornHostedMcpAccessMode = "off" | "invite";
+
+function matterhornHostedMcpAccessMode(): MatterhornHostedMcpAccessMode {
+  return process.env[MATTERHORN_HOSTED_MCP_ACCESS_MODE]?.trim().toLowerCase()
+    === "invite"
+    ? "invite"
+    : "off";
+}
+
+function matterhornHostedMcpAccountIsAllowed(accountId: string): boolean {
+  if (matterhornHostedMcpAccessMode() !== "invite") return false;
+  const allowed = new Set(
+    (process.env[MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS] ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  return allowed.has(accountId);
+}
+
+function bearerToken(request: Request): string | null {
+  const authorization = request.headers.get("authorization")?.trim() ?? "";
+  return authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? null;
+}
+
+function matterhornHostedMcpRouteIsAllowed(request: Request): boolean {
+  const method = request.method.toUpperCase();
+  const pathname = new URL(request.url).pathname.replace(/\/+$/, "") || "/";
+  if (method === "GET" && pathname === "/health/ready") return true;
+  if (method === "GET" && pathname === "/workspaces") return true;
+  if (/^\/workspace\/[^/]+\/sessions$/.test(pathname)) {
+    return method === "GET" || method === "POST";
+  }
+  const session = pathname.match(
+    /^\/workspace\/[^/]+\/sessions\/[^/]+(?:\/(messages|status|snapshot|events))?$/,
+  );
+  if (!session) return false;
+  const operation = session[1];
+  if (!operation) return method === "GET" || method === "DELETE";
+  if (operation === "messages") return method === "GET" || method === "POST";
+  return method === "GET";
+}
+
+function resolveMatterhornHostedMcpAccess(
+  request: Request,
+  authStore: MatterhornAuthStore,
+): MatterhornHostedMcpAccessIdentity | null {
+  const token = bearerToken(request);
+  if (!token) return null;
+  const identity = authStore.resolveHostedMcpAccessCredential(token);
+  if (!identity || !matterhornHostedMcpAccountIsAllowed(identity.user.id)) {
+    return null;
+  }
+  return identity;
+}
+
+function assertMatterhornHostedMcpRouteAllowed(
+  request: Request,
+  authStore: MatterhornAuthStore,
+): void {
+  const cookie = matterhornCookieSessionToken(request);
+  if (cookie && authStore.getSession(cookie)) return;
+  const identity = resolveMatterhornHostedMcpAccess(request, authStore);
+  if (identity && !matterhornHostedMcpRouteIsAllowed(request)) {
+    throw new ApiError(
+      403,
+      "hosted_mcp_operation_not_allowed",
+      "This access key can only use Matterhorn's guarded workspace and chat tools.",
+    );
+  }
+}
 
 function optionalStringBodyField(
   body: Record<string, unknown>,
@@ -5107,7 +5194,8 @@ function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
           ? 403
         : error.code === "email_taken" ||
             error.code === "account_owns_shared_organization" ||
-            error.code === "organization_slug_taken"
+            error.code === "organization_slug_taken" ||
+            error.code === "hosted_mcp_access_limit_reached"
           ? 409
           : error.code === "signup_capacity_reached"
             ? 503
@@ -5121,6 +5209,17 @@ function requireMatterhornSessionToken(
   authStore: MatterhornAuthStore,
 ): string {
   const token = matterhornSessionToken(request);
+  if (!token || !authStore.getSession(token)) {
+    throw new ApiError(401, "unauthorized", "Sign in to continue.");
+  }
+  return token;
+}
+
+function requireMatterhornCookieSessionToken(
+  request: Request,
+  authStore: MatterhornAuthStore,
+): string {
+  const token = matterhornCookieSessionToken(request);
   if (!token || !authStore.getSession(token)) {
     throw new ApiError(401, "unauthorized", "Sign in to continue.");
   }
@@ -6356,6 +6455,32 @@ async function requireClientAccess(
         authStore,
         session,
       ),
+    };
+  }
+
+  const hostedMcpAccess = resolveMatterhornHostedMcpAccess(request, authStore);
+  if (hostedMcpAccess && bearer) {
+    const session: MatterhornAuthSession = {
+      token: "",
+      user: hostedMcpAccess.user,
+      activeOrgId: hostedMcpAccess.activeOrgId,
+      activeOrgSlug: null,
+      expiresAt: hostedMcpAccess.expiresAt,
+    };
+    return {
+      actor: {
+        type: "remote",
+        clientId: hostedMcpAccess.user.id,
+        tokenHash: hashToken(bearer),
+        scope: "collaborator",
+      },
+      session,
+      workspace: await ensureMatterhornOrganizationWorkspace(
+        config,
+        authStore,
+        session,
+      ),
+      hostedMcpAccess,
     };
   }
 
@@ -10285,6 +10410,69 @@ function createRoutes(
       authStore.securitySummary(token),
     );
     const response = jsonResponse(summary);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "GET", "/api/auth/account/mcp-access", "none", async ({ request }) => {
+    const token = requireMatterhornCookieSessionToken(request, authStore);
+    const session = authStore.getSession(token)!;
+    const response = jsonResponse({
+      mode: matterhornHostedMcpAccessMode(),
+      eligible: matterhornHostedMcpAccountIsAllowed(session.user.id),
+      maxExpiresInDays: HOSTED_MCP_ACCESS_MAX_DAYS,
+      credentials: authStore.listHostedMcpAccessCredentials(token),
+    });
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "POST", "/api/auth/account/mcp-access", "none", async ({ request }) => {
+    const token = requireMatterhornCookieSessionToken(request, authStore);
+    const session = authStore.getSession(token)!;
+    if (!matterhornHostedMcpAccountIsAllowed(session.user.id)) {
+      throw new ApiError(
+        403,
+        "hosted_mcp_access_unavailable",
+        "Hosted MCP access is currently available to invited accounts only.",
+      );
+    }
+    const body = await readJsonBody(request, 4 * 1024, "Hosted MCP access key");
+    const expiresInDays = body.expiresInDays == null
+      ? undefined
+      : typeof body.expiresInDays === "number"
+        ? body.expiresInDays
+        : Number.NaN;
+    const credential = withMatterhornAuthErrorMapping(() =>
+      authStore.createHostedMcpAccessCredential(token, {
+        label: stringBodyField(body, "label") || "External AI app",
+        ...(expiresInDays === undefined ? {} : { expiresInDays }),
+      }),
+    );
+    const response = jsonResponse({
+      credential: {
+        id: credential.id,
+        label: credential.label,
+        activeOrgId: credential.activeOrgId,
+        createdAt: credential.createdAt,
+        expiresAt: credential.expiresAt,
+        lastUsedAt: credential.lastUsedAt,
+        accessToken: credential.token,
+      },
+    }, 201);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "DELETE", "/api/auth/account/mcp-access/:credentialId", "none", async ({ request, params }) => {
+    const token = requireMatterhornCookieSessionToken(request, authStore);
+    const revoked = withMatterhornAuthErrorMapping(() =>
+      authStore.revokeHostedMcpAccessCredential(token, params.credentialId),
+    );
+    if (!revoked) {
+      throw new ApiError(404, "hosted_mcp_access_not_found", "Access key not found.");
+    }
+    const response = jsonResponse({ ok: true, revoked: true });
     response.headers.set("Cache-Control", "no-store");
     return response;
   });

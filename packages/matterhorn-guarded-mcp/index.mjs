@@ -438,13 +438,18 @@ async function callSessionEventStream(args) {
 }
 
 async function status() {
-  const health = await callServer("/health", { auth: false });
-  requireClientToken();
-  const [serviceStatus, capabilities] = await Promise.all([
-    callServer("/status"),
-    callServer("/capabilities"),
+  const [readiness, workspaceAccess] = await Promise.all([
+    callServer("/health/ready", { auth: false }),
+    callServer("/workspaces"),
   ]);
-  return { serverUrl: SERVER, health, status: serviceStatus, capabilities };
+  return {
+    serverUrl: SERVER,
+    readiness,
+    accountAccess: true,
+    workspaceCount: Array.isArray(workspaceAccess?.items)
+      ? workspaceAccess.items.length
+      : 0,
+  };
 }
 
 async function handleTool(name, args) {

@@ -31,6 +31,34 @@ describe("hosted MCP summary", () => {
     }
   });
 
+  test("keeps hosted credential handling account-scoped and memory-only", () => {
+    const summarySource = readFileSync(
+      new URL(
+        "../src/react-app/domains/settings/pages/hosted-mcp-summary.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const clientSource = readFileSync(
+      new URL(
+        "../src/react-app/domains/settings/pages/hosted-mcp-access-client.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(summarySource).toContain("Create access key");
+    expect(summarySource).toContain("Copy this key now");
+    expect(summarySource).toContain("Matterhorn stores only its hash");
+    expect(summarySource).toContain("Revoke");
+    expect(clientSource).toContain("/api/auth/account/mcp-access");
+    expect(clientSource).toContain('credentials: "include"');
+    expect(summarySource).not.toContain("localStorage");
+    expect(summarySource).not.toContain("sessionStorage");
+    expect(clientSource).not.toContain("localStorage");
+    expect(clientSource).not.toContain("sessionStorage");
+  });
+
   test("keeps the shared manifest aligned with managed web capability", () => {
     expect(MCPS_PROTOCOL_DESK_MANIFEST.status).toBe("beta_ready");
     expect(MCPS_PROTOCOL_DESK_MANIFEST.backendStatus).toBe("partial");

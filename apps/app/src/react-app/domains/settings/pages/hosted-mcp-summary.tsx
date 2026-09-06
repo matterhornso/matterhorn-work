@@ -5,16 +5,26 @@ import {
   CircleAlert,
   CircleX,
   Code2,
+  Copy,
   FileCheck2,
   ExternalLink,
+  KeyRound,
   ListTree,
   MessageSquareText,
   SearchCheck,
+  Trash2,
   WalletCards,
 } from "lucide-react";
+import { useCallback, useEffect, useState, type ElementType } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  createHostedMcpAccess,
+  readHostedMcpAccess,
+  revokeHostedMcpAccess,
+  type HostedMcpAccessResponse,
+} from "./hosted-mcp-access-client";
 
 export type HostedMcpConnection = {
   name: string;
@@ -98,6 +108,206 @@ const GUARDED_MCP_TOOL_NAMES = [
   "matterhorn_get_session_snapshot",
   "matterhorn_delete_session",
 ] as const;
+
+function HostedMcpAccessPanel({ heading: Heading }: { heading: ElementType }) {
+  const [access, setAccess] = useState<HostedMcpAccessResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [newAccessToken, setNewAccessToken] = useState<string | null>(null);
+  const [copied, setCopied] = useState<"server" | "token" | null>(null);
+  const [clientLabel, setClientLabel] = useState<(typeof GUARDED_MCP_CLIENTS)[number]>("Codex");
+
+  const loadAccess = useCallback(async () => {
+    try {
+      setAccess(await readHostedMcpAccess());
+    } catch {
+      setAccess(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAccess();
+  }, [loadAccess]);
+
+  const createAccess = async () => {
+    setWorking(true);
+    setError(null);
+    setNewAccessToken(null);
+    try {
+      const credential = await createHostedMcpAccess({
+        label: clientLabel,
+        expiresInDays: access?.maxExpiresInDays ?? 30,
+      });
+      setNewAccessToken(credential.accessToken);
+      await loadAccess();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Matterhorn could not create the access key.");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const revokeAccess = async (credentialId: string) => {
+    setWorking(true);
+    setError(null);
+    try {
+      await revokeHostedMcpAccess(credentialId);
+      setNewAccessToken(null);
+      await loadAccess();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Matterhorn could not revoke the access key.");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const copyValue = async (kind: "server" | "token", value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(kind);
+      window.setTimeout(() => setCopied(null), 1_500);
+    } catch {
+      setError("Copy is unavailable. Select the value and copy it manually.");
+    }
+  };
+
+  if (loading || !access?.eligible) {
+    return (
+      <>
+        <p className="mt-5 max-w-2xl text-xs leading-5 text-dls-secondary">
+          External setup is available today with Matterhorn Desktop or a
+          self-hosted Matterhorn server. Connecting an external client directly
+          to this hosted account is not available in this release.
+        </p>
+        <a
+          href="https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-mcp-install.md"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-dls-surface-muted/30 px-3 text-xs font-semibold text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.35)]"
+        >
+          Set up with Matterhorn Desktop
+          <ExternalLink className="size-3.5" aria-hidden="true" />
+        </a>
+        <p className="mt-2 text-[11px] leading-4 text-dls-muted">
+          The current setup uses a trusted local checkout and a client-only
+          token. The MCP package is not published to npm yet.
+        </p>
+      </>
+    );
+  }
+
+  const serverUrl = typeof window === "undefined" ? "" : window.location.origin;
+  return (
+    <div className="mt-5 border-y border-dls-border/70 py-4">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
+        <div>
+          <Heading className="text-sm font-medium text-dls-text">
+            Hosted access
+          </Heading>
+          <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+            Invite preview. Keys expire within {access.maxExpiresInDays} days and can only use the guarded tools above.
+          </p>
+        </div>
+        <div className="flex w-full gap-2 sm:w-auto">
+          <label className="min-w-0 flex-1 sm:w-36 sm:flex-none">
+            <span className="sr-only">AI app</span>
+            <select
+              aria-label="AI app"
+              value={clientLabel}
+              onChange={(event) => setClientLabel(event.target.value as (typeof GUARDED_MCP_CLIENTS)[number])}
+              className="h-10 w-full rounded-md border border-dls-border bg-dls-surface px-2.5 text-xs text-dls-text outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.35)]"
+            >
+              {GUARDED_MCP_CLIENTS.map((client) => <option key={client}>{client}</option>)}
+            </select>
+          </label>
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-10 shrink-0"
+            disabled={working}
+            onClick={() => void createAccess()}
+          >
+            <KeyRound className="size-3.5" aria-hidden="true" />
+            {working ? "Working…" : "Create access key"}
+          </Button>
+        </div>
+      </div>
+
+      {newAccessToken ? (
+        <div className="mt-4 border-l-2 border-amber-9 pl-3" role="status">
+          <p className="text-xs font-medium text-dls-text">Copy this key now</p>
+          <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+            Matterhorn stores only its hash. This value will disappear when you leave this page.
+          </p>
+          <div className="mt-3 grid gap-2">
+            {[
+              { kind: "server" as const, label: "Server", value: serverUrl },
+              { kind: "token" as const, label: "Access key", value: newAccessToken },
+            ].map((item) => (
+              <div key={item.kind} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-dls-muted">{item.label}</p>
+                  <code className="mt-0.5 block truncate font-mono text-[11px] text-dls-text">{item.value}</code>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Copy ${item.label.toLowerCase()}`}
+                  onClick={() => void copyValue(item.kind, item.value)}
+                >
+                  {copied === item.kind ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {access.credentials.length > 0 ? (
+        <ul className="mt-4 divide-y divide-dls-border/50" aria-label="Hosted MCP access keys">
+          {access.credentials.map((credential) => (
+            <li key={credential.id} className="flex min-h-12 items-center gap-3 py-2.5">
+              <KeyRound className="size-3.5 shrink-0 text-dls-secondary" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium text-dls-text">{credential.label}</p>
+                <p className="mt-0.5 text-[10px] text-dls-muted">
+                  Expires {new Date(credential.expiresAt).toLocaleDateString()}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={working}
+                aria-label={`Revoke ${credential.label}`}
+                onClick={() => void revokeAccess(credential.id)}
+              >
+                <Trash2 className="size-3.5" aria-hidden="true" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 text-[11px] leading-4 text-dls-muted">No active hosted access keys.</p>
+      )}
+
+      {error ? <p className="mt-3 text-xs leading-5 text-red-10" role="alert">{error}</p> : null}
+      <a
+        href="https://github.com/matterhornso/matterhorn-work/tree/dev/packages/matterhorn-guarded-mcp"
+        target="_blank"
+        rel="noreferrer"
+        className="mt-4 inline-flex items-center gap-1.5 text-[11px] font-medium text-dls-text hover:underline"
+      >
+        Open connector setup
+        <ExternalLink className="size-3" aria-hidden="true" />
+      </a>
+    </div>
+  );
+}
 
 function HostedMcpCompactSummary({
   connections,
@@ -370,24 +580,7 @@ export function HostedMcpSummary(props: HostedMcpSummaryProps) {
           </ul>
         </details>
 
-        <p className="mt-5 max-w-2xl text-xs leading-5 text-dls-secondary">
-          External setup is available today with Matterhorn Desktop or a
-          self-hosted Matterhorn server. Connecting an external client directly
-          to this hosted account is not available in this release.
-        </p>
-        <a
-          href="https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-mcp-install.md"
-          target="_blank"
-          rel="noreferrer"
-          className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-dls-surface-muted/30 px-3 text-xs font-semibold text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.35)]"
-        >
-          Set up with Matterhorn Desktop
-          <ExternalLink className="size-3.5" aria-hidden="true" />
-        </a>
-        <p className="mt-2 text-[11px] leading-4 text-dls-muted">
-          The current setup uses a trusted local checkout and a client-only
-          token. The MCP package is not published to npm yet.
-        </p>
+        <HostedMcpAccessPanel heading={ItemHeading} />
       </section>
 
       {props.onBrowseCryptoApps ? (

@@ -11,9 +11,17 @@ wallet, signing, relay, submission, shell, configuration, or operator tools.
 
 ```bash
 export MATTERHORN_WORK_SERVER_URL="https://your-matterhorn-server.example"
-export MATTERHORN_WORK_TOKEN="<account-client-token>"
+export MATTERHORN_WORK_TOKEN="<guarded-client-token>"
 npx -y @matterhorn-work/guarded-mcp
 ```
+
+Invited hosted accounts can create a 30-day maximum access key in **Settings →
+MCPs & Tools**. Matterhorn shows the secret once and stores only its hash. The
+key is bound to the issuing account's active workspace and is rejected on raw
+OpenCode, host, configuration, protocol, wallet, signing, relay, and submission
+routes. Operators keep `MATTERHORN_HOSTED_MCP_ACCESS_MODE=off` until an account
+is explicitly added to `MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS` and the
+connector is ready for that tester.
 
 Until the package is published, run the checked-out entrypoint with Node:
 

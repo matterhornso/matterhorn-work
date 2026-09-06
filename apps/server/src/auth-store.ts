@@ -47,6 +47,18 @@ type SessionRow = {
   expires_at: number;
 };
 
+type HostedMcpAccessRow = {
+  id: string;
+  token_hash: string;
+  user_id: string;
+  active_org_id: string;
+  label: string;
+  expires_at: number;
+  created_at: number;
+  last_used_at: number | null;
+  revoked_at: number | null;
+};
+
 type OrganizationRow = {
   id: string;
   name: string;
@@ -90,6 +102,7 @@ export type MatterhornAuthMaintenanceResult = {
   expiredEmailsTerminalized: number;
   finalizedEmailsDeleted: number;
   completedDeletionJobsDeleted: number;
+  expiredHostedMcpCredentialsDeleted: number;
 };
 
 export type MatterhornVerificationRequired = {
@@ -111,6 +124,27 @@ export type MatterhornAuthSession = {
   user: MatterhornAuthUser;
   activeOrgId: string | null;
   activeOrgSlug: string | null;
+  expiresAt: number;
+};
+
+export type MatterhornHostedMcpAccessSummary = {
+  id: string;
+  label: string;
+  activeOrgId: string;
+  createdAt: number;
+  expiresAt: number;
+  lastUsedAt: number | null;
+};
+
+export type MatterhornHostedMcpAccessCredential =
+  MatterhornHostedMcpAccessSummary & {
+    token: string;
+  };
+
+export type MatterhornHostedMcpAccessIdentity = {
+  credentialId: string;
+  user: MatterhornAuthUser;
+  activeOrgId: string;
   expiresAt: number;
 };
 
@@ -178,6 +212,8 @@ export class MatterhornAuthError extends Error {
       | "account_deletion_pending"
       | "organization_slug_taken"
       | "signup_capacity_reached"
+      | "hosted_mcp_access_invalid"
+      | "hosted_mcp_access_limit_reached"
       | "unauthorized",
     message: string,
   ) {
@@ -193,6 +229,10 @@ const EMAIL_VERIFICATION_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 const PASSWORD_MIN_LENGTH = 12;
 const PASSWORD_MAX_LENGTH = 256;
+export const HOSTED_MCP_ACCESS_MAX_DAYS = 30;
+const HOSTED_MCP_ACCESS_MAX_ACTIVE = 5;
+const HOSTED_MCP_ACCESS_TOKEN_PREFIX = "mhmcp_";
+const HOSTED_MCP_ACCESS_USAGE_WRITE_INTERVAL_MS = 5 * 60 * 1_000;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -335,6 +375,41 @@ function hashSessionToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function hashHostedMcpAccessToken(token: string): string {
+  return createHash("sha256")
+    .update("matterhorn-hosted-mcp-access\0")
+    .update(token)
+    .digest("hex");
+}
+
+function normalizeHostedMcpAccessLabel(label: string): string {
+  const normalized = label.trim();
+  if (
+    normalized.length < 1
+    || normalized.length > 80
+    || /[\u0000-\u001f\u007f]/.test(normalized)
+  ) {
+    throw new MatterhornAuthError(
+      "hosted_mcp_access_invalid",
+      "Access key name must be 1-80 visible characters.",
+    );
+  }
+  return normalized;
+}
+
+function hostedMcpAccessSummaryFromRow(
+  row: HostedMcpAccessRow,
+): MatterhornHostedMcpAccessSummary {
+  return {
+    id: row.id,
+    label: row.label,
+    activeOrgId: row.active_org_id,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    lastUsedAt: row.last_used_at,
+  };
+}
+
 function hashPasswordResetToken(token: string): string {
   return createHash("sha256")
     .update("matterhorn-password-reset\0")
@@ -443,6 +518,24 @@ export class MatterhornAuthStore {
       CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at);
       CREATE INDEX IF NOT EXISTS organization_members_user_id_idx
         ON organization_members(user_id);
+
+      CREATE TABLE IF NOT EXISTS hosted_mcp_access_tokens (
+        id TEXT PRIMARY KEY,
+        token_hash TEXT NOT NULL UNIQUE,
+        user_id TEXT NOT NULL,
+        active_org_id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        last_used_at INTEGER,
+        revoked_at INTEGER,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (active_org_id) REFERENCES organizations(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS hosted_mcp_access_tokens_user_idx
+        ON hosted_mcp_access_tokens(user_id, revoked_at, expires_at);
+      CREATE INDEX IF NOT EXISTS hosted_mcp_access_tokens_expiry_idx
+        ON hosted_mcp_access_tokens(expires_at, revoked_at);
     `);
     const userColumns = statement(this.db, "PRAGMA table_info(users)").all() as Array<{ name?: string }>;
     if (!userColumns.some((column) => column.name === "email_verified_at")) {
@@ -576,6 +669,11 @@ export class MatterhornAuthStore {
         DELETE FROM account_deletion_jobs
         WHERE status = 'completed' AND completed_at IS NOT NULL AND completed_at < ?
       `).run(finalizedBefore).changes ?? 0;
+      const expiredHostedMcpCredentialsDeleted = statement(this.db, `
+        DELETE FROM hosted_mcp_access_tokens
+        WHERE (revoked_at IS NOT NULL AND revoked_at < ?)
+          OR (expires_at < ?)
+      `).run(finalizedBefore, finalizedBefore).changes ?? 0;
       return {
         expiredSessionsDeleted,
         expiredVerificationChallengesDeleted,
@@ -583,8 +681,144 @@ export class MatterhornAuthStore {
         expiredEmailsTerminalized: expiredVerificationEmails + expiredPasswordResetEmails,
         finalizedEmailsDeleted,
         completedDeletionJobsDeleted,
+        expiredHostedMcpCredentialsDeleted,
       };
     });
+  }
+
+  createHostedMcpAccessCredential(
+    sessionToken: string,
+    input: { label: string; expiresInDays?: number },
+  ): MatterhornHostedMcpAccessCredential {
+    const session = this.requireSession(sessionToken);
+    if (!session.activeOrgId) {
+      throw new MatterhornAuthError(
+        "hosted_mcp_access_invalid",
+        "Select a workspace before creating an access key.",
+      );
+    }
+    const expiresInDays = input.expiresInDays ?? HOSTED_MCP_ACCESS_MAX_DAYS;
+    if (
+      !Number.isSafeInteger(expiresInDays)
+      || expiresInDays < 1
+      || expiresInDays > HOSTED_MCP_ACCESS_MAX_DAYS
+    ) {
+      throw new MatterhornAuthError(
+        "hosted_mcp_access_invalid",
+        `Access keys must expire within ${HOSTED_MCP_ACCESS_MAX_DAYS} days.`,
+      );
+    }
+    const label = normalizeHostedMcpAccessLabel(input.label);
+    const now = Date.now();
+    const active = statement(this.db, `
+      SELECT COUNT(*) AS count
+      FROM hosted_mcp_access_tokens
+      WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
+    `).get(session.user.id, now) as { count?: number } | undefined;
+    if ((active?.count ?? 0) >= HOSTED_MCP_ACCESS_MAX_ACTIVE) {
+      throw new MatterhornAuthError(
+        "hosted_mcp_access_limit_reached",
+        "Revoke an existing access key before creating another.",
+      );
+    }
+
+    const id = `mcp_${randomUUID().replaceAll("-", "")}`;
+    const token = `${HOSTED_MCP_ACCESS_TOKEN_PREFIX}${randomBytes(32).toString("base64url")}`;
+    const expiresAt = now + expiresInDays * 24 * 60 * 60 * 1_000;
+    statement(this.db, `
+      INSERT INTO hosted_mcp_access_tokens(
+        id, token_hash, user_id, active_org_id, label,
+        expires_at, created_at, last_used_at, revoked_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+    `).run(
+      id,
+      hashHostedMcpAccessToken(token),
+      session.user.id,
+      session.activeOrgId,
+      label,
+      expiresAt,
+      now,
+    );
+    return {
+      id,
+      token,
+      label,
+      activeOrgId: session.activeOrgId,
+      createdAt: now,
+      expiresAt,
+      lastUsedAt: null,
+    };
+  }
+
+  listHostedMcpAccessCredentials(
+    sessionToken: string,
+  ): MatterhornHostedMcpAccessSummary[] {
+    const session = this.requireSession(sessionToken);
+    const now = Date.now();
+    return (statement(this.db, `
+      SELECT id, token_hash, user_id, active_org_id, label,
+        expires_at, created_at, last_used_at, revoked_at
+      FROM hosted_mcp_access_tokens
+      WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
+      ORDER BY created_at DESC
+    `).all(session.user.id, now) as HostedMcpAccessRow[])
+      .map(hostedMcpAccessSummaryFromRow);
+  }
+
+  resolveHostedMcpAccessCredential(
+    token: string,
+    now = Date.now(),
+  ): MatterhornHostedMcpAccessIdentity | null {
+    if (!token.startsWith(HOSTED_MCP_ACCESS_TOKEN_PREFIX)) return null;
+    const row = statement(this.db, `
+      SELECT t.id, t.token_hash, t.user_id, t.active_org_id, t.label,
+        t.expires_at, t.created_at, t.last_used_at, t.revoked_at,
+        u.email, u.name, u.email_verified_at
+      FROM hosted_mcp_access_tokens t
+      JOIN users u ON u.id = t.user_id
+      JOIN organization_members m
+        ON m.organization_id = t.active_org_id AND m.user_id = t.user_id
+      WHERE t.token_hash = ? AND t.revoked_at IS NULL AND t.expires_at > ?
+      LIMIT 1
+    `).get(hashHostedMcpAccessToken(token), now) as
+      (HostedMcpAccessRow & {
+        email: string;
+        name: string | null;
+        email_verified_at: number | null;
+      }) | undefined;
+    if (!row || this.hasPendingAccountDeletion(row.user_id)) return null;
+    if (
+      row.last_used_at === null
+      || row.last_used_at <= now - HOSTED_MCP_ACCESS_USAGE_WRITE_INTERVAL_MS
+    ) {
+      statement(this.db, `
+        UPDATE hosted_mcp_access_tokens SET last_used_at = ? WHERE id = ?
+      `).run(now, row.id);
+    }
+    return {
+      credentialId: row.id,
+      user: {
+        id: row.user_id,
+        email: row.email,
+        name: row.name,
+        emailVerified: row.email_verified_at !== null,
+      },
+      activeOrgId: row.active_org_id,
+      expiresAt: row.expires_at,
+    };
+  }
+
+  revokeHostedMcpAccessCredential(
+    sessionToken: string,
+    credentialId: string,
+  ): boolean {
+    const session = this.requireSession(sessionToken);
+    const result = statement(this.db, `
+      UPDATE hosted_mcp_access_tokens
+      SET revoked_at = ?
+      WHERE id = ? AND user_id = ? AND revoked_at IS NULL
+    `).run(Date.now(), credentialId, session.user.id);
+    return (result.changes ?? 0) > 0;
   }
 
   createAccount(input: {
@@ -1336,7 +1570,7 @@ export class MatterhornAuthStore {
         "session_count",
       ],
       excludes: [
-        "Session tokens, password hashes, reset challenges, and verification codes are never exported.",
+        "Session tokens, MCP access keys and hashes, password hashes, reset challenges, and verification codes are never exported.",
         "Workspace chats, files, notes, outputs, and memory are exported separately from each workspace.",
       ],
     };
