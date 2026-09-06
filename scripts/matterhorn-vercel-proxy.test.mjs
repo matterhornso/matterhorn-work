@@ -10,6 +10,8 @@ import {
 } from "../api/matterhorn-proxy.mjs";
 
 assert.equal(normalizeProxyPath("/api/auth/sign-in/email"), "/api/auth/sign-in/email");
+assert.equal(normalizeProxyPath("/crypto-apps"), "/crypto-apps");
+assert.equal(normalizeProxyPath("/crypto-apps/matterhorn.sui-testnet"), "/crypto-apps/matterhorn.sui-testnet");
 assert.equal(normalizeProxyPath("/workspace/ws_123/opencode/session"), "/workspace/ws_123/opencode/session");
 assert.equal(normalizeProxyPath("/opencode/global/health"), "/opencode/global/health");
 for (const rejected of [
