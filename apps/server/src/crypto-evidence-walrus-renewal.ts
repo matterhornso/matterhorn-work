@@ -22,6 +22,8 @@ import {
   type MatterhornWalrusCertificationVerifier,
 } from "./crypto-evidence-walrus-publisher.js";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
+import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 import { assessMatterhornWalrusStorageLifecycle } from "./walrus-storage-lifecycle.js";
 
@@ -168,14 +170,25 @@ function translateDependencyError(error: unknown): never {
 }
 
 export class MatterhornCryptoEvidenceWalrusRenewalService {
+  private readonly intentState: MatterhornDurableAuthorizedState;
+
   constructor(
     private readonly store: MatterhornCryptoEvidenceStore,
     private readonly stateStore: MatterhornGuardedRuntimeStateStore,
+    authority: MatterhornDurableStateAuthority,
     private readonly buildTransaction: MatterhornWalrusRenewalTransactionBuilder,
     private readonly verifyTransaction: MatterhornSuiTransactionStatusVerifier,
     private readonly verifyCertification: MatterhornWalrusCertificationVerifier,
     private readonly extensionEpochs = 5,
   ) {
+    const integrityCode = "crypto_evidence_walrus_renewal_intent_integrity_invalid";
+    this.intentState = new MatterhornDurableAuthorizedState(
+      stateStore,
+      authority,
+      STATE_KIND,
+      integrityCode,
+      () => new MatterhornCryptoEvidenceWalrusRenewalError(integrityCode),
+    );
     if (!Number.isSafeInteger(extensionEpochs) || extensionEpochs < 1 || extensionEpochs > 53) {
       fail("crypto_evidence_walrus_renewal_epochs_invalid");
     }
@@ -194,7 +207,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
     const signer = canonicalSigner(input.signer);
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) fail("crypto_evidence_time_invalid");
-    const existing = this.stateStore.get<RenewalIntentRecord>(STATE_KIND, input.evidenceId, now.getTime());
+    const existing = this.intentState.get<RenewalIntentRecord>(input.evidenceId, now.getTime());
     if (existing) {
       assertIntentTenant(existing, input);
       if (!this.store.hasWalrusRenewalClaim({
@@ -204,7 +217,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
         claimId: existing.claimId,
         now,
       })) {
-        this.stateStore.delete(STATE_KIND, input.evidenceId);
+        this.intentState.delete(input.evidenceId);
       } else {
         if (existing.preview.evidenceRevision !== input.expectedRevision
           || existing.preview.signer !== signer
@@ -214,7 +227,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
         return this.prepareResponse(existing.preview);
       }
     }
-    this.stateStore.delete(STATE_KIND, input.evidenceId);
+    this.intentState.delete(input.evidenceId);
     const candidate = this.store.beginWalrusRenewal({
       workspaceId: input.workspaceId,
       ownerId: input.ownerId,
@@ -312,8 +325,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
         intentHash: sha256(intentHashPayload(previewWithoutHash)),
       };
       assertPreview(preview);
-      if (!this.stateStore.putIfAbsent({
-        kind: STATE_KIND,
+      if (!this.intentState.putIfAbsent({
         key: input.evidenceId,
         workspaceId: input.workspaceId,
         value: {
@@ -352,7 +364,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
     if (input.signal.aborted) fail("crypto_evidence_walrus_aborted");
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) fail("crypto_evidence_time_invalid");
-    const record = this.stateStore.get<RenewalIntentRecord>(STATE_KIND, input.evidenceId, now.getTime());
+    const record = this.intentState.get<RenewalIntentRecord>(input.evidenceId, now.getTime());
     if (!record) fail("crypto_evidence_walrus_renewal_expired_or_replayed");
     assertIntentTenant(record, input);
     const preview = record.preview;
@@ -431,8 +443,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
       reason: null,
     };
     const item = this.stateStore.transaction(() => {
-      const consumed = this.stateStore.take<RenewalIntentRecord>(
-        STATE_KIND,
+      const consumed = this.intentState.take<RenewalIntentRecord>(
         input.evidenceId,
         finalizedAt.getTime(),
       );

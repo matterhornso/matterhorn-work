@@ -44,7 +44,7 @@ describe("desk workflow stage panel metadata", () => {
     expect(titles).toContain("Subnet discovery");
     expect(titles).toContain("Validator comparison");
     expect(titles).toContain("Review stake");
-    expect(titles).toContain("External-signer handoff");
+    expect(titles).toContain("Wallet review handoff");
     expect(titles).toContain("Receipt and evidence");
   });
 

@@ -66,8 +66,34 @@ describe("Wallet approval security contract", () => {
 
     expect(source).toContain("analyzeWalletTransaction");
     expect(source).toContain("analysis.displayValue");
-    expect(source).toContain("Decoded Token Action");
+    expect(source).toContain('label="Token action"');
     expect(source).not.toContain("{pending.value} ETH");
+  });
+
+  test("wallet review keeps plain terms primary and technical contract data collapsed", () => {
+    const source = readAppSource("domains/wallet/TransactionApproval.tsx");
+
+    expect(source).toContain("Review wallet action");
+    expect(source).toContain("Nothing moves until you continue in your wallet");
+    expect(source).toContain('label="Recipient"');
+    expect(source).toContain('label="Safety check"');
+    expect(source).toContain('label="Network fee estimate"');
+    expect(source).toContain("Show technical data");
+    expect(source).toContain("Continue in wallet");
+    expect(source).not.toContain('label="Calldata"');
+    expect(source).not.toContain('label="Simulation"');
+  });
+
+  test("wallet review warnings use readable theme tokens", () => {
+    const source = readAppSource("domains/wallet/TransactionApproval.tsx");
+
+    expect(source).toContain("bg-amber-3/40 text-amber-12");
+    expect(source).toContain("dark:text-amber-11");
+    expect(source).toContain("bg-red-3/40 text-red-12");
+    expect(source).toContain("dark:text-red-11");
+    expect(source).not.toContain("text-amber-100");
+    expect(source).not.toContain("text-red-100");
+    expect(source).not.toMatch(/text-(?:green|red|amber)-(?:100|200|300|400)/);
   });
 
   test("approval modal uses one calm status summary and a dominant reviewed value", () => {

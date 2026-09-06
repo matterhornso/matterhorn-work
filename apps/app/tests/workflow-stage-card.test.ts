@@ -76,10 +76,12 @@ describe("WorkflowStageCard — render contract", () => {
     expect(pageSource).toContain('actionPlacement="below"');
   });
 
-  test("shows external signer lock indicator when required", () => {
+  test("shows a wallet-review lock indicator when required", () => {
     const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
     expect(source).toContain("requiresExternalSigner?:");
     expect(source).toContain("Lock");
+    expect(source).toContain("Wallet review required");
+    expect(source).not.toContain("External signer required");
   });
 
   test("shows current stage highlight when isCurrent is true", () => {
@@ -206,6 +208,25 @@ describe("DeskWorkflowStagePanel — uses WorkflowStageCard", () => {
     expect(panelSrc).toContain("Complete the current stage, review its output, then continue.");
     expect(pageSrc).toContain('presentation={deskId === "wellness" ? "guided" : "default"}');
     expect(pageSrc).toContain("showAgentHeader={false}");
+  });
+
+  test("new protocol chats lead with three plain-language choices and keep the full workflow optional", () => {
+    const panelSrc = readAppSource("domains/session/workflows/desk-workflow-stage-panel.tsx");
+    const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
+    const chatFirstStart = surfaceSrc.indexOf("<DeskWorkflowStagePanel\n                    deskId={activeDeskMode}");
+    const chatFirstBlock = surfaceSrc.slice(chatFirstStart, surfaceSrc.indexOf("/>", chatFirstStart));
+
+    expect(panelSrc).toContain('presentation?: "default" | "guided" | "chat-first"');
+    expect(panelSrc).toContain('const chatFirstSequence = presentation === "chat-first"');
+    expect(panelSrc).toContain("visibleSteps.slice(0, 3)");
+    expect(panelSrc).toContain("visibleSteps.slice(3)");
+    expect(panelSrc).toContain("What would you like to do?");
+    expect(panelSrc).toContain("Ask in your own words below, or choose a starting point.");
+    expect(panelSrc).toContain("More ways to use this desk");
+    expect(panelSrc).toContain("Continues in your wallet");
+    expect(chatFirstStart).toBeGreaterThan(-1);
+    expect(chatFirstBlock).toContain('presentation="chat-first"');
+    expect(chatFirstBlock).toContain("showAgentHeader={false}");
   });
 
   test("derives outputs from step.outputArtifactIds and manifest.generatedArtifacts", () => {

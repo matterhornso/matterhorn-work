@@ -28,16 +28,16 @@ Each chat, MCP, CLI, or watch preview carries structured risk context alongside 
 
 If a close/reduce request arrives without an account address, the workflow asks exactly one clarification (for the public address) instead of guessing the position size or side. Agent workflows never execute. The user can separately review and sign an order in the connected-wallet trade ticket.
 
-## External-Signer Execution (non-custodial)
+## Agent Draft And Wallet Handoff (non-custodial)
 
-The legacy handoff flow remains available **without Matterhorn holding a key, signing, submitting, or broadcasting** — mirroring the shared `external_signer_required` / `MarketReceipt` contract:
+The agent/tool flow remains non-submitting. It prepares public terms and a hash-bound handoff without holding a key, signing, submitting, or broadcasting:
 
 1. **Preview** → an `unsigned_preview` (`canSubmit: false`).
-2. **`buildHyperliquidSigningHandoff(preview)`** → a `HyperliquidSigningHandoff`: the public order terms (asset, side, size, price, reduce-only), the signing scheme (Hyperliquid L1 action signing), a `previewSha256` binding, a `handoffSha256`, and an expiry. `externalSignerOnly: true`, `canSubmit: false`. Never fabricates a signature.
-3. **The user signs and submits with their own wallet** via Hyperliquid's official client — Matterhorn provides the economic terms only, never the signature, API wallet, or submission.
+2. **`buildHyperliquidSigningHandoff(preview)`** → a non-submitting handoff containing the public order terms, `previewSha256`, `handoffSha256`, and expiry. It never fabricates or accepts a signature.
+3. **The user opens the separate connected-wallet ticket** to review an exact fresh intent. The agent handoff itself cannot become an order.
 4. **`verifyHyperliquidReceipt(handoff, receipt)`** validates a returned **public** receipt (order id / tx hash / status) against the handoff and emits a `MarketReceipt`-shaped result. It **rejects any signing material** (raw signatures / signed payloads are never accepted).
 
-The handoff flow stays non-custodial end to end and does not submit. The dedicated web ticket is a separate path: the connected wallet signs an exact server intent, and Matterhorn relays only that verified one-time intent.
+The handoff flow stays non-custodial end to end and does not submit. The dedicated web ticket is the only supported execution path: the connected wallet signs an exact server intent, and Matterhorn relays only that verified one-time intent.
 
 ## Connected-Wallet Execution
 
@@ -49,11 +49,11 @@ The handoff flow stays non-custodial end to end and does not submit. The dedicat
 - Market orders use IOC at the reviewed slippage boundary; limit orders use GTC.
 - Chat, MCP, CLI, watches, and agent prompts cannot call the execution path.
 
-### Legacy handoff payload (validation-gated)
+### Handoff payload (validation-gated)
 
 When the asset index is resolvable, the handoff also carries `signingPayload` — the **canonical Hyperliquid L1 order-action object** (`buildHyperliquidOrderActionPayload`): `{ type: "order", orders: [{ a, b, p, s, r, t:{limit:{tif}} }], grouping: "na" }`, plus the fixed EIP-712 **Agent** signing scaffold (domain `Exchange`/`1`/chainId `1337`, `Agent(source, connectionId)`).
 
-This legacy handoff is a **template, not a signed action.** Matterhorn does **not** compute the `connectionId`, nonce, or signature for that handoff, and it remains marked `requiresClientValidation: true`. The dedicated web trade ticket is different: the server computes the exact msgpack action hash for a short-lived intent, the connected wallet signs the Hyperliquid Agent typed data, and the server recovers the signer before relaying that same one-time action. Both paths must be validated against the official Hyperliquid SDK (`hyperliquid-python-sdk`) and on testnet before using real funds.
+This handoff is a **template, not a signed action.** Matterhorn does **not** compute the `connectionId`, nonce, or signature for that artifact, and it remains marked `requiresClientValidation: true`. The dedicated web trade ticket computes the exact msgpack action hash for a short-lived intent, the connected wallet signs the Hyperliquid Agent typed data, and the server recovers the signer before relaying that same one-time action. Validate the ticket against the official Hyperliquid SDK (`hyperliquid-python-sdk`) and on testnet before using real funds.
 
 ## Not Supported
 

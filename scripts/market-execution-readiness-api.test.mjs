@@ -35,8 +35,11 @@ for (const phrase of [
   'status: hyperliquidExecution ? "ready" : "review"',
   'venue: "hyperliquid"',
   'venue: "polymarket"',
-  "external_sign_request",
-  "redacted_artifact_validation",
+  "connected_wallet_only",
+  "policy_and_simulation",
+  "eligible_eoa_buy_wallet_ticket",
+  "eligible_eoa_sell_wallet_ticket",
+  "exact_order_cancellation",
   "public_receipt_import",
   "route_level_kill_switch",
   "live_submit_routes",
@@ -50,6 +53,10 @@ for (const phrase of [
   "acceptsSecrets: false",
 ]) {
   assert.ok(contractSurface.includes(phrase), `execution-readiness contract should include ${phrase}`);
+}
+
+for (const retired of ["external_sign_request", "redacted_artifact_validation", "testnet_external_signer"]) {
+  assert.equal(contractSurface.includes(retired), false, `execution-readiness contract must not advertise retired flow ${retired}`);
 }
 
 for (const forbidden of [

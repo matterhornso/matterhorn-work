@@ -42,6 +42,7 @@ assert.deepEqual(archive.sort(), [
   "package/README.md",
   "package/index.mjs",
   "package/package.json",
+  "package/tools.mjs",
 ].sort());
 
 run("tar", ["-xzf", tarball, "-C", extractDirectory]);
@@ -61,7 +62,9 @@ for (const lifecycle of ["preinstall", "install", "postinstall", "prepublish", "
   assert.equal(lifecycle in (manifest.scripts || {}), false, `archive contains ${lifecycle} lifecycle script`);
 }
 
-const source = readFileSync(join(packedDirectory, "index.mjs"), "utf8");
+const source = ["index.mjs", "tools.mjs"]
+  .map((name) => readFileSync(join(packedDirectory, name), "utf8"))
+  .join("\n");
 for (const forbidden of [
   "MATTERHORN_WORK_HOST_TOKEN",
   "OPENWORK_HOST_TOKEN",

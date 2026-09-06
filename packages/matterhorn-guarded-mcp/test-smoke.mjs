@@ -35,12 +35,10 @@ const server = createServer(async (request, response) => {
     body,
   });
 
-  if (url.pathname === "/health") return json(response, 200, { ok: true });
+  if (url.pathname === "/health/ready") return json(response, 200, { ok: true });
   if (request.headers.authorization !== `Bearer ${clientToken}`) {
     return json(response, 401, { code: "unauthorized", internalPath: "/data/private.sqlite" });
   }
-  if (url.pathname === "/status") return json(response, 200, { ok: true, mode: "public_beta" });
-  if (url.pathname === "/capabilities") return json(response, 200, { ok: true, accountTools: true });
   if (url.pathname === "/workspaces") return json(response, 200, { items: [{ id: "ws_1", name: "Test" }] });
   if (url.pathname === "/workspace/ws_1/sessions" && request.method === "POST") {
     return json(response, 200, { item: { id: "ses_1", title: body.title || "New chat" } });
@@ -204,7 +202,13 @@ try {
   assert.equal(override.error.message, "This argument is not available in the Matterhorn Guarded MCP.");
   assert.equal(requests.length, beforeOverride);
 
-  toolResult(await client.ask("tools/call", { name: "matterhorn_status", arguments: {} }));
+  const status = toolResult(await client.ask("tools/call", {
+    name: "matterhorn_status",
+    arguments: {},
+  }));
+  assert.equal(status.readiness.ok, true);
+  assert.equal(status.accountAccess, true);
+  assert.equal(status.workspaceCount, 1);
   toolResult(await client.ask("tools/call", { name: "matterhorn_list_workspaces", arguments: {} }));
   toolResult(await client.ask("tools/call", {
     name: "matterhorn_create_session",
@@ -270,8 +274,10 @@ try {
     executionMode: "work",
   });
   assert.equal(requests.every((request) => (
-    request.path === "/health" || request.authorization === `Bearer ${clientToken}`
+    request.path === "/health/ready" || request.authorization === `Bearer ${clientToken}`
   )), true);
+  assert.equal(requests.some((request) => request.path === "/status"), false);
+  assert.equal(requests.some((request) => request.path === "/capabilities"), false);
 
   const backendFailure = await client.ask("tools/call", {
     name: "matterhorn_get_session",

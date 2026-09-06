@@ -350,11 +350,11 @@ function validateMarketExecutionChainReport(report) {
     if (safety[key] !== false) errors.push(`Execution-chain safety.${key} must be false.`);
   }
   if (safety.nonCustodial !== true) errors.push("Execution-chain safety.nonCustodial must be true.");
-  if (safety.externalSignerRequired !== true) errors.push("Execution-chain safety.externalSignerRequired must be true.");
+  if (safety.connectedWalletRequired !== true) errors.push("Execution-chain safety.connectedWalletRequired must be true.");
   const stages = Array.isArray(guide.stages) ? guide.stages : [];
   if (stages.length < 5) errors.push("Execution-chain guide must include at least five stages.");
   const stageIds = new Set(stages.map((stage) => stage?.id));
-  for (const id of ["preview_handoff", "external_sign_request", "redacted_artifact_validation", "artifact_reconciliation", "public_receipt_import"]) {
+  for (const id of ["agent_draft", "policy_and_simulation", "wallet_review", "wallet_submission", "receipt_reconciliation"]) {
     if (!stageIds.has(id)) errors.push(`Execution-chain guide is missing stage ${id}.`);
   }
   return errors;

@@ -176,7 +176,7 @@ for (const title of [
   "Browser UI checklist",
   "Bittensor live public QA",
   "Hyperliquid and Polymarket read/preview QA",
-  "Market sign-request and artifact validation QA",
+  "Connected-wallet transaction QA",
   "Negative security prompts",
   "Screenshots and evidence expectations",
   "Issue ledger",

@@ -1,5 +1,8 @@
-import type { MatterhornCryptoAppManifest } from "@matterhorn-work/types/crypto-coworkers";
-import { validateMatterhornCryptoAppManifest } from "@matterhorn-work/types/crypto-coworkers";
+import {
+  MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
+  type MatterhornCryptoAppManifest,
+  validateMatterhornCryptoAppManifest,
+} from "@matterhorn-work/types/crypto-coworkers";
 
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 import { isPublicHttpsCryptoAdapterEndpoint } from "./crypto-app-egress.js";
@@ -99,6 +102,11 @@ export function runCryptoAppManifestConformance(
   } else {
     finding(findings, "warning", "network", "runtime_dns_revalidation_required");
   }
+  if (manifest.transport.kind === "openapi"
+    && (manifest.transport.profile !== MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION
+      || !manifest.transport.operations)) {
+    finding(findings, "error", "schema", "openapi_signed_operation_profile_required");
+  }
   if (Buffer.byteLength(canonicalJson(manifest), "utf8") > MAX_MANIFEST_BYTES) {
     finding(findings, "error", "schema", "manifest_size_exceeded");
   }
@@ -155,6 +163,19 @@ export function runCryptoAppManifestConformance(
       && action.access !== "prepare"
       && action.access !== "simulate") {
       finding(findings, "error", "authority", "financial_risk_requires_prepare_or_simulate", action.id);
+    }
+    if (action.cachePolicy === "block_bound_public") {
+      if (action.access !== "read" || action.risk !== "informational") {
+        finding(findings, "error", "privacy", "public_cache_requires_informational_read", action.id);
+      }
+      if (!action.requiresFreshness || action.freshnessMaxAgeMs === null) {
+        finding(findings, "error", "privacy", "public_cache_requires_freshness", action.id);
+      }
+      if (manifest.authentication.type !== "none"
+        || manifest.authentication.scopes.length > 0
+        || action.requiredScopes.length > 0) {
+        finding(findings, "error", "privacy", "public_cache_requires_anonymous_scope_free_action", action.id);
+      }
     }
   }
 

@@ -29,6 +29,8 @@ const sameOriginWorkspaceProxy = {
 };
 const sameOriginProxy = {
   "/api": sameOriginMatterhornProxy,
+  "/coworker-access": sameOriginWorkspaceProxy,
+  "/crypto-apps": sameOriginMatterhornProxy,
   "/developer": sameOriginWorkspaceProxy,
   "/workspaces": sameOriginMatterhornProxy,
   "/workspace": sameOriginWorkspaceProxy,

@@ -69,6 +69,12 @@ assert.ok(
   "generated-media smoke launcher should use a repeatable local Max billing context without payment providers",
 );
 assert.ok(
+  script.includes('MATTERHORN_COWORKER_MODE: "internal"') &&
+    script.includes('MATTERHORN_COWORKER_POLICY_VERSION: "generated-media-smoke-v1"') &&
+    script.includes("MATTERHORN_COWORKER_DB:"),
+  "generated-media smoke launcher should expose an isolated internal coworker runtime for full-surface browser QA",
+);
+assert.ok(
   script.includes('smokePlanId !== "max" || imageLimit !== null') &&
     script.includes("Generated-media smoke billing isolation failed"),
   "generated-media smoke launcher should verify its isolated backend has unlimited QA image allowance",

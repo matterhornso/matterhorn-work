@@ -157,8 +157,8 @@ describe("unified crypto chat execute route", () => {
     expect(payload.venue).toBe("auto");
     expect(payload.intent).toBe("market_execution_chain");
     expect(payload.execution).toBe("read_only");
-    expect(payload.responseText).toContain("connected wallet authorizes each supported submission");
-    expect(payload.responseText).toContain("legacy evidence chain");
+    expect(payload.responseText).toContain("connected wallet authorizes each supported action");
+    expect(payload.responseText).toContain("Unsupported actions remain unavailable");
     expect(payload.sharedCards[0]).toMatchObject({
       version: "matterhorn.crypto.shared-card.v1",
       kind: "readiness_report",
@@ -178,7 +178,7 @@ describe("unified crypto chat execute route", () => {
   test("answers execution-step prompts through the unified chat route", async () => {
     const { base } = await boot();
     const { res, payload } = await postCryptoChat(base, {
-      message: "Create a Hyperliquid external sign request for testnet. What public context is needed?",
+      message: "What will I review before my connected wallet can authorize a Hyperliquid order?",
       venue: "auto",
     });
 
@@ -186,10 +186,10 @@ describe("unified crypto chat execute route", () => {
     expect(payload.success).toBe(true);
     expect(payload.intent).toBe("market_execution_step_guidance");
     expect(payload.execution).toBe("read_only");
-    expect(payload.responseText).toContain("External sign request");
-    expect(payload.responseText).toContain("cannot submit");
-    expect(payload.responseText).toContain("fail closed on hash mismatches");
-    expect(payload.data.highlightedStep.id).toBe("external_sign_request");
+    expect(payload.responseText).toContain("Wallet review");
+    expect(payload.responseText).toContain("cannot approve or submit");
+    expect(payload.responseText).toContain("invalidates the ticket");
+    expect(payload.data.highlightedStep.id).toBe("wallet_review");
     expect(payload.sharedCards[0]).toMatchObject({
       version: "matterhorn.crypto.shared-card.v1",
       kind: "readiness_report",
@@ -245,13 +245,14 @@ describe("unified crypto chat execute route", () => {
       canSubmit: false,
       liveSubmissionEnabled: false,
       nonCustodial: true,
+      connectedWalletRequired: true,
       acceptsSecrets: false,
       acceptsRawSignatures: false,
       acceptsSignedPayloads: false,
     });
     expect(payload.cards[0]).toMatchObject({
       kind: "market_execution_chain",
-      title: "Legacy evidence chain",
+      title: "Connected-wallet transaction path",
     });
     expect(JSON.stringify(payload)).not.toContain("/orders/submit");
     expect(forbiddenFieldPath(payload)).toBeNull();

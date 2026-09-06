@@ -8,6 +8,7 @@ import {
   MATTERHORN_COWORKER_WATCH_VERSION,
   MATTERHORN_COWORKER_WORKING_STATE_VERSION,
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+  MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
   MATTERHORN_EVIDENCE_BUNDLE_VERSION,
   MATTERHORN_POLICY_DECISION_VERSION,
   MATTERHORN_WALRUS_PROOF_VERSION,
@@ -322,6 +323,42 @@ const inboxItem: MatterhornCoworkerInboxItem = {
 describe("crypto coworker public contracts", () => {
   test("accepts a non-custodial crypto app manifest", () => {
     expect(validateMatterhornCryptoAppManifest(manifest)).toEqual([]);
+  });
+
+  test("binds every profiled OpenAPI action to one exact signed POST path", () => {
+    const profiled = structuredClone(manifest);
+    profiled.transport = {
+      kind: "openapi",
+      endpoint: "https://api.matterhorn.example",
+      profile: MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
+      operations: [{ actionId: "prepare_transfer", method: "POST", path: "/v1/sui/prepare-transfer" }],
+    };
+    expect(validateMatterhornCryptoAppManifest(profiled)).toEqual([]);
+
+    const invalidTransports = [
+      { ...profiled.transport, endpoint: "https://api.matterhorn.example/base" },
+      { ...profiled.transport, operations: [] },
+      { ...profiled.transport, operations: [{ actionId: "prepare_other", method: "POST", path: "/v1/sui/prepare-transfer" }] },
+      { ...profiled.transport, operations: [{ actionId: "prepare_transfer", method: "GET", path: "/v1/sui/prepare-transfer" }] },
+      { ...profiled.transport, operations: [{ actionId: "prepare_transfer", method: "POST", path: "/v1/../submit" }] },
+      { ...profiled.transport, operations: [{ actionId: "prepare_transfer", method: "POST", path: "/v1/read?then=submit" }] },
+      { ...profiled.transport, operations: [
+        { actionId: "prepare_transfer", method: "POST", path: "/v1/sui/prepare-transfer" },
+        { actionId: "prepare_transfer", method: "POST", path: "/v1/sui/prepare-again" },
+      ] },
+    ];
+    const expected = [
+      "openapi_endpoint_origin_required",
+      "openapi_operations_invalid",
+      "openapi_operation_coverage_invalid",
+      "openapi_operation_invalid",
+      "openapi_operation_invalid",
+      "openapi_operation_invalid",
+      "openapi_operation_duplicate",
+    ];
+    invalidTransports.forEach((transport, index) => {
+      expect(validateMatterhornCryptoAppManifest({ ...profiled, transport })).toContain(expected[index]);
+    });
   });
 
   test("rejects advertised signing or submission authority", () => {

@@ -1,6 +1,8 @@
 # Matterhorn Desks Platform Architecture
 
-**Status:** Current implementation guide
+**Status:** Core runtime implementation guide. For the current crypto coworker,
+privacy, capability, transaction, and evidence boundaries, use
+[Guarded Agent Architecture v3](architecture/matterhorn-guarded-agent-architecture-v3.md).
 **Updated:** 2026-07-11
 
 ## System Overview
@@ -18,7 +20,7 @@ flowchart LR
   UI -->|session SDK| Engine[Managed OpenCode runtime]
   Server -->|workspace-scoped SDK| Engine
   Engine -->|stdio JSON-RPC| MCP[Configured MCP servers]
-  UI --> Wallet[Browser wallet or external signer]
+  UI --> Wallet[Connected browser wallet]
   Server --> Files[Workspace files and .matterhorn-work]
   Server --> Providers[Specialized provider APIs]
 ```
@@ -87,10 +89,13 @@ Matterhorn prepares and reviews actions; it does not become the wallet.
 
 - EVM connection uses supported browser connectors when available.
 - Sui uses wallet-standard connections through Mysten dApp Kit.
-- Bittensor writes require an external Bittensor-compatible signer.
-- Hyperliquid and Polymarket customer flows remain read/preview/handoff oriented.
+- Supported Bittensor, Hyperliquid, Polymarket, and Sui transaction paths stop at
+  an exact, expiring connected-wallet review. Unsupported paths remain
+  read/preview-only and cannot be submitted by an agent or server.
 - Workspace policy enforces per-transaction limits, daily limits, slippage limits, network preference, and mainnet enablement before submission.
 - The safety ledger stores sanitized reviewed-vs-submitted evidence, not raw calldata or signing material.
+- The model, coworker, server, scheduler, MCP client, and third-party app never
+  receive signing, relay, broadcast, or submission authority.
 
 ## MCP Boundary
 

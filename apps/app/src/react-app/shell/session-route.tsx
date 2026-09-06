@@ -85,6 +85,13 @@ import {
 } from "../../app/utils";
 import { t } from "../../i18n";
 import { useLocal } from "../kernel/local-provider";
+import {
+  inheritSessionChoiceOverride,
+  readStoredSessionChoiceOverrides,
+  withSessionChoiceOverride,
+  writeStoredSessionChoiceOverrides,
+  type SessionChoiceOverride,
+} from "../kernel/model-config";
 import { usePlatform } from "../kernel/platform";
 import {
   clearPendingDeskTask,
@@ -120,6 +127,7 @@ import {
   MATTERHORN_PRIVATE_MODEL_PROVIDER_ID,
   privateModeModelFromProviders,
   standardModeModelFromProviders,
+  verifiedPrivateModeModelFromProviders,
 } from "../domains/session/private-model-mode";
 import { buildOpenworkEnvSystemContext } from "../domains/session/sync/env-context";
 import {
@@ -181,7 +189,7 @@ import {
 } from "@matterhorn-work/types/desk-agents";
 import { getCustomerProtocolDeskVisual } from "../domains/session/workflows/protocol-desk-ui";
 import {
-  buildMatterhornPublicWalletContext,
+  buildMatterhornWalletPrivateContext,
   compileMatterhornSessionSystemContext,
   estimateMatterhornContextTokens,
   MATTERHORN_DESK_CONTEXT_MAX_CHARS,
@@ -800,6 +808,46 @@ export function SessionRoute() {
   const [providerConnectedIds, setProviderConnectedIds] = useState<string[]>([]);
   const [disabledProviderIds, setDisabledProviderIds] = useState<string[]>([]);
   const [workspaceModelSelection, setWorkspaceModelSelection] = useState<MatterhornBackendModelSelectionResponse | null>(null);
+  const [sessionModelChoicesByWorkspace, setSessionModelChoicesByWorkspace] =
+    useState<Record<string, Record<string, SessionChoiceOverride>>>({});
+  const sessionModelChoices = useMemo(
+    () => sessionModelChoicesByWorkspace[selectedWorkspaceId]
+      ?? readStoredSessionChoiceOverrides(selectedWorkspaceId),
+    [selectedWorkspaceId, sessionModelChoicesByWorkspace],
+  );
+  const selectedSessionModelChoice = selectedSessionId
+    ? sessionModelChoices[selectedSessionId] ?? null
+    : null;
+  const storeSessionModelChoice = useCallback((
+    workspaceId: string,
+    sessionId: string,
+    choice: SessionChoiceOverride | null,
+  ) => {
+    setSessionModelChoicesByWorkspace((currentByWorkspace) => {
+      const current = currentByWorkspace[workspaceId]
+        ?? readStoredSessionChoiceOverrides(workspaceId);
+      const next = withSessionChoiceOverride(current, sessionId, choice);
+      writeStoredSessionChoiceOverrides(workspaceId, next);
+      return { ...currentByWorkspace, [workspaceId]: next };
+    });
+  }, []);
+  const inheritStoredSessionModelChoice = useCallback((
+    workspaceId: string,
+    sourceSessionId: string,
+    targetSessionId: string,
+  ) => {
+    setSessionModelChoicesByWorkspace((currentByWorkspace) => {
+      const current = currentByWorkspace[workspaceId]
+        ?? readStoredSessionChoiceOverrides(workspaceId);
+      const next = inheritSessionChoiceOverride(
+        current,
+        sourceSessionId,
+        targetSessionId,
+      );
+      writeStoredSessionChoiceOverrides(workspaceId, next);
+      return { ...currentByWorkspace, [workspaceId]: next };
+    });
+  }, []);
   // Bump to re-filter provider list when den session changes (sign-in/out)
   const [denSessionVersion, setDenSessionVersion] = useState(0);
   useEffect(() => {
@@ -1935,24 +1983,31 @@ export function SessionRoute() {
     };
   }, [refreshWorkspaceModelSelection, selectedWorkspaceId]);
   const selectedPromptModelResolution = useMemo(() => resolveSelectedPromptModel({
+    sessionModel: selectedSessionModelChoice?.model,
     localDefaultModel: local.prefs.defaultModel,
     workspaceModelSelection,
-  }), [local.prefs.defaultModel, workspaceModelSelection]);
+  }), [local.prefs.defaultModel, selectedSessionModelChoice?.model, workspaceModelSelection]);
   const selectedPromptModel = selectedPromptModelResolution.model;
-  const privateModeModel = useMemo(
+  const privateModePrivacyPolicy = workspaceModelSelection?.privacy?.providers?.find(
+    (policy) => policy.providerId.trim().toLowerCase() === MATTERHORN_PRIVATE_MODEL_PROVIDER_ID,
+  ) ?? null;
+  const configuredPrivateModeModel = useMemo(
     () => privateModeModelFromProviders(providers, providerConnectedIds),
     [providerConnectedIds, providers],
+  );
+  const privateModeModel = useMemo(
+    () => verifiedPrivateModeModelFromProviders(
+      providers,
+      providerConnectedIds,
+      privateModePrivacyPolicy,
+    ),
+    [privateModePrivacyPolicy, providerConnectedIds, providers],
   );
   const standardModeModel = useMemo(
     () => standardModeModelFromProviders(providers, providerConnectedIds),
     [providerConnectedIds, providers],
   );
-  const privateModePrivacyPolicy = workspaceModelSelection?.privacy?.providers?.find(
-    (policy) => policy.providerId.trim().toLowerCase() === MATTERHORN_PRIVATE_MODEL_PROVIDER_ID,
-  ) ?? null;
-  const privateModeVerified = Boolean(
-    privateModeModel && isVerifiedPrivateModePolicy(privateModePrivacyPolicy, privateModeModel),
-  );
+  const privateModeVerified = Boolean(privateModeModel);
   const selectedPrivateModeVerified = Boolean(
     selectedPromptModel
       && isVerifiedPrivateModePolicy(privateModePrivacyPolicy, selectedPromptModel),
@@ -2366,7 +2421,13 @@ export function SessionRoute() {
     modelBehaviorDefaultLabel,
   } = useMemo(() => {
     const ref = selectedPromptModel;
-    const localVariant = local.prefs.modelVariant ?? null;
+    const hasSessionVariant = Boolean(
+      selectedSessionModelChoice
+      && Object.prototype.hasOwnProperty.call(selectedSessionModelChoice, "variant"),
+    );
+    const localVariant = hasSessionVariant
+      ? selectedSessionModelChoice?.variant ?? null
+      : local.prefs.modelVariant ?? null;
     const workspaceEffectiveModel = workspaceModelSelection?.effectiveModel ?? null;
     const selectedModelMatchesWorkspace = Boolean(
       ref &&
@@ -2411,7 +2472,7 @@ export function SessionRoute() {
       modelBehaviorIsProviderDefault: localVariant == null,
       modelBehaviorDefaultLabel: defaultLabel,
     };
-  }, [local.prefs.modelVariant, providerCatalog, selectedPromptModel, workspaceModelSelection]);
+  }, [local.prefs.modelVariant, providerCatalog, selectedPromptModel, selectedSessionModelChoice, workspaceModelSelection]);
 
   // Load the picker list lazily the first time the modal opens. Uses the
   // cached catalog when available, otherwise re-fetches.
@@ -2554,11 +2615,11 @@ export function SessionRoute() {
         )
       : Promise.resolve(undefined);
 
-    const includeWalletPublicContext = contextPolicy?.includeWalletPublicContext === true || (
+    const includeWalletContext = contextPolicy?.includeWalletPublicContext === true || (
       isGeneralMatterhornAgent && shouldInjectCryptoPrompt(text)
     );
-    const walletContext = wallet.snapshot.isConnected && includeWalletPublicContext
-      ? buildMatterhornPublicWalletContext({
+    const walletContext = wallet.snapshot.isConnected && includeWalletContext
+      ? buildMatterhornWalletPrivateContext({
           address: wallet.snapshot.address,
           chainId: wallet.snapshot.chainId,
           ethBalance: wallet.snapshot.ethBalance,
@@ -2629,7 +2690,7 @@ export function SessionRoute() {
         content: envSystemContext,
         enabled: includeEnvironmentMetadata,
       },
-      { id: "wallet_public_metadata", content: walletContext },
+      { id: "wallet_private_context", content: walletContext },
       { id: "crypto_safety", content: cryptoPrompt },
       { id: "workspace_orientation", content: matterhornOrientationPrompt },
       { id: "workflow_run", content: workflowRunPrompt },
@@ -2700,7 +2761,7 @@ export function SessionRoute() {
       providerPrivacyPolicy: selectedProviderPrivacyPolicy,
       privateModeAvailable: privateModeVerified,
       privateModeEnabled,
-      privateModeUnavailableReason: privateModeModel && !privateModeVerified
+      privateModeUnavailableReason: configuredPrivateModeModel && !privateModeVerified
         ? "Matterhorn could not verify Venice's current private-model list. Open model settings and try again."
         : null,
       onPrivateModeChange: (enabled: boolean) => {
@@ -2709,11 +2770,10 @@ export function SessionRoute() {
             handleOpenSettings("/settings/ai");
             return;
           }
-          local.setPrefs((previous) => ({
-            ...previous,
-            defaultModel: privateModeModel,
-            modelVariant: null,
-          }));
+          storeSessionModelChoice(selectedWorkspaceId, selectedSessionId, {
+            model: privateModeModel,
+            variant: null,
+          });
           setCompactModelPickerOpen(false);
           return;
         }
@@ -2723,11 +2783,10 @@ export function SessionRoute() {
           providerListQuery.data &&
           isModelAvailableInConnectedProviders(providerListQuery.data, fallback)
         ) {
-          local.setPrefs((previous) => ({
-            ...previous,
-            defaultModel: fallback,
-            modelVariant: null,
-          }));
+          storeSessionModelChoice(selectedWorkspaceId, selectedSessionId, {
+            model: fallback,
+            variant: null,
+          });
           return;
         }
         setModelPickerQuery("");
@@ -2735,13 +2794,12 @@ export function SessionRoute() {
       },
       onModelPickerOpenChange: setCompactModelPickerOpen,
       onModelChange: (model: ModelRef) => {
-        local.setPrefs((previous) => ({
-          ...previous,
-          defaultModel: model,
-          modelVariant: previous.defaultModel?.providerID === model.providerID && previous.defaultModel.modelID === model.modelID
-            ? previous.modelVariant
-            : null,
-        }));
+        const sameModel = selectedPromptModel?.providerID === model.providerID
+          && selectedPromptModel.modelID === model.modelID;
+        storeSessionModelChoice(selectedWorkspaceId, selectedSessionId, {
+          model,
+          variant: sameModel ? modelVariantValue : null,
+        });
         setCompactModelPickerOpen(false);
       },
       onOpenSettingsSection: (section: "commands" | "skills" | "mcps" | "extensions" | "plugins") => {
@@ -2948,7 +3006,10 @@ export function SessionRoute() {
           reasoningLevel: value,
           source: "current_app",
         });
-        local.setPrefs((previous) => ({ ...previous, modelVariant: value }));
+        storeSessionModelChoice(selectedWorkspaceId, selectedSessionId, {
+          ...(selectedPromptModel ? { model: selectedPromptModel } : {}),
+          variant: value,
+        });
       },
       responsePerspective,
       onResponsePerspectiveChange: handleResponsePerspectiveChange,
@@ -3030,6 +3091,29 @@ export function SessionRoute() {
         void (async () => {
           try {
             const forked = await forkSession(opencodeClient, selectedSessionId, messageId);
+            let coworkerForkWarning = false;
+            if (selectedWorkspaceEndpoint) {
+              try {
+                const sourceBinding = await selectedWorkspaceEndpoint.client.getCoworkerSessionBinding(
+                  selectedWorkspaceEndpoint.workspaceId,
+                  selectedSessionId,
+                );
+                if (sourceBinding.binding) {
+                  if (!sourceBinding.active) {
+                    coworkerForkWarning = true;
+                  } else {
+                    await selectedWorkspaceEndpoint.client.inheritCoworkerSessionBinding(
+                      selectedWorkspaceEndpoint.workspaceId,
+                      selectedSessionId,
+                      forked.id,
+                    );
+                  }
+                }
+              } catch {
+                coworkerForkWarning = true;
+              }
+            }
+            inheritStoredSessionModelChoice(selectedWorkspaceId, selectedSessionId, forked.id);
             writeLastSessionFor(selectedWorkspaceId, forked.id);
             rememberPendingCreatedSession(selectedWorkspaceId, forked.id);
             setSessionsByWorkspaceId((current) => ({
@@ -3038,19 +3122,26 @@ export function SessionRoute() {
             }));
             navigateToWorkspaceSession(selectedWorkspaceId, forked.id);
             void refreshRouteState();
+            if (coworkerForkWarning) {
+              showToast({
+                title: "Chat forked without its coworker",
+                description: "Open Coworkers and choose who should continue this chat.",
+                tone: "warning",
+                durationMs: 4200,
+              });
+            }
           } catch (error) {
             console.warn("[fork] failed", error);
           }
         })();
       },
       onChangeModel: (model: { providerID: string; modelID: string }) => {
-        local.setPrefs((previous) => ({
-          ...previous,
-          defaultModel: model,
-          modelVariant: previous.defaultModel?.providerID === model.providerID && previous.defaultModel.modelID === model.modelID
-            ? previous.modelVariant
-            : null,
-        }));
+        const sameModel = selectedPromptModel?.providerID === model.providerID
+          && selectedPromptModel.modelID === model.modelID;
+        storeSessionModelChoice(selectedWorkspaceId, selectedSessionId, {
+          model,
+          variant: sameModel ? modelVariantValue : null,
+        });
       },
     };
   }, [
@@ -3063,7 +3154,7 @@ export function SessionRoute() {
     handleOpenSettings,
     handleResponsePerspectiveChange,
     handleSelectAgent,
-    local,
+    inheritStoredSessionModelChoice,
     listSlashCommands,
     modelBehaviorIsProviderDefault,
     modelBehaviorDefaultLabel,
@@ -3090,6 +3181,7 @@ export function SessionRoute() {
     selectedPrivateModeVerified,
     selectedPromptModel,
     standardModeModel,
+    storeSessionModelChoice,
     selectedWorkspace,
     selectedWorkspaceEndpoint,
     selectedWorkspaceId,
@@ -3409,6 +3501,10 @@ export function SessionRoute() {
     setModelPickerOpen(true);
   }, []);
 
+  const clearSessionModelChoiceForControl = useCallback((workspaceId: string, sessionId: string) => {
+    storeSessionModelChoice(workspaceId, sessionId, null);
+  }, [storeSessionModelChoice]);
+
   useSessionControlActions({
     workspaces,
     sessionsByWorkspaceId,
@@ -3422,6 +3518,7 @@ export function SessionRoute() {
     navigateToSessionRoot: navigateToSessionRootForControl,
     createTaskInWorkspace: handleCreateTaskInWorkspace,
     openModelPicker: openModelPickerForControl,
+    onSessionDeleted: clearSessionModelChoiceForControl,
     refreshRouteState,
   });
 
@@ -3898,6 +3995,12 @@ export function SessionRoute() {
                 sessionId: session.id,
               });
               writeMatterhornExecutionMode(workspaceId, session.id, "work");
+              if (selectedPromptModel) {
+                storeSessionModelChoice(workspaceId, session.id, {
+                  model: selectedPromptModel,
+                  variant: modelVariantValue,
+                });
+              }
               if (!sendImmediately) {
                 saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
               }
@@ -3993,6 +4096,7 @@ export function SessionRoute() {
                       : { providerId: "", modelId: "" },
                     agentId: agent || undefined,
                     executionMode: "work",
+                    ...(privateModeEnabled ? { privacyMode: "private_workspace" as const } : {}),
                     ...(executionModeTools ? { requestToolProfiles: [executionModeTools] } : {}),
                     ...(modelVariantValue ? { variant: modelVariantValue } : {}),
                   });
@@ -4002,6 +4106,7 @@ export function SessionRoute() {
                     parts: [{ type: "text", text: prompt }],
                     model: selectedPromptModel ?? undefined,
                     agent: agent || undefined,
+                    ...(privateModeEnabled ? { privacyMode: "private_workspace" as const } : {}),
                     ...(modelVariantValue ? { variant: modelVariantValue } : {}),
                     ...(systemContext ? { system: systemContext } : {}),
                   });
@@ -4146,6 +4251,7 @@ export function SessionRoute() {
               const endpoint = endpointForWorkspace(selectedWorkspace);
               if (!endpoint) return;
               await endpoint.client.deleteSession(endpoint.workspaceId, sessionId);
+              storeSessionModelChoice(selectedWorkspaceId, sessionId, null);
               if (selectedSessionId === sessionId) {
                 navigateToWorkspaceSession(selectedWorkspaceId);
               }
@@ -4299,16 +4405,26 @@ export function SessionRoute() {
 
       query={modelPickerQuery}
       setQuery={setModelPickerQuery}
-      target="default"
+      target={selectedSessionId ? "session" : "default"}
       current={selectedPromptModel ?? ({ providerID: "", modelID: "" } satisfies ModelRef)}
       onSelect={(next: ModelRef) => {
-        local.setPrefs((previous) => ({
-          ...previous,
-          defaultModel: next,
-          modelVariant: previous.defaultModel?.providerID === next.providerID && previous.defaultModel.modelID === next.modelID
-            ? previous.modelVariant
-            : null,
-        }));
+        if (selectedWorkspaceId && selectedSessionId) {
+          const sameModel = selectedPromptModel?.providerID === next.providerID
+            && selectedPromptModel.modelID === next.modelID;
+          storeSessionModelChoice(selectedWorkspaceId, selectedSessionId, {
+            model: next,
+            variant: sameModel ? modelVariantValue : null,
+          });
+        } else {
+          local.setPrefs((previous) => ({
+            ...previous,
+            defaultModel: next,
+            modelVariant: previous.defaultModel?.providerID === next.providerID
+              && previous.defaultModel.modelID === next.modelID
+              ? previous.modelVariant
+              : null,
+          }));
+        }
         setModelPickerOpen(false);
       }}
       disabledProviders={disabledProviderIds}

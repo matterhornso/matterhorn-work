@@ -6,6 +6,7 @@ import {
   isVerifiedPrivateModePolicy,
   privateModeModelFromProviders,
   standardModeModelFromProviders,
+  verifiedPrivateModeModelFromProviders,
 } from "../src/react-app/domains/session/private-model-mode";
 
 describe("private model mode", () => {
@@ -73,6 +74,50 @@ describe("private model mode", () => {
     expect(isVerifiedPrivateModePolicy({ ...policy, providerId: "cudos" }, model, Date.parse("2026-09-02T13:00:00.000Z"))).toBe(false);
   });
 
+  test("selects the first connected model in the exact current server proof", () => {
+    const providers = [{
+      id: "venice",
+      models: {
+        "newly-discovered-unverified": {},
+        "private-tools": {},
+        "another-private-model": {},
+      },
+    }];
+    const policy = {
+      providerId: "venice",
+      providerName: "Venice Private",
+      status: "verified_no_training" as const,
+      trainingUse: "none" as const,
+      retentionDays: 0,
+      policyUrl: "https://docs.venice.ai/overview/privacy",
+      verifiedAt: "2026-09-02T12:00:00.000Z",
+      verificationExpiresAt: "2026-09-03T12:00:00.000Z",
+      verifiedModelIds: ["private-tools", "another-private-model"],
+      allowed: true,
+      label: "Private model · zero retention",
+      description: "Verified private model.",
+    };
+    const now = Date.parse("2026-09-02T13:00:00.000Z");
+
+    expect(verifiedPrivateModeModelFromProviders(providers, ["venice"], policy, now)).toEqual({
+      providerID: "venice",
+      modelID: "private-tools",
+    });
+    expect(verifiedPrivateModeModelFromProviders(providers, [], policy, now)).toBeNull();
+    expect(verifiedPrivateModeModelFromProviders(
+      providers,
+      ["venice"],
+      { ...policy, verificationExpiresAt: "2026-09-02T13:00:00.000Z" },
+      now,
+    )).toBeNull();
+    expect(verifiedPrivateModeModelFromProviders(
+      providers,
+      ["venice"],
+      { ...policy, verifiedModelIds: [] },
+      now,
+    )).toBeNull();
+  });
+
   test("keeps private mode discoverable, accessible, and bound to private workspace mode", () => {
     const composer = readFileSync(
       new URL(
@@ -97,18 +142,46 @@ describe("private model mode", () => {
     );
 
     expect(composer).toContain('"Set up a private model"');
-    expect(composer).toContain('"Private model unavailable"');
-    expect(composer).toContain('"Private unavailable"');
-    expect(composer).toContain('aria-label={props.privateModeEnabled ? "Turn off private model" : "Turn on private model"}');
+    expect(composer).toContain('"Review private model setup"');
+    expect(composer).toContain('"Review Private"');
+    expect(composer).toContain('"Turn off private model"');
+    expect(composer).toContain('"Turn on private model"');
     expect(composer).toContain('role="switch"');
     expect(composer).toContain("aria-checked={Boolean(props.privateModeEnabled)}");
     expect(composer).toContain('<span>{props.privateModeEnabled ? "Private on" : "Private"}</span>');
     expect(composer).toContain("props.onPrivateModeChange?.(true)");
     expect(sessionSurface).toContain('mode: "private_workspace"');
-    expect(sessionSurface).toContain("Private mode · Venice does not retain this prompt or response.");
-    expect(sessionSurface).toContain("Matterhorn does not train on your chats");
+    expect(sessionSurface).toContain("PrivateModePrivacyNotice");
     expect(sessionRoute).toContain("selectedPrivateModeVerified");
     expect(sessionRoute).toContain("Model privacy not verified");
     expect(sessionRoute).toContain("privateModePrivacyPolicy?.verificationExpiresAt");
+    expect(sessionRoute).toContain("storeSessionModelChoice(selectedWorkspaceId, selectedSessionId");
+    expect(sessionRoute).toContain('target={selectedSessionId ? "session" : "default"}');
+    expect(sessionRoute).toContain("inheritStoredSessionModelChoice(selectedWorkspaceId, selectedSessionId, forked.id)");
+    expect(sessionRoute).toContain("storeSessionModelChoice(selectedWorkspaceId, sessionId, null)");
+  });
+
+  test("preserves private workspace mode for immediate desk tasks", () => {
+    const sessionRoute = readFileSync(
+      new URL(
+        "../src/react-app/shell/session-route.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const launcherBlock = sessionRoute.slice(
+      sessionRoute.indexOf("onCreateTaskWithPrompt:"),
+      sessionRoute.indexOf("onOpenRenameWorkspace:"),
+    );
+    const sendBlock = launcherBlock.slice(
+      launcherBlock.indexOf('recordInspectorEvent("desk.task_launch.prompt_send_started"'),
+      launcherBlock.indexOf('recordInspectorEvent("desk.task_launch.prompt_sent"'),
+    );
+    const privateModeBinding =
+      '...(privateModeEnabled ? { privacyMode: "private_workspace" as const } : {})';
+
+    expect(sendBlock).toContain("await endpoint.client.sendAgentMessage");
+    expect(sendBlock).toContain("await workspaceClient.session.promptAsync");
+    expect(sendBlock.split(privateModeBinding)).toHaveLength(3);
   });
 });

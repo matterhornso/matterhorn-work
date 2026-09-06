@@ -33,6 +33,13 @@ export type MatterhornFirstPartyPolymarketClobResearchOptions = Omit<
   polymarketClobEndpoint: string;
 };
 
+export type MatterhornFirstPartyPolymarketWalletPreviewOptions = Omit<
+  MatterhornFirstPartyCryptoAppOptions,
+  "suiTestnetEndpoint" | "hyperliquidTestnetEndpoint"
+> & {
+  polymarketClobEndpoint: string;
+};
+
 export type MatterhornFirstPartyBittensorTestnetOptions = Omit<
   MatterhornFirstPartyCryptoAppOptions,
   "suiTestnetEndpoint" | "hyperliquidTestnetEndpoint"
@@ -56,6 +63,9 @@ const FIRST_PARTY_ACTION_PROXY_TOOLS: Readonly<Record<string, Readonly<Record<st
   },
   "matterhorn.polymarket-clob-research": {
     polymarket_orderbook_read: "matterhorn_polymarket_get_orderbook",
+  },
+  "matterhorn.polymarket-wallet-preview": {
+    polymarket_preview_order: "matterhorn_polymarket_prepare_handoff",
   },
   "matterhorn.bittensor-testnet": {
     bittensor_subnet_list: "matterhorn_bittensor_chat",
@@ -181,6 +191,44 @@ export function firstPartyCryptoAppAdapterArguments(input: {
       throw new Error("first_party_crypto_app_arguments_invalid");
     }
     return { tokenId };
+  }
+  if (input.appId === "matterhorn.polymarket-wallet-preview" && input.actionId === "polymarket_preview_order") {
+    const signer = textArgument(args.address)?.toLowerCase();
+    const marketId = textArgument(args.marketId)?.toLowerCase();
+    const tokenId = textArgument(args.tokenId);
+    const outcome = textArgument(args.outcome);
+    const side = textArgument(args.side)?.toLowerCase();
+    const amountUsdc = decimalArgument(args.amountUsdc);
+    const amountShares = decimalArgument(args.amountShares);
+    const slippagePercent = args.slippageTolerance === undefined ? 2 : Number(args.slippageTolerance);
+    if (!signer
+      || !/^0x[a-f0-9]{40}$/.test(signer)
+      || !marketId
+      || !/^0x[a-f0-9]{64}$/.test(marketId)
+      || !tokenId
+      || !/^[1-9][0-9]{0,77}$/.test(tokenId)
+      || BigInt(tokenId) > ((1n << 256n) - 1n)
+      || !outcome
+      || outcome.length > 120
+      || /[\u0000-\u001F\u007F]/.test(outcome)
+      || (side !== "buy" && side !== "sell")
+      || !Number.isFinite(slippagePercent)
+      || slippagePercent < 0.01
+      || slippagePercent > 10
+      || (side === "buy" ? !amountUsdc || amountShares !== null : !amountShares || amountUsdc !== null)
+      || Number(side === "buy" ? amountUsdc : amountShares) <= 0) {
+      throw new Error("first_party_crypto_app_arguments_invalid");
+    }
+    return {
+      signer,
+      marketId,
+      tokenId,
+      outcome,
+      side,
+      amountUsdc: side === "buy" ? amountUsdc : null,
+      amountShares: side === "sell" ? amountShares : null,
+      maxSlippageBps: Math.round(slippagePercent * 100),
+    };
   }
   if (input.appId === "matterhorn.bittensor-testnet" && input.actionId === "bittensor_subnet_list") {
     const limit = args.limit === undefined ? 12 : Number(args.limit);
@@ -357,7 +405,7 @@ function hyperliquidManifest(options: MatterhornFirstPartyCryptoAppOptions): Mat
     appId: "matterhorn.hyperliquid-testnet",
     displayName: "Hyperliquid Testnet",
     description: "Certified Hyperliquid testnet market reads and wallet-reviewed order preparation.",
-    manifestRevision: "1.1.0",
+    manifestRevision: "1.2.0",
     transport: { kind: "matterhorn_sdk", endpoint: options.hyperliquidTestnetEndpoint },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "hyperliquid", chainId: "hyperliquid:testnet", environment: "testnet" }],
@@ -368,6 +416,7 @@ function hyperliquidManifest(options: MatterhornFirstPartyCryptoAppOptions): Mat
         description: "Read bounded Hyperliquid testnet market summaries.",
         access: "read",
         risk: "informational",
+        cachePolicy: "block_bound_public",
         inputSchema: objectSchema({ limit: { type: "integer", minimum: 1, maximum: 50 } }),
         outputProjectionSchema: objectSchema({
           markets: {
@@ -396,6 +445,7 @@ function hyperliquidManifest(options: MatterhornFirstPartyCryptoAppOptions): Mat
         description: "Read a bounded Hyperliquid testnet orderbook for one asset.",
         access: "read",
         risk: "informational",
+        cachePolicy: "block_bound_public",
         inputSchema: objectSchema({ asset: { type: "string", minLength: 1, maxLength: 32 } }, ["asset"]),
         outputProjectionSchema: objectSchema({
           asset: { type: "string", minLength: 1, maxLength: 32 },
@@ -625,7 +675,7 @@ export function buildMatterhornFirstPartyBittensorTestnetManifest(
     appId: "matterhorn.bittensor-testnet",
     displayName: "Bittensor Testnet",
     description: "Certified Bittensor testnet research and wallet-reviewed transfer, stake, and unstake preparation.",
-    manifestRevision: "1.1.0",
+    manifestRevision: "1.2.0",
     transport: { kind: "matterhorn_sdk", endpoint: options.bittensorTestnetSidecarEndpoint },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "bittensor", chainId: "bittensor:test", environment: "testnet" }],
@@ -636,6 +686,7 @@ export function buildMatterhornFirstPartyBittensorTestnetManifest(
         description: "Read bounded public subnet metadata with block and observation freshness.",
         access: "read",
         risk: "informational",
+        cachePolicy: "block_bound_public",
         inputSchema: objectSchema({ limit: { type: "integer", minimum: 1, maximum: 50 } }),
         outputProjectionSchema: objectSchema({
           network: { type: "string", const: "bittensor:test" },
@@ -657,6 +708,7 @@ export function buildMatterhornFirstPartyBittensorTestnetManifest(
         description: "Read one subnet and a bounded validator comparison from public testnet state.",
         access: "read",
         risk: "informational",
+        cachePolicy: "block_bound_public",
         inputSchema: objectSchema({
           netuid: { type: "integer", minimum: 0, maximum: 65_535 },
           validatorLimit: { type: "integer", minimum: 1, maximum: 20 },
@@ -706,7 +758,7 @@ export function buildMatterhornFirstPartyPolymarketResearchManifest(
     appId: "matterhorn.polymarket-research",
     displayName: "Polymarket Public Research",
     description: "Read-only public Polymarket market discovery. No wallet or order authority.",
-    manifestRevision: "1.1.0",
+    manifestRevision: "1.2.0",
     transport: { kind: "matterhorn_sdk", endpoint: options.polymarketGammaEndpoint },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "polymarket", chainId: "polymarket:public", environment: "mainnet" }],
@@ -716,6 +768,7 @@ export function buildMatterhornFirstPartyPolymarketResearchManifest(
       description: "Search bounded public market metadata without wallet, profile, or order access.",
       access: "read",
       risk: "informational",
+      cachePolicy: "block_bound_public",
       inputSchema: objectSchema({
         query: { type: "string", minLength: 1, maxLength: 200 },
         limit: { type: "integer", minimum: 1, maximum: 10 },
@@ -794,7 +847,7 @@ export function buildMatterhornFirstPartyPolymarketClobResearchManifest(
     appId: "matterhorn.polymarket-clob-research",
     displayName: "Polymarket Public Order Books",
     description: "Read-only public Polymarket order-book snapshots. No account, wallet, or order authority.",
-    manifestRevision: "1.0.0",
+    manifestRevision: "1.1.0",
     transport: { kind: "matterhorn_sdk", endpoint: options.polymarketClobEndpoint },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "polymarket", chainId: "polymarket:public", environment: "mainnet" }],
@@ -804,6 +857,7 @@ export function buildMatterhornFirstPartyPolymarketClobResearchManifest(
       description: "Read one bounded public order book by its exact outcome token ID.",
       access: "read",
       risk: "informational",
+      cachePolicy: "block_bound_public",
       inputSchema: objectSchema({
         tokenId: { type: "string", minLength: 1, maxLength: 78 },
       }, ["tokenId"]),
@@ -837,6 +891,84 @@ export function buildMatterhornFirstPartyPolymarketClobResearchManifest(
       freshnessMaxAgeMs: 10_000,
       timeoutMs: 10_000,
       simulationRequired: false,
+      walletSubmissionOnly: true,
+      agentMaySubmit: false,
+    }],
+  });
+}
+
+/**
+ * One-action Polymarket transaction adapter. It may only read a public CLOB
+ * book and derive short-lived FAK bounds. Authentication, account data,
+ * signing, cancellation, relay, and submission remain exclusively in the
+ * connected-wallet browser boundary.
+ */
+export function buildMatterhornFirstPartyPolymarketWalletPreviewManifest(
+  options: MatterhornFirstPartyPolymarketWalletPreviewOptions,
+): MatterhornCryptoAppManifest {
+  return signedManifest(options, {
+    appId: "matterhorn.polymarket-wallet-preview",
+    displayName: "Polymarket Wallet Preview",
+    description: "Fresh public CLOB simulation for exact, connected-wallet-only order review.",
+    manifestRevision: "1.0.0",
+    transport: { kind: "matterhorn_sdk", endpoint: options.polymarketClobEndpoint },
+    authentication: { type: "none", scopes: [] },
+    networks: [{ protocol: "polymarket", chainId: "polymarket:polygon", environment: "mainnet" }],
+    actions: [{
+      id: "polymarket_preview_order",
+      title: "Prepare Polymarket wallet order",
+      description: "Read one exact token book and derive a short-lived FAK price bound for wallet review.",
+      access: "prepare",
+      risk: "financial_high",
+      inputSchema: objectSchema({
+        signer: { type: "string", minLength: 42, maxLength: 42 },
+        marketId: { type: "string", minLength: 66, maxLength: 66 },
+        tokenId: { type: "string", minLength: 1, maxLength: 78 },
+        outcome: { type: "string", minLength: 1, maxLength: 120 },
+        side: { type: "string", enum: ["buy", "sell"] },
+        amountUsdc: { oneOf: [decimalString, { type: "null" }] },
+        amountShares: { oneOf: [decimalString, { type: "null" }] },
+        maxSlippageBps: { type: "integer", minimum: 1, maximum: 1_000 },
+      }, ["signer", "marketId", "tokenId", "outcome", "side", "amountUsdc", "amountShares", "maxSlippageBps"]),
+      outputProjectionSchema: objectSchema({
+        version: { type: "string", const: "matterhorn.polymarket-wallet-preview.v1" },
+        network: { type: "string", const: "polymarket:polygon" },
+        signer: { type: "string", minLength: 42, maxLength: 42 },
+        marketId: { type: "string", minLength: 66, maxLength: 66 },
+        tokenId: { type: "string", minLength: 1, maxLength: 78 },
+        outcome: { type: "string", minLength: 1, maxLength: 120 },
+        side: { type: "string", enum: ["buy", "sell"] },
+        amountUsdc: { oneOf: [decimalString, { type: "null" }] },
+        amountShares: { oneOf: [decimalString, { type: "null" }] },
+        orderType: { type: "string", const: "FAK" },
+        limitPrice: decimalString,
+        maxSlippageBps: { type: "integer", minimum: 1, maximum: 1_000 },
+        tickSize: decimalString,
+        minimumOrderSize: decimalString,
+        negativeRisk: { type: "boolean" },
+        bestPrice: decimalString,
+        estimatedAverageFillPrice: decimalString,
+        estimatedShares: { oneOf: [decimalString, { type: "null" }] },
+        estimatedProceedsUsdc: { oneOf: [decimalString, { type: "null" }] },
+        maximumSpendUsdc: { oneOf: [decimalString, { type: "null" }] },
+        visibleDepthSufficient: { type: "boolean" },
+        snapshotHash: identifierString,
+        simulationReference: identifierString,
+        observedAt: timestampString,
+        expiresAt: timestampString,
+      }, [
+        "version", "network", "signer", "marketId", "tokenId", "outcome", "side",
+        "amountUsdc", "amountShares", "orderType", "limitPrice", "maxSlippageBps",
+        "tickSize", "minimumOrderSize", "negativeRisk", "bestPrice",
+        "estimatedAverageFillPrice", "estimatedShares", "estimatedProceedsUsdc",
+        "maximumSpendUsdc", "visibleDepthSufficient", "snapshotHash",
+        "simulationReference", "observedAt", "expiresAt",
+      ]),
+      requiredScopes: [],
+      requiresFreshness: true,
+      freshnessMaxAgeMs: 10_000,
+      timeoutMs: 10_000,
+      simulationRequired: true,
       walletSubmissionOnly: true,
       agentMaySubmit: false,
     }],

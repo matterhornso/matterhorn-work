@@ -231,7 +231,7 @@ const cli = mustContain("apps/orchestrator/src/cli.ts", [
 assertNoSubmitRoute("market CLI sections", sectionBetween(cli, "matterhorn-work hyperliquid", "matterhorn-work bittensor"));
 
 mustContain("docs/hyperliquid-read-preview.md", [
-  "External-Signer Execution",
+  "Agent Draft And Wallet Handoff",
   "Matterhorn does **not** compute",
   "Private keys, API secrets, signatures, signed actions, or signed payloads",
   "It does not accept API secrets, private keys, signatures, or signed payloads",
@@ -243,15 +243,16 @@ mustContain("docs/market-execution-readiness-security-gate.md", [
   "Connected-Wallet Hyperliquid Execution",
   "MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED",
   "SUBMIT LIVE ORDER",
-  "Connected-Wallet Polymarket BUY Ticket",
+  "Connected-Wallet Polymarket Ticket",
   "SUBMIT POLYMARKET ORDER",
-  "Polymarket agent and server tools remain read/preview only",
+  "Polymarket has no agent-facing server submit route",
+  "eligible EOA buy, sell, and cancel actions",
 ]);
 
 mustContain("docs/polymarket-read-preview.md", [
-  "Agent And External-Handoff Execution",
-  "Separate browser-wallet BUY ticket",
-  "The tool layer produces economic terms only",
+  "Agent Draft And Wallet Handoff",
+  "Separate browser-wallet buy, sell, and cancel ticket",
+  "The agent handoff itself cannot become an order",
   "Private keys, API secrets, signatures, signed actions, or signed payloads",
   "canSubmit: false",
   "requiresClientValidation",

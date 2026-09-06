@@ -4,6 +4,7 @@ import type {
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import { MatterhornCryptoAppAdapterError } from "./crypto-app-adapter-router.js";
+import { verifyCryptoAppResultEvidence } from "./crypto-app-evidence-identity.js";
 import { MatterhornCoworkers, type MatterhornCoworkerInboxItemInput } from "./crypto-coworkers.js";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 
@@ -95,6 +96,15 @@ function freshness(result: MatterhornCryptoAppResult): "fresh" | "stale" | "unkn
   return maxAge !== null && result.observation.ageMs > maxAge ? "stale" : "fresh";
 }
 
+function evidenceReferenceHash(result: MatterhornCryptoAppResult): string {
+  if (!verifyCryptoAppResultEvidence(result)) {
+    throw new MatterhornCryptoAppAdapterError("adapter_output_invalid");
+  }
+  // The observation proof also binds the exact projection proof, app,
+  // action, network, source, block/version and observation time.
+  return result.provenance.observationHash!;
+}
+
 function safeExecutionReason(error: unknown): string {
   const code = error instanceof MatterhornCryptoAppAdapterError ? error.code : "watch_execution_failed";
   return SAFE_EXECUTION_ERRORS.has(code) ? code : "watch_execution_failed";
@@ -139,6 +149,7 @@ export class MatterhornCoworkerWatchRunner {
     try {
       const result = await this.#execute(watch);
       const completedAt = this.#now();
+      const exactEvidenceReferenceHash = evidenceReferenceHash(result);
       const resultHash = sha256({
         app: result.app,
         action: result.action,
@@ -173,7 +184,7 @@ export class MatterhornCoworkerWatchRunner {
           source: {
             appId: watch.appId,
             actionId: watch.actionId,
-            evidenceReferenceHash: result.provenance.evidenceReference,
+            evidenceReferenceHash: exactEvidenceReferenceHash,
             freshness: freshness(result),
             observedAt: result.observation.observedAt ?? result.timing.completedAt,
           },

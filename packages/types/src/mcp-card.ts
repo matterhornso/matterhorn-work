@@ -114,7 +114,7 @@ export const HYPERLIQUID_MCP_CARD: McpCardConnectivity = {
   displayName: "Matterhorn Hyperliquid",
   deskId: "hyperliquid",
   description:
-    "Read Hyperliquid market data and preview trades. Prepare external-signer handoffs and verify receipts.",
+    "Read Hyperliquid market data and preview trades. Prepare wallet reviews and verify public receipts.",
   status: "testable",
   installCommands: [
     installCmd("codex", "matterhorn-hyperliquid"),
@@ -125,7 +125,7 @@ export const HYPERLIQUID_MCP_CARD: McpCardConnectivity = {
   supportedTools: [
     { name: "hyperliquid_read_market", description: "Read perp market metadata", isReadOnly: true },
     { name: "hyperliquid_preview_order", description: "Preview an order", isReadOnly: true },
-    { name: "hyperliquid_prepare_handoff", description: "Build an external-signer handoff", isReadOnly: false },
+    { name: "hyperliquid_prepare_handoff", description: "Prepare an exact connected-wallet review", isReadOnly: false },
     { name: "hyperliquid_import_receipt", description: "Import a signed receipt", isReadOnly: false },
   ],
   testEndpoint: "/api/hyperliquid/orders/handoff",
@@ -141,7 +141,7 @@ export const POLYMARKET_MCP_CARD: McpCardConnectivity = {
   displayName: "Matterhorn Polymarket",
   deskId: "polymarket",
   description:
-    "Search Polymarket markets, read probabilities, and preview positions. Prepare external-signer handoffs and verify receipts.",
+    "Search Polymarket markets, read probabilities, and preview positions. Prepare wallet reviews and verify public receipts.",
   status: "testable",
   installCommands: [
     installCmd("codex", "matterhorn-polymarket"),
@@ -152,7 +152,7 @@ export const POLYMARKET_MCP_CARD: McpCardConnectivity = {
   supportedTools: [
     { name: "polymarket_search_markets", description: "Search prediction markets", isReadOnly: true },
     { name: "polymarket_preview_trade", description: "Preview a trade", isReadOnly: true },
-    { name: "polymarket_prepare_handoff", description: "Build an external-signer handoff", isReadOnly: false },
+    { name: "polymarket_prepare_handoff", description: "Prepare an exact connected-wallet review", isReadOnly: false },
     { name: "polymarket_import_receipt", description: "Import a signed receipt", isReadOnly: false },
   ],
   testEndpoint: "/api/polymarket/orders/handoff",

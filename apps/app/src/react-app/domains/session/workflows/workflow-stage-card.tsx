@@ -31,9 +31,9 @@ export interface WorkflowStageCardProps {
   outputs?: Array<{ name: string; description?: string }>;
   /** What the user needs to do at this stage, if anything. */
   userActionHint?: string;
-  /** Evidence or source hints, e.g. "reads: public SS58", "requires: external signer". */
+  /** Evidence or source hints, e.g. "reads: public SS58", "requires: wallet review". */
   evidenceHints?: string[];
-  /** Whether external signer is required for this stage. */
+  /** Whether connected-wallet review is required for this stage. */
   requiresExternalSigner?: boolean;
   /** Whether customer confirmation is required before proceeding. */
   requiresCustomerConfirmation?: boolean;
@@ -221,7 +221,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
               <li className="inline-flex min-w-0 items-center gap-1.5">
                 <Lock className="size-3 shrink-0 text-dls-muted" />
                 <span className="min-w-0 text-xs leading-[18px] text-dls-secondary">
-                  <span className="font-medium text-dls-text">External signer required</span> - unsigned handoff only
+                  <span className="font-medium text-dls-text">Wallet review required</span> - Matterhorn cannot sign or submit
                 </span>
               </li>
             ) : null}

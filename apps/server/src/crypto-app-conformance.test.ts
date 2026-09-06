@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+  MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
   type MatterhornCryptoAppManifest,
 } from "@matterhorn-work/types/crypto-coworkers";
 
@@ -76,6 +77,33 @@ describe("crypto app manifest conformance", () => {
       code: "runtime_dns_revalidation_required",
     })]);
     expect(report.reportHash).toHaveLength(64);
+  });
+
+  test("requires the signed operation profile before certifying OpenAPI", () => {
+    const value = manifest();
+    value.transport = { kind: "openapi", endpoint: "https://api.matterhorn.so" };
+    value.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(value), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    expect(conformance(value).findings).toContainEqual(expect.objectContaining({
+      severity: "error",
+      code: "openapi_signed_operation_profile_required",
+    }));
+
+    value.transport = {
+      kind: "openapi",
+      endpoint: "https://api.matterhorn.so",
+      profile: MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
+      operations: [{ actionId: "prepare_order", method: "POST", path: "/v1/orders/prepare" }],
+    };
+    value.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(value), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    expect(conformance(value).passed).toBe(true);
   });
 
   test("rejects private and loopback transport endpoints", () => {
@@ -277,6 +305,42 @@ describe("crypto app manifest conformance", () => {
     const codes = conformance(value).findings.map((item) => item.code);
     expect(codes).toContain("freshness_max_age_required");
     expect(codes).toContain("financial_action_risk_required");
+  });
+
+  test("requires an explicit public-only contract before cache admission", () => {
+    const value = manifest();
+    value.actions[0] = {
+      ...value.actions[0]!,
+      cachePolicy: "block_bound_public",
+      requiresFreshness: false,
+      freshnessMaxAgeMs: null,
+    };
+    value.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(value), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    expect(conformance(value).findings.map((item) => item.code)).toEqual(expect.arrayContaining([
+      "public_cache_requires_informational_read",
+      "public_cache_requires_freshness",
+      "public_cache_requires_anonymous_scope_free_action",
+    ]));
+  });
+
+  test("rejects unknown signed cache policy values", () => {
+    const value = manifest();
+    (value.actions[0] as unknown as Record<string, unknown>).cachePolicy = "always";
+    value.publisher.signature = sign(
+      null,
+      Buffer.from(canonicalCryptoAppManifestPayload(value), "utf8"),
+      keys.privateKey,
+    ).toString("base64url");
+    expect(conformance(value).findings).toContainEqual(expect.objectContaining({
+      severity: "error",
+      category: "schema",
+      code: "action_cache_policy_invalid",
+      actionId: null,
+    }));
   });
 
   test("hashes the full report so policy or finding changes are detectable", () => {

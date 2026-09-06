@@ -18,7 +18,12 @@ function draft(): MatterhornUnsignedCryptoAppManifest {
     description: "Public Sui reads and wallet-reviewed testnet transfer preparation.",
     manifestRevision: "1.0.0",
     publisher: { id: "acme.crypto", keyId: "publisher-1", algorithm: "ed25519" },
-    transport: { kind: "openapi", endpoint: "https://adapter.acme.example/v1" },
+    transport: {
+      kind: "openapi",
+      endpoint: "https://adapter.acme.example",
+      profile: "matterhorn.openapi-action.v1",
+      operations: [{ actionId: "sui_balance_read", method: "POST", path: "/v1/sui/balance" }],
+    },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "sui", chainId: "sui:testnet", environment: "testnet" }],
     actions: [{
@@ -117,6 +122,47 @@ describe("Matterhorn crypto app SDK", () => {
     expect(() => buildCryptoAppSigningRequest(loopbackDraft)).toThrowError(expect.objectContaining({
       code: "manifest_invalid",
       issues: expect.arrayContaining(["transport_https_required"]),
+    }));
+  });
+
+  test("requires public, anonymous, scope-free reads for cache declarations", () => {
+    const publicRead = draft();
+    publicRead.actions[0]!.risk = "informational";
+    publicRead.actions[0]!.cachePolicy = "block_bound_public";
+    const keys = generateKeyPairSync("ed25519");
+    const signing = buildCryptoAppSigningRequest(publicRead);
+    const signed = attachCryptoAppManifestSignature(
+      publicRead,
+      sign(null, Buffer.from(signing.canonicalPayload), keys.privateKey).toString("base64url"),
+    );
+    expect(emulateCryptoAppPolicy(signed, "testnet").passed).toBe(true);
+
+    const privateRead = structuredClone(signed);
+    privateRead.actions[0]!.risk = "private_data";
+    expect(emulateCryptoAppPolicy(privateRead, "testnet").findings).toContainEqual(expect.objectContaining({
+      severity: "error",
+      code: "public_cache_requires_informational_read",
+    }));
+
+    const scopedRead = structuredClone(signed);
+    scopedRead.authentication.scopes = ["account:read"];
+    expect(emulateCryptoAppPolicy(scopedRead, "testnet").findings).toContainEqual(expect.objectContaining({
+      severity: "error",
+      code: "public_cache_requires_anonymous_scope_free_action",
+    }));
+
+    const walletLinkedRead = structuredClone(signed);
+    walletLinkedRead.authentication = { type: "wallet_connection", scopes: [] };
+    expect(emulateCryptoAppPolicy(walletLinkedRead, "testnet").findings).toContainEqual(expect.objectContaining({
+      severity: "error",
+      code: "public_cache_requires_anonymous_scope_free_action",
+    }));
+
+    const unknownPolicy = draft();
+    (unknownPolicy.actions[0] as unknown as Record<string, unknown>).cachePolicy = "always";
+    expect(() => buildCryptoAppSigningRequest(unknownPolicy)).toThrowError(expect.objectContaining({
+      code: "manifest_invalid",
+      issues: expect.arrayContaining(["action_cache_policy_invalid"]),
     }));
   });
 

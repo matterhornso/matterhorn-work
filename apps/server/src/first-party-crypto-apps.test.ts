@@ -23,12 +23,14 @@ import {
   buildMatterhornFirstPartyBittensorTestnetManifest,
   buildMatterhornFirstPartyPolymarketClobResearchManifest,
   buildMatterhornFirstPartyPolymarketResearchManifest,
+  buildMatterhornFirstPartyPolymarketWalletPreviewManifest,
   buildMatterhornFirstPartyTestnetManifests,
   firstPartyCryptoAppAdapterArguments,
   firstPartyCryptoAppCapabilityBindings,
 } from "./first-party-crypto-apps.js";
 
 const keys = generateKeyPairSync("ed25519");
+const CONNECTION_INTEGRITY_SECRET = "test-connection-integrity-secret-at-least-32-bytes";
 
 function manifests() {
   return buildMatterhornFirstPartyTestnetManifests({
@@ -57,6 +59,18 @@ function polymarketResearchManifest() {
 
 function polymarketClobResearchManifest() {
   return buildMatterhornFirstPartyPolymarketClobResearchManifest({
+    publisherId: "matterhorn",
+    publisherKeyId: "first-party-test-key",
+    sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
+    polymarketClobEndpoint: "https://clob.polymarket.com",
+    privacyPolicyUrl: "https://matterhorn.so/privacy",
+    statusUrl: "https://matterhorn.so/status",
+    securityContact: "security@matterhorn.so",
+  });
+}
+
+function polymarketWalletPreviewManifest() {
+  return buildMatterhornFirstPartyPolymarketWalletPreviewManifest({
     publisherId: "matterhorn",
     publisherKeyId: "first-party-test-key",
     sign: (payload) => sign(null, Buffer.from(payload), keys.privateKey).toString("base64url"),
@@ -113,6 +127,7 @@ describe("Matterhorn first-party crypto app contracts", () => {
       id: "polymarket_market_search",
       access: "read",
       risk: "informational",
+      cachePolicy: "block_bound_public",
       simulationRequired: false,
       walletSubmissionOnly: true,
       agentMaySubmit: false,
@@ -128,7 +143,7 @@ describe("Matterhorn first-party crypto app contracts", () => {
     expect(report.passed).toBe(true);
     expect(firstPartyCryptoAppCapabilityBindings([app])).toEqual([{
       appId: "matterhorn.polymarket-research",
-      manifestRevision: "1.1.0",
+      manifestRevision: "1.2.0",
       actionId: "polymarket_market_search",
       proxyToolName: "matterhorn_polymarket_search_markets",
     }]);
@@ -143,6 +158,7 @@ describe("Matterhorn first-party crypto app contracts", () => {
       id: "polymarket_orderbook_read",
       access: "read",
       risk: "informational",
+      cachePolicy: "block_bound_public",
       requiredScopes: [],
       simulationRequired: false,
       walletSubmissionOnly: true,
@@ -158,9 +174,34 @@ describe("Matterhorn first-party crypto app contracts", () => {
     expect(report.passed).toBe(true);
     expect(firstPartyCryptoAppCapabilityBindings([app])).toEqual([{
       appId: "matterhorn.polymarket-clob-research",
-      manifestRevision: "1.0.0",
+      manifestRevision: "1.1.0",
       actionId: "polymarket_orderbook_read",
       proxyToolName: "matterhorn_polymarket_get_orderbook",
+    }]);
+  });
+
+  test("keeps Polymarket wallet preview authority in one simulation-only prepare contract", () => {
+    const app = polymarketWalletPreviewManifest();
+    expect(app).toMatchObject({
+      appId: "matterhorn.polymarket-wallet-preview",
+      transport: { kind: "matterhorn_sdk", endpoint: "https://clob.polymarket.com" },
+      authentication: { type: "none", scopes: [] },
+      networks: [{ protocol: "polymarket", chainId: "polymarket:polygon", environment: "mainnet" }],
+    });
+    expect(app.actions).toEqual([expect.objectContaining({
+      id: "polymarket_preview_order",
+      access: "prepare",
+      risk: "financial_high",
+      simulationRequired: true,
+      walletSubmissionOnly: true,
+      agentMaySubmit: false,
+    })]);
+    expect(JSON.stringify(app)).not.toMatch(/private.?key|api.?key|passphrase|post.?order|cancel|relay|submit.?transaction/i);
+    expect(firstPartyCryptoAppCapabilityBindings([app])).toEqual([{
+      appId: "matterhorn.polymarket-wallet-preview",
+      manifestRevision: "1.0.0",
+      actionId: "polymarket_preview_order",
+      proxyToolName: "matterhorn_polymarket_prepare_handoff",
     }]);
   });
 
@@ -180,7 +221,9 @@ describe("Matterhorn first-party crypto app contracts", () => {
       "bittensor_prepare_unstake",
     ]);
     expect(app.actions.filter((action) => action.access === "read").every((action) => (
-      action.risk === "informational" && !action.simulationRequired
+      action.risk === "informational"
+      && action.cachePolicy === "block_bound_public"
+      && !action.simulationRequired
     ))).toBe(true);
     expect(app.actions.filter((action) => action.access === "prepare").every((action) => (
       action.risk === "financial_high" && action.simulationRequired
@@ -199,31 +242,31 @@ describe("Matterhorn first-party crypto app contracts", () => {
     expect(firstPartyCryptoAppCapabilityBindings([app])).toEqual([
       {
         appId: "matterhorn.bittensor-testnet",
-        manifestRevision: "1.1.0",
+        manifestRevision: "1.2.0",
         actionId: "bittensor_subnet_list",
         proxyToolName: "matterhorn_bittensor_chat",
       },
       {
         appId: "matterhorn.bittensor-testnet",
-        manifestRevision: "1.1.0",
+        manifestRevision: "1.2.0",
         actionId: "bittensor_subnet_read",
         proxyToolName: "matterhorn_bittensor_chat",
       },
       {
         appId: "matterhorn.bittensor-testnet",
-        manifestRevision: "1.1.0",
+        manifestRevision: "1.2.0",
         actionId: "bittensor_prepare_transfer",
         proxyToolName: "matterhorn_bittensor_prepare_action",
       },
       {
         appId: "matterhorn.bittensor-testnet",
-        manifestRevision: "1.1.0",
+        manifestRevision: "1.2.0",
         actionId: "bittensor_prepare_stake",
         proxyToolName: "matterhorn_bittensor_prepare_action",
       },
       {
         appId: "matterhorn.bittensor-testnet",
-        manifestRevision: "1.1.0",
+        manifestRevision: "1.2.0",
         actionId: "bittensor_prepare_unstake",
         proxyToolName: "matterhorn_bittensor_prepare_action",
       },
@@ -323,6 +366,31 @@ describe("Matterhorn first-party crypto app contracts", () => {
         apiKey: "must-not-forward",
       },
     })).toEqual({ tokenId: "12345678901234567890" });
+    expect(firstPartyCryptoAppAdapterArguments({
+      appId: "matterhorn.polymarket-wallet-preview",
+      actionId: "polymarket_preview_order",
+      arguments: {
+        address: `0x${"1".repeat(40)}`,
+        marketId: `0x${"a".repeat(64)}`,
+        tokenId: "12345678901234567890",
+        outcome: "Yes",
+        side: "buy",
+        amountUsdc: "25",
+        amountShares: null,
+        slippageTolerance: "1",
+        endpoint: "https://attacker.invalid/order",
+        apiKey: "must-not-forward",
+      },
+    })).toEqual({
+      signer: `0x${"1".repeat(40)}`,
+      marketId: `0x${"a".repeat(64)}`,
+      tokenId: "12345678901234567890",
+      outcome: "Yes",
+      side: "buy",
+      amountUsdc: "25",
+      amountShares: null,
+      maxSlippageBps: 100,
+    });
     expect(firstPartyCryptoAppAdapterArguments({
       appId: "matterhorn.bittensor-testnet",
       actionId: "bittensor_subnet_list",
@@ -443,7 +511,7 @@ describe("Matterhorn first-party crypto app contracts", () => {
     const store = new MatterhornCryptoAppConnectionStore(join(
       mkdtempSync(join(tmpdir(), "matterhorn-first-party-apps-")),
       "connections.db",
-    ));
+    ), CONNECTION_INTEGRITY_SECRET);
     let id = 0;
     const connections = new MatterhornCryptoAppConnections({
       registry,

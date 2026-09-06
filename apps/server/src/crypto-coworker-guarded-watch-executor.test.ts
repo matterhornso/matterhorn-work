@@ -10,12 +10,14 @@ import type {
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import type { MatterhornCryptoAppRuntimeServices } from "./crypto-app-runtime.js";
+import { cryptoAppEvidenceIdentity } from "./crypto-app-evidence-identity.js";
 import { createGuardedCoworkerWatchExecutor } from "./crypto-coworker-guarded-watch-executor.js";
 import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
 import { MatterhornCoworkers } from "./crypto-coworkers.js";
 import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 
 const roots: string[] = [];
+const COWORKER_INTEGRITY_SECRET = "coworker-watch-executor-integrity-secret-at-least-32-bytes";
 
 afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
@@ -40,7 +42,7 @@ function connection(): MatterhornCryptoAppConnectionView {
 }
 
 function result(): MatterhornCryptoAppResult {
-  return {
+  const candidate: MatterhornCryptoAppResult = {
     version: "matterhorn.crypto-app-result.v1",
     app: { id: "matterhorn.sui-testnet", manifestRevision: "1.0.0", connectionId: "cxc_sui" },
     action: { id: "sui_account_read", access: "read", network: "sui:testnet" },
@@ -64,13 +66,24 @@ function result(): MatterhornCryptoAppResult {
     metering: { costMicros: 0, reservationId: "reservation_sui" },
     result: { balanceAtomic: "10" },
   };
+  Object.assign(candidate.provenance, cryptoAppEvidenceIdentity({
+    appId: candidate.app.id,
+    manifestRevision: candidate.app.manifestRevision,
+    connectionId: candidate.app.connectionId,
+    actionId: candidate.action.id,
+    access: candidate.action.access,
+    network: candidate.action.network,
+    result: candidate.result,
+    observation: candidate.observation,
+  }));
+  return candidate;
 }
 
 describe("guarded coworker watch executor", () => {
   test("binds one certified Sui read to one model-free guarded run", async () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-watch-executor-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     const coworkers = new MatterhornCoworkers({
       store,
       policyVersion: "coworker-policy-1",
@@ -129,6 +142,7 @@ describe("guarded coworker watch executor", () => {
     const started: unknown[] = [];
     const completed: unknown[] = [];
     const routed: unknown[] = [];
+    let adapterResult = result();
     const guardedRuntime = {
       capabilities: { mode: "enforce" },
       ready: () => true,
@@ -148,7 +162,7 @@ describe("guarded coworker watch executor", () => {
       router: {
         execute: async (input: unknown) => {
           routed.push(input);
-          return result();
+          return adapterResult;
         },
       },
       purgeWorkspace: () => ({ connections: 0, usage: 0, circuits: 0 }),
@@ -163,7 +177,7 @@ describe("guarded coworker watch executor", () => {
         runtimeSecret: () => "runtime-secret",
         id: () => "nonce",
       });
-      expect(await execute(watch)).toEqual(result());
+      expect(await execute(watch)).toEqual(adapterResult);
       expect(started).toEqual([expect.objectContaining({
         workspaceId: "ws_alpha",
         sessionId: "cw_watch_cwatch_sui_nonce",
@@ -200,6 +214,21 @@ describe("guarded coworker watch executor", () => {
         status: "success",
         usage: expect.objectContaining({ inputTokens: 0, outputTokens: 0, reasoningTokens: 0 }),
       })]);
+
+      adapterResult = {
+        ...result(),
+        result: { balanceAtomic: "11" },
+      };
+      await expect(execute(watch)).rejects.toThrow("adapter_output_invalid");
+      expect(completed.at(-1)).toMatchObject({
+        runtimeSecret: "runtime-secret",
+        runId: "run_watch_sui",
+        status: "error",
+      });
+      expect(completed.filter((entry) => (
+        (entry as { status?: string }).status === "success"
+      ))).toHaveLength(1);
+
       coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, {
         expectedRevision: 1,
         profileRevision: profile.revision,
@@ -208,8 +237,8 @@ describe("guarded coworker watch executor", () => {
         connections: [],
       });
       await expect(execute(watch)).rejects.toThrow("coworker_watch_resource_unavailable");
-      expect(started).toHaveLength(1);
-      expect(routed).toHaveLength(1);
+      expect(started).toHaveLength(2);
+      expect(routed).toHaveLength(2);
     } finally {
       store.close();
     }

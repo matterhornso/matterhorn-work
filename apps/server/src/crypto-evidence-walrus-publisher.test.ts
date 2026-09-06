@@ -11,6 +11,7 @@ import type { MatterhornAgentRunReceipt } from "@matterhorn-work/types/guarded-a
 import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import { sealMatterhornRunEvidence } from "./crypto-evidence-sealer.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import {
   createPinnedWalrusEvidenceTransport,
   MATTERHORN_WALRUS_EVIDENCE_CONTENT_TYPE,
@@ -91,7 +92,7 @@ async function fixture() {
     correlationSalt: Buffer.alloc(32, 18),
     idEntropy: Buffer.alloc(24, 19),
   });
-  const store = new MatterhornCryptoEvidenceStore(state, keyManager);
+  const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, testDurableStateAuthority());
   const record = store.create({
     workspaceId: "workspace_walrus",
     ownerId: "owner_walrus",
@@ -292,7 +293,7 @@ describe("testnet Walrus evidence publisher", () => {
         5,
         () => firstTimes.shift() ?? new Date("2026-09-01T00:06:00.000Z"),
       );
-      const secondStore = new MatterhornCryptoEvidenceStore(secondState, value.keyManager);
+      const secondStore = new MatterhornCryptoEvidenceStore(secondState, value.keyManager, {}, null, testDurableStateAuthority());
       const secondPublisher = new MatterhornTestnetWalrusEvidencePublisher(
         secondStore,
         secondTransport,

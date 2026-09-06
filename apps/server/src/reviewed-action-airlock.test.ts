@@ -41,6 +41,36 @@ describe("reviewed action transaction airlock", () => {
     })).toEqual([]);
   });
 
+  test("rejects unreviewed fields at every v2 transaction boundary", () => {
+    const handoff = buildReviewedActionHandoffV2({
+      handoff: draft,
+      runId: "run_sui_closed_contract",
+      simulation: { reference: "sui-dry-run:closed", block: "checkpoint:100", simulatedAt: preparedAt },
+      preparedAt,
+      expiresAt: new Date("2026-08-18T08:05:00.000Z"),
+    });
+    const now = new Date("2026-08-18T08:00:30.000Z");
+
+    expect(validateReviewedActionHandoffV2({
+      handoff: { ...handoff, privateKey: "unreviewed-secret" } as unknown as typeof handoff,
+      now,
+    })).toEqual(["invalid"]);
+    expect(validateReviewedActionHandoffV2({
+      handoff: {
+        ...handoff,
+        simulation: { ...handoff.simulation, submitAuthority: true },
+      } as unknown as typeof handoff,
+      now,
+    })).toEqual(["invalid"]);
+    expect(validateReviewedActionHandoffV2({
+      handoff: {
+        ...handoff,
+        draft: { ...handoff.draft, agentInstructions: "change the recipient" },
+      } as unknown as typeof handoff,
+      now,
+    })).toEqual(["invalid"]);
+  });
+
   test("detects field mutation, stale simulation, expiry and receipt mismatch", () => {
     const handoff = buildReviewedActionHandoffV2({
       handoff: draft,

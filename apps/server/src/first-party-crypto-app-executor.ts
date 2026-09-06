@@ -59,10 +59,12 @@ const HYPERLIQUID_APP_ID = "matterhorn.hyperliquid-testnet";
 const BITTENSOR_APP_ID = "matterhorn.bittensor-testnet";
 const POLYMARKET_RESEARCH_APP_ID = "matterhorn.polymarket-research";
 const POLYMARKET_CLOB_RESEARCH_APP_ID = "matterhorn.polymarket-clob-research";
+const POLYMARKET_WALLET_PREVIEW_APP_ID = "matterhorn.polymarket-wallet-preview";
 const SUI_APP_ID = "matterhorn.sui-testnet";
 const HYPERLIQUID_NETWORK = "hyperliquid:testnet";
 const BITTENSOR_NETWORK = "bittensor:test";
 const POLYMARKET_RESEARCH_NETWORK = "polymarket:public";
+const POLYMARKET_WALLET_NETWORK = "polymarket:polygon";
 const SUI_NETWORK = "sui:testnet";
 const DECIMAL_RE = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
 const SIGNED_DECIMAL_RE = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
@@ -111,6 +113,53 @@ function subtractDecimalsAtZero(first: string, ...rest: string[]): string {
   const [head = 0n, ...tail] = normalized;
   const result = tail.reduce((current, value) => current - value, head);
   return decimalFromParts(result < 0n ? 0n : result, scale);
+}
+
+function compareDecimals(left: string, right: string): number {
+  const a = decimalParts(left);
+  const b = decimalParts(right);
+  const scale = Math.max(a.scale, b.scale);
+  const leftUnits = a.units * (10n ** BigInt(scale - a.scale));
+  const rightUnits = b.units * (10n ** BigInt(scale - b.scale));
+  return leftUnits < rightUnits ? -1 : leftUnits > rightUnits ? 1 : 0;
+}
+
+function addDecimals(left: string, right: string): string {
+  const a = decimalParts(left);
+  const b = decimalParts(right);
+  const scale = Math.max(a.scale, b.scale);
+  return decimalFromParts(
+    a.units * (10n ** BigInt(scale - a.scale)) + b.units * (10n ** BigInt(scale - b.scale)),
+    scale,
+  );
+}
+
+function divideDecimalsFloor(numerator: string, denominator: string, precision = 12): string {
+  const a = decimalParts(numerator);
+  const b = decimalParts(denominator);
+  if (b.units <= 0n) throw new Error("first_party_polymarket_division_invalid");
+  const scaledNumerator = a.units * (10n ** BigInt(precision + b.scale));
+  const scaledDenominator = b.units * (10n ** BigInt(a.scale));
+  return decimalFromParts(scaledNumerator / scaledDenominator, precision);
+}
+
+function polymarketLimitPrice(bestPrice: string, tickSize: string, maxSlippageBps: number, side: "buy" | "sell"): string {
+  const best = decimalParts(bestPrice);
+  const tick = decimalParts(tickSize);
+  const factor = BigInt(side === "buy" ? 10_000 + maxSlippageBps : 10_000 - maxSlippageBps);
+  const targetUnits = best.units * factor;
+  const targetScale = best.scale + 4;
+  const commonScale = Math.max(targetScale, tick.scale);
+  const targetAtScale = targetUnits * (10n ** BigInt(commonScale - targetScale));
+  const tickAtScale = tick.units * (10n ** BigInt(commonScale - tick.scale));
+  if (tickAtScale <= 0n) throw new Error("first_party_polymarket_tick_size_invalid");
+  const steps = side === "buy"
+    ? (targetAtScale + tickAtScale - 1n) / tickAtScale
+    : targetAtScale / tickAtScale;
+  const quantized = decimalFromParts(steps * tick.units, tick.scale);
+  const maximum = subtractDecimalsAtZero("1", tickSize);
+  if (side === "buy") return compareDecimals(quantized, maximum) > 0 ? maximum : quantized;
+  return compareDecimals(quantized, tickSize) < 0 ? tickSize : quantized;
 }
 
 function signedDecimal(value: unknown, field: string): string {
@@ -1181,6 +1230,138 @@ async function executePolymarketClobResearch(
   };
 }
 
+async function executePolymarketWalletPreview(
+  context: RequestContext,
+  actionId: string,
+  network: string,
+  args: JsonObject,
+  observedAt: string,
+): Promise<{ data: unknown; source: string; observedAt: string; blockOrVersion: string }> {
+  if (network !== POLYMARKET_WALLET_NETWORK) {
+    throw new Error("first_party_polymarket_network_invalid");
+  }
+  if (actionId !== "polymarket_preview_order") {
+    throw new Error("first_party_polymarket_action_invalid");
+  }
+  const signer = boundedPublicText(args.signer, "signer", 42).toLowerCase();
+  const expectedMarketId = boundedPublicText(args.marketId, "market_id", 66).toLowerCase();
+  const expectedTokenId = polymarketTokenId(args.tokenId);
+  const outcome = boundedPublicText(args.outcome, "outcome", 120);
+  const side = args.side === "buy" || args.side === "sell" ? args.side : null;
+  const amountUsdc = args.amountUsdc === null ? null : decimal(args.amountUsdc, "polymarket_amount_usdc", false);
+  const amountShares = args.amountShares === null ? null : decimal(args.amountShares, "polymarket_amount_shares", false);
+  const maxSlippageBps = Number(args.maxSlippageBps);
+  if (!/^0x[a-f0-9]{40}$/.test(signer)
+    || !/^0x[a-f0-9]{64}$/.test(expectedMarketId)
+    || !side
+    || !Number.isSafeInteger(maxSlippageBps)
+    || maxSlippageBps < 1
+    || maxSlippageBps > 1_000
+    || (side === "buy" ? amountUsdc === null || amountShares !== null : amountShares === null || amountUsdc !== null)) {
+    throw new Error("first_party_polymarket_preview_arguments_invalid");
+  }
+  const payload = record(await getJson(
+    context,
+    polymarketOrderbookEndpoint(context.endpoint, expectedTokenId),
+  ));
+  if (!payload
+    || payload.asset_id !== expectedTokenId
+    || typeof payload.neg_risk !== "boolean"
+    || typeof payload.market !== "string"
+    || payload.market.toLowerCase() !== expectedMarketId) {
+    throw new Error("first_party_polymarket_orderbook_invalid");
+  }
+  const bids = polymarketBookLevels(payload.bids, "bid");
+  const asks = polymarketBookLevels(payload.asks, "ask");
+  const levels = side === "buy" ? asks : bids;
+  if (levels.length === 0) throw new Error("first_party_polymarket_liquidity_unavailable");
+  const minimumOrderSize = decimal(payload.min_order_size, "polymarket_minimum_order_size", false);
+  const tickSize = decimal(payload.tick_size, "polymarket_tick_size", false);
+  if (compareDecimals(tickSize, "1") >= 0) throw new Error("first_party_polymarket_tick_size_invalid");
+  const bestPrice = levels[0]!.price;
+  const limitPrice = polymarketLimitPrice(bestPrice, tickSize, maxSlippageBps, side);
+  if (compareDecimals(limitPrice, "0") <= 0 || compareDecimals(limitPrice, "1") >= 0) {
+    throw new Error("first_party_polymarket_limit_price_invalid");
+  }
+
+  let estimatedShares = "0";
+  let estimatedProceedsUsdc = "0";
+  let averageNumerator = "0";
+  let visibleDepthSufficient = false;
+  if (side === "buy") {
+    let remaining = amountUsdc!;
+    for (const level of levels) {
+      if (compareDecimals(level.price, limitPrice) > 0 || compareDecimals(remaining, "0") <= 0) break;
+      const levelNotional = multiplyDecimals(level.price, level.size);
+      const takenNotional = compareDecimals(levelNotional, remaining) > 0 ? remaining : levelNotional;
+      const takenShares = compareDecimals(takenNotional, levelNotional) === 0
+        ? level.size
+        : divideDecimalsFloor(takenNotional, level.price);
+      estimatedShares = addDecimals(estimatedShares, takenShares);
+      averageNumerator = addDecimals(averageNumerator, takenNotional);
+      remaining = subtractDecimalsAtZero(remaining, takenNotional);
+    }
+    visibleDepthSufficient = compareDecimals(remaining, "0") === 0;
+  } else {
+    let remaining = amountShares!;
+    for (const level of levels) {
+      if (compareDecimals(level.price, limitPrice) < 0 || compareDecimals(remaining, "0") <= 0) break;
+      const takenShares = compareDecimals(level.size, remaining) > 0 ? remaining : level.size;
+      const proceeds = multiplyDecimals(level.price, takenShares);
+      estimatedShares = addDecimals(estimatedShares, takenShares);
+      estimatedProceedsUsdc = addDecimals(estimatedProceedsUsdc, proceeds);
+      averageNumerator = addDecimals(averageNumerator, proceeds);
+      remaining = subtractDecimalsAtZero(remaining, takenShares);
+    }
+    visibleDepthSufficient = compareDecimals(remaining, "0") === 0;
+  }
+  if (compareDecimals(estimatedShares, minimumOrderSize) < 0) {
+    throw new Error("first_party_polymarket_minimum_order_size_unmet");
+  }
+  const estimatedAverageFillPrice = divideDecimalsFloor(averageNumerator, estimatedShares, 8);
+  const snapshotTimestamp = boundedPublicText(payload.timestamp, "snapshot_timestamp", 32);
+  if (!/^[0-9]{1,32}$/.test(snapshotTimestamp)) {
+    throw new Error("first_party_polymarket_snapshot_timestamp_invalid");
+  }
+  const snapshotHash = boundedPublicText(payload.hash, "snapshot_hash", 160);
+  const expiresAt = new Date(Date.parse(observedAt) + 30_000).toISOString();
+  const simulationMaterial = {
+    version: "matterhorn.polymarket-wallet-preview.v1",
+    network: POLYMARKET_WALLET_NETWORK,
+    signer,
+    marketId: expectedMarketId,
+    tokenId: expectedTokenId,
+    outcome,
+    side,
+    amountUsdc,
+    amountShares,
+    orderType: "FAK" as const,
+    limitPrice,
+    maxSlippageBps,
+    tickSize,
+    minimumOrderSize,
+    negativeRisk: payload.neg_risk,
+    bestPrice,
+    estimatedAverageFillPrice,
+    estimatedShares,
+    estimatedProceedsUsdc: side === "sell" ? estimatedProceedsUsdc : null,
+    maximumSpendUsdc: side === "buy" ? amountUsdc : null,
+    visibleDepthSufficient,
+    snapshotHash,
+    observedAt,
+    expiresAt,
+  };
+  return {
+    data: {
+      ...simulationMaterial,
+      simulationReference: sha256(simulationMaterial),
+    },
+    source: "Polymarket CLOB public book simulation; connected wallet signs and submits",
+    observedAt,
+    blockOrVersion: snapshotHash,
+  };
+}
+
 async function executePolymarketResearch(
   context: RequestContext,
   actionId: string,
@@ -1275,6 +1456,8 @@ export function createFirstPartyCryptoAppExecutor(
             ? await executePolymarketResearch(context, input.action.id, input.network, input.arguments, observedAt)
             : input.appId === POLYMARKET_CLOB_RESEARCH_APP_ID
               ? await executePolymarketClobResearch(context, input.action.id, input.network, input.arguments, observedAt)
+              : input.appId === POLYMARKET_WALLET_PREVIEW_APP_ID
+                ? await executePolymarketWalletPreview(context, input.action.id, input.network, input.arguments, observedAt)
               : Promise.reject(new Error("first_party_app_unsupported"));
     if (!context.connectedAddress) throw new Error("first_party_network_observation_required");
     const costMicros = safeCost(options.estimateCostMicros?.({

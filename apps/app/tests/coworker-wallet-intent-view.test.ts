@@ -8,6 +8,8 @@ import {
   coworkerWalletReviewUnavailableReason,
   coworkerWalletReceiptStatus,
   isActiveCoworkerWalletIntent,
+  polymarketCoworkerWalletMismatchReason,
+  polymarketCoworkerWalletReceiptInput,
   sortCoworkerWalletIntents,
 } from "../src/react-app/domains/coworkers/coworker-wallet-intent-view";
 
@@ -89,6 +91,67 @@ describe("coworker wallet intent presentation", () => {
     finney.reviewedAction.network = "bittensor:finney";
     expect(canOpenCoworkerWalletIntent(finney)).toBe(true);
     expect(coworkerWalletReviewUnavailableReason(finney)).toBeNull();
+  });
+
+  test("binds a Polymarket coworker result to Polygon, the reviewed action, and the reviewed signer", () => {
+    const context = {
+      protocol: "polymarket",
+      network: "polygon",
+      signer: "0xAbC0000000000000000000000000000000000123",
+      operation: "buy",
+      expectedRevision: 3,
+      authorizedArgumentsHash: "a".repeat(64),
+    };
+    expect(polymarketCoworkerWalletMismatchReason(context, {
+      chainId: 137,
+      address: "0xabc0000000000000000000000000000000000123",
+      operation: "buy",
+    })).toBeNull();
+    expect(polymarketCoworkerWalletMismatchReason(context, {
+      chainId: 1,
+      address: context.signer,
+      operation: "buy",
+    })).toContain("Polygon");
+    expect(polymarketCoworkerWalletMismatchReason(context, {
+      chainId: 137,
+      address: context.signer,
+      operation: "sell",
+    })).toContain("fresh wallet review");
+    expect(polymarketCoworkerWalletMismatchReason(context, {
+      chainId: 137,
+      address: "0xdef0000000000000000000000000000000000456",
+      operation: "buy",
+    })).toContain("wallet named");
+  });
+
+  test("stores only public Polymarket receipt metadata for coworker history", () => {
+    const input = polymarketCoworkerWalletReceiptInput({
+      protocol: "polymarket",
+      network: "polygon",
+      signer: null,
+      operation: "cancel",
+      expectedRevision: 4,
+      authorizedArgumentsHash: "b".repeat(64),
+    }, {
+      status: "cancelled",
+      orderId: null,
+      transactionHashes: [],
+      tradeIds: [],
+      submittedAt: "2026-09-04T12:00:00.000Z",
+    });
+    expect(input).toEqual({
+      expectedRevision: 4,
+      status: "submitted",
+      publicId: "polymarket-cancel:2026-09-04T12:00:00.000Z",
+      transactionHash: null,
+      blockHash: null,
+      network: "polygon",
+      signer: null,
+      operation: "cancel",
+      authorizedArgumentsHash: "b".repeat(64),
+    });
+    expect(JSON.stringify(input)).not.toContain("signature");
+    expect(JSON.stringify(input)).not.toContain("credential");
   });
 
   test("sorts wallet activity by latest update without mutating server data", () => {

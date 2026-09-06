@@ -2,10 +2,10 @@
 
 Matterhorn Desks supports Hyperliquid and Polymarket execution only through a non-custodial loop:
 
-1. Build a read/preview-only order plan.
-2. Create an external-signer handoff.
-3. The user signs and submits outside Matterhorn.
-4. Matterhorn imports or verifies a public receipt only.
+1. The agent builds a non-submitting draft.
+2. Deterministic policy, compliance, network, and protocol checks create an exact reviewed action.
+3. The connected wallet reviews and authorizes the unchanged supported action.
+4. Matterhorn imports or verifies public receipt evidence bound to that reviewed intent.
 
 `pnpm test:market-receipt-qa` is an offline regression harness for step 4. It does not call Hyperliquid, Polymarket, wallets, CLOB/exchange endpoints, or any signing API. It validates that public receipt evidence can be matched back to the handoff and that raw signing material is rejected.
 

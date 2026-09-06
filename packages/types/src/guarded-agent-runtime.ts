@@ -134,6 +134,15 @@ export type MatterhornAgentPrivacyConsentResponse = {
 
 export type MatterhornAgentCapabilityAccess = "read" | "prepare";
 
+export type MatterhornAgentJurisdictionPolicyContext = {
+  evidenceHash: string;
+  policyVersion: string;
+  policyHash: string;
+  decisionHash: string;
+  validUntil: string;
+  polymarketOpenPositionAllowed: boolean;
+};
+
 export type MatterhornAgentCapabilityClaims = {
   version: typeof MATTERHORN_AGENT_CAPABILITY_VERSION;
   jti: string;
@@ -150,6 +159,10 @@ export type MatterhornAgentCapabilityClaims = {
   expiresAt: string;
   policyVersion: string;
   registryVersion: string;
+  /** Hash-only proof that server-owned request policy context is unchanged. */
+  jurisdictionEvidenceHash?: string;
+  /** Content-free server policy decision bound to the edge evidence. */
+  jurisdictionPolicy?: MatterhornAgentJurisdictionPolicyContext;
   coworker?: {
     id: string;
     ownerId: string;
@@ -187,6 +200,20 @@ export type MatterhornAgentToolReceipt = {
   source: string | null;
   freshness: string | null;
   trust: "trusted_runtime" | "untrusted_external";
+  /**
+   * Content-free evidence delivery metadata. It deliberately excludes the
+   * query, tool result, wallet identity, and upstream response body.
+   */
+  evidence?: {
+    delivery: "live" | "certified_cache";
+    observedAt: string | null;
+    ageMs: number | null;
+    freshnessMaxAgeMs: number | null;
+    /** Domain-separated SHA-256 of the exact typed, quarantined model-facing result. Optional only on legacy receipts. */
+    projectionHash?: string;
+    /** Domain-separated SHA-256 of the app/action/network observation identity. Optional only on legacy receipts. */
+    observationHash?: string;
+  };
 };
 
 export type MatterhornAgentRunReceipt = {
@@ -228,6 +255,25 @@ export type MatterhornAgentRunReceipt = {
     chatFiles: number;
     coworkerFiles: number;
     savedMemories: number;
+  };
+  /**
+   * Content-free measurements from the authoritative context compiler. These
+   * explain how narrowly Matterhorn scoped a run without retaining prompt,
+   * Memory, file, tool-argument, or tool-result content. Legacy v1 receipts
+   * may omit this additive field.
+   */
+  contextOptimization?: {
+    compilerVersion: string;
+    systemChars: number;
+    policyChars: number;
+    dataChars: number;
+    activeCryptoTools: number;
+    availableCryptoTools: number;
+    activeToolSchemaChars: number;
+    availableToolSchemaChars: number;
+    dataSectionsIncluded: number;
+    dataSectionsShortened: number;
+    dataSectionsOmitted: number;
   };
   usage: {
     inputTokens: number;

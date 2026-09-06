@@ -22,9 +22,11 @@ export type GuardedRuntimeStateKind =
   | "privacy_consent"
   | "run_grant"
   | "staged_capability"
+  | "consumed_capability"
   | "rollout_bypass"
   | "active_agent_run"
   | "agent_run_scope"
+  | "session_privacy_floor"
   | "user_message_binding"
   | "assistant_message_binding"
   | "crypto_app_reservation"
@@ -55,6 +57,27 @@ type StateRow = {
   updated_at: number;
 };
 
+export type GuardedRuntimeConsumedCapabilityRecord<T> = {
+  jti: string;
+  runId: string;
+  callId: string;
+  workspaceId: string;
+  sessionId: string;
+  claims: T;
+  consumedAtMs: number;
+  expiresAtMs: number;
+};
+
+export type GuardedRuntimeStateRecord<T> = {
+  kind: GuardedRuntimeStateKind;
+  key: string;
+  workspaceId: string;
+  sessionId: string | null;
+  value: T;
+  expiresAtMs: number | null;
+  updatedAtMs: number;
+};
+
 const require = createRequire(import.meta.url);
 
 function openSqliteDatabase(path: string): SqliteDatabase {
@@ -71,6 +94,22 @@ function statement(db: SqliteDatabase, sql: string): SqliteStatement {
   if (db.prepare) return db.prepare(sql);
   if (db.query) return db.query(sql);
   throw new Error("SQLite database does not support prepare/query.");
+}
+
+function parseStateRow<T>(row: StateRow): GuardedRuntimeStateRecord<T> {
+  try {
+    return {
+      kind: row.kind,
+      key: row.state_key,
+      workspaceId: row.workspace_id,
+      sessionId: row.session_id,
+      value: JSON.parse(row.payload_json) as T,
+      expiresAtMs: row.expires_at,
+      updatedAtMs: row.updated_at,
+    };
+  } catch {
+    throw new Error("guarded_runtime_state_corrupt");
+  }
 }
 
 export function guardedRuntimeStatePath(): string {
@@ -121,6 +160,8 @@ export class MatterhornGuardedRuntimeStateStore {
       );
       CREATE INDEX IF NOT EXISTS consumed_capabilities_workspace_idx
         ON consumed_capabilities(workspace_id, expires_at);
+      CREATE UNIQUE INDEX IF NOT EXISTS consumed_capabilities_run_call_idx
+        ON consumed_capabilities(run_id, call_id);
     `);
     chmodSync(path, 0o600);
   }
@@ -209,6 +250,14 @@ export class MatterhornGuardedRuntimeStateStore {
   }
 
   get<T>(kind: GuardedRuntimeStateKind, key: string, nowMs = Date.now()): T | null {
+    return this.getRecord<T>(kind, key, nowMs)?.value ?? null;
+  }
+
+  getRecord<T>(
+    kind: GuardedRuntimeStateKind,
+    key: string,
+    nowMs = Date.now(),
+  ): GuardedRuntimeStateRecord<T> | null {
     const row = statement(this.db, `
       SELECT kind, state_key, workspace_id, session_id, payload_json, expires_at, updated_at
       FROM guarded_state
@@ -216,11 +265,7 @@ export class MatterhornGuardedRuntimeStateStore {
       LIMIT 1
     `).get(kind, key, nowMs) as StateRow | undefined;
     if (!row) return null;
-    try {
-      return JSON.parse(row.payload_json) as T;
-    } catch {
-      throw new Error("guarded_runtime_state_corrupt");
-    }
+    return parseStateRow<T>(row);
   }
 
   /**
@@ -229,39 +274,46 @@ export class MatterhornGuardedRuntimeStateStore {
    * cannot confirm or consume the same record after the first process wins.
    */
   take<T>(kind: GuardedRuntimeStateKind, key: string, nowMs = Date.now()): T | null {
+    return this.takeRecord<T>(kind, key, nowMs)?.value ?? null;
+  }
+
+  takeRecord<T>(
+    kind: GuardedRuntimeStateKind,
+    key: string,
+    nowMs = Date.now(),
+  ): GuardedRuntimeStateRecord<T> | null {
     const row = statement(this.db, `
       DELETE FROM guarded_state
       WHERE kind = ? AND state_key = ? AND (expires_at IS NULL OR expires_at > ?)
-      RETURNING payload_json
-    `).get(kind, key, nowMs) as { payload_json: string } | undefined;
+      RETURNING kind, state_key, workspace_id, session_id, payload_json, expires_at, updated_at
+    `).get(kind, key, nowMs) as StateRow | undefined;
     if (!row) return null;
-    try {
-      return JSON.parse(row.payload_json) as T;
-    } catch {
-      throw new Error("guarded_runtime_state_corrupt");
-    }
+    return parseStateRow<T>(row);
   }
 
   list<T>(kind: GuardedRuntimeStateKind, input: { workspaceId?: string; nowMs?: number } = {}): T[] {
+    return this.listRecords<T>(kind, input).map((record) => record.value);
+  }
+
+  listRecords<T>(
+    kind: GuardedRuntimeStateKind,
+    input: { workspaceId?: string; nowMs?: number } = {},
+  ): Array<GuardedRuntimeStateRecord<T>> {
     const nowMs = input.nowMs ?? Date.now();
     const rows = input.workspaceId
       ? statement(this.db, `
-          SELECT payload_json FROM guarded_state
+          SELECT kind, state_key, workspace_id, session_id, payload_json, expires_at, updated_at
+          FROM guarded_state
           WHERE kind = ? AND workspace_id = ? AND (expires_at IS NULL OR expires_at > ?)
           ORDER BY updated_at ASC
         `).all(kind, input.workspaceId, nowMs)
       : statement(this.db, `
-          SELECT payload_json FROM guarded_state
+          SELECT kind, state_key, workspace_id, session_id, payload_json, expires_at, updated_at
+          FROM guarded_state
           WHERE kind = ? AND (expires_at IS NULL OR expires_at > ?)
           ORDER BY updated_at ASC
         `).all(kind, nowMs);
-    return rows.map((row) => {
-      try {
-        return JSON.parse((row as { payload_json: string }).payload_json) as T;
-      } catch {
-        throw new Error("guarded_runtime_state_corrupt");
-      }
-    });
+    return rows.map((row) => parseStateRow<T>(row as StateRow));
   }
 
   delete(kind: GuardedRuntimeStateKind, key: string): boolean {
@@ -296,12 +348,42 @@ export class MatterhornGuardedRuntimeStateStore {
   }
 
   listConsumedCapabilities<T>(nowMs = Date.now()): T[] {
+    return this.listConsumedCapabilityRecords<T>(nowMs).map((record) => record.claims);
+  }
+
+  listConsumedCapabilityRecords<T>(nowMs = Date.now()): Array<GuardedRuntimeConsumedCapabilityRecord<T>> {
     const rows = statement(this.db, `
-      SELECT claims_json FROM consumed_capabilities
+      SELECT jti, run_id, call_id, workspace_id, session_id, claims_json, consumed_at, expires_at
+      FROM consumed_capabilities
       WHERE expires_at > ?
       ORDER BY consumed_at ASC
     `).all(nowMs);
-    return rows.map((row) => JSON.parse((row as { claims_json: string }).claims_json) as T);
+    return rows.map((rawRow) => {
+      const row = rawRow as {
+        jti: string;
+        run_id: string;
+        call_id: string;
+        workspace_id: string;
+        session_id: string;
+        claims_json: string;
+        consumed_at: number;
+        expires_at: number;
+      };
+      try {
+        return {
+          jti: row.jti,
+          runId: row.run_id,
+          callId: row.call_id,
+          workspaceId: row.workspace_id,
+          sessionId: row.session_id,
+          claims: JSON.parse(row.claims_json) as T,
+          consumedAtMs: row.consumed_at,
+          expiresAtMs: row.expires_at,
+        };
+      } catch {
+        throw new Error("guarded_runtime_state_corrupt");
+      }
+    });
   }
 
   purgeWorkspace(

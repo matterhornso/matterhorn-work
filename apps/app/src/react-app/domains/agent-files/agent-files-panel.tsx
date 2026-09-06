@@ -98,6 +98,11 @@ export function formatAgentFileSize(bytes: number): string {
   return `${(bytes / (1_024 * 1_024)).toFixed(bytes >= 10 * 1_024 * 1_024 ? 0 : 1)} MB`;
 }
 
+export function agentFileSelectionSummary(count: number): string {
+  if (count <= 0) return "No files selected";
+  return `${count} ${count === 1 ? "file" : "files"} selected · 8 maximum`;
+}
+
 function agentFileErrorMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
     if (error.code === "agent_file_blocked") {
@@ -111,7 +116,7 @@ function agentFileErrorMessage(error: unknown): string {
     if (error.code === "agent_file_walrus_publication_claim_invalid") return "This backup request expired or changed. Start it again.";
     if (error.code === "agent_file_walrus_unavailable") return "Encrypted cloud backup is temporarily unavailable.";
     if (error.code === "agent_file_walrus_certification_expired") {
-      return "This cloud copy has expired. The encrypted workspace file is still available, but the public backup cannot be used.";
+      return "This backup has expired. Your workspace file is still available, but its public encrypted copy cannot be used.";
     }
     if (error.code === "agent_file_walrus_renewal_not_due") return "This cloud copy does not need renewal yet.";
     if (error.code === "agent_file_walrus_renewal_in_progress") return "A renewal is already waiting for wallet review.";
@@ -185,8 +190,8 @@ function FileRow(props: {
   onDelete: () => void;
 }) {
   const backupState = props.verification?.lifecycle.status === "renewal_due"
-    ? "Cloud copy needs renewal soon"
-    : props.verification ? "Encrypted cloud copy checked" : "Encrypted cloud copy saved";
+    ? "Backup expires soon"
+    : props.verification ? "Backup checked" : "Backed up";
   return (
     <li className="border-b border-dls-border/70 py-4 last:border-b-0">
       <div className="flex items-start gap-1 sm:gap-3">
@@ -209,34 +214,48 @@ function FileRow(props: {
             {props.item.publication ? <Cloud aria-hidden="true" className="size-3.5" /> : <ShieldCheck aria-hidden="true" className="size-3.5" />}
             {props.item.publication
               ? backupState
-              : "Encrypted in this workspace"}
+              : "Private in Matterhorn"}
           </p>
           {props.item.publication ? (
-            <p className="mt-1 text-xs leading-5 text-dls-secondary">
-              Stored through storage period {props.item.publication.validUntilEpoch}
-              {props.verification ? ` · ${props.verification.lifecycle.remainingEpochs} remaining` : ""}
-            </p>
+            <details className="mt-1 text-xs leading-5 text-dls-secondary">
+              <summary className="min-h-6 cursor-pointer outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Backup details</summary>
+              <p className="mt-1">
+                An encrypted copy is stored on Walrus's public Sui test network through storage period {props.item.publication.validUntilEpoch}. It cannot be opened without the recovery key kept by Matterhorn.
+              </p>
+            </details>
           ) : null}
         </div>
       </div>
 
       {props.confirmingBackup ? (
         <div className="mt-3 border-t border-dls-border/70 pt-3 text-xs leading-5 text-dls-secondary">
-          <p>
-            Only encrypted bytes will be copied to the public Walrus test network. The readable file and recovery key stay private in Matterhorn. Public encrypted bytes may remain after deletion; deleting the file destroys its recovery key.
+          <p className="font-medium text-dls-text">Back up this file?</p>
+          <p className="mt-1">
+            Only the encrypted copy is uploaded. Your readable file and recovery key stay private in Matterhorn.
           </p>
+          <details className="mt-2">
+            <summary className="min-h-6 cursor-pointer outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">What this means</summary>
+            <p className="mt-1">
+              The encrypted copy is stored on Walrus, a public Sui test network. Encrypted bytes may remain after deletion, but deleting the file destroys the recovery key so Matterhorn cannot open them.
+            </p>
+          </details>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button className="min-h-11 sm:min-h-8" size="sm" disabled={props.busy} onClick={props.onConfirmBackup}>
-              {props.busy ? "Backing up…" : "Back up encrypted copy"}
+              {props.busy ? "Saving backup…" : "Back up file"}
             </Button>
             <Button className="min-h-11 sm:min-h-8" size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancelBackup}>Cancel</Button>
           </div>
         </div>
       ) : props.renewingBackup ? (
         <div className="mt-3 border-t border-dls-border/70 pt-3 text-xs leading-5 text-dls-secondary">
-          <p>
-            Renewal uses WAL on Sui testnet. Matterhorn checks the exact transaction; your connected wallet is the only signer and submitter.
+          <p className="font-medium text-dls-text">Keep this backup available longer?</p>
+          <p className="mt-1">
+            Matterhorn prepares and checks the exact transaction. Only your connected wallet can approve, sign, and send it.
           </p>
+          <details className="mt-2">
+            <summary className="min-h-6 cursor-pointer outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Network details</summary>
+            <p className="mt-1">The storage fee is paid in WAL on Sui testnet.</p>
+          </details>
           {props.connectedWalletAddress ? (
             <p className="mt-2 font-mono text-[11px] text-dls-text">
               {props.connectedWalletAddress.slice(0, 10)}…{props.connectedWalletAddress.slice(-6)}
@@ -291,7 +310,7 @@ function FileRow(props: {
           ) : null}
           <Button className="min-h-11 sm:min-h-6" size="xs" variant="ghost" disabled={props.busy} onClick={props.onRecover}>
             <Download aria-hidden="true" className="size-3.5" />
-            Download original
+            Download
           </Button>
           <Button className="min-h-11 sm:min-h-6" size="xs" variant="ghost" disabled={props.busy} onClick={props.onDelete}>
             <Trash2 aria-hidden="true" className="size-3.5" />
@@ -433,7 +452,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
       await props.client.publishAgentFile(workspaceId, item.id, item.revision);
       setConfirmingBackupId(null);
       await refresh();
-      showToast({ title: "Encrypted cloud copy saved", description: "The readable file and recovery key stayed private.", tone: "success" });
+      showToast({ title: "Encrypted backup saved", description: "The readable file and recovery key stayed private.", tone: "success" });
     } catch (cause) {
       setError(agentFileErrorMessage(cause));
     } finally {
@@ -457,8 +476,8 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
       showToast({
         title: renewalDue ? "Backup needs renewal soon" : "Backup checked",
         description: renewalDue
-          ? `The copy matches, with ${result.lifecycle.remainingEpochs} storage periods remaining. Renew it with your Sui wallet.`
-          : `The encrypted public copy matches, with ${result.lifecycle.remainingEpochs} storage periods remaining.`,
+          ? "The encrypted backup matches this file. Renew it with your Sui wallet to keep it available."
+          : "The encrypted backup matches the file in your workspace.",
         tone: renewalDue ? "warning" : "success",
       });
     } catch (cause) {
@@ -523,7 +542,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
       await refresh();
       showToast({
         title: "Cloud copy renewed",
-        description: `Sui confirmed storage through period ${confirmed.verification.validUntilEpoch}.`,
+        description: "Sui confirmed the renewed encrypted backup.",
         tone: "success",
       });
     } catch (cause) {
@@ -620,9 +639,9 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
       <header className="shrink-0 border-b border-dls-border/70 px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-dls-text">Files for your coworker</h2>
+            <h2 className="text-base font-semibold text-dls-text">Files</h2>
             <p className="mt-1 text-xs leading-5 text-dls-secondary">
-              You choose what a coworker can read. Files stay read-only and cannot grant wallet access.
+              Choose what {selectedCoworker?.name ?? "a coworker"} can read in this chat. Files stay read-only and never grant wallet access.
             </p>
           </div>
           {selectedCoworker ? (
@@ -632,7 +651,6 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
             </Button>
           ) : null}
         </div>
-        <p className="mt-3 text-[11px] leading-5 text-dls-secondary">Text, Markdown, CSV, or JSON · 10 MB max · secrets are blocked</p>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5">
@@ -644,20 +662,20 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
           </div>
         ) : query.isError || !query.data ? (
           <div className="py-8" aria-live="polite">
-            <h3 className="text-sm font-semibold text-dls-text">Coworker files are not ready</h3>
+            <h3 className="text-sm font-semibold text-dls-text">Couldn't load files</h3>
             <p className="mt-2 text-sm leading-6 text-dls-secondary">{agentFileErrorMessage(query.error)}</p>
             <Button className="mt-4 min-h-11 sm:min-h-8" size="sm" onClick={() => void query.refetch()}>Try again</Button>
           </div>
         ) : !query.data.files.available ? (
           <div className="py-8">
-            <h3 className="text-sm font-semibold text-dls-text">Private file storage is not enabled</h3>
-            <p className="mt-2 text-sm leading-6 text-dls-secondary">Chat and Memory still work. An administrator must enable encrypted coworker files for this deployment.</p>
+            <h3 className="text-sm font-semibold text-dls-text">Files aren't available here</h3>
+            <p className="mt-2 text-sm leading-6 text-dls-secondary">Chat and saved memory still work. Your workspace owner needs to turn on encrypted files.</p>
           </div>
         ) : coworkers.length === 0 ? (
           <div className="py-8">
             <Users aria-hidden="true" className="size-5 text-dls-secondary" />
             <h3 className="mt-3 text-sm font-semibold text-dls-text">Add a coworker first</h3>
-            <p className="mt-2 text-sm leading-6 text-dls-secondary">A coworker gives each file a clear, limited reader. Choose a starting role.</p>
+            <p className="mt-2 text-sm leading-6 text-dls-secondary">Create a coworker before adding files. Each file stays private to the coworker you choose.</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button className="min-h-11 sm:min-h-8" size="sm" disabled={creatingCoworker !== null} onClick={() => void createCoworker("market_analyst")}>
                 {creatingCoworker === "market_analyst" ? "Adding…" : "Add research coworker"}
@@ -671,7 +689,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
           <>
             <div className="sticky top-0 z-[var(--matterhorn-layer-sticky)] -mx-4 border-b border-dls-border/70 bg-dls-background px-4 py-3">
               <label className="grid gap-1.5 text-xs font-medium text-dls-text">
-                Coworker
+                Who can read them
                 <select
                   className="h-11 w-full rounded-md border border-dls-border bg-dls-surface px-3 text-sm text-dls-text outline-none focus:border-ring focus:ring-2 focus:ring-ring/35 sm:h-9"
                   value={selectedCoworker?.id ?? ""}
@@ -685,9 +703,15 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
                 </select>
               </label>
               <div className="mt-3 flex items-center justify-between gap-3">
-                <p className="text-xs text-dls-secondary">Select up to 8 files for one chat.</p>
-                <Button className="min-h-11 sm:min-h-8" size="sm" disabled={selectedFiles.length === 0} onClick={useInChat}>
-                  Use {selectedFiles.length || "files"} in chat
+                <p className="text-xs text-dls-secondary" aria-live="polite">{agentFileSelectionSummary(selectedFiles.length)}</p>
+                <Button
+                  className="min-h-11 sm:min-h-8"
+                  size="sm"
+                  aria-label={selectedFiles.length > 0 ? `Use ${selectedFiles.length} selected files in chat` : "Use selected files in chat"}
+                  disabled={selectedFiles.length === 0}
+                  onClick={useInChat}
+                >
+                  Use in chat
                 </Button>
               </div>
             </div>
@@ -695,7 +719,8 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
             {uploadOpen ? (
               <section className="border-b border-dls-border/70 py-4" aria-label="Add a coworker file">
                 <h3 className="text-sm font-semibold text-dls-text">Add a private file</h3>
-                <p className="mt-1 text-xs leading-5 text-dls-secondary">It will be encrypted for {selectedCoworker?.name}. Matterhorn scans it before storage.</p>
+                <p className="mt-1 text-xs leading-5 text-dls-secondary">It will be encrypted for {selectedCoworker?.name}. Matterhorn checks for secrets and unsafe file types before saving it.</p>
+                <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Text, Markdown, CSV, or JSON · 10 MB maximum</p>
                 <div className="mt-3 grid gap-3">
                   <label className={cn(buttonVariants({ variant: "outline", size: "sm" }), "min-h-11 w-fit cursor-pointer sm:min-h-8") }>
                     Choose file
@@ -791,7 +816,7 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
         open={Boolean(deleteTarget)}
         title="Delete this file?"
         message={deleteTarget?.publication
-          ? "Matterhorn will destroy the recovery key immediately. The encrypted public bytes may remain, but nobody can open them through Matterhorn."
+          ? "Matterhorn will destroy the recovery key immediately, so it can never open the public encrypted copy again. The encrypted bytes may remain on the test network."
           : "Matterhorn will remove the encrypted file and destroy its recovery key. This cannot be undone."}
         confirmLabel={busyFileId === deleteTarget?.id ? "Deleting…" : "Delete file"}
         cancelLabel="Keep file"

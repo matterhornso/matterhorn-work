@@ -10,10 +10,14 @@ import {
   type MatterhornAgentFileRecord,
 } from "./agent-file-store.js";
 import {
+  matterhornCryptoEvidenceRunIndexKey,
+  type MatterhornCryptoEvidenceRunIndexRecord,
   MatterhornCryptoEvidenceStore,
   type MatterhornCryptoEvidenceRecord,
 } from "./crypto-evidence-store.js";
 import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
+import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 import {
   MatterhornRecoveryErasureLedger,
@@ -21,6 +25,30 @@ import {
 } from "./recovery-erasure-ledger.js";
 
 const SECRET = "test-only-erasure-ledger-secret-with-32-bytes";
+
+function putAuthenticatedRecord(
+  state: MatterhornGuardedRuntimeStateStore,
+  authority: MatterhornDurableStateAuthority,
+  kind: "crypto_evidence_record" | "agent_file_record",
+  record: MatterhornCryptoEvidenceRecord | MatterhornAgentFileRecord,
+): void {
+  const updatedAtMs = Date.parse(record.updatedAt);
+  state.put({
+    kind,
+    key: record.id,
+    workspaceId: record.workspaceId,
+    value: authority.seal({
+      kind,
+      key: record.id,
+      workspaceId: record.workspaceId,
+      sessionId: null,
+      expiresAtMs: null,
+      updatedAtMs,
+      value: record,
+    }),
+    nowMs: updatedAtMs,
+  });
+}
 
 function evidenceRecord(input: {
   id: string;
@@ -160,10 +188,11 @@ describe("recovery erasure ledger", () => {
         wrappedKey: "wrapped-evidence-beta",
         keyContext: "context-evidence-beta",
       });
-      state.put({ kind: "crypto_evidence_record", key: evidence.id, workspaceId: evidence.workspaceId, value: evidence });
-      state.put({ kind: "agent_file_record", key: file.id, workspaceId: file.workspaceId, value: file });
+      const authority = testDurableStateAuthority();
+      putAuthenticatedRecord(state, authority, "crypto_evidence_record", evidence);
+      putAuthenticatedRecord(state, authority, "agent_file_record", file);
       state.put({ kind: "agent_file_renewal_intent", key: file.id, workspaceId: file.workspaceId, value: { secret: "pending" } });
-      state.put({ kind: "crypto_evidence_record", key: unaffected.id, workspaceId: unaffected.workspaceId, value: unaffected });
+      putAuthenticatedRecord(state, authority, "crypto_evidence_record", unaffected);
 
       const destroyedAt = new Date("2026-09-05T12:00:00.000Z");
       const evidenceEvent = ledger.record({
@@ -189,7 +218,7 @@ describe("recovery erasure ledger", () => {
       expect(JSON.stringify([evidenceEvent, fileEvent])).not.toContain("owner-private");
       expect(JSON.stringify([evidenceEvent, fileEvent])).not.toContain("wrapped-");
 
-      const reconciled = ledger.reconcile(state);
+      const reconciled = ledger.reconcile(state, authority);
       expect(reconciled).toMatchObject({
         checkedEvidence: 2,
         checkedAgentFiles: 1,
@@ -197,7 +226,9 @@ describe("recovery erasure ledger", () => {
         agentFilesDeleted: 1,
         ledger: { count: 2 },
       });
-      const erased = state.get<MatterhornCryptoEvidenceRecord>("crypto_evidence_record", evidence.id);
+      const erased = authority.open<MatterhornCryptoEvidenceRecord>(
+        state.getRecord("crypto_evidence_record", evidence.id),
+      );
       expect(erased).toMatchObject({
         state: "key_destroyed",
         revision: 2,
@@ -205,10 +236,28 @@ describe("recovery erasure ledger", () => {
         key: { keyReference: null, wrappedKey: null, keyContext: null, recipientKeyIds: [] },
         updatedAt: destroyedAt.toISOString(),
       });
+      const erasedRunIndex = authority.open<MatterhornCryptoEvidenceRunIndexRecord>(
+        state.getRecord(
+          "crypto_evidence_run_index",
+          matterhornCryptoEvidenceRunIndexKey(evidence),
+          destroyedAt.getTime(),
+        ),
+      );
+      expect(erasedRunIndex).toMatchObject({
+        version: "matterhorn.crypto-evidence-run-index.v1",
+        evidenceId: evidence.id,
+        workspaceIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        ownerIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        coworkerIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        runIdHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        updatedAt: destroyedAt.toISOString(),
+      });
       expect(state.get("agent_file_record", file.id)).toBeNull();
       expect(state.get("agent_file_renewal_intent", file.id)).toBeNull();
-      expect(state.get<MatterhornCryptoEvidenceRecord>("crypto_evidence_record", unaffected.id)).toEqual(unaffected);
-      expect(ledger.reconcile(state)).toMatchObject({ evidenceKeysDestroyed: 0, agentFilesDeleted: 0 });
+      expect(authority.open<MatterhornCryptoEvidenceRecord>(
+        state.getRecord("crypto_evidence_record", unaffected.id),
+      )).toEqual(unaffected);
+      expect(ledger.reconcile(state, authority)).toMatchObject({ evidenceKeysDestroyed: 0, agentFilesDeleted: 0 });
 
       const ledgerBytes = readFileSync(ledgerPath);
       expect(ledgerBytes.includes(Buffer.from("workspace-private"))).toBe(false);
@@ -264,8 +313,9 @@ describe("recovery erasure ledger", () => {
         wrappedKey: "wrapped-live-file",
         keyContext: "context-live-file",
       });
-      state.put({ kind: "crypto_evidence_record", key: evidence.id, workspaceId: evidence.workspaceId, value: evidence });
-      state.put({ kind: "agent_file_record", key: file.id, workspaceId: file.workspaceId, value: file });
+      const authority = testDurableStateAuthority();
+      putAuthenticatedRecord(state, authority, "crypto_evidence_record", evidence);
+      putAuthenticatedRecord(state, authority, "agent_file_record", file);
       ledger.record({
         materialKind: "crypto_evidence",
         wrappedKey: evidence.key.wrappedKey!,
@@ -277,14 +327,14 @@ describe("recovery erasure ledger", () => {
         keyContext: file.key.keyContext,
       });
 
-      const evidenceStore = new MatterhornCryptoEvidenceStore(state, keys, {}, ledger);
+      const evidenceStore = new MatterhornCryptoEvidenceStore(state, keys, {}, ledger, authority);
       await expect(evidenceStore.decrypt({
         workspaceId: evidence.workspaceId,
         ownerId: evidence.ownerId,
         coworkerId: evidence.coworkerId,
         evidenceId: evidence.id,
       })).rejects.toThrow("crypto_evidence_key_destroyed");
-      const fileStore = new MatterhornAgentFileStore(state, keys, ledger);
+      const fileStore = new MatterhornAgentFileStore(state, keys, ledger, authority);
       expect(fileStore.list({ workspaceId: file.workspaceId, ownerId: file.ownerId })).toEqual([]);
       expect(fileStore.get({ workspaceId: file.workspaceId, ownerId: file.ownerId, fileId: file.id })).toBeNull();
       expect(decryptCalls).toBe(0);

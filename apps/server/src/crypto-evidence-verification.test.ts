@@ -10,6 +10,7 @@ import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import { sealMatterhornRunEvidence } from "./crypto-evidence-sealer.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import { MatterhornCryptoEvidenceVerificationService } from "./crypto-evidence-verification.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 function receipt(runId: string): MatterhornAgentRunReceipt {
@@ -73,7 +74,7 @@ describe("crypto evidence verification boundary", () => {
       destroyKey: async () => {},
     };
     try {
-      const store = new MatterhornCryptoEvidenceStore(state, keyManager);
+      const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, testDurableStateAuthority());
       const sealed = await sealMatterhornRunEvidence({
         receipt: receipt("run_evidence"),
         coworkerId: "coworker_private",

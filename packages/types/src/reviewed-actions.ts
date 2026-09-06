@@ -127,7 +127,14 @@ export type ReviewedActionDraftHandoff =
         | {
             operation: "buy"
             marketId: string
+            /** Exact CLOB outcome token. Required for v2 wallet reviews. */
+            tokenId?: string | null
             outcome: string
+            /** Exact wallet execution terms. Required for v2 wallet reviews. */
+            orderType?: "FAK" | null
+            limitPrice?: number | null
+            tickSize?: string | null
+            negativeRisk?: boolean | null
             amountUsdc: number
             amountShares: null
             slippageTolerance: number
@@ -137,7 +144,14 @@ export type ReviewedActionDraftHandoff =
         | {
             operation: "sell"
             marketId: string
+            /** Exact CLOB outcome token. Required for v2 wallet reviews. */
+            tokenId?: string | null
             outcome: string
+            /** Exact wallet execution terms. Required for v2 wallet reviews. */
+            orderType?: "FAK" | null
+            limitPrice?: number | null
+            tickSize?: string | null
+            negativeRisk?: boolean | null
             amountUsdc: null
             amountShares: number
             slippageTolerance: number
@@ -294,7 +308,8 @@ export function isReviewedActionHandoffV2(value: unknown): value is ReviewedActi
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   const handoff = value as Record<string, unknown>
   if (
-    handoff.version !== MATTERHORN_REVIEWED_ACTION_HANDOFF_V2
+    !hasOnlyKeys(handoff, REVIEWED_ACTION_HANDOFF_V2_KEYS)
+    || handoff.version !== MATTERHORN_REVIEWED_ACTION_HANDOFF_V2
     || (handoff.source !== "agent-card" && handoff.source !== "composer-command")
     || !isNonEmptyPublicText(handoff.runId, 128)
     || !isNonEmptyPublicText(handoff.intentHash, 128)
@@ -314,6 +329,7 @@ export function isReviewedActionHandoffV2(value: unknown): value is ReviewedActi
     || Array.isArray(handoff.simulation)
   ) return false
   const simulation = handoff.simulation as Record<string, unknown>
+  if (!hasOnlyKeys(simulation, REVIEWED_ACTION_SIMULATION_KEYS)) return false
   const protocolValid = handoff.protocol === "hyperliquid" || handoff.protocol === "polymarket" || handoff.protocol === "bittensor" || handoff.protocol === "sui"
   const draftValid = protocolValid && isReviewedActionDraftHandoff({
     version: "matterhorn.reviewed-action-handoff.v1",
@@ -321,6 +337,18 @@ export function isReviewedActionHandoffV2(value: unknown): value is ReviewedActi
     source: handoff.source,
     draft: handoff.draft,
   })
+  const certifiedPolymarketTermsBound = handoff.protocol !== "polymarket"
+    || (isRecordLike(handoff.draft)
+      && handoff.draft.operation === "cancel")
+    || (isRecordLike(handoff.draft)
+      && isNonEmptyPublicText(handoff.draft.tokenId, 78)
+      && /^[1-9][0-9]{0,77}$/.test(handoff.draft.tokenId)
+      && BigInt(handoff.draft.tokenId) <= ((1n << 256n) - 1n)
+      && handoff.draft.orderType === "FAK"
+      && isFiniteNumberInRange(handoff.draft.limitPrice, Number.MIN_VALUE, 1 - Number.EPSILON)
+      && isPositiveDecimalText(handoff.draft.tickSize)
+      && Number(handoff.draft.tickSize) < 1
+      && typeof handoff.draft.negativeRisk === "boolean")
   return /^[a-f0-9]{64}$/i.test(String(handoff.intentHash))
     && /^[a-f0-9]{64}$/i.test(String(handoff.policyHash))
     && Number.isFinite(Date.parse(String(handoff.expiresAt)))
@@ -330,6 +358,11 @@ export function isReviewedActionHandoffV2(value: unknown): value is ReviewedActi
     && Number.isFinite(Date.parse(String(simulation.simulatedAt)))
     && (simulation.block === null || isNonEmptyPublicText(simulation.block, 128))
     && draftValid
+    && certifiedPolymarketTermsBound
+}
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
 function isFiniteNumberInRange(value: unknown, minimum: number, maximum: number): value is number {
@@ -360,12 +393,98 @@ function isPositiveDecimalText(value: unknown): value is string {
     && isFiniteNumberInRange(Number(value), Number.MIN_VALUE, 1_000_000_000_000)
     }
 
+function hasOnlyKeys(value: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  const allowed = new Set(allowedKeys)
+  return Object.keys(value).every((key) => allowed.has(key))
+}
+
+const REVIEWED_ACTION_HANDOFF_V1_KEYS = ["version", "protocol", "source", "draft"] as const
+const REVIEWED_ACTION_HANDOFF_V2_KEYS = [
+  "version",
+  "protocol",
+  "source",
+  "runId",
+  "intentHash",
+  "policyHash",
+  "signer",
+  "network",
+  "operation",
+  "amount",
+  "asset",
+  "recipient",
+  "slippage",
+  "expiresAt",
+  "simulation",
+  "preparedAt",
+  "capabilityClass",
+  "draft",
+] as const
+const REVIEWED_ACTION_SIMULATION_KEYS = ["reference", "block", "simulatedAt"] as const
+const HYPERLIQUID_DRAFT_KEYS = [
+  "operation",
+  "network",
+  "asset",
+  "orderId",
+  "side",
+  "size",
+  "orderType",
+  "limitPrice",
+  "slippageBps",
+  "reduceOnly",
+] as const
+const POLYMARKET_ORDER_DRAFT_KEYS = [
+  "operation",
+  "marketId",
+  "tokenId",
+  "outcome",
+  "orderType",
+  "limitPrice",
+  "tickSize",
+  "negativeRisk",
+  "amountUsdc",
+  "amountShares",
+  "slippageTolerance",
+  "orderIds",
+  "cancelAll",
+] as const
+const POLYMARKET_CANCEL_DRAFT_KEYS = [
+  "operation",
+  "marketId",
+  "outcome",
+  "amountUsdc",
+  "amountShares",
+  "slippageTolerance",
+  "orderIds",
+  "cancelAll",
+] as const
+const BITTENSOR_DRAFT_KEYS = [
+  "operation",
+  "sender",
+  "destination",
+  "hotkey",
+  "netuid",
+  "amountTao",
+] as const
+const SUI_DRAFT_KEYS = [
+  "operation",
+  "network",
+  "sender",
+  "recipient",
+  "amount",
+  "coinType",
+  "objectId",
+  "transfers",
+] as const
+const SUI_BATCH_TRANSFER_KEYS = ["recipient", "amount"] as const
+
 export type ReviewedActionOperation = ReviewedActionDraftHandoff["draft"]["operation"]
 
 export function isReviewedActionDraftHandoff(value: unknown): value is ReviewedActionDraftHandoff {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   const handoff = value as Record<string, unknown>
   if (
+    !hasOnlyKeys(handoff, REVIEWED_ACTION_HANDOFF_V1_KEYS)
+    ||
     handoff.version !== "matterhorn.reviewed-action-handoff.v1"
     || (handoff.source !== "agent-card" && handoff.source !== "composer-command")
     || !handoff.draft
@@ -377,6 +496,7 @@ export function isReviewedActionDraftHandoff(value: unknown): value is ReviewedA
 
   const draft = handoff.draft as Record<string, unknown>
   if (handoff.protocol === "hyperliquid") {
+    if (!hasOnlyKeys(draft, HYPERLIQUID_DRAFT_KEYS)) return false
     const hasBase = (draft.network === "testnet" || draft.network === "mainnet")
       && isNonEmptyPublicText(draft.asset, 24)
     if (!hasBase) return false
@@ -413,7 +533,8 @@ export function isReviewedActionDraftHandoff(value: unknown): value is ReviewedA
 
   if (handoff.protocol === "polymarket") {
     if (draft.operation === "cancel") {
-      return isNull(draft.marketId)
+      return hasOnlyKeys(draft, POLYMARKET_CANCEL_DRAFT_KEYS)
+        && isNull(draft.marketId)
         && isNull(draft.outcome)
         && isNull(draft.amountUsdc)
         && isNull(draft.amountShares)
@@ -422,8 +543,19 @@ export function isReviewedActionDraftHandoff(value: unknown): value is ReviewedA
         && typeof draft.cancelAll === "boolean"
         && (draft.cancelAll || draft.orderIds.length > 0)
     }
-    const hasMarketTerms = isNonEmptyPublicText(draft.marketId, 512)
+    const hasMarketTerms = hasOnlyKeys(draft, POLYMARKET_ORDER_DRAFT_KEYS)
+      && isNonEmptyPublicText(draft.marketId, 512)
+      && (draft.tokenId === undefined || draft.tokenId === null
+        || (isNonEmptyPublicText(draft.tokenId, 78)
+          && /^[1-9][0-9]{0,77}$/.test(draft.tokenId)
+          && BigInt(draft.tokenId) <= ((1n << 256n) - 1n)))
       && isNonEmptyPublicText(draft.outcome, 256)
+      && (draft.orderType === undefined || draft.orderType === null || draft.orderType === "FAK")
+      && (draft.limitPrice === undefined || draft.limitPrice === null
+        || isFiniteNumberInRange(draft.limitPrice, Number.MIN_VALUE, 1 - Number.EPSILON))
+      && (draft.tickSize === undefined || draft.tickSize === null
+        || (isPositiveDecimalText(draft.tickSize) && Number(draft.tickSize) < 1))
+      && (draft.negativeRisk === undefined || draft.negativeRisk === null || typeof draft.negativeRisk === "boolean")
       && isFiniteNumberInRange(draft.slippageTolerance, 0.01, 50)
       && Array.isArray(draft.orderIds)
       && draft.orderIds.length === 0
@@ -439,7 +571,8 @@ export function isReviewedActionDraftHandoff(value: unknown): value is ReviewedA
   }
 
   if (handoff.protocol === "bittensor") {
-    const hasBase = (draft.sender === null || isNonEmptyPublicText(draft.sender, 128))
+    const hasBase = hasOnlyKeys(draft, BITTENSOR_DRAFT_KEYS)
+      && (draft.sender === null || isNonEmptyPublicText(draft.sender, 128))
       && isNonEmptyPublicText(draft.amountTao, 64)
       && isFiniteNumberInRange(Number(draft.amountTao), Number.MIN_VALUE, 21_000_000)
     if (!hasBase) return false
@@ -456,6 +589,7 @@ export function isReviewedActionDraftHandoff(value: unknown): value is ReviewedA
   }
 
   if (handoff.protocol === "sui") {
+    if (!hasOnlyKeys(draft, SUI_DRAFT_KEYS)) return false
     if (draft.network !== "testnet" && draft.network !== "mainnet") return false
     if (draft.sender !== null && !isSuiAddress(draft.sender)) return false
     if (!Array.isArray(draft.transfers)) return false
@@ -492,6 +626,8 @@ export function isReviewedActionDraftHandoff(value: unknown): value is ReviewedA
       && transfers.every((transfer) => (
         transfer
         && typeof transfer === "object"
+        && !Array.isArray(transfer)
+        && hasOnlyKeys(transfer as Record<string, unknown>, SUI_BATCH_TRANSFER_KEYS)
         && isSuiAddress((transfer as Record<string, unknown>).recipient)
         && isPositiveDecimalText((transfer as Record<string, unknown>).amount)
       ))

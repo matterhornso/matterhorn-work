@@ -132,9 +132,11 @@ import type {
   MatterhornAgentFileWalrusRenewalPrepareResponse,
   MatterhornAgentFileWalrusVerification,
   MatterhornCoworkerInboxItem,
+  MatterhornCoworkerInboxSummary,
   MatterhornCoworkerProfile,
   MatterhornCoworkerResourceRecommendation,
   MatterhornCoworkerResourceScope,
+  MatterhornCoworkerSessionBinding,
   MatterhornCoworkerState,
   MatterhornCoworkerTemplateId,
   MatterhornCoworkerWatch,
@@ -165,6 +167,7 @@ import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } fro
 export type MatterhornCoworkerAccountProfile = Omit<MatterhornCoworkerProfile, "ownerId">;
 export type MatterhornCoworkerAccountState = Omit<MatterhornCoworkerWorkingState, "ownerId">;
 export type MatterhornCoworkerAccountResourceScope = Omit<MatterhornCoworkerResourceScope, "ownerId">;
+export type MatterhornCoworkerAccountSessionBinding = Omit<MatterhornCoworkerSessionBinding, "ownerId" | "workspaceId">;
 export type MatterhornCoworkerAccountResourceRecommendation = MatterhornCoworkerResourceRecommendation;
 export type MatterhornCoworkerAccountWatch = Omit<MatterhornCoworkerWatch, "ownerId">;
 export type MatterhornCoworkerAccountInboxItem = Omit<MatterhornCoworkerInboxItem, "ownerId">;
@@ -1903,9 +1906,60 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     listCoworkers: (workspaceId: string) => requestJson<{
       mode: "off" | "internal" | "invite" | "public";
       coworkers: MatterhornCoworkerAccountProfile[];
+      inbox?: {
+        totalUnread: number;
+        byCoworker: MatterhornCoworkerInboxSummary[];
+      };
     }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers`, {
       token,
       timeoutMs: timeouts.status,
+    }),
+    getCoworkerSessionBinding: (workspaceId: string, sessionId: string) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      active: boolean;
+      binding: MatterhornCoworkerAccountSessionBinding | null;
+      coworker: MatterhornCoworkerAccountProfile | null;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/coworker`, {
+      token,
+      timeoutMs: timeouts.status,
+    }),
+    bindCoworkerSession: (
+      workspaceId: string,
+      sessionId: string,
+      input: { coworkerId: string; coworkerRevision: number; expectedRevision: number },
+    ) => requestJson<{
+      mode: "internal" | "invite" | "public";
+      active: true;
+      binding: MatterhornCoworkerAccountSessionBinding;
+      coworker: MatterhornCoworkerAccountProfile;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/coworker`, {
+      token,
+      method: "PUT",
+      body: input,
+      timeoutMs: timeouts.config,
+    }),
+    inheritCoworkerSessionBinding: (
+      workspaceId: string,
+      sourceSessionId: string,
+      targetSessionId: string,
+    ) => requestJson<{
+      mode: "internal" | "invite" | "public";
+      active: true;
+      binding: MatterhornCoworkerAccountSessionBinding;
+      coworker: MatterhornCoworkerAccountProfile;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sourceSessionId)}/coworker/fork`, {
+      token,
+      method: "POST",
+      body: { targetSessionId },
+      timeoutMs: timeouts.config,
+    }),
+    unbindCoworkerSession: (workspaceId: string, sessionId: string, expectedRevision: number) => requestJson<{
+      deleted: true;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/coworker`, {
+      token,
+      method: "DELETE",
+      body: { expectedRevision },
+      timeoutMs: timeouts.config,
     }),
     createCoworkerFromTemplate: (
       workspaceId: string,
@@ -1926,6 +1980,28 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/state`, {
       token,
       timeoutMs: timeouts.status,
+    }),
+    setCoworkerState: (
+      workspaceId: string,
+      coworkerId: string,
+      input: {
+        expectedRevision: number;
+        profileRevision: number;
+        decisions: MatterhornCoworkerAccountState["decisions"];
+        positions: MatterhornCoworkerAccountState["positions"];
+        unresolvedRisks: MatterhornCoworkerAccountState["unresolvedRisks"];
+        pendingActions: MatterhornCoworkerAccountState["pendingActions"];
+        evidenceReferences: MatterhornCoworkerAccountState["evidenceReferences"];
+        approvedMemoryIds: MatterhornCoworkerAccountState["approvedMemoryIds"];
+      },
+    ) => requestJson<{
+      mode: "off" | "internal" | "invite" | "public";
+      state: MatterhornCoworkerAccountState;
+    }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/coworkers/${encodeURIComponent(coworkerId)}/state`, {
+      token,
+      method: "PUT",
+      body: input,
+      timeoutMs: timeouts.config,
     }),
     getCoworkerResources: (workspaceId: string, coworkerId: string) => requestJson<{
       mode: "off" | "internal" | "invite" | "public";

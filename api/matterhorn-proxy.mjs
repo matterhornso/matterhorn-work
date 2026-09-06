@@ -1,13 +1,18 @@
 import { isIP } from "node:net";
+import { createHash, createHmac } from "node:crypto";
 
 const INTERNAL_PATH_PARAM = "__matterhorn_path";
 const ALLOWED_ROOTS = new Set([
   "api",
   "capabilities",
+  "coworker-access",
+  "crypto-apps",
+  "developer",
   "env",
   "experimental",
   "files",
   "health",
+  "mcp",
   "opencode",
   "runtime",
   "tokens",
@@ -22,12 +27,25 @@ const FORWARDED_REQUEST_HEADERS_TO_REMOVE = [
   "host",
   "x-forwarded-for",
   "x-real-ip",
+  "x-vercel-forwarded-for",
+  "x-vercel-id",
+  "x-vercel-ip-city",
+  "x-vercel-ip-continent",
+  "x-vercel-ip-country",
+  "x-vercel-ip-country-region",
+  "x-vercel-ip-latitude",
+  "x-vercel-ip-longitude",
+  "x-vercel-ip-postal-code",
+  "x-vercel-ip-timezone",
   "x-matterhorn-client-ip",
+  "x-matterhorn-edge-jurisdiction",
   "x-matterhorn-host-token",
   "x-matterhorn-proxy-secret",
   "x-openwork-host-token",
 ];
 const FORWARDED_RESPONSE_HEADERS_TO_REMOVE = ["connection", "content-length", "transfer-encoding"];
+const EDGE_JURISDICTION_VERSION = "matterhorn.edge-jurisdiction.v2";
+const EDGE_JURISDICTION_TTL_MS = 60_000;
 
 export function normalizeProxyPath(value) {
   const path = typeof value === "string" ? value.trim() : "";
@@ -36,7 +54,9 @@ export function normalizeProxyPath(value) {
   const segments = path.split("/").filter(Boolean);
   if (segments.some((segment) => segment === "." || segment === "..")) return null;
   if (!segments[0] || !ALLOWED_ROOTS.has(segments[0])) return null;
-  return `/${segments.join("/")}`;
+  const normalized = `/${segments.join("/")}`;
+  if (segments[0] === "mcp" && normalized !== "/mcp/guarded") return null;
+  return normalized;
 }
 
 export function resolveControlPlaneUrl(rawValue, allowHttp = false) {
@@ -78,6 +98,73 @@ function forwardedClientIp(request) {
     ?.split(",")[0]
     ?.trim() ?? "";
   return isIP(candidate) ? candidate : null;
+}
+
+function base64Url(value) {
+  return Buffer.from(value).toString("base64url");
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function normalizedVercelCountry(value) {
+  const country = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return /^[A-Z]{2}$/.test(country) ? country : null;
+}
+
+function normalizedVercelRegion(value) {
+  const region = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return /^[A-Z0-9]{1,3}$/.test(region) ? region : null;
+}
+
+function boundedVercelRequestId(value) {
+  const requestId = typeof value === "string" ? value.trim() : "";
+  return requestId.length > 0 && requestId.length <= 256 && /^[A-Za-z0-9:._-]+$/.test(requestId)
+    ? requestId
+    : null;
+}
+
+/**
+ * Create a short-lived, request-bound proof of Vercel's country signal.
+ * The proof contains no raw IP or request id and is accepted by the backend
+ * only together with the independently verified same-origin proxy secret.
+ */
+export function createEdgeJurisdictionAttestation(input) {
+  const country = normalizedVercelCountry(input?.country);
+  const region = normalizedVercelRegion(input?.region);
+  const clientIp = typeof input?.clientIp === "string" && isIP(input.clientIp) ? input.clientIp : null;
+  const method = typeof input?.method === "string" ? input.method.trim().toUpperCase() : "";
+  const path = normalizeProxyPath(input?.path);
+  const requestId = boundedVercelRequestId(input?.requestId);
+  const secret = typeof input?.secret === "string" ? input.secret.trim() : "";
+  const issuedAtMs = input?.issuedAtMs ?? Date.now();
+  if (
+    !country
+    || !clientIp
+    || !/^[A-Z]+$/.test(method)
+    || !path
+    || !requestId
+    || secret.length < 16
+    || !Number.isSafeInteger(issuedAtMs)
+    || issuedAtMs <= 0
+  ) return null;
+
+  const payload = {
+    version: EDGE_JURISDICTION_VERSION,
+    source: "vercel_ip_country",
+    country,
+    region,
+    method,
+    path,
+    clientIpHash: sha256(clientIp),
+    requestIdHash: sha256(requestId),
+    issuedAtMs,
+    expiresAtMs: issuedAtMs + EDGE_JURISDICTION_TTL_MS,
+  };
+  const encoded = base64Url(JSON.stringify(payload));
+  const signature = createHmac("sha256", secret).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
 }
 
 function requestUrl(request) {
@@ -144,6 +231,20 @@ export async function matterhornProxy(request) {
   headers.set("x-matterhorn-proxy-secret", proxySecret);
   const clientIp = forwardedClientIp(request);
   if (clientIp) headers.set("x-matterhorn-client-ip", clientIp);
+  const jurisdictionAttestation = process.env.VERCEL === "1"
+    ? createEdgeJurisdictionAttestation({
+        country: request.headers.get("x-vercel-ip-country"),
+        region: request.headers.get("x-vercel-ip-country-region"),
+        clientIp,
+        method: request.method,
+        path,
+        requestId: request.headers.get("x-vercel-id"),
+        secret: proxySecret,
+      })
+    : null;
+  if (jurisdictionAttestation) {
+    headers.set("x-matterhorn-edge-jurisdiction", jurisdictionAttestation);
+  }
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
   const init = {

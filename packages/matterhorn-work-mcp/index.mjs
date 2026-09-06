@@ -883,7 +883,7 @@ const tools = [
   },
   {
     name: "matterhorn_hyperliquid_prepare_handoff",
-    description: "Build a non-custodial external-signer handoff for a Hyperliquid order. The user signs and submits with their OWN wallet; Matterhorn never signs, submits, or holds keys.",
+    description: "Build a non-custodial Hyperliquid order handoff for exact connected-wallet review. Matterhorn never signs, submits, or holds keys.",
     inputSchema: {
       type: "object",
       properties: {
@@ -895,38 +895,6 @@ const tools = [
         slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
       },
       required: ["asset", "side", "size"],
-    },
-  },
-  {
-    name: "matterhorn_hyperliquid_create_sign_request",
-    description: "Create a Phase 1 Hyperliquid external sign request for operator-owned testnet validation. Requires executionMode=testnet_external_signer; Matterhorn does not sign, accept signed artifacts, or submit.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        executionMode: { type: "string", enum: ["testnet_external_signer"] },
-        asset: { type: "string" },
-        side: { type: "string", enum: ["buy", "sell", "long", "short"] },
-        size: { oneOf: [{ type: "number" }, { type: "string" }] },
-        price: { oneOf: [{ type: "number" }, { type: "string" }] },
-        reduceOnly: { type: "boolean" },
-        slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
-      },
-      required: ["executionMode", "asset", "side", "size"],
-    },
-  },
-  {
-    name: "matterhorn_hyperliquid_validate_external_artifact",
-    description: "Validate Phase 2 Hyperliquid public/redacted artifact metadata against a Phase 1 sign request. Returns a public audit receipt candidate only; Matterhorn does not accept raw signing material or submit.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        signRequest: { type: "object", description: "The matterhorn.market.external-sign-request.v1 packet from Phase 1." },
-        artifact: {
-          type: "object",
-          description: "Public/redacted metadata only: hashes, signerAddress, producedAt, signedArtifactPublicHash, signedArtifactRedacted=true, canSubmit=false.",
-        },
-      },
-      required: ["signRequest", "artifact"],
     },
   },
   {
@@ -951,7 +919,7 @@ const tools = [
         marketId: { type: "string", description: "Optional Polymarket market id for detail/orderbook/preview/monitor." },
         outcome: { type: "string", description: "Optional outcome label such as Yes or No." },
         side: { type: "string", enum: ["yes", "no"] },
-        amountUsdc: { oneOf: [{ type: "number" }, { type: "string" }], description: "USDC notional for a bet preview." },
+        amountUsdc: { oneOf: [{ type: "number" }, { type: "string" }], description: "Legacy field name for the pUSD notional in a Polymarket CLOB V2 preview." },
         slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
         limit: { type: "number" },
       },
@@ -1067,7 +1035,7 @@ const tools = [
   },
   {
     name: "matterhorn_polymarket_prepare_handoff",
-    description: "Build a non-custodial external-signer handoff for a Polymarket order. The user signs and submits with their OWN wallet; Matterhorn never signs, submits, or holds keys. A geoblocked region returns a blocked preview and no handoff.",
+    description: "Build a compliance-gated Polymarket order handoff for exact connected-wallet review. Matterhorn never signs, submits, or holds keys. A geoblocked region returns a blocked preview and no handoff.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1078,37 +1046,6 @@ const tools = [
         slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
       },
       required: ["marketId", "amountUsdc"],
-    },
-  },
-  {
-    name: "matterhorn_polymarket_create_sign_request",
-    description: "Create a Phase 1 Polymarket external sign request for operator-owned testnet validation. Requires executionMode=testnet_external_signer; Matterhorn does not sign, accept signed artifacts, store CLOB secrets, or submit.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        executionMode: { type: "string", enum: ["testnet_external_signer"] },
-        marketId: { type: "string" },
-        outcome: { type: "string" },
-        side: { type: "string", enum: ["yes", "no"] },
-        amountUsdc: { oneOf: [{ type: "number" }, { type: "string" }] },
-        slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
-      },
-      required: ["executionMode", "marketId", "amountUsdc"],
-    },
-  },
-  {
-    name: "matterhorn_polymarket_validate_external_artifact",
-    description: "Validate Phase 2 Polymarket public/redacted artifact metadata against a Phase 1 sign request. Returns a public audit receipt candidate only; Matterhorn does not accept CLOB credentials or submit.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        signRequest: { type: "object", description: "The matterhorn.market.external-sign-request.v1 packet from Phase 1." },
-        artifact: {
-          type: "object",
-          description: "Public/redacted metadata only: hashes, signerAddress, producedAt, signedArtifactPublicHash, signedArtifactRedacted=true, canSubmit=false.",
-        },
-      },
-      required: ["signRequest", "artifact"],
     },
   },
   {
@@ -2178,57 +2115,62 @@ function matterhornMarketExecutionChain() {
   return {
     success: true,
     version: "matterhorn.market.execution-chain-guide.v1",
-    title: "Matterhorn market execution chain",
-    summary: "Preview-only, testnet-external-signer, public/redacted evidence path for Hyperliquid and Polymarket.",
+    title: "Connected-wallet transaction path",
+    summary: "The agent drafts exact terms; deterministic checks and a separate connected-wallet ticket control every supported submission.",
     safety: {
       canSubmit: false,
       liveSubmissionEnabled: false,
       nonCustodial: true,
-      externalSignerRequired: true,
+      connectedWalletRequired: true,
       acceptsSecrets: false,
       acceptsRawSignatures: false,
       acceptsSignedPayloads: false,
     },
     stages: [
       {
-        id: "preview_handoff",
-        label: "Preview / handoff",
-        commands: [
-          "matterhorn-work hyperliquid handoff --asset BTC --side buy --size 0.001 --price <testnet-price> --json",
-          "matterhorn-work polymarket handoff --market-id <testnet-market-id> --side yes --amount-usdc 1 --json",
-        ],
+        id: "agent_draft",
+        label: "Agent draft",
+        purpose: "Turn the request into exact proposed terms without submission authority.",
+        commands: [],
+        output: "A non-submitting draft that identifies the venue, action, amount, limits, and unresolved inputs.",
       },
       {
-        id: "external_sign_request",
-        label: "External sign request",
-        commands: [
-          "matterhorn-work hyperliquid sign-request BTC --side buy --size 0.001 --price <testnet-price> --execution-mode testnet_external_signer --json",
-          "matterhorn-work polymarket sign-request <testnet-market-id> --side yes --amount-usdc 1 --execution-mode testnet_external_signer --json",
-        ],
+        id: "policy_and_simulation",
+        label: "Safety checks",
+        purpose: "Apply workspace limits, compliance, network checks, and a fresh protocol simulation.",
+        commands: [],
+        output: "A hash-bound reviewed action or a clear block. Any material change requires regeneration.",
       },
       {
-        id: "redacted_artifact_validation",
-        label: "Redacted artifact validation",
-        commands: [
-          "matterhorn-work hyperliquid validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
-          "matterhorn-work polymarket validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
-        ],
+        id: "wallet_review",
+        label: "Wallet review",
+        purpose: "Show exact terms, risks, expiry, network, signer, fees, and simulation before approval.",
+        commands: [],
+        output: "A short-lived ticket that cannot be edited after review.",
       },
       {
-        id: "artifact_reconciliation",
-        label: "Artifact reconciliation",
-        commands: [
-          "matterhorn-work crypto artifact-reconcile --hyperliquid-artifact-validation <hyperliquid-artifact-validation.json> --polymarket-artifact-validation <polymarket-artifact-validation.json> --strict --json",
-        ],
+        id: "wallet_submission",
+        label: "Wallet authorization",
+        purpose: "Let the connected wallet authorize the unchanged reviewed action.",
+        commands: [],
+        output: "The wallet rejects the ticket or submits the exact supported action. Agents and watches cannot do this.",
       },
       {
-        id: "public_receipt_import",
-        label: "Public receipt import",
-        commands: [
-          "matterhorn-work hyperliquid receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
-          "matterhorn-work polymarket receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
-        ],
+        id: "receipt_reconciliation",
+        label: "Receipt",
+        purpose: "Match public protocol evidence back to the reviewed intent hash.",
+        commands: [],
+        output: "A public status receipt that never contains secrets, signatures, or raw wallet material.",
       },
+    ],
+    forbidden: [
+      "seed phrase",
+      "private key",
+      "API secret",
+      "raw signature",
+      "signed payload",
+      "wallet export",
+      "agent or watch submission",
     ],
   };
 }
@@ -3775,9 +3717,13 @@ async function handleTool(name, args = {}) {
     case "matterhorn_hyperliquid_prepare_handoff":
       return callServer("/api/hyperliquid/orders/handoff", { method: "POST", body: args });
     case "matterhorn_hyperliquid_create_sign_request":
-      return callServer("/api/hyperliquid/orders/external-sign-request", { method: "POST", body: args });
     case "matterhorn_hyperliquid_validate_external_artifact":
-      return callServer("/api/hyperliquid/orders/external-artifact/validate", { method: "POST", body: args });
+      return {
+        success: false,
+        code: "wallet_airlock_required",
+        tool: name,
+        message: "This deprecated Hyperliquid signing tool cannot accept signing artifacts or bypass wallet review. Prepare the order and use the connected-wallet ticket.",
+      };
     case "matterhorn_hyperliquid_verify_receipt":
       return callServer("/api/hyperliquid/orders/receipt", { method: "POST", body: args });
     case "matterhorn_polymarket_chat":
@@ -3805,9 +3751,13 @@ async function handleTool(name, args = {}) {
     case "matterhorn_polymarket_prepare_handoff":
       return callServer("/api/polymarket/orders/handoff", { method: "POST", body: args });
     case "matterhorn_polymarket_create_sign_request":
-      return callServer("/api/polymarket/orders/external-sign-request", { method: "POST", body: args });
     case "matterhorn_polymarket_validate_external_artifact":
-      return callServer("/api/polymarket/orders/external-artifact/validate", { method: "POST", body: args });
+      return {
+        success: false,
+        code: "wallet_airlock_required",
+        tool: name,
+        message: "This deprecated Polymarket signing tool cannot accept signing artifacts or bypass wallet review. Prepare an eligible order and use the connected Polygon-wallet ticket.",
+      };
     case "matterhorn_polymarket_verify_receipt":
       return callServer("/api/polymarket/orders/receipt", { method: "POST", body: args });
     case "matterhorn_bittensor_chat":

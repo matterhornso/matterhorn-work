@@ -18,7 +18,12 @@ function draft(): MatterhornUnsignedCryptoAppManifest {
     description: "SDK and server canonical-signature compatibility fixture.",
     manifestRevision: "1.0.0",
     publisher: { id: "compat.publisher", keyId: "compat-key", algorithm: "ed25519" },
-    transport: { kind: "openapi", endpoint: "https://compat.example/v1" },
+    transport: {
+      kind: "openapi",
+      endpoint: "https://compat.example",
+      profile: "matterhorn.openapi-action.v1",
+      operations: [{ actionId: "compat_read", method: "POST", path: "/v1/compat/read" }],
+    },
     authentication: { type: "none", scopes: [] },
     networks: [{ protocol: "sui", chainId: "sui:testnet", environment: "testnet" }],
     actions: [{

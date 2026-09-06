@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createHmac } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MatterhornAgentCapabilityBroker } from "./agent-capability.js";
+import type { MatterhornDurableStateAuthorityEnvelope } from "./durable-state-authority.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import { evaluatePolymarketOpenPositionJurisdiction } from "./polymarket-jurisdiction-policy.js";
+import type { MatterhornTrustedJurisdiction } from "./trusted-jurisdiction.js";
 
 const originalSigningSecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
 const originalRuntimeSecret = process.env.MATTERHORN_AGENT_RUNTIME_SECRET;
@@ -33,6 +37,93 @@ function brokerWithRun() {
   return broker;
 }
 
+function resignCapability(token: string, mutate: (claims: Record<string, unknown>) => void): string {
+  const [payload] = token.split(".");
+  if (!payload) throw new Error("test_capability_payload_missing");
+  const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, unknown>;
+  mutate(claims);
+  const nextPayload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const signature = createHmac("sha256", process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET!)
+    .update(nextPayload)
+    .digest("base64url");
+  return `${nextPayload}.${signature}`;
+}
+
+const JURISDICTION_NOW = new Date("2026-09-04T12:00:00.000Z");
+
+function polymarketJurisdiction(country: string): MatterhornTrustedJurisdiction {
+  return {
+    version: "matterhorn.edge-jurisdiction.v2",
+    source: "vercel_ip_country",
+    country,
+    region: null,
+    observedAt: "2026-09-04T11:59:59.000Z",
+    expiresAt: "2026-09-04T12:00:59.000Z",
+    evidenceHash: country === "CH" ? "c".repeat(64) : "b".repeat(64),
+  };
+}
+
+function polymarketPolicyContext(country: string) {
+  const evaluated = evaluatePolymarketOpenPositionJurisdiction(
+    polymarketJurisdiction(country),
+    JURISDICTION_NOW,
+  );
+  if (!evaluated.jurisdictionEvidenceHash || !evaluated.validUntil) {
+    throw new Error("test_jurisdiction_context_missing");
+  }
+  return {
+    evidenceHash: evaluated.jurisdictionEvidenceHash,
+    policyVersion: evaluated.policyVersion,
+    policyHash: evaluated.policyHash,
+    decisionHash: evaluated.decisionHash,
+    validUntil: evaluated.validUntil,
+    polymarketOpenPositionAllowed: evaluated.canOpenPosition,
+  };
+}
+
+function polymarketPrepareBroker(input: { appId?: string; country?: string; includePolicy?: boolean } = {}) {
+  const broker = new MatterhornAgentCapabilityBroker("enforce");
+  broker.setCoworkerResolver(() => true);
+  const context = polymarketPolicyContext(input.country ?? "CH");
+  const appId = input.appId ?? "matterhorn.polymarket-wallet-preview";
+  broker.createRunGrant({
+    runId: "run_polymarket_prepare",
+    workspaceId: "ws_1",
+    sessionId: "ses_polymarket_prepare",
+    agentId: "matterhorn-polymarket",
+    executionMode: "work",
+    requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_polymarket_preview_order": true }],
+    coworker: {
+      id: "cw_polymarket",
+      workspaceId: "ws_1",
+      ownerId: "account_1",
+      revision: 1,
+      policyVersion: "coworker-policy-1",
+      allowedAppIds: [appId],
+      allowedActionIds: ["polymarket_preview_trade"],
+      allowedNetworks: ["polygon:mainnet"],
+      automaticAuthorities: ["prepare"],
+      actionBindings: [{
+        connectionId: "cxc_polymarket",
+        appId,
+        manifestRevision: "1.0.0",
+        actionId: "polymarket_preview_trade",
+        network: "polygon:mainnet",
+        proxyToolName: "matterhorn_polymarket_preview_order",
+        access: "prepare",
+      }],
+      allowedDataLabels: ["public", "wallet_private", "untrusted_external"],
+      allowUnverifiedProviderConsent: false,
+      maxReadCallsPerRun: 0,
+      maxPrepareCallsPerFamily: 1,
+    },
+    jurisdictionEvidenceHash: context.evidenceHash,
+    ...(input.includePolicy === false ? {} : { jurisdictionPolicy: context }),
+    now: JURISDICTION_NOW,
+  });
+  return { broker, context };
+}
+
 describe("agent capability broker", () => {
   test("bounds persisted run-grant expiry to the exact accepted run", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-expiry-"));
@@ -49,9 +140,8 @@ describe("agent capability broker", () => {
       expiresAtMs,
       now,
     });
-    expect(state.list<{ expiresAtMs: number }>("run_grant", { nowMs: now.getTime() })).toEqual([
-      expect.objectContaining({ expiresAtMs }),
-    ]);
+    const [stored] = state.listRecords("run_grant", { nowMs: now.getTime() });
+    expect(stored?.expiresAtMs).toBe(expiresAtMs);
     expect(() => broker.createRunGrant({
       runId: "run_too_long",
       workspaceId: "ws_short_lived",
@@ -61,6 +151,7 @@ describe("agent capability broker", () => {
       expiresAtMs: now.getTime() + 6 * 60 * 60 * 1_000 + 1,
       now,
     })).toThrow("capability_run_expiry_invalid");
+    broker.close();
     state.close();
   });
 
@@ -79,6 +170,326 @@ describe("agent capability broker", () => {
     const claims = broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args });
     expect(claims.workspaceId).toBe("ws_1");
     expect(() => broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args })).toThrow("capability_replayed");
+  });
+
+  test("seals durable tool context to the exact consumed call and bounded reconciliation window", () => {
+    const broker = brokerWithRun();
+    const now = new Date();
+    const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
+    const capability = broker.issue({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+      now,
+    });
+    broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args, now });
+    const context = {
+      reservationId: "crypto_app_reservation_test",
+      appId: "matterhorn.sui-testnet",
+      actionId: "sui_account_read",
+      canonicalArgumentsHash: "a".repeat(64),
+    };
+    const sealed = broker.sealConsumedToolContext({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      toolName: "matterhorn_sui_get_balance",
+      context,
+      now,
+    });
+    expect(sealed?.seal).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(sealed?.seal).not.toContain(process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET!);
+    expect(broker.verifyConsumedToolContext({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      toolName: "matterhorn_sui_get_balance",
+      context,
+      seal: sealed!.seal,
+      now,
+    })).toMatchObject({ access: "read", argsHash: capability.claims.argsHash });
+    expect(broker.verifyConsumedToolContext({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      toolName: "matterhorn_sui_get_balance",
+      context: { ...context, actionId: "sui_transfer_preview" },
+      seal: sealed!.seal,
+      now,
+    })).toBeNull();
+    expect(broker.verifyConsumedToolContext({
+      runId: "run_1",
+      workspaceId: "ws_other",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      toolName: "matterhorn_sui_get_balance",
+      context,
+      seal: sealed!.seal,
+      now,
+    })).toBeNull();
+    expect(broker.verifyConsumedToolContext({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      callId: "call_sealed_context",
+      toolName: "matterhorn_sui_get_balance",
+      context,
+      seal: sealed!.seal,
+      now: new Date(now.getTime() + 2 * 60_000 + 1),
+    })).toBeNull();
+  });
+
+  test("rejects correctly signed capabilities with open or invalid claim contracts", () => {
+    const broker = brokerWithRun();
+    const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
+    const capability = broker.issue({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      callId: "call_closed_claims",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    });
+    const withSubmitAuthority = resignCapability(capability.token, (claims) => {
+      claims.submit = true;
+    });
+    expect(() => broker.consume({ token: withSubmitAuthority, toolName: "matterhorn_sui_get_balance", args }))
+      .toThrow("capability_invalid_signature");
+    const withUnboundedExpiry = resignCapability(capability.token, (claims) => {
+      claims.expiresAt = "2999-01-01T00:00:00.000Z";
+    });
+    expect(() => broker.consume({ token: withUnboundedExpiry, toolName: "matterhorn_sui_get_balance", args }))
+      .toThrow("capability_invalid_signature");
+  });
+
+  test("does not let a repeated run or session reset guarded budgets", () => {
+    const broker = brokerWithRun();
+    expect(() => broker.createRunGrant({
+      runId: "run_1",
+      workspaceId: "ws_1",
+      sessionId: "ses_new",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+    })).toThrow("capability_run_already_exists");
+    expect(() => broker.createRunGrant({
+      runId: "run_new",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+    })).toThrow("capability_session_already_active");
+  });
+
+  test("binds capabilities to the server-owned jurisdiction evidence hash", () => {
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    const jurisdictionEvidenceHash = "a".repeat(64);
+    broker.createRunGrant({
+      runId: "run_jurisdiction",
+      workspaceId: "ws_1",
+      sessionId: "ses_jurisdiction",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      jurisdictionEvidenceHash,
+    });
+    const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
+    const capability = broker.issue({
+      runId: "run_jurisdiction",
+      workspaceId: "ws_1",
+      sessionId: "ses_jurisdiction",
+      callId: "call_jurisdiction",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    });
+    expect(capability.claims.jurisdictionEvidenceHash).toBe(jurisdictionEvidenceHash);
+    expect(broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args }))
+      .toMatchObject({ jurisdictionEvidenceHash });
+    expect(() => broker.createRunGrant({
+      runId: "run_bad_jurisdiction",
+      workspaceId: "ws_1",
+      sessionId: "ses_bad_jurisdiction",
+      executionMode: "work",
+      jurisdictionEvidenceHash: "not-a-digest",
+    })).toThrow("capability_jurisdiction_binding_invalid");
+  });
+
+  test("binds an allowed Polymarket prepare capability to the current server policy", () => {
+    const { broker, context } = polymarketPrepareBroker();
+    const args = { marketId: "market_1", outcome: "YES", side: "buy", amountUsdc: "5" };
+    const capability = broker.issue({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_polymarket_allowed",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: JURISDICTION_NOW,
+    });
+    expect(capability.claims.jurisdictionPolicy).toEqual(context);
+    expect(Date.parse(capability.claims.expiresAt)).toBeLessThanOrEqual(Date.parse(context.validUntil));
+    expect(broker.consume({
+      token: capability.token,
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: JURISDICTION_NOW,
+    })).toMatchObject({ jurisdictionPolicy: context });
+    expect(broker.consumedCapabilityProof({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_polymarket_allowed",
+      coworkerId: "cw_polymarket",
+      connectionId: "cxc_polymarket",
+      appId: "matterhorn.polymarket-wallet-preview",
+      manifestRevision: "1.0.0",
+      actionId: "polymarket_preview_trade",
+      network: "polygon:mainnet",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: JURISDICTION_NOW,
+    })).toMatchObject({ jurisdictionPolicy: context });
+  });
+
+  test("fails closed for missing, blocked, expired, or substituted Polymarket policy context", () => {
+    const args = { marketId: "market_1", outcome: "YES", side: "buy", amountUsdc: "5" };
+    const missing = polymarketPrepareBroker({ includePolicy: false }).broker;
+    expect(() => missing.issue({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_missing_policy",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: JURISDICTION_NOW,
+    })).toThrow("capability_polymarket_jurisdiction_denied");
+
+    const thirdParty = polymarketPrepareBroker({
+      appId: "acme.prediction-market",
+      includePolicy: false,
+    }).broker;
+    expect(() => thirdParty.issue({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_third_party_missing_policy",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: JURISDICTION_NOW,
+    })).toThrow("capability_polymarket_jurisdiction_denied");
+
+    const blocked = polymarketPrepareBroker({ country: "GB" }).broker;
+    expect(() => blocked.issue({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_blocked_policy",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: JURISDICTION_NOW,
+    })).toThrow("capability_polymarket_jurisdiction_denied");
+
+    const expired = polymarketPrepareBroker().broker;
+    expect(() => expired.issue({
+      runId: "run_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_prepare",
+      callId: "call_expired_policy",
+      toolName: "matterhorn_polymarket_preview_order",
+      args,
+      now: new Date("2026-09-04T12:05:00.000Z"),
+    })).toThrow("capability_polymarket_jurisdiction_denied");
+
+    const context = polymarketPolicyContext("CH");
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    expect(() => broker.createRunGrant({
+      runId: "run_substituted_policy",
+      workspaceId: "ws_1",
+      sessionId: "ses_substituted_policy",
+      executionMode: "work",
+      jurisdictionEvidenceHash: context.evidenceHash,
+      jurisdictionPolicy: { ...context, policyHash: "f".repeat(64) },
+      now: JURISDICTION_NOW,
+    })).toThrow("capability_jurisdiction_policy_invalid");
+  });
+
+  test("does not let a generic agent bypass Polymarket transaction jurisdiction", () => {
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    broker.createRunGrant({
+      runId: "run_generic_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_generic_polymarket_prepare",
+      agentId: "matterhorn",
+      executionMode: "work",
+      requestToolProfiles: [{
+        "*": false,
+        "matterhorn-work_matterhorn_polymarket_preview_order": true,
+      }],
+      now: JURISDICTION_NOW,
+    });
+    expect(() => broker.issue({
+      runId: "run_generic_polymarket_prepare",
+      workspaceId: "ws_1",
+      sessionId: "ses_generic_polymarket_prepare",
+      callId: "call_generic_polymarket_prepare",
+      toolName: "matterhorn_polymarket_preview_order",
+      args: { marketId: "market_1", outcome: "YES", side: "buy", amountUsdc: "5" },
+      now: JURISDICTION_NOW,
+    })).toThrow("capability_polymarket_jurisdiction_denied");
+  });
+
+  test("keeps certified Polymarket public reads available without transaction jurisdiction", () => {
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    broker.setCoworkerResolver(() => true);
+    broker.createRunGrant({
+      runId: "run_polymarket_read",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_read",
+      agentId: "matterhorn-polymarket",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_polymarket_search_markets": true }],
+      coworker: {
+        id: "cw_polymarket_read",
+        workspaceId: "ws_1",
+        ownerId: "account_1",
+        revision: 1,
+        policyVersion: "coworker-policy-1",
+        allowedAppIds: ["matterhorn.polymarket-research"],
+        allowedActionIds: ["polymarket_market_search"],
+        allowedNetworks: ["polymarket:public"],
+        automaticAuthorities: ["read"],
+        actionBindings: [{
+          connectionId: "cxc_polymarket_read",
+          appId: "matterhorn.polymarket-research",
+          manifestRevision: "1.0.0",
+          actionId: "polymarket_market_search",
+          network: "polymarket:public",
+          proxyToolName: "matterhorn_polymarket_search_markets",
+          access: "read",
+        }],
+        allowedDataLabels: ["public", "untrusted_external"],
+        allowUnverifiedProviderConsent: false,
+        maxReadCallsPerRun: 1,
+        maxPrepareCallsPerFamily: 0,
+      },
+      now: JURISDICTION_NOW,
+    });
+    expect(broker.issue({
+      runId: "run_polymarket_read",
+      workspaceId: "ws_1",
+      sessionId: "ses_polymarket_read",
+      callId: "call_polymarket_read",
+      toolName: "matterhorn_polymarket_search_markets",
+      args: { query: "election", limit: 5 },
+      now: JURISDICTION_NOW,
+    }).claims.access).toBe("read");
   });
 
   test("fails closed for argument mutation, wrong tools and wrong sessions", () => {
@@ -389,6 +800,7 @@ describe("agent capability broker", () => {
 
   test("accounts prepare budgets from the resolved protocol instead of a static registry prefix", () => {
     const broker = new MatterhornAgentCapabilityBroker("enforce");
+    const jurisdictionPolicy = polymarketPolicyContext("CH");
     broker.createRunGrant({
       runId: "run_protocol_family",
       workspaceId: "ws_1",
@@ -401,6 +813,9 @@ describe("agent capability broker", () => {
         "matterhorn-work_matterhorn_hyperliquid_preview_order": true,
         "matterhorn-work_matterhorn_polymarket_preview_order": true,
       }],
+      jurisdictionEvidenceHash: jurisdictionPolicy.evidenceHash,
+      jurisdictionPolicy,
+      now: JURISDICTION_NOW,
     });
     const autoArgs = { message: "Prepare the reviewed action I described" };
     const automatic = broker.issue({
@@ -410,8 +825,14 @@ describe("agent capability broker", () => {
       callId: "call_auto_hyperliquid",
       toolName: "matterhorn_crypto_chat",
       args: autoArgs,
+      now: JURISDICTION_NOW,
     });
-    broker.consume({ token: automatic.token, toolName: "matterhorn_crypto_chat", args: autoArgs });
+    broker.consume({
+      token: automatic.token,
+      toolName: "matterhorn_crypto_chat",
+      args: autoArgs,
+      now: JURISDICTION_NOW,
+    });
     broker.recordToolOutcome(
       "run_protocol_family",
       "call_auto_hyperliquid",
@@ -426,6 +847,7 @@ describe("agent capability broker", () => {
       callId: "call_duplicate_hyperliquid",
       toolName: "matterhorn_hyperliquid_preview_order",
       args: { asset: "BTC", side: "buy", size: "0.01" },
+      now: JURISDICTION_NOW,
     })).toThrow("capability_prepare_family_already_completed");
     expect(broker.issue({
       runId: "run_protocol_family",
@@ -434,6 +856,7 @@ describe("agent capability broker", () => {
       callId: "call_distinct_polymarket",
       toolName: "matterhorn_polymarket_preview_order",
       args: { marketId: "market_1", outcome: "YES", amountUsdc: "5" },
+      now: JURISDICTION_NOW,
     }).claims.access).toBe("prepare");
   });
 
@@ -465,7 +888,242 @@ describe("agent capability broker", () => {
     expect(second.activeRun("ses_durable")).toBe("run_durable");
     expect(second.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args }).runId).toBe("run_durable");
     expect(() => first.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args })).toThrow("capability_replayed");
+    first.close();
+    second.close();
     firstState.close();
     secondState.close();
+  });
+
+  test("restores an authenticated consumed proof through its bounded reconciliation window", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-reconciliation-window-"));
+    const path = join(root, "state.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const broker = new MatterhornAgentCapabilityBroker("enforce", state);
+    const issuedAt = new Date(Date.now() - 70_000);
+    broker.createRunGrant({
+      runId: "run_reconciliation_window",
+      workspaceId: "ws_reconciliation_window",
+      sessionId: "ses_reconciliation_window",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, matterhorn_sui_get_balance: true }],
+      now: issuedAt,
+    });
+    const args = { address: `0x${"4".repeat(64)}`, network: "testnet" };
+    const capability = broker.issue({
+      runId: "run_reconciliation_window",
+      workspaceId: "ws_reconciliation_window",
+      sessionId: "ses_reconciliation_window",
+      callId: "call_reconciliation_window",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+      now: issuedAt,
+    });
+    broker.consume({
+      token: capability.token,
+      toolName: "matterhorn_sui_get_balance",
+      args,
+      now: new Date(issuedAt.getTime() + 30_000),
+    });
+    broker.close();
+
+    const restored = new MatterhornAgentCapabilityBroker("enforce", state);
+    expect(restored.consumedToolProof({
+      runId: capability.claims.runId,
+      workspaceId: capability.claims.workspaceId,
+      sessionId: capability.claims.sessionId,
+      callId: capability.claims.callId,
+      toolName: capability.claims.toolName,
+      args,
+    })?.argsHash).toBe(capability.claims.argsHash);
+    restored.close();
+    state.close();
+  });
+
+  test("fails closed when a restored run grant is mutated, transplanted, unsealed, or opened with the wrong key", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-corrupt-grant-"));
+    const path = join(root, "state.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const broker = new MatterhornAgentCapabilityBroker("enforce", state);
+    broker.createRunGrant({
+      runId: "run_corrupt",
+      workspaceId: "ws_corrupt",
+      sessionId: "ses_corrupt",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, matterhorn_sui_get_balance: true }],
+    });
+    const stored = state.getRecord<MatterhornDurableStateAuthorityEnvelope<Record<string, unknown>>>(
+      "run_grant",
+      "run_corrupt",
+    );
+    if (!stored) throw new Error("test run grant missing");
+    const attempts = [
+      {
+        ...stored,
+        value: {
+          ...stored.value,
+          value: {
+            ...stored.value.value,
+            allowedTools: ["matterhorn_sui_get_balance", "matterhorn_unknown_submit"],
+          },
+        },
+      },
+      { ...stored, key: "run_transplanted" },
+      { ...stored, workspaceId: "ws_transplanted" },
+      { ...stored, sessionId: "ses_transplanted" },
+      { ...stored, expiresAtMs: (stored.expiresAtMs ?? 0) + 1 },
+      { ...stored, updatedAtMs: stored.updatedAtMs + 1 },
+      { ...stored, value: stored.value.value },
+    ];
+    for (const attempt of attempts) {
+      state.put({
+        kind: attempt.kind,
+        key: attempt.key,
+        workspaceId: attempt.workspaceId,
+        sessionId: attempt.sessionId,
+        value: attempt.value,
+        expiresAtMs: attempt.expiresAtMs,
+        nowMs: attempt.updatedAtMs,
+      });
+      expect(() => new MatterhornAgentCapabilityBroker("enforce", state))
+        .toThrow("capability_persisted_grant_invalid");
+      state.put({
+        kind: stored.kind,
+        key: stored.key,
+        workspaceId: stored.workspaceId,
+        sessionId: stored.sessionId,
+        value: stored.value,
+        expiresAtMs: stored.expiresAtMs,
+        nowMs: stored.updatedAtMs,
+      });
+    }
+    process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "wrong-capability-state-key-at-least-32-characters";
+    try {
+      expect(() => new MatterhornAgentCapabilityBroker("enforce", state))
+        .toThrow("capability_persisted_grant_invalid");
+    } finally {
+      process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "capability-test-secret-at-least-32-characters";
+    }
+    broker.close();
+    state.close();
+  });
+
+  test("fails closed when a consumed capability row disagrees with its claims", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-corrupt-consumption-"));
+    const path = join(root, "state.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const broker = new MatterhornAgentCapabilityBroker("enforce", state);
+    broker.createRunGrant({
+      runId: "run_consumed",
+      workspaceId: "ws_consumed",
+      sessionId: "ses_consumed",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, matterhorn_sui_get_balance: true }],
+    });
+    const args = { address: `0x${"2".repeat(64)}`, network: "testnet" };
+    const capability = broker.issue({
+      runId: "run_consumed",
+      workspaceId: "ws_consumed",
+      sessionId: "ses_consumed",
+      callId: "call_consumed",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    });
+    const expiresAtMs = Date.parse(capability.claims.expiresAt);
+    expect(state.consumeCapability({
+      jti: "cap_wrong_row",
+      runId: capability.claims.runId,
+      callId: capability.claims.callId,
+      workspaceId: capability.claims.workspaceId,
+      sessionId: capability.claims.sessionId,
+      claims: capability.claims,
+      consumedAtMs: Date.now(),
+      expiresAtMs: expiresAtMs + 60_000,
+    })).toBe(true);
+    expect(() => new MatterhornAgentCapabilityBroker("enforce", state))
+      .toThrow("capability_persisted_consumption_invalid");
+    broker.close();
+    state.close();
+  });
+
+  test("authenticates restored consumed-capability proofs against mutation, transplantation, and wrong keys", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-sealed-consumption-"));
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
+    const broker = new MatterhornAgentCapabilityBroker("enforce", state);
+    broker.createRunGrant({
+      runId: "run_sealed_consumption",
+      workspaceId: "ws_sealed_consumption",
+      sessionId: "ses_sealed_consumption",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, matterhorn_sui_get_balance: true }],
+    });
+    const args = { address: `0x${"3".repeat(64)}`, network: "testnet" };
+    const capability = broker.issue({
+      runId: "run_sealed_consumption",
+      workspaceId: "ws_sealed_consumption",
+      sessionId: "ses_sealed_consumption",
+      callId: "call_sealed_consumption",
+      toolName: "matterhorn_sui_get_balance",
+      args,
+    });
+    broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args });
+    const [stored] = state.listConsumedCapabilityRecords<unknown>();
+    if (!stored) throw new Error("test consumed capability missing");
+    const envelope = stored.claims;
+    if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
+      throw new Error("test consumed capability envelope invalid");
+    }
+    const exactRoot = mkdtempSync(join(tmpdir(), "matterhorn-capability-consumption-exact-"));
+    const exactState = new MatterhornGuardedRuntimeStateStore(join(exactRoot, "state.db"));
+    expect(exactState.consumeCapability(stored)).toBe(true);
+    const restored = new MatterhornAgentCapabilityBroker("enforce", exactState);
+    expect(restored.consumedToolProof({
+      runId: capability.claims.runId,
+      workspaceId: capability.claims.workspaceId,
+      sessionId: capability.claims.sessionId,
+      callId: capability.claims.callId,
+      toolName: capability.claims.toolName,
+      args,
+    })?.argsHash).toBe(capability.claims.argsHash);
+    restored.close();
+    exactState.close();
+
+    const corruptEnvelope = { ...envelope, authoritySeal: "A".repeat(43) };
+    const attempts = [
+      { ...stored, jti: "cap_transplanted" },
+      { ...stored, workspaceId: "ws_transplanted" },
+      { ...stored, sessionId: "ses_transplanted" },
+      { ...stored, runId: "run_transplanted" },
+      { ...stored, callId: "call_transplanted" },
+      { ...stored, expiresAtMs: stored.expiresAtMs + 1 },
+      { ...stored, consumedAtMs: stored.consumedAtMs + 1 },
+      { ...stored, claims: corruptEnvelope },
+      { ...stored, claims: capability.claims },
+    ];
+    for (const [index, attempt] of attempts.entries()) {
+      const targetRoot = mkdtempSync(join(tmpdir(), `matterhorn-capability-consumption-mutation-${index}-`));
+      const target = new MatterhornGuardedRuntimeStateStore(join(targetRoot, "state.db"));
+      expect(target.consumeCapability(attempt)).toBe(true);
+      expect(() => new MatterhornAgentCapabilityBroker("enforce", target))
+        .toThrow("capability_persisted_consumption_invalid");
+      target.close();
+    }
+
+    const wrongRoot = mkdtempSync(join(tmpdir(), "matterhorn-capability-consumption-wrong-key-"));
+    const wrongState = new MatterhornGuardedRuntimeStateStore(join(wrongRoot, "state.db"));
+    expect(wrongState.consumeCapability(stored)).toBe(true);
+    process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "wrong-consumption-state-key-at-least-32-characters";
+    try {
+      expect(() => new MatterhornAgentCapabilityBroker("enforce", wrongState))
+        .toThrow("capability_persisted_consumption_invalid");
+    } finally {
+      process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "capability-test-secret-at-least-32-characters";
+    }
+    broker.close();
+    state.close();
+    wrongState.close();
   });
 });

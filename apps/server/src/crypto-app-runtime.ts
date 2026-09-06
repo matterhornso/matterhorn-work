@@ -23,7 +23,12 @@ import { isTrustedEd25519PublisherKey, type MatterhornTrustedPublisherKey } from
 import { cryptoCoworkerFeatureConfig, type MatterhornCryptoAppGatewayMode } from "./crypto-coworker-config.js";
 import { createFirstPartyCryptoAppExecutor } from "./first-party-crypto-app-executor.js";
 import { firstPartyCryptoAppProxyTool } from "./first-party-crypto-apps.js";
-import { createPinnedJsonCryptoAppTransport } from "./crypto-app-https-transport.js";
+import {
+  type MatterhornCryptoAppCredentialResolver,
+} from "./crypto-app-https-transport.js";
+import { createPinnedMcpHttpCryptoAppTransport } from "./crypto-app-mcp-http-transport.js";
+import { createPinnedJsonRpcCryptoAppTransport } from "./crypto-app-json-rpc-transport.js";
+import { createPinnedOpenApiCryptoAppTransport } from "./crypto-app-openapi-transport.js";
 import type { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
 import {
   createPinnedSuiPublicTransactionVerifier,
@@ -61,6 +66,9 @@ export class MatterhornCryptoAppRuntimeConfigurationError extends Error {
     | "crypto_app_publisher_keys_invalid"
     | "crypto_app_publisher_key_duplicate"
     | "crypto_app_private_key_forbidden"
+    | "crypto_app_connection_integrity_secret_required"
+    | "crypto_app_developer_integrity_secret_required"
+    | "crypto_app_operational_integrity_secret_required"
     | "crypto_app_oauth_encryption_key_required"
     | "crypto_app_wallet_proof_secret_required") {
     super(code);
@@ -164,11 +172,23 @@ export function createMatterhornCryptoAppRuntime(
     throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_policy_version_required");
   }
   const walletProofSecret = env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET;
+  const connectionIntegritySecret = env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET;
+  const developerIntegritySecret = env.MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET;
+  const operationalIntegritySecret = env.MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET;
   const oauthConfigured = Boolean(env.MATTERHORN_CRYPTO_APP_OAUTH_CLIENTS_JSON?.trim());
   const oauthEncryptionKey = env.MATTERHORN_CRYPTO_APP_OAUTH_ENCRYPTION_KEY;
   if (feature.cryptoAppGatewayMode === "enforce"
     && (!walletProofSecret || Buffer.byteLength(walletProofSecret, "utf8") < 32)) {
     throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_wallet_proof_secret_required");
+  }
+  if (!connectionIntegritySecret || Buffer.byteLength(connectionIntegritySecret, "utf8") < 32) {
+    throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_connection_integrity_secret_required");
+  }
+  if (!developerIntegritySecret || Buffer.byteLength(developerIntegritySecret, "utf8") < 32) {
+    throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_developer_integrity_secret_required");
+  }
+  if (!operationalIntegritySecret || Buffer.byteLength(operationalIntegritySecret, "utf8") < 32) {
+    throw new MatterhornCryptoAppRuntimeConfigurationError("crypto_app_operational_integrity_secret_required");
   }
   if (feature.cryptoAppGatewayMode === "enforce"
     && oauthConfigured
@@ -188,7 +208,10 @@ export function createMatterhornCryptoAppRuntime(
       policyVersion,
       store: registryStore,
     });
-    const activeConnectionStore = new MatterhornCryptoAppConnectionStore(connectionPath || undefined);
+    const activeConnectionStore = new MatterhornCryptoAppConnectionStore(
+      connectionPath || undefined,
+      connectionIntegritySecret,
+    );
     connectionStore = activeConnectionStore;
     const connections = new MatterhornCryptoAppConnections({ registry, store: activeConnectionStore });
     const managedCredentials = new MatterhornManagedCryptoAppCredentials(env);
@@ -213,13 +236,18 @@ export function createMatterhornCryptoAppRuntime(
     });
     const operator = new MatterhornCryptoAppOperator(registry);
     const developerPath = env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB?.trim();
-    developerPortalStore = new MatterhornCryptoDeveloperPortalStore(developerPath || undefined);
+    developerPortalStore = new MatterhornCryptoDeveloperPortalStore(
+      developerPath || undefined,
+      developerIntegritySecret,
+    );
     const developerPortal = new MatterhornCryptoDeveloperPortal({
       store: developerPortalStore,
       policyVersion,
     });
     const operationalPath = env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB?.trim();
-    operationalPolicy = new MatterhornCryptoAppOperationalPolicyStore(operationalPath || undefined);
+    operationalPolicy = new MatterhornCryptoAppOperationalPolicyStore(operationalPath || undefined, {
+      integritySecret: operationalIntegritySecret,
+    });
     let router: MatterhornCryptoAppAdapterRouter | null = null;
     let verifySuiTransaction: MatterhornSuiPublicTransactionVerifier | null = null;
     if (feature.cryptoAppGatewayMode === "enforce" && options.guardedRuntime) {
@@ -233,23 +261,24 @@ export function createMatterhornCryptoAppRuntime(
           return proxyToolName ? { ...input, proxyToolName } : null;
         },
       });
-      const pinnedJsonTransport = createPinnedJsonCryptoAppTransport({
-        resolveCredentialHeaders: (input) => {
-          if (input.credential.type === "oauth2") {
-            if (!oauthConnections || !input.workspaceId || !input.connectionId) {
-              throw new Error("crypto_app_oauth_token_unavailable");
-            }
-            return oauthConnections.resolveHeaders({
-              workspaceId: input.workspaceId,
-              connectionId: input.connectionId,
-              appId: input.appId,
-              manifestRevision: input.manifestRevision,
-              secretReference: input.credential.secretReference,
-            });
+      const resolveCredentialHeaders: MatterhornCryptoAppCredentialResolver = (input) => {
+        if (input.credential.type === "oauth2") {
+          if (!oauthConnections || !input.workspaceId || !input.connectionId) {
+            throw new Error("crypto_app_oauth_token_unavailable");
           }
-          return managedCredentials.resolveHeaders(input);
-        },
-      });
+          return oauthConnections.resolveHeaders({
+            workspaceId: input.workspaceId,
+            connectionId: input.connectionId,
+            appId: input.appId,
+            manifestRevision: input.manifestRevision,
+            secretReference: input.credential.secretReference,
+          });
+        }
+        return managedCredentials.resolveHeaders(input);
+      };
+      const pinnedMcpHttpTransport = createPinnedMcpHttpCryptoAppTransport({ resolveCredentialHeaders });
+      const pinnedJsonRpcTransport = createPinnedJsonRpcCryptoAppTransport({ resolveCredentialHeaders });
+      const pinnedOpenApiTransport = createPinnedOpenApiCryptoAppTransport({ resolveCredentialHeaders });
       router = new MatterhornCryptoAppAdapterRouter({
         registry,
         connections,
@@ -279,9 +308,9 @@ export function createMatterhornCryptoAppRuntime(
         },
         executors: {
           matterhorn_sdk: createFirstPartyCryptoAppExecutor(),
-          mcp_http: pinnedJsonTransport,
-          openapi: pinnedJsonTransport,
-          rpc: pinnedJsonTransport,
+          mcp_http: pinnedMcpHttpTransport,
+          openapi: pinnedOpenApiTransport,
+          rpc: pinnedJsonRpcTransport,
         },
       });
       verifySuiTransaction = createPinnedSuiPublicTransactionVerifier({

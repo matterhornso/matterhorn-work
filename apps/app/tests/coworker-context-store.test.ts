@@ -29,6 +29,7 @@ describe("coworker chat context", () => {
       name: "Market analyst",
       role: "Research",
       revision: 3,
+      bindingRevision: 2,
       updatedAt: "2026-09-02T12:00:00.000Z",
       ownerId: "must-not-persist",
       mission: "must-not-persist",
@@ -40,6 +41,7 @@ describe("coworker chat context", () => {
       name: "Market analyst",
       role: "Research",
       revision: 3,
+      bindingRevision: 2,
       updatedAt: "2026-09-02T12:00:00.000Z",
     });
     expect(JSON.stringify(context)).not.toContain("must-not-persist");
@@ -51,6 +53,13 @@ describe("coworker chat context", () => {
       name: "Analyst",
       role: "Research",
       revision: 1,
+    })).toBeNull();
+    expect(sanitizeMatterhornCoworkerContext("ses_1", {
+      id: "coworker_1",
+      name: "Analyst",
+      role: "Research",
+      revision: 1,
+      bindingRevision: 0,
     })).toBeNull();
     expect(sanitizeMatterhornCoworkerContext("ses_1", {
       id: "coworker_1",

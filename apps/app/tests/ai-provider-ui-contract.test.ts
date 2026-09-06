@@ -29,10 +29,10 @@ describe("AI provider UI contract", () => {
 
     expect(viewSource).toContain("catalog?.providers ?? []");
     expect(viewSource).toContain("catalogProviderById.get(provider.id)");
-    expect(viewSource).toContain("Checking models...");
     expect(viewSource).toContain("Checking model provider");
     expect(viewSource).toContain("Loading the models managed for this workspace.");
     expect(viewSource).toContain("Checking availability...");
+    expect(viewSource).toContain("providerStateLoading");
     expect(viewSource).toContain("provider.modelCount");
     expect(viewSource).toContain("countConnectedCatalogModels(catalog)");
     expect(viewSource).not.toContain(
@@ -60,11 +60,14 @@ describe("AI provider UI contract", () => {
     const surfaceSource = readReactSource(
       "domains/session/surface/session-surface.tsx",
     );
+    const noticeSource = readReactSource(
+      "domains/session/surface/private-mode-privacy-notice.tsx",
+    );
 
     expect(viewSource).toContain("modelReadiness.providerPrivacy");
     expect(viewSource).toContain("Review provider policy");
-    expect(surfaceSource).toContain("Matterhorn does not train on your chats");
-    expect(surfaceSource).toContain("Privacy details");
+    expect(noticeSource).toContain("Matterhorn does not train on your chats");
+    expect(noticeSource).toContain("Privacy details");
     expect(surfaceSource).toContain("props.onOpenPrivacyDetails");
     expect(surfaceSource).not.toContain('href="/privacy"');
     expect(routeSource).toContain('handleOpenSettings("/settings/privacy")');
@@ -89,7 +92,7 @@ describe("AI provider UI contract", () => {
     );
   });
 
-  test("separates a ready model provider from a catalog-only entry", () => {
+  test("keeps one primary model choice and progressively discloses expert settings", () => {
     const viewSource = readReactSource("domains/settings/pages/ai-view.tsx");
     const summarySource = readReactSource(
       "domains/settings/state/model-readiness-summary.ts",
@@ -97,14 +100,21 @@ describe("AI provider UI contract", () => {
     const routeSource = readReactSource("shell/settings-route.tsx");
 
     expect(viewSource).toContain("isMatterhornManagedProvider");
-    expect(viewSource).toContain("<LayoutSectionTitle>Model provider</LayoutSectionTitle>");
-    expect(viewSource).toContain("<LayoutSectionTitle>Available models</LayoutSectionTitle>");
-    expect(viewSource).toContain("<LayoutSectionTitle>Model providers</LayoutSectionTitle>");
-    expect(viewSource).toContain("Connected model catalog");
-    expect(viewSource).toContain("Browse models");
-    expect(viewSource).toContain("Choose provider");
-    expect(viewSource).toContain("Provider and data details");
+    expect(viewSource).toContain("<LayoutSectionTitle>Choose a model</LayoutSectionTitle>");
+    expect(viewSource).toContain(
+      "Pick the AI that answers your chats. You can change it any time.",
+    );
+    expect(viewSource).toContain("More model settings");
+    expect(viewSource).toContain("Use for new chats");
+    expect(viewSource).toContain("Use saved default");
+    expect(viewSource).toContain("Clear saved default");
+    expect(viewSource).toContain("<LayoutSectionTitle>Provider connection</LayoutSectionTitle>");
+    expect(viewSource).toContain("Connect AI");
+    expect(viewSource).toContain("How provider data is handled");
     expect(viewSource).toContain("A model catalog is only a list.");
+    expect(viewSource).not.toContain("<LayoutSectionTitle>Available models</LayoutSectionTitle>");
+    expect(viewSource).not.toContain("Connected model catalog");
+    expect(viewSource).not.toContain("Browse models");
     expect(viewSource).not.toContain('"Included models ready"');
     expect(viewSource).not.toContain('label="Included"');
     expect(viewSource).not.toContain("Matterhorn Models");

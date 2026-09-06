@@ -1,9 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
-import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import type { MatterhornCoworkerRunBinding } from "./agent-capability.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
+import { sha256 } from "./guarded-runtime-crypto.js";
+import {
+  MatterhornGuardedRuntimeStateStore,
+  type GuardedRuntimeStateRecord,
+} from "./guarded-runtime-state-store.js";
 
 const original = {
   mode: process.env.MATTERHORN_GUARDED_RUNTIME_MODE,
@@ -38,7 +44,353 @@ afterAll(async () => {
   await rm(dataDir, { recursive: true, force: true });
 });
 
+function finalizedRunCoworker(id: string, workspaceId: string): MatterhornCoworkerRunBinding {
+  return {
+    id,
+    workspaceId,
+    ownerId: `account_${id}`,
+    revision: 1,
+    policyVersion: "coworker-policy-1",
+    allowedAppIds: ["matterhorn.sui-testnet"],
+    allowedActionIds: ["sui_account_read"],
+    allowedNetworks: ["sui:testnet"],
+    automaticAuthorities: ["read"],
+    actionBindings: [{
+      connectionId: "cxc_sui",
+      appId: "matterhorn.sui-testnet",
+      manifestRevision: "1.0.0",
+      actionId: "sui_account_read",
+      network: "sui:testnet",
+      proxyToolName: "matterhorn_sui_get_balance",
+      access: "read",
+    }],
+    allowedDataLabels: ["public", "untrusted_external"],
+    allowUnverifiedProviderConsent: false,
+    maxReadCallsPerRun: 4,
+    maxPrepareCallsPerFamily: 0,
+  };
+}
+
+function replaceAuthorizedRecord(
+  store: MatterhornGuardedRuntimeStateStore,
+  record: GuardedRuntimeStateRecord<unknown>,
+  value: unknown,
+): void {
+  if (typeof record.expiresAtMs !== "number" || !Number.isSafeInteger(record.expiresAtMs)) {
+    throw new Error("test state expiry missing");
+  }
+  const authority = testDurableStateAuthority(process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET);
+  try {
+    store.put({
+      kind: record.kind,
+      key: record.key,
+      workspaceId: record.workspaceId,
+      sessionId: record.sessionId,
+      value: authority.seal({
+        kind: record.kind,
+        key: record.key,
+        workspaceId: record.workspaceId,
+        sessionId: record.sessionId,
+        expiresAtMs: record.expiresAtMs,
+        updatedAtMs: record.updatedAtMs,
+        value,
+      }),
+      expiresAtMs: record.expiresAtMs,
+      nowMs: record.updatedAtMs,
+    });
+  } finally {
+    authority.close();
+  }
+}
+
 describe("guarded agent runtime transport", () => {
+  test("persists a monotonic session privacy floor and purges it with the chat", async () => {
+    const path = join(dataDir, "session-privacy-floor.db");
+    const first = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    expect(first.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: false,
+    })).toBe("public");
+    expect(first.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_legacy_history",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+
+    await first.acceptPrompt({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      parts: [{ type: "text", text: "Compare public Sui activity" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      executionMode: "work",
+    });
+    expect(first.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: true,
+    })).toBe("public");
+
+    await first.acceptPrompt({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      parts: [{ type: "text", text: "Use the private workspace report" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "private_workspace",
+      executionMode: "work",
+    });
+    first.close();
+
+    const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    expect(restored.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+    expect(() => restored.resolveSessionHistoryLabel({
+      workspaceId: "ws_other",
+      sessionId: "ses_history",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+
+    await restored.acceptPrompt({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      parts: [{ type: "text", text: "Continue with public market data" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "public_research",
+      executionMode: "work",
+    });
+    expect(restored.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+
+    restored.purgeSessionPrivacyState({ workspaceId: "ws_history", sessionId: "ses_history" });
+    expect(restored.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+    expect(restored.resolveSessionHistoryLabel({
+      workspaceId: "ws_history",
+      sessionId: "ses_history",
+      hasStoredHistory: false,
+    })).toBe("public");
+    restored.close();
+  });
+
+  test("rejects privacy-floor downgrades and SQLite metadata mutation before reuse", async () => {
+    const path = join(dataDir, "session-privacy-floor-tamper.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(state);
+    await runtime.acceptPrompt({
+      workspaceId: "ws_floor_tamper",
+      sessionId: "ses_floor_tamper",
+      parts: [{ type: "text", text: "Use my private wallet context for this transaction" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "transaction",
+      executionMode: "work",
+    });
+    const stored = state.getRecord<unknown>("session_privacy_floor", "ses_floor_tamper");
+    if (!stored) throw new Error("expected_session_privacy_floor");
+    const downgraded = structuredClone(stored.value) as {
+      version: string;
+      floor: { mode: string };
+      authoritySeal: string;
+    };
+    downgraded.floor.mode = "public_research";
+    state.put({
+      kind: "session_privacy_floor",
+      key: stored.key,
+      workspaceId: stored.workspaceId,
+      sessionId: stored.sessionId,
+      value: downgraded,
+      expiresAtMs: stored.expiresAtMs,
+      nowMs: stored.updatedAtMs,
+    });
+    expect(() => runtime.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_tamper",
+      sessionId: "ses_floor_tamper",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+
+    state.put({
+      kind: "session_privacy_floor",
+      key: stored.key,
+      workspaceId: stored.workspaceId,
+      sessionId: stored.sessionId,
+      value: stored.value,
+      expiresAtMs: (stored.expiresAtMs ?? 0) + 1,
+      nowMs: stored.updatedAtMs,
+    });
+    expect(() => runtime.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_tamper",
+      sessionId: "ses_floor_tamper",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+
+    state.put({
+      kind: "session_privacy_floor",
+      key: stored.key,
+      workspaceId: "ws_floor_attacker",
+      sessionId: stored.sessionId,
+      value: stored.value,
+      expiresAtMs: stored.expiresAtMs,
+      nowMs: stored.updatedAtMs,
+    });
+    expect(() => runtime.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_tamper",
+      sessionId: "ses_floor_tamper",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+    runtime.close();
+  });
+
+  test("rejects wrong-key and unsealed restored privacy floors", async () => {
+    const path = join(dataDir, "session-privacy-floor-key.db");
+    const initialState = new MatterhornGuardedRuntimeStateStore(path);
+    const initial = new MatterhornGuardedAgentRuntime(initialState);
+    const accepted = await initial.acceptPrompt({
+      workspaceId: "ws_floor_key",
+      sessionId: "ses_floor_key",
+      parts: [{ type: "text", text: "Use my private workspace report" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "private_workspace",
+      executionMode: "work",
+    });
+    const stored = initialState.getRecord<unknown>("session_privacy_floor", "ses_floor_key");
+    if (!stored) throw new Error("expected_session_privacy_floor");
+    await initial.completeTrustedGatewayRun(accepted.runId, "cancelled");
+    initial.close();
+
+    const expectedSigningSecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "different-capability-signing-secret-with-at-least-32-characters";
+    const wrongKey = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    expect(() => wrongKey.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_key",
+      sessionId: "ses_floor_key",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+    wrongKey.close();
+
+    delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    const missingKey = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    expect(() => missingKey.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_key",
+      sessionId: "ses_floor_key",
+      hasStoredHistory: true,
+    })).toThrow("cannot safely persist this chat's privacy history");
+    missingKey.close();
+
+    if (expectedSigningSecret === undefined) delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    else process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = expectedSigningSecret;
+    const unsealedState = new MatterhornGuardedRuntimeStateStore(path);
+    const envelope = stored.value as { floor: unknown };
+    unsealedState.put({
+      kind: "session_privacy_floor",
+      key: stored.key,
+      workspaceId: stored.workspaceId,
+      sessionId: stored.sessionId,
+      value: envelope.floor,
+      expiresAtMs: stored.expiresAtMs,
+      nowMs: stored.updatedAtMs,
+    });
+    const unsealed = new MatterhornGuardedAgentRuntime(unsealedState);
+    expect(() => unsealed.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_key",
+      sessionId: "ses_floor_key",
+      hasStoredHistory: true,
+    })).toThrow("could not verify this chat's privacy history");
+    unsealed.close();
+  });
+
+  test("rolls back a sealed privacy-floor update when persistence fails", async () => {
+    const path = join(dataDir, "session-privacy-floor-rollback.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(state);
+    await runtime.acceptPrompt({
+      workspaceId: "ws_floor_rollback",
+      sessionId: "ses_floor_rollback",
+      parts: [{ type: "text", text: "Use my private workspace report" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "private_workspace",
+      executionMode: "work",
+    });
+    const before = state.getRecord<unknown>("session_privacy_floor", "ses_floor_rollback");
+    if (!before) throw new Error("expected_session_privacy_floor");
+    const originalPut = state.put.bind(state);
+    let failUpdate = true;
+    Object.defineProperty(state, "put", {
+      configurable: true,
+      value: (input: Parameters<MatterhornGuardedRuntimeStateStore["put"]>[0]) => {
+        originalPut(input);
+        if (failUpdate && input.kind === "session_privacy_floor") {
+          failUpdate = false;
+          throw new Error("injected_session_privacy_floor_write_failure");
+        }
+      },
+    });
+
+    await expect(runtime.acceptPrompt({
+      workspaceId: "ws_floor_rollback",
+      sessionId: "ses_floor_rollback",
+      parts: [{ type: "text", text: "Continue with public market data" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "public_research",
+      executionMode: "work",
+    })).rejects.toThrow("injected_session_privacy_floor_write_failure");
+    Object.defineProperty(state, "put", { configurable: true, value: originalPut });
+
+    expect(state.getRecord<unknown>("session_privacy_floor", "ses_floor_rollback")).toEqual(before);
+    expect(runtime.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_rollback",
+      sessionId: "ses_floor_rollback",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+    runtime.close();
+  });
+
+  test("authenticates privacy-floor deletion and rolls it back for the wrong tenant", async () => {
+    const path = join(dataDir, "session-privacy-floor-purge.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(state);
+    await runtime.acceptPrompt({
+      workspaceId: "ws_floor_purge",
+      sessionId: "ses_floor_purge",
+      parts: [{ type: "text", text: "Use my private workspace report" }],
+      providerId: "local",
+      modelId: "private-local-model",
+      privacyMode: "private_workspace",
+      executionMode: "work",
+    });
+
+    expect(() => runtime.purgeSessionPrivacyState({
+      workspaceId: "ws_other",
+      sessionId: "ses_floor_purge",
+    })).toThrow("could not verify this chat's privacy history");
+    expect(runtime.resolveSessionHistoryLabel({
+      workspaceId: "ws_floor_purge",
+      sessionId: "ses_floor_purge",
+      hasStoredHistory: true,
+    })).toBe("workspace_private");
+
+    runtime.purgeSessionPrivacyState({
+      workspaceId: "ws_floor_purge",
+      sessionId: "ses_floor_purge",
+    });
+    expect(state.getRecord("session_privacy_floor", "ses_floor_purge", 0)).toBeNull();
+    runtime.close();
+  });
+
   test("records selected context as counts without retaining file identifiers", async () => {
     const path = join(dataDir, "run-context-counts.db");
     const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
@@ -230,7 +582,133 @@ describe("guarded agent runtime transport", () => {
     second.close();
   });
 
-  test("rejects a receipt index rebound to another tenant", async () => {
+  test("rejects restored active-run state with added authority fields", async () => {
+    const path = join(dataDir, "active-run-open-contract.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const prompt = {
+      workspaceId: "ws_active_contract",
+      sessionId: "ses_active_contract",
+      parts: [{ type: "text" as const, text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work" as const,
+    };
+    const accepted = await runtime.acceptPrompt(prompt);
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "active_agent_run",
+      prompt.sessionId,
+    );
+    if (!persisted) throw new Error("test active run missing");
+    const envelope = persisted.value as { value?: unknown };
+    if (!envelope.value || typeof envelope.value !== "object" || Array.isArray(envelope.value)) {
+      throw new Error("test active run envelope missing");
+    }
+    replaceAuthorizedRecord(store, persisted, { ...envelope.value, submit: true });
+
+    expect(() => runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: prompt.workspaceId,
+      sessionId: prompt.sessionId,
+      callId: "call_active_contract",
+      agentId: prompt.agentId,
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    })).toThrow("guarded_run_state_invalid");
+    expect(store.list("staged_capability", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    runtime.close();
+  });
+
+  test("fails closed with a stable error for malformed restored run payloads", async () => {
+    const path = join(dataDir, "active-run-malformed-contract.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const prompt = {
+      workspaceId: "ws_malformed_contract",
+      sessionId: "ses_malformed_contract",
+      parts: [{ type: "text" as const, text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work" as const,
+    };
+    const accepted = await runtime.acceptPrompt(prompt);
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "active_agent_run",
+      prompt.sessionId,
+    );
+    if (!persisted) throw new Error("test active run missing");
+    store.put({
+      kind: "active_agent_run",
+      key: persisted.key,
+      workspaceId: persisted.workspaceId,
+      sessionId: persisted.sessionId,
+      value: null,
+      expiresAtMs: persisted.expiresAtMs,
+      nowMs: persisted.updatedAtMs,
+    });
+
+    expect(() => runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: prompt.workspaceId,
+      sessionId: prompt.sessionId,
+      callId: "call_malformed_contract",
+      agentId: prompt.agentId,
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"1".repeat(64)}` },
+    })).toThrow("guarded_run_state_invalid");
+    expect(store.list("staged_capability", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    runtime.close();
+  });
+
+  test("rejects restored run scope with changed tenant metadata or extended authority", async () => {
+    const path = join(dataDir, "run-scope-tenant-substitution.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const prompt = {
+      workspaceId: "ws_scope_contract",
+      sessionId: "ses_scope_contract",
+      parts: [{ type: "text" as const, text: "Read public Hyperliquid markets" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-hyperliquid",
+      executionMode: "work" as const,
+    };
+    const accepted = await runtime.acceptPrompt(prompt);
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "agent_run_scope",
+      accepted.runId,
+    );
+    if (!persisted) throw new Error("test run scope missing");
+    const extendedExpiry = persisted.updatedAtMs + 12 * 60 * 60 * 1_000;
+    store.put({
+      kind: "agent_run_scope",
+      key: persisted.key,
+      workspaceId: "ws_scope_other",
+      sessionId: persisted.sessionId,
+      value: persisted.value,
+      expiresAtMs: extendedExpiry,
+      nowMs: persisted.updatedAtMs,
+    });
+
+    expect(() => runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: prompt.workspaceId,
+      sessionId: prompt.sessionId,
+      callId: "call_scope_contract",
+      agentId: prompt.agentId,
+      toolName: "matterhorn-work_matterhorn_hyperliquid_markets",
+      args: {},
+    })).toThrow("guarded_run_state_invalid");
+    expect(store.list("staged_capability", { workspaceId: prompt.workspaceId })).toHaveLength(0);
+    runtime.close();
+  });
+
+  test("rejects an unsealed or tenant-rebound receipt index", async () => {
     const path = join(dataDir, "receipt-index-tenant-substitution.db");
     const store = new MatterhornGuardedRuntimeStateStore(path);
     const runtime = new MatterhornGuardedAgentRuntime(store);
@@ -243,6 +721,8 @@ describe("guarded agent runtime transport", () => {
       agentId: "matterhorn-hyperliquid",
       executionMode: "work",
     });
+    const originalReceipt = store.getRecord<unknown>("receipt_index", accepted.runId);
+    if (!originalReceipt) throw new Error("test receipt index missing");
     store.put({
       kind: "receipt_index",
       key: accepted.runId,
@@ -266,8 +746,30 @@ describe("guarded agent runtime transport", () => {
       agentId: "matterhorn-hyperliquid",
       toolName: "matterhorn-work_matterhorn_hyperliquid_markets",
       args: {},
-    })).toThrow("capability_scope_mismatch");
+    })).toThrow("agent_run_receipt_index_invalid");
     expect(store.list("staged_capability", { workspaceId: "ws_receipt_scope" })).toHaveLength(0);
+
+    const receiptEnvelope = originalReceipt.value as { value?: unknown };
+    if (!receiptEnvelope.value
+      || typeof receiptEnvelope.value !== "object"
+      || Array.isArray(receiptEnvelope.value)) {
+      throw new Error("test receipt index envelope missing");
+    }
+    replaceAuthorizedRecord(store, originalReceipt, {
+      ...receiptEnvelope.value,
+      workspaceId: "ws_receipt_other",
+      sessionId: "ses_receipt_other",
+    });
+    expect(() => runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_receipt_scope",
+      sessionId: "ses_receipt_scope",
+      callId: "call_receipt_scope_rebound",
+      agentId: "matterhorn-hyperliquid",
+      toolName: "matterhorn-work_matterhorn_hyperliquid_markets",
+      args: {},
+    })).toThrow("agent_run_receipt_index_invalid");
     runtime.close();
   });
 
@@ -311,7 +813,8 @@ describe("guarded agent runtime transport", () => {
 
   test("restores an exact staged tool call after a runtime restart", async () => {
     const path = join(dataDir, "restart-state.db");
-    const first = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    const firstStore = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornGuardedAgentRuntime(firstStore);
     const accepted = await first.acceptPrompt({
       workspaceId: "ws_restart",
       sessionId: "ses_restart",
@@ -332,6 +835,10 @@ describe("guarded agent runtime transport", () => {
       toolName: "matterhorn-work_matterhorn_sui_get_balance",
       args,
     });
+    const persisted = firstStore.getRecord<unknown>("staged_capability", "call_after_restart");
+    expect(persisted).not.toBeNull();
+    expect(JSON.stringify(persisted)).not.toContain('"token"');
+    expect(JSON.stringify(persisted)).not.toContain("capability-signing-secret");
     first.close();
 
     const second = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
@@ -340,6 +847,127 @@ describe("guarded agent runtime transport", () => {
       args: { ...args, _matterhornCallId: "call_after_restart" },
     })).toEqual(expect.objectContaining({ runId: accepted.runId, workspaceId: "ws_restart" }));
     second.close();
+  });
+
+  test("rejects restored staged capabilities with added authority or prolonged lifetime", async () => {
+    const path = join(dataDir, "staged-capability-open-contract.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_staged_contract",
+      sessionId: "ses_staged_contract",
+      parts: [{ type: "text", text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+    });
+    const args = { address: `0x${"4".repeat(64)}` };
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_staged_contract",
+      sessionId: "ses_staged_contract",
+      callId: "call_staged_open_contract",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args,
+    });
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "staged_capability",
+      "call_staged_open_contract",
+    );
+    if (!persisted) throw new Error("test staged capability missing");
+    const envelope = persisted.value as { value?: unknown };
+    if (!envelope.value || typeof envelope.value !== "object" || Array.isArray(envelope.value)) {
+      throw new Error("test staged capability envelope missing");
+    }
+    replaceAuthorizedRecord(store, persisted, { ...envelope.value, submit: true });
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { ...args, _matterhornCallId: "call_staged_open_contract" },
+    })).toThrow("invalid persisted tool capability");
+
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_staged_contract",
+      sessionId: "ses_staged_contract",
+      callId: "call_staged_prolonged",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args,
+    });
+    const prolonged = store.getRecord<Record<string, unknown>>(
+      "staged_capability",
+      "call_staged_prolonged",
+    );
+    if (!prolonged) throw new Error("test staged capability missing");
+    const extendedExpiry = prolonged.updatedAtMs + 5 * 60_000;
+    store.put({
+      kind: "staged_capability",
+      key: prolonged.key,
+      workspaceId: prolonged.workspaceId,
+      sessionId: prolonged.sessionId,
+      value: { ...prolonged.value, expiresAtMs: extendedExpiry },
+      expiresAtMs: extendedExpiry,
+      nowMs: prolonged.updatedAtMs,
+    });
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_sui_get_balance",
+      args: { ...args, _matterhornCallId: "call_staged_prolonged" },
+    })).toThrow("invalid persisted tool capability");
+    runtime.close();
+  });
+
+  test("rejects staged capability tenant metadata that disagrees with its signed claims", async () => {
+    const path = join(dataDir, "staged-capability-tenant-substitution.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_staged_tenant",
+      sessionId: "ses_staged_tenant",
+      parts: [{ type: "text", text: "Read public Bittensor state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-bittensor",
+      executionMode: "work",
+    });
+    const args = { address: "5DtenantAddress" };
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_staged_tenant",
+      sessionId: "ses_staged_tenant",
+      callId: "call_staged_tenant",
+      agentId: "matterhorn-bittensor",
+      toolName: "matterhorn-work_matterhorn_bittensor_chat",
+      args,
+    });
+    const persisted = store.getRecord<Record<string, unknown>>("staged_capability", "call_staged_tenant");
+    if (!persisted) throw new Error("test staged capability missing");
+    store.put({
+      kind: "staged_capability",
+      key: persisted.key,
+      workspaceId: "ws_staged_other",
+      sessionId: "ses_staged_other",
+      value: {
+        ...persisted.value,
+        workspaceId: "ws_staged_other",
+        sessionId: "ses_staged_other",
+      },
+      expiresAtMs: persisted.expiresAtMs,
+      nowMs: persisted.updatedAtMs,
+    });
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_bittensor_chat",
+      args: { ...args, _matterhornCallId: "call_staged_tenant" },
+    })).toThrow("invalid persisted tool capability");
+    expect(() => runtime.authorizeMcpTool({
+      toolName: "matterhorn_bittensor_chat",
+      args: { ...args, _matterhornCallId: "call_staged_tenant" },
+    })).toThrow("unknown, expired, or replayed");
+    runtime.close();
   });
 
   test("restores a user-message binding when assistant binding persistence fails", async () => {
@@ -435,6 +1063,106 @@ describe("guarded agent runtime transport", () => {
       assistantMessageId: "msg_binding_other_assistant",
     })).toEqual({ runId: other.runId });
     second.close();
+  });
+
+  test("rejects restored message bindings with added authority fields", async () => {
+    const path = join(dataDir, "message-binding-open-contract.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_binding_contract",
+      sessionId: "ses_binding_contract",
+      parts: [{ type: "text", text: "Read public Bittensor state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-bittensor",
+      executionMode: "work",
+    });
+    runtime.bindUserMessage({
+      runId: accepted.runId,
+      sessionId: "ses_binding_contract",
+      messageId: "msg_binding_contract_user",
+    });
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "user_message_binding",
+      "msg_binding_contract_user",
+    );
+    if (!persisted) throw new Error("test message binding missing");
+    const envelope = persisted.value as { value?: unknown };
+    if (!envelope.value || typeof envelope.value !== "object" || Array.isArray(envelope.value)) {
+      throw new Error("test message binding envelope missing");
+    }
+    replaceAuthorizedRecord(store, persisted, { ...envelope.value, submit: true });
+
+    expect(() => runtime.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_binding_contract",
+      userMessageId: "msg_binding_contract_user",
+      assistantMessageId: "msg_binding_contract_assistant",
+    })).toThrow("guarded_message_binding_state_invalid");
+    expect(store.getRecord("user_message_binding", "msg_binding_contract_user")).not.toBeNull();
+    expect(store.getRecord("assistant_message_binding", "msg_binding_contract_assistant")).toBeNull();
+    runtime.close();
+  });
+
+  test("rejects restored message bindings with tenant substitution or prolonged authority", async () => {
+    const path = join(dataDir, "message-binding-tenant-substitution.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_binding_tenant",
+      sessionId: "ses_binding_tenant",
+      parts: [{ type: "text", text: "Read public Hyperliquid state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-hyperliquid",
+      executionMode: "work",
+    });
+    runtime.bindUserMessage({
+      runId: accepted.runId,
+      sessionId: "ses_binding_tenant",
+      messageId: "msg_binding_tenant_user",
+    });
+    const persisted = store.getRecord<Record<string, unknown>>(
+      "user_message_binding",
+      "msg_binding_tenant_user",
+    );
+    if (!persisted) throw new Error("test message binding missing");
+    store.put({
+      kind: "user_message_binding",
+      key: persisted.key,
+      workspaceId: "ws_binding_other",
+      sessionId: persisted.sessionId,
+      value: { ...persisted.value, workspaceId: "ws_binding_other" },
+      expiresAtMs: persisted.updatedAtMs + 12 * 60 * 60 * 1_000,
+      nowMs: persisted.updatedAtMs,
+    });
+
+    expect(() => runtime.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_binding_tenant",
+      userMessageId: "msg_binding_tenant_user",
+      assistantMessageId: "msg_binding_tenant_assistant",
+    })).toThrow("guarded_message_binding_state_invalid");
+    expect(store.getRecord("assistant_message_binding", "msg_binding_tenant_assistant")).toBeNull();
+
+    store.put({
+      kind: "user_message_binding",
+      key: persisted.key,
+      workspaceId: persisted.workspaceId,
+      sessionId: persisted.sessionId,
+      value: persisted.value,
+      expiresAtMs: persisted.updatedAtMs + 12 * 60 * 60 * 1_000,
+      nowMs: persisted.updatedAtMs,
+    });
+    expect(() => runtime.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_binding_tenant",
+      userMessageId: "msg_binding_tenant_user",
+      assistantMessageId: "msg_binding_prolonged_assistant",
+    })).toThrow("guarded_message_binding_state_invalid");
+    expect(store.getRecord("assistant_message_binding", "msg_binding_prolonged_assistant")).toBeNull();
+    runtime.close();
   });
 
   test("revokes the active grant and staged calls when a run completes", async () => {
@@ -537,6 +1265,85 @@ describe("guarded agent runtime transport", () => {
       toolName: "matterhorn_sui_get_balance",
       args: { ...args, _matterhornCallId: "call_coworker_pending" },
     })).toThrow("unknown, expired, or replayed");
+  });
+
+  test("carries only a content-free current Polymarket jurisdiction decision through the capability", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    runtime.setCoworkerResolver(() => true);
+    const nowMs = Date.now();
+    const jurisdiction = {
+      version: "matterhorn.edge-jurisdiction.v2" as const,
+      source: "vercel_ip_country" as const,
+      country: "CH",
+      region: "ZH",
+      observedAt: new Date(nowMs - 1_000).toISOString(),
+      expiresAt: new Date(nowMs + 59_000).toISOString(),
+      evidenceHash: "c".repeat(64),
+    };
+    const coworker = {
+      id: "cw_polymarket_policy",
+      workspaceId: "ws_polymarket_policy",
+      ownerId: "account_polymarket_policy",
+      revision: 1,
+      policyVersion: "coworker-policy-1",
+      allowedAppIds: ["matterhorn.polymarket-wallet-preview"],
+      allowedActionIds: ["polymarket_preview_trade"],
+      allowedNetworks: ["polygon:mainnet"],
+      automaticAuthorities: ["prepare"] as Array<"prepare">,
+      actionBindings: [{
+        connectionId: "cxc_polymarket_policy",
+        appId: "matterhorn.polymarket-wallet-preview",
+        manifestRevision: "1.0.0",
+        actionId: "polymarket_preview_trade",
+        network: "polygon:mainnet",
+        proxyToolName: "matterhorn_polymarket_preview_order",
+        access: "prepare" as const,
+      }],
+      allowedDataLabels: ["public", "wallet_private", "untrusted_external"] as Array<
+        "public" | "wallet_private" | "untrusted_external"
+      >,
+      allowUnverifiedProviderConsent: false,
+      maxReadCallsPerRun: 0,
+      maxPrepareCallsPerFamily: 1,
+    };
+    const accepted = await runtime.acceptPrompt({
+      workspaceId: "ws_polymarket_policy",
+      sessionId: "ses_polymarket_policy",
+      parts: [{ type: "text", text: "Prepare a five dollar public market order for wallet review" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-polymarket",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_polymarket_preview_order": true }],
+      coworker,
+      jurisdiction,
+    });
+    const args = { marketId: "market_1", outcome: "YES", side: "buy", amountUsdc: "5" };
+    runtime.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      workspaceId: "ws_polymarket_policy",
+      sessionId: "ses_polymarket_policy",
+      callId: "call_polymarket_policy",
+      agentId: "matterhorn-polymarket",
+      toolName: "matterhorn-work_matterhorn_polymarket_preview_order",
+      args,
+    });
+    const authorization = runtime.authorizeMcpTool({
+      toolName: "matterhorn_polymarket_preview_order",
+      args: { ...args, _matterhornCallId: "call_polymarket_policy" },
+    });
+    expect(authorization.jurisdictionPolicy).toMatchObject({
+      evidenceHash: jurisdiction.evidenceHash,
+      polymarketOpenPositionAllowed: true,
+    });
+    const serializedAuthorization = JSON.stringify(authorization);
+    expect(serializedAuthorization).not.toContain(jurisdiction.country);
+    expect(serializedAuthorization).not.toContain(jurisdiction.region);
+    const receipt = await runtime.receipts.get("ws_polymarket_policy", accepted.runId);
+    expect(JSON.stringify(receipt)).not.toContain(jurisdiction.country);
+    expect(JSON.stringify(receipt)).not.toContain(jurisdiction.region);
+    runtime.close();
   });
 
   test("revokes staged authority immediately when an exact app connection is disconnected", async () => {
@@ -749,6 +1556,157 @@ describe("guarded agent runtime transport", () => {
     expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
   });
 
+  test("authenticates a pending coworker evidence finalization after restart", async () => {
+    const path = join(dataDir, "finalization-restart.db");
+    const coworker = finalizedRunCoworker("cw_finalization_restart", "ws_finalization_restart");
+    const first = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    first.setCoworkerResolver(() => true);
+    first.setFinalizedRunHandler(async () => { throw new Error("kms_temporarily_unavailable"); });
+    const accepted = await first.acceptPrompt({
+      workspaceId: coworker.workspaceId,
+      sessionId: "ses_finalization_restart",
+      parts: [{ type: "text", text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker,
+    });
+    await first.completeRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      status: "success",
+    });
+    first.close();
+
+    const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    const finalized: string[] = [];
+    restored.setFinalizedRunHandler(async ({ receipt }) => { finalized.push(receipt.runId); });
+    expect(await restored.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 1, failed: 0 });
+    expect(finalized).toEqual([accepted.runId]);
+    expect(await restored.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+    restored.close();
+  });
+
+  test("rejects tenant, receipt, and SQLite metadata mutation in a pending evidence finalization", async () => {
+    const variants = ["receipt", "workspace_row", "expiry"] as const;
+    for (const variant of variants) {
+      const path = join(dataDir, `finalization-tamper-${variant}.db`);
+      const store = new MatterhornGuardedRuntimeStateStore(path);
+      const runtime = new MatterhornGuardedAgentRuntime(store);
+      const coworker = finalizedRunCoworker(`cw_finalization_${variant}`, `ws_finalization_${variant}`);
+      runtime.setCoworkerResolver(() => true);
+      let calls = 0;
+      runtime.setFinalizedRunHandler(async () => {
+        calls += 1;
+        throw new Error("kms_temporarily_unavailable");
+      });
+      const accepted = await runtime.acceptPrompt({
+        workspaceId: coworker.workspaceId,
+        sessionId: `ses_finalization_${variant}`,
+        parts: [{ type: "text", text: "Read public Sui state" }],
+        providerId: "cudos",
+        modelId: "asi1-mini",
+        agentId: "matterhorn-sui",
+        executionMode: "work",
+        requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+        coworker,
+      });
+      await runtime.completeRun({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        runId: accepted.runId,
+        status: "success",
+      });
+      const record = store.getRecord<unknown>("crypto_evidence_finalization", accepted.runId)!;
+      const tampered = structuredClone(record.value) as {
+        finalizedRun: { receipt: { workspaceId: string } };
+      };
+      if (variant === "receipt") {
+        tampered.finalizedRun.receipt.workspaceId = "ws_other";
+      }
+      store.put({
+        kind: "crypto_evidence_finalization",
+        key: record.key,
+        workspaceId: variant === "workspace_row" ? "ws_other" : record.workspaceId,
+        sessionId: record.sessionId,
+        value: tampered,
+        expiresAtMs: variant === "expiry" ? (record.expiresAtMs ?? 0) + 1 : record.expiresAtMs,
+        nowMs: record.updatedAtMs,
+      });
+
+      await expect(runtime.retryPendingFinalizedRuns()).rejects.toMatchObject({
+        code: "crypto_evidence_finalization_state_invalid",
+      });
+      expect(calls).toBe(1);
+      expect(store.getRecord("crypto_evidence_finalization", accepted.runId)).not.toBeNull();
+      runtime.close();
+    }
+  });
+
+  test("rejects unsealed legacy and wrong-key evidence finalization state", async () => {
+    const path = join(dataDir, "finalization-legacy-wrong-key.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornGuardedAgentRuntime(store);
+    const coworker = finalizedRunCoworker("cw_finalization_legacy", "ws_finalization_legacy");
+    first.setCoworkerResolver(() => true);
+    first.setFinalizedRunHandler(async () => { throw new Error("kms_temporarily_unavailable"); });
+    const accepted = await first.acceptPrompt({
+      workspaceId: coworker.workspaceId,
+      sessionId: "ses_finalization_legacy",
+      parts: [{ type: "text", text: "Read public Sui state" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work",
+      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }],
+      coworker,
+    });
+    await first.completeRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      status: "success",
+    });
+    const record = store.getRecord<unknown>("crypto_evidence_finalization", accepted.runId)!;
+    const sealed = structuredClone(record.value) as { finalizedRun: unknown };
+    store.put({
+      kind: "crypto_evidence_finalization",
+      key: record.key,
+      workspaceId: record.workspaceId,
+      sessionId: record.sessionId,
+      value: sealed.finalizedRun,
+      expiresAtMs: record.expiresAtMs,
+      nowMs: record.updatedAtMs,
+    });
+    await expect(first.retryPendingFinalizedRuns()).rejects.toMatchObject({
+      code: "crypto_evidence_finalization_state_invalid",
+    });
+    store.put({
+      kind: "crypto_evidence_finalization",
+      key: record.key,
+      workspaceId: record.workspaceId,
+      sessionId: record.sessionId,
+      value: sealed,
+      expiresAtMs: record.expiresAtMs,
+      nowMs: record.updatedAtMs,
+    });
+    first.close();
+
+    const signingSecret = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = "different-capability-signing-secret-at-least-32-bytes";
+    try {
+      const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+      restored.setFinalizedRunHandler(async () => undefined);
+      await expect(restored.retryPendingFinalizedRuns()).rejects.toMatchObject({
+        code: "crypto_evidence_finalization_state_invalid",
+      });
+      restored.close();
+    } finally {
+      if (signingSecret === undefined) delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+      else process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = signingSecret;
+    }
+  });
+
   test("does not run the coworker evidence finalizer for an unbound chat", async () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     let calls = 0;
@@ -876,6 +1834,7 @@ describe("guarded agent runtime transport", () => {
       workspaceId: null,
       sessionId: null,
       coworker: null,
+      jurisdictionPolicy: null,
     });
     expect(runtime.observationSnapshot()).toContainEqual(expect.objectContaining({
       mode: "shadow",
@@ -1000,6 +1959,97 @@ describe("guarded agent runtime transport", () => {
     delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS;
   });
 
+  test("rejects restored rollout bypasses with added authority and invalidates them when policy changes", async () => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS = "prepare";
+    process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS = "sui";
+    const path = join(dataDir, "rollout-bypass-closed-contract.db");
+    const store = new MatterhornGuardedRuntimeStateStore(path);
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    try {
+      const accepted = await runtime.acceptPrompt({
+        workspaceId: "ws_rollout_contract",
+        sessionId: "ses_rollout_contract",
+        parts: [{ type: "text", text: "Read public Sui state" }],
+        providerId: "cudos",
+        modelId: "asi1-mini",
+        agentId: "matterhorn-sui",
+        executionMode: "work",
+      });
+      const args = { address: `0x${"6".repeat(64)}` };
+      runtime.stageRuntimeTool({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        runId: accepted.runId,
+        workspaceId: "ws_rollout_contract",
+        sessionId: "ses_rollout_contract",
+        callId: "call_rollout_contract",
+        agentId: "matterhorn-sui",
+        toolName: "matterhorn-work_matterhorn_sui_get_balance",
+        args,
+      });
+      const persisted = store.getRecord<Record<string, unknown>>("rollout_bypass", "call_rollout_contract");
+      if (!persisted) throw new Error("test rollout bypass missing");
+      const envelope = persisted.value as { value?: unknown };
+      if (!envelope.value || typeof envelope.value !== "object" || Array.isArray(envelope.value)) {
+        throw new Error("test rollout bypass envelope missing");
+      }
+      replaceAuthorizedRecord(store, persisted, { ...envelope.value, submit: true });
+      expect(() => runtime.authorizeMcpTool({
+        toolName: "matterhorn_sui_get_balance",
+        args: { ...args, _matterhornCallId: "call_rollout_contract" },
+      })).toThrow("invalid persisted rollout authorization");
+
+      runtime.stageRuntimeTool({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        runId: accepted.runId,
+        workspaceId: "ws_rollout_contract",
+        sessionId: "ses_rollout_contract",
+        callId: "call_rollout_policy_changed",
+        agentId: "matterhorn-sui",
+        toolName: "matterhorn-work_matterhorn_sui_get_balance",
+        args,
+      });
+      delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS;
+      delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS;
+      expect(() => runtime.authorizeMcpTool({
+        toolName: "matterhorn_sui_get_balance",
+        args: { ...args, _matterhornCallId: "call_rollout_policy_changed" },
+      })).toThrow("no longer matches the active enforcement policy");
+    } finally {
+      runtime.close();
+      delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_ACCESS;
+      delete process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS;
+    }
+  });
+
+  test("never promotes a persisted shadow denial into enforce-mode rollout authority", () => {
+    const path = join(dataDir, "rollout-bypass-mode-transition.db");
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "shadow";
+    const shadow = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    shadow.stageRuntimeTool({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: "run_missing",
+      workspaceId: "ws_shadow_transition",
+      sessionId: "ses_shadow_transition",
+      callId: "call_shadow_transition",
+      agentId: "matterhorn-sui",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance",
+      args: { address: `0x${"7".repeat(64)}` },
+    });
+    shadow.close();
+
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+    const enforce = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    try {
+      expect(() => enforce.authorizeMcpTool({
+        toolName: "matterhorn_sui_get_balance",
+        args: { address: `0x${"7".repeat(64)}`, _matterhornCallId: "call_shadow_transition" },
+      })).toThrow("no longer matches the active enforcement policy");
+    } finally {
+      enforce.close();
+      process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+    }
+  });
+
   test("invalid rollout selectors fail readiness instead of bypassing tools", () => {
     process.env.MATTERHORN_GUARDED_RUNTIME_ENFORCE_DESKS = "sui,typo-desk";
     const runtime = new MatterhornGuardedAgentRuntime();
@@ -1106,5 +2156,328 @@ describe("guarded agent runtime transport", () => {
         else process.env[key] = value;
       }
     }
+  });
+
+  test("releases provider system context only for the exact active run scope", async () => {
+    const path = join(dataDir, "provider-system-exact-scope.db");
+    const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    const system = "Matterhorn-approved Bittensor system context.";
+    const input = {
+      workspaceId: "ws_provider_system",
+      sessionId: "ses_provider_system",
+      parts: [{
+        type: "system_context" as const,
+        text: system,
+        source: "system" as const,
+        label: "public" as const,
+        contentHash: sha256(system),
+      }, {
+        type: "provider_system_manifest" as const,
+        source: "system" as const,
+        label: "public" as const,
+        contentHash: sha256(system),
+        version: "matterhorn.provider-system.message.v1",
+      }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-bittensor",
+      executionMode: "work" as const,
+    };
+    const authorization = runtime.authorizePrompt(input);
+    const accepted = await runtime.startAuthorizedPrompt(input, authorization, {
+      sections: [system],
+      purpose: "message",
+    });
+    expect(() => runtime.resolveRuntimeProviderSystem({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      purpose: "message",
+    })).toThrow("Provider system context is not bound");
+    const messages = [{
+      info: { id: "msg_provider_system", role: "user", sessionID: input.sessionId },
+      parts: [{ type: "text", text: "Compare public Bittensor validators" }],
+    }];
+    expect(() => runtime.validateRuntimeProviderMessages({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: "ws_other",
+      sessionId: input.sessionId,
+      messages,
+    })).toThrow("not bound to this active Matterhorn run");
+    const validated = runtime.validateRuntimeProviderMessages({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      messages,
+    });
+    expect(validated).toEqual({
+      accepted: true,
+      runId: accepted.runId,
+      messagesHash: sha256(JSON.stringify(messages)),
+    });
+    const exact = runtime.resolveRuntimeProviderSystem({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      purpose: "message",
+    });
+    expect(exact).toEqual({ runId: accepted.runId, system: [system], systemHash: sha256(system) });
+    expect(() => runtime.resolveRuntimeProviderSystem({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      purpose: "message",
+    })).toThrow("Provider system context is not bound");
+
+    for (const mutation of [
+      { workspaceId: "ws_other" },
+      { sessionId: "ses_other" },
+      { providerId: "venice" },
+      { modelId: "different-model" },
+      { purpose: "compaction" as const },
+    ]) {
+      expect(() => runtime.resolveRuntimeProviderSystem({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        providerId: input.providerId,
+        modelId: input.modelId,
+        purpose: "message",
+        ...mutation,
+      })).toThrow("Provider system context is not bound");
+    }
+    runtime.close();
+    expect((await readFile(path)).includes(Buffer.from(system, "utf8"))).toBe(false);
+
+    const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    expect(() => restored.resolveRuntimeProviderSystem({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      purpose: "message",
+    })).toThrow("Provider system context is not bound");
+    restored.close();
+  });
+
+  test("blocks secrets introduced into the final provider messages after preflight", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    const system = "Matterhorn-approved public research context.";
+    const input = {
+      workspaceId: "ws_provider_message_secret",
+      sessionId: "ses_provider_message_secret",
+      parts: [{
+        type: "system_context" as const,
+        text: system,
+        source: "system" as const,
+        label: "public" as const,
+        contentHash: sha256(system),
+      }, {
+        type: "provider_system_manifest" as const,
+        source: "system" as const,
+        label: "public" as const,
+        contentHash: sha256(system),
+        version: "matterhorn.provider-system.message.v1",
+      }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      executionMode: "work" as const,
+    };
+    const authorization = runtime.authorizePrompt(input);
+    await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+
+    expect(() => runtime.validateRuntimeProviderMessages({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      messages: [{
+        info: { role: "assistant", sessionID: input.sessionId },
+        parts: [{ type: "tool", state: { output: "api_key=sk-this-secret-was-added-by-a-tool-output" } }],
+      }],
+    })).toThrow("blocked sensitive material");
+    expect(() => runtime.resolveRuntimeProviderSystem({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      purpose: "message",
+    })).toThrow("Provider system context is not bound");
+    runtime.close();
+  });
+
+  test("rejects private attachments and wallet intent introduced after public preflight", async () => {
+    for (const [suffix, parts] of [
+      ["attachment", [{ type: "file", mime: "text/plain", url: "data:text/plain;base64,cHJpdmF0ZQ==" }]],
+      ["wallet", [{
+        type: "text",
+        text: "Transfer 1 SUI to recipient 0x1111111111111111111111111111111111111111111111111111111111111111",
+      }]],
+    ] as const) {
+      const runtime = new MatterhornGuardedAgentRuntime();
+      const system = "Matterhorn-approved public research context.";
+      const input = {
+        workspaceId: `ws_provider_message_${suffix}`,
+        sessionId: `ses_provider_message_${suffix}`,
+        parts: [{
+          type: "system_context" as const,
+          text: system,
+          source: "system" as const,
+          label: "public" as const,
+          contentHash: sha256(system),
+        }, {
+          type: "provider_system_manifest" as const,
+          source: "system" as const,
+          label: "public" as const,
+          contentHash: sha256(system),
+          version: "matterhorn.provider-system.message.v1",
+        }],
+        providerId: "cudos",
+        modelId: "asi1-mini",
+        executionMode: "work" as const,
+      };
+      const authorization = runtime.authorizePrompt(input);
+      await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+
+      expect(() => runtime.validateRuntimeProviderMessages({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        messages: [{
+          info: { role: "user", sessionID: input.sessionId },
+          parts,
+        }],
+      })).toThrow("became more sensitive");
+      expect(() => runtime.resolveRuntimeProviderSystem({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        providerId: input.providerId,
+        modelId: input.modelId,
+        purpose: "message",
+      })).toThrow("Provider system context is not bound");
+      runtime.close();
+    }
+  });
+
+  test("rejects final messages when the accepted provider policy changes", async () => {
+    const keys = [
+      "MATTERHORN_CUDOS_TRAINING_USE",
+      "MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS",
+      "MATTERHORN_CUDOS_PRIVACY_POLICY_URL",
+      "MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT",
+    ] as const;
+    const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    try {
+      process.env.MATTERHORN_CUDOS_TRAINING_USE = "none";
+      process.env.MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS = "30";
+      process.env.MATTERHORN_CUDOS_PRIVACY_POLICY_URL = "https://provider.example/privacy";
+      process.env.MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT = new Date().toISOString();
+      const runtime = new MatterhornGuardedAgentRuntime();
+      const system = "Matterhorn-approved private research context.";
+      const input = {
+        workspaceId: "ws_provider_message_policy",
+        sessionId: "ses_provider_message_policy",
+        parts: [{
+          type: "system_context" as const,
+          text: system,
+          source: "system" as const,
+          label: "workspace_private" as const,
+          contentHash: sha256(system),
+        }, {
+          type: "provider_system_manifest" as const,
+          source: "system" as const,
+          label: "workspace_private" as const,
+          contentHash: sha256(system),
+          version: "matterhorn.provider-system.message.v1",
+        }],
+        providerId: "cudos",
+        modelId: "asi1-mini",
+        privacyMode: "private_workspace" as const,
+        executionMode: "work" as const,
+      };
+      const authorization = runtime.authorizePrompt(input);
+      await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+
+      delete process.env.MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS;
+      expect(() => runtime.validateRuntimeProviderMessages({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        messages: [{
+          info: { role: "user", sessionID: input.sessionId },
+          parts: [{ type: "text", text: "Continue the private research" }],
+        }],
+      })).toThrow("provider privacy policy changed");
+      runtime.close();
+    } finally {
+      for (const key of keys) {
+        const value = previous[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  test("rejects provider system bytes that were not classified in the exact preflight", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    const input = {
+      workspaceId: "ws_provider_system_unclassified",
+      sessionId: "ses_provider_system_unclassified",
+      parts: [{ type: "text" as const, text: "Read public Sui activity" }],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn-sui",
+      executionMode: "work" as const,
+    };
+    const authorization = runtime.authorizePrompt(input);
+    await expect(runtime.startAuthorizedPrompt(input, authorization, {
+      sections: ["Late workspace instruction that skipped privacy review"],
+      purpose: "message",
+    })).rejects.toMatchObject({ code: "agent_provider_system_unclassified" });
+    expect(await runtime.receipts.list(input.workspaceId)).toHaveLength(0);
+    expect(runtime.capabilities.activeRun(input.sessionId)).toBeNull();
+    runtime.close();
+  });
+
+  test("rejects reordered or omitted provider system sections after privacy review", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    const first = "Exact selected agent instructions";
+    const second = "Exact Matterhorn workspace system context";
+    const input = {
+      workspaceId: "ws_provider_system_order",
+      sessionId: "ses_provider_system_order",
+      parts: [
+        { type: "agent_instructions" as const, source: "system" as const, label: "public" as const, contentHash: sha256(first) },
+        { type: "compiled_system_context" as const, source: "system" as const, label: "public" as const, contentHash: sha256(second) },
+        {
+          type: "provider_system_manifest" as const,
+          source: "system" as const,
+          label: "public" as const,
+          contentHash: sha256(`${first}\n${second}`),
+          version: "matterhorn.provider-system.message.v1",
+        },
+      ],
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      agentId: "matterhorn",
+      executionMode: "work" as const,
+    };
+    const authorization = runtime.authorizePrompt(input);
+    for (const sections of [[second, first], [first]]) {
+      await expect(runtime.startAuthorizedPrompt(input, authorization, {
+        sections,
+        purpose: "message",
+      })).rejects.toMatchObject({ code: "agent_provider_system_unbound" });
+    }
+    expect(await runtime.receipts.list(input.workspaceId)).toHaveLength(0);
+    runtime.close();
   });
 });

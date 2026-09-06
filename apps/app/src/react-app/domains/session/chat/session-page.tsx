@@ -81,7 +81,7 @@ import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
 import type { ProviderAuthModalProps } from "../../connections/provider-auth/provider-auth-modal";
 import { RenameSessionModal } from "../modals/rename-session-modal";
 import { AppSidebar } from "../sidebar/app-sidebar";
-import { SessionSurface, type SessionSurfaceProps } from "../surface/session-surface";
+import type { SessionSurfaceProps } from "../surface/session-surface";
 import { useMatterhornSessionMemoryContextStore } from "../surface/memory-context-store";
 import {
   SidebarInset,
@@ -119,6 +119,12 @@ import {
   workflowOutputReceiptsFromEvidence,
 } from "../artifacts/output-receipts";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
+import {
+  boundedCoworkerUnreadCount,
+  coworkerListQueryKey,
+  coworkerUnreadBadgeLabel,
+  coworkerUnreadStatusLabel,
+} from "../../coworkers/coworker-query";
 import { ProjectHistoryPage } from "../../recent-activity/project-history-page";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import { useStatusToasts } from "../../shell-feedback/status-toasts";
@@ -177,6 +183,9 @@ import { getChatDraftConfig, type ReviewedActionOperation } from "@matterhorn-wo
 import { matterhornDeskAgentIdForDesk } from "@matterhorn-work/types/desk-agents";
 import type { MatterhornWorkflowRun } from "@matterhorn-work/types/workflow-runs";
 
+const SessionSurface = lazy(() => import("../surface/session-surface").then((module) => ({
+  default: module.SessionSurface,
+})));
 const ProviderAuthModal = lazy(() => import("../../connections/provider-auth/provider-auth-modal"));
 const ShareWorkspaceModal = lazy(() => import("../../workspace/share-workspace-modal").then((module) => ({
   default: module.ShareWorkspaceModal,
@@ -1713,6 +1722,20 @@ export function SessionPage(props: SessionPageProps) {
     () => customerWorkflowStarterCards.filter((card) => card.panel === "bittensor" || card.panel === "hyperliquid" || card.panel === "polymarket" || card.panel === "sui"),
     [customerWorkflowStarterCards],
   );
+  const coworkerWorkspaceId = (props.runtimeWorkspaceId ?? props.selectedWorkspaceId ?? "").trim();
+  const coworkerListQuery = useQuery({
+    queryKey: coworkerListQueryKey(coworkerWorkspaceId),
+    queryFn: () => props.matterhornServerClient!.listCoworkers(coworkerWorkspaceId),
+    enabled: Boolean(props.matterhornServerClient && coworkerWorkspaceId),
+    retry: false,
+    refetchInterval: (query) => query.state.status === "error" ? false : 30_000,
+  });
+  const coworkerUnreadCount = boundedCoworkerUnreadCount(coworkerListQuery.data?.inbox?.totalUnread);
+  const coworkerUnreadBadge = coworkerUnreadBadgeLabel(coworkerUnreadCount);
+  const coworkerUnreadStatus = coworkerUnreadStatusLabel(coworkerUnreadCount);
+  const coworkerNavigationTitle = coworkerUnreadCount > 0
+    ? `Coworkers · ${coworkerUnreadStatus}`
+    : "Coworkers";
   const [memorySuggestionUnreadCount, setMemorySuggestionUnreadCount] = useState(0);
   const refreshMemorySuggestionUnreadCount = useCallback(async () => {
     const client = props.matterhornServerClient;
@@ -2320,9 +2343,10 @@ export function SessionPage(props: SessionPageProps) {
     setHomeCoworkerStart(request);
     setCurrentSidePanel("coworkers");
   }, [setCurrentSidePanel]);
-  const clearHomeCoworkerTemplate = useCallback(() => {
+  const closeCoworkersPane = useCallback(() => {
     setHomeCoworkerStart(null);
-  }, []);
+    closeRightPane();
+  }, [closeRightPane]);
   const openAgentFilesRailPane = useCallback(() => {
     toggleCurrentSidePanel("files");
   }, [toggleCurrentSidePanel]);
@@ -2457,11 +2481,11 @@ export function SessionPage(props: SessionPageProps) {
       client={props.matterhornServerClient}
       initialTemplateId={homeCoworkerStart?.templateId}
       initialOutcome={homeCoworkerStart?.outcome}
-      onInitialTemplateHandled={clearHomeCoworkerTemplate}
       workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
       selectedSessionId={props.selectedSessionId}
       selectedWorkspaceId={props.selectedWorkspaceId}
-      onClose={closeRightPane}
+      compactHeader={overlaySidePanelOpen}
+      onClose={closeCoworkersPane}
       onBrowseApps={() => navigate(`/workspace/${encodeURIComponent(props.selectedWorkspaceId)}/crypto-apps`)}
       onBrowseFiles={() => setCurrentSidePanel("files")}
       onBrowseMemory={() => setCurrentSidePanel("memory")}
@@ -2942,6 +2966,14 @@ export function SessionPage(props: SessionPageProps) {
                     <p className="px-3 pb-1 pt-2 text-xs font-medium text-dls-muted">Workspace</p>
                     <MobileWorkspaceMenuAction
                       active={coworkersRailActive}
+                      badge={coworkerUnreadBadge ? (
+                        <>
+                          <span className="sr-only">{coworkerUnreadStatus}</span>
+                          <span aria-hidden="true" className="rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-semibold text-dls-secondary">
+                            {coworkerUnreadBadge}
+                          </span>
+                        </>
+                      ) : null}
                       icon={<UsersRound className="size-4" />}
                       label="Coworkers"
                       onSelect={() => runMobileWorkspaceAction(openCoworkersRailPane)}
@@ -3100,34 +3132,36 @@ export function SessionPage(props: SessionPageProps) {
               ) : null}
 
               {!showDelayedSessionLoadingState && canRenderReactSurface ? (
-                <SessionSurface
-                  // Spread `surface` first so the explicit per-workspace
-                  // routing props below CAN'T be silently overridden by
-                  // anything that leaks into `surface`. SessionSurface's
-                  // server target (client/workspaceId/sessionId/opencodeBaseUrl/matterhornToken)
-                  // must come from the resolved workspace endpoint passed by
-                  // SessionRoute, not from anything in `surface`.
-                  {...props.surface!}
-                  client={props.matterhornServerClient!}
-                  workspaceId={props.runtimeWorkspaceId!}
-                  sessionId={props.selectedSessionId!}
-                  opencodeBaseUrl={reactSessionBaseUrl}
-                  matterhornToken={reactSessionToken}
-                  todos={props.todos}
-                  activePermission={props.activePermission}
-                  permissionReplyBusy={props.permissionReplyBusy}
-                  respondPermission={props.respondPermission}
-                  activeQuestion={props.activeQuestion}
-                  questionReplyBusy={props.questionReplyBusy}
-                  respondQuestion={props.respondQuestion}
-                  safeStringify={props.safeStringify}
-                  connectedProviderIds={props.providerConnectedIds}
-                  onOpenTarget={openTarget}
-                  onOpenTargetsChange={handleOpenTargetsChange}
-                  onCreateDeskTask={(prompt, options) => {
-                    return props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, options);
-                  }}
-                />
+                <Suspense fallback={<LazyPanelFallback label="Loading chat" />}>
+                  <SessionSurface
+                    // Spread `surface` first so the explicit per-workspace
+                    // routing props below CAN'T be silently overridden by
+                    // anything that leaks into `surface`. SessionSurface's
+                    // server target (client/workspaceId/sessionId/opencodeBaseUrl/matterhornToken)
+                    // must come from the resolved workspace endpoint passed by
+                    // SessionRoute, not from anything in `surface`.
+                    {...props.surface!}
+                    client={props.matterhornServerClient!}
+                    workspaceId={props.runtimeWorkspaceId!}
+                    sessionId={props.selectedSessionId!}
+                    opencodeBaseUrl={reactSessionBaseUrl}
+                    matterhornToken={reactSessionToken}
+                    todos={props.todos}
+                    activePermission={props.activePermission}
+                    permissionReplyBusy={props.permissionReplyBusy}
+                    respondPermission={props.respondPermission}
+                    activeQuestion={props.activeQuestion}
+                    questionReplyBusy={props.questionReplyBusy}
+                    respondQuestion={props.respondQuestion}
+                    safeStringify={props.safeStringify}
+                    connectedProviderIds={props.providerConnectedIds}
+                    onOpenTarget={openTarget}
+                    onOpenTargetsChange={handleOpenTargetsChange}
+                    onCreateDeskTask={(prompt, options) => {
+                      return props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, options);
+                    }}
+                  />
+                </Suspense>
               ) : null}
 
               {!showDelayedSessionLoadingState && !canRenderReactSurface && !showStartupSkeleton ? (
@@ -3775,16 +3809,23 @@ export function SessionPage(props: SessionPageProps) {
               variant="ghost"
               size="icon-sm"
               className={cn(
-                RAIL_BUTTON_CLASS,
+                `relative ${RAIL_BUTTON_CLASS}`,
                 coworkersRailActive && RAIL_ACTIVE_CLASS,
               )}
               onClick={openCoworkersRailPane}
-              title="Coworkers"
-              aria-label="Coworkers"
+              title={coworkerNavigationTitle}
               aria-pressed={coworkersRailActive}
             >
-              <UsersRound size={17} />
+              <UsersRound size={17} aria-hidden="true" />
               <span className={RAIL_LABEL_CLASS}>Coworkers</span>
+              {coworkerUnreadCount > 0 ? (
+                <>
+                  <span className="sr-only">{coworkerUnreadStatus}</span>
+                  <span aria-hidden="true" className="absolute right-1 top-1 flex min-w-3 items-center justify-center rounded-md bg-dls-hover px-1 text-[9px] font-semibold leading-3 text-dls-secondary ring-1 ring-dls-border/40">
+                    {coworkerUnreadBadge}
+                  </span>
+                </>
+              ) : null}
             </Button>
             <Button
               variant="ghost"
@@ -3942,7 +3983,7 @@ export function SessionPage(props: SessionPageProps) {
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      className="size-8 rounded-md text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
+                      className="size-11 rounded-md text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
                       onClick={closeRightPane}
                       title="Back to workspace"
                       aria-label="Back to workspace"

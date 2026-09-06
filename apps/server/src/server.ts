@@ -133,10 +133,8 @@ import {
   findForbiddenHyperliquidCredentialInput,
   hyperliquidProvider,
   isValidHyperliquidAddress,
-  prepareHyperliquidExternalSignRequestFromRequest,
   prepareHyperliquidHandoffFromRequest,
   prepareHyperliquidOrderPreview,
-  validateHyperliquidRedactedArtifactEnvelope,
   type HyperliquidWatchCheckResult,
   type HyperliquidWatchDescriptor,
   verifyHyperliquidReceipt,
@@ -164,11 +162,9 @@ import {
   findForbiddenPolymarketCredentialInput,
   buildPolymarketWatchDescriptor,
   polymarketProvider,
-  preparePolymarketExternalSignRequestFromRequest,
   preparePolymarketHandoffFromRequest,
   preparePolymarketOrderFromRequest,
   preparePolymarketSellPreviewFromRequest,
-  validatePolymarketRedactedArtifactEnvelope,
   type PolymarketWatchCheckResult,
   type PolymarketWatchDescriptor,
   verifyPolymarketReceipt,
@@ -272,6 +268,7 @@ import {
 import {
   MATTERHORN_MEMORY_SUGGESTION_VERSION,
   MATTERHORN_MEMORY_DESK_POLICY_MATRIX,
+  containsForbiddenMemoryRecordMaterial,
   detectMemoryDeskFromRecord,
   validateMemoryRecordAgainstDeskPolicy,
   type MatterhornMemoryDesk,
@@ -316,6 +313,7 @@ import type {
   MatterhornAgentDataLabel,
   MatterhornAgentPrivacyMode,
   MatterhornAgentPrivacyPart,
+  MatterhornAgentRunReceipt,
 } from "@matterhorn-work/types/guarded-agent-runtime";
 import type {
   MatterhornBackendModelCatalogErrorCode,
@@ -346,7 +344,10 @@ import {
   getMatterhornDeskAgent,
   getMatterhornDeskAgentById,
 } from "@matterhorn-work/types/desk-agents";
-import { getMatterhornCryptoTool } from "@matterhorn-work/types/crypto-action-registry";
+import {
+  getMatterhornCryptoTool,
+  MATTERHORN_CRYPTO_ACTION_REGISTRY,
+} from "@matterhorn-work/types/crypto-action-registry";
 import {
   MATTERHORN_EXECUTION_MODE_HEADER,
   buildMatterhornExecutionModeSystemPrompt,
@@ -368,6 +369,7 @@ import { buildMatterhornGeneralCryptoToolProfile } from "./agent-tool-routing.js
 import {
   activeDeskToolDefinitions,
   compileMatterhornCryptoState,
+  receiptEvidenceReferences,
 } from "./crypto-context-compiler.js";
 import {
   createMatterhornCryptoAppRuntime,
@@ -460,6 +462,7 @@ import type {
   MatterhornCryptoAppManifest,
   MatterhornCoworkerProfile,
   MatterhornCoworkerResourceScope,
+  MatterhornCoworkerSessionBinding,
   MatterhornCoworkerState,
   MatterhornCoworkerWatch,
   MatterhornCoworkerInboxItem,
@@ -502,10 +505,12 @@ import {
   verifyMatterhornTurnstile,
 } from "./turnstile.js";
 import {
+  HOSTED_MCP_ACCESS_MAX_DAYS,
   MatterhornAuthError,
   MatterhornAuthStore,
   resolveMatterhornDataRoot,
   type MatterhornAuthAccountDeletionJob,
+  type MatterhornHostedMcpAccessIdentity,
   type MatterhornAuthSession,
 } from "./auth-store.js";
 import {
@@ -523,7 +528,12 @@ import { startReloadWatchers } from "./reload-watcher.js";
 import { opencodeConfigPath, openworkConfigPath, projectCommandsDir, projectSkillsDir } from "./workspace-files.js";
 import { ensureDir, exists, hashToken, shortId, timingSafeTokenEqual } from "./utils.js";
 import { workspaceIdForPath } from "./workspaces.js";
-import { ensureWorkspaceFiles, readRawOpencodeConfig } from "./workspace-init.js";
+import {
+  ensureWorkspaceFiles,
+  readRawOpencodeConfig,
+  resolveMatterhornManagedAgentPrompt,
+} from "./workspace-init.js";
+import { MATTERHORN_CRYPTO_COMPACTION_CONTEXT } from "./opencode-compaction-policy.js";
 import { sanitizeCommandName, validateMcpName } from "./validators.js";
 import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
@@ -551,7 +561,6 @@ import {
   writeWorkspaceModelSelection,
 } from "./backend-models.js";
 import {
-  providerPrivacyEnforcementMode,
   resolveModelProviderPrivacyPolicy,
   resolveProviderPrivacyPolicy,
 } from "./provider-privacy.js";
@@ -627,12 +636,22 @@ import {
 import { callExperimentalExtensionAction, listExperimentalExtensionActions } from "./extensions/index.js";
 import { handleManagedOpencodeMcp } from "./managed-opencode-mcp.js";
 import {
+  handleHostedGuardedMcpPost,
+  hostedGuardedMcpMethodNotAllowed,
+  hostedGuardedMcpParseError,
+  HostedGuardedMcpToolError,
+  type HostedGuardedMcpInvocation,
+} from "./hosted-guarded-mcp.js";
+import {
   GuardedRuntimeError,
   MatterhornGuardedAgentRuntime,
   type GuardedPromptAcceptance,
   type GuardedPromptAuthorization,
+  type GuardedPromptInput,
+  type GuardedProviderSystemContext,
 } from "./guarded-agent-runtime.js";
 import { canonicalJson } from "./guarded-runtime-crypto.js";
+import { resolveTrustedRequestJurisdiction } from "./trusted-jurisdiction.js";
 import {
   awsKmsEvidenceKeyManagerFromEnv,
   evidenceKmsRotationDaysFromEnv,
@@ -785,9 +804,19 @@ function assertOptionalReviewedActionReceiptBinding(
       const asset = walletHandoff ? readStringField(walletHandoff, "asset") : "";
       if (asset && handoff.asset && asset !== handoff.asset) failTerms();
     } else {
-      const marketId = walletHandoff ? readStringField(walletHandoff, "marketId") : "";
-      const outcome = walletHandoff ? readStringField(walletHandoff, "outcome") : "";
-      if ((marketId && handoff.recipient && marketId !== handoff.recipient) || (outcome && handoff.asset && outcome !== handoff.asset)) failTerms();
+      const receipt = isRecord(body.receipt) ? body.receipt : null;
+      const marketId = readStringField(receipt, "marketId") || (walletHandoff ? readStringField(walletHandoff, "marketId") : "");
+      const order = walletHandoff && isRecord(walletHandoff.order) ? walletHandoff.order : null;
+      const tokenId = readStringField(receipt, "tokenId") || readStringField(order, "tokenId");
+      const outcome = readStringField(receipt, "outcome") || (walletHandoff ? readStringField(walletHandoff, "outcome") : "");
+      const side = readStringField(receipt, "side");
+      const reviewedDraft = handoff.draft.operation === "buy" || handoff.draft.operation === "sell"
+        ? handoff.draft
+        : null;
+      if ((marketId && handoff.recipient && marketId !== handoff.recipient)
+        || (tokenId && handoff.asset && tokenId !== handoff.asset)
+        || (outcome && reviewedDraft && outcome !== reviewedDraft.outcome)
+        || (side && reviewedDraft && side !== reviewedDraft.operation)) failTerms();
     }
   }
   return { handoff, receiptIntentHash };
@@ -1278,6 +1307,14 @@ function assertOpencodeProxyAllowed(access: ClientAccess, request: Request, prox
   const m = method.toUpperCase();
   const scope = access.actor.scope ?? "viewer";
 
+  if (access.hostedMcpAccess) {
+    throw new ApiError(
+      403,
+      "hosted_mcp_operation_not_allowed",
+      "This access key can only use Matterhorn's guarded workspace and chat tools.",
+    );
+  }
+
   if (
     isRawInferenceProxyRequest(m, proxyPath)
     && accountMessageGatewayRequired(access)
@@ -1307,7 +1344,7 @@ function assertOpencodeProxyAllowed(access: ClientAccess, request: Request, prox
 }
 
 function isSessionPromptProxyRequest(method: string, proxyPath: string) {
-  return method === "POST" && /^\/session\/[^/]+\/prompt_async$/.test(normalizeOpencodeProxyPath(proxyPath));
+  return method === "POST" && /^\/session\/[^/]+\/(?:message|prompt_async)$/.test(normalizeOpencodeProxyPath(proxyPath));
 }
 
 function isRestrictedSessionMutationProxyRequest(method: string, proxyPath: string) {
@@ -1376,6 +1413,7 @@ interface RequestContext {
   actor?: Actor;
   matterhornSession?: MatterhornAuthSession;
   matterhornWorkspace?: WorkspaceInfo;
+  hostedMcpAccess?: MatterhornHostedMcpAccessIdentity;
   peerAddress?: string;
 }
 
@@ -1383,6 +1421,7 @@ type ClientAccess = {
   actor: Actor;
   session?: MatterhornAuthSession;
   workspace?: WorkspaceInfo;
+  hostedMcpAccess?: MatterhornHostedMcpAccessIdentity;
 };
 
 type MatterhornSuiEvidenceAnchorPackageState = {
@@ -2013,6 +2052,7 @@ export async function startServer(
       routeTemplate = route.path;
       try {
         assertTrustedBrowserMutationOrigin(request, config);
+        assertMatterhornHostedMcpRouteAllowed(request, authStore);
         const clientAccess =
           route.auth === "client"
             ? await requireClientAccess(request, config, tokens, authStore)
@@ -2056,6 +2096,7 @@ export async function startServer(
           actor,
           matterhornSession: clientAccess?.session,
           matterhornWorkspace: clientAccess?.workspace,
+          hostedMcpAccess: clientAccess?.hostedMcpAccess,
           peerAddress: rateLimitPeerAddress ?? undefined,
         });
         return finalize(response);
@@ -2152,6 +2193,7 @@ function providerForOperationalRoute(route: string, proxyService?: "opencode"): 
 
 function operationalReadiness(
   config: ServerConfig,
+  authStore: MatterhornAuthStore,
   guardedRuntime?: MatterhornGuardedAgentRuntime,
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices,
   coworkerRuntime?: MatterhornCoworkerRuntimeServices,
@@ -2197,6 +2239,16 @@ function operationalReadiness(
   const hostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA === "1";
   const accountMessageGatewayReady = !hostedPublicBeta
     || process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED === "1";
+  const sessionPrivacyStateReady = !hostedPublicBeta
+    || Boolean(guardedRuntime?.sessionPrivacyStateReady());
+  const providerSystemBoundaryReady = !hostedPublicBeta || Boolean(
+    accountMessageGatewayReady
+    && config.managedOpencodeMcp
+    && (process.env.MATTERHORN_AGENT_RUNTIME_SECRET?.trim().length ?? 0) >= 32
+  );
+  const hostedMcpAccessMode = matterhornHostedMcpAccessMode();
+  const hostedMcpAccessIntegrityReady = hostedMcpAccessMode === "off"
+    || authStore.hostedMcpAccessIntegrityReady();
   const hostBackupRequired = process.env.MATTERHORN_HOST_BACKUP_REQUIRED === "1";
   const hostBackupFreshCheck = !hostBackupRequired || hostBackupFresh();
   const cryptoEvidenceSuiAnchorPackageReady = !cryptoEvidenceSuiAnchorPackageState.configured
@@ -2216,6 +2268,9 @@ function operationalReadiness(
       && recoveryErasureLedgerReady
       && hostedBrowserOpencodePolicyReady
       && accountMessageGatewayReady
+      && sessionPrivacyStateReady
+      && providerSystemBoundaryReady
+      && hostedMcpAccessIntegrityReady
       && hostBackupFreshCheck
       && cryptoEvidenceSuiAnchorPackageReady,
     checks: {
@@ -2242,6 +2297,10 @@ function operationalReadiness(
       hostedBrowserOpencodePolicy: HOSTED_BROWSER_OPENCODE_POLICY,
       hostedBrowserOpencodePolicyReady,
       accountMessageGatewayReady,
+      sessionPrivacyStateReady,
+      providerSystemBoundaryReady,
+      hostedMcpAccessMode,
+      hostedMcpAccessIntegrityReady,
       hostBackupRequired,
       hostBackupFresh: hostBackupFreshCheck,
       cryptoEvidenceSuiAnchorPackageConfigured: cryptoEvidenceSuiAnchorPackageState.configured,
@@ -2316,13 +2375,18 @@ function createWorkspaceOpencodeClient(config: ServerConfig, workspace: Workspac
   });
 }
 
-async function ensureMatterhornSessionPermissionProfile(input: {
+const MATTERHORN_AGENT_PROMPT_MAX_CHARS = 128_000;
+
+function comparableAgentPrompt(value: string): string {
+  return value.replace(/\r\n/g, "\n").trim();
+}
+
+async function resolveMatterhornSessionAgentContext(input: {
   config: ServerConfig;
   workspace: WorkspaceInfo;
   sessionId: string;
   agentId?: string;
-  requestToolProfiles?: readonly Record<string, boolean>[];
-}): Promise<void> {
+}) {
   const opencode = createWorkspaceOpencodeClient(input.config, input.workspace);
   const directory = resolveOpencodeDirectory(input.workspace) ?? undefined;
   const [session, agents] = await Promise.all([
@@ -2338,15 +2402,120 @@ async function ensureMatterhornSessionPermissionProfile(input: {
     }).then((result) => unwrapOpencodeResult(result, "/agent")),
   ]);
 
-  const effectiveAgentId = input.agentId?.trim() || session.agent?.trim() || "matterhorn";
-  const agent = agents.find((candidate) => candidate.name === effectiveAgentId);
+  const agentId = input.agentId?.trim() || session.agent?.trim() || "matterhorn";
+  const agent = agents.find((candidate) => candidate.name === agentId);
   if (!agent) {
-    throw new ApiError(400, "agent_unavailable", `Agent ${effectiveAgentId} is not available in this workspace`);
+    throw new ApiError(400, "agent_unavailable", `Agent ${agentId} is not available in this workspace`);
   }
+  const prompt = typeof agent.prompt === "string" ? agent.prompt : "";
+  if (prompt.length > MATTERHORN_AGENT_PROMPT_MAX_CHARS) {
+    throw new ApiError(
+      413,
+      "agent_context_too_large",
+      "The selected agent instructions are too large to verify safely.",
+    );
+  }
+  const promptHash = sha256Bytes(prompt);
+  const canonicalPrompt = resolveMatterhornManagedAgentPrompt(agentId);
+  const managed = canonicalPrompt !== null
+    && comparableAgentPrompt(prompt) === comparableAgentPrompt(canonicalPrompt);
+  const privacyParts: MatterhornAgentPrivacyPart[] = prompt ? [{
+    type: "agent_instructions",
+    name: `Selected agent instructions: ${agentId}`,
+    text: prompt,
+    source: "system",
+    label: managed ? "public" : "workspace_private",
+    contentHash: promptHash,
+    sizeBytes: Buffer.byteLength(prompt, "utf8"),
+    version: "matterhorn.opencode-agent-context.v1",
+  }] : [];
 
-  const agentPermission = normalizeMatterhornPermissionRules(agent.permission);
+  return { opencode, directory, session, agentId, agent, prompt, promptHash, privacyParts };
+}
+
+function guardedProviderSystemContext(
+  sections: readonly string[],
+  purpose: GuardedProviderSystemContext["purpose"],
+): GuardedProviderSystemContext {
+  return {
+    sections: sections.filter((section) => section.length > 0),
+    purpose,
+  };
+}
+
+function guardedProviderSystemPrivacyPart(
+  context: GuardedProviderSystemContext,
+): MatterhornAgentPrivacyPart {
+  const system = context.sections.join("\n");
+  return {
+    type: "provider_system_manifest",
+    name: "Exact provider system manifest",
+    source: "system",
+    label: "public",
+    contentHash: sha256Bytes(system),
+    sizeBytes: Buffer.byteLength(system, "utf8"),
+    version: `matterhorn.provider-system.${context.purpose}.v1`,
+  };
+}
+
+function matterhornCompactionPrivacyParts(
+  agentContext: Awaited<ReturnType<typeof resolveMatterhornSessionAgentContext>>,
+): MatterhornAgentPrivacyPart[] {
+  return [
+    ...agentContext.privacyParts,
+    {
+      type: "system_context",
+      name: "Matterhorn crypto compaction contract",
+      text: MATTERHORN_CRYPTO_COMPACTION_CONTEXT,
+      source: "system",
+      label: "public",
+      contentHash: sha256Bytes(MATTERHORN_CRYPTO_COMPACTION_CONTEXT),
+      sizeBytes: Buffer.byteLength(MATTERHORN_CRYPTO_COMPACTION_CONTEXT, "utf8"),
+      version: "matterhorn.crypto-compaction-context.v1",
+    },
+  ];
+}
+
+async function assertMatterhornSessionAgentContextUnchanged(input: {
+  config: ServerConfig;
+  workspace: WorkspaceInfo;
+  sessionId: string;
+  agentId: string;
+  expectedAgentPromptHash: string;
+}) {
+  const context = await resolveMatterhornSessionAgentContext(input);
+  if (context.agentId !== input.agentId || context.promptHash !== input.expectedAgentPromptHash) {
+    throw new ApiError(
+      409,
+      "agent_context_changed",
+      "The selected agent changed after privacy review. Review the request again before sending.",
+    );
+  }
+  return context;
+}
+
+async function ensureMatterhornSessionPermissionProfile(input: {
+  config: ServerConfig;
+  workspace: WorkspaceInfo;
+  sessionId: string;
+  agentId?: string;
+  expectedAgentId?: string;
+  expectedAgentPromptHash?: string;
+  requestToolProfiles?: readonly Record<string, boolean>[];
+}): Promise<void> {
+  const context = input.expectedAgentId && input.expectedAgentPromptHash
+    ? await assertMatterhornSessionAgentContextUnchanged({
+        config: input.config,
+        workspace: input.workspace,
+        sessionId: input.sessionId,
+        agentId: input.expectedAgentId,
+        expectedAgentPromptHash: input.expectedAgentPromptHash,
+      })
+    : await resolveMatterhornSessionAgentContext(input);
+  const { opencode, directory, session } = context;
+  const agentPermission = normalizeMatterhornPermissionRules(context.agent.permission);
   if (agentPermission.length === 0) {
-    throw new ApiError(503, "agent_permission_unavailable", `Agent ${effectiveAgentId} has no runtime permission policy`);
+    throw new ApiError(503, "agent_permission_unavailable", `Agent ${context.agentId} has no runtime permission policy`);
   }
   const profile = buildMatterhornSessionPermissionProfile({
     agentPermission,
@@ -2431,6 +2600,27 @@ function unwrapOpencodeResult<T, E>(result: OpencodeClientResult<T, E>, path: st
     status: response?.status ?? 502,
     path,
   });
+}
+
+async function abortWorkspaceSessionBeforeReplacement(
+  config: ServerConfig,
+  workspace: WorkspaceInfo,
+  sessionId: string,
+): Promise<void> {
+  const directory = resolveOpencodeDirectory(workspace) ?? undefined;
+  const opencode = createWorkspaceOpencodeClient(config, workspace);
+  try {
+    unwrapOpencodeResult(
+      await opencode.session.abort({ sessionID: sessionId, ...(directory ? { directory } : {}) }),
+      `/session/${encodeURIComponent(sessionId)}/abort`,
+    );
+  } catch {
+    throw new ApiError(
+      502,
+      "agent_run_abort_failed",
+      "Matterhorn could not stop the previous response. Nothing new was sent.",
+    );
+  }
 }
 
 function recordLike(value: unknown): Record<string, unknown> | null {
@@ -2744,11 +2934,30 @@ async function proxyOpencodeRequest(input: {
     workspace: WorkspaceInfo;
     sessionId: string;
     agentId?: string;
+    expectedAgentId?: string;
+    expectedAgentPromptHash?: string;
     requestToolProfiles?: readonly Record<string, boolean>[];
   } | null = null;
   let usageReservationId: string | null = null;
   let usageSubject: ModelUsageSubject | null = null;
   let guardedRunId: string | null = null;
+  let guardedPromptMessageId: string | null = null;
+  let guardedPromptStart: {
+    input: GuardedPromptInput;
+    authorization: GuardedPromptAuthorization;
+    requestPrivacyParts: MatterhornAgentPrivacyPart[];
+    providerSystem: GuardedProviderSystemContext;
+  } | null = null;
+  let guardedSummaryStart: {
+    input: GuardedPromptInput;
+    authorization: GuardedPromptAuthorization;
+    sessionId: string;
+    agentId: string;
+    agentPromptHash: string;
+    privacyParts: MatterhornAgentPrivacyPart[];
+    providerSystem: GuardedProviderSystemContext;
+  } | null = null;
+  let completeGuardedRunAfterResponse = false;
   if (isSessionPromptProxyRequest(method, proxyPath)) {
     let payload: Record<string, unknown>;
     try {
@@ -2822,10 +3031,26 @@ async function proxyOpencodeRequest(input: {
     const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
     promptAudit = { executionMode: bodyExecutionMode, agent, sessionId };
     if (workspace) {
-      promptPermissionRequest = {
+      const agentContext = await resolveMatterhornSessionAgentContext({
+        config: input.config,
         workspace,
         sessionId,
         ...(agent ? { agentId: agent } : {}),
+      });
+      payload.agent = agentContext.agentId;
+      promptAudit = { executionMode: bodyExecutionMode, agent: agentContext.agentId, sessionId };
+      // The server owns the upstream message identifier so the OpenCode guard
+      // can bind provider events and tool calls to this exact guarded run.
+      // Never accept a caller-supplied id: it could alias an earlier run.
+      guardedPromptMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
+      payload.messageID = guardedPromptMessageId;
+      body = JSON.stringify(payload);
+      promptPermissionRequest = {
+        workspace,
+        sessionId,
+        agentId: agentContext.agentId,
+        expectedAgentId: agentContext.agentId,
+        expectedAgentPromptHash: agentContext.promptHash,
         ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
       };
       const modelResolution = await resolveSessionPromptModel(
@@ -2836,22 +3061,46 @@ async function proxyOpencodeRequest(input: {
       if (input.guardedRuntime.capabilities.mode === "off") {
         assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
       }
+      const providerSystem = guardedProviderSystemContext(
+        [agentContext.prompt, typeof payload.system === "string" ? payload.system : ""],
+        "message",
+      );
+      const requestPrivacyParts = [
+        ...normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
+        ...rawPromptSystemPrivacyParts(payload.system),
+        ...agentContext.privacyParts,
+        guardedProviderSystemPrivacyPart(providerSystem),
+      ];
+      const historyPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+        config: input.config,
+        workspace,
+        sessionId,
+        guardedRuntime: input.guardedRuntime,
+      });
+      const guardedInput: GuardedPromptInput = {
+        workspaceId: workspace.id,
+        sessionId,
+        parts: [
+          ...historyPrivacyParts,
+          ...requestPrivacyParts,
+        ],
+        providerId: modelResolution.model.providerID,
+        modelId: modelResolution.model.modelID,
+        agentId: agentContext.agentId,
+        attachmentIds,
+        memoryIds,
+        privacyMode,
+        privacyConsentToken,
+        executionMode: bodyExecutionMode,
+        requestToolProfiles,
+      };
       try {
-        const acceptance = await input.guardedRuntime.acceptPrompt({
-          workspaceId: workspace.id,
-          sessionId,
-          parts: normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
-          providerId: modelResolution.model.providerID,
-          modelId: modelResolution.model.modelID,
-          agentId: agent,
-          attachmentIds,
-          memoryIds,
-          privacyMode,
-          privacyConsentToken,
-          executionMode: bodyExecutionMode,
-          requestToolProfiles,
-        });
-        guardedRunId = acceptance.runId;
+        guardedPromptStart = {
+          input: guardedInput,
+          authorization: input.guardedRuntime.authorizePrompt(guardedInput),
+          requestPrivacyParts,
+          providerSystem,
+        };
       } catch (error) {
         throw guardedRuntimeApiError(error);
       }
@@ -2883,41 +3132,131 @@ async function proxyOpencodeRequest(input: {
         workspace,
         parseSessionCommandModel(payload),
       );
-      if (input.guardedRuntime.capabilities.mode === "off" && providerPrivacyEnforcementMode() === "verified_only") {
-        assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
-      }
+      assertOpaqueCommandProviderPrivacy(
+        modelResolution.model.providerID,
+        modelResolution.model.modelID,
+      );
       const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
+      const requestedAgentId = typeof payload.agent === "string" && payload.agent.trim()
+        ? payload.agent.trim()
+        : undefined;
+      const agentContext = await resolveMatterhornSessionAgentContext({
+        config: input.config,
+        workspace,
+        sessionId,
+        ...(requestedAgentId ? { agentId: requestedAgentId } : {}),
+      });
+      payload.agent = agentContext.agentId;
       const command = typeof payload.command === "string" ? payload.command.trim() : "";
       const commandArguments = typeof payload.arguments === "string" ? payload.arguments.trim() : "";
       const privacyMode = parseAgentPrivacyMode(payload.privacyMode);
       const privacyConsentToken = typeof payload.privacyConsentToken === "string" ? payload.privacyConsentToken.trim() : undefined;
       delete payload.privacyMode;
       delete payload.privacyConsentToken;
-      body = JSON.stringify(payload);
-      headers.delete("content-length");
+      const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
+      payload.messageID = userMessageId;
+      const commandSystem = buildMatterhornExecutionModeSystemPrompt("work");
+      const providerSystem = guardedProviderSystemContext([agentContext.prompt, commandSystem], "message");
       try {
-        const acceptance = await input.guardedRuntime.acceptPrompt({
+        const requestPrivacyParts: MatterhornAgentPrivacyPart[] = [
+          { type: "text", text: `/${command}${commandArguments ? ` ${commandArguments}` : ""}` },
+          ...rawPromptSystemPrivacyParts(commandSystem),
+          ...agentContext.privacyParts,
+          guardedProviderSystemPrivacyPart(providerSystem),
+        ];
+        const historyPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+          config: input.config,
+          workspace,
+          sessionId,
+          guardedRuntime: input.guardedRuntime,
+        });
+        const guardedInput: GuardedPromptInput = {
           workspaceId: workspace.id,
           sessionId,
-          parts: [{ type: "text", text: `/${command}${commandArguments ? ` ${commandArguments}` : ""}` }],
+          parts: [
+            ...historyPrivacyParts,
+            ...requestPrivacyParts,
+          ],
           providerId: modelResolution.model.providerID,
           modelId: modelResolution.model.modelID,
-          agentId: typeof payload.agent === "string" ? payload.agent.trim() : undefined,
+          agentId: agentContext.agentId,
           privacyMode,
           privacyConsentToken,
           executionMode: "work",
+        };
+        const authorization = input.guardedRuntime.authorizePrompt(guardedInput);
+        await ensureMatterhornSessionPermissionProfile({
+          config: input.config,
+          workspace,
+          sessionId,
+          agentId: agentContext.agentId,
+          expectedAgentId: agentContext.agentId,
+          expectedAgentPromptHash: agentContext.promptHash,
         });
+        if (input.access && input.modelUsageStore) {
+          const usage = await reserveModelUsage({
+            config: input.config,
+            workspace,
+            store: input.modelUsageStore,
+            access: input.access,
+            sessionId,
+            providerId: modelResolution.model.providerID,
+            modelId: modelResolution.model.modelID,
+          });
+          usageReservationId = usage.reservation.reservationId;
+          usageSubject = usage.subject;
+        }
+        await abortWorkspaceSessionBeforeReplacement(input.config, workspace, sessionId);
+        const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+          config: input.config,
+          workspace,
+          sessionId,
+          guardedRuntime: input.guardedRuntime,
+        });
+        const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
+          {
+            ...guardedInput,
+            parts: [...currentHistoryPrivacyParts, ...requestPrivacyParts],
+          },
+          authorization,
+          providerSystem,
+        );
         guardedRunId = acceptance.runId;
+        input.guardedRuntime.bindUserMessage({
+          runId: guardedRunId,
+          sessionId,
+          messageId: userMessageId,
+        });
       } catch (error) {
-        throw guardedRuntimeApiError(error);
+        input.modelUsageStore?.cancel(usageReservationId);
+        if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+        if (error instanceof GuardedRuntimeError) throw guardedRuntimeApiError(error);
+        throw error;
       }
+      body = JSON.stringify(payload);
+      headers.delete("content-length");
     }
     void fetch(targetUrl, {
       method,
       headers,
       body,
+    }).then((upstream) => {
+      if (!upstream.ok) {
+        input.modelUsageStore?.cancel(usageReservationId);
+        if (guardedRunId) void input.guardedRuntime.failRun(guardedRunId);
+        return;
+      }
+      if (input.modelUsageStore && usageSubject && workspace) {
+        scheduleModelUsageReconciliation({
+          config: input.config,
+          workspace,
+          store: input.modelUsageStore,
+          subject: usageSubject,
+          sessionId: decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? ""),
+        });
+      }
     }).catch(() => {
-      // Command failures are surfaced through the OpenCode event stream.
+      input.modelUsageStore?.cancel(usageReservationId);
       if (guardedRunId) void input.guardedRuntime.failRun(guardedRunId);
     });
     return jsonResponse({ ok: true, accepted: true });
@@ -2925,15 +3264,77 @@ async function proxyOpencodeRequest(input: {
   if (
     method === "POST" &&
     /^\/session\/[^/]+\/summarize$/.test(normalizeOpencodeProxyPath(proxyPath)) &&
-    workspace &&
-    (providerPrivacyEnforcementMode() === "verified_only" || input.guardedRuntime.capabilities.mode !== "off")
+    workspace
   ) {
+    const payload = parseJsonObjectBody(rawBody, "Session summary");
     const modelResolution = await resolveSessionPromptModel(
       input.config,
       workspace,
-      undefined,
+      parseSessionPromptModel(payload),
     );
-    assertPromptProviderPrivacy(modelResolution.model.providerID, modelResolution.model.modelID);
+    const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
+    const privacyMode = parseAgentPrivacyMode(payload.privacyMode);
+    const privacyConsentToken = typeof payload.privacyConsentToken === "string"
+      ? payload.privacyConsentToken.trim()
+      : undefined;
+    delete payload.privacyMode;
+    delete payload.privacyConsentToken;
+    body = JSON.stringify(payload);
+    headers.delete("content-length");
+    const compactionAgentContext = await resolveMatterhornSessionAgentContext({
+      config: input.config,
+      workspace,
+      sessionId,
+      agentId: "compaction",
+    });
+    const compactionPrivacyParts = matterhornCompactionPrivacyParts(compactionAgentContext);
+    const providerSystem = guardedProviderSystemContext(
+      [compactionAgentContext.prompt, MATTERHORN_CRYPTO_COMPACTION_CONTEXT],
+      "compaction",
+    );
+    const guardedCompactionPrivacyParts = [
+      ...compactionPrivacyParts,
+      guardedProviderSystemPrivacyPart(providerSystem),
+    ];
+    const messages = await readWorkspaceSessionMessages(input.config, workspace, sessionId, {});
+    const guardedInput: GuardedPromptInput = {
+      workspaceId: workspace.id,
+      sessionId,
+      parts: [...sessionCompactionPrivacyParts(messages), ...guardedCompactionPrivacyParts],
+      providerId: modelResolution.model.providerID,
+      modelId: modelResolution.model.modelID,
+      agentId: compactionAgentContext.agentId,
+      privacyMode,
+      privacyConsentToken,
+      executionMode: "work",
+      requestToolProfiles: [],
+    };
+    try {
+      guardedSummaryStart = {
+        input: guardedInput,
+        authorization: input.guardedRuntime.authorizePrompt(guardedInput),
+        sessionId,
+        agentId: compactionAgentContext.agentId,
+        agentPromptHash: compactionAgentContext.promptHash,
+        privacyParts: guardedCompactionPrivacyParts,
+        providerSystem,
+      };
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+    if (input.access && input.modelUsageStore) {
+      const usage = await reserveModelUsage({
+        config: input.config,
+        workspace,
+        store: input.modelUsageStore,
+        access: input.access,
+        sessionId,
+        providerId: modelResolution.model.providerID,
+        modelId: modelResolution.model.modelID,
+      });
+      usageReservationId = usage.reservation.reservationId;
+      usageSubject = usage.subject;
+    }
   }
   if (promptPermissionRequest) {
     try {
@@ -2944,6 +3345,75 @@ async function proxyOpencodeRequest(input: {
     } catch (error) {
       input.modelUsageStore?.cancel(usageReservationId);
       if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+      throw error;
+    }
+  }
+  if (guardedPromptStart && workspace && promptAudit) {
+    try {
+      await abortWorkspaceSessionBeforeReplacement(input.config, workspace, promptAudit.sessionId);
+      const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+        config: input.config,
+        workspace,
+        sessionId: promptAudit.sessionId,
+        guardedRuntime: input.guardedRuntime,
+      });
+      const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
+        {
+          ...guardedPromptStart.input,
+          parts: [...currentHistoryPrivacyParts, ...guardedPromptStart.requestPrivacyParts],
+        },
+        guardedPromptStart.authorization,
+        guardedPromptStart.providerSystem,
+      );
+      guardedRunId = acceptance.runId;
+      if (!guardedPromptMessageId) {
+        throw new Error("Matterhorn could not create a guarded message binding.");
+      }
+      input.guardedRuntime.bindUserMessage({
+        runId: guardedRunId,
+        sessionId: promptAudit.sessionId,
+        messageId: guardedPromptMessageId,
+      });
+    } catch (error) {
+      input.modelUsageStore?.cancel(usageReservationId);
+      if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+      if (error instanceof GuardedRuntimeError) throw guardedRuntimeApiError(error);
+      throw error;
+    }
+  }
+  if (guardedSummaryStart && workspace) {
+    try {
+      const currentMessages = await readWorkspaceSessionMessages(
+        input.config,
+        workspace,
+        guardedSummaryStart.sessionId,
+        {},
+      );
+      await assertMatterhornSessionAgentContextUnchanged({
+        config: input.config,
+        workspace,
+        sessionId: guardedSummaryStart.sessionId,
+        agentId: guardedSummaryStart.agentId,
+        expectedAgentPromptHash: guardedSummaryStart.agentPromptHash,
+      });
+      await abortWorkspaceSessionBeforeReplacement(input.config, workspace, guardedSummaryStart.sessionId);
+      const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
+        {
+          ...guardedSummaryStart.input,
+          parts: [
+            ...sessionCompactionPrivacyParts(currentMessages),
+            ...guardedSummaryStart.privacyParts,
+          ],
+        },
+        guardedSummaryStart.authorization,
+        guardedSummaryStart.providerSystem,
+      );
+      guardedRunId = acceptance.runId;
+      completeGuardedRunAfterResponse = true;
+    } catch (error) {
+      input.modelUsageStore?.cancel(usageReservationId);
+      if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+      if (error instanceof GuardedRuntimeError) throw guardedRuntimeApiError(error);
       throw error;
     }
   }
@@ -3062,6 +3532,19 @@ async function proxyOpencodeRequest(input: {
     }
   }
 
+  if (response.ok && completeGuardedRunAfterResponse && guardedRunId) {
+    await input.guardedRuntime.completeTrustedGatewayRun(guardedRunId, "success");
+    if (input.modelUsageStore && usageSubject && workspace && guardedSummaryStart) {
+      scheduleModelUsageReconciliation({
+        config: input.config,
+        workspace,
+        store: input.modelUsageStore,
+        subject: usageSubject,
+        sessionId: guardedSummaryStart.sessionId,
+      });
+    }
+  }
+
   const sanitized = sanitizeProxyResponse(response, input.request.signal, upstreamController);
   if (guardedRunId) sanitized.headers.set("X-Matterhorn-Agent-Run-Id", guardedRunId);
   return sanitized;
@@ -3153,21 +3636,6 @@ function sanitizeProxyResponse(
     statusText: response.statusText,
     headers,
   });
-}
-
-function sanitizeMarketArtifactValidationInputForSecretScan(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sanitizeMarketArtifactValidationInputForSecretScan);
-  if (!value || typeof value !== "object") return value;
-  const output: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (key === "signingPayload") continue;
-    if (key === "unsignedPayloadSha256") {
-      output.payloadHash = child;
-      continue;
-    }
-    output[key] = sanitizeMarketArtifactValidationInputForSecretScan(child);
-  }
-  return output;
 }
 
 function jsonResponse(data: unknown, status = 200) {
@@ -3460,6 +3928,11 @@ function coworkerWorkingStateAccountView(state: MatterhornCoworkerWorkingState) 
 
 function coworkerResourceScopeAccountView(scope: MatterhornCoworkerResourceScope) {
   const { ownerId: _ownerId, ...view } = structuredClone(scope);
+  return view;
+}
+
+function coworkerSessionBindingAccountView(binding: MatterhornCoworkerSessionBinding) {
+  const { ownerId: _ownerId, workspaceId: _workspaceId, ...view } = structuredClone(binding);
   return view;
 }
 
@@ -3874,23 +4347,41 @@ type ResolvedMessageCoworker = {
 
 function resolveMessageCoworker(input: {
   body: Record<string, unknown>;
+  sessionId: string;
   workspace: WorkspaceInfo;
   ctx: RequestContext;
   coworkerRuntime: MatterhornCoworkerRuntimeServices;
   cryptoAppRuntime: MatterhornCryptoAppRuntimeServices;
   guardedRuntime: MatterhornGuardedAgentRuntime;
 }): ResolvedMessageCoworker | undefined {
-  if (input.body.coworkerId == null) return undefined;
-  const coworkerId = typeof input.body.coworkerId === "string" ? input.body.coworkerId.trim() : "";
-  if (!coworkerId || coworkerId.length > 256) {
+  const requestedCoworkerId = input.body.coworkerId == null
+    ? null
+    : typeof input.body.coworkerId === "string" ? input.body.coworkerId.trim() : "";
+  if (requestedCoworkerId !== null && (!requestedCoworkerId || requestedCoworkerId.length > 256)) {
     throw new ApiError(400, "coworker_input_invalid", "coworkerId is invalid.");
   }
   const ownerId = cryptoAppCreatedBy(input.ctx);
+  if (!input.coworkerRuntime.coworkers) {
+    if (requestedCoworkerId === null) return undefined;
+    throw new ApiError(503, "coworker_execution_not_ready", "Crypto coworker execution is unavailable.");
+  }
+  const storedBinding = input.coworkerRuntime.coworkers.lookupSessionBinding(
+    input.workspace.id,
+    ownerId,
+    input.sessionId,
+  );
+  if (!storedBinding && requestedCoworkerId === null) return undefined;
   if (input.coworkerRuntime.mode === "invite" && !input.coworkerRuntime.accountIsAllowed(ownerId)) {
     throw new ApiError(403, "coworker_access_required", "Accept a valid Matterhorn invite to use Crypto Coworkers.");
   }
-  if (!input.coworkerRuntime.coworkers
-    || input.cryptoAppRuntime.mode !== "enforce"
+  if (storedBinding && requestedCoworkerId !== null && requestedCoworkerId !== storedBinding.coworkerId) {
+    throw new ApiError(
+      409,
+      "coworker_session_binding_conflict",
+      "The selected coworker does not match this chat.",
+    );
+  }
+  if (input.cryptoAppRuntime.mode !== "enforce"
     || input.guardedRuntime.capabilities.mode !== "enforce"
     || !input.guardedRuntime.ready()) {
     throw new ApiError(
@@ -3899,6 +4390,25 @@ function resolveMessageCoworker(input: {
       "Crypto coworker execution is unavailable until the gateway and guarded runtime are enforced.",
     );
   }
+  if (!storedBinding) {
+    throw new ApiError(
+      409,
+      "coworker_session_binding_required",
+      "Connect this coworker to the chat before sending a request.",
+    );
+  }
+  if (!input.coworkerRuntime.coworkers.resolveActiveSessionBinding(
+    input.workspace.id,
+    ownerId,
+    input.sessionId,
+  )) {
+    throw new ApiError(
+      409,
+      "coworker_session_binding_stale",
+      "This chat's coworker or app access changed. Review access before continuing.",
+    );
+  }
+  const coworkerId = storedBinding.coworkerId;
   const profile = input.coworkerRuntime.coworkers.resolveActive(
     input.workspace.id,
     ownerId,
@@ -3932,6 +4442,14 @@ function resolveMessageCoworker(input: {
       "Connect an approved crypto app for this coworker before starting chat.",
     );
   }
+  if (storedBinding.coworkerRevision !== profile.revision
+    || storedBinding.resourceScopeHash !== storedResourceScope?.scopeHash) {
+    throw new ApiError(
+      409,
+      "coworker_session_binding_stale",
+      "This chat's coworker or app access changed. Review access before continuing.",
+    );
+  }
   return {
     profile,
     binding,
@@ -3946,12 +4464,15 @@ function coworkerApiError(error: unknown): ApiError {
       : error.code === "coworker_not_found"
       || error.code === "coworker_watch_not_found"
       || error.code === "coworker_inbox_item_not_found"
+      || error.code === "coworker_session_binding_not_found"
       ? 404
       : error.code === "coworker_revision_conflict"
         || error.code === "coworker_transition_invalid"
         || error.code === "coworker_watch_transition_invalid"
         || error.code === "coworker_watch_limit"
         || error.code === "coworker_inbox_state_conflict"
+        || error.code === "coworker_session_binding_conflict"
+        || error.code === "coworker_session_binding_stale"
         ? 409
         : 400;
     const message = error.code === "coworker_access_required"
@@ -3962,6 +4483,12 @@ function coworkerApiError(error: unknown): ApiError {
         ? "Coworker watch not found."
         : error.code === "coworker_inbox_item_not_found"
           ? "Coworker inbox item not found."
+        : error.code === "coworker_session_binding_not_found"
+          ? "This chat is not connected to a coworker."
+        : error.code === "coworker_session_binding_conflict"
+          ? "The new chat is already connected to a coworker."
+        : error.code === "coworker_session_binding_stale"
+          ? "This chat's coworker or app access changed. Review access before continuing."
       : error.code === "coworker_revision_conflict"
         ? "Coworker state changed; retry with the latest revision."
         : error.code === "coworker_watch_limit"
@@ -3976,6 +4503,8 @@ function coworkerApiError(error: unknown): ApiError {
             ? "Coworker working state is invalid or contains forbidden secret material."
             : error.code === "coworker_resource_scope_invalid"
               ? "Choose only current files, Memory, and connected apps allowed for this coworker."
+            : error.code === "coworker_session_binding_invalid"
+              ? "The coworker chat connection is invalid."
             : error.code === "coworker_watch_invalid"
               ? "Coworker watch is outside the active profile, schedule, budget, or privacy boundary."
               : error.code === "coworker_inbox_item_invalid"
@@ -4065,6 +4594,9 @@ function cryptoEvidencePublicationApiError(error: unknown): ApiError {
 
 function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
   if (error instanceof MatterhornCryptoEvidenceWalrusRenewalError) {
+    if (error.code === "crypto_evidence_walrus_renewal_intent_integrity_invalid") {
+      return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+    }
     if (error.code === "crypto_evidence_not_found") {
       return new ApiError(404, error.code, "Evidence record not found.");
     }
@@ -4116,6 +4648,9 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
 
 function cryptoEvidenceDeletionApiError(error: unknown): ApiError {
   if (error instanceof MatterhornCryptoEvidenceWalrusDeletionError) {
+    if (error.code === "crypto_evidence_walrus_deletion_intent_integrity_invalid") {
+      return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+    }
     if (error.code === "crypto_evidence_not_found") {
       return new ApiError(404, error.code, "Evidence record not found.");
     }
@@ -4168,6 +4703,9 @@ function cryptoEvidenceDeletionApiError(error: unknown): ApiError {
 
 function cryptoEvidenceSuiAnchorApiError(error: unknown): ApiError {
   if (error instanceof MatterhornCryptoEvidenceSuiAnchorError) {
+    if (error.code === "crypto_evidence_sui_anchor_intent_integrity_invalid") {
+      return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+    }
     if (error.code === "crypto_evidence_not_found") {
       return new ApiError(404, error.code, "Evidence record not found.");
     }
@@ -4297,6 +4835,9 @@ function agentFileApiError(error: unknown): ApiError {
 function agentFileWalrusApiError(error: unknown): ApiError {
   if (error instanceof MatterhornAgentFileStoreError) return agentFileApiError(error);
   if (error instanceof MatterhornAgentFileWalrusRenewalError) {
+    if (error.code === "agent_file_walrus_renewal_intent_integrity_invalid") {
+      return new ApiError(503, "agent_file_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+    }
     if (error.code === "agent_file_not_found") {
       return new ApiError(404, error.code, "Agent file not found.");
     }
@@ -4389,6 +4930,216 @@ function pendingCryptoIntentApiError(error: unknown): ApiError {
 
 const MATTERHORN_SESSION_COOKIE = "mh_session";
 const MATTERHORN_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const MATTERHORN_HOSTED_MCP_ACCESS_MODE = "MATTERHORN_HOSTED_MCP_ACCESS_MODE";
+const MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS =
+  "MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS";
+
+type MatterhornHostedMcpAccessMode = "off" | "invite";
+
+function matterhornHostedMcpAccessMode(): MatterhornHostedMcpAccessMode {
+  return process.env[MATTERHORN_HOSTED_MCP_ACCESS_MODE]?.trim().toLowerCase()
+    === "invite"
+    ? "invite"
+    : "off";
+}
+
+function matterhornHostedMcpAccountIsAllowed(accountId: string): boolean {
+  if (matterhornHostedMcpAccessMode() !== "invite") return false;
+  const allowed = new Set(
+    (process.env[MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS] ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  return allowed.has(accountId);
+}
+
+function bearerToken(request: Request): string | null {
+  const authorization = request.headers.get("authorization")?.trim() ?? "";
+  return authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? null;
+}
+
+function matterhornHostedMcpRouteIsAllowed(request: Request): boolean {
+  const method = request.method.toUpperCase();
+  const pathname = new URL(request.url).pathname.replace(/\/+$/, "") || "/";
+  if (pathname === "/mcp/guarded") {
+    return method === "GET" || method === "POST" || method === "DELETE";
+  }
+  if (method === "GET" && pathname === "/health/ready") return true;
+  if (method === "GET" && pathname === "/workspaces") return true;
+  if (/^\/workspace\/[^/]+\/sessions$/.test(pathname)) {
+    return method === "GET" || method === "POST";
+  }
+  const session = pathname.match(
+    /^\/workspace\/[^/]+\/sessions\/[^/]+(?:\/(messages|status|snapshot|events))?$/,
+  );
+  if (!session) return false;
+  const operation = session[1];
+  if (!operation) return method === "GET" || method === "DELETE";
+  if (operation === "messages") return method === "GET" || method === "POST";
+  return method === "GET";
+}
+
+const HOSTED_GUARDED_MCP_RESPONSE_MAX_BYTES = 1_048_576;
+const HOSTED_GUARDED_MCP_INVOCATION_TIMEOUT_MS = 20_000;
+
+const HOSTED_GUARDED_MCP_SAFE_ERRORS = new Map<string, string>([
+  ["provider_privacy_unverified", "This request needs privacy review in Matterhorn before it can be sent."],
+  ["consent_required", "This request needs one-time privacy review in Matterhorn before it can be sent."],
+  ["secret_detected", "Matterhorn blocked credential or signing material before provider contact."],
+  ["model_usage_exceeded", "This workspace has reached its current model-usage allowance."],
+  ["hosted_operation_not_allowed", "This operation is not available to hosted account clients."],
+  ["hosted_mcp_operation_not_allowed", "This operation is not available through Matterhorn's guarded connection."],
+  ["wallet_airlock_required", "Continue in Matterhorn's connected-wallet review to approve this action."],
+]);
+
+function hostedGuardedMcpToolError(error: unknown): HostedGuardedMcpToolError {
+  if (error instanceof HostedGuardedMcpToolError) return error;
+  if (error instanceof ApiError) {
+    const safe = HOSTED_GUARDED_MCP_SAFE_ERRORS.get(error.code);
+    if (safe) return new HostedGuardedMcpToolError(safe);
+    if (error.status === 401 || error.status === 403 || error.status === 404) {
+      return new HostedGuardedMcpToolError(
+        "Matterhorn denied this account-scoped request. Check the connection and workspace access.",
+      );
+    }
+    if (error.status >= 400 && error.status < 500) {
+      return new HostedGuardedMcpToolError("Matterhorn rejected this guarded request.");
+    }
+  }
+  return new HostedGuardedMcpToolError("Matterhorn could not complete this guarded request.");
+}
+
+async function readHostedGuardedMcpResponseText(response: Response): Promise<string> {
+  const declaredLength = Number.parseInt(response.headers.get("content-length") ?? "0", 10);
+  if (Number.isFinite(declaredLength) && declaredLength > HOSTED_GUARDED_MCP_RESPONSE_MAX_BYTES) {
+    throw new HostedGuardedMcpToolError("Matterhorn response exceeded the guarded size limit.");
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > HOSTED_GUARDED_MCP_RESPONSE_MAX_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new HostedGuardedMcpToolError("Matterhorn response exceeded the guarded size limit.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+function parseHostedGuardedMcpSse(text: string): Array<Record<string, unknown>> {
+  if (!text.trim()) return [];
+  return text
+    .trim()
+    .split(/\r?\n\r?\n+/)
+    .filter(Boolean)
+    .slice(0, 50)
+    .map((block) => {
+      const event: Record<string, unknown> = {};
+      const data: string[] = [];
+      for (const line of block.split(/\r?\n/)) {
+        if (line.startsWith("id:")) event.id = line.slice(3).trimStart();
+        else if (line.startsWith("event:")) event.event = line.slice(6).trimStart();
+        else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+      }
+      if (data.length > 0) {
+        const raw = data.join("\n");
+        try {
+          event.data = JSON.parse(raw) as unknown;
+        } catch {
+          event.data = raw;
+        }
+      }
+      return event;
+    });
+}
+
+async function hostedGuardedMcpInvocationResult(response: Response): Promise<unknown> {
+  const text = await readHostedGuardedMcpResponseText(response);
+  if (!response.ok) {
+    let code = "request_failed";
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (isRecord(parsed) && typeof parsed.code === "string") code = parsed.code;
+    } catch {
+      // Never forward an unstructured upstream response to an external client.
+    }
+    const safe = HOSTED_GUARDED_MCP_SAFE_ERRORS.get(code);
+    if (safe) throw new HostedGuardedMcpToolError(safe);
+    if (response.status === 401 || response.status === 403 || response.status === 404) {
+      throw new HostedGuardedMcpToolError(
+        "Matterhorn denied this account-scoped request. Check the connection and workspace access.",
+      );
+    }
+    throw new HostedGuardedMcpToolError(`Matterhorn request failed (${code}, HTTP ${response.status}).`);
+  }
+  if (response.headers.get("content-type")?.toLowerCase().includes("text/event-stream")) {
+    const events = parseHostedGuardedMcpSse(text);
+    const last = events.at(-1);
+    const lastData = isRecord(last?.data) ? last.data : null;
+    const lastCursor = typeof last?.id === "string"
+      ? last.id
+      : typeof lastData?.cursor === "string" ? lastData.cursor : null;
+    return {
+      ok: true,
+      events,
+      count: events.length,
+      lastCursor,
+      nextSince: lastCursor,
+    };
+  }
+  if (!text) return { ok: true };
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new HostedGuardedMcpToolError("Matterhorn returned an invalid guarded response.");
+  }
+}
+
+function resolveMatterhornHostedMcpAccess(
+  request: Request,
+  authStore: MatterhornAuthStore,
+): MatterhornHostedMcpAccessIdentity | null {
+  const token = bearerToken(request);
+  if (!token) return null;
+  const identity = authStore.resolveHostedMcpAccessCredential(token);
+  if (!identity || !matterhornHostedMcpAccountIsAllowed(identity.user.id)) {
+    return null;
+  }
+  return identity;
+}
+
+function assertMatterhornHostedMcpRouteAllowed(
+  request: Request,
+  authStore: MatterhornAuthStore,
+): void {
+  const cookie = matterhornCookieSessionToken(request);
+  if (cookie && authStore.getSession(cookie)) return;
+  const identity = resolveMatterhornHostedMcpAccess(request, authStore);
+  if (identity && !matterhornHostedMcpRouteIsAllowed(request)) {
+    throw new ApiError(
+      403,
+      "hosted_mcp_operation_not_allowed",
+      "This access key can only use Matterhorn's guarded workspace and chat tools.",
+    );
+  }
+}
 
 function optionalStringBodyField(
   body: Record<string, unknown>,
@@ -4594,8 +5345,11 @@ function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
           ? 403
         : error.code === "email_taken" ||
             error.code === "account_owns_shared_organization" ||
-            error.code === "organization_slug_taken"
+            error.code === "organization_slug_taken" ||
+            error.code === "hosted_mcp_access_limit_reached"
           ? 409
+          : error.code === "hosted_mcp_access_integrity_unavailable"
+            ? 503
           : error.code === "signup_capacity_reached"
             ? 503
           : 400;
@@ -4608,6 +5362,17 @@ function requireMatterhornSessionToken(
   authStore: MatterhornAuthStore,
 ): string {
   const token = matterhornSessionToken(request);
+  if (!token || !authStore.getSession(token)) {
+    throw new ApiError(401, "unauthorized", "Sign in to continue.");
+  }
+  return token;
+}
+
+function requireMatterhornCookieSessionToken(
+  request: Request,
+  authStore: MatterhornAuthStore,
+): string {
+  const token = matterhornCookieSessionToken(request);
   if (!token || !authStore.getSession(token)) {
     throw new ApiError(401, "unauthorized", "Sign in to continue.");
   }
@@ -5784,7 +6549,7 @@ function withCors(response: Response, request: Request, config: ServerConfig) {
   headers.set("Access-Control-Allow-Origin", allowOrigin);
   headers.set(
     "Access-Control-Allow-Headers",
-    "Authorization, Content-Type, X-Matterhorn-Execution-Mode, X-Matterhorn-Host-Token, X-OpenWork-Host-Token, X-OpenWork-Client-Id, X-OpenCode-Directory, X-Opencode-Directory, x-opencode-directory",
+    "Authorization, Content-Type, MCP-Protocol-Version, Last-Event-ID, X-Matterhorn-Execution-Mode, X-Matterhorn-Host-Token, X-OpenWork-Host-Token, X-OpenWork-Client-Id, X-OpenCode-Directory, X-Opencode-Directory, x-opencode-directory",
   );
   headers.set("Access-Control-Expose-Headers", "X-Matterhorn-Build-Commit");
   headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
@@ -5843,6 +6608,32 @@ async function requireClientAccess(
         authStore,
         session,
       ),
+    };
+  }
+
+  const hostedMcpAccess = resolveMatterhornHostedMcpAccess(request, authStore);
+  if (hostedMcpAccess && bearer) {
+    const session: MatterhornAuthSession = {
+      token: "",
+      user: hostedMcpAccess.user,
+      activeOrgId: hostedMcpAccess.activeOrgId,
+      activeOrgSlug: null,
+      expiresAt: hostedMcpAccess.expiresAt,
+    };
+    return {
+      actor: {
+        type: "remote",
+        clientId: hostedMcpAccess.user.id,
+        tokenHash: hashToken(bearer),
+        scope: "collaborator",
+      },
+      session,
+      workspace: await ensureMatterhornOrganizationWorkspace(
+        config,
+        authStore,
+        session,
+      ),
+      hostedMcpAccess,
     };
   }
 
@@ -6228,7 +7019,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       desktop: {
         runtime: "desktop",
-        ...capability("preview", "Desktop external handoff", "Desktop uses public addresses and external signer handoffs; injected browser wallets are not available there."),
+        ...capability("preview", "Desktop wallet preview", "Desktop uses public addresses for previews. Open the same workspace in a supported web browser for connected-wallet review."),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -6237,7 +7028,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       electron: {
         runtime: "electron",
-        ...capability("preview", "Electron external handoff", "Electron builds use public addresses and external signer handoffs; injected browser wallets are not available there."),
+        ...capability("preview", "Desktop wallet preview", "Desktop uses public addresses for previews. Open the same workspace in a supported web browser for connected-wallet review."),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -6302,7 +7093,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const bittensorSidecarConfigured = Boolean(process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL?.trim());
   const bittensorCapabilityStatus: MatterhornCapabilityStatus = bittensorSidecarConfigured ? "working" : "preview";
   const bittensorCapabilityDescription = bittensorSidecarConfigured
-    ? "Bittensor uses live provider-backed public SS58 reads, unsigned previews, and external-signer handoffs."
+    ? "Bittensor uses live provider-backed public SS58 reads and prepares supported actions for exact connected-wallet review."
     : "Bittensor public workflows are available with clearly labeled fallback data. Configure the Subtensor sidecar for live-chain reads.";
   const bittensor = walletFamily({
     family: "bittensor",
@@ -6324,7 +7115,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     runtimeSupport: {
       web: {
         runtime: "web",
-        ...capability(bittensorCapabilityStatus, "Web external signer", bittensorCapabilityDescription),
+        ...capability(bittensorCapabilityStatus, "Web wallet approval", bittensorCapabilityDescription),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -6333,7 +7124,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       desktop: {
         runtime: "desktop",
-        ...capability(bittensorCapabilityStatus, "Desktop external signer", bittensorCapabilityDescription),
+        ...capability(bittensorCapabilityStatus, "Desktop wallet preview", bittensorCapabilityDescription),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -6342,7 +7133,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       electron: {
         runtime: "electron",
-        ...capability(bittensorCapabilityStatus, "Electron external signer", bittensorCapabilityDescription),
+        ...capability(bittensorCapabilityStatus, "Desktop wallet preview", bittensorCapabilityDescription),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -9776,6 +10567,80 @@ function createRoutes(
     return response;
   });
 
+  addRoute(routes, "GET", "/api/auth/account/mcp-access", "none", async ({ request }) => {
+    const token = requireMatterhornCookieSessionToken(request, authStore);
+    const session = authStore.getSession(token)!;
+    const allowed = matterhornHostedMcpAccountIsAllowed(session.user.id);
+    const integrityReady = authStore.hostedMcpAccessIntegrityReady();
+    const response = jsonResponse({
+      mode: matterhornHostedMcpAccessMode(),
+      eligible: allowed && integrityReady,
+      maxExpiresInDays: HOSTED_MCP_ACCESS_MAX_DAYS,
+      credentials: allowed && integrityReady
+        ? authStore.listHostedMcpAccessCredentials(token)
+        : [],
+    });
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "POST", "/api/auth/account/mcp-access", "none", async ({ request }) => {
+    const token = requireMatterhornCookieSessionToken(request, authStore);
+    const session = authStore.getSession(token)!;
+    if (!matterhornHostedMcpAccountIsAllowed(session.user.id)) {
+      throw new ApiError(
+        403,
+        "hosted_mcp_access_unavailable",
+        "Hosted MCP access is currently available to invited accounts only.",
+      );
+    }
+    if (!authStore.hostedMcpAccessIntegrityReady()) {
+      throw new ApiError(
+        503,
+        "hosted_mcp_access_integrity_unavailable",
+        "Hosted MCP access is not ready on this deployment.",
+      );
+    }
+    const body = await readJsonBody(request, 4 * 1024, "Hosted MCP access key");
+    const expiresInDays = body.expiresInDays == null
+      ? undefined
+      : typeof body.expiresInDays === "number"
+        ? body.expiresInDays
+        : Number.NaN;
+    const credential = withMatterhornAuthErrorMapping(() =>
+      authStore.createHostedMcpAccessCredential(token, {
+        label: stringBodyField(body, "label") || "External AI app",
+        ...(expiresInDays === undefined ? {} : { expiresInDays }),
+      }),
+    );
+    const response = jsonResponse({
+      credential: {
+        id: credential.id,
+        label: credential.label,
+        activeOrgId: credential.activeOrgId,
+        createdAt: credential.createdAt,
+        expiresAt: credential.expiresAt,
+        lastUsedAt: credential.lastUsedAt,
+        accessToken: credential.token,
+      },
+    }, 201);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "DELETE", "/api/auth/account/mcp-access/:credentialId", "none", async ({ request, params }) => {
+    const token = requireMatterhornCookieSessionToken(request, authStore);
+    const revoked = withMatterhornAuthErrorMapping(() =>
+      authStore.revokeHostedMcpAccessCredential(token, params.credentialId),
+    );
+    if (!revoked) {
+      throw new ApiError(404, "hosted_mcp_access_not_found", "Access key not found.");
+    }
+    const response = jsonResponse({ ok: true, revoked: true });
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
   addRoute(routes, "GET", "/api/auth/account/export", "none", async ({ request }) => {
     const token = requireMatterhornSessionToken(request, authStore);
     const accountExport = withMatterhornAuthErrorMapping(() => authStore.exportAccount(token));
@@ -9952,6 +10817,7 @@ function createRoutes(
   addRoute(routes, "GET", "/health/ready", "none", async () => {
     const readiness = operationalReadiness(
       config,
+      authStore,
       guardedRuntime,
       cryptoAppRuntime,
       coworkerRuntime,
@@ -9994,6 +10860,7 @@ function createRoutes(
   addRoute(routes, "GET", "/health/launch", "none", async () => {
     const infrastructure = operationalReadiness(
       config,
+      authStore,
       guardedRuntime,
       cryptoAppRuntime,
       coworkerRuntime,
@@ -10020,6 +10887,7 @@ function createRoutes(
   addRoute(routes, "GET", "/metrics", "host", async () => {
     const readiness = operationalReadiness(
       config,
+      authStore,
       guardedRuntime,
       cryptoAppRuntime,
       coworkerRuntime,
@@ -10051,6 +10919,103 @@ function createRoutes(
     coworkers: coworkerRuntime.coworkers,
     guardedRuntime,
     resolveWorkspace: (workspaceId) => resolveWorkspace(config, workspaceId),
+  });
+
+  const invokeHostedGuardedMcpRoute = async (
+    ctx: RequestContext,
+    invocation: HostedGuardedMcpInvocation,
+  ): Promise<unknown> => {
+    const targetUrl = new URL(invocation.path, ctx.url.origin);
+    for (const [name, value] of Object.entries(invocation.query ?? {})) {
+      if (value !== undefined) targetUrl.searchParams.set(name, String(value));
+    }
+    const headers = new Headers({
+      Accept: invocation.accept ?? "application/json",
+    });
+    const body = invocation.body === undefined ? undefined : JSON.stringify(invocation.body);
+    if (body !== undefined) headers.set("Content-Type", "application/json");
+
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    const timeout = setTimeout(abort, HOSTED_GUARDED_MCP_INVOCATION_TIMEOUT_MS);
+    ctx.request.signal.addEventListener("abort", abort, { once: true });
+    try {
+      const targetRequest = new Request(targetUrl, {
+        method: invocation.method,
+        headers,
+        ...(body !== undefined ? { body } : {}),
+        signal: controller.signal,
+      });
+      if (!matterhornHostedMcpRouteIsAllowed(targetRequest)) {
+        throw new HostedGuardedMcpToolError(
+          "This operation is not available through Matterhorn's guarded connection.",
+        );
+      }
+      const targetRoute = matchRoute(routes, invocation.method, targetUrl.pathname);
+      const readinessRoute = invocation.method === "GET" && targetUrl.pathname === "/health/ready";
+      if (!targetRoute || (targetRoute.auth !== "client" && !(readinessRoute && targetRoute.auth === "none"))) {
+        throw new HostedGuardedMcpToolError(
+          "This operation is not available through Matterhorn's guarded connection.",
+        );
+      }
+      const requestedWorkspaceId = targetRoute.path.startsWith("/workspace/:id")
+        ? targetRoute.params.id
+        : undefined;
+      assertMatterhornWorkspaceAccess(requestedWorkspaceId, {
+        actor: ctx.actor ?? { type: "remote", scope: "viewer" },
+        session: ctx.matterhornSession,
+        workspace: ctx.matterhornWorkspace,
+      });
+      const response = await targetRoute.handler({
+        ...ctx,
+        request: targetRequest,
+        url: targetUrl,
+        params: targetRoute.params,
+      });
+      return await hostedGuardedMcpInvocationResult(response);
+    } catch (error) {
+      throw hostedGuardedMcpToolError(error);
+    } finally {
+      clearTimeout(timeout);
+      ctx.request.signal.removeEventListener("abort", abort);
+    }
+  };
+
+  const requireHostedGuardedMcpTransport = (ctx: RequestContext): void => {
+    if (!ctx.hostedMcpAccess) {
+      throw new ApiError(
+        403,
+        "hosted_mcp_access_required",
+        "Create an invited MCP access key in Matterhorn before connecting an external client.",
+      );
+    }
+  };
+
+  addRoute(routes, "GET", "/mcp/guarded", "client", async (ctx) => {
+    requireHostedGuardedMcpTransport(ctx);
+    return hostedGuardedMcpMethodNotAllowed();
+  });
+
+  addRoute(routes, "DELETE", "/mcp/guarded", "client", async (ctx) => {
+    requireHostedGuardedMcpTransport(ctx);
+    return hostedGuardedMcpMethodNotAllowed();
+  });
+
+  addRoute(routes, "POST", "/mcp/guarded", "client", async (ctx) => {
+    requireHostedGuardedMcpTransport(ctx);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(await readBodyTextLimited(ctx.request, 524_288, "Hosted MCP")) as unknown;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 413) throw error;
+      return hostedGuardedMcpParseError();
+    }
+    return handleHostedGuardedMcpPost({
+      request: ctx.request,
+      payload,
+      serverVersion: SERVER_VERSION,
+      invoke: (invocation) => invokeHostedGuardedMcpRoute(ctx, invocation),
+    });
   });
 
   addRoute(routes, "POST", "/mcp/opencode", "client", async (ctx) => {
@@ -10096,6 +11061,77 @@ function createRoutes(
         args: body.args,
       });
       const response = jsonResponse(staged);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/internal/agent-runs/provider-messages", "none", async (ctx) => {
+    const runtimeSecret = ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "";
+    try {
+      guardedRuntime.authenticateRuntime(runtimeSecret);
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+    const body = await readJsonBody(
+      ctx.request,
+      (16 * 1_024 * 1_024) + (64 * 1_024),
+      "Agent provider messages",
+    );
+    const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    if (!sessionId || !Array.isArray(body.messages)) {
+      throw new ApiError(400, "invalid_payload", "sessionId and messages are required");
+    }
+    try {
+      const validated = guardedRuntime.validateRuntimeProviderMessages({
+        runtimeSecret,
+        workspaceId: workspace.id,
+        sessionId,
+        messages: body.messages,
+      });
+      const response = jsonResponse(validated);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/internal/agent-runs/provider-system", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 32_000, "Agent provider system context");
+    const runtimeSecret = ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "";
+    try {
+      guardedRuntime.authenticateRuntime(runtimeSecret);
+    } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+    const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const providerId = typeof body.providerId === "string" ? body.providerId.trim() : "";
+    const modelId = typeof body.modelId === "string" ? body.modelId.trim() : "";
+    const purpose = body.purpose === "message" || body.purpose === "compaction"
+      ? body.purpose
+      : null;
+    if (!sessionId || !providerId || !modelId || !purpose) {
+      throw new ApiError(
+        400,
+        "invalid_payload",
+        "sessionId, providerId, modelId, and a valid purpose are required",
+      );
+    }
+    try {
+      const bound = guardedRuntime.resolveRuntimeProviderSystem({
+        runtimeSecret,
+        workspaceId: workspace.id,
+        sessionId,
+        providerId,
+        modelId,
+        purpose,
+      });
+      const response = jsonResponse(bound);
       response.headers.set("Cache-Control", "no-store");
       return response;
     } catch (error) {
@@ -11579,9 +12615,15 @@ function createRoutes(
       }
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const ownerId = cryptoAppCreatedBy(ctx);
+      const coworkers = coworkerRuntime.coworkers.list(workspace.id, ownerId);
+      const inboxByCoworker = coworkerRuntime.coworkers.listInboxSummaries(workspace.id, ownerId);
       return noStoreJsonResponse({
         mode: coworkerRuntime.mode,
-        coworkers: coworkerRuntime.coworkers.list(workspace.id, ownerId).map(coworkerAccountView),
+        coworkers: coworkers.map(coworkerAccountView),
+        inbox: {
+          totalUnread: inboxByCoworker.reduce((total, item) => total + item.unreadCount, 0),
+          byCoworker: inboxByCoworker,
+        },
       });
     } catch (error) {
       throw coworkerApiError(error);
@@ -13941,6 +14983,176 @@ function createRoutes(
     return jsonResponse({ item });
   });
 
+  addRoute(routes, "GET", "/workspace/:id/sessions/:sessionId/coworker", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
+    await readWorkspaceSession(config, workspace, sessionId);
+    if (!coworkerRuntime.coworkers || coworkerRuntime.mode === "off") {
+      return noStoreJsonResponse({ mode: coworkerRuntime.mode, active: false, binding: null, coworker: null });
+    }
+    try {
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const binding = coworkerRuntime.coworkers.getSessionBinding(workspace.id, ownerId, sessionId);
+      if (!binding) {
+        return noStoreJsonResponse({ mode: coworkerRuntime.mode, active: false, binding: null, coworker: null });
+      }
+      const activeBinding = coworkerRuntime.coworkers.resolveActiveSessionBinding(workspace.id, ownerId, sessionId);
+      const coworker = coworkerRuntime.coworkers.get(workspace.id, ownerId, binding.coworkerId);
+      const resources = coworker
+        ? coworkerRuntime.coworkers.getResourceScope(workspace.id, ownerId, coworker.id)
+        : null;
+      const active = Boolean(activeBinding
+        && coworker
+        && resources
+        && resources.profileRevision === coworker.revision
+        && coworkerResourceConnectionsAreActive(cryptoAppRuntime, resources));
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        active,
+        binding: coworkerSessionBindingAccountView(binding),
+        coworker: coworker ? coworkerAccountView(coworker) : null,
+      });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "PUT", "/workspace/:id/sessions/:sessionId/coworker", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!coworkerRuntime.coworkers || coworkerRuntime.mode === "off") {
+      throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
+    await readWorkspaceSession(config, workspace, sessionId);
+    const body = await readJsonBody(ctx.request, 4_096, "Coworker chat connection");
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => !["coworkerId", "coworkerRevision", "expectedRevision"].includes(key))
+      || typeof body.coworkerId !== "string"
+      || !Number.isSafeInteger(body.coworkerRevision)
+      || !Number.isSafeInteger(body.expectedRevision)) {
+      throw new ApiError(400, "coworker_session_binding_invalid", "Coworker chat connection is invalid.");
+    }
+    try {
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const coworker = coworkerRuntime.coworkers.resolveActive(workspace.id, ownerId, body.coworkerId.trim());
+      const resources = coworker
+        ? coworkerRuntime.coworkers.resolveActiveResourceScope(workspace.id, ownerId, coworker.id)
+        : null;
+      if (!coworker
+        || !resources
+        || !coworkerResourceConnectionsAreActive(cryptoAppRuntime, resources)) {
+        throw new MatterhornCoworkerError("coworker_session_binding_stale");
+      }
+      const binding = coworkerRuntime.coworkers.bindSession(workspace.id, ownerId, sessionId, {
+        coworkerId: body.coworkerId.trim(),
+        coworkerRevision: body.coworkerRevision as number,
+        expectedRevision: body.expectedRevision as number,
+      });
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        active: true,
+        binding: coworkerSessionBindingAccountView(binding),
+        coworker: coworkerAccountView(coworker),
+      });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/coworker/fork", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!coworkerRuntime.coworkers || coworkerRuntime.mode === "off") {
+      throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sourceSessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sourceSessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
+    await readWorkspaceSession(config, workspace, sourceSessionId);
+    const body = await readJsonBody(ctx.request, 4_096, "Forked coworker chat connection");
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => key !== "targetSessionId")
+      || typeof body.targetSessionId !== "string") {
+      throw new ApiError(400, "coworker_session_binding_invalid", "Forked chat connection is invalid.");
+    }
+    const targetSessionId = body.targetSessionId.trim();
+    if (!targetSessionId || targetSessionId === sourceSessionId) {
+      throw new ApiError(400, "coworker_session_binding_invalid", "Forked chat connection is invalid.");
+    }
+    await readWorkspaceSession(config, workspace, targetSessionId);
+    try {
+      const ownerId = cryptoAppCreatedBy(ctx);
+      const sourceBinding = coworkerRuntime.coworkers.getSessionBinding(workspace.id, ownerId, sourceSessionId);
+      const activeBinding = coworkerRuntime.coworkers.resolveActiveSessionBinding(
+        workspace.id,
+        ownerId,
+        sourceSessionId,
+      );
+      const coworker = sourceBinding
+        ? coworkerRuntime.coworkers.get(workspace.id, ownerId, sourceBinding.coworkerId)
+        : null;
+      const resources = coworker
+        ? coworkerRuntime.coworkers.getResourceScope(workspace.id, ownerId, coworker.id)
+        : null;
+      if (!sourceBinding) {
+        throw new MatterhornCoworkerError("coworker_session_binding_not_found");
+      }
+      if (!activeBinding
+        || !coworker
+        || !resources
+        || !coworkerResourceConnectionsAreActive(cryptoAppRuntime, resources)) {
+        throw new MatterhornCoworkerError("coworker_session_binding_stale");
+      }
+      const binding = coworkerRuntime.coworkers.inheritSessionBinding(
+        workspace.id,
+        ownerId,
+        sourceSessionId,
+        targetSessionId,
+      );
+      return noStoreJsonResponse({
+        mode: coworkerRuntime.mode,
+        active: true,
+        binding: coworkerSessionBindingAccountView(binding),
+        coworker: coworkerAccountView(coworker),
+      }, 201);
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/sessions/:sessionId/coworker", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!coworkerRuntime.coworkers || coworkerRuntime.mode === "off") {
+      throw new ApiError(503, "coworker_runtime_disabled", "Crypto coworkers are not enabled for this deployment.");
+    }
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
+    await readWorkspaceSession(config, workspace, sessionId);
+    const body = await readJsonBody(ctx.request, 4_096, "Coworker chat disconnection");
+    if (!isRecord(body)
+      || Object.keys(body).some((key) => key !== "expectedRevision")
+      || !Number.isSafeInteger(body.expectedRevision)) {
+      throw new ApiError(400, "coworker_session_binding_invalid", "Coworker chat connection is invalid.");
+    }
+    try {
+      coworkerRuntime.coworkers.unbindSession(
+        workspace.id,
+        cryptoAppCreatedBy(ctx),
+        sessionId,
+        body.expectedRevision as number,
+      );
+      return noStoreJsonResponse({ deleted: true });
+    } catch (error) {
+      throw coworkerApiError(error);
+    }
+  });
+
   addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages/preflight", "client", async (ctx) => {
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
@@ -13961,17 +15173,25 @@ function createRoutes(
     ) {
       throw new ApiError(400, "execution_mode_mismatch", "Prompt execution mode does not match the request header");
     }
-    const agentId = typeof body.agentId === "string" && body.agentId.trim()
+    const requestedAgentId = typeof body.agentId === "string" && body.agentId.trim()
       ? body.agentId.trim()
       : typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
     const coworker = resolveMessageCoworker({
       body,
+      sessionId,
       workspace,
       ctx,
       coworkerRuntime,
       cryptoAppRuntime,
       guardedRuntime,
     });
+    const agentContext = await resolveMatterhornSessionAgentContext({
+      config,
+      workspace,
+      sessionId,
+      ...(requestedAgentId ? { agentId: requestedAgentId } : {}),
+    });
+    const agentId = agentContext.agentId;
     const coworkerState = activeCoworkerWorkingState(coworkerRuntime, coworker?.profile);
     const rawParts = parseSessionPromptParts(body);
     const modeTools = buildMatterhornExecutionModeTools(executionMode, agentId);
@@ -14012,10 +15232,23 @@ function createRoutes(
       coworker: coworker?.binding,
       resourceScopeHash: coworker?.resourceScope?.scopeHash,
     });
+    const jurisdiction = resolveTrustedRequestJurisdiction(ctx.request, config.trustedProxySecret);
+    const providerSystem = guardedProviderSystemContext([agentContext.prompt, resolved.system], "message");
+    const historyPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+      config,
+      workspace,
+      sessionId,
+      guardedRuntime,
+    });
     const response = guardedRuntime.preflight({
       workspaceId: workspace.id,
       sessionId,
-      parts: resolved.privacyParts,
+      parts: [
+        ...historyPrivacyParts,
+        ...resolved.privacyParts,
+        ...agentContext.privacyParts,
+        guardedProviderSystemPrivacyPart(providerSystem),
+      ],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
       agentId,
@@ -14025,6 +15258,7 @@ function createRoutes(
       privacyMode,
       coworker: coworker?.binding,
       authorizationContextHash,
+      ...(jurisdiction ? { jurisdiction } : {}),
     });
     const result = jsonResponse(response);
     result.headers.set("Cache-Control", "no-store");
@@ -14113,17 +15347,35 @@ function createRoutes(
     }
     const body = await readJsonBody(ctx.request, 16_384, "Session compaction");
     const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
+    const compactionAgentContext = await resolveMatterhornSessionAgentContext({
+      config,
+      workspace,
+      sessionId,
+      agentId: "compaction",
+    });
     const privacyMode = parseAgentPrivacyMode(body.privacyMode);
     const privacyConsentToken = typeof body.privacyConsentToken === "string"
       ? body.privacyConsentToken.trim()
       : undefined;
     const messages = await readWorkspaceSessionMessages(config, workspace, sessionId, {});
+    const providerSystem = guardedProviderSystemContext(
+      [compactionAgentContext.prompt, MATTERHORN_CRYPTO_COMPACTION_CONTEXT],
+      "compaction",
+    );
+    const compactionPrivacyParts = [
+      ...matterhornCompactionPrivacyParts(compactionAgentContext),
+      guardedProviderSystemPrivacyPart(providerSystem),
+    ];
     const guardedInput = {
       workspaceId: workspace.id,
       sessionId,
-      parts: sessionCompactionPrivacyParts(messages),
+      parts: [
+        ...sessionCompactionPrivacyParts(messages),
+        ...compactionPrivacyParts,
+      ],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
+      agentId: compactionAgentContext.agentId,
       privacyMode,
       privacyConsentToken,
       executionMode: "discuss" as const,
@@ -14168,10 +15420,25 @@ function createRoutes(
       // before dispatch so a concurrent message, tool result, edit, or revert
       // invalidates the authorization instead of being silently compacted.
       const currentMessages = await readWorkspaceSessionMessages(config, workspace, sessionId, {});
-      guardedAcceptance = await guardedRuntime.startAuthorizedPrompt({
-        ...guardedInput,
-        parts: sessionCompactionPrivacyParts(currentMessages),
-      }, guardedAuthorization);
+      await assertMatterhornSessionAgentContextUnchanged({
+        config,
+        workspace,
+        sessionId,
+        agentId: compactionAgentContext.agentId,
+        expectedAgentPromptHash: compactionAgentContext.promptHash,
+      });
+      await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
+      guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
+        {
+          ...guardedInput,
+          parts: [
+            ...sessionCompactionPrivacyParts(currentMessages),
+            ...compactionPrivacyParts,
+          ],
+        },
+        guardedAuthorization,
+        providerSystem,
+      );
       unwrapOpencodeResult(
         await sessionApi.summarize({
           sessionID: sessionId,
@@ -14283,17 +15550,26 @@ function createRoutes(
       abort: (parameters: { sessionID: string; directory?: string }) => Promise<OpencodeClientResult<unknown, unknown>>;
     };
 
-    const agent = typeof body.agentId === "string" && body.agentId.trim()
+    const requestedAgent = typeof body.agentId === "string" && body.agentId.trim()
       ? body.agentId.trim()
       : typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
     const coworker = resolveMessageCoworker({
       body,
+      sessionId,
       workspace,
       ctx,
       coworkerRuntime,
       cryptoAppRuntime,
       guardedRuntime,
     });
+    const agentContext = await resolveMatterhornSessionAgentContext({
+      config,
+      workspace,
+      sessionId,
+      ...(requestedAgent ? { agentId: requestedAgent } : {}),
+    });
+    const agent = agentContext.agentId;
+    auditMetadata.agent = agent;
     const coworkerState = activeCoworkerWorkingState(coworkerRuntime, coworker?.profile);
     const modeTools = buildMatterhornExecutionModeTools(executionMode, agent);
     const routedTools = modeTools ?? (executionMode === "work"
@@ -14336,10 +15612,26 @@ function createRoutes(
       coworker: coworker?.binding,
       resourceScopeHash: coworker?.resourceScope?.scopeHash,
     });
+    const jurisdiction = resolveTrustedRequestJurisdiction(ctx.request, config.trustedProxySecret);
+    const providerSystem = guardedProviderSystemContext([agentContext.prompt, resolved.system], "message");
+    const requestPrivacyParts = [
+      ...resolved.privacyParts,
+      ...agentContext.privacyParts,
+      guardedProviderSystemPrivacyPart(providerSystem),
+    ];
+    const historyPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+      config,
+      workspace,
+      sessionId,
+      guardedRuntime,
+    });
     const guardedInput = {
       workspaceId: workspace.id,
       sessionId,
-      parts: resolved.privacyParts,
+      parts: [
+        ...historyPrivacyParts,
+        ...requestPrivacyParts,
+      ],
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
       agentId: agent,
@@ -14352,6 +15644,8 @@ function createRoutes(
       requestToolProfiles,
       coworker: coworker?.binding,
       authorizationContextHash,
+      contextOptimization: resolved.contextOptimization,
+      ...(jurisdiction ? { jurisdiction } : {}),
     };
     let guardedAuthorization: ReturnType<typeof guardedRuntime.authorizePrompt>;
     try {
@@ -14380,10 +15674,7 @@ function createRoutes(
       // A follow-up is a replacement run. Abort any in-flight response before
       // consuming consent or starting the newly authorized guarded run; abort
       // is idempotent when the session is already idle.
-      unwrapOpencodeResult(
-        await sessionApi.abort({ sessionID: sessionId, ...(directory ? { directory } : {}) }),
-        `/session/${encodeURIComponent(sessionId)}/abort`,
-      );
+      await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
     } catch (error) {
       modelUsageStore.cancel(usage.reservation.reservationId);
       throw error;
@@ -14391,7 +15682,20 @@ function createRoutes(
 
     let guardedAcceptance: GuardedPromptAcceptance;
     try {
-      guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(guardedInput, guardedAuthorization);
+      const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+        config,
+        workspace,
+        sessionId,
+        guardedRuntime,
+      });
+      guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
+        {
+          ...guardedInput,
+          parts: [...currentHistoryPrivacyParts, ...requestPrivacyParts],
+        },
+        guardedAuthorization,
+        providerSystem,
+      );
     } catch (error) {
       modelUsageStore.cancel(usage.reservation.reservationId);
       throw guardedRuntimeApiError(error);
@@ -14419,7 +15723,9 @@ function createRoutes(
         config,
         workspace,
         sessionId,
-        ...(agent ? { agentId: agent } : {}),
+        agentId: agent,
+        expectedAgentId: agentContext.agentId,
+        expectedAgentPromptHash: agentContext.promptHash,
         ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
       });
       if (reasoningEffort) {
@@ -14590,9 +15896,19 @@ function createRoutes(
       throw new ApiError(400, "invalid_payload", "sessionId is required");
     }
 
-    // OpenCode session deletion via the upstream API.
+    // Treat deletion as idempotent so a retry can finish local lifecycle
+    // cleanup after OpenCode accepted an earlier request.
     const opencode = createWorkspaceOpencodeClient(config, workspace);
-    unwrapOpencodeResult(await opencode.session.delete({ sessionID: sessionId }), `/session/${encodeURIComponent(sessionId)}`);
+    const deleted = await opencode.session.delete({ sessionID: sessionId });
+    if (deleted.data == null && deleted.response?.status !== 404) {
+      unwrapOpencodeResult(deleted, `/session/${encodeURIComponent(sessionId)}`);
+    }
+    coworkerRuntime.coworkers?.purgeDeletedSessionBinding(
+      workspace.id,
+      cryptoAppCreatedBy(ctx),
+      sessionId,
+    );
+    guardedRuntime.purgeSessionPrivacyState({ workspaceId: workspace.id, sessionId });
 
     return jsonResponse({ ok: true });
   });
@@ -17703,7 +19019,7 @@ function createRoutes(
         kind: "readiness_report",
         title: "Crypto customer readiness",
         summary: ready
-          ? "Runtime crypto surfaces are ready within their stated boundaries: Hyperliquid uses wallet-approved execution, Polymarket supports an eligible reviewed wallet ticket, and Bittensor uses its stated external-signer routes."
+          ? "Runtime crypto surfaces are ready within their stated boundaries: Hyperliquid uses wallet-approved execution, Polymarket supports an eligible reviewed wallet ticket, and Bittensor supports reviewed transfer, stake, and unstake calls through the connected wallet."
           : "Resolve readiness blockers before production use.",
         tone: ready ? "good" : "danger",
         items: [
@@ -17841,40 +19157,12 @@ function createRoutes(
     }
   });
 
-  addRoute(routes, "POST", "/api/hyperliquid/orders/external-sign-request", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    const forbidden = findForbiddenHyperliquidCredentialInput(body);
-    if (forbidden) {
-      throw new ApiError(400, "market_secret_rejected", `Hyperliquid sign-request input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
-    }
-    try {
-      const { preview, handoff, signRequest } = await prepareHyperliquidExternalSignRequestFromRequest({
-        asset: typeof body.asset === "string" ? body.asset : null,
-        side: typeof body.side === "string" ? body.side as never : null,
-        size: body.size === undefined ? null : body.size as never,
-        price: body.price === undefined ? null : body.price as never,
-        reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
-        slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as never,
-        executionMode: typeof body.executionMode === "string" ? body.executionMode : null,
-      });
-      return jsonResponse({ success: true, signRequest, handoff, preview });
-    } catch (err) {
-      throw new ApiError(400, "invalid_hyperliquid_sign_request", err instanceof Error ? err.message : "Could not prepare Hyperliquid external sign request");
-    }
+  addRoute(routes, "POST", "/api/hyperliquid/orders/external-sign-request", "client", async () => {
+    throw new ApiError(409, "wallet_airlock_required", "Legacy Hyperliquid external signing is disabled. Prepare the order, then review, sign, and submit the exact action in the connected-wallet ticket.");
   });
 
-  addRoute(routes, "POST", "/api/hyperliquid/orders/external-artifact/validate", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    const forbidden = findForbiddenHyperliquidCredentialInput(sanitizeMarketArtifactValidationInputForSecretScan(body));
-    if (forbidden) {
-      throw new ApiError(400, "market_secret_rejected", `Hyperliquid artifact validation input must contain only public/redacted metadata (${forbidden}).`);
-    }
-    try {
-      const validation = validateHyperliquidRedactedArtifactEnvelope(body.signRequest as never, body.artifact as never);
-      return jsonResponse({ success: validation.status === "accepted_public_metadata", validation, receiptCandidate: validation.publicAuditReceiptCandidate });
-    } catch (err) {
-      throw new ApiError(400, "invalid_hyperliquid_artifact_validation", err instanceof Error ? err.message : "Could not validate Hyperliquid public artifact metadata");
-    }
+  addRoute(routes, "POST", "/api/hyperliquid/orders/external-artifact/validate", "client", async () => {
+    throw new ApiError(409, "wallet_airlock_required", "Legacy Hyperliquid signed-artifact intake is disabled. Import only the public receipt produced by the connected-wallet ticket.");
   });
 
   addRoute(routes, "POST", "/api/hyperliquid/orders/receipt", "client", async (ctx) => {
@@ -18324,42 +19612,12 @@ function createRoutes(
     }
   });
 
-  addRoute(routes, "POST", "/api/polymarket/orders/external-sign-request", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    const forbidden = findForbiddenPolymarketCredentialInput(body);
-    if (forbidden) {
-      throw new ApiError(400, "market_secret_rejected", `Polymarket sign-request input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
-    }
-    try {
-      const { preview, handoff, signRequest, blocked } = await preparePolymarketExternalSignRequestFromRequest({
-        marketId: typeof body.marketId === "string" ? body.marketId : "",
-        outcome: typeof body.outcome === "string" ? body.outcome : null,
-        side: typeof body.side === "string" ? body.side as never : null,
-        amountUsdc: Number(body.amountUsdc),
-        slippageTolerance: body.slippageTolerance === undefined ? null : Number(body.slippageTolerance),
-        executionMode: typeof body.executionMode === "string" ? body.executionMode : null,
-      });
-      if (blocked) {
-        return jsonResponse({ success: true, blocked: true, preview, handoff: null, signRequest: null, cards: [buildPolymarketOrderPreviewCard(preview)] });
-      }
-      return jsonResponse({ success: true, signRequest, handoff, preview });
-    } catch (err) {
-      throw new ApiError(400, "invalid_polymarket_sign_request", err instanceof Error ? err.message : "Could not prepare Polymarket external sign request");
-    }
+  addRoute(routes, "POST", "/api/polymarket/orders/external-sign-request", "client", async () => {
+    throw new ApiError(409, "wallet_airlock_required", "Legacy Polymarket external signing is disabled. Prepare an eligible order, then review, authorize, and submit the exact action in the connected Polygon-wallet ticket.");
   });
 
-  addRoute(routes, "POST", "/api/polymarket/orders/external-artifact/validate", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    const forbidden = findForbiddenPolymarketCredentialInput(sanitizeMarketArtifactValidationInputForSecretScan(body));
-    if (forbidden) {
-      throw new ApiError(400, "market_secret_rejected", `Polymarket artifact validation input must contain only public/redacted metadata (${forbidden}).`);
-    }
-    try {
-      const validation = validatePolymarketRedactedArtifactEnvelope(body.signRequest as never, body.artifact as never);
-      return jsonResponse({ success: validation.status === "accepted_public_metadata", validation, receiptCandidate: validation.publicAuditReceiptCandidate });
-    } catch (err) {
-      throw new ApiError(400, "invalid_polymarket_artifact_validation", err instanceof Error ? err.message : "Could not validate Polymarket public artifact metadata");
-    }
+  addRoute(routes, "POST", "/api/polymarket/orders/external-artifact/validate", "client", async () => {
+    throw new ApiError(409, "wallet_airlock_required", "Legacy Polymarket signed-artifact intake is disabled. Import only the public receipt produced by the connected Polygon-wallet ticket.");
   });
 
   addRoute(routes, "POST", "/api/polymarket/orders/receipt", "client", async (ctx) => {
@@ -18387,13 +19645,51 @@ function createRoutes(
       throw new ApiError(400, "market_secret_rejected", `Polymarket receipt evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
     }
     const handoff = coercePolymarketHandoffReference(body.handoff);
-    if (!handoff) {
+    if (!handoff && !receiptBinding) {
       throw new ApiError(400, "invalid_handoff", "A valid signing handoff (previewSha256, handoffSha256, marketId, outcome, side) is required to save a receipt.");
     }
-    const verification = verifyPolymarketReceipt(handoff, coercePolymarketReceiptInput(body.receipt));
-    if (!verification.ok || !verification.receipt) {
-      throw new ApiError(400, "receipt_mismatch", verification.errors.join(" ") || "The Polymarket receipt did not match the reviewed handoff.");
+    const legacyVerification = handoff
+      ? verifyPolymarketReceipt(handoff, coercePolymarketReceiptInput(body.receipt))
+      : null;
+    if (legacyVerification && (!legacyVerification.ok || !legacyVerification.receipt)) {
+      throw new ApiError(400, "receipt_mismatch", legacyVerification.errors.join(" ") || "The Polymarket receipt did not match the reviewed handoff.");
     }
+    const reviewedDraft = receiptBinding?.handoff.draft.operation === "buy"
+      || receiptBinding?.handoff.draft.operation === "sell"
+      ? receiptBinding.handoff.draft
+      : null;
+    const rawReceipt = isRecord(body.receipt) ? body.receipt : null;
+    if (!legacyVerification?.receipt && (!receiptBinding || !reviewedDraft || !rawReceipt)) {
+      throw new ApiError(400, "receipt_mismatch", "A public receipt must match the exact reviewed Polymarket order.");
+    }
+    const reviewedStatus = rawReceipt ? readStringField(rawReceipt, "status").slice(0, 80) : "";
+    const reviewedSubmittedAt = rawReceipt ? readStringField(rawReceipt, "submittedAt") : "";
+    const reviewedOrderId = rawReceipt ? readStringField(rawReceipt, "orderId") : "";
+    const reviewedTxHash = rawReceipt ? readStringField(rawReceipt, "txHash") : "";
+    if (!legacyVerification?.receipt && (!/^[A-Za-z0-9_-]{1,40}$/.test(reviewedStatus)
+      || !Number.isFinite(Date.parse(reviewedSubmittedAt))
+      || (reviewedOrderId && !/^[A-Za-z0-9_-]{6,160}$/.test(reviewedOrderId))
+      || (reviewedTxHash && !/^0x[a-fA-F0-9]{64}$/.test(reviewedTxHash)))) {
+      throw new ApiError(400, "invalid_receipt", "A public Polymarket order status and timestamp are required.");
+    }
+    const verifiedReceipt = legacyVerification?.receipt ?? {
+      version: "matterhorn.market.receipt.v1" as const,
+      venue: "polymarket" as const,
+      status: reviewedStatus,
+      action: reviewedDraft!.operation === "buy" ? "buy_shares" : "sell_shares",
+      previewSha256: receiptBinding!.handoff.simulation.reference,
+      handoffSha256: receiptBinding!.handoff.intentHash,
+      orderId: reviewedOrderId || null,
+      txHash: reviewedTxHash || null,
+      marketId: reviewedDraft!.marketId,
+      tokenId: reviewedDraft!.tokenId,
+      outcome: reviewedDraft!.outcome,
+      side: reviewedDraft!.operation,
+      submittedAt: new Date(reviewedSubmittedAt).toISOString(),
+      warnings: reviewedOrderId || reviewedTxHash
+        ? []
+        : ["Receipt has neither an order id nor a transaction hash; status cannot be independently located."],
+    };
 
     const requestedSessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
     const sessionSlug = normalizeSessionSlug(requestedSessionId || `polymarket_${shortId()}`);
@@ -18409,10 +19705,10 @@ function createRoutes(
       summary: "Polymarket order receipt saved",
       auditAction: "workspace.polymarket.receipt.import",
       metadata: {
-        receiptStatus: verification.receipt.status,
-        marketId: verification.receipt.marketId,
-        outcome: verification.receipt.outcome,
-        side: verification.receipt.side,
+        receiptStatus: verifiedReceipt.status,
+        marketId: verifiedReceipt.marketId,
+        outcome: verifiedReceipt.outcome,
+        side: verifiedReceipt.side,
       },
       outputPayload: {
         version: "matterhorn.market.workspace-evidence.v1",
@@ -18420,7 +19716,7 @@ function createRoutes(
         venue: "polymarket",
         workspaceId: workspace.id,
         outputPath,
-        receipt: verification.receipt,
+        receipt: verifiedReceipt,
         safety: {
           custody: false,
           containsSignatureMaterial: false,
@@ -18432,13 +19728,13 @@ function createRoutes(
       guardedRuntime,
       workspaceId: workspace.id,
       binding: receiptBinding,
-      publicReceipt: verification.receipt,
+      publicReceipt: verifiedReceipt,
     });
     return jsonResponse({
       success: true,
-      receipt: verification.receipt,
+      receipt: verifiedReceipt,
       matchesHandoff: true,
-      warnings: verification.warnings,
+      warnings: verifiedReceipt.warnings,
       evidence: { workspaceId: workspace.id, outputPath, taskId, sessionSlug, source: "task_events" },
     }, 201);
   });
@@ -19699,7 +20995,7 @@ function createRoutes(
       status: status as BittensorSignedResult["status"],
       txHash: normalizeBittensorReceiptString(record.txHash),
       blockHash: normalizeBittensorReceiptString(record.blockHash),
-      message: normalizeBittensorReceiptString(record.message) ?? "External signer receipt evidence imported by Matterhorn.",
+      message: normalizeBittensorReceiptString(record.message) ?? "Public wallet receipt evidence imported by Matterhorn.",
       explorerUrl: normalizeBittensorReceiptString(record.explorerUrl),
     };
   }
@@ -19853,7 +21149,7 @@ function createRoutes(
       taskId,
       sessionSlug,
       outputPath,
-      summary: "Bittensor external-signer receipt saved",
+      summary: "Bittensor wallet receipt saved",
       auditAction: "workspace.bittensor.receipt.import",
       evidenceKind: "external_signer_receipt",
       workflowId: "bittensor_external_signer",
@@ -20231,15 +21527,53 @@ type ResolvedAgentMessageContext = {
   attachmentIds: string[];
   memoryIds: string[];
   agentFileIds: string[];
+  contextOptimization: NonNullable<MatterhornAgentRunReceipt["contextOptimization"]>;
 };
 
 type ResolvedCryptoRunContext = {
   modelText: string;
   privacyParts: MatterhornAgentPrivacyPart[];
+  optimization?: {
+    activeCryptoTools: number;
+    availableCryptoTools: number;
+    activeToolSchemaChars: number;
+    availableToolSchemaChars: number;
+  };
 };
 
 function sha256Bytes(value: Uint8Array | string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+const RAW_SYSTEM_WALLET_CONTEXT_MARKERS = [
+  "## Connected Wallet Private Context",
+  // Older desktop clients used this heading even though an address linked to
+  // a Matterhorn account is private under the guarded-runtime policy.
+  "## Connected Wallet Public Context",
+] as const;
+
+function rawPromptSystemPrivacyParts(system: unknown): MatterhornAgentPrivacyPart[] {
+  if (typeof system !== "string" || !system) return [];
+
+  const hasWalletContext = RAW_SYSTEM_WALLET_CONTEXT_MARKERS.some((marker) => system.includes(marker));
+  const hasWorkspaceContext = system.includes("## Active Matterhorn Workflow Run")
+    || system.includes("Matterhorn Desks environment variables configured:");
+  const label: MatterhornAgentDataLabel = hasWalletContext
+    ? "wallet_private"
+    : hasWorkspaceContext
+      ? "workspace_private"
+      : "public";
+
+  return [{
+    type: "system",
+    name: "Exact trusted-runtime system context",
+    text: system,
+    source: hasWalletContext ? "wallet" : "system",
+    label,
+    contentHash: sha256Bytes(system),
+    sizeBytes: Buffer.byteLength(system, "utf8"),
+    version: "matterhorn.raw-system-context.v1",
+  }];
 }
 
 function sessionCompactionInspectionText(value: unknown): string {
@@ -20263,9 +21597,36 @@ function sessionCompactionInspectionText(value: unknown): string {
   return lines.join("\n");
 }
 
+const SESSION_HISTORY_PRIVACY_MAX_MESSAGES = 2_048;
+const SESSION_HISTORY_PRIVACY_MAX_BYTES = 16 * 1024 * 1024;
+
+function assertSessionHistoryWithinPrivacyLimits(
+  messages: Awaited<ReturnType<typeof readWorkspaceSessionMessages>>,
+): void {
+  if (messages.length > SESSION_HISTORY_PRIVACY_MAX_MESSAGES) {
+    throw new ApiError(
+      413,
+      "session_history_too_large",
+      "This chat is too large to verify safely. Compact it or start a new chat.",
+    );
+  }
+  let totalBytes = 0;
+  for (const message of messages) {
+    totalBytes += Buffer.byteLength(canonicalJson(message), "utf8");
+    if (totalBytes > SESSION_HISTORY_PRIVACY_MAX_BYTES) {
+      throw new ApiError(
+        413,
+        "session_history_too_large",
+        "This chat is too large to verify safely. Compact it or start a new chat.",
+      );
+    }
+  }
+}
+
 function sessionCompactionPrivacyParts(
   messages: Awaited<ReturnType<typeof readWorkspaceSessionMessages>>,
 ): MatterhornAgentPrivacyPart[] {
+  assertSessionHistoryWithinPrivacyLimits(messages);
   const messageParts = messages.map((message, index): MatterhornAgentPrivacyPart => {
     const canonical = canonicalJson(message);
     const messageId = typeof message.info.id === "string" && message.info.id.trim()
@@ -20308,6 +21669,75 @@ function sessionCompactionPrivacyParts(
     sizeBytes: Buffer.byteLength(manifest, "utf8"),
     version: "matterhorn.session-compaction.v1",
   }, ...messageParts, ...toolParts];
+}
+
+function sessionPromptHistoryPrivacyParts(
+  messages: Awaited<ReturnType<typeof readWorkspaceSessionMessages>>,
+  label: Extract<MatterhornAgentDataLabel, "public" | "workspace_private" | "wallet_private">,
+): MatterhornAgentPrivacyPart[] {
+  assertSessionHistoryWithinPrivacyLimits(messages);
+  const messageParts = messages.map((message, index): MatterhornAgentPrivacyPart => {
+    const canonical = canonicalJson(message);
+    const messageId = typeof message.info.id === "string" && message.info.id.trim()
+      ? message.info.id.trim()
+      : `turn-${index + 1}`;
+    return {
+      type: "session_history",
+      name: `Stored chat turn ${index + 1}`,
+      text: sessionCompactionInspectionText(message),
+      source: "system",
+      label,
+      contentHash: sha256Bytes(canonical),
+      sizeBytes: Buffer.byteLength(canonical, "utf8"),
+      version: messageId,
+    };
+  });
+  const toolParts = messages.flatMap((message, messageIndex) => (
+    Array.isArray(message.parts)
+      ? message.parts.flatMap((part, partIndex): MatterhornAgentPrivacyPart[] => {
+          if (!isRecord(part) || part.type !== "tool") return [];
+          const canonical = canonicalJson(part);
+          return [{
+            type: "session_tool_history",
+            name: `Stored tool result ${messageIndex + 1}.${partIndex + 1}`,
+            source: "tool",
+            label: "untrusted_external",
+            contentHash: sha256Bytes(canonical),
+            sizeBytes: Buffer.byteLength(canonical, "utf8"),
+          }];
+        })
+      : []
+  ));
+  const manifest = canonicalJson(messages.map((message) => sha256Bytes(canonicalJson(message))));
+  return [{
+    type: "session_history_manifest",
+    name: "Exact stored chat included with this request",
+    source: "system",
+    label,
+    contentHash: sha256Bytes(manifest),
+    sizeBytes: Buffer.byteLength(manifest, "utf8"),
+    version: "matterhorn.session-history.v1",
+  }, ...messageParts, ...toolParts];
+}
+
+async function guardedSessionPromptHistoryPrivacyParts(input: {
+  config: ServerConfig;
+  workspace: WorkspaceInfo;
+  sessionId: string;
+  guardedRuntime: MatterhornGuardedAgentRuntime;
+}): Promise<MatterhornAgentPrivacyPart[]> {
+  const messages = await readWorkspaceSessionMessages(
+    input.config,
+    input.workspace,
+    input.sessionId,
+    {},
+  );
+  const label = input.guardedRuntime.resolveSessionHistoryLabel({
+    workspaceId: input.workspace.id,
+    sessionId: input.sessionId,
+    hasStoredHistory: messages.length > 0,
+  });
+  return sessionPromptHistoryPrivacyParts(messages, label);
 }
 
 function decodeInlineAttachmentData(url: string): { bytes: Uint8Array; mimeFromUrl: string | null } {
@@ -20477,6 +21907,13 @@ async function resolveSelectedMemoryContext(input: {
   const workspaceVault = memoryVaultForWorkspace(input.memoryVault, input.workspace);
   const records = await Promise.all(input.memoryIds.map(async (id) => {
     const record = assertWorkspaceMemoryRecord(await workspaceVault.getRecord(id), input.workspace);
+    if (containsForbiddenMemoryRecordMaterial(record)) {
+      throw new ApiError(
+        400,
+        "memory_safety_rejected",
+        "A selected Memory record contains content Matterhorn cannot send to a model. Remove it from Memory and try again.",
+      );
+    }
     if (!record.canUseInChat) {
       throw new ApiError(403, "memory_not_available_in_chat", "A selected Memory record is not approved for chat use.");
     }
@@ -20582,13 +22019,14 @@ async function resolveCryptoRunContext(input: {
   )) {
     return { modelText: "", privacyParts: [] };
   }
-  const toolNames = activeDeskToolDefinitions(desk.deskId)
+  const deskTools = activeDeskToolDefinitions(desk.deskId);
+  const activeTools = deskTools.filter((tool) => input.requestToolProfiles.every((profile) => {
+    const permission = `matterhorn-work_${tool.name}`;
+    if (profile[permission] === false) return false;
+    return profile["*"] !== false || profile[permission] === true;
+  }));
+  const toolNames = activeTools
     .map((tool) => tool.name)
-    .filter((toolName) => input.requestToolProfiles.every((profile) => {
-      const permission = `matterhorn-work_${toolName}`;
-      if (profile[permission] === false) return false;
-      return profile["*"] !== false || profile[permission] === true;
-    }))
     .sort();
   const recent = await input.guardedRuntime.receipts.list(input.workspaceId, {
     sessionId: input.sessionId,
@@ -20600,10 +22038,7 @@ async function resolveCryptoRunContext(input: {
       .filter((action) => !action.publicReceipt)
       .map((action) => action.intentHash))
     : [];
-  const evidenceReferences = recent.flatMap((receipt) => receipt.tools.flatMap((tool) => [
-    tool.source ? `${tool.name}:source:${tool.source}` : "",
-    tool.freshness ? `${tool.name}:freshness:${tool.freshness}` : "",
-  ])).filter(Boolean);
+  const evidenceReferences = recent.flatMap((receipt) => receiptEvidenceReferences(receipt.tools));
   const state = compileMatterhornCryptoState({ pendingActionIds, evidenceReferences });
   const modelText = [
     "## Matterhorn Crypto Context",
@@ -20622,6 +22057,12 @@ async function resolveCryptoRunContext(input: {
       contentHash: sha256Bytes(modelText),
       version: "matterhorn.crypto-context-compiler.v1",
     }],
+    optimization: {
+      activeCryptoTools: activeTools.length,
+      availableCryptoTools: MATTERHORN_CRYPTO_ACTION_REGISTRY.length,
+      activeToolSchemaChars: JSON.stringify(activeTools).length,
+      availableToolSchemaChars: JSON.stringify(MATTERHORN_CRYPTO_ACTION_REGISTRY).length,
+    },
   };
 }
 
@@ -20664,7 +22105,12 @@ function buildAuthoritativeAgentSystemContext(input: {
   cryptoStateText: string;
   agentFileText: string;
   coworker?: MatterhornCoworkerProfile;
-}): { system: string; privacyParts: MatterhornAgentPrivacyPart[] } {
+  cryptoOptimization?: ResolvedCryptoRunContext["optimization"];
+}): {
+  system: string;
+  privacyParts: MatterhornAgentPrivacyPart[];
+  contextOptimization: NonNullable<MatterhornAgentRunReceipt["contextOptimization"]>;
+} {
   const desk = getMatterhornDeskAgentById(input.agentId);
   const policySections = [
     buildMatterhornExecutionModeSystemPrompt(input.executionMode),
@@ -20710,6 +22156,19 @@ function buildAuthoritativeAgentSystemContext(input: {
   }] : [];
   return {
     system,
+    contextOptimization: {
+      compilerVersion: MATTERHORN_COWORKER_CONTEXT_COMPILER_VERSION,
+      systemChars: compilation.totalChars,
+      policyChars: compilation.policyChars,
+      dataChars: compilation.dataChars,
+      activeCryptoTools: input.cryptoOptimization?.activeCryptoTools ?? 0,
+      availableCryptoTools: input.cryptoOptimization?.availableCryptoTools ?? 0,
+      activeToolSchemaChars: input.cryptoOptimization?.activeToolSchemaChars ?? 0,
+      availableToolSchemaChars: input.cryptoOptimization?.availableToolSchemaChars ?? 0,
+      dataSectionsIncluded: compilation.includedSections.length,
+      dataSectionsShortened: compilation.truncatedSections.length,
+      dataSectionsOmitted: compilation.omittedSections.length,
+    },
     privacyParts: [
       {
         type: "compiled_system_context",
@@ -20821,6 +22280,7 @@ async function resolveAuthoritativeAgentMessage(input: {
     cryptoStateText: [crypto.modelText, coworkerStateText].filter(Boolean).join("\n\n"),
     agentFileText: agentFiles.modelText,
     coworker: input.coworker,
+    cryptoOptimization: crypto.optimization,
   });
   const toolProfilePart: MatterhornAgentPrivacyPart = {
     type: "tool_profile",
@@ -20861,6 +22321,7 @@ async function resolveAuthoritativeAgentMessage(input: {
     attachmentIds,
     memoryIds,
     agentFileIds,
+    contextOptimization: authoritativeSystem.contextOptimization,
   };
 }
 
@@ -20952,6 +22413,21 @@ function assertPromptProviderPrivacy(providerId: string, modelId: string): void 
     403,
     "provider_privacy_unverified",
     `${policy.providerName} cannot receive prompts until its no-training and retention policy is verified. Choose a verified provider or ask the workspace owner to finish privacy setup.`,
+    {
+      providerId: policy.providerId,
+      privacyStatus: policy.status,
+      trainingUse: policy.trainingUse,
+    },
+  );
+}
+
+function assertOpaqueCommandProviderPrivacy(providerId: string, modelId: string): void {
+  const policy = resolveModelProviderPrivacyPolicy(providerId, modelId);
+  if (policy.status === "local_processing" || policy.status === "verified_no_training") return;
+  throw new ApiError(
+    403,
+    "command_privacy_unverifiable",
+    "This command may expand hidden workspace context that Matterhorn cannot bind to one exact privacy review. Use a local or verified private model, or send the instruction as a normal chat message.",
     {
       providerId: policy.providerId,
       privacyStatus: policy.status,

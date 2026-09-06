@@ -6,9 +6,14 @@ import type {
   MatterhornAgentPrivacyPart,
   MatterhornAgentPrivacyPreflightResponse,
 } from "@matterhorn-work/types/guarded-agent-runtime";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
+import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import { resolveModelProviderPrivacyPolicy } from "./provider-privacy.js";
 import { equalDigest, sha256 } from "./guarded-runtime-crypto.js";
-import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import type {
+  GuardedRuntimeStateRecord,
+  MatterhornGuardedRuntimeStateStore,
+} from "./guarded-runtime-state-store.js";
 import {
   isRegisteredVenicePrivateModel,
   VENICE_PROVIDER_ID,
@@ -52,6 +57,8 @@ export type PrivacyInput = {
    * changes without putting the authority document in provider context.
    */
   authorizationContextHash?: string;
+  /** Server-verified, content-free proof of the request's edge jurisdiction. */
+  jurisdiction?: { evidenceHash: string };
 };
 
 type ChallengeRecord = {
@@ -73,6 +80,135 @@ type ConsentRecord = {
   expiresAtMs: number;
   consumed: boolean;
 };
+
+const PRIVACY_DATA_CATEGORIES = new Set([
+  "api_credential",
+  "cloud_credential",
+  "external_tool_data",
+  "linked_wallet_context",
+  "private_key",
+  "raw_signature",
+  "secret_attachment",
+  "secret_context",
+  "seed_phrase",
+  "selected_memory",
+  "session_credential",
+  "transaction_intent",
+  "wallet_export",
+  "workspace_agent_instructions",
+  "workspace_attachment",
+]);
+const PRIVACY_CHALLENGE_ID = /^privacy_challenge_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function hasExactKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return actual.length === sortedExpected.length
+    && actual.every((key, index) => key === sortedExpected[index]);
+}
+
+function isBoundedIdentifier(value: unknown): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= 256
+    && value.trim() === value;
+}
+
+function isSha256Digest(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
+function isCanonicalCategories(value: unknown): value is string[] {
+  if (!Array.isArray(value) || value.length > PRIVACY_DATA_CATEGORIES.size) return false;
+  if (!value.every((category) => typeof category === "string" && PRIVACY_DATA_CATEGORIES.has(category))) {
+    return false;
+  }
+  return value.every((category, index) => index === 0 || value[index - 1]! < category);
+}
+
+function validExpiry(expiresAtMs: unknown, nowMs: number): expiresAtMs is number {
+  return Number.isSafeInteger(expiresAtMs)
+    && (expiresAtMs as number) > nowMs
+    && (expiresAtMs as number) <= nowMs + CONSENT_TTL_MS;
+}
+
+function assertPersistedChallenge(
+  state: GuardedRuntimeStateRecord<ChallengeRecord> | null,
+  challengeId: string,
+  nowMs: number,
+): ChallengeRecord | null {
+  if (!state) return null;
+  const value = state.value;
+  if (
+    state.kind !== "privacy_challenge"
+    || state.key !== challengeId
+    || !hasExactKeys(value, [
+      "id",
+      "workspaceId",
+      "sessionId",
+      "requestHash",
+      "categories",
+      "expiresAtMs",
+      "confirmed",
+    ])
+    || value.id !== challengeId
+    || !PRIVACY_CHALLENGE_ID.test(value.id)
+    || !isBoundedIdentifier(value.workspaceId)
+    || !isBoundedIdentifier(value.sessionId)
+    || !isSha256Digest(value.requestHash)
+    || !isCanonicalCategories(value.categories)
+    || !validExpiry(value.expiresAtMs, nowMs)
+    || value.confirmed !== false
+    || state.workspaceId !== value.workspaceId
+    || state.sessionId !== value.sessionId
+    || state.expiresAtMs !== value.expiresAtMs
+    || !Number.isSafeInteger(state.updatedAtMs)
+    || state.updatedAtMs > nowMs
+    || value.expiresAtMs - state.updatedAtMs !== CONSENT_TTL_MS
+  ) {
+    throw new Error("privacy_persisted_challenge_invalid");
+  }
+  return value as ChallengeRecord;
+}
+
+function assertPersistedConsent(
+  state: GuardedRuntimeStateRecord<ConsentRecord> | null,
+  tokenHash: string,
+  nowMs: number,
+): ConsentRecord | null {
+  if (!state) return null;
+  const value = state.value;
+  if (
+    state.kind !== "privacy_consent"
+    || state.key !== tokenHash
+    || !hasExactKeys(value, [
+      "tokenHash",
+      "workspaceId",
+      "sessionId",
+      "requestHash",
+      "categories",
+      "expiresAtMs",
+      "consumed",
+    ])
+    || value.tokenHash !== tokenHash
+    || !isBoundedIdentifier(value.workspaceId)
+    || !isBoundedIdentifier(value.sessionId)
+    || !isSha256Digest(value.requestHash)
+    || !isCanonicalCategories(value.categories)
+    || !validExpiry(value.expiresAtMs, nowMs)
+    || value.consumed !== false
+    || state.workspaceId !== value.workspaceId
+    || state.sessionId !== value.sessionId
+    || state.expiresAtMs !== value.expiresAtMs
+    || !Number.isSafeInteger(state.updatedAtMs)
+    || state.updatedAtMs > nowMs
+    || value.expiresAtMs - state.updatedAtMs > CONSENT_TTL_MS
+  ) {
+    throw new Error("privacy_persisted_consent_invalid");
+  }
+  return value as ConsentRecord;
+}
 
 function challengeMatches(
   challenge: ChallengeRecord | null | undefined,
@@ -138,6 +274,9 @@ function classify(input: PrivacyInput): {
     labels.add(part.label);
     if (part.label === "workspace_private") {
       effectiveMode = maxMode(effectiveMode, "private_workspace");
+      if (part.type === "agent_instructions") {
+        categories.add("workspace_agent_instructions");
+      }
     } else if (part.label === "wallet_private") {
       effectiveMode = "transaction";
     } else if (part.label === "secret") {
@@ -214,6 +353,7 @@ export function agentPrivacyRequestHash(input: PrivacyInput): string {
     memoryIds: normalizedIds(input.memoryIds),
     privacyMode: requestedMode(input.privacyMode),
     authorizationContextHash: input.authorizationContextHash?.trim() || null,
+    jurisdictionEvidenceHash: input.jurisdiction?.evidenceHash?.trim() || null,
     parts: input.parts.map((part) => ({
       type: part.type,
       text: part.contentHash ? null : part.text ?? null,
@@ -231,8 +371,30 @@ export function agentPrivacyRequestHash(input: PrivacyInput): string {
 export class MatterhornPrivacyFirewall {
   private readonly challenges = new Map<string, ChallengeRecord>();
   private readonly consents = new Map<string, ConsentRecord>();
+  private readonly challengeState: MatterhornDurableAuthorizedState | null;
+  private readonly consentState: MatterhornDurableAuthorizedState | null;
 
-  constructor(private readonly stateStore?: MatterhornGuardedRuntimeStateStore) {}
+  constructor(
+    private readonly stateStore?: MatterhornGuardedRuntimeStateStore,
+    authority?: MatterhornDurableStateAuthority,
+  ) {
+    this.challengeState = stateStore && authority
+      ? new MatterhornDurableAuthorizedState(
+        stateStore,
+        authority,
+        "privacy_challenge",
+        "privacy_persisted_challenge_invalid",
+      )
+      : null;
+    this.consentState = stateStore && authority
+      ? new MatterhornDurableAuthorizedState(
+        stateStore,
+        authority,
+        "privacy_consent",
+        "privacy_persisted_consent_invalid",
+      )
+      : null;
+  }
 
   preflight(input: PrivacyInput, options: { issueChallenge?: boolean; now?: Date } = {}): MatterhornPrivacyEvaluation {
     const now = options.now ?? new Date();
@@ -281,8 +443,7 @@ export class MatterhornPrivacyFirewall {
         confirmed: false,
       };
       this.challenges.set(id, record);
-      this.stateStore?.put({
-        kind: "privacy_challenge",
+      this.challengeState?.put({
         key: id,
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
@@ -355,12 +516,17 @@ export class MatterhornPrivacyFirewall {
       return { challenge, consent, token };
     };
     const stateStore = this.stateStore;
-    const converted = stateStore
+    const challengeState = this.challengeState;
+    const consentState = this.consentState;
+    const converted = stateStore && challengeState && consentState
       ? stateStore.transaction(() => {
-          const challenge = stateStore.take<ChallengeRecord>("privacy_challenge", input.challengeId, nowMs);
+          const challenge = assertPersistedChallenge(
+            challengeState.takeRecord<ChallengeRecord>(input.challengeId, nowMs),
+            input.challengeId,
+            nowMs,
+          );
           const result = convertChallenge(challenge);
-          const stored = stateStore.putIfAbsent({
-            kind: "privacy_consent",
+          const stored = consentState.putIfAbsent({
             key: result.consent.tokenHash,
             workspaceId: result.challenge.workspaceId,
             sessionId: result.challenge.sessionId,
@@ -395,8 +561,12 @@ export class MatterhornPrivacyFirewall {
     const nowMs = (input.now ?? new Date()).getTime();
     this.cleanup(nowMs);
     const tokenHash = sha256(input.token);
-    const candidate = this.stateStore
-      ? this.stateStore.get<ConsentRecord>("privacy_consent", tokenHash, nowMs)
+    const candidate = this.consentState
+      ? assertPersistedConsent(
+          this.consentState.getRecord<ConsentRecord>(tokenHash, nowMs),
+          tokenHash,
+          nowMs,
+        )
       : this.consents.get(tokenHash);
     if (
       !candidate
@@ -406,8 +576,12 @@ export class MatterhornPrivacyFirewall {
       || candidate.sessionId !== input.sessionId
       || !equalDigest(candidate.requestHash, input.requestHash)
     ) return false;
-    const record = this.stateStore
-      ? this.stateStore.take<ConsentRecord>("privacy_consent", tokenHash, nowMs)
+    const record = this.consentState
+      ? assertPersistedConsent(
+          this.consentState.takeRecord<ConsentRecord>(tokenHash, nowMs),
+          tokenHash,
+          nowMs,
+        )
       : candidate;
     this.consents.delete(tokenHash);
     if (
@@ -432,8 +606,12 @@ export class MatterhornPrivacyFirewall {
     const nowMs = (input.now ?? new Date()).getTime();
     this.cleanup(nowMs);
     const tokenHash = sha256(input.token);
-    const candidate = this.stateStore
-      ? this.stateStore.get<ConsentRecord>("privacy_consent", tokenHash, nowMs)
+    const candidate = this.consentState
+      ? assertPersistedConsent(
+          this.consentState.getRecord<ConsentRecord>(tokenHash, nowMs),
+          tokenHash,
+          nowMs,
+        )
       : this.consents.get(tokenHash);
     return Boolean(
       candidate

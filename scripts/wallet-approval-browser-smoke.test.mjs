@@ -74,7 +74,7 @@ assert.ok(
     script.includes("Matterhorn will not send a transaction that fails simulation") &&
     script.includes("Matterhorn will not send this transaction until simulation is available") &&
     script.includes("wallet_browser_smoke") &&
-    script.includes("Transaction Approval"),
+    script.includes("Review wallet action"),
   "wallet approval browser smoke should use the real transaction approval event, modal, and simulation gate",
 );
 assert.ok(
@@ -100,13 +100,14 @@ assert.ok(
     script.includes("Approval modal exposed raw wei as ETH") &&
     script.includes("page.getByText(REVIEWED_TO.slice(0, 6), { exact: false }).first().waitFor") &&
     script.includes("page.getByText(REVIEWED_VALUE_DISPLAY, { exact: false }).first().waitFor") &&
-    script.includes("Passed pre-approval simulation"),
+    script.includes("Checks passed\\. Your wallet can review this action\\."),
   "wallet approval browser smoke should fail when raw wei is displayed as ETH and prove passing simulations are visible without strict duplicate address selectors",
 );
 assert.ok(
   script.includes("blocked approval button is enabled") &&
     script.includes("assertApprovalBlocked(page, \"Failed simulation\")") &&
-    script.includes("approve button is enabled") &&
+    script.includes("continue-in-wallet button is enabled") &&
+    script.includes("Continue in wallet") &&
     script.includes("Failed simulation reached wallet") &&
     script.includes("Cancelled review reached wallet") &&
     script.includes("simulation route was not reachable in this browser path") &&
@@ -137,9 +138,10 @@ assert.ok(
   "wallet approval browser smoke should fail strict runs on browser and API failures",
 );
 assert.ok(
-  script.includes("wallet-approval-browser-smoke.png") &&
+  script.includes("wallet-approval-review.png") &&
+    script.includes("wallet-approval-browser-smoke.png") &&
     script.includes("summary.json"),
-  "wallet approval browser smoke should write screenshot and JSON evidence",
+  "wallet approval browser smoke should write review, final-state, and JSON evidence",
 );
 assert.equal(
   packageJson.scripts?.["smoke:wallet-approval-browser"],

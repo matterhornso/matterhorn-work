@@ -37,7 +37,9 @@ const EMPTY_ACCESS_MAINTENANCE: MatterhornCoworkerAccessMaintenanceResult = {
 };
 
 export class MatterhornCoworkerRuntimeConfigurationError extends Error {
-  constructor(public readonly code: "coworker_policy_version_required") {
+  constructor(public readonly code:
+    | "coworker_policy_version_required"
+    | "coworker_integrity_secret_required") {
     super(code);
     this.name = "MatterhornCoworkerRuntimeConfigurationError";
   }
@@ -96,8 +98,12 @@ export function createMatterhornCoworkerRuntime(
   if (!POLICY_VERSION_PATTERN.test(policyVersion)) {
     throw new MatterhornCoworkerRuntimeConfigurationError("coworker_policy_version_required");
   }
+  const integritySecret = env.MATTERHORN_COWORKER_INTEGRITY_SECRET ?? "";
+  if (Buffer.byteLength(integritySecret, "utf8") < 32) {
+    throw new MatterhornCoworkerRuntimeConfigurationError("coworker_integrity_secret_required");
+  }
   const storePath = env.MATTERHORN_COWORKER_DB?.trim();
-  const store = new MatterhornCoworkerStore(storePath || undefined);
+  const store = new MatterhornCoworkerStore(storePath || undefined, integritySecret);
   const access = feature.coworkerMode === "invite"
     ? new MatterhornCoworkerAccess({ store, ...(options.now ? { now: options.now } : {}) })
     : null;

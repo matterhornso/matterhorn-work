@@ -11,11 +11,13 @@ import {
 } from "./crypto-coworker-runtime.js";
 import { MatterhornCoworkerError } from "./crypto-coworkers.js";
 
+const COWORKER_INTEGRITY_SECRET = "coworker-runtime-integrity-secret-at-least-32-bytes";
 const INVITE_ENV = {
   MATTERHORN_COWORKER_MODE: "invite",
   MATTERHORN_COWORKER_POLICY_VERSION: "coworker-policy-1",
   MATTERHORN_CRYPTO_APP_GATEWAY_MODE: "enforce",
   MATTERHORN_GUARDED_RUNTIME_MODE: "enforce",
+  MATTERHORN_COWORKER_INTEGRITY_SECRET: COWORKER_INTEGRITY_SECRET,
 } as const;
 
 describe("crypto coworker runtime startup", () => {
@@ -54,12 +56,30 @@ describe("crypto coworker runtime startup", () => {
         MATTERHORN_COWORKER_MODE: "internal",
         MATTERHORN_COWORKER_POLICY_VERSION: "coworker-policy-1",
         MATTERHORN_COWORKER_DB: path,
+        MATTERHORN_COWORKER_INTEGRITY_SECRET: COWORKER_INTEGRITY_SECRET,
       };
       const runtime = createMatterhornCoworkerRuntime(env);
       expect(runtime).toMatchObject({ mode: "internal", ready: true });
       expect(runtime.coworkers).not.toBeNull();
       expect(coworkerRuntimeDatabaseExists(env)).toBe(true);
       runtime.close();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("requires an independent integrity secret before opening enabled state", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-integrity-"));
+    const path = join(root, "coworkers.db");
+    try {
+      const env = {
+        MATTERHORN_COWORKER_MODE: "internal",
+        MATTERHORN_COWORKER_POLICY_VERSION: "coworker-policy-1",
+        MATTERHORN_COWORKER_DB: path,
+      };
+      expect(() => createMatterhornCoworkerRuntime(env))
+        .toThrow(new MatterhornCoworkerRuntimeConfigurationError("coworker_integrity_secret_required"));
+      expect(coworkerRuntimeDatabaseExists(env)).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

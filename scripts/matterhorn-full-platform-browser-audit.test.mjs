@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
@@ -9,6 +10,46 @@ assert.equal(
   packageJson.scripts?.["test:matterhorn-full-platform-browser-audit"],
   "node scripts/matterhorn-full-platform-browser-audit.test.mjs",
 );
+assert.equal(
+  packageJson.scripts?.["smoke:matterhorn-full-platform-browser-audit"],
+  "node scripts/matterhorn-full-platform-browser-audit.mjs --strict",
+);
+
+for (const signal of [
+  'import { chromium, firefox, webkit } from "playwright"',
+  'Object.freeze({ chromium, firefox, webkit })',
+  'argumentValue("--browser")',
+  "MATTERHORN_FULL_AUDIT_BROWSER",
+  'throw new Error("Browser must be chromium, firefox, or webkit.")',
+  "browserEngine: browserName",
+  "browserTypes[browserName].launch",
+  "matterhorn-full-platform-browser-audit-${browserName}",
+  "knownNonBlockingBrowserDiagnostic",
+  "webkit_viewport_option_unsupported",
+  "vite_dev_csp_eval_blocked",
+  "browserWarningsByCategory",
+  "waitForNotesPanel",
+  'aria-label="Notes panel"',
+]) {
+  assert.ok(source.includes(signal), `full platform audit missing cross-browser boundary: ${signal}`);
+}
+
+const firefoxHelp = spawnSync(process.execPath, [
+  "scripts/matterhorn-full-platform-browser-audit.mjs",
+  "--help",
+  "--browser",
+  "firefox",
+], { encoding: "utf8" });
+assert.equal(firefoxHelp.status, 0, firefoxHelp.stderr);
+assert.match(firefoxHelp.stdout, /chromium, firefox, or webkit/);
+
+const invalidBrowser = spawnSync(process.execPath, [
+  "scripts/matterhorn-full-platform-browser-audit.mjs",
+  "--browser",
+  "safari",
+], { encoding: "utf8" });
+assert.notEqual(invalidBrowser.status, 0);
+assert.match(invalidBrowser.stderr, /Browser must be chromium, firefox, or webkit/);
 
 for (const surface of [
   "workspace-home",

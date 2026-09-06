@@ -1,4 +1,7 @@
-import type { MatterhornCoworkerWalletIntentView } from "../../../app/lib/matterhorn-server";
+import type {
+  MatterhornCoworkerWalletIntentView,
+  MatterhornCoworkerWalletReceiptInput,
+} from "../../../app/lib/matterhorn-server";
 
 const CANCELLABLE_STATES = new Set<MatterhornCoworkerWalletIntentView["state"]>(
   ["wallet_review", "refreshing", "regeneration_required", "wallet_approved"],
@@ -13,6 +16,23 @@ const TERMINAL_STATES = new Set<MatterhornCoworkerWalletIntentView["state"]>([
 
 type BittensorWalletNetwork = "finney" | "test" | "local";
 
+type PolymarketCoworkerReceiptContext = {
+  protocol: string;
+  network: string;
+  signer: string | null;
+  operation: string;
+  expectedRevision: number;
+  authorizedArgumentsHash: string;
+};
+
+type PolymarketWalletResult = {
+  status: string;
+  orderId: string | null;
+  transactionHashes: string[];
+  tradeIds: string[];
+  submittedAt: string;
+};
+
 function normalizeBittensorNetwork(value: string): BittensorWalletNetwork | null {
   const normalized = value.trim().toLowerCase().replace(/^bittensor:/, "");
   if (normalized === "finney" || normalized === "test" || normalized === "local") return normalized;
@@ -24,6 +44,57 @@ export function bittensorWalletNetworkMatches(
   walletNetwork: BittensorWalletNetwork,
 ): boolean {
   return normalizeBittensorNetwork(reviewedNetwork) === walletNetwork;
+}
+
+function isPolygonMainnet(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "polygon"
+    || normalized === "polygon:137"
+    || normalized === "polymarket:polygon"
+    || normalized === "polymarket:137";
+}
+
+export function polymarketCoworkerWalletMismatchReason(
+  context: PolymarketCoworkerReceiptContext,
+  wallet: { chainId: number | null; address: string | null; operation: "buy" | "sell" | "cancel" },
+): string | null {
+  if (context.protocol !== "polymarket" || !isPolygonMainnet(context.network)) {
+    return "This wallet result does not match a protected Polygon Polymarket review.";
+  }
+  if (wallet.chainId !== 137) {
+    return "Switch the connected wallet to Polygon before continuing.";
+  }
+  if (context.operation !== wallet.operation) {
+    return "The selected action no longer matches the coworker's protected review. Open a fresh wallet review.";
+  }
+  if (context.signer && context.signer.toLowerCase() !== wallet.address?.toLowerCase()) {
+    return "Connect the wallet named in the coworker's protected review before continuing.";
+  }
+  return null;
+}
+
+export function polymarketCoworkerWalletReceiptInput(
+  context: PolymarketCoworkerReceiptContext,
+  receipt: PolymarketWalletResult,
+): MatterhornCoworkerWalletReceiptInput {
+  const transactionHash = receipt.transactionHashes.find((value) => value.trim())?.trim() ?? null;
+  const tradeId = receipt.tradeIds.find((value) => value.trim())?.trim() ?? null;
+  const orderId = receipt.orderId?.trim() || null;
+  const publicId = transactionHash
+    ?? tradeId
+    ?? (orderId && orderId.length <= 192 ? orderId : null)
+    ?? `polymarket-${context.operation}:${receipt.submittedAt}`;
+  return {
+    expectedRevision: context.expectedRevision,
+    status: "submitted",
+    publicId,
+    transactionHash,
+    blockHash: null,
+    network: context.network,
+    signer: context.signer,
+    operation: context.operation,
+    authorizedArgumentsHash: context.authorizedArgumentsHash,
+  };
 }
 
 export function coworkerWalletReviewUnavailableReason(

@@ -29,6 +29,8 @@ import {
   type MatterhornWalrusCertificationVerifier,
 } from "./crypto-evidence-walrus-publisher.js";
 import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
+import { MatterhornDurableAuthorizedState } from "./durable-authorized-state.js";
+import type { MatterhornDurableStateAuthority } from "./durable-state-authority.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 import { assessMatterhornWalrusStorageLifecycle } from "./walrus-storage-lifecycle.js";
 
@@ -225,13 +227,25 @@ export function createPinnedWalrusDeletionTransactionBuilder(options: {
 }
 
 export class MatterhornCryptoEvidenceWalrusDeletionService {
+  private readonly intentState: MatterhornDurableAuthorizedState;
+
   constructor(
     private readonly store: MatterhornCryptoEvidenceStore,
     private readonly stateStore: MatterhornGuardedRuntimeStateStore,
+    authority: MatterhornDurableStateAuthority,
     private readonly buildTransaction: MatterhornWalrusDeletionTransactionBuilder,
     private readonly verifyTransaction: MatterhornSuiTransactionStatusVerifier,
     private readonly verifyCertification: MatterhornWalrusCertificationVerifier,
-  ) {}
+  ) {
+    const integrityCode = "crypto_evidence_walrus_deletion_intent_integrity_invalid";
+    this.intentState = new MatterhornDurableAuthorizedState(
+      stateStore,
+      authority,
+      STATE_KIND,
+      integrityCode,
+      () => new MatterhornCryptoEvidenceWalrusDeletionError(integrityCode),
+    );
+  }
 
   async prepare(input: {
     workspaceId: string;
@@ -246,7 +260,7 @@ export class MatterhornCryptoEvidenceWalrusDeletionService {
     const signer = canonicalSigner(input.signer);
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) fail("crypto_evidence_time_invalid");
-    const existing = this.stateStore.get<DeletionIntentRecord>(STATE_KIND, input.evidenceId, now.getTime());
+    const existing = this.intentState.get<DeletionIntentRecord>(input.evidenceId, now.getTime());
     if (existing) {
       assertIntentTenant(existing, input);
       if (!this.store.hasWalrusDeletionClaim({
@@ -256,7 +270,7 @@ export class MatterhornCryptoEvidenceWalrusDeletionService {
         claimId: existing.claimId,
         now,
       })) {
-        this.stateStore.delete(STATE_KIND, input.evidenceId);
+        this.intentState.delete(input.evidenceId);
       } else {
         if (existing.preview.evidenceRevision !== input.expectedRevision
           || existing.preview.signer !== signer) {
@@ -265,7 +279,7 @@ export class MatterhornCryptoEvidenceWalrusDeletionService {
         return this.prepareResponse(existing.preview);
       }
     }
-    this.stateStore.delete(STATE_KIND, input.evidenceId);
+    this.intentState.delete(input.evidenceId);
     const candidate = this.store.beginWalrusDeletion({
       workspaceId: input.workspaceId,
       ownerId: input.ownerId,
@@ -345,8 +359,7 @@ export class MatterhornCryptoEvidenceWalrusDeletionService {
         intentHash: sha256(intentHashPayload(previewWithoutHash)),
       };
       assertPreview(preview);
-      if (!this.stateStore.putIfAbsent({
-        kind: STATE_KIND,
+      if (!this.intentState.putIfAbsent({
         key: input.evidenceId,
         workspaceId: input.workspaceId,
         value: {
@@ -385,7 +398,7 @@ export class MatterhornCryptoEvidenceWalrusDeletionService {
     if (input.signal.aborted) fail("crypto_evidence_walrus_aborted");
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) fail("crypto_evidence_time_invalid");
-    const record = this.stateStore.get<DeletionIntentRecord>(STATE_KIND, input.evidenceId, now.getTime());
+    const record = this.intentState.get<DeletionIntentRecord>(input.evidenceId, now.getTime());
     if (!record) fail("crypto_evidence_walrus_deletion_expired_or_replayed");
     assertIntentTenant(record, input);
     const preview = record.preview;
@@ -429,8 +442,7 @@ export class MatterhornCryptoEvidenceWalrusDeletionService {
       now: finalizedAt,
     });
     const consumed = this.stateStore.transaction(() => {
-      const current = this.stateStore.take<DeletionIntentRecord>(
-        STATE_KIND,
+      const current = this.intentState.take<DeletionIntentRecord>(
         input.evidenceId,
         finalizedAt.getTime(),
       );

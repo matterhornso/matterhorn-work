@@ -16,10 +16,11 @@ import type { MatterhornCryptoAppManifest } from "@matterhorn-work/types/crypto-
 import type { MatterhornFirstPartyCertificationInputs } from "../apps/server/src/first-party-crypto-app-certification-driver.js";
 import {
   certifyMatterhornFirstPartyCryptoApp,
+  certifyMatterhornFirstPartyPolymarketWalletPreview,
   certifyMatterhornFirstPartyPublicReadCryptoApp,
 } from "../apps/server/src/first-party-crypto-app-certifier.js";
 
-type CertificationScope = "testnet" | "public-readonly";
+type CertificationScope = "testnet" | "public-readonly" | "polymarket-wallet-preview";
 
 type CliConfig = {
   manifestPath: string;
@@ -43,10 +44,12 @@ Usage:
 
 Public Polymarket reads use the separate package command
 \`pnpm certify:crypto-app-readonly\` with the same file arguments.
+The wallet-only Polymarket preview uses \`pnpm certify:crypto-app-polymarket-preview\`.
 
 The default command certifies only the first-party testnet contracts. The
 public-readonly command certifies only Matterhorn's fixed, unauthenticated
-Polymarket discovery or order-book read contract and grants no transaction authority.
+Polymarket discovery or order-book read contract. The preview command certifies
+only public-book simulation and grants no account, signing, relay, or submit authority.
 The input file may contain linked identities or exact public queries and must be owner-only.
 No private key, seed phrase, API credential, signature, or wallet export is accepted.
 The output is created with mode 0600 only after every static and runtime probe passes.`;
@@ -91,7 +94,7 @@ function parseArgs(argv: string[]): CliConfig | "help" {
     throw new Error("certification_cli_argument_invalid");
   }
   const scope = values.get("--scope") ?? "testnet";
-  if (scope !== "testnet" && scope !== "public-readonly") {
+  if (scope !== "testnet" && scope !== "public-readonly" && scope !== "polymarket-wallet-preview") {
     throw new Error("certification_cli_argument_invalid");
   }
   return {
@@ -199,7 +202,9 @@ export async function runFirstPartyCryptoAppCertificationCli(argv: string[]): Pr
     };
     const promotion = config.scope === "public-readonly"
       ? await certifyMatterhornFirstPartyPublicReadCryptoApp(certificationOptions)
-      : await certifyMatterhornFirstPartyCryptoApp(certificationOptions);
+      : config.scope === "polymarket-wallet-preview"
+        ? await certifyMatterhornFirstPartyPolymarketWalletPreview(certificationOptions)
+        : await certifyMatterhornFirstPartyCryptoApp(certificationOptions);
 
     tempPath = resolve(dirname(config.outputPath), `.matterhorn-certification-${process.pid}-${Date.now()}.tmp`);
     await writeFile(tempPath, `${JSON.stringify(promotion, null, 2)}\n`, { flag: "wx", mode: 0o600 });

@@ -129,4 +129,18 @@ const mismatchedDomain = runNode([
 assert.notEqual(mismatchedDomain.status, 0, "mismatched Polymarket domain fixture must be rejected");
 assert.match(`${mismatchedDomain.stdout}\n${mismatchedDomain.stderr}`, /verifyingContract/);
 
+const legacyPolymarketV1 = runNode([
+  "scripts/market-official-sdk-validation-capture.mjs",
+  "--generated-at", generatedAt,
+  "--hyperliquid-normalized", fixture("hyperliquid-normalized-action.fixture.json"),
+  "--hyperliquid-package-version", "fixture-hyperliquid-python-sdk",
+  "--polymarket-normalized", fixture("polymarket-legacy-v1.fixture.json"),
+  "--polymarket-package-version", "fixture-@polymarket/clob-client-v2",
+  "--polymarket-exchange-address", exchangeAddress,
+  "--polymarket-chain-id", chainId,
+  "--json",
+]);
+assert.notEqual(legacyPolymarketV1.status, 0, "legacy Polymarket V1 typed data must be rejected");
+assert.match(`${legacyPolymarketV1.stdout}\n${legacyPolymarketV1.stderr}`, /CLOB V2|version 2|legacy field/);
+
 process.stdout.write("Market official SDK validation fixture tests passed.\n");

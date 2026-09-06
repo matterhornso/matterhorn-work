@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  MatterhornCoworkerInboxSummary,
   MatterhornCoworkerTemplateId,
   MatterhornCryptoAppCatalogSummary,
   MatterhornCryptoAppConnectionView,
@@ -22,6 +23,7 @@ import {
   MatterhornServerError,
   type MatterhornCoworkerAccountInboxItem,
   type MatterhornCoworkerAccountProfile,
+  type MatterhornCoworkerAccountState,
   type MatterhornCoworkerAccountWatch,
   type MatterhornCoworkerWalletIntentView,
   type MatterhornServerClient,
@@ -44,13 +46,13 @@ import {
   sortCoworkerWalletIntents,
 } from "./coworker-wallet-intent-view";
 import { buildCoworkerAppConnectionDraft } from "./coworker-app-connection";
+import { COWORKER_QUERY_PREFIX, coworkerListQueryKey } from "./coworker-query";
 import {
   parseCoworkerWatchParameters,
   resolveCoworkerWatchFields,
   resolveCoworkerWatchSources,
 } from "./coworker-watch-form";
 
-const QUERY_PREFIX = "coworker-control";
 const WATCH_INTERVALS = [
   { label: "Every 15 minutes", value: 15 * 60_000 },
   { label: "Every hour", value: 60 * 60_000 },
@@ -72,10 +74,10 @@ export type SessionCoworkersPanelProps = {
   client: MatterhornServerClient | null;
   initialTemplateId?: MatterhornCoworkerTemplateId | null;
   initialOutcome?: string | null;
-  onInitialTemplateHandled?: () => void;
   workspaceId: string | null;
   selectedSessionId: string | null;
   selectedWorkspaceId: string;
+  compactHeader?: boolean;
   onClose: () => void;
   onBrowseApps: () => void;
   onBrowseFiles: () => void;
@@ -87,6 +89,7 @@ export type SessionCoworkersPanelProps = {
 type ConfirmAction =
   | { kind: "revoke"; coworker: MatterhornCoworkerAccountProfile }
   | { kind: "delete"; coworker: MatterhornCoworkerAccountProfile }
+  | { kind: "clear-memory"; coworker: MatterhornCoworkerAccountProfile; state: MatterhornCoworkerAccountState }
   | null;
 
 type CoworkerResourceDraft = {
@@ -94,6 +97,18 @@ type CoworkerResourceDraft = {
   memoryIds: string[];
   connectionIds: string[];
 };
+
+type OptionalCoworkerResource<T> =
+  | { available: true; data: T }
+  | { available: false; data: null };
+
+async function loadOptionalCoworkerResource<T>(request: Promise<T>): Promise<OptionalCoworkerResource<T>> {
+  try {
+    return { available: true, data: await request };
+  } catch {
+    return { available: false, data: null };
+  }
+}
 
 const EMPTY_RESOURCE_DRAFT: CoworkerResourceDraft = {
   agentFileIds: [],
@@ -107,14 +122,14 @@ const COWORKER_CHOICES: ReadonlyArray<{
   summary: string;
 }> = [
   { id: "market_analyst", label: "Research markets", summary: "Finds and compares current market information." },
-  { id: "risk_monitor", label: "Monitor risk", summary: "Checks approved data and alerts you when it changes." },
-  { id: "transaction_coordinator", label: "Prepare wallet actions", summary: "Prepares exact wallet actions for you to review." },
-  { id: "treasury_coworker", label: "Track treasury", summary: "Tracks the balances and activity you approve." },
+  { id: "risk_monitor", label: "Watch risk", summary: "Checks approved data and alerts you when it changes." },
+  { id: "transaction_coordinator", label: "Prepare a wallet review", summary: "Prepares exact wallet actions for you to review." },
+  { id: "treasury_coworker", label: "Track balances", summary: "Tracks the balances and activity you approve." },
 ];
 
 function coworkerSummary(role: string): string {
   return COWORKER_CHOICES.find((choice) => choice.id === role)?.summary
-    ?? "Helps with the crypto work and access you approve.";
+    ?? "Helps with crypto work using only what you choose.";
 }
 
 type CoworkerNextStepAction = "start" | "wait" | "reload" | "connect" | "review" | "resume" | "none";
@@ -137,18 +152,18 @@ export function resolveCoworkerNextStep(input: {
     return { action: "start", label: "Start chat", message: "Ready. Start a chat and describe what you need." };
   }
   if (input.loadFailed) {
-    return { action: "reload", label: "Reload setup", message: "Reload this coworker's setup." };
+    return { action: "reload", label: "Try again", message: "We couldn't check what this coworker can use." };
   }
   if (input.loading || input.connectionsAvailable === undefined) {
-    return { action: "wait", label: "Checking setup…", message: "Checking what this coworker can use…" };
+    return { action: "wait", label: "Checking…", message: "Checking what this coworker can use…" };
   }
   if (!input.connectionsAvailable) {
-    return { action: "none", label: null, message: "App connections are currently unavailable." };
+    return { action: "none", label: null, message: "App connections aren't available here yet." };
   }
   if (input.connectedAppCount === 0) {
-    return { action: "connect", label: "Connect an app", message: "Connect one app for this coworker." };
+    return { action: "connect", label: "Choose an app", message: "Choose an app for this coworker." };
   }
-  return { action: "review", label: "Review access", message: "Choose what this coworker can use, then save." };
+  return { action: "review", label: "Choose what it can use", message: "Choose its apps, files, and saved Memory, then save." };
 }
 
 export function coworkerActivitySummary(input: {
@@ -170,21 +185,61 @@ export function coworkerActivitySummary(input: {
   return parts.length ? parts.join(" · ") : "No activity yet";
 }
 
+export function coworkerRememberedWorkSummary(state: MatterhornCoworkerAccountState | null | undefined): string {
+  if (!state) return "Nothing remembered from earlier chats yet";
+  const activeDecisions = state.decisions.filter((decision) => decision.status === "active").length;
+  const openActions = state.pendingActions.filter((action) => (
+    action.status === "needs_context" || action.status === "wallet_review"
+  )).length;
+  const parts = [
+    activeDecisions > 0 ? `${activeDecisions} ${activeDecisions === 1 ? "decision" : "decisions"}` : null,
+    state.positions.length > 0 ? `${state.positions.length} ${state.positions.length === 1 ? "position" : "positions"}` : null,
+    state.unresolvedRisks.length > 0 ? `${state.unresolvedRisks.length} open ${state.unresolvedRisks.length === 1 ? "risk" : "risks"}` : null,
+    openActions > 0 ? `${openActions} pending ${openActions === 1 ? "action" : "actions"}` : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length ? parts.join(" · ") : "Nothing remembered from earlier chats yet";
+}
+
+export function coworkerPositionSource(appId: string, network: string): string {
+  const labels = [humanizeId(appId), humanizeId(network)];
+  return labels.filter((label, index) => labels.indexOf(label) === index).join(" · ");
+}
+
+export function coworkerUnreadSummaryLabel(totalUnread: number): string {
+  if (totalUnread === 1) return "1 update needs your attention";
+  return `${totalUnread} updates need your attention`;
+}
+
+export function newestUnreadCoworkerId(
+  summaries: readonly MatterhornCoworkerInboxSummary[],
+): string | null {
+  return [...summaries]
+    .filter((summary) => summary.unreadCount > 0 && Number.isFinite(Date.parse(summary.latestUnreadAt)))
+    .sort((left, right) => (
+      right.latestUnreadAt.localeCompare(left.latestUnreadAt)
+      || left.coworkerId.localeCompare(right.coworkerId)
+    ))[0]?.coworkerId ?? null;
+}
+
 function coworkerErrorMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
     if (error.code === "coworker_runtime_disabled" || error.code === "coworker_execution_not_ready") {
-      return "Coworkers are not enabled in this environment yet.";
+      return "Coworkers aren't available here yet.";
     }
     if (error.code === "coworker_not_found") return "This coworker no longer exists.";
     if (error.code === "coworker_revision_conflict") return "This coworker changed. Refresh and try again.";
+    if (error.code === "coworker_working_state_invalid") return "This coworker's remembered work changed. Refresh and try again.";
     if (error.code === "coworker_resource_scope_invalid") return "One of these files, memories, or apps is no longer available. Refresh and choose again.";
-    if (error.code === "coworker_resource_recommendation_stale") return "The suggested access changed. Review the latest suggestion before saving.";
-    if (error.code === "coworker_resources_stale") return "This access list changed. Review it again before starting work.";
+    if (error.code === "coworker_resource_recommendation_stale") return "The suggestions changed. Review the latest choices before saving.";
+    if (error.code === "coworker_resources_stale") return "These choices changed. Review them again before starting work.";
+    if (error.code === "coworker_session_binding_required") return "Choose this coworker again to connect it to the chat.";
+    if (error.code === "coworker_session_binding_conflict") return "A different coworker is connected to this chat. Refresh and try again.";
+    if (error.code === "coworker_session_binding_stale") return "This coworker's app choices changed. Choose again before continuing.";
     if (error.code === "coworker_transition_invalid") return "That change is no longer available for this coworker.";
-    if (error.code === "coworker_watch_invalid") return "This check no longer matches the app access you approved. Review access and try again.";
+    if (error.code === "coworker_watch_invalid") return "This check no longer matches the app you chose. Check your choices and try again.";
     if (error.code === "coworker_watch_limit") return "This coworker has reached its active check limit. Pause or remove a check first.";
     if (error.code === "coworker_watch_not_found") return "This check is no longer available. Refresh and try again.";
-    if (error.code === "coworker_watch_transition_invalid") return "This check cannot be resumed with its current app access.";
+    if (error.code === "coworker_watch_transition_invalid") return "This check cannot be resumed with the apps currently selected.";
     if (error.code === "coworker_inbox_state_conflict") return "This alert changed. Refresh and try again.";
     if (error.code === "crypto_app_gateway_disabled") return "App connections are currently unavailable.";
     if (error.code === "app_certification_unavailable") return "This app did not pass its latest safety check. Refresh before connecting it.";
@@ -194,7 +249,7 @@ function coworkerErrorMessage(error: unknown): string {
     if (error.code === "connection_action_not_allowed"
       || error.code === "connection_scope_not_allowed"
       || error.code === "connection_network_not_allowed") {
-      return "This app's available access changed. Refresh and review it again.";
+      return "What this app can do changed. Refresh and review it again.";
     }
     if (error.code === "pending_crypto_intent_revision_conflict") return "This wallet review changed. Refresh and try again.";
     if (error.code === "pending_crypto_intent_expired" || error.code === "pending_crypto_intent_transition_invalid") {
@@ -236,7 +291,7 @@ function CoworkerBoundary(props: { coworker: MatterhornCoworkerAccountProfile })
         <div>
           <p className="text-xs font-medium text-dls-text">Can do automatically</p>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            {automatic.length ? automatic.join(" · ") : "Nothing until you choose access"}
+            {automatic.length ? automatic.join(" · ") : "Nothing until you choose"}
           </p>
         </div>
         <div>
@@ -249,6 +304,44 @@ function CoworkerBoundary(props: { coworker: MatterhornCoworkerAccountProfile })
         </div>
       </div>
     </details>
+  );
+}
+
+export function CoworkerResourceSaveActions(props: {
+  busy: boolean;
+  continuingToChat: boolean;
+  selectedAppCount: number;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const appRequired = props.continuingToChat && props.selectedAppCount === 0;
+  const statusId = "coworker-resource-app-required";
+  return (
+    <div className="grid gap-2">
+      {appRequired ? (
+        <p id={statusId} className="text-xs leading-5 text-dls-secondary" role="status">
+          Choose one app above. Then you can continue to chat.
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          disabled={props.busy || appRequired}
+          aria-busy={props.busy}
+          aria-describedby={appRequired ? statusId : undefined}
+          onClick={props.onSave}
+        >
+          {props.busy
+            ? "Saving…"
+            : appRequired
+              ? "Choose an app above"
+              : props.continuingToChat
+                ? "Save and open chat"
+                : "Save choices"}
+        </Button>
+        <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancel}>Cancel</Button>
+      </div>
+    </div>
   );
 }
 
@@ -320,7 +413,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const queryClient = useQueryClient();
   const { onClose, onStartTask, selectedSessionId, selectedWorkspaceId } = props;
   const workspaceId = props.workspaceId?.trim() ?? "";
-  const listKey = useMemo(() => [QUERY_PREFIX, workspaceId, "list"], [workspaceId]);
+  const listKey = useMemo(() => coworkerListQueryKey(workspaceId), [workspaceId]);
   const [coworkerChoice, setCoworkerChoice] = useState("");
   const [pendingOutcome, setPendingOutcome] = useState("");
   const [creating, setCreating] = useState<MatterhornCoworkerTemplateId | null>(null);
@@ -329,6 +422,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [resourceDraft, setResourceDraft] = useState<CoworkerResourceDraft>(EMPTY_RESOURCE_DRAFT);
   const [resourceRecommendationHash, setResourceRecommendationHash] = useState<string | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [pendingActivityCoworkerId, setPendingActivityCoworkerId] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [cancelIntent, setCancelIntent] = useState<MatterhornCoworkerWalletIntentView | null>(null);
@@ -340,8 +434,11 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [watchValues, setWatchValues] = useState<Record<string, string | boolean>>({});
   const [watchFormError, setWatchFormError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const guidedOutcome = pendingOutcome || props.initialOutcome?.trim() || "";
+  const guidedSetup = Boolean(guidedOutcome);
   const handledInitialTemplateRef = useRef<MatterhornCoworkerTemplateId | null>(null);
   const newlyConnectedAppRef = useRef<string | null>(null);
+  const activitySectionRef = useRef<HTMLDetailsElement | null>(null);
   const boundCoworkerId = useMatterhornSessionCoworkerContextStore((state) => (
     selectedSessionId ? state.contexts[selectedSessionId]?.id ?? "" : ""
   ));
@@ -350,12 +447,20 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     queryKey: listKey,
     enabled: Boolean(props.client && workspaceId),
     retry: false,
+    refetchInterval: 30_000,
     queryFn: () => props.client!.listCoworkers(workspaceId),
   });
   const coworkers = listQuery.data?.coworkers ?? [];
+  const inboxSummary = listQuery.data?.inbox;
+  const unreadByCoworker = useMemo(
+    () => new Map((inboxSummary?.byCoworker ?? []).map((summary) => [summary.coworkerId, summary.unreadCount])),
+    [inboxSummary?.byCoworker],
+  );
+  const latestUnreadCoworkerId = newestUnreadCoworkerId(inboxSummary?.byCoworker ?? []);
+  const latestUnreadCoworker = coworkers.find((coworker) => coworker.id === latestUnreadCoworkerId) ?? null;
   const selectedCoworker = coworkers.find((item) => item.id === (coworkerChoice || boundCoworkerId)) ?? coworkers[0] ?? null;
   const detailKey = useMemo(
-    () => [QUERY_PREFIX, workspaceId, selectedCoworker?.id ?? "none", "detail"],
+    () => [COWORKER_QUERY_PREFIX, workspaceId, selectedCoworker?.id ?? "none", "detail"],
     [selectedCoworker?.id, workspaceId],
   );
   const detailQuery = useQuery({
@@ -374,7 +479,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     },
   });
   const resourceKey = useMemo(
-    () => [QUERY_PREFIX, workspaceId, selectedCoworker?.id ?? "none", selectedCoworker?.revision ?? 0, "resources"],
+    () => [COWORKER_QUERY_PREFIX, workspaceId, selectedCoworker?.id ?? "none", selectedCoworker?.revision ?? 0, "resources"],
     [selectedCoworker?.id, selectedCoworker?.revision, workspaceId],
   );
   const resourceQuery = useQuery({
@@ -383,52 +488,42 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     retry: false,
     queryFn: async () => {
       if (!props.client || !selectedCoworker) throw new Error("coworker_unavailable");
-      const cryptoAppsRequest = Promise.all([
+      const cryptoAppsRequest = loadOptionalCoworkerResource(Promise.all([
         props.client.listCryptoApps(),
         props.client.listCryptoAppConnections(workspaceId),
       ])
         .then(([catalog, connections]) => {
           if (catalog.mode !== connections.mode) throw new Error("crypto_app_mode_mismatch");
-          return { available: true, apps: catalog.apps, connections: connections.connections };
-        })
-        .catch((cause: unknown) => {
-          if (cause instanceof MatterhornServerError && cause.code === "crypto_app_gateway_disabled") {
-            const unavailable: {
-              available: false;
-              apps: MatterhornCryptoAppCatalogSummary[];
-              connections: MatterhornCryptoAppConnectionView[];
-            } = {
-              available: false,
-              apps: [],
-              connections: [],
-            };
-            return unavailable;
-          }
-          throw cause;
-        });
+          return { apps: catalog.apps, connections: connections.connections };
+        }));
       const [scope, recommendation, files, memories, cryptoApps] = await Promise.all([
         props.client.getCoworkerResources(workspaceId, selectedCoworker.id),
         props.client.getCoworkerResourceRecommendation(workspaceId, selectedCoworker.id),
-        props.client.listAgentFiles(workspaceId),
-        props.client.listWorkspaceMemory(workspaceId, { limit: 80 }),
+        loadOptionalCoworkerResource(props.client.listAgentFiles(workspaceId)),
+        loadOptionalCoworkerResource(props.client.listWorkspaceMemory(workspaceId, { limit: 80 })),
         cryptoAppsRequest,
       ]);
+      const fileItems = files.data?.items ?? [];
+      const memoryRecords = memories.data?.records ?? [];
+      const cryptoAppCatalog = cryptoApps.data?.apps ?? [];
+      const cryptoAppConnections = cryptoApps.data?.connections ?? [];
       return {
         scope,
         recommendation: recommendation.recommendation,
-        filesAvailable: files.available,
-        files: files.items.filter((item) => item.file.access.coworkerIds.includes(selectedCoworker.id)),
-        memories: memories.records.filter((record) => record.canUseInChat && record.sensitivity !== "forbidden_secret"),
+        filesAvailable: files.available && files.data.available,
+        files: fileItems.filter((item) => item.file.access.coworkerIds.includes(selectedCoworker.id)),
+        memoriesAvailable: memories.available,
+        memories: memoryRecords.filter((record) => record.canUseInChat && record.sensitivity !== "forbidden_secret"),
         connectionsAvailable: cryptoApps.available,
-        allConnections: cryptoApps.connections,
-        connections: cryptoApps.connections.filter((connection) => (
+        allConnections: cryptoAppConnections,
+        connections: cryptoAppConnections.filter((connection) => (
           connection.state === "active"
           && connection.availability === "available"
           && selectedCoworker.allowedAppIds.includes(connection.appId)
           && connection.grantedActionIds.some((actionId) => selectedCoworker.allowedActionIds.includes(actionId))
           && connection.grantedNetworks.some((network) => selectedCoworker.allowedNetworks.includes(network))
         )),
-        apps: cryptoApps.apps.filter((app) => buildCoworkerAppConnectionDraft(selectedCoworker, app) !== null),
+        apps: cryptoAppCatalog.filter((app) => buildCoworkerAppConnectionDraft(selectedCoworker, app) !== null),
       };
     },
   });
@@ -499,7 +594,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const watchSource = watchSources.find((source) => source.id === watchSourceId) ?? null;
   const watchDetailQuery = useQuery({
     queryKey: [
-      QUERY_PREFIX,
+      COWORKER_QUERY_PREFIX,
       "watch-app",
       watchSource?.appId ?? "none",
       watchSource?.connectionId ?? "none",
@@ -526,6 +621,22 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     checkCount: detailQuery.data?.watches.length ?? 0,
     updateCount: detailQuery.data?.inbox.length ?? 0,
   });
+  const rememberedState = detailQuery.data?.state ?? null;
+  const activeDecisions = rememberedState?.decisions.filter((decision) => decision.status === "active") ?? [];
+  const rememberedPositions = rememberedState?.positions ?? [];
+  const rememberedRisks = rememberedState?.unresolvedRisks ?? [];
+  const rememberedEvidence = rememberedState?.evidenceReferences ?? [];
+  const approvedMemoryIds = rememberedState?.approvedMemoryIds ?? [];
+  const openActions = rememberedState?.pendingActions.filter((action) => (
+    action.status === "needs_context" || action.status === "wallet_review"
+  )) ?? [];
+  const rememberedWorkSummary = coworkerRememberedWorkSummary(rememberedState);
+  const hasRememberedWork = activeDecisions.length > 0
+    || rememberedPositions.length > 0
+    || rememberedRisks.length > 0
+    || openActions.length > 0
+    || rememberedEvidence.length > 0
+    || approvedMemoryIds.length > 0;
   const hasCoworkerActivity = activitySummary !== "No activity yet";
   const canAddWatch = Boolean(
     selectedCoworker?.state === "active"
@@ -556,6 +667,22 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     setWatchValues({});
     setWatchFormError(null);
   }, [selectedCoworker?.id]);
+
+  useEffect(() => {
+    if (!pendingActivityCoworkerId
+      || selectedCoworker?.id !== pendingActivityCoworkerId
+      || detailQuery.isLoading
+      || !detailQuery.data) return;
+    setActivityOpen(true);
+    const frame = window.requestAnimationFrame(() => {
+      activitySectionRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+      setPendingActivityCoworkerId(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [detailQuery.data, detailQuery.isLoading, pendingActivityCoworkerId, selectedCoworker?.id]);
   const nextStep = resolveCoworkerNextStep({
     coworkerState: selectedCoworker?.state ?? "revoked",
     ready: canStartCoworker,
@@ -596,6 +723,68 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     setResourcesOpen(true);
   }, [resourceQuery.data?.recommendation]);
 
+  const startChat = useCallback((coworker: MatterhornCoworkerAccountProfile) => {
+    const bindCoworker = async (sessionId: string) => {
+      if (!props.client || !workspaceId) throw new Error("Coworker service is unavailable.");
+      const current = await props.client.getCoworkerSessionBinding(workspaceId, sessionId);
+      const response = await props.client.bindCoworkerSession(workspaceId, sessionId, {
+        coworkerId: coworker.id,
+        coworkerRevision: coworker.revision,
+        expectedRevision: current.binding?.revision ?? 0,
+      });
+      const fileContext = useMatterhornSessionAgentFileContextStore.getState().contexts[sessionId];
+      if (fileContext && fileContext.coworker.id !== coworker.id) {
+        useMatterhornSessionAgentFileContextStore.getState().clearContext(sessionId);
+      }
+      useMatterhornSessionCoworkerContextStore.getState().setContext(sessionId, {
+        id: response.coworker.id,
+        name: response.coworker.name,
+        role: response.coworker.role,
+        revision: response.coworker.revision,
+        bindingRevision: response.binding.revision,
+        updatedAt: response.binding.updatedAt,
+      });
+    };
+    const sessionId = selectedSessionId?.trim() ?? "";
+    if (sessionId && !pendingOutcome) {
+      void (async () => {
+        setBusyAction(`start:${coworker.id}`);
+        setError(null);
+        try {
+          await bindCoworker(sessionId);
+          onClose();
+          showToast({ title: `${coworker.name} joined this chat`, description: "Your next request will use this coworker's limits.", tone: "success" });
+        } catch (cause) {
+          setError(coworkerErrorMessage(cause));
+        } finally {
+          setBusyAction(null);
+        }
+      })();
+      return;
+    }
+    if (!onStartTask) {
+      setError("Open a chat, then choose this coworker again.");
+      return;
+    }
+    void (async () => {
+      const started = await onStartTask(
+        selectedWorkspaceId,
+        pendingOutcome || "Ask what outcome I want, then help me take the safest next step.",
+        {
+          title: `${coworker.name} chat`,
+          sendImmediately: false,
+          onSessionCreated: bindCoworker,
+        },
+      );
+      if (started === false) {
+        setError("The chat did not start. Try again.");
+        return;
+      }
+      onClose();
+      setPendingOutcome("");
+    })().catch((cause) => setError(coworkerErrorMessage(cause)));
+  }, [onClose, onStartTask, pendingOutcome, props.client, selectedSessionId, selectedWorkspaceId, showToast, workspaceId]);
+
   const saveResources = useCallback(async () => {
     if (!props.client || !workspaceId || !selectedCoworker) return;
     setBusyAction(`resources:${selectedCoworker.id}`);
@@ -617,12 +806,21 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
         description: `${selectedCoworker.name} can use only the items you selected.`,
         tone: "success",
       });
+      if (pendingOutcome && resourceDraft.connectionIds.length > 0) startChat(selectedCoworker);
     } catch (cause) {
       setError(coworkerErrorMessage(cause));
     } finally {
       setBusyAction(null);
     }
-  }, [props.client, queryClient, resourceDraft, resourceKey, resourceQuery.data?.scope.resources?.revision, resourceRecommendationHash, selectedCoworker, showToast, workspaceId]);
+  }, [pendingOutcome, props.client, queryClient, resourceDraft, resourceKey, resourceQuery.data?.scope.resources?.revision, resourceRecommendationHash, selectedCoworker, showToast, startChat, workspaceId]);
+
+  const cancelResourceSetup = useCallback(() => {
+    if (guidedSetup) {
+      onClose();
+      return;
+    }
+    setResourcesOpen(false);
+  }, [guidedSetup, onClose]);
 
   const connectApp = useCallback(async (app: MatterhornCryptoAppCatalogSummary) => {
     if (!props.client || !workspaceId || !selectedCoworker) return;
@@ -639,7 +837,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       await queryClient.invalidateQueries({ queryKey: resourceKey });
       showToast({
         title: `${app.displayName} connected`,
-        description: "Review the selected access, then save it for this coworker.",
+        description: "Review these choices, then save them for this coworker.",
         tone: "success",
       });
     } catch (cause) {
@@ -662,7 +860,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       await queryClient.invalidateQueries({ queryKey: resourceKey });
       showToast({
         title: `${app.displayName} resumed`,
-        description: "Review the selected access, then save it for this coworker.",
+        description: "Review these choices, then save them for this coworker.",
         tone: "success",
       });
     } catch (cause) {
@@ -700,14 +898,13 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
 
     handledInitialTemplateRef.current = templateId;
     setPendingOutcome(props.initialOutcome?.trim() ?? "");
-    props.onInitialTemplateHandled?.();
     const existingCoworker = coworkers.find((coworker) => coworker.role === templateId);
     if (existingCoworker) {
       setCoworkerChoice(existingCoworker.id);
       return;
     }
     void createCoworker(templateId);
-  }, [coworkers, createCoworker, listQuery.data, props.initialOutcome, props.initialTemplateId, props.onInitialTemplateHandled]);
+  }, [coworkers, createCoworker, listQuery.data, props.initialOutcome, props.initialTemplateId]);
 
   useEffect(() => {
     if (!pendingOutcome || !selectedCoworker || !resourceQuery.data) return;
@@ -715,49 +912,6 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
     if (scope.active && (scope.resources?.connections.length ?? 0) > 0) return;
     setResourcesOpen(true);
   }, [pendingOutcome, resourceQuery.data, selectedCoworker]);
-
-  const startChat = useCallback((coworker: MatterhornCoworkerAccountProfile) => {
-    const context = {
-      id: coworker.id,
-      name: coworker.name,
-      role: coworker.role,
-      revision: coworker.revision,
-      updatedAt: new Date().toISOString(),
-    };
-    const sessionId = selectedSessionId?.trim() ?? "";
-    if (sessionId) {
-      const fileContext = useMatterhornSessionAgentFileContextStore.getState().contexts[sessionId];
-      if (fileContext && fileContext.coworker.id !== coworker.id) {
-        useMatterhornSessionAgentFileContextStore.getState().clearContext(sessionId);
-      }
-      useMatterhornSessionCoworkerContextStore.getState().setContext(sessionId, context);
-      onClose();
-      showToast({ title: `${coworker.name} joined this chat`, description: "Your next request will use this coworker's limits.", tone: "success" });
-      return;
-    }
-    if (!onStartTask) {
-      setError("Open a chat, then choose this coworker again.");
-      return;
-    }
-    void (async () => {
-      const started = await onStartTask(
-        selectedWorkspaceId,
-        pendingOutcome || "Ask what outcome I want, then help me take the safest next step.",
-        {
-          title: `${coworker.name} chat`,
-          sendImmediately: false,
-          onSessionCreated: (createdSessionId) => {
-            useMatterhornSessionCoworkerContextStore.getState().setContext(createdSessionId, context);
-          },
-        },
-      );
-      if (started === false) {
-        setError("The chat did not start. Try again.");
-        return;
-      }
-      setPendingOutcome("");
-    })();
-  }, [onClose, onStartTask, pendingOutcome, selectedSessionId, selectedWorkspaceId, showToast]);
 
   const transitionCoworker = useCallback(async (coworker: MatterhornCoworkerAccountProfile, state: "active" | "paused" | "revoked") => {
     if (!props.client || !workspaceId) return;
@@ -795,6 +949,39 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       setBusyAction(null);
     }
   }, [props.client, refresh, showToast, workspaceId]);
+
+  const clearRememberedWork = useCallback(async (
+    coworker: MatterhornCoworkerAccountProfile,
+    state: MatterhornCoworkerAccountState,
+  ) => {
+    if (!props.client || !workspaceId) return;
+    setBusyAction(`memory:${coworker.id}`);
+    setError(null);
+    try {
+      await props.client.setCoworkerState(workspaceId, coworker.id, {
+        expectedRevision: state.revision,
+        profileRevision: coworker.revision,
+        decisions: [],
+        positions: [],
+        unresolvedRisks: [],
+        pendingActions: [],
+        evidenceReferences: [],
+        approvedMemoryIds: [],
+      });
+      setConfirmAction(null);
+      await queryClient.invalidateQueries({ queryKey: detailKey });
+      showToast({
+        title: "Remembered work cleared",
+        description: "Future chats will start without this coworker's saved decisions, positions, risks, or evidence.",
+        tone: "success",
+      });
+    } catch (cause) {
+      setConfirmAction(null);
+      setError(coworkerErrorMessage(cause));
+    } finally {
+      setBusyAction(null);
+    }
+  }, [detailKey, props.client, queryClient, showToast, workspaceId]);
 
   const toggleWatch = useCallback(async (watch: MatterhornCoworkerAccountWatch) => {
     if (!props.client || !workspaceId || !selectedCoworker) return;
@@ -958,15 +1145,31 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
 
   return (
     <div className="matterhorn-rail-content flex h-full min-h-0 flex-col bg-dls-background" data-testid="coworkers-panel">
-      <header className="shrink-0 border-b border-dls-border/70 px-4 py-4">
+      <header className={cn(
+        "shrink-0 border-b border-dls-border/70 px-4",
+        props.compactHeader ? "py-3" : "py-4",
+      )}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-dls-text">Coworkers</h2>
-            <p className="mt-1 text-xs leading-5 text-dls-secondary">Pick who helps. You choose what it can access.</p>
+            <h2 className={cn("text-base font-semibold text-dls-text", props.compactHeader && !guidedSetup && "sr-only")}>{guidedSetup ? "Choose what it can use" : "Coworkers"}</h2>
+            <p className={cn("text-xs leading-5 text-dls-secondary", !props.compactHeader && "mt-1")}>
+              {guidedSetup
+                ? "Pick one crypto app. Files and saved Memory are optional."
+                : "Choose who helps. You decide what they can see and use."}
+            </p>
           </div>
-          <Button size="icon-sm" variant="ghost" title="Refresh coworkers" aria-label="Refresh coworkers" onClick={() => void refresh()}>
-            <RefreshCw aria-hidden="true" />
-          </Button>
+          {!guidedSetup ? (
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              className={cn(props.compactHeader && "size-11")}
+              title="Refresh coworkers"
+              aria-label="Refresh coworkers"
+              onClick={() => void refresh()}
+            >
+              <RefreshCw aria-hidden="true" />
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -979,30 +1182,44 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
           </div>
         ) : listQuery.isError || !listQuery.data ? (
           <div className="py-8" aria-live="polite">
-            <h3 className="text-sm font-semibold text-dls-text">Coworkers are not ready</h3>
+            <h3 className="text-sm font-semibold text-dls-text">Couldn't load coworkers</h3>
             <p className="mt-2 text-sm leading-6 text-dls-secondary">{coworkerErrorMessage(listQuery.error)}</p>
             <Button className="mt-4" size="sm" onClick={() => void listQuery.refetch()}>Try again</Button>
+          </div>
+        ) : coworkers.length === 0 && guidedSetup ? (
+          <div className="py-8" role="status">
+            <h3 className="text-sm font-semibold text-dls-text">Getting your helper ready…</h3>
+            <p className="mt-2 text-sm leading-6 text-dls-secondary">Nothing has started or been shared yet.</p>
           </div>
         ) : coworkers.length === 0 ? (
           <div className="py-8">
             <UserRound aria-hidden="true" className="size-5 text-dls-secondary" />
-            <h3 className="mt-3 text-sm font-semibold text-dls-text">Who should help first?</h3>
-            <p className="mt-2 text-sm leading-6 text-dls-secondary">Choose one job. Anything involving funds stops for your wallet approval.</p>
+            <h3 className="mt-3 text-sm font-semibold text-dls-text">What do you want help with?</h3>
+            <p className="mt-2 text-sm leading-6 text-dls-secondary">
+              Choose one to continue. You will choose what it can use before it starts. Anything involving funds stops for your wallet approval.
+            </p>
             <div className="mt-4 grid gap-2">
-              {COWORKER_CHOICES.map((choice, index) => (
+              {COWORKER_CHOICES.map((choice) => (
                 <Button
                   key={choice.id}
-                  variant={index === 0 ? "default" : "outline"}
+                  variant="outline"
+                  className="h-auto min-h-14 justify-start whitespace-normal px-3 py-2 text-left"
                   disabled={creating !== null}
                   onClick={() => void createCoworker(choice.id)}
                 >
-                  {creating === choice.id ? "Adding…" : choice.label}
+                  <span className="block min-w-0">
+                    <span className="block text-sm font-medium text-dls-text">
+                      {creating === choice.id ? "Adding…" : choice.label}
+                    </span>
+                    <span className="mt-0.5 block text-xs font-normal leading-5 text-dls-secondary">{choice.summary}</span>
+                  </span>
                 </Button>
               ))}
             </div>
           </div>
         ) : selectedCoworker ? (
           <>
+            {!guidedSetup ? (
             <div className="sticky top-0 z-[var(--matterhorn-layer-sticky)] -mx-4 border-b border-dls-border/70 bg-dls-background px-4 py-3">
               <div className="flex items-end gap-2">
                 <label className="grid min-w-0 flex-1 gap-1.5 text-xs font-medium text-dls-text">
@@ -1015,7 +1232,14 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       setError(null);
                     }}
                   >
-                    {coworkers.map((coworker) => <option key={coworker.id} value={coworker.id}>{coworker.name}</option>)}
+                    {coworkers.map((coworker) => {
+                      const unreadCount = unreadByCoworker.get(coworker.id) ?? 0;
+                      return (
+                        <option key={coworker.id} value={coworker.id}>
+                          {coworker.name}{unreadCount > 0 ? ` — ${unreadCount} new` : ""}
+                        </option>
+                      );
+                    })}
                   </select>
                 </label>
                 <Button
@@ -1042,27 +1266,52 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   ))}
                 </div>
               ) : null}
+              {(inboxSummary?.totalUnread ?? 0) > 0 && latestUnreadCoworker ? (
+                <button
+                  type="button"
+                  className="mt-3 flex min-h-11 w-full items-center gap-2 border-t border-dls-border/60 pt-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+                  onClick={() => {
+                    setCoworkerChoice(latestUnreadCoworker.id);
+                    setPendingActivityCoworkerId(latestUnreadCoworker.id);
+                    setActivityOpen(true);
+                  }}
+                >
+                  <Bell className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-medium text-dls-text">
+                      {coworkerUnreadSummaryLabel(inboxSummary?.totalUnread ?? 0)}
+                    </span>
+                    <span className="block truncate text-[11px] leading-5 text-dls-secondary">
+                      Latest from {latestUnreadCoworker.name}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs font-medium text-dls-secondary">View</span>
+                </button>
+              ) : null}
             </div>
+            ) : null}
 
             <section className="py-4" aria-labelledby="coworker-summary-title">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 id="coworker-summary-title" className="truncate text-sm font-semibold text-dls-text">{selectedCoworker.name}</h3>
-                    <span className={cn(
-                      "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-                      selectedCoworker.state === "active" ? "bg-status-success/10 text-status-success" : "bg-dls-surface-muted text-dls-secondary",
-                    )}>{selectedCoworker.state === "active" ? "Active" : selectedCoworker.state === "paused" ? "Paused" : "Disabled"}</span>
+                    {!guidedSetup ? (
+                      <span className={cn(
+                        "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                        selectedCoworker.state === "active" ? "bg-status-success/10 text-status-success" : "bg-dls-surface-muted text-dls-secondary",
+                      )}>{selectedCoworker.state === "active" ? "Active" : selectedCoworker.state === "paused" ? "Paused" : "Disabled"}</span>
+                    ) : null}
                   </div>
                   <p className="mt-2 text-sm leading-6 text-dls-secondary">{coworkerSummary(selectedCoworker.role)}</p>
-                  <details className="mt-2">
-                    <summary className="min-h-8 cursor-pointer text-xs text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">About this coworker</summary>
+                  {!guidedSetup ? <details className="mt-2">
+                    <summary className="min-h-8 cursor-pointer text-xs text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">What it does</summary>
                     <p className="mt-1 border-l border-dls-border/70 pl-3 text-xs leading-5 text-dls-secondary">{selectedCoworker.mission}</p>
-                  </details>
-                  {pendingOutcome ? (
+                  </details> : null}
+                  {guidedOutcome ? (
                     <div className="mt-4 border-y border-dls-border/70 py-3">
-                      <p className="text-xs font-medium text-dls-text">Your outcome</p>
-                      <p className="mt-1 line-clamp-3 text-xs leading-5 text-dls-secondary">{pendingOutcome}</p>
+                      <p className="text-xs font-medium text-dls-text">Your goal</p>
+                      <p className="mt-1 line-clamp-3 text-xs leading-5 text-dls-secondary">{guidedOutcome}</p>
                     </div>
                   ) : null}
                 </div>
@@ -1108,16 +1357,18 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
             <section className="border-b border-dls-border/70 py-4" aria-labelledby="coworker-resources-title">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 id="coworker-resources-title" className="text-sm font-semibold text-dls-text">What this coworker can use</h3>
+                  <h3 id="coworker-resources-title" className="text-sm font-semibold text-dls-text">{guidedSetup ? "Choose an app" : "What it can use"}</h3>
                   <p className="mt-1 text-xs leading-5 text-dls-secondary">
                     {resourceQuery.isLoading
-                      ? "Loading access…"
+                      ? "Loading choices…"
                       : resourceQuery.isError
-                        ? "Setup could not be loaded."
+                        ? "These choices could not be loaded."
+                        : guidedSetup && !resourceQuery.data?.scope.resources
+                          ? "Pick one app for this goal. Nothing is shared until you save."
                         : !resourceQuery.data?.scope.resources
                           ? "Nothing is shared until you choose."
                           : !resourceQuery.data.scope.active
-                            ? "Review access again because this coworker changed."
+                            ? "Choose again because this coworker changed."
                             : resourceQuery.data.scope.resources.connections.length === 0
                               ? "Connect at least one app before starting chat."
                             : `${resourceQuery.data.scope.resources.agentFiles.length} files · ${resourceQuery.data.scope.resources.memories.length} memories · ${resourceQuery.data.scope.resources.connections.length} apps`}
@@ -1130,20 +1381,20 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   aria-expanded={resourcesOpen}
                   onClick={() => setResourcesOpen((open) => !open)}
                 >
-                  {resourcesOpen ? "Close" : "Choose"}
+                  {resourcesOpen ? "Close" : resourceQuery.data?.scope.resources ? "Change" : "Choose"}
                 </Button>
               </div>
 
               {resourceSuggestionAvailable && resourceQuery.data ? (
                 <div className="mt-4 flex items-start justify-between gap-3 border-t border-dls-border/70 pt-4">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-dls-text">Suggested items</p>
+                    <p className="text-xs font-medium text-dls-text">Suggested for this coworker</p>
                     <p className="mt-1 text-xs leading-5 text-dls-secondary">
                       Matterhorn found {
                         resourceQuery.data.recommendation.agentFiles.length
                         + resourceQuery.data.recommendation.memories.length
                         + resourceQuery.data.recommendation.connections.length
-                      } items that match this coworker. Nothing changes until you review and save.
+                      } items that match this coworker. Nothing changes until you save.
                     </p>
                   </div>
                   <Button size="sm" variant="ghost" onClick={reviewResourceRecommendation}>Review</Button>
@@ -1154,16 +1405,16 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                 <div className="mt-4 grid gap-4 border-t border-dls-border/70 pt-4">
                   {resourceRecommendationHash ? (
                     <p className="text-xs leading-5 text-dls-secondary">
-                      Suggested items are selected below. Uncheck anything you do not want to share, then save.
+                      The suggestions are selected below. Uncheck anything you do not want to share, then save.
                     </p>
                   ) : null}
-                  <fieldset>
-                    <legend className="text-xs font-medium text-dls-text">Connected apps</legend>
+                  <fieldset aria-describedby="coworker-apps-help">
+                    <legend className="text-xs font-medium text-dls-text">{guidedSetup ? "Crypto app" : "Apps"}</legend>
+                    <p id="coworker-apps-help" className="mt-1 text-xs leading-5 text-dls-secondary">
+                      Choose one app for this coworker. Nothing is shared until you save.
+                    </p>
                     {!resourceQuery.data.connectionsAvailable ? (
-                      <div className="mt-2 flex items-center justify-between gap-3">
-                        <p className="text-xs leading-5 text-dls-secondary">App connections are not enabled in this environment.</p>
-                        <Button size="xs" variant="outline" onClick={props.onBrowseApps}>Browse apps</Button>
-                      </div>
+                      <p className="mt-2 text-xs leading-5 text-dls-secondary">App connections aren't available here yet.</p>
                     ) : resourceQuery.data.connections.length ? (
                       <div className="mt-2 grid gap-2">
                         {resourceQuery.data.connections.map((connection) => (
@@ -1180,7 +1431,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       </div>
                     ) : (
                       <div className="mt-2 flex items-center justify-between gap-3">
-                        <p className="text-xs leading-5 text-dls-secondary">No approved apps are connected for this coworker.</p>
+                        <p className="text-xs leading-5 text-dls-secondary">No apps are connected yet.</p>
                         <Button size="xs" variant="outline" onClick={props.onBrowseApps}>Browse apps</Button>
                       </div>
                     )}
@@ -1189,7 +1440,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       <div className="mt-3 border-t border-dls-border/70 pt-3">
                         <p className="text-xs font-medium text-dls-text">Connect an app</p>
                         <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                          Choose only what this coworker needs. Nothing is shared until you save access.
+                          Choose only what this coworker needs. Nothing is shared until you save.
                         </p>
                         <ul className="mt-2 divide-y divide-dls-border/60">
                           {appsNeedingConnection.map((app) => {
@@ -1258,89 +1509,213 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                     ) : null}
                   </fieldset>
 
-                  <fieldset>
-                    <legend className="text-xs font-medium text-dls-text">Private files</legend>
-                    {!resourceQuery.data.filesAvailable ? (
-                      <p className="mt-2 text-xs leading-5 text-dls-secondary">Private files are not enabled in this environment.</p>
-                    ) : resourceQuery.data.files.length ? (
-                      <div className="mt-2 grid gap-2">
-                        {resourceQuery.data.files.map((item) => (
-                          <label key={item.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
-                            <input
-                              type="checkbox"
-                              className="size-4 accent-current"
-                              checked={resourceDraft.agentFileIds.includes(item.id)}
-                              onChange={() => toggleResource("agentFileIds", item.id)}
-                            />
-                            <span className="truncate">{item.file.name}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mt-2 flex items-center justify-between gap-3">
-                        <p className="text-xs leading-5 text-dls-secondary">No private files are available for this coworker.</p>
-                        <Button size="xs" variant="outline" onClick={props.onBrowseFiles}>Add file</Button>
-                      </div>
-                    )}
-                  </fieldset>
+                  <details className="group border-t border-dls-border/70 pt-3">
+                    <summary className="min-h-9 cursor-pointer list-none outline-none focus-visible:ring-2 focus-visible:ring-ring/35 [&::-webkit-details-marker]:hidden">
+                      <span className="flex items-center justify-between gap-3">
+                        <span>
+                          <span className="block text-xs font-medium text-dls-text">Add private information</span>
+                          <span className="mt-0.5 block text-xs leading-5 text-dls-secondary">
+                            Optional · {resourceDraft.agentFileIds.length} files · {resourceDraft.memoryIds.length} memories
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-xs font-medium text-dls-secondary">
+                          <span className="group-open:hidden">Choose</span>
+                          <span className="hidden group-open:inline">Close</span>
+                        </span>
+                      </span>
+                    </summary>
 
-                  <fieldset>
-                    <legend className="text-xs font-medium text-dls-text">Memory</legend>
-                    {resourceQuery.data.memories.length ? (
-                      <div className="mt-2 grid gap-2">
-                        {resourceQuery.data.memories.map((record) => (
-                          <label key={record.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
-                            <input
-                              type="checkbox"
-                              className="size-4 accent-current"
-                              checked={resourceDraft.memoryIds.includes(record.id)}
-                              onChange={() => toggleResource("memoryIds", record.id)}
-                            />
-                            <span className="truncate">{record.title}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mt-2 flex items-center justify-between gap-3">
-                        <p className="text-xs leading-5 text-dls-secondary">No saved Memory is available yet.</p>
-                        <Button size="xs" variant="outline" onClick={props.onBrowseMemory}>Add memory</Button>
-                      </div>
-                    )}
-                  </fieldset>
+                    <div className="mt-3 grid gap-4 border-t border-dls-border/60 pt-3">
+                      <fieldset>
+                        <legend className="text-xs font-medium text-dls-text">Files</legend>
+                        {!resourceQuery.data.filesAvailable ? (
+                          <p className="mt-2 text-xs leading-5 text-dls-secondary">Private files are not enabled in this environment.</p>
+                        ) : resourceQuery.data.files.length ? (
+                          <div className="mt-2 grid gap-2">
+                            {resourceQuery.data.files.map((item) => (
+                              <label key={item.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
+                                <input
+                                  type="checkbox"
+                                  className="size-4 accent-current"
+                                  checked={resourceDraft.agentFileIds.includes(item.id)}
+                                  onChange={() => toggleResource("agentFileIds", item.id)}
+                                />
+                                <span className="truncate">{item.file.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <p className="text-xs leading-5 text-dls-secondary">No private files are available for this coworker.</p>
+                            <Button size="xs" variant="outline" onClick={props.onBrowseFiles}>Add file</Button>
+                          </div>
+                        )}
+                      </fieldset>
 
-                  <p className="text-xs leading-5 text-dls-secondary">
-                    Private files and saved Memory are sent only through a model approved for private data. This coworker cannot bypass that rule.
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      disabled={busyAction !== null}
-                      onClick={() => void saveResources()}
-                    >
-                      {busyAction === `resources:${selectedCoworker.id}` ? "Saving…" : "Save access"}
-                    </Button>
-                    <Button size="sm" variant="ghost" disabled={busyAction !== null} onClick={() => setResourcesOpen(false)}>Cancel</Button>
-                  </div>
+                      <fieldset>
+                        <legend className="text-xs font-medium text-dls-text">Saved memory</legend>
+                        {!resourceQuery.data.memoriesAvailable ? (
+                          <p className="mt-2 text-xs leading-5 text-dls-secondary">Saved memory is unavailable right now.</p>
+                        ) : resourceQuery.data.memories.length ? (
+                          <div className="mt-2 grid gap-2">
+                            {resourceQuery.data.memories.map((record) => (
+                              <label key={record.id} className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-dls-text">
+                                <input
+                                  type="checkbox"
+                                  className="size-4 accent-current"
+                                  checked={resourceDraft.memoryIds.includes(record.id)}
+                                  onChange={() => toggleResource("memoryIds", record.id)}
+                                />
+                                <span className="truncate">{record.title}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <p className="text-xs leading-5 text-dls-secondary">No saved memory is available yet.</p>
+                            <Button size="xs" variant="outline" onClick={props.onBrowseMemory}>Add memory</Button>
+                          </div>
+                        )}
+                      </fieldset>
+
+                      <p className="text-xs leading-5 text-dls-secondary">
+                        Private information only goes to a model approved for private data. This coworker cannot change that.
+                      </p>
+                    </div>
+                  </details>
+
+                  <CoworkerResourceSaveActions
+                    busy={busyAction === `resources:${selectedCoworker.id}`}
+                    continuingToChat={guidedSetup}
+                    selectedAppCount={resourceDraft.connectionIds.length}
+                    onSave={() => void saveResources()}
+                    onCancel={cancelResourceSetup}
+                  />
                 </div>
               ) : null}
             </section>
 
-            <details className="border-b border-dls-border/70 py-4">
+            {!guidedSetup && detailQuery.data ? (
+              <details className="border-b border-dls-border/70 py-4">
+                <summary className="min-h-8 cursor-pointer list-none outline-none focus-visible:ring-2 focus-visible:ring-ring/35 [&::-webkit-details-marker]:hidden">
+                  <span className="block text-sm font-semibold text-dls-text">What it remembers</span>
+                  <span className="mt-1 block text-xs leading-5 text-dls-secondary">{rememberedWorkSummary}</span>
+                </summary>
+                <div className="mt-3 border-t border-dls-border/60 pt-3">
+                  <p className="text-xs leading-5 text-dls-secondary">
+                    This short list helps with future chats. Matterhorn does not replay the full conversation.
+                  </p>
+
+                  {activeDecisions.length ? (
+                    <section className="mt-4" aria-labelledby="coworker-remembered-decisions-title">
+                      <h4 id="coworker-remembered-decisions-title" className="text-xs font-medium text-dls-text">Decisions</h4>
+                      <ul className="mt-1 divide-y divide-dls-border/60">
+                        {activeDecisions.map((decision) => (
+                          <li key={decision.id} className="py-2 text-xs leading-5">
+                            <p className="text-dls-text">{decision.summary}</p>
+                            <p className="text-dls-secondary">Saved {shortDate(decision.decidedAt)}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+
+                  {rememberedPositions.length ? (
+                    <section className="mt-4" aria-labelledby="coworker-remembered-positions-title">
+                      <h4 id="coworker-remembered-positions-title" className="text-xs font-medium text-dls-text">Positions</h4>
+                      <ul className="mt-1 divide-y divide-dls-border/60">
+                        {rememberedPositions.map((position) => (
+                          <li key={position.id} className="py-2 text-xs leading-5">
+                            <p className="text-dls-text">
+                              {position.asset} · {humanizeId(position.side)}{position.size ? ` ${position.size}` : ""}
+                            </p>
+                            <p className="text-dls-secondary">
+                              {coworkerPositionSource(position.appId, position.network)} · Checked {shortDate(position.observedAt)}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+
+                  {rememberedRisks.length ? (
+                    <section className="mt-4" aria-labelledby="coworker-remembered-risks-title">
+                      <h4 id="coworker-remembered-risks-title" className="text-xs font-medium text-dls-text">Open risks</h4>
+                      <ul className="mt-1 divide-y divide-dls-border/60">
+                        {rememberedRisks.map((risk) => (
+                          <li key={risk.id} className="py-2 text-xs leading-5">
+                            <p className={cn(
+                              risk.severity === "critical" || risk.severity === "high"
+                                ? "text-destructive"
+                                : "text-dls-text",
+                            )}>
+                              {humanizeId(risk.severity)} · {risk.summary}
+                            </p>
+                            <p className="text-dls-secondary">Open since {shortDate(risk.openedAt)}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+
+                  {openActions.length ? (
+                    <section className="mt-4" aria-labelledby="coworker-remembered-actions-title">
+                      <h4 id="coworker-remembered-actions-title" className="text-xs font-medium text-dls-text">Pending actions</h4>
+                      <ul className="mt-1 divide-y divide-dls-border/60">
+                        {openActions.map((action) => (
+                          <li key={action.id} className="flex items-start justify-between gap-3 py-2 text-xs leading-5">
+                            <span className="text-dls-text">
+                              {action.status === "wallet_review" ? "Waiting for wallet review" : "Needs more information"}
+                            </span>
+                            <span className="shrink-0 text-right text-dls-secondary">Until {shortDate(action.expiresAt)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+
+                  {!hasRememberedWork || !rememberedState ? (
+                    <p className="mt-4 text-xs leading-5 text-dls-secondary">
+                      Decisions, positions, risks, and source checks will appear here as you work.
+                    </p>
+                  ) : (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-dls-border/60 pt-3">
+                      <p className="text-xs leading-5 text-dls-secondary">
+                        {rememberedEvidence.length} source {rememberedEvidence.length === 1 ? "check" : "checks"}
+                        {approvedMemoryIds.length
+                          ? ` · ${approvedMemoryIds.length} saved ${approvedMemoryIds.length === 1 ? "memory item" : "memory items"}`
+                          : ""}
+                      </p>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        disabled={busyAction !== null}
+                        onClick={() => setConfirmAction({ kind: "clear-memory", coworker: selectedCoworker, state: rememberedState })}
+                      >
+                        Clear remembered work
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </details>
+            ) : null}
+
+            {!guidedSetup ? <details className="border-b border-dls-border/70 py-4">
               <summary className="min-h-8 cursor-pointer text-sm font-semibold text-dls-text outline-none focus-visible:ring-2 focus-visible:ring-ring/35">
-                Safety limits
+                Limits
               </summary>
-              <p className="mt-1 text-xs leading-5 text-dls-secondary">See how often this coworker may read data, run checks, or prepare a wallet review.</p>
+              <p className="mt-1 text-xs leading-5 text-dls-secondary">See how many app reads, recurring checks, and wallet reviews this coworker can make.</p>
               <dl className="mt-3 grid gap-2 text-xs leading-5">
-                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Apps this role can use</dt><dd className="text-right text-dls-text">{selectedCoworker.allowedAppIds.map(humanizeId).join(", ") || "None"}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">App lookups per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxReadCallsPerRun}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Apps allowed</dt><dd className="text-right text-dls-text">{selectedCoworker.allowedAppIds.map(humanizeId).join(", ") || "None"}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">App reads per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxReadCallsPerRun}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Wallet reviews per request</dt><dd className="text-dls-text">{selectedCoworker.limits.maxPrepareCallsPerFamily > 0 ? selectedCoworker.limits.maxPrepareCallsPerFamily : "Not available"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Active checks</dt><dd className="text-dls-text">{selectedCoworker.limits.maxActiveWatches > 0 ? `${detailQuery.data?.watches.filter((watch) => watch.state === "active").length ?? 0} of ${selectedCoworker.limits.maxActiveWatches}` : "Not available"}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Per wallet action</dt><dd className="text-dls-text">{selectedCoworker.limits.perActionUsd > 0 ? `Up to $${selectedCoworker.limits.perActionUsd.toLocaleString()}` : "Not allowed"}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Daily wallet actions</dt><dd className="text-dls-text">{selectedCoworker.limits.dailyUsd > 0 ? `Up to $${selectedCoworker.limits.dailyUsd.toLocaleString()}` : "Not allowed"}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Maximum per wallet action</dt><dd className="text-dls-text">{selectedCoworker.limits.perActionUsd > 0 ? `Up to $${selectedCoworker.limits.perActionUsd.toLocaleString()}` : "Not allowed"}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Maximum per day</dt><dd className="text-dls-text">{selectedCoworker.limits.dailyUsd > 0 ? `Up to $${selectedCoworker.limits.dailyUsd.toLocaleString()}` : "Not allowed"}</dd></div>
               </dl>
-            </details>
+            </details> : null}
 
-            {detailQuery.isLoading ? (
+            {!guidedSetup ? detailQuery.isLoading ? (
               <div className="space-y-3 border-t border-dls-border/70 py-4" role="status" aria-label="Loading coworker activity">
                 <Skeleton className="h-16 w-full rounded-md" />
                 <Skeleton className="h-16 w-full rounded-md" />
@@ -1353,6 +1728,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
             ) : (
               <details
                 key={`${selectedCoworker.id}:${hasCoworkerActivity ? "has-activity" : "empty"}`}
+                ref={activitySectionRef}
                 className="border-b border-dls-border/70 py-4"
                 open={activityOpen}
                 onToggle={(event) => setActivityOpen(event.currentTarget.open)}
@@ -1396,15 +1772,20 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                               <p className="mt-1 text-amber-12 dark:text-amber-11" role="status">{reviewUnavailableReason}</p>
                             ) : null}
                             <details className="mt-2">
-                              <summary className="min-h-8 cursor-pointer text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Transaction details</summary>
+                              <summary className="min-h-8 cursor-pointer text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Wallet review details</summary>
                               <dl className="mt-2 grid gap-1.5 border-y border-dls-border/70 py-2 text-dls-secondary">
                                 <div><dt className="inline font-medium text-dls-text">Wallet: </dt><dd className="inline break-all">{item.reviewedAction.signer ?? "Chosen in wallet"}</dd></div>
                                 <div><dt className="inline font-medium text-dls-text">Recipient: </dt><dd className="inline break-all">{item.reviewedAction.recipient ?? "Set by the connected app"}</dd></div>
-                                <div><dt className="inline font-medium text-dls-text">Safety preview: </dt><dd className="inline break-all">{item.reviewedAction.simulation.reference}</dd></div>
                                 <div><dt className="inline font-medium text-dls-text">Checked: </dt><dd className="inline">{shortDate(item.reviewedAction.simulation.simulatedAt)}</dd></div>
-                                <div><dt className="inline font-medium text-dls-text">Safety checks: </dt><dd className="inline">{item.policy.limits.length ? `${item.policy.limits.filter((limit) => limit.passed).length} of ${item.policy.limits.length} passed` : "No numeric limits applied"}</dd></div>
-                                {item.receipt ? <div><dt className="inline font-medium text-dls-text">Public receipt: </dt><dd className="inline break-all">{item.receipt.publicId}</dd></div> : null}
+                                <div><dt className="inline font-medium text-dls-text">Safety checks: </dt><dd className="inline">{item.policy.limits.length ? `${item.policy.limits.filter((limit) => limit.passed).length} of ${item.policy.limits.length} passed` : "No amount limits apply"}</dd></div>
                               </dl>
+                              <details className="mt-2 text-dls-secondary">
+                                <summary className="min-h-7 cursor-pointer outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Technical proof</summary>
+                                <dl className="mt-1 grid gap-1.5 border-l border-dls-border/70 pl-3">
+                                  <div><dt className="inline font-medium text-dls-text">Network check ID: </dt><dd className="inline break-all">{item.reviewedAction.simulation.reference}</dd></div>
+                                  {item.receipt ? <div><dt className="inline font-medium text-dls-text">Public receipt ID: </dt><dd className="inline break-all">{item.receipt.publicId}</dd></div> : null}
+                                </dl>
+                              </details>
                             </details>
                             <div className="mt-2 flex flex-wrap gap-1">
                               {canOpenCoworkerWalletIntent(item) ? (
@@ -1423,7 +1804,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       })}
                     </ul>
                   ) : <p className="mt-3 text-xs leading-5 text-dls-secondary">No wallet actions yet. Ask this coworker to prepare one when you are ready.</p>}
-                  {activeIntents.length > 4 ? <p className="mt-2 text-xs text-dls-secondary">{activeIntents.length - 4} more pending in wallet history.</p> : null}
+                  {activeIntents.length > 4 ? <p className="mt-2 text-xs text-dls-secondary">{activeIntents.length - 4} more wallet reviews in history.</p> : null}
                   </section>
 
                   <section className="border-t border-dls-border/70 py-4" aria-labelledby="coworker-watches-title">
@@ -1487,7 +1868,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                             <Skeleton className="h-9 w-full rounded-md" />
                           </div>
                         ) : watchDetailQuery.isError ? (
-                          <p className="text-xs leading-5 text-destructive" role="alert">This app changed. Refresh access before adding the check.</p>
+                          <p className="text-xs leading-5 text-destructive" role="alert">This app changed. Refresh your choices before adding the check.</p>
                         ) : watchFieldResult.supported ? watchFieldResult.fields.filter((field) => field.kind !== "constant").map((field) => (
                           field.kind === "boolean" ? (
                             <label key={field.name} className="flex min-h-9 cursor-pointer items-center gap-2 text-xs font-medium text-dls-text">
@@ -1564,7 +1945,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                       </div>
                     </div>
                   ) : !canAddWatch && watchSources.length === 0 && selectedCoworker.automaticAuthorities.includes("watch") ? (
-                    <p className="mt-3 text-xs leading-5 text-dls-secondary">Give this coworker access to a read-only app before adding a check.</p>
+                    <p className="mt-3 text-xs leading-5 text-dls-secondary">Choose an app that can read data before adding a check.</p>
                   ) : activeWatchCount >= selectedCoworker.limits.maxActiveWatches && selectedCoworker.limits.maxActiveWatches > 0 ? (
                     <p className="mt-3 text-xs leading-5 text-dls-secondary">Pause or remove a check before adding another.</p>
                   ) : null}
@@ -1601,11 +1982,11 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   </section>
                 </div>
               </details>
-            )}
+            ) : null}
 
             {error ? <p className="border-t border-dls-border/70 py-3 text-sm leading-6 text-destructive" role="alert">{error}</p> : null}
 
-            <details className="border-t border-dls-border/70 py-4">
+            {!guidedSetup ? <details className="border-t border-dls-border/70 py-4">
               <summary className="min-h-8 cursor-pointer text-sm font-semibold text-dls-text outline-none focus-visible:ring-2 focus-visible:ring-ring/35">
                 Pause or disable
               </summary>
@@ -1624,23 +2005,37 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   </Button>
                 )}
               </div>
-            </details>
+            </details> : null}
           </>
         ) : null}
       </div>
 
       <ConfirmModal
         open={Boolean(confirmAction)}
-        title={confirmAction?.kind === "delete" ? "Delete this coworker?" : "Disable this coworker permanently?"}
+        title={confirmAction?.kind === "delete"
+          ? "Delete this coworker?"
+          : confirmAction?.kind === "clear-memory"
+            ? "Clear remembered work?"
+            : "Disable this coworker permanently?"}
         message={confirmAction?.kind === "delete"
           ? "This removes the saved coworker profile. It cannot be undone."
-          : "This cannot be undone. New chats and checks stop, connected apps are blocked, and unfinished wallet reviews are cancelled."}
-        confirmLabel={busyAction ? "Working…" : confirmAction?.kind === "delete" ? "Delete coworker" : "Disable coworker"}
-        cancelLabel="Keep coworker"
-        variant="danger"
+          : confirmAction?.kind === "clear-memory"
+            ? "This clears its saved decisions, positions, risks, pending actions, and source checks. Chats, files, saved Memory, app access, and wallet history stay in place."
+            : "This cannot be undone. New chats and checks stop, connected apps are blocked, and unfinished wallet reviews are cancelled."}
+        confirmLabel={busyAction
+          ? "Working…"
+          : confirmAction?.kind === "delete"
+            ? "Delete coworker"
+            : confirmAction?.kind === "clear-memory"
+              ? "Clear remembered work"
+              : "Disable coworker"}
+        cancelLabel={confirmAction?.kind === "clear-memory" ? "Keep remembered work" : "Keep coworker"}
+        variant={confirmAction?.kind === "clear-memory" ? "warning" : "danger"}
+        confirmButtonVariant={confirmAction?.kind === "clear-memory" ? "outline" : undefined}
         onConfirm={() => {
           if (!confirmAction) return;
           if (confirmAction.kind === "delete") void deleteCoworker(confirmAction.coworker);
+          else if (confirmAction.kind === "clear-memory") void clearRememberedWork(confirmAction.coworker, confirmAction.state);
           else void transitionCoworker(confirmAction.coworker, "revoked");
         }}
         onCancel={() => {

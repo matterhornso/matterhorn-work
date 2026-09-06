@@ -64,5 +64,5 @@ export function buildResponsePerspectiveSystemPrompt(perspective: ResponsePerspe
     ? "Answer cautiously. Lead with material risks, failure cases, reversibility, and what could go wrong before describing upside."
     : "Answer constructively. Lead with realistic possibilities, opportunities, and actionable next steps while acknowledging material tradeoffs.";
 
-  return `## Response Perspective\n${framing}\nThis changes framing only. Never remove, weaken, delay, or hide safety constraints, non-custodial boundaries, external-signer requirements, financial risk disclosures, compliance limits, or wellness disclaimers.`;
+  return `## Response Perspective\n${framing}\nThis changes framing only. Never remove, weaken, delay, or hide safety constraints, non-custodial boundaries, connected-wallet requirements, financial risk disclosures, compliance limits, or wellness disclaimers.`;
 }

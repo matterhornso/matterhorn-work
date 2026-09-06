@@ -79,7 +79,8 @@ describe("wallet runtime contract", () => {
       liveSubmissionEnabled: true,
       signerRequirement: "client_signer",
     });
-    expect(DESKTOP_WALLET_RUNTIME_CAPABILITY.safetyCopy.publicAddressLine).toContain("complete signing in your own wallet");
+    expect(DESKTOP_WALLET_RUNTIME_CAPABILITY.safetyCopy.publicAddressLine).toContain("supported web browser");
+    expect(DESKTOP_WALLET_RUNTIME_CAPABILITY.safetyCopy.externalSignerLine).toContain("connected wallet");
     expect(DESKTOP_WALLET_RUNTIME_CAPABILITY.safetyCopy.publicAddressLine).not.toContain("planned wallet strategy");
   });
 });

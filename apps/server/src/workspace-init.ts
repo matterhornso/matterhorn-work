@@ -9,6 +9,8 @@ import {
 
 import { ensureDir, exists } from "./utils.js";
 import { ApiError } from "./errors.js";
+import { parseFrontmatter } from "./frontmatter.js";
+import { OPEN_CODE_1_18_27_COMPACTION_AGENT_PROMPT } from "./opencode-compaction-policy.js";
 import { openworkConfigPath, opencodeConfigPath } from "./workspace-files.js";
 import { readJsoncFile, updateJsoncPath, updateJsoncTopLevel, writeJsoncFile } from "./jsonc.js";
 import type { ReloadReason } from "./types.js";
@@ -163,6 +165,31 @@ ${buildMatterhornDeskAgentSystemPrompt(agent)}
 
 ${MATTERHORN_ARTIFACT_GUIDANCE}
 `;
+}
+
+function managedAgentPromptBody(source: string): string {
+  return parseFrontmatter(source).body.replace(/\r\n/g, "\n").trim();
+}
+
+/**
+ * Return the exact public prompt body Matterhorn owns for a managed agent.
+ *
+ * OpenCode resolves agent markdown after Matterhorn's request preflight. The
+ * server uses this canonical body to distinguish shipped policy from
+ * workspace-authored instructions, which must be treated as private context.
+ */
+export function resolveMatterhornManagedAgentPrompt(agentId: string): string | null {
+  const normalizedAgentId = agentId.trim();
+  if (normalizedAgentId === "compaction") {
+    return OPEN_CODE_1_18_27_COMPACTION_AGENT_PROMPT;
+  }
+  if (normalizedAgentId === "matterhorn") {
+    return managedAgentPromptBody(resolveAgentTemplate());
+  }
+  const manifest = Object.values(MATTERHORN_DESK_AGENT_MANIFESTS)
+    .find((candidate) => candidate.agentId === normalizedAgentId);
+  if (!manifest || manifest.toolPolicy.runtimeKind !== "managed_desk") return null;
+  return managedAgentPromptBody(renderDeskAgentTemplate(manifest));
 }
 
 async function ensureMatterhornAgent(workspaceRoot: string): Promise<boolean> {

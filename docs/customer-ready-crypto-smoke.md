@@ -132,7 +132,7 @@ For a copy-pasteable no-submit market execution chain, run:
 matterhorn-work crypto execution-chain --json
 ```
 
-This prints the current preview/handoff, testnet external sign-request, public/redacted artifact validation, artifact reconciliation, and public receipt import commands. It is local-only and does not contact the server. When a local server is running, the same read-only contract is also available at `GET /api/crypto/market-execution-chain`; it returns `matterhorn.market.execution-chain-guide.v1` and keeps `canSubmit: false` plus `liveSubmissionEnabled: false`.
+This prints the five-stage transaction boundary: agent draft, deterministic policy and simulation, connected-wallet review, wallet authorization, and public receipt reconciliation. It is local-only, contains no signing or submission command, and does not contact the server. When a local server is running, the same read-only contract is available at `GET /api/crypto/market-execution-chain`; it returns `matterhorn.market.execution-chain-guide.v1` and keeps agent authority at `canSubmit: false` plus `liveSubmissionEnabled: false`.
 
 ## Optional Local Server Smoke
 
@@ -148,9 +148,9 @@ node scripts/customer-ready-crypto-smoke.mjs \
 
 This delegates to `scripts/market-live-readonly-smoke.mjs` and checks:
 
-- Hyperliquid market reads, chat reads, order previews, and external-signer handoff.
-- Polymarket market reads, compliance reads, chat reads, and external-signer handoff when a market is available.
-- No submit route, no signing route, no funds movement, and no `canSubmit: true`.
+- Hyperliquid market reads, chat reads, order previews, and connected-wallet handoff preparation.
+- Polymarket market reads, compliance reads, chat reads, and connected-wallet handoff preparation when a market is available.
+- No agent, MCP, CLI, chat, or watch signing/submission authority and no funds movement from the smoke runner.
 
 ## Optional Live Public-Data QA Pack
 
@@ -255,7 +255,7 @@ matterhorn-work crypto sdk-evidence --sample --json > /tmp/matterhorn-market-sdk
 # Fixture-backed strict validation path:
 # pnpm test:market-official-sdk-validation-fixtures
 
-# Optional after an external signer returns public market receipt evidence:
+# Optional after a connected-wallet action produces public market receipt evidence:
 # matterhorn-work crypto receipt-check \
 #   --venue hyperliquid \
 #   --handoff-file /tmp/hyperliquid-handoff.json \
@@ -263,17 +263,6 @@ matterhorn-work crypto sdk-evidence --sample --json > /tmp/matterhorn-market-sdk
 #   --output /tmp/matterhorn-market-receipt-check.json
 # Use --require-receipt-check below only when this receipt evidence is part of
 # the customer claim for the demo.
-
-# Optional after Phase 2 external artifact validation returns public/redacted
-# metadata for one or both venues:
-# matterhorn-work crypto artifact-reconcile \
-#   --hyperliquid-artifact-validation /tmp/hyperliquid-artifact-validation.json \
-#   --polymarket-artifact-validation /tmp/polymarket-artifact-validation.json \
-#   --output /tmp/matterhorn-market-artifact-reconciliation.md \
-#   --json-output /tmp/matterhorn-market-artifact-reconciliation.json \
-#   --strict
-# Use --require-artifact-reconciliation below only when this reconciliation
-# evidence is part of the customer claim for the demo.
 
 matterhorn-work crypto sdk-manifest-check \
   --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json \
@@ -342,7 +331,7 @@ acceptable for read/preview-only customer QA, but it is not authorization for
 live Hyperliquid or Polymarket execution.
 
 Use `--require-receipt-check` only when the demo includes a public
-external-signer receipt. Required receipt evidence must be accepted by
+connected-wallet receipt. Required receipt evidence must be accepted by
 `matterhorn-work crypto receipt-check`, match the original handoff, and remain
 free of raw signatures, signed payloads, API secrets, private keys, and wallet
 exports.
@@ -356,7 +345,7 @@ Report ready for a test customer only when:
 
 - The smoke runner exits 0.
 - Market execution safety passes.
-- Hyperliquid and Polymarket remain read/preview/external-signer only.
+- Hyperliquid and Polymarket agents remain read/draft only; supported transactions require a separate, exact connected-wallet ticket.
 - Bittensor readiness, receipt, watch, scheduler, signing-handoff, and evidence-bundle gates pass.
 - Bittensor customer evidence verifier accepts the Bittensor bundle when attached.
 - Market customer evidence bundle accepts the redacted official-SDK validation evidence.

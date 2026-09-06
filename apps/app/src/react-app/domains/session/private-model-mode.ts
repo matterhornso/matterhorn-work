@@ -79,3 +79,31 @@ export function isVerifiedPrivateModePolicy(
     && expiresAtMs > nowMs
     && expiresAtMs > verifiedAtMs;
 }
+
+/**
+ * Select only a connected Venice model covered by the server's current proof.
+ * Catalog order is not authority: rolling provider/OpenCode updates may leave
+ * an older or newly discovered entry first while another entry is the exact
+ * model the server has verified.
+ */
+export function verifiedPrivateModeModelFromProviders(
+  providers: readonly PrivateModeProvider[],
+  connectedProviderIds: readonly string[],
+  policy: MatterhornProviderPrivacyPolicy | null | undefined,
+  nowMs = Date.now(),
+): ModelRef | null {
+  const connected = new Set(
+    connectedProviderIds.map((providerId) => providerId.trim().toLowerCase()),
+  );
+  if (!connected.has(MATTERHORN_PRIVATE_MODEL_PROVIDER_ID)) return null;
+  const provider = providers.find(
+    (candidate) => candidate.id?.trim().toLowerCase() === MATTERHORN_PRIVATE_MODEL_PROVIDER_ID,
+  );
+  for (const rawModelId of Object.keys(provider?.models ?? {})) {
+    const modelID = rawModelId.trim();
+    if (!modelID) continue;
+    const model = { providerID: MATTERHORN_PRIVATE_MODEL_PROVIDER_ID, modelID };
+    if (isVerifiedPrivateModePolicy(policy, model, nowMs)) return model;
+  }
+  return null;
+}

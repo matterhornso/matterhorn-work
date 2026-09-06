@@ -32,6 +32,7 @@ type UseSessionControlActionsInput = {
   navigateToSessionRoot: () => void;
   createTaskInWorkspace: (workspaceId: string) => Promise<unknown> | unknown;
   openModelPicker: () => void;
+  onSessionDeleted?: (workspaceId: string, sessionId: string) => void;
   refreshRouteState: () => Promise<unknown> | unknown;
 };
 
@@ -68,6 +69,7 @@ export function useSessionControlActions(input: UseSessionControlActionsInput) {
     createTaskInWorkspace,
     navigateToSession,
     navigateToSessionRoot,
+    onSessionDeleted,
     openModelPicker,
     matterhornClient,
     opencodeClient,
@@ -184,13 +186,14 @@ export function useSessionControlActions(input: UseSessionControlActionsInput) {
       const targetWorkspace = findSessionWorkspace(workspaces, sessionsByWorkspaceId, sessionId);
       if (!targetWorkspace) return { ok: false, error: "Session was not found in the current session list" };
       await matterhornClient.deleteSession(targetWorkspace.id, sessionId);
+      onSessionDeleted?.(targetWorkspace.id, sessionId);
       if (selectedSessionId === sessionId) {
         navigateToSessionRoot();
       }
       await refreshRouteState();
       return { ok: true, sessionId, deleted: true };
     },
-  }), [navigateToSessionRoot, matterhornClient, refreshRouteState, selectedSessionId, sessionsByWorkspaceId, workspaces]);
+  }), [navigateToSessionRoot, matterhornClient, onSessionDeleted, refreshRouteState, selectedSessionId, sessionsByWorkspaceId, workspaces]);
   useControlAction(deleteSessionControlAction);
 
   const modelPickerControlAction = useMemo<MatterhornControlAction>(() => ({

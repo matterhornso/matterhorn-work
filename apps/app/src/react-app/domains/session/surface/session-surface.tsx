@@ -152,6 +152,8 @@ import { getMatterhornMemoryPolicyDecision } from "../../memory/memory-policy";
 import { useQuickJot } from "../../notes";
 import type { BittensorPublicEvidenceCard } from "./message-list";
 import { buildResultCardMemoryRecord } from "./result-card-memory";
+import { PrivateModePrivacyNotice } from "./private-mode-privacy-notice";
+import { privacyConsentDetail } from "./privacy-consent-copy";
 
 const SessionTranscript = lazy(() => import("./message-list").then((module) => ({
   default: module.SessionTranscript,
@@ -622,7 +624,7 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
     return item.protocolDesk.capabilityBullets;
   }
   if (item.panel === "bittensor") {
-    return ["TAO wallet reads", "Subnet discovery", "External-signer previews"];
+    return ["TAO wallet reads", "Subnet discovery", "Wallet-reviewed actions"];
   }
   if (item.panel === "hyperliquid") {
     return ["Orderbook reads", "Exposure context", "External trade handoff"];
@@ -1054,12 +1056,9 @@ export function parseSessionError(thrown: unknown): SessionError {
   }
   const privacyPreflight = findPrivacyPreflightInError(parsed ?? raw);
   if (privacyPreflight?.decision === "consent_required" && privacyPreflight.challenge) {
-    const categories = privacyPreflight.detectedData.categories.length
-      ? privacyPreflight.detectedData.categories.join(", ")
-      : "private workspace context";
     return {
-      message: `Allow ${privacyPreflight.provider.name} for this request?`,
-      detail: `This request includes ${categories}. It leaves Matterhorn for ${privacyPreflight.provider.name} and this one-time approval expires in five minutes.`,
+      message: `Share private context with ${privacyPreflight.provider.name} once?`,
+      detail: privacyConsentDetail(privacyPreflight),
       kind: "privacy-consent",
       retryable: false,
       privacyPreflight,
@@ -1163,7 +1162,7 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
   };
 }
 
-function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfirmPrivacy, confirmingPrivacy, onChangeModel, onOpenModelPicker, onOpenAiProviders, onOpenPrivacyDetails }: {
+export function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfirmPrivacy, confirmingPrivacy, onChangeModel, onOpenModelPicker, onOpenAiProviders, onOpenPrivacyDetails }: {
   error: SessionError;
   onDismiss: () => void;
   onRetry?: () => void | Promise<void>;
@@ -1244,7 +1243,7 @@ function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfirmPrivac
                   onClick={() => void onConfirmPrivacy()}
                   disabled={confirmingPrivacy}
                 >
-                  {confirmingPrivacy ? "Authorizing…" : "Allow this request"}
+                  {confirmingPrivacy ? "Sending…" : "Share once and send"}
                 </button>
                 {onOpenPrivacyDetails ? (
                   <button
@@ -1302,7 +1301,7 @@ function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfirmPrivac
           <button
             type="button"
             className={cn(
-              "shrink-0 rounded-full p-1 transition-colors",
+              "-mr-2 -mt-2 grid size-10 shrink-0 place-items-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/30",
               cancelled
                 ? "text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
                 : "text-red-10 hover:bg-red-3 hover:text-red-11",
@@ -1399,7 +1398,7 @@ function AgentFileContextStrip(props: { context: MatterhornSessionAgentFileConte
   );
 }
 
-function CoworkerContextStrip(props: { context: MatterhornSessionCoworkerContext; onClear: () => void }) {
+function CoworkerContextStrip(props: { context: MatterhornSessionCoworkerContext; clearing?: boolean; onClear: () => void }) {
   return (
     <div className="border-b border-dls-border bg-dls-surface/70 px-4 py-2">
       <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
@@ -1416,8 +1415,9 @@ function CoworkerContextStrip(props: { context: MatterhornSessionCoworkerContext
           type="button"
           className="shrink-0 rounded-md border border-dls-border px-2 py-1 font-medium text-dls-secondary transition-colors hover:border-primary/35 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
           onClick={props.onClear}
+          disabled={props.clearing}
         >
-          Clear
+          {props.clearing ? "Clearing…" : "Clear"}
         </button>
       </div>
     </div>
@@ -1460,11 +1460,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const agentFileContext = useMatterhornSessionAgentFileContextStore((state) => getMatterhornSessionAgentFileContext(state, props.sessionId));
   const clearAgentFileContext = useMatterhornSessionAgentFileContextStore((state) => state.clearContext);
   const coworkerContext = useMatterhornSessionCoworkerContextStore((state) => getMatterhornSessionCoworkerContext(state, props.sessionId));
+  const setCoworkerContext = useMatterhornSessionCoworkerContextStore((state) => state.setContext);
   const clearCoworkerContext = useMatterhornSessionCoworkerContextStore((state) => state.clearContext);
   const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [error, setError] = useState<SessionError | null>(null);
   const [sending, setSending] = useState(false);
   const [confirmingPrivacy, setConfirmingPrivacy] = useState(false);
+  const [clearingCoworker, setClearingCoworker] = useState(false);
   const [showDelayedLoading, setShowDelayedLoading] = useState(false);
   const [awaitingAssistantBaseline, setAwaitingAssistantBaseline] = useState<number | null>(null);
   const [noVisibleAssistantOutputBaseline, setNoVisibleAssistantOutputBaseline] = useState<number | null>(null);
@@ -1511,6 +1513,32 @@ export function SessionSurface(props: SessionSurfaceProps) {
     staleTime: 500,
     retry: (failureCount, error) => !(error instanceof MatterhornServerError && error.status === 404) && failureCount < 2,
   });
+  const coworkerBindingQuery = useQuery({
+    queryKey: ["coworker-session-binding", props.workspaceId, props.sessionId],
+    queryFn: async () => props.client.getCoworkerSessionBinding(props.workspaceId, props.sessionId),
+    staleTime: 2_000,
+    retry: (failureCount, queryError) => (
+      !(queryError instanceof MatterhornServerError && [403, 404, 503].includes(queryError.status))
+      && failureCount < 1
+    ),
+  });
+  useEffect(() => {
+    const response = coworkerBindingQuery.data;
+    if (!response) return;
+    if (response.active && response.binding && response.coworker) {
+      setCoworkerContext(props.sessionId, {
+        id: response.coworker.id,
+        name: response.coworker.name,
+        role: response.coworker.role,
+        revision: response.coworker.revision,
+        bindingRevision: response.binding.revision,
+        updatedAt: response.binding.updatedAt,
+      });
+      return;
+    }
+    clearCoworkerContext(props.sessionId);
+    clearAgentFileContext(props.sessionId);
+  }, [clearAgentFileContext, clearCoworkerContext, coworkerBindingQuery.data, props.sessionId, setCoworkerContext]);
   const runReceiptsQuery = useQuery({
     queryKey: ["agent-run-receipts", props.workspaceId, props.sessionId],
     queryFn: async () => props.client.listAgentRunReceipts(
@@ -2152,11 +2180,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
       props.onDraftChange(buildDraft("", []));
       return;
     }
-    // Intentionally allow sending while the assistant is still streaming.
-    // OpenCode accepts follow-up user turns mid-run and queues them; if the
-    // backend can't accept the follow-up it'll surface an error via the
-    // catch below. This restores the "append a prompt while it's still
-    // talking" behavior that the Solid composer had.
+    // Follow-up sends replace the active run. The authoritative gateway aborts
+    // the prior response before dispatch; trusted/local proxy paths enforce the
+    // same boundary so late tool events cannot inherit newer authority.
     suppressNextAbortFailureRef.current = false;
     setError(null);
     useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "busy" });
@@ -3261,6 +3287,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   ) : null}
                   <DeskWorkflowStagePanel
                     deskId={activeDeskMode}
+                    presentation="chat-first"
+                    showAgentHeader={false}
                     taskStatus={effectiveActivityStatus === "idle" ? "idle" : effectiveActivityStatus === "waiting" ? "waiting" : "running"}
                     stageActionDisabled={activeDeskStartBlocked}
                     stageActionLabel="Platform setup"
@@ -3403,39 +3431,14 @@ export function SessionSurface(props: SessionSurfaceProps) {
       </div>
 
       <div ref={composerShellRef} className="shrink-0 bg-dls-surface px-0 pb-3 pt-3">
-        <div
-          className="mx-auto mb-2 flex max-w-[920px] items-start gap-2 px-4 text-[11px] leading-4 text-dls-secondary"
-          aria-live="polite"
-        >
-          <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-          <p className="min-w-0">
-              {props.privateModeEnabled ? (
-                <>
-                  Private mode · Venice does not retain this prompt or response.
-                </>
-              ) : props.providerPrivacyPolicy ? (
-                props.providerPrivacyPolicy.allowed ? (
-                  <>
-                    Matterhorn does not train on your chats · {props.providerPrivacyPolicy.providerName} processes this chat · {props.providerPrivacyPolicy.label}.
-                  </>
-                ) : (
-                  <>
-                    Sending blocked · {props.providerPrivacyPolicy.providerName}&apos;s training and retention terms are not verified.
-                  </>
-                )
-              ) : (
-                <>Checking model privacy.</>
-              )}{" "}
-              <button
-                type="button"
-                className="whitespace-nowrap text-dls-text underline decoration-dls-border underline-offset-2 hover:decoration-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/30"
-                onClick={props.onOpenPrivacyDetails}
-                disabled={!props.onOpenPrivacyDetails}
-              >
-                Privacy details
-              </button>
-          </p>
-        </div>
+        <PrivateModePrivacyNotice
+          providerPrivacyPolicy={props.providerPrivacyPolicy}
+          privateModeAvailable={props.privateModeAvailable}
+          privateModeEnabled={props.privateModeEnabled}
+          privateModeUnavailableReason={props.privateModeUnavailableReason}
+          onPrivateModeChange={props.onPrivateModeChange}
+          onOpenPrivacyDetails={props.onOpenPrivacyDetails}
+        />
         <DevProfiler id="SessionComposer">
         <ReactSessionComposer
           draft={draft}
@@ -3481,6 +3484,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         onExecutionModeChange={props.onExecutionModeChange}
         agentLabel={props.agentLabel}
         agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode)}
+        hideLockedAgentLabel={Boolean(activeDeskMode)}
         agentSelectionLockedReason={
           linkedWorkflowRun?.deskId === "blank"
             ? "This chat keeps the agent selected when it started."
@@ -3579,10 +3583,36 @@ export function SessionSurface(props: SessionSurfaceProps) {
                 {coworkerContext ? (
                   <CoworkerContextStrip
                     context={coworkerContext}
+                    clearing={clearingCoworker}
                     onClear={() => {
-                      clearCoworkerContext(props.sessionId);
-                      clearAgentFileContext(props.sessionId);
-                      setNotice({ title: "Coworker cleared", tone: "info" });
+                      if (clearingCoworker) return;
+                      void (async () => {
+                        setClearingCoworker(true);
+                        try {
+                          const latest = await props.client.getCoworkerSessionBinding(props.workspaceId, props.sessionId);
+                          if (latest.binding) {
+                            await props.client.unbindCoworkerSession(
+                              props.workspaceId,
+                              props.sessionId,
+                              latest.binding.revision,
+                            );
+                          }
+                          clearCoworkerContext(props.sessionId);
+                          clearAgentFileContext(props.sessionId);
+                          setNotice({ title: "Coworker cleared", tone: "info" });
+                          await coworkerBindingQuery.refetch();
+                        } catch (cause) {
+                          setNotice({
+                            title: "Coworker was not cleared",
+                            description: cause instanceof MatterhornServerError
+                              ? cause.message
+                              : "Refresh the chat and try again.",
+                            tone: "error",
+                          });
+                        } finally {
+                          setClearingCoworker(false);
+                        }
+                      })();
                     }}
                   />
                 ) : null}

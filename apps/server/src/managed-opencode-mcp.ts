@@ -13,6 +13,10 @@ import {
   type ReviewedActionHandoffV2,
 } from "@matterhorn-work/types/reviewed-actions";
 import type { MatterhornAgentCapabilityClaims } from "@matterhorn-work/types/guarded-agent-runtime";
+import {
+  containsForbiddenMemorySecretMaterial,
+  findForbiddenMemorySecretFields,
+} from "@matterhorn-work/types/memory";
 import { sha256 } from "./guarded-runtime-crypto.js";
 import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
 import {
@@ -60,6 +64,7 @@ export type ManagedMcpToolAuthorization = {
   workspaceId: string | null;
   sessionId?: string | null;
   coworker?: MatterhornAgentCapabilityClaims["coworker"] | null;
+  jurisdictionPolicy?: MatterhornAgentCapabilityClaims["jurisdictionPolicy"] | null;
 };
 
 export type ManagedMcpCertifiedToolExecutor = (input: {
@@ -303,15 +308,23 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_polymarket_prepare_handoff",
     title: "Polymarket wallet handoff",
-    description: "Prepare a compliance-gated Polymarket handoff for separate connected-wallet review. Never signs or submits.",
+    description: "Prepare fresh, exact Polymarket CLOB terms for separate connected-wallet review. Never signs, authenticates, or submits.",
     inputSchema: objectSchema({
-      marketId: { type: "string" },
-      outcome: { type: "string" },
-      side: { type: "string", enum: ["buy", "sell", "yes", "no"] },
+      address: { type: "string", description: "Public Polygon wallet address that must review the order." },
+      marketId: { type: "string", description: "Exact Polymarket condition ID returned by certified discovery." },
+      tokenId: { type: "string", description: "Exact outcome token ID returned by certified discovery." },
+      outcome: { type: "string", description: "Outcome label paired with the exact token ID by certified discovery." },
+      side: { type: "string", enum: ["buy", "sell"] },
       amountUsdc: numberOrStringSchema,
+      amountShares: numberOrStringSchema,
       slippageTolerance: numberOrStringSchema,
-    }, ["marketId", "outcome", "side", "amountUsdc"]),
-    request: (args) => ({ path: "/api/polymarket/orders/handoff", method: "POST", body: args }),
+    }, ["address", "marketId", "tokenId", "outcome", "side"]),
+    request: () => {
+      // The exact contract is executable only through the certified coworker
+      // gateway above. Falling back to the legacy handoff route would discard
+      // the token, signer, and sell-size binding that the wallet airlock needs.
+      throw new Error("certified_crypto_app_required");
+    },
   },
   {
     name: "matterhorn_sui_get_balance",
@@ -363,12 +376,131 @@ function withCanonicalCryptoContract(tool: ManagedMcpTool): ManagedMcpTool {
 
 const MANAGED_MCP_TOOLS = MANAGED_MCP_TRANSPORTS.map(withCanonicalCryptoContract);
 
+/**
+ * Closed legacy-response contract. Only these top-level fields can cross the
+ * MCP boundary into OpenCode. Unknown tools and newly-added response fields
+ * fail closed instead of silently widening model-visible data.
+ */
+const LEGACY_MODEL_RESULT_KEYS: Readonly<Record<string, readonly string[]>> = {
+  matterhorn_status: ["ok", "version", "opencodeVersion", "readOnly"],
+  matterhorn_bittensor_chat: [
+    "success", "plan", "responseText", "data", "warnings",
+    "requiresClarification", "clarificationQuestion", "execution",
+  ],
+  matterhorn_bittensor_prepare_action: ["success", "preview"],
+  matterhorn_crypto_chat: [
+    "success", "venue", "requestedVenue", "intent", "execution", "responseText",
+    "data", "preview", "compliance", "warnings", "requiresClarification",
+    "clarificationQuestion",
+  ],
+  matterhorn_hyperliquid_list_markets: ["success", "markets"],
+  matterhorn_hyperliquid_get_account: ["success", "account"],
+  matterhorn_hyperliquid_get_positions: [
+    "success", "address", "positions", "notionalExposure", "unrealizedPnl", "source", "warnings",
+  ],
+  matterhorn_hyperliquid_get_open_orders: ["success", "address", "orders", "source", "warnings"],
+  matterhorn_hyperliquid_get_orderbook: ["success", "orderbook"],
+  matterhorn_hyperliquid_get_funding: ["success", "funding"],
+  matterhorn_hyperliquid_preview_order: ["success", "preview"],
+  matterhorn_prediction_market_venues: ["version", "venues", "safety"],
+  matterhorn_prediction_markets_search: ["version", "query", "markets", "venues", "fetchedAt", "safety"],
+  matterhorn_polymarket_search_markets: ["success", "markets"],
+  matterhorn_polymarket_get_orderbook: ["success", "orderbook"],
+  matterhorn_polymarket_check_compliance: ["success", "compliance"],
+  matterhorn_polymarket_preview_order: ["success", "preview"],
+  matterhorn_polymarket_prepare_handoff: ["success", "preview"],
+  matterhorn_sui_get_balance: ["success", "balance"],
+  matterhorn_sui_preview_transfer: ["success", "preview"],
+};
+
+export function managedMcpLegacyResultProjectionToolNames(): readonly string[] {
+  return Object.keys(LEGACY_MODEL_RESULT_KEYS).sort();
+}
+
 export function managedOpencodeCryptoToolDefinitions(): readonly MatterhornCryptoToolDefinition[] {
   return listMatterhornCryptoTools();
 }
 
 function jsonRpcError(id: unknown, code: number, message: string) {
   return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
+}
+
+/**
+ * Only stable, content-free Matterhorn failure codes may return to OpenCode.
+ * A thrown error can originate below the adapter, transport, persistence, or
+ * policy boundary and its message is not a safe model-facing channel.
+ */
+const MODEL_SAFE_MCP_ERROR_CODES = new Set([
+  "agent_capability_denied",
+  "agent_run_not_active",
+  "agent_tool_outcome_not_bound",
+  "adapter_action_not_allowed",
+  "adapter_arguments_invalid",
+  "adapter_authorization_denied",
+  "adapter_circuit_open",
+  "adapter_connected_address_invalid",
+  "adapter_connection_unavailable",
+  "adapter_cost_limit_exceeded",
+  "adapter_endpoint_blocked",
+  "adapter_network_not_allowed",
+  "adapter_output_invalid",
+  "adapter_output_stale",
+  "adapter_policy_unavailable",
+  "adapter_quota_exceeded",
+  "adapter_request_invalid",
+  "adapter_result_too_large",
+  "adapter_timeout",
+  "adapter_transport_unavailable",
+  "adapter_upstream_failed",
+  "adapter_usage_reconciliation_failed",
+  "certified_crypto_app_required",
+  "coworker_certified_access_denied",
+  "coworker_certified_arguments_invalid",
+  "coworker_certified_gateway_unavailable",
+  "coworker_certified_tool_unknown",
+  "coworker_transaction_authority_changed",
+  "coworker_transaction_workspace_mismatch",
+  "compliance_unavailable",
+  "matterhorn_read_tool_cannot_prepare_action",
+  "matterhorn_tool_result_rejected",
+  "polymarket_token_id_invalid",
+  "reviewed_action_receipt_unavailable",
+  "transaction_capability_proof_missing",
+  "transaction_context_invalid",
+  "transaction_evidence_invalid",
+  "transaction_policy_preflight_denied",
+  "transaction_proxy_tool_unavailable",
+  "transaction_receipt_record_failed",
+  "transaction_regeneration_denied",
+  "transaction_regeneration_invalid",
+]);
+
+function modelSafeMcpErrorMessage(error: unknown): string {
+  const explicitCode = error && typeof error === "object" && !Array.isArray(error)
+    && typeof (error as { code?: unknown }).code === "string"
+    ? (error as { code: string }).code
+    : "";
+  if (MODEL_SAFE_MCP_ERROR_CODES.has(explicitCode)) return explicitCode;
+  const exactMessage = error instanceof Error ? error.message.trim() : "";
+  if (MODEL_SAFE_MCP_ERROR_CODES.has(exactMessage)) return exactMessage;
+  return "matterhorn_tool_failed";
+}
+
+function modelSafeMcpHttpFailureCode(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "matterhorn_tool_failed";
+  }
+  const record = value as JsonObject;
+  const nestedError = record.error && typeof record.error === "object" && !Array.isArray(record.error)
+    ? record.error as JsonObject
+    : null;
+  const candidates = [record.code, typeof record.error === "string" ? record.error : null, nestedError?.code];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && MODEL_SAFE_MCP_ERROR_CODES.has(candidate.trim())) {
+      return candidate.trim();
+    }
+  }
+  return "matterhorn_tool_failed";
 }
 
 function argumentsObject(params: unknown): JsonObject {
@@ -417,7 +549,143 @@ function compactJsonForModel(
   return compact;
 }
 
-/** Keep full structured evidence for receipts while bounding model context. */
+type ManagedMcpResultOrigin = "legacy" | "certified" | "safe_error";
+
+const MODEL_PRIVATE_RESULT_FIELD_PATTERN = /^(?:raw|assetPositions|openOrders|cards|sharedCards|context|route|workspaceId|ownerId|tenantId|accountId|organizationId|userId|sessionId|runId|callId|connectionId|reservationId|appId|actionId|policyVersion|registryVersion|manifestRevision|capability|capabilityToken|grant|headers|request|response|endpoint|internalPath|configPath|filesystemPath|filePath|authorizedRoots|tokenSource|reasonCodes|intentHash|policyHash|projectionHash|observationHash|_matterhornCallId|_matterhornCapability)$/i;
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function containsForbiddenToolResultSecret(value: unknown): boolean {
+  return containsForbiddenMemorySecretMaterial(value)
+    || (isJsonObject(value) && findForbiddenMemorySecretFields(value).length > 0);
+}
+
+function stripPrivateModelResultFields(value: unknown, depth = 0): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (depth >= 10) return "[Matterhorn omitted over-nested external content]";
+  if (Array.isArray(value)) {
+    return value.map((entry) => stripPrivateModelResultFields(entry, depth + 1));
+  }
+  return Object.fromEntries(Object.entries(value as JsonObject)
+    .filter(([key]) => !MODEL_PRIVATE_RESULT_FIELD_PATTERN.test(key))
+    .map(([key, entry]) => [key, stripPrivateModelResultFields(entry, depth + 1)]));
+}
+
+function projectReviewedActionForModel(value: unknown): JsonObject | undefined {
+  if (!isJsonObject(value)) return undefined;
+  const keys = [
+    "version", "protocol", "source", "network", "operation", "signer", "amount", "asset",
+    "recipient", "slippage", "expiresAt", "preparedAt", "capabilityClass", "draft",
+  ] as const;
+  const projected = Object.fromEntries(keys
+    .filter((key) => value[key] !== undefined)
+    .map((key) => [key, value[key]]));
+  const simulation = value.simulation;
+  if (isJsonObject(simulation)) {
+    projected.simulation = Object.fromEntries(["block", "simulatedAt"]
+      .filter((key) => simulation[key] !== undefined)
+      .map((key) => [key, simulation[key]]));
+  }
+  return projected;
+}
+
+function projectCertifiedResult(
+  definition: NonNullable<ReturnType<typeof getMatterhornCryptoTool>>,
+  result: JsonObject,
+): JsonObject {
+  const keys = definition.access === "read"
+    ? ["version", "app", "action", "observation", "provenance", "result"]
+    : [
+        "version", "status", "blocked", "adapterResult", "policy", "reviewedAction",
+        "pendingIntent", "walletControl",
+      ];
+  const projected = Object.fromEntries(keys
+    .filter((key) => result[key] !== undefined)
+    .map((key) => [key, result[key]]));
+  const policy = projected.policy;
+  if (isJsonObject(policy)) {
+    projected.policy = Object.fromEntries(["decision", "limits", "evaluatedAt"]
+      .filter((key) => policy[key] !== undefined)
+      .map((key) => [key, policy[key]]));
+  }
+  const pendingIntent = projected.pendingIntent;
+  if (isJsonObject(pendingIntent)) {
+    projected.pendingIntent = Object.fromEntries(["state", "expiresAt"]
+      .filter((key) => pendingIntent[key] !== undefined)
+      .map((key) => [key, pendingIntent[key]]));
+  }
+  const reviewedAction = projectReviewedActionForModel(projected.reviewedAction);
+  if (reviewedAction) projected.reviewedAction = reviewedAction;
+  return projected;
+}
+
+function compactStructuredModelResult(value: unknown, maxChars: number): unknown {
+  if (JSON.stringify(value).length <= maxChars) return value;
+  for (const options of [
+    { arrayItems: 8, objectKeys: 40, stringChars: 600 },
+    { arrayItems: 4, objectKeys: 20, stringChars: 240 },
+  ]) {
+    const compact = {
+      _matterhornContext: "Result shortened for model context. Use a narrower query for omitted detail.",
+      result: compactJsonForModel(value, options),
+    };
+    if (JSON.stringify(compact).length <= maxChars) return compact;
+  }
+  return {
+    _matterhornContext: "Result exceeded the model-context limit. Ask for a narrower query.",
+  };
+}
+
+function projectManagedMcpResult(input: {
+  tool: ManagedMcpTool;
+  result: unknown;
+  origin: ManagedMcpResultOrigin;
+  reviewedAction?: ReviewedActionHandoffV2;
+}): { result: unknown; sanitization: "typed_projection" | "quarantined" } {
+  if (input.origin === "safe_error") {
+    return { result: input.result, sanitization: "typed_projection" };
+  }
+  if (!isJsonObject(input.result)) {
+    throw new Error("matterhorn_tool_result_rejected");
+  }
+  const rawResult = input.result;
+  if (containsForbiddenToolResultSecret(rawResult)) {
+    throw new Error("matterhorn_tool_result_rejected");
+  }
+  const definition = getMatterhornCryptoTool(input.tool.name);
+  let closed: JsonObject;
+  if (input.origin === "certified") {
+    if (!definition) throw new Error("matterhorn_tool_result_rejected");
+    if (rawResult.reviewedAction !== undefined && !input.reviewedAction) {
+      throw new Error("matterhorn_tool_result_rejected");
+    }
+    closed = projectCertifiedResult(definition, rawResult);
+  } else {
+    const keys = LEGACY_MODEL_RESULT_KEYS[input.tool.name];
+    if (!keys) throw new Error("matterhorn_tool_result_rejected");
+    closed = Object.fromEntries(keys
+      .filter((key) => rawResult[key] !== undefined)
+      .map((key) => [key, rawResult[key]]));
+  }
+  if (Object.keys(closed).length === 0) {
+    throw new Error("matterhorn_tool_result_rejected");
+  }
+  const reviewedAction = projectReviewedActionForModel(input.reviewedAction ?? closed.reviewedAction);
+  if (reviewedAction) closed.reviewedAction = reviewedAction;
+  const stripped = stripPrivateModelResultFields(closed);
+  const quarantined = quarantineUntrustedContent(stripped);
+  const access = definition?.access ?? "read";
+  const maxChars = access === "prepare"
+    ? MANAGED_MCP_MODEL_PREPARE_CONTENT_MAX_CHARS
+    : MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS;
+  return {
+    result: compactStructuredModelResult(quarantined, maxChars),
+    sanitization: untrustedContentChanged(stripped, quarantined) ? "quarantined" : "typed_projection",
+  };
+}
+/** Bound the already-closed projection for the model text channel. */
 function modelFacingToolText(text: string, access: "read" | "prepare" | "system"): string {
   const maxChars = access === "prepare"
     ? MANAGED_MCP_MODEL_PREPARE_CONTENT_MAX_CHARS
@@ -606,25 +874,6 @@ function buildGuardedReviewedAction(input: {
   });
 }
 
-function attachReviewedActionToToolResult(result: unknown, reviewedAction: ReviewedActionHandoffV2): unknown {
-  if (!result || typeof result !== "object" || Array.isArray(result)) {
-    return { result, reviewedAction };
-  }
-  const record = result as JsonObject;
-  const cards = Array.isArray(record.cards)
-    ? record.cards.map((card) => {
-        if (!card || typeof card !== "object" || Array.isArray(card)) return card;
-        const cardRecord = card as JsonObject;
-        if (cardRecord.kind !== "action_preview") return card;
-        const data = cardRecord.data && typeof cardRecord.data === "object" && !Array.isArray(cardRecord.data)
-          ? cardRecord.data as JsonObject
-          : {};
-        return { ...cardRecord, data: { ...data, reviewedAction } };
-      })
-    : undefined;
-  return { ...record, reviewedAction, ...(cards ? { cards } : {}) };
-}
-
 const BITTENSOR_ACTION_INTENT_PATTERN = /\b(?:send|transfer|stake|unstake|delegate)\b/i;
 
 function assertReadToolArguments(tool: ManagedMcpTool, args: JsonObject): void {
@@ -639,15 +888,15 @@ function buildCryptoEvidenceEnvelope(input: {
   definition: NonNullable<ReturnType<typeof getMatterhornCryptoTool>>;
   status: "success" | "error";
   result: unknown;
+  evidenceResult: unknown;
+  sanitization: "typed_projection" | "quarantined";
   startedAtMs: number;
   completedAtMs: number;
-  reviewedAction?: ReviewedActionHandoffV2;
 }): MatterhornCryptoEvidenceEnvelope {
   const completedAt = new Date(input.completedAtMs).toISOString();
   const upstreamSource = findEvidenceString(input.result, ["source", "provider", "venue"]);
   const upstreamObservedAt = findEvidenceString(input.result, ["observedAt", "asOf", "updatedAt", "fetchedAt"]);
   const freshness = findEvidenceString(input.result, ["freshness", "freshnessStatus", "dataStatus"]);
-  const sanitizedResult = quarantineUntrustedContent(input.result);
   return {
     version: MATTERHORN_CRYPTO_EVIDENCE_VERSION,
     status: input.status,
@@ -671,30 +920,37 @@ function buildCryptoEvidenceEnvelope(input: {
     },
     provenance: {
       trust: "untrusted_external",
-      sanitization: untrustedContentChanged(input.result, sanitizedResult) ? "quarantined" : "typed_projection",
-      evidenceReference: `sha256:${sha256(input.result)}`,
+      sanitization: input.sanitization,
+      evidenceReference: `sha256:${sha256(input.evidenceResult)}`,
     },
     warnings: evidenceWarnings(input.result),
-    ...(input.reviewedAction ? { reviewedAction: input.reviewedAction } : {}),
-    result: sanitizedResult,
+    result: input.result,
   };
 }
 
 function toolCallResult(input: {
   tool: ManagedMcpTool;
-  text: string;
+  result: unknown;
+  evidenceResult?: unknown;
+  origin: ManagedMcpResultOrigin;
   ok: boolean;
   startedAtMs: number;
   completedAtMs: number;
   reviewedAction?: ReviewedActionHandoffV2;
 }) {
-  const result = parseToolPayload(input.text);
   const definition = getMatterhornCryptoTool(input.tool.name);
+  const projection = projectManagedMcpResult({
+    tool: input.tool,
+    result: input.result,
+    origin: input.origin,
+    reviewedAction: input.reviewedAction,
+  });
+  const text = JSON.stringify(projection.result);
   return {
     content: [{
       type: "text",
       text: modelFacingToolText(
-        input.text || (input.ok ? "{}" : "Matterhorn backend returned an empty error"),
+        text,
         definition?.access ?? "system",
       ),
     }],
@@ -703,10 +959,11 @@ function toolCallResult(input: {
           structuredContent: buildCryptoEvidenceEnvelope({
             definition,
             status: input.ok ? "success" : "error",
-            result,
+            result: projection.result,
+            evidenceResult: input.evidenceResult ?? input.result,
+            sanitization: projection.sanitization,
             startedAtMs: input.startedAtMs,
             completedAtMs: input.completedAtMs,
-            reviewedAction: input.reviewedAction,
           }),
         }
       : {}),
@@ -739,7 +996,6 @@ async function callBackendTool(input: {
         authorization: input.authorization,
       });
       if (certified !== null) {
-        outcome = "success";
         const completedAtMs = Date.now();
         const certifiedRecord = certified && typeof certified === "object" && !Array.isArray(certified)
           ? certified as JsonObject
@@ -748,11 +1004,19 @@ async function callBackendTool(input: {
         reviewedAction = isReviewedActionHandoffV2(certifiedReviewedAction)
           ? certifiedReviewedAction
           : undefined;
-        source = findEvidenceString(certified, ["source", "provider", "venue"]);
-        freshness = findEvidenceString(certified, ["freshness", "freshnessStatus", "dataStatus", "observedAt", "asOf"]);
+        const projection = projectManagedMcpResult({
+          tool: input.tool,
+          result: certified,
+          origin: "certified",
+          reviewedAction,
+        });
+        source = findEvidenceString(projection.result, ["source", "provider", "venue"]);
+        freshness = findEvidenceString(projection.result, ["freshness", "freshnessStatus", "dataStatus", "observedAt", "asOf"]);
+        outcome = "success";
         return toolCallResult({
           tool: input.tool,
-          text: JSON.stringify(certified),
+          result: certified,
+          origin: "certified",
           ok: true,
           startedAtMs,
           completedAtMs,
@@ -772,11 +1036,8 @@ async function callBackendTool(input: {
       signal: AbortSignal.timeout(input.tool.timeoutMs ?? 30_000),
     });
     const text = await response.text();
-    outcome = response.ok ? "success" : "error";
     const completedAtMs = Date.now();
     const parsedResult = parseToolPayload(text);
-    source = findEvidenceString(parsedResult, ["source", "provider", "venue"]);
-    freshness = findEvidenceString(parsedResult, ["freshness", "freshnessStatus", "dataStatus", "observedAt", "asOf"]);
     if (response.ok) {
       reviewedAction = buildGuardedReviewedAction({
         toolName: input.tool.name,
@@ -785,13 +1046,26 @@ async function callBackendTool(input: {
         authorization: input.authorization,
         completedAtMs,
       });
+      const projection = projectManagedMcpResult({
+        tool: input.tool,
+        result: parsedResult,
+        origin: "legacy",
+        reviewedAction,
+      });
+      source = findEvidenceString(projection.result, ["source", "provider", "venue"]);
+      freshness = findEvidenceString(projection.result, ["freshness", "freshnessStatus", "dataStatus", "observedAt", "asOf"]);
+      outcome = "success";
+    } else {
+      outcome = "error";
     }
-    const resultText = reviewedAction
-      ? JSON.stringify(attachReviewedActionToToolResult(parsedResult, reviewedAction))
-      : text;
+    const result = response.ok
+      ? parsedResult
+      : { code: modelSafeMcpHttpFailureCode(parsedResult) };
     return toolCallResult({
       tool: input.tool,
-      text: resultText || (!response.ok ? `Matterhorn backend returned HTTP ${response.status}` : "{}"),
+      result,
+      evidenceResult: response.ok ? parsedResult : result,
+      origin: response.ok ? "legacy" : "safe_error",
       ok: response.ok,
       startedAtMs,
       completedAtMs,
@@ -846,7 +1120,7 @@ async function mcpResult(message: JsonRpcRequest, options: {
       : {};
     const name = typeof params.name === "string" ? params.name : "";
     const tool = MANAGED_MCP_TOOLS.find((item) => item.name === name);
-    if (!tool) return { content: [{ type: "text", text: `Unknown Matterhorn tool: ${name || "(missing)"}` }], isError: true };
+    if (!tool) return { content: [{ type: "text", text: "Unknown Matterhorn tool." }], isError: true };
     const rawArgs = argumentsObject(params);
     const authorization = options.authorizeToolCall?.({ toolName: tool.name, args: rawArgs });
     return callBackendTool({
@@ -896,7 +1170,7 @@ export async function handleManagedOpencodeMcp(input: {
         }),
       });
     } catch (error) {
-      responses.push(jsonRpcError(message.id, -32603, error instanceof Error ? error.message : "Matterhorn MCP call failed"));
+      responses.push(jsonRpcError(message.id, -32603, modelSafeMcpErrorMessage(error)));
     }
   }
   if (responses.length === 0) return { status: 202, body: null };

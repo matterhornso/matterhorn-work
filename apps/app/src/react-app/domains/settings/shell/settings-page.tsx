@@ -178,7 +178,7 @@ export function getSettingsTabDescription(tab: SettingsTab) {
     case "overview":
       return "Profile, safety, protocols, and diagnostics";
     case "ai":
-      return "Choose models and connect providers";
+      return "Choose the AI that answers your chats";
     case "preferences":
       return "Model and reasoning controls";
     case "shell":

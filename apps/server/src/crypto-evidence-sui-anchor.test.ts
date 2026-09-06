@@ -19,6 +19,7 @@ import {
   type MatterhornSuiEvidenceAnchorTransactionVerifier,
 } from "./crypto-evidence-sui-anchor.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import type { MatterhornWalrusCertification } from "./crypto-evidence-walrus-publisher.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
@@ -246,7 +247,7 @@ async function serviceFixture(input: {
     correlationSalt: Buffer.alloc(32, 8),
     idEntropy: Buffer.alloc(24, 9),
   });
-  const store = new MatterhornCryptoEvidenceStore(state, keyManager);
+  const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, testDurableStateAuthority());
   const created = store.create({
     workspaceId: "workspace_alpha",
     ownerId: "owner_alpha",
@@ -308,7 +309,7 @@ async function serviceFixture(input: {
     suiTransactionDigest: null,
   });
   const service = new MatterhornCryptoEvidenceSuiAnchorService(
-    store, state, PACKAGE, build, verify, certification, input.now,
+    store, state, testDurableStateAuthority(), PACKAGE, build, verify, certification, input.now,
   );
   return {
     state,
@@ -327,6 +328,48 @@ async function serviceFixture(input: {
 }
 
 describe("Sui evidence anchor wallet airlock", () => {
+  test("rejects a restored anchor intent with changed expiry before chain verification", async () => {
+    const fixture = await serviceFixture();
+    try {
+      const prepared = await fixture.service.prepare({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        evidenceId: fixture.published.id,
+        expectedRevision: fixture.published.revision,
+        signer: SIGNER,
+        signal: new AbortController().signal,
+        now: new Date("2026-09-03T00:00:00.000Z"),
+      });
+      const row = fixture.state.getRecord<unknown>(
+        "crypto_evidence_sui_anchor_intent",
+        fixture.published.id,
+        new Date("2026-09-03T00:01:00.000Z").getTime(),
+      )!;
+      fixture.state.put({
+        kind: row.kind,
+        key: row.key,
+        workspaceId: row.workspaceId,
+        sessionId: row.sessionId,
+        value: row.value,
+        expiresAtMs: (row.expiresAtMs ?? 0) + 60_000,
+        nowMs: row.updatedAtMs,
+      });
+      await expect(fixture.service.confirm({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        evidenceId: fixture.published.id,
+        intentId: prepared.preview.intentId,
+        intentHash: prepared.preview.intentHash,
+        transactionDigest: prepared.preview.transactionDigest,
+        signal: new AbortController().signal,
+        now: new Date("2026-09-03T00:01:00.000Z"),
+      })).rejects.toThrow("crypto_evidence_sui_anchor_intent_integrity_invalid");
+      expect(fixture.verifyCalls).toHaveLength(0);
+    } finally {
+      fixture.state.close();
+    }
+  });
+
   test("serializes anchor preparation across SQLite connections and protects replacement claims", async () => {
     let releaseBuild!: () => void;
     let buildStarted!: () => void;
@@ -340,10 +383,11 @@ describe("Sui evidence anchor wallet airlock", () => {
     });
     const secondState = new MatterhornGuardedRuntimeStateStore(fixture.statePath);
     try {
-      const secondStore = new MatterhornCryptoEvidenceStore(secondState, fixture.keyManager);
+      const secondStore = new MatterhornCryptoEvidenceStore(secondState, fixture.keyManager, {}, null, testDurableStateAuthority());
       const secondService = new MatterhornCryptoEvidenceSuiAnchorService(
         secondStore,
         secondState,
+        testDurableStateAuthority(),
         PACKAGE,
         fixture.build,
         fixture.verify,

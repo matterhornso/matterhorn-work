@@ -8,15 +8,14 @@ const POLYMARKET_MESSAGE_FIELDS = [
   "salt",
   "maker",
   "signer",
-  "taker",
   "tokenId",
   "makerAmount",
   "takerAmount",
-  "expiration",
-  "nonce",
-  "feeRateBps",
   "side",
   "signatureType",
+  "timestamp",
+  "metadata",
+  "builder",
 ];
 
 function isRecord(value) {
@@ -134,13 +133,13 @@ function normalizePolymarket(input) {
   if (!types || !Array.isArray(types.Order)) throw new Error("Polymarket typed data must include types.Order.");
   if (!isRecord(message)) throw new Error("Polymarket typed data must include message.");
   const normalizedMessage = pickObject(message, POLYMARKET_MESSAGE_FIELDS);
-  for (const field of ["makerAmount", "takerAmount", "signatureType"]) {
+  for (const field of POLYMARKET_MESSAGE_FIELDS) {
     if (!(field in normalizedMessage)) throw new Error(`Polymarket message must include ${field}.`);
   }
   return {
     domain: {
       name: coerceString(domain.name, "domain.name"),
-      version: coerceString(domain.version ?? "1", "domain.version"),
+      version: coerceString(domain.version, "domain.version"),
       chainId: Number(domain.chainId),
       verifyingContract: coerceString(domain.verifyingContract, "domain.verifyingContract"),
     },

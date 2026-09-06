@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +21,8 @@ import {
 } from "./crypto-coworkers.js";
 
 const NOW = "2026-09-01T12:00:00.000Z";
+const COWORKER_INTEGRITY_SECRET = "coworker-state-integrity-secret-at-least-32-bytes";
+const FORGED_AUTHORITY_SEAL = `${"A".repeat(16)}.${"B".repeat(22)}`;
 const roots: string[] = [];
 
 function input(overrides: Partial<MatterhornCoworkerCreateInput> = {}): MatterhornCoworkerCreateInput {
@@ -178,7 +181,7 @@ function fixture(
 ) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-coworkers-"));
   roots.push(root);
-  const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+  const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
   const coworkers = new MatterhornCoworkers({
     store,
     policyVersion,
@@ -226,10 +229,22 @@ describe("durable crypto coworkers", () => {
     }
   });
 
+  test("rejects crypto secret formats in model-facing profile text", () => {
+    const { store, coworkers } = fixture();
+    const secret = `suiprivkey1${"p".repeat(58)}`;
+    try {
+      expect(() => coworkers.create("ws_alpha", "account_alpha", input({ mission: secret })))
+        .toThrow(new MatterhornCoworkerError("coworker_input_invalid"));
+      expect(coworkers.list("ws_alpha", "account_alpha")).toEqual([]);
+    } finally {
+      store.close();
+    }
+  });
+
   test("isolates identical coworker ids by both workspace and owner", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-isolation-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     let sequence = 0;
     const coworkers = new MatterhornCoworkers({
       store,
@@ -254,7 +269,7 @@ describe("durable crypto coworkers", () => {
   test("purges every owner profile in only the selected workspace", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-purge-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     let sequence = 0;
     const coworkers = new MatterhornCoworkers({
       store,
@@ -282,7 +297,7 @@ describe("durable crypto coworkers", () => {
   test("serializes edits with optimistic revisions and rebinds the policy version", () => {
     const { root, store, coworkers } = fixture("coworker-policy-1");
     const created = coworkers.create("ws_alpha", "account_alpha", input());
-    const secondStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const secondStore = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     const upgraded = new MatterhornCoworkers({
       store: secondStore,
       policyVersion: "coworker-policy-2",
@@ -376,7 +391,7 @@ describe("durable crypto coworkers", () => {
   test("persists structured state without transcript replay and isolates it by tenant", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-state-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     let sequence = 0;
     const coworkers = new MatterhornCoworkers({
       store,
@@ -396,7 +411,7 @@ describe("durable crypto coworkers", () => {
       expect(() => coworkers.getWorkingState("ws_shared", "account_beta", alpha.id))
         .toThrow(new MatterhornCoworkerError("coworker_not_found"));
 
-      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
       try {
         const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
         expect(reopened.getWorkingState("ws_shared", "account_alpha", alpha.id)?.approvedMemoryIds)
@@ -412,7 +427,7 @@ describe("durable crypto coworkers", () => {
   test("persists an exact private resource scope and isolates it by workspace and owner", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-resources-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     let sequence = 0;
     const coworkers = new MatterhornCoworkers({
       store,
@@ -433,7 +448,7 @@ describe("durable crypto coworkers", () => {
         "ws_shared",
         "account_alpha",
         alpha.id,
-        resourceScopeInput(),
+        watchResourceScopeInput(),
       );
       expect(scope).toMatchObject({
         revision: 1,
@@ -449,7 +464,7 @@ describe("durable crypto coworkers", () => {
       expect(() => coworkers.getResourceScope("ws_shared", "account_beta", alpha.id))
         .toThrow(new MatterhornCoworkerError("coworker_not_found"));
 
-      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
       try {
         const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
         expect(reopened.getResourceScope("ws_shared", "account_alpha", alpha.id)?.connections)
@@ -520,11 +535,202 @@ describe("durable crypto coworkers", () => {
     }
   });
 
+  test("persists an exact chat-to-coworker binding and isolates it by tenant and session", () => {
+    const { root, store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      const resources = coworkers.setResourceScope(
+        "ws_alpha",
+        "account_alpha",
+        profile.id,
+        watchResourceScopeInput(),
+      );
+      const binding = coworkers.bindSession("ws_alpha", "account_alpha", "ses_alpha", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      });
+      expect(binding).toMatchObject({
+        workspaceId: "ws_alpha",
+        ownerId: "account_alpha",
+        sessionId: "ses_alpha",
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        resourceScopeHash: resources.scopeHash,
+        revision: 1,
+      });
+      expect(coworkers.getSessionBinding("ws_alpha", "account_alpha", "ses_other")).toBeNull();
+      expect(coworkers.getSessionBinding("ws_other", "account_alpha", "ses_alpha")).toBeNull();
+      expect(coworkers.getSessionBinding("ws_alpha", "account_beta", "ses_alpha")).toBeNull();
+      store.close();
+
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
+      try {
+        const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
+        expect(reopened.resolveActiveSessionBinding("ws_alpha", "account_alpha", "ses_alpha"))
+          .toEqual(binding);
+        reopened.unbindSession("ws_alpha", "account_alpha", "ses_alpha", binding.revision);
+        expect(reopened.getSessionBinding("ws_alpha", "account_alpha", "ses_alpha")).toBeNull();
+      } finally {
+        reopenedStore.close();
+      }
+    } finally {
+      try { store.close(); } catch { /* already closed for reopen coverage */ }
+    }
+  });
+
+  test("inherits an active coworker binding to one new chat without caller-selected authority", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      const resources = coworkers.setResourceScope(
+        "ws_alpha",
+        "account_alpha",
+        profile.id,
+        watchResourceScopeInput(),
+      );
+      coworkers.bindSession("ws_alpha", "account_alpha", "ses_source", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      });
+      const inherited = coworkers.inheritSessionBinding(
+        "ws_alpha",
+        "account_alpha",
+        "ses_source",
+        "ses_fork",
+      );
+      expect(inherited).toMatchObject({
+        sessionId: "ses_fork",
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        resourceScopeHash: resources.scopeHash,
+        revision: 1,
+      });
+      expect(() => coworkers.inheritSessionBinding(
+        "ws_alpha",
+        "account_alpha",
+        "ses_source",
+        "ses_fork",
+      )).toThrow(new MatterhornCoworkerError("coworker_session_binding_conflict"));
+      expect(() => coworkers.inheritSessionBinding(
+        "ws_alpha",
+        "account_beta",
+        "ses_source",
+        "ses_beta_fork",
+      )).toThrow(new MatterhornCoworkerError("coworker_session_binding_not_found"));
+      expect(() => coworkers.inheritSessionBinding(
+        "ws_other",
+        "account_alpha",
+        "ses_source",
+        "ses_other_fork",
+      )).toThrow(new MatterhornCoworkerError("coworker_session_binding_not_found"));
+      expect(() => coworkers.inheritSessionBinding(
+        "ws_alpha",
+        "account_alpha",
+        "ses_source",
+        "ses_source",
+      )).toThrow(new MatterhornCoworkerError("coworker_session_binding_invalid"));
+
+      coworkers.update("ws_alpha", "account_alpha", profile.id, {
+        expectedRevision: profile.revision,
+        mission: "Continue only after the user reviews this changed coworker.",
+      });
+      expect(() => coworkers.inheritSessionBinding(
+        "ws_alpha",
+        "account_alpha",
+        "ses_source",
+        "ses_stale_fork",
+      )).toThrow(new MatterhornCoworkerError("coworker_session_binding_stale"));
+      expect(coworkers.getSessionBinding("ws_alpha", "account_alpha", "ses_stale_fork")).toBeNull();
+    } finally {
+      store.close();
+    }
+  });
+
+  test("purges a deleted chat binding after coworker access is revoked", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-session-purge-"));
+    roots.push(root);
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
+    let accountAllowed = true;
+    const coworkers = new MatterhornCoworkers({
+      store,
+      policyVersion: "coworker-policy-1",
+      enforceAccountAccess: true,
+      accountIsAllowed: () => accountAllowed,
+      now: () => new Date(NOW),
+      id: () => "cw_session_purge",
+    });
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      coworkers.bindSession("ws_alpha", "account_alpha", "ses_deleted", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      });
+      accountAllowed = false;
+      expect(() => coworkers.getSessionBinding("ws_alpha", "account_alpha", "ses_deleted"))
+        .toThrow(new MatterhornCoworkerError("coworker_access_required"));
+      expect(coworkers.purgeDeletedSessionBinding("ws_alpha", "account_alpha", "ses_deleted"))
+        .toBe(true);
+      expect(coworkers.purgeDeletedSessionBinding("ws_alpha", "account_alpha", "ses_deleted"))
+        .toBe(false);
+      expect(store.getSessionBinding("ws_alpha", "account_alpha", "ses_deleted")).toBeNull();
+      expect(() => coworkers.purgeDeletedSessionBinding("ws_alpha", "account_alpha", ""))
+        .toThrow(new MatterhornCoworkerError("coworker_session_binding_invalid"));
+    } finally {
+      store.close();
+    }
+  });
+
+  test("rejects stale or replayed chat bindings after profile and resource changes", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      const binding = coworkers.bindSession("ws_alpha", "account_alpha", "ses_alpha", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      });
+      expect(() => coworkers.bindSession("ws_alpha", "account_alpha", "ses_alpha", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      })).toThrow(new MatterhornCoworkerError("coworker_revision_conflict"));
+      const updated = coworkers.update("ws_alpha", "account_alpha", profile.id, {
+        expectedRevision: profile.revision,
+        mission: "Use the same app only after its access is reviewed again.",
+      });
+      expect(coworkers.resolveActiveSessionBinding("ws_alpha", "account_alpha", "ses_alpha")).toBeNull();
+      expect(() => coworkers.bindSession("ws_alpha", "account_alpha", "ses_alpha", {
+        coworkerId: profile.id,
+        coworkerRevision: updated.revision,
+        expectedRevision: binding.revision,
+      })).toThrow(new MatterhornCoworkerError("coworker_session_binding_stale"));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput({
+        expectedRevision: 1,
+        profileRevision: updated.revision,
+      }));
+      const rebound = coworkers.bindSession("ws_alpha", "account_alpha", "ses_alpha", {
+        coworkerId: profile.id,
+        coworkerRevision: updated.revision,
+        expectedRevision: binding.revision,
+      });
+      expect(rebound.revision).toBe(binding.revision + 1);
+      expect(() => coworkers.unbindSession("ws_alpha", "account_alpha", "ses_alpha", binding.revision))
+        .toThrow(new MatterhornCoworkerError("coworker_revision_conflict"));
+    } finally {
+      store.close();
+    }
+  });
+
   test("detects resource-scope mutation when durable state is reopened", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-resource-integrity-"));
     roots.push(root);
     const path = join(root, "coworkers.db");
-    const store = new MatterhornCoworkerStore(path);
+    const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
     const coworkers = new MatterhornCoworkers({
       store,
       policyVersion: "coworker-policy-1",
@@ -545,17 +751,158 @@ describe("durable crypto coworkers", () => {
       .get() as { scope_json: string };
     const tampered = JSON.parse(row.scope_json) as Record<string, unknown>;
     tampered.memories = [];
-    database.query("UPDATE crypto_coworker_resource_scopes SET scope_json = ?")
-      .run(JSON.stringify(tampered));
+    database.query("UPDATE crypto_coworker_resource_scopes SET scope_json = ?, authority_seal = ?")
+      .run(JSON.stringify(tampered), FORGED_AUTHORITY_SEAL);
     database.close();
 
-    const reopenedStore = new MatterhornCoworkerStore(path);
-    try {
-      const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
-      expect(() => reopened.getResourceScope("ws_alpha", "account_alpha", profile.id))
+    expect(() => new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET))
+      .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+  });
+
+  test("rejects valid-shaped restored execution-state mutation and wrong-key restoration", () => {
+    const targets = ["profile", "working_state", "resource_scope", "session_binding"] as const;
+    for (const target of targets) {
+      const root = mkdtempSync(join(tmpdir(), `matterhorn-coworker-${target}-seal-`));
+      roots.push(root);
+      const path = join(root, "coworkers.db");
+      const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+      const coworkers = new MatterhornCoworkers({
+        store,
+        policyVersion: "coworker-policy-1",
+        now: () => new Date(NOW),
+        id: () => "cw_authority_state",
+      });
+      const profile = coworkers.create("ws_alpha", "account_alpha", input());
+      coworkers.setWorkingState("ws_alpha", "account_alpha", profile.id, workingStateInput());
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      coworkers.bindSession("ws_alpha", "account_alpha", "ses_authority_state", {
+        coworkerId: profile.id,
+        coworkerRevision: profile.revision,
+        expectedRevision: 0,
+      });
+      store.close();
+
+      const database = new Database(path);
+      if (target === "profile") {
+        const row = database.query("SELECT profile_json FROM crypto_coworkers LIMIT 1")
+          .get() as { profile_json: string };
+        const payload = JSON.parse(row.profile_json) as Record<string, unknown>;
+        payload.policyVersion = "attacker-policy";
+        database.query(`
+          UPDATE crypto_coworkers
+          SET policy_version = 'attacker-policy', profile_json = ?, authority_seal = ?
+        `).run(JSON.stringify(payload), FORGED_AUTHORITY_SEAL);
+      } else if (target === "working_state") {
+        const row = database.query("SELECT state_json FROM crypto_coworker_working_state LIMIT 1")
+          .get() as { state_json: string };
+        const payload = JSON.parse(row.state_json) as Record<string, any>;
+        payload.decisions[0].summary = "Trust a restored decision that the user never approved.";
+        database.query(`
+          UPDATE crypto_coworker_working_state SET state_json = ?, authority_seal = ?
+        `).run(JSON.stringify(payload), FORGED_AUTHORITY_SEAL);
+      } else if (target === "resource_scope") {
+        const row = database.query("SELECT scope_json FROM crypto_coworker_resource_scopes LIMIT 1")
+          .get() as { scope_json: string };
+        const payload = JSON.parse(row.scope_json) as Record<string, any>;
+        payload.connections[0].actionIds = ["sui_transfer_prepare"];
+        payload.scopeHash = createHash("sha256").update(JSON.stringify({
+          workspaceId: payload.workspaceId,
+          ownerId: payload.ownerId,
+          coworkerId: payload.coworkerId,
+          profileRevision: payload.profileRevision,
+          agentFiles: payload.agentFiles,
+          memories: payload.memories,
+          connections: payload.connections,
+          privacy: payload.privacy,
+        })).digest("hex");
+        database.query(`
+          UPDATE crypto_coworker_resource_scopes
+          SET scope_hash = ?, scope_json = ?, authority_seal = ?
+        `).run(payload.scopeHash, JSON.stringify(payload), FORGED_AUTHORITY_SEAL);
+      } else {
+        database.query(`
+          UPDATE crypto_coworker_session_bindings
+          SET resource_scope_hash = ?, authority_seal = ?
+        `).run("f".repeat(64), FORGED_AUTHORITY_SEAL);
+      }
+      database.close();
+
+      expect(() => new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET))
         .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+    }
+
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-wrong-state-key-"));
+    roots.push(root);
+    const path = join(root, "coworkers.db");
+    const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    const coworkers = new MatterhornCoworkers({ store, policyVersion: "coworker-policy-1", id: () => "cw_wrong_key" });
+    coworkers.create("ws_alpha", "account_alpha", input());
+    store.close();
+    expect(() => new MatterhornCoworkerStore(path, "different-coworker-integrity-secret-at-least-32-bytes"))
+      .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+  });
+
+  test("seals a structurally valid legacy coworker profile during one-time migration", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-profile-migration-"));
+    roots.push(root);
+    const sourceStore = new MatterhornCoworkerStore(join(root, "source.db"), COWORKER_INTEGRITY_SECRET);
+    const source = new MatterhornCoworkers({
+      store: sourceStore,
+      policyVersion: "coworker-policy-1",
+      now: () => new Date(NOW),
+      id: () => "cw_legacy_profile",
+    });
+    const profile = source.create("ws_alpha", "account_alpha", input());
+    sourceStore.close();
+
+    const path = join(root, "legacy.db");
+    const legacy = new Database(path);
+    legacy.exec(`
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE crypto_coworkers (
+        workspace_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        coworker_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        state TEXT NOT NULL,
+        policy_version TEXT NOT NULL,
+        profile_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, owner_id, coworker_id)
+      );
+    `);
+    legacy.query(`
+      INSERT INTO crypto_coworkers(
+        workspace_id, owner_id, coworker_id, revision, state,
+        policy_version, profile_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      profile.workspaceId,
+      profile.ownerId,
+      profile.id,
+      profile.revision,
+      profile.state,
+      profile.policyVersion,
+      JSON.stringify(profile),
+      profile.createdAt,
+      profile.updatedAt,
+    );
+    legacy.close();
+
+    const migrated = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    try {
+      expect(migrated.get(profile.workspaceId, profile.ownerId, profile.id)).toEqual(profile);
+      const database = new Database(path, { readonly: true });
+      try {
+        const row = database.query("SELECT authority_seal FROM crypto_coworkers LIMIT 1")
+          .get() as { authority_seal: string };
+        expect(row.authority_seal).toMatch(/^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}$/);
+      } finally {
+        database.close();
+      }
     } finally {
-      reopenedStore.close();
+      migrated.close();
     }
   });
 
@@ -570,7 +917,7 @@ describe("durable crypto coworkers", () => {
         expectedRevision: created.revision,
         decisions: [{
           ...workingStateInput().decisions[0]!,
-          summary: "Store this private key in the coworker state.",
+          summary: `suiprivkey1${"q".repeat(58)}`,
         }],
       }))).toThrow(new MatterhornCoworkerError("coworker_working_state_invalid"));
       expect(() => coworkers.setWorkingState("ws_alpha", "account_alpha", profile.id, workingStateInput({
@@ -634,7 +981,7 @@ describe("durable crypto coworkers", () => {
       expect(() => coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput({ name: "Second watch" })))
         .toThrow(new MatterhornCoworkerError("coworker_watch_limit"));
 
-      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+      const reopenedStore = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
       try {
         const reopened = new MatterhornCoworkers({ store: reopenedStore, policyVersion: "coworker-policy-1" });
         expect(reopened.getWatch("ws_alpha", "account_alpha", profile.id, watch.id)?.conditions[0]?.operator)
@@ -735,6 +1082,7 @@ describe("durable crypto coworkers", () => {
         watchInput({ budgets: { ...watchInput().budgets, maxReadCallsPerCheck: 13 } }),
         watchInput({ schedule: { intervalMs: 1_000, maxChecksPerDay: 1_000 } }),
         watchInput({ parameters: { privateKey: "secret material" } }),
+        watchInput({ parameters: { note: `suiprivkey1${"r".repeat(58)}` } }),
         watchInput({
           conditions: [{ id: "unsafe_hash", metric: "matterhorn_result_hash", operator: "eq", value: "attacker" }],
         }),
@@ -746,6 +1094,185 @@ describe("durable crypto coworkers", () => {
       expect(coworkers.listWatches("ws_alpha", "account_alpha", profile.id)).toEqual([]);
     } finally {
       store.close();
+    }
+  });
+
+  test("rejects secret-shaped values returned by a scheduled check", () => {
+    const { store, coworkers } = fixture();
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      const [claimed] = coworkers.claimDueWatches(new Date("2026-09-01T12:05:00.000Z"));
+
+      expect(() => coworkers.completeWatchCheck(claimed!, {
+        checkedAt: new Date("2026-09-01T12:05:01.000Z"),
+        resultHash: "f".repeat(64),
+        conditionValues: { balance_changed: `suiprivkey1${"s".repeat(58)}` },
+        inboxItem: null,
+      })).toThrow(new MatterhornCoworkerError("coworker_watch_invalid"));
+    } finally {
+      store.close();
+    }
+  });
+
+  test("rejects restored watch authority and inbox evidence mutation before use", () => {
+    for (const target of ["watch", "inbox"] as const) {
+      const root = mkdtempSync(join(tmpdir(), `matterhorn-coworker-${target}-seal-`));
+      roots.push(root);
+      const path = join(root, "coworkers.db");
+      const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+      const coworkers = new MatterhornCoworkers({
+        store,
+        policyVersion: "coworker-policy-1",
+        now: () => new Date(NOW),
+        id: () => "cw_restored_authority",
+        watchId: () => "cwatch_restored_authority",
+        inboxItemId: () => "cinbox_restored_authority",
+      });
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
+      store.close();
+
+      const database = new Database(path);
+      if (target === "watch") {
+        const row = database.query("SELECT watch_json FROM crypto_coworker_watches LIMIT 1")
+          .get() as { watch_json: string };
+        const payload = JSON.parse(row.watch_json) as Record<string, any>;
+        payload.parameters.address = "0x9999";
+        database.query(`
+          UPDATE crypto_coworker_watches SET watch_json = ?, authority_seal = ?
+        `).run(JSON.stringify(payload), FORGED_AUTHORITY_SEAL);
+      } else {
+        const row = database.query("SELECT item_json FROM crypto_coworker_inbox LIMIT 1")
+          .get() as { item_json: string };
+        const payload = JSON.parse(row.item_json) as Record<string, any>;
+        payload.summary = "This restored alert was not produced by the approved watch.";
+        database.query(`
+          UPDATE crypto_coworker_inbox SET item_json = ?, authority_seal = ?
+        `).run(JSON.stringify(payload), FORGED_AUTHORITY_SEAL);
+      }
+      database.close();
+
+      expect(() => new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET))
+        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
+    }
+  });
+
+  test("seals structurally valid legacy watch authority and inbox evidence during migration", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-watch-migration-"));
+    roots.push(root);
+    const path = join(root, "coworkers.db");
+    const sourceStore = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    const source = new MatterhornCoworkers({
+      store: sourceStore,
+      policyVersion: "coworker-policy-1",
+      now: () => new Date(NOW),
+      id: () => "cw_legacy_watch",
+      watchId: () => "cwatch_legacy_watch",
+      inboxItemId: () => "cinbox_legacy_watch",
+    });
+    const profile = source.create("ws_alpha", "account_alpha", input({
+      automaticAuthorities: ["read", "watch"],
+      limits: { ...input().limits, maxActiveWatches: 1 },
+    }));
+    source.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+    const watch = source.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+    const item = source.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
+    sourceStore.close();
+
+    const legacy = new Database(path);
+    legacy.exec(`
+      DROP TRIGGER crypto_coworker_watch_seal_insert;
+      DROP TRIGGER crypto_coworker_watch_seal_update;
+      DROP TRIGGER crypto_coworker_inbox_seal_insert;
+      DROP TRIGGER crypto_coworker_inbox_seal_update;
+      ALTER TABLE crypto_coworker_watches DROP COLUMN authority_seal;
+      ALTER TABLE crypto_coworker_inbox DROP COLUMN authority_seal;
+    `);
+    legacy.close();
+
+    const migrated = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    try {
+      expect(migrated.getWatch("ws_alpha", "account_alpha", profile.id, watch.id)).toEqual(watch);
+      expect(migrated.getInboxItem("ws_alpha", "account_alpha", profile.id, item.id)).toEqual(item);
+      const database = new Database(path, { readonly: true });
+      try {
+        const migratedWatch = database.query("SELECT authority_seal FROM crypto_coworker_watches LIMIT 1")
+          .get() as { authority_seal: string };
+        const migratedItem = database.query("SELECT authority_seal FROM crypto_coworker_inbox LIMIT 1")
+          .get() as { authority_seal: string };
+        expect(migratedWatch.authority_seal).toMatch(/^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}$/);
+        expect(migratedItem.authority_seal).toMatch(/^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}$/);
+      } finally {
+        database.close();
+      }
+    } finally {
+      migrated.close();
+    }
+  });
+
+  test("rejects secret-bearing legacy watch authority and inbox evidence instead of sealing it", () => {
+    for (const target of ["watch", "inbox"] as const) {
+      const root = mkdtempSync(join(tmpdir(), `matterhorn-coworker-legacy-${target}-secret-`));
+      roots.push(root);
+      const path = join(root, "coworkers.db");
+      const sourceStore = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+      const source = new MatterhornCoworkers({
+        store: sourceStore,
+        policyVersion: "coworker-policy-1",
+        now: () => new Date(NOW),
+        id: () => "cw_legacy_secret",
+        watchId: () => "cwatch_legacy_secret",
+        inboxItemId: () => "cinbox_legacy_secret",
+      });
+      const profile = source.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      source.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      const watch = source.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      source.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
+      sourceStore.close();
+
+      const legacy = new Database(path);
+      if (target === "watch") {
+        legacy.exec(`
+          DROP TRIGGER crypto_coworker_watch_seal_insert;
+          DROP TRIGGER crypto_coworker_watch_seal_update;
+          ALTER TABLE crypto_coworker_watches DROP COLUMN authority_seal;
+        `);
+        const row = legacy.query("SELECT watch_json FROM crypto_coworker_watches LIMIT 1")
+          .get() as { watch_json: string };
+        const payload = JSON.parse(row.watch_json) as Record<string, any>;
+        payload.parameters.note = `suiprivkey1${"t".repeat(58)}`;
+        legacy.query("UPDATE crypto_coworker_watches SET watch_json = ?")
+          .run(JSON.stringify(payload));
+      } else {
+        legacy.exec(`
+          DROP TRIGGER crypto_coworker_inbox_seal_insert;
+          DROP TRIGGER crypto_coworker_inbox_seal_update;
+          ALTER TABLE crypto_coworker_inbox DROP COLUMN authority_seal;
+        `);
+        const row = legacy.query("SELECT item_json FROM crypto_coworker_inbox LIMIT 1")
+          .get() as { item_json: string };
+        const payload = JSON.parse(row.item_json) as Record<string, any>;
+        payload.summary = `suiprivkey1${"t".repeat(58)}`;
+        legacy.query("UPDATE crypto_coworker_inbox SET item_json = ?")
+          .run(JSON.stringify(payload));
+      }
+      legacy.close();
+
+      expect(() => new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET))
+        .toThrow(new MatterhornCoworkerStoreError("coworker_state_corrupt"));
     }
   });
 
@@ -804,6 +1331,8 @@ describe("durable crypto coworkers", () => {
       expect(JSON.stringify(item)).not.toMatch(/sign|submit|relay|broadcast|private.?key/i);
       expect(coworkers.listInbox({ workspaceId: "ws_alpha", ownerId: "account_alpha", coworkerId: profile.id }))
         .toHaveLength(1);
+      expect(coworkers.listInboxSummaries("ws_alpha", "account_alpha"))
+        .toEqual([{ coworkerId: profile.id, unreadCount: 1, latestUnreadAt: NOW }]);
       expect(() => coworkers.listInbox({ workspaceId: "ws_alpha", ownerId: "account_beta", coworkerId: profile.id }))
         .toThrow(new MatterhornCoworkerError("coworker_not_found"));
       const read = coworkers.transitionInboxItem(
@@ -815,6 +1344,7 @@ describe("durable crypto coworkers", () => {
         "unread",
       );
       expect(read.state).toBe("read");
+      expect(coworkers.listInboxSummaries("ws_alpha", "account_alpha")).toEqual([]);
       expect(() => coworkers.transitionInboxItem(
         "ws_alpha",
         "account_alpha",
@@ -824,7 +1354,7 @@ describe("durable crypto coworkers", () => {
         "unread",
       )).toThrow(new MatterhornCoworkerError("coworker_inbox_state_conflict"));
       expect(() => coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id, {
-        summary: "Store this private key in the alert.",
+        summary: `suiprivkey1${"u".repeat(58)}`,
       }))).toThrow(new MatterhornCoworkerError("coworker_inbox_item_invalid"));
       expect(() => coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id, {
         budgetImpact: { readCallsConsumed: 2, modelTokensConsumed: 0, costMicros: 1_000 },
@@ -838,10 +1368,52 @@ describe("durable crypto coworkers", () => {
     }
   });
 
+  test("prunes only authenticated inbox evidence beyond the 500-item tenant cap", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-inbox-pruning-"));
+    roots.push(root);
+    const path = join(root, "coworkers.db");
+    const store = new MatterhornCoworkerStore(path, COWORKER_INTEGRITY_SECRET);
+    let itemSequence = 0;
+    const coworkers = new MatterhornCoworkers({
+      store,
+      policyVersion: "coworker-policy-1",
+      now: () => new Date(NOW),
+      id: () => "cw_inbox_pruning",
+      watchId: () => "cwatch_inbox_pruning",
+      inboxItemId: () => `cinbox_prune_${String(++itemSequence).padStart(4, "0")}`,
+    });
+    try {
+      const profile = coworkers.create("ws_alpha", "account_alpha", input({
+        automaticAuthorities: ["read", "watch"],
+        limits: { ...input().limits, maxActiveWatches: 1 },
+      }));
+      coworkers.setResourceScope("ws_alpha", "account_alpha", profile.id, watchResourceScopeInput());
+      const watch = coworkers.createWatch("ws_alpha", "account_alpha", profile.id, watchInput());
+      for (let index = 0; index < 501; index += 1) {
+        coworkers.createInboxItem("ws_alpha", "account_alpha", profile.id, inboxInput(watch.id));
+      }
+
+      expect(store.getInboxItem("ws_alpha", "account_alpha", profile.id, "cinbox_prune_0001")).toBeNull();
+      expect(store.getInboxItem("ws_alpha", "account_alpha", profile.id, "cinbox_prune_0501")).not.toBeNull();
+      const database = new Database(path, { readonly: true });
+      try {
+        const row = database.query(`
+          SELECT COUNT(*) AS count FROM crypto_coworker_inbox
+          WHERE workspace_id = ? AND owner_id = ? AND coworker_id = ?
+        `).get("ws_alpha", "account_alpha", profile.id) as { count: number };
+        expect(row.count).toBe(500);
+      } finally {
+        database.close();
+      }
+    } finally {
+      store.close();
+    }
+  });
+
   test("stops scheduled checks at claim and completion boundaries after invite revocation", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-access-watch-"));
     roots.push(root);
-    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+    const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
     const access = new MatterhornCoworkerAccess({ store, now: () => new Date(NOW) });
     const invite = access.issueInvite();
     access.accept("account_alpha", invite.token);

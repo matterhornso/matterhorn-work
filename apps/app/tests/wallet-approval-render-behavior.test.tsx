@@ -12,18 +12,20 @@ function renderApproval({
   connectedChainId,
   requestedChainId,
   value,
+  data,
   maxPerTransactionUSD = 1_000,
 }: {
   connectedChainId: number;
   requestedChainId: number;
   value: string;
+  data?: string;
   maxPerTransactionUSD?: number;
 }) {
   const store = createWalletStore();
   store.setConnected(CONNECTED, connectedChainId, "Mock wallet");
   store.setMaxPerTransactionUSD(maxPerTransactionUSD);
   store.setMaxDailySpendUSD(10_000);
-  store.requestApproval(TARGET, value, undefined, requestedChainId, "render_test", "low");
+  store.requestApproval(TARGET, value, data, requestedChainId, "render_test", "low");
 
   return renderToStaticMarkup(
     <TransactionApproval
@@ -97,6 +99,25 @@ describe("Wallet approval rendered behavior", () => {
     expect(html).not.toContain("50000000000000000 ETH");
     expect(html).toContain("disabled");
     expect(html).toContain("Blocked");
+  });
+
+  test("renders a plain wallet-review hierarchy with technical contract data collapsed", () => {
+    const html = renderApproval({
+      connectedChainId: 84532,
+      requestedChainId: 84532,
+      value: "0",
+      data: "0xa9059cbb00000000000000000000000022222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000001",
+    });
+
+    expect(html).toContain("Review wallet action");
+    expect(html).toContain("Nothing moves until you continue in your wallet");
+    expect(html).toContain("Recipient");
+    expect(html).toContain("Contract details");
+    expect(html).toContain("Safety check");
+    expect(html).toContain("Show technical data");
+    expect(html).toContain("Blocked");
+    expect(html).not.toContain("Transaction Approval");
+    expect(html).not.toContain(">Calldata<");
   });
 
   test("blocks Base mainnet by default until mainnet is explicitly enabled", () => {

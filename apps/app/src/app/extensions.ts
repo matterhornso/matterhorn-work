@@ -190,7 +190,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     icon: { src: "/matterhorn-wallet.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. " },
     setup: {
-      instructions: "Protocol workflows are available as separate Bittensor, Hyperliquid, and Polymarket desks in the session rail. Agent, chat, and MCP routes prepare reads, previews, and drafts only. Hyperliquid orders can be submitted only from the dedicated web ticket after exact review and connected-wallet approval; Bittensor and Polymarket actions remain external handoffs.",
+      instructions: "Protocol workflows are available as separate Bittensor, Hyperliquid, and Polymarket desks in the session rail. Agent, chat, and MCP routes prepare reads, previews, and drafts only. Supported actions continue to a dedicated web ticket for exact connected-wallet review; unsupported actions stay unavailable.",
       primaryCta: "Open protocol desks",
     },
     resources: [
@@ -242,7 +242,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     icon: { src: "/assets/desks/bittensor/logo-dark.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. For Bittensor, " },
     setup: {
-      instructions: "Bittensor support is public-read and external-signer-first. Paste public SS58 coldkeys only; never paste seed phrases, private keys, or mnemonics.",
+      instructions: "Bittensor supports public reads and connected-wallet review. Paste public SS58 addresses only; never paste seed phrases, private keys, or mnemonics.",
       primaryCta: "Open Bittensor desk",
     },
     resources: [

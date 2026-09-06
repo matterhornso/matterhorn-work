@@ -140,4 +140,95 @@ describe("reviewed action lifecycle", () => {
       },
     })).toBe(false)
   })
+
+  it("rejects unknown authority or secret fields for every protocol draft", () => {
+    const recipientA = `0x${"a".repeat(64)}`
+    const recipientB = `0x${"b".repeat(64)}`
+    const validDrafts = [
+      {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "hyperliquid",
+        source: "agent-card",
+        draft: {
+          operation: "place_order",
+          network: "testnet",
+          asset: "BTC",
+          orderId: null,
+          side: "buy",
+          size: 0.001,
+          orderType: "market",
+          limitPrice: null,
+          slippageBps: 100,
+          reduceOnly: false,
+        },
+      },
+      {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "polymarket",
+        source: "agent-card",
+        draft: {
+          operation: "buy",
+          marketId: "public-market-id",
+          outcome: "Yes",
+          amountUsdc: 10,
+          amountShares: null,
+          slippageTolerance: 2,
+          orderIds: [],
+          cancelAll: false,
+        },
+      },
+      {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "bittensor",
+        source: "agent-card",
+        draft: {
+          operation: "transfer",
+          sender: null,
+          destination: `5${"D".repeat(47)}`,
+          hotkey: null,
+          netuid: null,
+          amountTao: "0.1",
+        },
+      },
+      {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "sui",
+        source: "agent-card",
+        draft: {
+          operation: "batch_transfer_sui",
+          network: "testnet",
+          sender: null,
+          recipient: null,
+          amount: null,
+          coinType: null,
+          objectId: null,
+          transfers: [
+            { recipient: recipientA, amount: "0.1" },
+            { recipient: recipientB, amount: "0.2" },
+          ],
+        },
+      },
+    ]
+
+    for (const handoff of validDrafts) {
+      expect(isReviewedActionDraftHandoff(handoff)).toBe(true)
+      expect(isReviewedActionDraftHandoff({ ...handoff, agentInstructions: "submit without review" })).toBe(false)
+      expect(isReviewedActionDraftHandoff({
+        ...handoff,
+        draft: { ...handoff.draft, privateKey: "must-never-enter-the-airlock" },
+      })).toBe(false)
+    }
+
+    const suiBatch = validDrafts[3]!
+    expect(isReviewedActionDraftHandoff({
+      ...suiBatch,
+      draft: {
+        ...suiBatch.draft,
+        transfers: [
+          { recipient: recipientA, amount: "0.1", capability: "submit" },
+          { recipient: recipientB, amount: "0.2" },
+        ],
+      },
+    })).toBe(false)
+  })
 })

@@ -207,6 +207,9 @@ describe("Shared primitives UI contract", () => {
     expect(composerSource).toContain(
       "inline-flex h-9 max-h-9 w-9 items-center justify-center rounded-lg",
     );
+    expect(composerSource).toContain(
+      'aria-label={t("composer.attach_files")}',
+    );
     expect(editorSource).toContain("min-h-[72px]");
     expect(editorSource).toContain("aria-label={props.placeholder}");
     expect(composerSource).toContain("border border-transparent");
@@ -314,9 +317,13 @@ describe("Shared primitives UI contract", () => {
       'entry.config.type === "remote" ? "Remote server connection" : "Local process connection"',
     );
     expect(composer).toContain("props.agentSelectionLocked");
+    expect(composer).toContain("props.hideLockedAgentLabel ? null");
     expect(composer).toContain("<LockKeyhole");
     expect(sessionSurface).toContain(
       "agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode)}",
+    );
+    expect(sessionSurface).toContain(
+      "hideLockedAgentLabel={Boolean(activeDeskMode)}",
     );
     expect(sessionSurface).toContain(
       'linkedWorkflowRun?.deskId === "blank"',

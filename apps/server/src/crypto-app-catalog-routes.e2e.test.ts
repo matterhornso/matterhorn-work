@@ -26,6 +26,9 @@ const ENV_KEYS = [
   "MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON",
   "MATTERHORN_CRYPTO_APP_REGISTRY_DB",
   "MATTERHORN_CRYPTO_APP_CONNECTION_DB",
+  "MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET",
+  "MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET",
+  "MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_MANAGED_CREDENTIALS_JSON",
   "MATTERHORN_CRYPTO_APP_SECRET_HYPERLIQUID_TEST",
   "MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET",
@@ -34,6 +37,7 @@ const ENV_KEYS = [
   "MATTERHORN_COWORKER_MODE",
   "MATTERHORN_COWORKER_POLICY_VERSION",
   "MATTERHORN_COWORKER_DB",
+  "MATTERHORN_COWORKER_INTEGRITY_SECRET",
   "MATTERHORN_WORK_DATA_DIR",
 ] as const;
 const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -126,9 +130,17 @@ function configureCatalog(root: string) {
   }]);
   process.env.MATTERHORN_CRYPTO_APP_REGISTRY_DB = registryPath;
   process.env.MATTERHORN_CRYPTO_APP_CONNECTION_DB = join(root, "connections.db");
+  process.env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET =
+    "catalog-route-connection-integrity-secret-at-least-32-bytes";
+  process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET =
+    "catalog-route-developer-integrity-secret-at-least-32-bytes";
+  process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET =
+    "catalog-route-operational-integrity-secret-at-least-32-bytes";
   process.env.MATTERHORN_COWORKER_MODE = "internal";
   process.env.MATTERHORN_COWORKER_POLICY_VERSION = "coworker-policy-1";
   process.env.MATTERHORN_COWORKER_DB = join(root, "coworkers.db");
+  process.env.MATTERHORN_COWORKER_INTEGRITY_SECRET =
+    "catalog-route-coworker-integrity-secret-at-least-32-bytes";
   const manifests = buildMatterhornFirstPartyTestnetManifests({
     publisherId: "matterhorn",
     publisherKeyId: "publisher-1",
@@ -142,6 +154,7 @@ function configureCatalog(root: string) {
   const authenticatedManifest = manifests.find((manifest) => manifest.appId === "matterhorn.hyperliquid-testnet");
   if (!authenticatedManifest) throw new Error("Hyperliquid test manifest is required.");
   authenticatedManifest.authentication = { type: "api_key_vault", scopes: [] };
+  for (const action of authenticatedManifest.actions) delete action.cachePolicy;
   authenticatedManifest.publisher.signature = sign(
     null,
     Buffer.from(canonicalCryptoAppManifestPayload(authenticatedManifest)),

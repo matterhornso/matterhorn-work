@@ -2,6 +2,7 @@ import type {
   MatterhornCryptoAppResult,
   MatterhornCryptoIntent,
 } from "@matterhorn-work/types/crypto-coworkers";
+import type { MatterhornAgentJurisdictionPolicyContext } from "@matterhorn-work/types/guarded-agent-runtime";
 import type { MatterhornWalletSafetyPolicy } from "@matterhorn-work/types/wallet-safety-policy";
 
 import type { MatterhornPendingCryptoIntent } from "./crypto-pending-intent-store.js";
@@ -12,6 +13,10 @@ import type {
   MatterhornTransactionPolicyScope,
 } from "./crypto-transaction-policy.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
+import {
+  MATTERHORN_POLYMARKET_JURISDICTION_POLICY_HASH,
+  MATTERHORN_POLYMARKET_JURISDICTION_POLICY_VERSION,
+} from "./polymarket-jurisdiction-policy.js";
 
 type NonCoworkerPolicyLayers = Omit<MatterhornTransactionPolicyLayers, "coworker">;
 
@@ -32,10 +37,16 @@ type FactsInput = {
   adapterResult: MatterhornCryptoAppResult;
   intent: MatterhornCryptoIntent;
   existingIntents: readonly MatterhornPendingCryptoIntent[];
+  jurisdictionPolicy?: MatterhornAgentJurisdictionPolicyContext | null;
   now?: Date;
 };
 
 const ACTIVE_BUDGET_STATES = new Set(["wallet_review", "wallet_approved", "submitted", "confirmed"]);
+const BITTENSOR_TESTNET_PREPARE_ACTIONS = new Set([
+  "bittensor_prepare_transfer",
+  "bittensor_prepare_stake",
+  "bittensor_prepare_unstake",
+]);
 
 function limits(input: Partial<MatterhornTransactionPolicyLayer["limits"]> = {}): MatterhornTransactionPolicyLayer["limits"] {
   return {
@@ -90,7 +101,19 @@ function supportedFirstPartyAction(input: Pick<PolicyInput, "appId" | "actionId"
       && input.network === "sui:testnet")
     || (input.appId === "matterhorn.hyperliquid-testnet"
       && input.actionId === "hyperliquid_preview_order"
-      && input.network === "hyperliquid:testnet");
+      && input.network === "hyperliquid:testnet")
+    || (input.appId === "matterhorn.bittensor-testnet"
+      && BITTENSOR_TESTNET_PREPARE_ACTIONS.has(input.actionId)
+      && input.network === "bittensor:test")
+    || (input.appId === "matterhorn.polymarket-wallet-preview"
+      && input.actionId === "polymarket_preview_order"
+      && input.network === "polymarket:polygon");
+}
+
+function certifiedTestNetwork(input: Pick<PolicyInput, "appId" | "network">): boolean {
+  return (input.appId === "matterhorn.sui-testnet" && input.network === "sui:testnet")
+    || (input.appId === "matterhorn.hyperliquid-testnet" && input.network === "hyperliquid:testnet")
+    || (input.appId === "matterhorn.bittensor-testnet" && input.network === "bittensor:test");
 }
 
 /**
@@ -111,8 +134,10 @@ export function buildMatterhornRuntimeTransactionPolicyLayers(input: PolicyInput
     actionId: input.actionId,
     network: input.network,
   };
-  const appAssets = input.appId === "matterhorn.sui-testnet" ? ["SUI"] : null;
-  const mainnetDenied = !input.walletPolicy.mainnetEnabled && !input.network.endsWith(":testnet");
+  const appAssets = input.appId === "matterhorn.sui-testnet"
+    ? ["SUI"]
+    : input.appId === "matterhorn.bittensor-testnet" ? ["TAO"] : null;
+  const mainnetDenied = !input.walletPolicy.mainnetEnabled && !certifiedTestNetwork(input);
   return {
     platform: layer({
       ...common,
@@ -219,6 +244,20 @@ function historyFacts(
   return { dailySpendUsdBefore, weeklySpendUsdBefore, transactionsLastHour, transactionsToday };
 }
 
+function currentPolymarketJurisdictionAllows(
+  context: MatterhornAgentJurisdictionPolicyContext | null | undefined,
+  now: Date,
+): boolean {
+  return Boolean(context
+    && context.policyVersion === MATTERHORN_POLYMARKET_JURISDICTION_POLICY_VERSION
+    && context.policyHash === MATTERHORN_POLYMARKET_JURISDICTION_POLICY_HASH
+    && context.polymarketOpenPositionAllowed === true
+    && /^[a-f0-9]{64}$/.test(context.evidenceHash)
+    && /^[a-f0-9]{64}$/.test(context.decisionHash)
+    && Number.isFinite(Date.parse(context.validUntil))
+    && Date.parse(context.validUntil) > now.getTime());
+}
+
 /**
  * Resolves only deterministic facts emitted by the pinned first-party
  * executors. Missing, contradictory, or third-party facts remain unavailable,
@@ -236,6 +275,13 @@ export function resolveMatterhornRuntimeTransactionFacts(input: FactsInput): Mat
     && input.intent.network === "sui:testnet") {
     // Sui testnet assets have no cash value. A positive reserve requirement
     // still fails closed because no trusted USD reserve fact exists.
+    notionalUsd = 0;
+  } else if (result
+    && input.intent.appId === "matterhorn.bittensor-testnet"
+    && BITTENSOR_TESTNET_PREPARE_ACTIONS.has(input.intent.actionId)
+    && input.intent.network === "bittensor:test") {
+    // Testnet TAO has no cash value. As with Sui testnet, reserve limits still
+    // fail closed because this boundary does not invent a trusted USD reserve.
     notionalUsd = 0;
   } else if (result
     && input.intent.appId === "matterhorn.hyperliquid-testnet"
@@ -261,17 +307,43 @@ export function resolveMatterhornRuntimeTransactionFacts(input: FactsInput): Mat
         leverage = reportedLeverage;
       }
     }
+  } else if (result
+    && input.intent.appId === "matterhorn.polymarket-wallet-preview"
+    && input.intent.actionId === "polymarket_preview_order"
+    && input.intent.network === "polymarket:polygon") {
+    const side = result.side;
+    const maximumSpend = finiteNonNegative(result.maximumSpendUsdc);
+    const estimatedProceeds = finiteNonNegative(result.estimatedProceedsUsdc);
+    const requestedShares = finiteNonNegative(result.amountShares);
+    const requestedUsdc = finiteNonNegative(result.amountUsdc);
+    if (side === "buy"
+      && maximumSpend !== null
+      && requestedUsdc !== null
+      && approximatelyEqual(maximumSpend, requestedUsdc)) {
+      notionalUsd = maximumSpend;
+    } else if (side === "sell"
+      && estimatedProceeds !== null
+      && requestedShares !== null
+      && estimatedProceeds > 0) {
+      // Counting expected sale proceeds against the per-action and daily
+      // limits is conservative and avoids granting unbounded financial value
+      // to a sell action merely because it does not spend collateral.
+      notionalUsd = estimatedProceeds;
+    }
   }
+  const supported = supportedFirstPartyAction({
+    appId: input.intent.appId,
+    actionId: input.intent.actionId,
+    network: input.intent.network,
+  });
+  const jurisdictionAllowed = input.intent.protocol !== "polymarket"
+    || currentPolymarketJurisdictionAllows(input.jurisdictionPolicy, now);
   return {
     notionalUsd,
     ...historyFacts(input.existingIntents, now),
     projectedReserveUsd,
     leverage,
     regionCode: null,
-    complianceAllowed: supportedFirstPartyAction({
-      appId: input.intent.appId,
-      actionId: input.intent.actionId,
-      network: input.intent.network,
-    }),
+    complianceAllowed: supported && jurisdictionAllowed,
   };
 }

@@ -69,14 +69,17 @@ describe("Milestone 3 AI work-state acceptance", () => {
 
   test("completed runs disclose privacy, usage, tools, Memory, and wallet reconciliation", () => {
     expect(surface).toContain("AgentRunReceiptDisclosure");
-    expect(receipt).toContain("receipt.privacy.dataCategories.join");
+    expect(receipt).toContain('.filter((category) => category !== "secret")');
+    expect(receipt).toContain(".map(privacyCategoryLabel)");
+    expect(receipt).toContain("sharedCategories.join");
     expect(receipt).toContain("receipt.privacy.redactionCount");
     expect(receipt).toContain("receipt.memory.readIds.length");
     expect(receipt).toContain("receipt.memory.writtenIds.length");
-    expect(receipt).toContain("receiptToolLabel");
+    expect(receipt).toContain("toolSummary");
     expect(receipt).toContain("tool.latencyMs");
     expect(receipt).toContain("tool.freshness");
     expect(receipt).toContain("receipt.usage.cacheWriteTokens");
     expect(receipt).toContain("action.publicReceipt");
+    expect(receipt).toContain("Technical details");
   });
 });

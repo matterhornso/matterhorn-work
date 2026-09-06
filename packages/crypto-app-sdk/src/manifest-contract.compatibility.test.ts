@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION as SERVER_MANIFEST_VERSION,
+  MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION as SERVER_OPENAPI_PROFILE_VERSION,
   type MatterhornCryptoAppAction as ServerAction,
   type MatterhornCryptoAppManifest as ServerManifest,
   validateMatterhornCryptoAppManifest,
@@ -9,6 +10,7 @@ import {
 
 import {
   MATTERHORN_CRYPTO_APP_MANIFEST_VERSION,
+  MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION,
   type MatterhornCryptoAppAction,
   type MatterhornCryptoAppManifest,
 } from "./manifest-contract.js";
@@ -29,6 +31,7 @@ describe("distributable manifest contract", () => {
     expect(localActionFitsServer).toBe(true);
     expect(serverActionFitsLocal).toBe(true);
     expect(MATTERHORN_CRYPTO_APP_MANIFEST_VERSION).toBe(SERVER_MANIFEST_VERSION);
+    expect(MATTERHORN_CRYPTO_APP_OPENAPI_PROFILE_VERSION).toBe(SERVER_OPENAPI_PROFILE_VERSION);
   });
 
   test("keeps model submission authority structurally impossible", () => {
@@ -56,6 +59,7 @@ describe("distributable manifest contract", () => {
         description: "Read one public Sui testnet balance.",
         access: "read",
         risk: "informational",
+        cachePolicy: "block_bound_public",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         outputProjectionSchema: { type: "object", properties: {}, additionalProperties: false },
         requiredScopes: [],

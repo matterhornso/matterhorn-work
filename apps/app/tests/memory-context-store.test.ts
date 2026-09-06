@@ -84,6 +84,7 @@ describe("session Memory context persistence", () => {
           record,
           { ...record, id: "mem_blocked", sensitivity: "forbidden_secret" },
           { ...record, id: "mem_key", body: { privateKey: "0x0123456789abcdef" } },
+          { ...record, id: "mem_sui_key", body: { value: `suiprivkey1${"q".repeat(58)}` } },
         ],
         updatedAt: "2026-08-15T00:00:00.000Z",
       },
@@ -93,6 +94,8 @@ describe("session Memory context persistence", () => {
     expect(raw).toContain("mem_qa");
     expect(raw).not.toContain("mem_blocked");
     expect(raw).not.toContain("mem_key");
+    expect(raw).not.toContain("mem_sui_key");
     expect(raw).not.toContain("privateKey");
+    expect(raw).not.toContain("suiprivkey1");
   });
 });

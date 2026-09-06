@@ -18,8 +18,19 @@ const SAFE_NAME = /^[^\u0000-\u001F\u007F/\\]{1,160}$/;
 const HASH = /^[a-f0-9]{64}$/;
 const SECRET_FILE_NAME = /(?:^|[._ -])(?:\.env|seed|mnemonic|keystore|wallet[._ -]?export|id_rsa|id_ed25519|private[._ -]?key)(?:$|[._ -])/i;
 const EXECUTABLE_FILE_NAME = /\.(?:app|bat|bin|cmd|com|dmg|exe|js|mjs|cjs|ps1|py|rb|sh|ts|tsx|wasm)$/i;
-const PEM_PRIVATE_KEY = /-----BEGIN (?:EC |OPENSSH |RSA )?PRIVATE KEY-----/i;
+const PEM_PRIVATE_KEY = /-----BEGIN (?:EC |ENCRYPTED |OPENSSH |RSA )?PRIVATE KEY-----/i;
 const RAW_PRIVATE_KEY = /\b(?:private[_\s-]?key|secret[_\s-]?key)\s*[:=]\s*(?:0x)?[a-f0-9]{64}\b/i;
+const BARE_HEX_PRIVATE_KEY = /^(?:0x)?[a-f0-9]{64}$/i;
+const HEX_32_BYTE_TOKEN = /\b(?:0x)?[a-f0-9]{64}\b/gi;
+const PUBLIC_HEX_CONTEXT = /"?(?:transaction|tx|block|object|receipt|content)?[ _-]*(?:hash|digest|address|account|checksum|sha-?256)"?\s*[:=]\s*["']?\s*$/i;
+const SUI_PRIVATE_KEY = /\bsuiprivkey1[0-9a-z]{40,}\b/i;
+const EXTENDED_PRIVATE_KEY = /\b(?:xprv|tprv|yprv|zprv|uprv|vprv|Yprv|Zprv|Uprv|Vprv)[1-9A-HJ-NP-Za-km-z]{60,}\b/;
+const BITCOIN_WIF_CANDIDATE = /\b[1-9A-HJ-NP-Za-km-z]{51,52}\b/g;
+const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const BASE58_DIGITS = new Map<string, number>();
+for (let index = 0; index < BASE58_ALPHABET.length; index += 1) {
+  BASE58_DIGITS.set(BASE58_ALPHABET[index], index);
+}
 const ALLOWED_MIME_TYPES = new Map<MatterhornAgentFileDescriptor["mimeType"], MatterhornAgentFileDescriptor["kind"]>([
   ["text/plain", "text"],
   ["text/markdown", "text"],
@@ -49,11 +60,129 @@ function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+function sha256Bytes(bytes: Uint8Array): Uint8Array {
+  return createHash("sha256").update(bytes).digest();
+}
+
 function decodeText(bytes: Uint8Array): string | null {
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
     return null;
+  }
+}
+
+function decodeBase58(value: string): Uint8Array | null {
+  let encoded = 0n;
+  for (const character of value) {
+    const digit = BASE58_DIGITS.get(character);
+    if (digit === undefined) return null;
+    encoded = (encoded * 58n) + BigInt(digit);
+  }
+  const decoded: number[] = [];
+  while (encoded > 0n) {
+    decoded.push(Number(encoded & 255n));
+    encoded >>= 8n;
+  }
+  decoded.reverse();
+  let leadingZeroes = 0;
+  while (value[leadingZeroes] === "1") leadingZeroes += 1;
+  return Uint8Array.from([...new Array<number>(leadingZeroes).fill(0), ...decoded]);
+}
+
+function isBitcoinWalletImportKey(value: string): boolean {
+  const decoded = decodeBase58(value);
+  if (!decoded || (decoded.byteLength !== 37 && decoded.byteLength !== 38)) return false;
+  const payloadLength = decoded.byteLength - 4;
+  if (decoded[0] !== 0x80 && decoded[0] !== 0xef) return false;
+  if (payloadLength === 34 && decoded[33] !== 0x01) return false;
+  const payload = decoded.subarray(0, payloadLength);
+  const expected = sha256Bytes(sha256Bytes(payload));
+  for (let index = 0; index < 4; index += 1) {
+    if (decoded[payloadLength + index] !== expected[index]) return false;
+  }
+  return true;
+}
+
+function isCanonicalBase64Bytes(value: string, byteLength: number): boolean {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value) || value.length % 4 !== 0) return false;
+  const decoded = Buffer.from(value, "base64");
+  return decoded.byteLength === byteLength && decoded.toString("base64") === value;
+}
+
+function isEthereumKeyStore(value: unknown): boolean {
+  if (!isRecord(value) || (value.version !== 3 && value.version !== "3") || typeof value.address !== "string") {
+    return false;
+  }
+  const crypto = isRecord(value.crypto) ? value.crypto : isRecord(value.Crypto) ? value.Crypto : null;
+  return Boolean(crypto)
+    && typeof crypto?.cipher === "string"
+    && typeof crypto.ciphertext === "string"
+    && typeof crypto.kdf === "string"
+    && typeof crypto.mac === "string";
+}
+
+function containsPrivateJsonKeyStructure(value: unknown): boolean {
+  const pending: unknown[] = [value];
+  let containersInspected = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (Array.isArray(current)) {
+      containersInspected += 1;
+      if (containersInspected > 4_096) return true;
+      if (current.length === 64
+        && current.every((entry) => Number.isInteger(entry) && entry >= 0 && entry <= 255)) {
+        return true;
+      }
+      if (current.length > 0
+        && current.every((entry) => typeof entry === "string")
+        && current.some((entry) => typeof entry === "string" && isCanonicalBase64Bytes(entry, 33))) {
+        return true;
+      }
+      for (const entry of current) {
+        if (Array.isArray(entry) || isRecord(entry)) pending.push(entry);
+      }
+      continue;
+    }
+    if (!isRecord(current)) continue;
+    containersInspected += 1;
+    if (containersInspected > 4_096) return true;
+    if (typeof current.kty === "string" && typeof current.d === "string" && current.d.length >= 16) return true;
+    if (isEthereumKeyStore(current)) return true;
+    for (const entry of Object.values(current)) {
+      if (Array.isArray(entry) || isRecord(entry)) pending.push(entry);
+    }
+  }
+  return false;
+}
+
+function containsUnlabelledHexKey(text: string): boolean {
+  for (const match of text.matchAll(HEX_32_BYTE_TOKEN)) {
+    const start = match.index ?? 0;
+    const context = text.slice(Math.max(0, start - 80), start);
+    if (!PUBLIC_HEX_CONTEXT.test(context)) return true;
+  }
+  return false;
+}
+
+function containsForbiddenAgentFileSecretMaterial(text: string): boolean {
+  const trimmed = text.trim();
+  if (containsForbiddenMemorySecretMaterial(text)
+    || PEM_PRIVATE_KEY.test(text)
+    || RAW_PRIVATE_KEY.test(text)
+    || BARE_HEX_PRIVATE_KEY.test(trimmed)
+    || containsUnlabelledHexKey(text)
+    || SUI_PRIVATE_KEY.test(text)
+    || EXTENDED_PRIVATE_KEY.test(text)) {
+    return true;
+  }
+  for (const candidate of text.match(BITCOIN_WIF_CANDIDATE) ?? []) {
+    if (isBitcoinWalletImportKey(candidate)) return true;
+  }
+  try {
+    return containsPrivateJsonKeyStructure(JSON.parse(text));
+  } catch {
+    return false;
   }
 }
 
@@ -112,9 +241,7 @@ export function scanMatterhornAgentFile(input: {
     ? decodeText(input.bytes)
     : null;
   if (text === null) issues.push("agent_file_text_decode_failed");
-  if (text !== null && (containsForbiddenMemorySecretMaterial(text)
-    || PEM_PRIVATE_KEY.test(text)
-    || RAW_PRIVATE_KEY.test(text))) {
+  if (text !== null && containsForbiddenAgentFileSecretMaterial(text)) {
     issues.push("agent_file_secret_content_blocked");
   }
   if (parsed.input?.mimeType === "application/json" && text !== null) {
@@ -181,9 +308,7 @@ export function compileMatterhornAgentFileContext(input: {
     throw new Error("agent_file_content_mismatch");
   }
   const decoded = decodeText(input.bytes);
-  if (decoded === null || containsForbiddenMemorySecretMaterial(decoded)
-    || PEM_PRIVATE_KEY.test(decoded)
-    || RAW_PRIVATE_KEY.test(decoded)) {
+  if (decoded === null || containsForbiddenAgentFileSecretMaterial(decoded)) {
     throw new Error("agent_file_content_blocked");
   }
   const quarantined = quarantineUntrustedContent(decoded);

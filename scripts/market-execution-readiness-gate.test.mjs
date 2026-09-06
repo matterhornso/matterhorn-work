@@ -22,7 +22,7 @@ const smoke = read("scripts/customer-ready-crypto-smoke.mjs");
 for (const required of [
   "MARKET_EXECUTION_READINESS_CONTROLS",
   "MarketExecutionReadinessChecklist",
-  "futureArchitecture: \"external_signer_only\"",
+  "futureArchitecture: \"connected_wallet_only\"",
   "liveSubmissionEnabled: boolean",
   "acceptsPrivateKeys: false",
   "acceptsApiSecrets: false",
@@ -36,8 +36,9 @@ for (const required of [
 for (const control of [
   "preview_hash_binding",
   "stale_preview_rejection",
-  "operator_confirmation",
-  "external_signer_handoff",
+  "policy_and_simulation",
+  "wallet_review",
+  "connected_wallet_only",
   "public_receipt_import",
   "audit_logging",
   "prompt_injection_rejection",
@@ -52,7 +53,7 @@ for (const required of [
   "Connected-Wallet Hyperliquid Execution",
   "MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED",
   "SUBMIT LIVE ORDER",
-  "Polymarket has no server submit route",
+  "Polymarket has no agent-facing server submit route",
   "Reject stale previews and hash mismatches",
   "Matterhorn stores only public receipt data",
 ]) {

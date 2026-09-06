@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -18,6 +18,7 @@ import type {
 } from "@matterhorn-work/types/crypto-coworkers";
 
 import { MatterhornAgentRunReceiptStore } from "./agent-run-receipts.js";
+import { cryptoAppEvidenceIdentity } from "./crypto-app-evidence-identity.js";
 import {
   compileCertifiedCryptoIntent,
   cryptoIntentToReviewedActionHandoffV2,
@@ -33,6 +34,12 @@ import type {
 } from "./crypto-evidence-sealer.js";
 import { sealMatterhornRunEvidence } from "./crypto-evidence-sealer.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
+import { runCryptoAppManifestConformance } from "./crypto-app-conformance.js";
+import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
+import { MatterhornCryptoAppRegistryStore } from "./crypto-app-registry-store.js";
+import { passingCryptoAppRuntimeReportForTest } from "./crypto-app-runtime-certification-test-support.js";
+import { buildMatterhornFirstPartyTestnetManifests } from "./first-party-crypto-apps.js";
 import type {
   MatterhornWalrusCertification,
   MatterhornWalrusEvidenceTransport,
@@ -56,13 +63,17 @@ const ENV_KEYS = [
   "MATTERHORN_COWORKER_MODE",
   "MATTERHORN_COWORKER_POLICY_VERSION",
   "MATTERHORN_COWORKER_DB",
+  "MATTERHORN_COWORKER_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_GATEWAY_MODE",
   "MATTERHORN_CRYPTO_APP_POLICY_VERSION",
   "MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON",
   "MATTERHORN_CRYPTO_APP_REGISTRY_DB",
   "MATTERHORN_CRYPTO_APP_CONNECTION_DB",
+  "MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_DEVELOPER_DB",
+  "MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_OPERATIONAL_DB",
+  "MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET",
   "MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET",
   "MATTERHORN_GUARDED_RUNTIME_MODE",
   "MATTERHORN_CAPABILITY_SIGNING_SECRET",
@@ -83,7 +94,7 @@ const priorEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
 const roots: string[] = [];
 const stops: Array<() => void | Promise<void>> = [];
 
-function config(port: number, root: string): ServerConfig {
+function config(port: number, root: string, opencodeBaseUrl?: string): ServerConfig {
   return {
     host: "127.0.0.1",
     port,
@@ -97,6 +108,7 @@ function config(port: number, root: string): ServerConfig {
       path: root,
       preset: "default",
       workspaceType: "local",
+      ...(opencodeBaseUrl ? { baseUrl: opencodeBaseUrl } : {}),
     }],
     authorizedRoots: [root],
     readOnly: false,
@@ -106,6 +118,7 @@ function config(port: number, root: string): ServerConfig {
     logFormat: "pretty",
     logRequests: false,
     reloadWatchers: false,
+    ...(opencodeBaseUrl ? { opencodeBaseUrl } : {}),
   } as ServerConfig;
 }
 
@@ -189,6 +202,8 @@ async function boot(
     walrus?: boolean;
     anchor?: boolean;
     anchorVerificationFailure?: boolean;
+    opencodeBaseUrl?: string;
+    seedCryptoApps?: boolean;
   } = {},
 ) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-coworker-routes-"));
@@ -204,6 +219,8 @@ async function boot(
   const coworkerDb = join(root, "coworkers.db");
   const guardedDb = join(root, "guarded-runtime.db");
   process.env.MATTERHORN_COWORKER_DB = coworkerDb;
+  process.env.MATTERHORN_COWORKER_INTEGRITY_SECRET =
+    "coworker-route-state-integrity-secret-at-least-32-bytes";
   process.env.MATTERHORN_GUARDED_RUNTIME_DB = guardedDb;
   process.env.MATTERHORN_CRYPTO_APP_GATEWAY_MODE = mode === "invite" ? "enforce" : "off";
   process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode === "invite" ? "enforce" : "off";
@@ -219,16 +236,67 @@ async function boot(
     }]);
     process.env.MATTERHORN_CRYPTO_APP_REGISTRY_DB = join(root, "crypto-app-registry.db");
     process.env.MATTERHORN_CRYPTO_APP_CONNECTION_DB = join(root, "crypto-app-connections.db");
+    process.env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET =
+      "coworker-route-connection-integrity-secret-at-least-32-bytes";
     process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB = join(root, "crypto-app-developers.db");
+    process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET =
+      "coworker-route-developer-integrity-secret-at-least-32-bytes";
     process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB = join(root, "crypto-app-operations.db");
+    process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET =
+      "coworker-route-operational-integrity-secret-at-least-32-bytes";
     process.env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET = "route-wallet-proof-secret-at-least-32-characters";
+    if (options.seedCryptoApps) {
+      const registryStore = new MatterhornCryptoAppRegistryStore(process.env.MATTERHORN_CRYPTO_APP_REGISTRY_DB);
+      try {
+        const registry = new MatterhornCryptoAppRegistry({
+          publisherKeys: [{
+            publisherId: "matterhorn",
+            keyId: "route-publisher-1",
+            algorithm: "ed25519",
+            publicKey: publisherKeys.publicKey,
+          }],
+          policyVersion: "crypto-app-policy-1",
+          store: registryStore,
+        });
+        const manifests = buildMatterhornFirstPartyTestnetManifests({
+          publisherId: "matterhorn",
+          publisherKeyId: "route-publisher-1",
+          sign: (payload) => sign(null, Buffer.from(payload), publisherKeys.privateKey).toString("base64url"),
+          suiTestnetEndpoint: "https://sui-route-test.example/v1",
+          hyperliquidTestnetEndpoint: "https://hyperliquid-route-test.example/v1",
+          privacyPolicyUrl: "https://matterhorn.so/privacy",
+          statusUrl: "https://status.matterhorn.so",
+          securityContact: "security@matterhorn.so",
+        });
+        for (const manifest of manifests) {
+          registry.register(manifest);
+          const report = runCryptoAppManifestConformance(manifest, {
+            publisherKey: publisherKeys.publicKey,
+            policyVersion: "crypto-app-policy-1",
+            targetEnvironment: "testnet",
+          });
+          registry.updateCertification({
+            appId: manifest.appId,
+            manifestRevision: manifest.manifestRevision,
+            state: "certified_testnet",
+            report,
+            runtimeReport: passingCryptoAppRuntimeReportForTest(manifest, report),
+          });
+        }
+      } finally {
+        registryStore.close();
+      }
+    }
   } else {
     delete process.env.MATTERHORN_CRYPTO_APP_POLICY_VERSION;
     delete process.env.MATTERHORN_CRYPTO_APP_PUBLISHER_KEYS_JSON;
     delete process.env.MATTERHORN_CRYPTO_APP_REGISTRY_DB;
     delete process.env.MATTERHORN_CRYPTO_APP_CONNECTION_DB;
+    delete process.env.MATTERHORN_CRYPTO_APP_CONNECTION_INTEGRITY_SECRET;
     delete process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_DB;
+    delete process.env.MATTERHORN_CRYPTO_APP_DEVELOPER_INTEGRITY_SECRET;
     delete process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_DB;
+    delete process.env.MATTERHORN_CRYPTO_APP_OPERATIONAL_INTEGRITY_SECRET;
     delete process.env.MATTERHORN_CRYPTO_APP_WALLET_PROOF_SECRET;
   }
   process.env.MATTERHORN_GUARDED_RUNTIME_INSTANCE_COUNT = "1";
@@ -356,7 +424,7 @@ async function boot(
     }
   }
   const server = await startServer(
-    config(await freePort(), root),
+    config(await freePort(), root, options.opencodeBaseUrl),
     dependencies,
   ) as Served;
   let stopped = false;
@@ -409,6 +477,45 @@ function cookie(response: Response): string {
   const value = response.headers.get("set-cookie")?.split(";")[0]?.trim() ?? "";
   if (!value.startsWith("mh_session=")) throw new Error("missing_test_session_cookie");
   return value;
+}
+
+function startCoworkerSessionServer(
+  sessionIds: string[],
+  deleteFailureSessionIds: string[] = [],
+): Served {
+  const allowed = new Set(sessionIds);
+  const deleteFailures = new Set(deleteFailureSessionIds);
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url);
+      const match = /^\/session\/([^/]+)$/.exec(url.pathname);
+      const sessionId = match ? decodeURIComponent(match[1] ?? "") : "";
+      if (!allowed.has(sessionId)) {
+        return Response.json({ code: "not_found", message: "Not found" }, { status: 404 });
+      }
+      if (request.method === "DELETE") {
+        if (deleteFailures.has(sessionId)) {
+          return Response.json({ code: "delete_failed", message: "Delete failed" }, { status: 500 });
+        }
+        allowed.delete(sessionId);
+        return Response.json(true);
+      }
+      if (request.method !== "GET") {
+        return Response.json({ code: "not_found", message: "Not found" }, { status: 404 });
+      }
+      return Response.json({
+        id: sessionId,
+        title: `Chat ${sessionId}`,
+        slug: sessionId,
+        directory: request.headers.get("x-opencode-directory") ?? "",
+        time: { created: 100, updated: 100 },
+      });
+    },
+  }) as Served;
+  stops.push(() => server.stop(true));
+  return server;
 }
 
 function coworkerInput() {
@@ -499,7 +606,7 @@ function transactionCoworkerInput() {
 }
 
 function certifiedSuiResult(now: Date): MatterhornCryptoAppResult {
-  return {
+  const candidate: MatterhornCryptoAppResult = {
     version: "matterhorn.crypto-app-result.v1",
     app: {
       id: "matterhorn.sui-testnet",
@@ -536,6 +643,17 @@ function certifiedSuiResult(now: Date): MatterhornCryptoAppResult {
       expiresAt: new Date(now.getTime() + 5 * 60_000).toISOString(),
     },
   };
+  Object.assign(candidate.provenance, cryptoAppEvidenceIdentity({
+    appId: candidate.app.id,
+    manifestRevision: candidate.app.manifestRevision,
+    connectionId: candidate.app.connectionId,
+    actionId: candidate.action.id,
+    access: candidate.action.access,
+    network: candidate.action.network,
+    result: candidate.result,
+    observation: candidate.observation,
+  }));
+  return candidate;
 }
 
 async function seedPendingSuiIntent(input: {
@@ -688,7 +806,13 @@ async function seedCryptoEvidence(input: {
   runId: string;
 }) {
   const state = new MatterhornGuardedRuntimeStateStore(input.guardedDb);
-  const store = new MatterhornCryptoEvidenceStore(state, input.keyManager);
+  const store = new MatterhornCryptoEvidenceStore(
+    state,
+    input.keyManager,
+    {},
+    null,
+    testDurableStateAuthority(process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET),
+  );
   const sealed = await sealMatterhornRunEvidence({
     receipt: completedEvidenceReceipt({
       workspaceId: input.workspaceId,
@@ -783,6 +907,55 @@ describe("crypto coworker HTTP boundary", () => {
     });
     expect(created.response.status).toBe(201);
     const coworkerId = String(created.payload.coworker.id);
+
+    const directStore = new MatterhornCoworkerStore(server.coworkerDb);
+    try {
+      const directCoworkers = new MatterhornCoworkers({
+        store: directStore,
+        policyVersion: "coworker-policy-1",
+      });
+      const resources = directCoworkers.setResourceScope(
+        workspaceA,
+        String(signupA.payload.user.id),
+        coworkerId,
+        {
+          expectedRevision: 0,
+          profileRevision: 1,
+          agentFiles: [],
+          memories: [],
+          connections: [{
+            id: "cxc_sui_bound_route",
+            appId: "matterhorn.sui-testnet",
+            manifestRevision: "1.0.0",
+            actionIds: ["sui_account_read"],
+            networks: ["sui:testnet"],
+          }],
+        },
+      );
+      const binding = directCoworkers.bindSession(
+        workspaceA,
+        String(signupA.payload.user.id),
+        "ses_bound_coworker",
+        { coworkerId, coworkerRevision: 1, expectedRevision: 0 },
+      );
+      expect(binding.resourceScopeHash).toBe(resources.scopeHash);
+    } finally {
+      directStore.close();
+    }
+    const substituted = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_bound_coworker/messages/preflight`,
+      {
+        cookie: cookieA,
+        body: {
+          coworkerId: "cw_substitution_attempt",
+          parts: [{ type: "text", text: "Read approved Sui testnet state." }],
+          executionMode: "work",
+        },
+      },
+    );
+    expect(substituted.response.status).toBe(409);
+    expect(substituted.payload.code).toBe("coworker_session_binding_conflict");
 
     const replay = await request(server.base, "/coworker-access/accept", {
       cookie: cookieB,
@@ -1374,6 +1547,13 @@ describe("crypto coworker HTTP boundary", () => {
     const disabled = await request(server.base, "/workspace/ws_coworker/coworkers", { bearer: TOKEN });
     expect(disabled.response.status).toBe(503);
     expect(disabled.payload.code).toBe("coworker_runtime_disabled");
+    const forkDisabled = await request(
+      server.base,
+      "/workspace/ws_coworker/sessions/source_session/coworker/fork",
+      { bearer: TOKEN, body: { targetSessionId: "target_session" } },
+    );
+    expect(forkDisabled.response.status).toBe(503);
+    expect(forkDisabled.payload.code).toBe("coworker_runtime_disabled");
     const evidence = await request(server.base, "/workspace/ws_coworker/crypto-evidence", { bearer: TOKEN });
     expect(evidence.response.status).toBe(200);
     expect(evidence.payload).toEqual({
@@ -1386,6 +1566,182 @@ describe("crypto coworker HTTP boundary", () => {
       anchorPackageStatus: "disabled",
       items: [],
     });
+  });
+
+  test("inherits a chat coworker only from the tenant's exact active source binding", async () => {
+    const opencode = startCoworkerSessionServer([
+      "ses_source",
+      "ses_fork",
+      "ses_injected",
+    ], ["ses_source"]);
+    const server = await boot("invite", {
+      opencodeBaseUrl: `http://127.0.0.1:${opencode.port}`,
+      seedCryptoApps: true,
+    });
+    const signupA = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "coworker-fork-a@example.com", password: PASSWORD },
+    });
+    const signupB = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "coworker-fork-b@example.com", password: PASSWORD },
+    });
+    const cookieA = cookie(signupA.response);
+    const cookieB = cookie(signupB.response);
+    const workspaceA = String((await request(server.base, "/workspaces", { cookie: cookieA })).payload.items[0].id);
+    const workspaceB = String((await request(server.base, "/workspaces", { cookie: cookieB })).payload.items[0].id);
+    const invite = await request(server.base, "/operator/coworker-access/invites", {
+      host: true,
+      body: { ttlMinutes: 60 },
+    });
+    expect((await request(server.base, "/coworker-access/accept", {
+      cookie: cookieA,
+      body: { inviteToken: String(invite.payload.invite.token) },
+    })).response.status).toBe(200);
+    const created = await request(server.base, `/workspace/${workspaceA}/coworkers`, {
+      cookie: cookieA,
+      body: coworkerInput(),
+    });
+    const coworkerId = String(created.payload.coworker.id);
+    const connection = await request(server.base, `/workspace/${workspaceA}/crypto-app-connections`, {
+      cookie: cookieA,
+      body: {
+        appId: "matterhorn.sui-testnet",
+        grantedActionIds: ["sui_account_read"],
+        grantedScopes: [],
+        grantedNetworks: ["sui:testnet"],
+      },
+    });
+    expect(connection.response.status).toBe(201);
+    expect((await request(
+      server.base,
+      `/workspace/${workspaceA}/coworkers/${coworkerId}/resources`,
+      {
+        method: "PUT",
+        cookie: cookieA,
+        body: {
+          expectedRevision: 0,
+          profileRevision: 1,
+          agentFileIds: [],
+          memoryIds: [],
+          connectionIds: [String(connection.payload.connection.id)],
+        },
+      },
+    )).response.status).toBe(200);
+    const bound = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_source/coworker`,
+      {
+        method: "PUT",
+        cookie: cookieA,
+        body: { coworkerId, coworkerRevision: 1, expectedRevision: 0 },
+      },
+    );
+    expect(bound.response.status).toBe(200);
+
+    const inherited = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_source/coworker/fork`,
+      { cookie: cookieA, body: { targetSessionId: "ses_fork" } },
+    );
+    expect(inherited.response.status).toBe(201);
+    expect(inherited.response.headers.get("cache-control")).toBe("no-store");
+    expect(inherited.payload).toMatchObject({
+      active: true,
+      binding: {
+        sessionId: "ses_fork",
+        coworkerId,
+        coworkerRevision: 1,
+        revision: 1,
+      },
+      coworker: { id: coworkerId, revision: 1, state: "active" },
+    });
+    expect(inherited.payload.binding.ownerId).toBeUndefined();
+    const restored = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_fork/coworker`,
+      { cookie: cookieA },
+    );
+    expect(restored.payload).toMatchObject({
+      active: true,
+      binding: { coworkerId, revision: 1 },
+    });
+
+    const replay = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_source/coworker/fork`,
+      { cookie: cookieA, body: { targetSessionId: "ses_fork" } },
+    );
+    expect(replay.response.status).toBe(409);
+    expect(replay.payload.code).toBe("coworker_session_binding_conflict");
+    const injected = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_source/coworker/fork`,
+      {
+        cookie: cookieA,
+        body: { targetSessionId: "ses_injected", coworkerId: "cw_caller_selected" },
+      },
+    );
+    expect(injected.response.status).toBe(400);
+    expect(injected.payload.code).toBe("coworker_session_binding_invalid");
+    const otherTenant = await request(
+      server.base,
+      `/workspace/${workspaceB}/sessions/ses_source/coworker/fork`,
+      { cookie: cookieA, body: { targetSessionId: "ses_injected" } },
+    );
+    expect(otherTenant.response.status).toBe(404);
+    expect(otherTenant.payload.code).toBe("workspace_not_found");
+
+    const otherAccountDelete = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_fork`,
+      { method: "DELETE", cookie: cookieB },
+    );
+    expect(otherAccountDelete.response.status).toBe(404);
+    expect(otherAccountDelete.payload.code).toBe("workspace_not_found");
+    const failedUpstreamDelete = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_source`,
+      { method: "DELETE", cookie: cookieA },
+    );
+    expect(failedUpstreamDelete.response.status).toBe(502);
+    expect(failedUpstreamDelete.payload.code).toBe("opencode_request_failed");
+    const beforeDeleteStore = new MatterhornCoworkerStore(server.coworkerDb);
+    try {
+      expect(beforeDeleteStore.getSessionBinding(
+        workspaceA,
+        String(signupA.payload.user.id),
+        "ses_source",
+      )).toMatchObject({ coworkerId });
+      expect(beforeDeleteStore.getSessionBinding(
+        workspaceA,
+        String(signupA.payload.user.id),
+        "ses_fork",
+      )).toMatchObject({ coworkerId });
+    } finally {
+      beforeDeleteStore.close();
+    }
+
+    const deleted = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_fork`,
+      { method: "DELETE", cookie: cookieA },
+    );
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload).toEqual({ ok: true });
+    const store = new MatterhornCoworkerStore(server.coworkerDb);
+    try {
+      expect(store.getSessionBinding(workspaceA, String(signupA.payload.user.id), "ses_fork")).toBeNull();
+      expect(store.getSessionBinding(workspaceA, String(signupA.payload.user.id), "ses_source"))
+        .toMatchObject({ coworkerId });
+    } finally {
+      store.close();
+    }
+    const retried = await request(
+      server.base,
+      `/workspace/${workspaceA}/sessions/ses_fork`,
+      { method: "DELETE", cookie: cookieA },
+    );
+    expect(retried.response.status).toBe(200);
+    expect(retried.payload).toEqual({ ok: true });
   });
 
   test("publishes completed coworker evidence only after exact owner confirmation", async () => {
@@ -2558,6 +2914,18 @@ describe("crypto coworker HTTP boundary", () => {
     expect(inbox.payload.items).toHaveLength(1);
     expect(inbox.payload.items[0]).toMatchObject({ id: "cinbox_route_alert", state: "unread", watchId });
     expect(inbox.payload.items[0].ownerId).toBeUndefined();
+    const unreadSummary = await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA });
+    expect(unreadSummary.payload.inbox).toEqual({
+      totalUnread: 1,
+      byCoworker: [{
+        coworkerId,
+        unreadCount: 1,
+        latestUnreadAt: "2026-09-01T12:05:00.000Z",
+      }],
+    });
+    expect(JSON.stringify(unreadSummary.payload.inbox)).not.toContain("Sui balance changed");
+    expect((await request(server.base, `/workspace/${workspaceB}/coworkers`, { cookie: cookieB })).payload.inbox)
+      .toEqual({ totalUnread: 0, byCoworker: [] });
     expect((await request(server.base, `/workspace/${workspaceB}/coworkers/${coworkerId}/inbox`, { cookie: cookieB })).response.status)
       .toBe(404);
     expect((await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/inbox`, {
@@ -2573,6 +2941,8 @@ describe("crypto coworker HTTP boundary", () => {
     });
     expect(read.response.status).toBe(200);
     expect(read.payload.item.state).toBe("read");
+    expect((await request(server.base, `/workspace/${workspaceA}/coworkers`, { cookie: cookieA })).payload.inbox)
+      .toEqual({ totalUnread: 0, byCoworker: [] });
     const staleInbox = await request(server.base, `/workspace/${workspaceA}/coworkers/${coworkerId}/inbox/cinbox_route_alert`, {
       method: "PATCH",
       cookie: cookieA,

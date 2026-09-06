@@ -15,6 +15,7 @@ import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import { sealMatterhornRunEvidence } from "./crypto-evidence-sealer.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
 import { MatterhornCryptoEvidenceWalrusRenewalService } from "./crypto-evidence-walrus-renewal.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import {
   matterhornWalrusOwnerAddressHash,
   type MatterhornWalrusCertification,
@@ -120,7 +121,8 @@ async function fixture(input: {
     correlationSalt: Buffer.alloc(32, 8),
     idEntropy: Buffer.alloc(24, 9),
   });
-  const store = new MatterhornCryptoEvidenceStore(state, keyManager);
+  const authority = testDurableStateAuthority();
+  const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, authority);
   const created = store.create({
     workspaceId: "workspace_alpha",
     ownerId: "owner_alpha",
@@ -194,6 +196,7 @@ async function fixture(input: {
   const service = new MatterhornCryptoEvidenceWalrusRenewalService(
     store,
     state,
+    authority,
     buildTransaction,
     verifyTransaction,
     verifyCertification,
@@ -210,6 +213,7 @@ async function fixture(input: {
     buildTransaction,
     verifyTransaction,
     verifyCertification,
+    authority,
     buildCalls: () => buildCalls,
     setValidUntilEpoch: (value: number) => { validUntilEpoch = value; },
     setTransactionStatus: (value: "confirmed" | "failed") => { transactionStatus = value; },
@@ -230,10 +234,11 @@ describe("Walrus encrypted evidence renewal airlock", () => {
     });
     const secondState = new MatterhornGuardedRuntimeStateStore(value.statePath);
     try {
-      const secondStore = new MatterhornCryptoEvidenceStore(secondState, value.keyManager);
+      const secondStore = new MatterhornCryptoEvidenceStore(secondState, value.keyManager, {}, null, testDurableStateAuthority());
       const secondService = new MatterhornCryptoEvidenceWalrusRenewalService(
         secondStore,
         secondState,
+        testDurableStateAuthority(),
         value.buildTransaction,
         value.verifyTransaction,
         value.verifyCertification,
@@ -340,6 +345,11 @@ describe("Walrus encrypted evidence renewal airlock", () => {
         },
       });
       expect(prepared.preview.intentHash).toMatch(/^[a-f0-9]{64}$/);
+      const originalIntent = value.state.getRecord<unknown>(
+        "crypto_evidence_renewal_intent",
+        value.published.id,
+        new Date("2026-09-02T00:01:00.000Z").getTime(),
+      )!;
 
       value.setValidUntilEpoch(20);
       const confirmed = await value.service.confirm({
@@ -382,6 +392,15 @@ describe("Walrus encrypted evidence renewal airlock", () => {
         claimId: nextClaim.claimId,
         now: new Date("2026-09-02T00:02:00.000Z"),
       })).toBe(true);
+      value.state.put({
+        kind: originalIntent.kind,
+        key: originalIntent.key,
+        workspaceId: originalIntent.workspaceId,
+        sessionId: originalIntent.sessionId,
+        value: originalIntent.value,
+        expiresAtMs: originalIntent.expiresAtMs,
+        nowMs: originalIntent.updatedAtMs,
+      });
       await expect(value.service.confirm({
         workspaceId: "workspace_alpha",
         ownerId: "owner_alpha",
@@ -394,6 +413,49 @@ describe("Walrus encrypted evidence renewal airlock", () => {
       })).rejects.toThrow("crypto_evidence_walrus_renewal_expired_or_replayed");
     } finally {
       value.state.close();
+    }
+  });
+
+  test("rejects mutated and unsealed restored renewal intents before wallet verification", async () => {
+    for (const mutation of ["seal", "legacy"] as const) {
+      const value = await fixture();
+      try {
+        const prepared = await value.service.prepare({
+          workspaceId: "workspace_alpha",
+          ownerId: "owner_alpha",
+          evidenceId: value.published.id,
+          expectedRevision: value.published.revision,
+          signer: SIGNER,
+          signal: new AbortController().signal,
+          now: new Date("2026-09-02T00:00:00.000Z"),
+        });
+        const row = value.state.getRecord<Record<string, unknown>>(
+          "crypto_evidence_renewal_intent",
+          value.published.id,
+          new Date("2026-09-02T00:01:00.000Z").getTime(),
+        )!;
+        value.state.put({
+          kind: row.kind,
+          key: row.key,
+          workspaceId: row.workspaceId,
+          sessionId: row.sessionId,
+          value: mutation === "seal" ? { ...row.value, authoritySeal: "A".repeat(43) } : { restored: true },
+          expiresAtMs: row.expiresAtMs,
+          nowMs: row.updatedAtMs,
+        });
+        await expect(value.service.confirm({
+          workspaceId: "workspace_alpha",
+          ownerId: "owner_alpha",
+          evidenceId: value.published.id,
+          intentId: prepared.preview.intentId,
+          intentHash: prepared.preview.intentHash,
+          transactionDigest: prepared.preview.transactionDigest,
+          signal: new AbortController().signal,
+          now: new Date("2026-09-02T00:01:00.000Z"),
+        })).rejects.toThrow("crypto_evidence_walrus_renewal_intent_integrity_invalid");
+      } finally {
+        value.state.close();
+      }
     }
   });
 
@@ -471,17 +533,32 @@ describe("Walrus encrypted evidence renewal airlock", () => {
         signal: new AbortController().signal,
         now: new Date("2026-09-02T00:00:00.000Z"),
       });
-      const stored = value.state.get<typeof value.published>(
-        "crypto_evidence_record",
-        value.published.id,
-      );
+      const stored = value.store.get({
+        workspaceId: "workspace_alpha",
+        ownerId: "owner_alpha",
+        evidenceId: value.published.id,
+      });
       if (!stored) throw new Error("test_evidence_missing");
+      const updatedAtMs = Date.parse("2026-09-02T00:00:30.000Z");
+      const next = {
+        ...stored,
+        revision: stored.revision + 1,
+        updatedAt: new Date(updatedAtMs).toISOString(),
+      };
       value.state.put({
         kind: "crypto_evidence_record",
         key: stored.id,
         workspaceId: stored.workspaceId,
-        value: { ...stored, revision: stored.revision + 1 },
-        nowMs: Date.parse("2026-09-02T00:00:30.000Z"),
+        value: value.authority.seal({
+          kind: "crypto_evidence_record",
+          key: next.id,
+          workspaceId: next.workspaceId,
+          sessionId: null,
+          expiresAtMs: null,
+          updatedAtMs,
+          value: next,
+        }),
+        nowMs: updatedAtMs,
       });
       value.setValidUntilEpoch(20);
       await expect(value.service.confirm({

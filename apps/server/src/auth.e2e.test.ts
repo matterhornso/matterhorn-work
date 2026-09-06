@@ -51,6 +51,9 @@ const priorTurnstileHostnames = process.env.TURNSTILE_HOSTNAMES;
 const priorAccountMessageGatewayRequired = process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED;
 const priorAgentRuntimeSecret = process.env.MATTERHORN_AGENT_RUNTIME_SECRET;
 const priorHostedPublicBeta = process.env.MATTERHORN_HOSTED_PUBLIC_BETA;
+const priorHostedMcpAccessMode = process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE;
+const priorHostedMcpAccessAccountIds = process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS;
+const priorHostedMcpAccessIntegritySecret = process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET;
 
 function config(port: number, root: string): ServerConfig {
   return {
@@ -234,6 +237,12 @@ afterEach(async () => {
   else process.env.MATTERHORN_AGENT_RUNTIME_SECRET = priorAgentRuntimeSecret;
   if (priorHostedPublicBeta === undefined) delete process.env.MATTERHORN_HOSTED_PUBLIC_BETA;
   else process.env.MATTERHORN_HOSTED_PUBLIC_BETA = priorHostedPublicBeta;
+  if (priorHostedMcpAccessMode === undefined) delete process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE;
+  else process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = priorHostedMcpAccessMode;
+  if (priorHostedMcpAccessAccountIds === undefined) delete process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS;
+  else process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS = priorHostedMcpAccessAccountIds;
+  if (priorHostedMcpAccessIntegritySecret === undefined) delete process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET;
+  else process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET = priorHostedMcpAccessIntegritySecret;
 });
 
 describe("public account authentication", () => {
@@ -688,6 +697,261 @@ describe("public account authentication", () => {
     expect(signedBackIn.payload.user.email).toBe("new.user@example.com");
   });
 
+  test("issues an invite-only MCP key that can reach only guarded workspace and chat routes", async () => {
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET =
+      "matterhorn-hosted-mcp-e2e-integrity-secret";
+    const app = await boot();
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+    const owner = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "mcp-owner@example.com", password: PASSWORD },
+    });
+    const other = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "mcp-other@example.com", password: PASSWORD },
+    });
+    const ownerCookie = sessionCookie(owner.response);
+    const otherCookie = sessionCookie(other.response);
+
+    const disabled = await jsonRequest(app.base, "/api/auth/account/mcp-access", {
+      cookie: ownerCookie,
+    });
+    expect(disabled.response.status).toBe(200);
+    expect(disabled.payload).toEqual({
+      mode: "off",
+      eligible: false,
+      maxExpiresInDays: 30,
+      credentials: [],
+    });
+    const disabledCreate = await jsonRequest(app.base, "/api/auth/account/mcp-access", {
+      cookie: ownerCookie,
+      body: { label: "Codex" },
+    });
+    expect(disabledCreate.response.status).toBe(403);
+    expect(disabledCreate.payload.code).toBe("hosted_mcp_access_unavailable");
+
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "invite";
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS = owner.payload.user.id;
+    const created = await jsonRequest(app.base, "/api/auth/account/mcp-access", {
+      cookie: ownerCookie,
+      body: { label: "Codex on laptop", expiresInDays: 7 },
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.response.headers.get("cache-control")).toBe("no-store");
+    expect(created.payload.credential.label).toBe("Codex on laptop");
+    expect(created.payload.credential.accessToken).toMatch(/^mhmcp_/);
+    const accessToken = created.payload.credential.accessToken as string;
+    const credentialId = created.payload.credential.id as string;
+
+    const listed = await jsonRequest(app.base, "/api/auth/account/mcp-access", {
+      cookie: ownerCookie,
+    });
+    expect(listed.response.status).toBe(200);
+    expect(listed.payload.credentials).toEqual([
+      expect.objectContaining({ id: credentialId, label: "Codex on laptop" }),
+    ]);
+    expect(JSON.stringify(listed.payload)).not.toContain(accessToken);
+    const exported = await jsonRequest(app.base, "/api/auth/account/export", {
+      cookie: ownerCookie,
+    });
+    expect(JSON.stringify(exported.payload)).not.toContain(accessToken);
+    expect(JSON.stringify(exported.payload)).not.toContain(credentialId);
+    expect(exported.payload.excludes.join(" ")).toContain("MCP access keys and hashes");
+
+    const workspaces = await jsonRequest(app.base, "/workspaces", {
+      bearer: accessToken,
+    });
+    expect(workspaces.response.status).toBe(200);
+    expect(workspaces.payload.items).toHaveLength(1);
+    const workspaceId = workspaces.payload.items[0].id as string;
+    expect(workspaceId).toMatch(/^ws_web_/);
+
+    const mcpHeaders = {
+      Accept: "application/json, text/event-stream",
+      "MCP-Protocol-Version": "2025-11-25",
+    };
+    for (const auth of [
+      { cookie: ownerCookie },
+      { bearer: TOKEN },
+    ]) {
+      const notInvitedTransport = await jsonRequest(app.base, "/mcp/guarded", {
+        ...auth,
+        headers: mcpHeaders,
+        body: { jsonrpc: "2.0", id: "not-invited", method: "tools/list", params: {} },
+      });
+      expect(notInvitedTransport.response.status).toBe(403);
+      expect(notInvitedTransport.payload.code).toBe("hosted_mcp_access_required");
+    }
+    const initialized = await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      headers: mcpHeaders,
+      body: {
+        jsonrpc: "2.0",
+        id: "initialize",
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-25",
+          capabilities: {},
+          clientInfo: { name: "hosted-mcp-e2e", version: "1.0.0" },
+        },
+      },
+    });
+    expect(initialized.response.status).toBe(200);
+    expect(initialized.payload.result).toMatchObject({
+      protocolVersion: "2025-11-25",
+      capabilities: { tools: {} },
+      serverInfo: { name: "matterhorn-hosted-guarded-mcp" },
+    });
+
+    const malformedMcp = await fetch(`${app.base}/mcp/guarded`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        ...mcpHeaders,
+      },
+      body: "{",
+    });
+    expect(malformedMcp.status).toBe(400);
+    expect(await malformedMcp.json()).toEqual({
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32700, message: "Invalid JSON." },
+    });
+
+    const untrustedMcpOrigin = await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      origin: "https://attacker.invalid",
+      headers: mcpHeaders,
+      body: { jsonrpc: "2.0", id: "origin", method: "tools/list" },
+    });
+    expect(untrustedMcpOrigin.response.status).toBe(403);
+    expect(untrustedMcpOrigin.payload.code).toBe("untrusted_origin");
+
+    const tools = await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      headers: mcpHeaders,
+      body: { jsonrpc: "2.0", id: "tools", method: "tools/list", params: {} },
+    });
+    expect(tools.response.status).toBe(200);
+    expect(tools.payload.result.tools).toHaveLength(11);
+    expect(tools.payload.result.tools.map((tool: { name: string }) => tool.name)).toContain(
+      "matterhorn_submit_session_prompt",
+    );
+    expect(JSON.stringify(tools.payload.result.tools)).not.toMatch(/wallet_(?:sign|submit)|transaction_submit/i);
+
+    const listedThroughMcp = await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      headers: mcpHeaders,
+      body: {
+        jsonrpc: "2.0",
+        id: "workspaces",
+        method: "tools/call",
+        params: { name: "matterhorn_list_workspaces", arguments: {} },
+      },
+    });
+    expect(listedThroughMcp.response.status).toBe(200);
+    expect(JSON.parse(listedThroughMcp.payload.result.content[0].text).items).toEqual([
+      expect.objectContaining({ id: workspaceId }),
+    ]);
+
+    const crossWorkspaceThroughMcp = await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      headers: mcpHeaders,
+      body: {
+        jsonrpc: "2.0",
+        id: "cross-workspace",
+        method: "tools/call",
+        params: {
+          name: "matterhorn_list_sessions",
+          arguments: { workspaceId: "ws_not_the_owner" },
+        },
+      },
+    });
+    expect(crossWorkspaceThroughMcp.response.status).toBe(200);
+    expect(crossWorkspaceThroughMcp.payload.result.isError).toBe(true);
+    expect(crossWorkspaceThroughMcp.payload.result.content[0].text).toContain("denied");
+    expect(JSON.stringify(crossWorkspaceThroughMcp.payload)).not.toContain("ws_web_");
+
+    for (const method of ["GET", "DELETE"] as const) {
+      const notAllowed = await jsonRequest(app.base, "/mcp/guarded", {
+        bearer: accessToken,
+        method,
+      });
+      expect(notAllowed.response.status).toBe(405);
+      expect(notAllowed.response.headers.get("allow")).toBe("POST");
+    }
+
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "off";
+    expect((await jsonRequest(app.base, "/workspaces", { bearer: accessToken })).response.status)
+      .toBe(401);
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "invite";
+    delete process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS;
+    expect((await jsonRequest(app.base, "/workspaces", { bearer: accessToken })).response.status)
+      .toBe(401);
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS = owner.payload.user.id;
+
+    const crossWorkspace = await jsonRequest(
+      app.base,
+      "/workspace/ws_not_the_owner/sessions",
+      { bearer: accessToken },
+    );
+    expect(crossWorkspace.response.status).toBe(404);
+    expect(crossWorkspace.payload.code).toBe("workspace_not_found");
+
+    for (const [path, method] of [
+      ["/whoami", "GET"],
+      ["/capabilities", "GET"],
+      ["/api/backend/capabilities", "GET"],
+      ["/tokens", "GET"],
+      ["/runtime/versions", "GET"],
+      [`/workspace/${workspaceId}/artifacts`, "GET"],
+      [`/workspace/${workspaceId}/model-usage/status`, "GET"],
+      [`/workspace/${workspaceId}/sessions/session-one/coworker`, "GET"],
+      [`/workspace/${workspaceId}/sessions/session-one/messages/preflight`, "POST"],
+      [`/workspace/${workspaceId}/sessions/session-one/compact`, "POST"],
+      [`/workspace/${workspaceId}/sessions/session-one/execution-mode`, "POST"],
+      ["/api/auth/account/mcp-access", "GET"],
+    ] as const) {
+      const forbidden = await jsonRequest(app.base, path, {
+        bearer: accessToken,
+        method,
+        ...(method === "POST" ? { body: {} } : {}),
+      });
+      expect(forbidden.response.status).toBe(403);
+      expect(forbidden.payload.code).toBe("hosted_mcp_operation_not_allowed");
+    }
+    const forbiddenRawRuntime = await jsonRequest(
+      app.base,
+      `/w/${encodeURIComponent(workspaceId)}/opencode/global/health`,
+      { bearer: accessToken },
+    );
+    expect(forbiddenRawRuntime.response.status).toBe(403);
+    expect(forbiddenRawRuntime.payload.code).toBe("hosted_mcp_operation_not_allowed");
+
+    const crossAccountRevoke = await jsonRequest(
+      app.base,
+      `/api/auth/account/mcp-access/${encodeURIComponent(credentialId)}`,
+      { cookie: otherCookie, method: "DELETE" },
+    );
+    expect(crossAccountRevoke.response.status).toBe(404);
+    expect((await jsonRequest(app.base, "/workspaces", { bearer: accessToken })).response.status)
+      .toBe(200);
+
+    const revoked = await jsonRequest(
+      app.base,
+      `/api/auth/account/mcp-access/${encodeURIComponent(credentialId)}`,
+      { cookie: ownerCookie, method: "DELETE" },
+    );
+    expect(revoked.response.status).toBe(200);
+    expect(revoked.payload).toEqual({ ok: true, revoked: true });
+    expect((await jsonRequest(app.base, "/workspaces", { bearer: accessToken })).response.status)
+      .toBe(401);
+    expect((await jsonRequest(app.base, "/mcp/guarded", {
+      bearer: accessToken,
+      headers: mcpHeaders,
+      body: { jsonrpc: "2.0", id: "revoked", method: "tools/list" },
+    })).response.status).toBe(401);
+  });
+
   test("manages sessions, rotates passwords, and deletes owned account data", async () => {
     const app = await boot();
     const email = "security-owner@example.com";
@@ -1087,6 +1351,27 @@ describe("public account authentication", () => {
     expect(readiness.payload.checks.accountMessageGatewayReady).toBe(true);
   });
 
+  test("fails readiness when invite-only MCP access lacks authenticated durable state", async () => {
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "invite";
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS =
+      "usr_00000000000000000000000000000000";
+    delete process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET;
+    const unavailable = await boot();
+    const failed = await jsonRequest(unavailable.base, "/health/ready");
+    expect(failed.response.status).toBe(503);
+    expect(failed.payload.checks.hostedMcpAccessMode).toBe("invite");
+    expect(failed.payload.checks.hostedMcpAccessIntegrityReady).toBe(false);
+    await unavailable.stop();
+
+    process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET =
+      "matterhorn-hosted-mcp-readiness-integrity-secret";
+    const available = await boot();
+    const ready = await jsonRequest(available.base, "/health/ready");
+    expect(ready.response.status).toBe(200);
+    expect(ready.payload.checks.hostedMcpAccessMode).toBe("invite");
+    expect(ready.payload.checks.hostedMcpAccessIntegrityReady).toBe(true);
+  });
+
   test("fails hosted Public Beta readiness when the authoritative message gateway is disabled", async () => {
     process.env.MATTERHORN_HOSTED_PUBLIC_BETA = "1";
     process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED = "0";
@@ -1094,6 +1379,18 @@ describe("public account authentication", () => {
     const readiness = await jsonRequest(app.base, "/health/ready");
     expect(readiness.response.status).toBe(503);
     expect(readiness.payload.checks.accountMessageGatewayReady).toBe(false);
+    expect(readiness.payload.checks.providerSystemBoundaryReady).toBe(false);
+  });
+
+  test("fails hosted Public Beta readiness without the managed provider-system boundary", async () => {
+    process.env.MATTERHORN_HOSTED_PUBLIC_BETA = "1";
+    process.env.MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED = "1";
+    process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "trusted-runtime-secret-for-readiness-tests";
+    const app = await boot();
+    const readiness = await jsonRequest(app.base, "/health/ready");
+    expect(readiness.response.status).toBe(503);
+    expect(readiness.payload.checks.accountMessageGatewayReady).toBe(true);
+    expect(readiness.payload.checks.providerSystemBoundaryReady).toBe(false);
   });
 
   test("rejects invalid, duplicate, and incorrect credentials safely", async () => {

@@ -226,7 +226,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
         publicRead: true,
         preview: true,
         signing: "external_signer",
-        description: "Bittensor is public-read/external-signer with no custody.",
+        description: "Bittensor supports public reads and connected-wallet review with no custody.",
       },
     },
   },

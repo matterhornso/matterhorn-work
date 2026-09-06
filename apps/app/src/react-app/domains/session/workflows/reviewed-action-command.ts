@@ -459,7 +459,7 @@ export function reviewedActionPreparedChatText(handoff: ReviewedActionDraftHando
     } else {
       title = `Polymarket ${draft.operation} prepared`;
       const quantity = draft.operation === "buy"
-        ? `$${compactNumber(draft.amountUsdc)} USDC`
+        ? `${compactNumber(draft.amountUsdc)} pUSD`
         : `${compactNumber(draft.amountShares)} shares`;
       terms = `${draft.operation === "buy" ? "Buy" : "Sell"} ${draft.outcome} · ${quantity} · Market ${shortenedIdentifier(draft.marketId)}`;
     }

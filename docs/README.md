@@ -16,7 +16,8 @@ Dated handoffs describe the tree at a moment in time. They are valuable evidence
 
 ## Start Here
 
-- [Platform architecture](platform-architecture.md) - app, server, engine, storage, providers, and trust boundaries.
+- [Guarded Agent Architecture v3](architecture/matterhorn-guarded-agent-architecture-v3.md) - current crypto coworker, privacy, capability, transaction, evidence, and rollout boundaries.
+- [Platform architecture](platform-architecture.md) - core app, server, engine, and local-runtime overview; use v3 above for guarded crypto behavior.
 - [Product surfaces](product-surfaces.md) - current customer-facing navigation and behavior.
 - [Platform safety gate](platform-safety-gate.md) - the required 10-stage verification gate.
 - [Production launch configuration](production-launch-configuration.md) - setup ownership, safe environment defaults, and the release verification path.

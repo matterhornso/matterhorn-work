@@ -184,7 +184,7 @@ function suggestionStatusMeta(status: MatterhornMemorySuggestionStatus) {
 
 function suggestionDeskReason(suggestion: MatterhornMemorySuggestion) {
   if (suggestion.desk === "bittensor") {
-    return "Bittensor memory is limited to public SS58, subnet, validator, watch, and external-signer context. It never stores seed phrases, private keys, mnemonics, or wallet exports.";
+    return "Bittensor memory is limited to public wallet addresses, subnet and validator details, watches, and reviewed wallet actions. It never stores seed phrases, private keys, mnemonics, or wallet exports.";
   }
   if (suggestion.desk === "hyperliquid" || suggestion.desk === "polymarket") {
     return "Market memory is read/preview/watch context only. It cannot enable live submission, custody, exchange API secrets, raw signatures, or signed payloads.";

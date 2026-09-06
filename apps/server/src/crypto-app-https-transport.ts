@@ -57,6 +57,15 @@ export type MatterhornPinnedJsonRequest = {
   body?: unknown;
   signal: AbortSignal;
   headers?: Record<string, string>;
+  /**
+   * Server-owned MCP protocol metadata. Kept separate from credential headers
+   * so an adapter credential can never spoof the negotiated protocol/session.
+   */
+  mcp?: {
+    protocolVersion?: "2025-11-25";
+    sessionId?: string;
+    expectNotificationAccepted?: boolean;
+  };
 };
 
 export type MatterhornPinnedJsonResponse = {
@@ -64,6 +73,8 @@ export type MatterhornPinnedJsonResponse = {
   connectedAddress: string;
   requestBytes: number;
   responseBytes: number;
+  /** Present for MCP requests; optional keeps non-MCP requester test doubles source-compatible. */
+  mcpSessionId?: string | null;
 };
 
 export type MatterhornPinnedJsonRequester = (
@@ -120,6 +131,8 @@ const FORBIDDEN_HEADERS = new Set([
   "expect",
   "forwarded",
   "host",
+  "mcp-protocol-version",
+  "mcp-session-id",
   "proxy-authorization",
   "te",
   "trailer",
@@ -213,6 +226,17 @@ function isJsonContentType(value: string | string[] | undefined): boolean {
     || /^application\/[a-z0-9!#$&^_.+-]+\+json$/.test(mediaType);
 }
 
+function safeMcpSessionId(value: string | string[] | undefined): string | null {
+  if (value === undefined) return null;
+  if (Array.isArray(value)
+    || value.length < 1
+    || value.length > 1_024
+    || /[^\x21-\x7e]/.test(value)) {
+    throw new Error("crypto_app_mcp_session_invalid");
+  }
+  return value;
+}
+
 async function securePinnedSocket(input: {
   endpoint: URL;
   pinnedAddress: string;
@@ -289,6 +313,10 @@ export function createPinnedJsonRequester(options: {
     if (method === "POST" && input.body === undefined) {
       throw new Error("crypto_app_transport_body_required");
     }
+    if (input.mcp?.sessionId !== undefined) safeMcpSessionId(input.mcp.sessionId);
+    if (input.mcp?.expectNotificationAccepted && method !== "POST") {
+      throw new Error("crypto_app_mcp_notification_invalid");
+    }
     const pinnedAddress = input.approvedAddresses[0]!;
     assertCryptoAdapterConnectedAddress(input.approvedAddresses, pinnedAddress);
     const headers = safeCredentialHeaders(input.headers ?? {});
@@ -330,17 +358,50 @@ export function createPinnedJsonRequester(options: {
           agent: false,
           createConnection: () => socket,
           headers: {
-            accept: "application/json",
+            accept: input.mcp ? "application/json, text/event-stream" : "application/json",
             "user-agent": "Matterhorn-Crypto-App-Gateway/1",
             ...(method === "POST" ? {
               "content-type": "application/json",
               "content-length": String(requestBytes),
             } : {}),
             ...headers,
+            ...(input.mcp?.protocolVersion
+              ? { "mcp-protocol-version": input.mcp.protocolVersion }
+              : {}),
+            ...(input.mcp?.sessionId ? { "mcp-session-id": input.mcp.sessionId } : {}),
           },
           signal: input.signal,
         }, (response) => {
           const connectedAddress = socket.remoteAddress ?? "";
+          let mcpSessionId: string | null;
+          try {
+            mcpSessionId = input.mcp ? safeMcpSessionId(response.headers["mcp-session-id"]) : null;
+          } catch (error) {
+            response.destroy();
+            finish(() => reject(error));
+            return;
+          }
+          if (input.mcp?.expectNotificationAccepted) {
+            if (response.statusCode !== 202) {
+              response.resume();
+              finish(() => reject(new Error("crypto_app_mcp_notification_status_invalid")));
+              return;
+            }
+            let responseBytes = 0;
+            response.on("data", (chunk: Buffer | string) => {
+              responseBytes += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk);
+              if (responseBytes > 0) response.destroy(new Error("crypto_app_mcp_notification_body_invalid"));
+            });
+            response.on("error", (error) => finish(() => reject(error)));
+            response.on("end", () => finish(() => resolve({
+              value: null,
+              connectedAddress,
+              requestBytes,
+              responseBytes,
+              mcpSessionId,
+            })));
+            return;
+          }
           if (!isJsonContentType(response.headers["content-type"])) {
             response.destroy();
             finish(() => reject(new Error("crypto_app_transport_content_type_invalid")));
@@ -366,7 +427,7 @@ export function createPinnedJsonRequester(options: {
           response.on("end", () => {
             try {
               const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-              finish(() => resolve({ value, connectedAddress, requestBytes, responseBytes }));
+              finish(() => resolve({ value, connectedAddress, requestBytes, responseBytes, mcpSessionId }));
             } catch (error) {
               finish(() => reject(error));
             }

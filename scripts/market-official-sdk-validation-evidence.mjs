@@ -12,9 +12,22 @@ const POLYMARKET_DOC_URL = "https://docs.polymarket.com/trading/overview";
 
 const EXPECTED_POLYMARKET_CLIENTS = new Set([
   "@polymarket/clob-client-v2",
-  "@polymarket/clob-client",
   "py-clob-client-v2",
 ]);
+const POLYMARKET_CLOB_V2_ORDER_FIELDS = [
+  ["salt", "uint256"],
+  ["maker", "address"],
+  ["signer", "address"],
+  ["tokenId", "uint256"],
+  ["makerAmount", "uint256"],
+  ["takerAmount", "uint256"],
+  ["side", "uint8"],
+  ["signatureType", "uint8"],
+  ["timestamp", "uint256"],
+  ["metadata", "bytes32"],
+  ["builder", "bytes32"],
+];
+const POLYMARKET_LEGACY_SIGNED_FIELDS = ["taker", "expiration", "nonce", "feeRateBps"];
 
 function isRecord(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -108,7 +121,7 @@ export function sampleEvidence() {
           requiresClientValidation: true,
           canSubmit: false,
           externalSignerOnly: true,
-          walletMustSet: ["maker", "signer", "salt", "nonce", "expiration"],
+          walletMustSet: ["maker", "signer", "salt", "timestamp", "signatureType"],
           amountDecimals: 6,
         },
         evidenceRequired: [
@@ -175,6 +188,8 @@ function validatePolymarketNormalizedOrder(venue, errors) {
   assertCondition(errors, isRecord(types), "Polymarket normalized typed data must include a types object.");
   assertCondition(errors, isRecord(message), "Polymarket normalized typed data/order must include a message object.");
   if (domain) {
+    assertCondition(errors, domain.name === "Polymarket CTF Exchange", "Polymarket normalized domain name must match CLOB V2.");
+    assertCondition(errors, String(domain.version ?? "") === "2", "Polymarket normalized domain version must be CLOB V2 version 2.");
     if (venue.environment?.chainId !== null && venue.environment?.chainId !== undefined) {
       assertCondition(errors, Number(domain.chainId) === Number(venue.environment.chainId), "Polymarket normalized domain chainId must match evidence environment.chainId.");
     }
@@ -182,12 +197,32 @@ function validatePolymarketNormalizedOrder(venue, errors) {
       assertCondition(errors, String(domain.verifyingContract ?? "").toLowerCase() === String(venue.environment.exchangeAddress).toLowerCase(), "Polymarket normalized domain verifyingContract must match evidence exchangeAddress.");
     }
   }
-  if (types) assertCondition(errors, Array.isArray(types.Order) && types.Order.length > 0, "Polymarket normalized types must include an Order type layout.");
+  if (types) {
+    assertCondition(errors, Array.isArray(types.Order), "Polymarket normalized types must include an Order type layout.");
+    const fields = Array.isArray(types.Order)
+      ? types.Order.map((field) => [field?.name, field?.type])
+      : [];
+    assertCondition(
+      errors,
+      JSON.stringify(fields) === JSON.stringify(POLYMARKET_CLOB_V2_ORDER_FIELDS),
+      "Polymarket normalized Order type must exactly match the CLOB V2 signed field layout.",
+    );
+  }
   if (isRecord(message)) {
-    for (const field of ["makerAmount", "takerAmount"]) {
+    for (const field of ["salt", "tokenId", "makerAmount", "takerAmount", "timestamp"]) {
       assertCondition(errors, typeof message[field] === "string" && /^\d+$/.test(message[field]), `Polymarket message.${field} must be a base-unit decimal string.`);
     }
+    for (const field of ["maker", "signer"]) {
+      assertCondition(errors, typeof message[field] === "string" && /^0x[a-f0-9]{40}$/i.test(message[field]), `Polymarket message.${field} must be an EVM address.`);
+    }
+    for (const field of ["metadata", "builder"]) {
+      assertCondition(errors, typeof message[field] === "string" && /^0x[a-f0-9]{64}$/i.test(message[field]), `Polymarket message.${field} must be bytes32.`);
+    }
+    assertCondition(errors, message.side === 0 || message.side === 1, "Polymarket message.side must be CLOB V2 BUY (0) or SELL (1).");
     assertCondition(errors, "signatureType" in message, "Polymarket message must include public signatureType metadata.");
+    for (const field of POLYMARKET_LEGACY_SIGNED_FIELDS) {
+      assertCondition(errors, !(field in message), `Polymarket CLOB V2 signed message must not include legacy field ${field}.`);
+    }
   }
   if ("primaryType" in typedData) assertCondition(errors, typedData.primaryType === "Order", "Polymarket normalized primaryType must be Order.");
 }
@@ -209,7 +244,7 @@ function validateHyperliquidVenue(venue, errors) {
 }
 
 function validatePolymarketVenue(venue, errors) {
-  assertCondition(errors, EXPECTED_POLYMARKET_CLIENTS.has(venue.officialClient?.name), "Polymarket evidence must name @polymarket/clob-client-v2, @polymarket/clob-client, or py-clob-client-v2.");
+  assertCondition(errors, EXPECTED_POLYMARKET_CLIENTS.has(venue.officialClient?.name), "Polymarket evidence must name @polymarket/clob-client-v2 or py-clob-client-v2. Legacy V1 clients are not accepted.");
   assertCondition(errors, venue.officialClient?.docsUrl === POLYMARKET_DOC_URL, "Polymarket evidence must point at the official trading overview docs.");
   assertCondition(errors, hasText(venue.environment?.network, "amoy") || hasText(venue.environment?.mode, "fixture"), "Polymarket validation must be Polygon Amoy or official-client fixture evidence.");
   const template = venue.matterhornTemplate ?? {};
@@ -217,9 +252,9 @@ function validatePolymarketVenue(venue, errors) {
   assertCondition(errors, template.requiresClientValidation === true, "Polymarket template must keep requiresClientValidation:true.");
   assertCondition(errors, template.canSubmit === false, "Polymarket template must keep canSubmit:false.");
   assertCondition(errors, template.externalSignerOnly === true, "Polymarket template must keep externalSignerOnly:true.");
-  assertCondition(errors, template.amountDecimals === 6, "Polymarket evidence must keep 6-decimal USDC/share accounting.");
+  assertCondition(errors, template.amountDecimals === 6, "Polymarket evidence must keep 6-decimal pUSD/share accounting.");
   const walletMustSet = Array.isArray(template.walletMustSet) ? template.walletMustSet : [];
-  for (const item of ["maker", "signer", "salt", "nonce", "expiration"]) {
+  for (const item of ["maker", "signer", "salt", "timestamp", "signatureType"]) {
     assertCondition(errors, walletMustSet.includes(item), `Polymarket walletMustSet must include ${item}.`);
   }
   validatePolymarketNormalizedOrder(venue, errors);

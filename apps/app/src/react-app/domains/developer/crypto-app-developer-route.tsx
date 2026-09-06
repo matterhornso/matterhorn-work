@@ -293,7 +293,7 @@ export function CryptoAppDeveloperRoute() {
                 <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
                   <div><dt className="text-muted-foreground">Policy</dt><dd className="mt-1 font-medium">{snapshot.status.policyVersion}</dd></div>
                   <div><dt className="text-muted-foreground">Environment</dt><dd className="mt-1 font-medium">Sui, Hyperliquid, or Bittensor testnet</dd></div>
-                  <div><dt className="text-muted-foreground">Signing boundary</dt><dd className="mt-1 font-medium">External signer</dd></div>
+                  <div><dt className="text-muted-foreground">Signing boundary</dt><dd className="mt-1 font-medium">Connected wallet only</dd></div>
                   <div><dt className="text-muted-foreground">Mainnet</dt><dd className="mt-1 font-medium">Unavailable</dd></div>
                 </dl>
               </div>

@@ -151,8 +151,9 @@ export const MARKET_SAFETY_DEFAULTS = {
 export const MARKET_EXECUTION_READINESS_CONTROLS = [
   "preview_hash_binding",
   "stale_preview_rejection",
-  "operator_confirmation",
-  "external_signer_handoff",
+  "policy_and_simulation",
+  "wallet_review",
+  "connected_wallet_only",
   "public_receipt_import",
   "audit_logging",
   "prompt_injection_rejection",
@@ -165,8 +166,8 @@ export interface MarketExecutionReadinessChecklist {
   version: "matterhorn.market.execution-readiness.v1";
   venues: Array<Extract<MarketVenue, "hyperliquid" | "polymarket">>;
   controls: MarketExecutionReadinessControl[];
-  futureArchitecture: "external_signer_only";
-  liveSubmissionEnabled: false;
+  futureArchitecture: "connected_wallet_only";
+  liveSubmissionEnabled: boolean;
   acceptsPrivateKeys: false;
   acceptsApiSecrets: false;
   acceptsRawSignatures: false;
@@ -252,11 +253,11 @@ export interface MarketExecutionReadinessResponse {
 }
 
 export const MARKET_EXECUTION_CHAIN_STEP_IDS = [
-  "preview_handoff",
-  "external_sign_request",
-  "redacted_artifact_validation",
-  "artifact_reconciliation",
-  "public_receipt_import",
+  "agent_draft",
+  "policy_and_simulation",
+  "wallet_review",
+  "wallet_submission",
+  "receipt_reconciliation",
 ] as const;
 export type MarketExecutionChainStepId = (typeof MARKET_EXECUTION_CHAIN_STEP_IDS)[number];
 
@@ -264,7 +265,7 @@ export interface MarketExecutionChainSafety {
   canSubmit: false;
   liveSubmissionEnabled: false;
   nonCustodial: true;
-  externalSignerRequired: true;
+  connectedWalletRequired: true;
   acceptsSecrets: false;
   acceptsRawSignatures: false;
   acceptsSignedPayloads: false;
@@ -281,7 +282,7 @@ export interface MarketExecutionChainStep {
 export interface MarketExecutionChainGuide {
   success: true;
   version: "matterhorn.market.execution-chain-guide.v1";
-  title: "Matterhorn market execution chain";
+  title: "Connected-wallet transaction path";
   summary: string;
   safety: MarketExecutionChainSafety;
   stages: MarketExecutionChainStep[];

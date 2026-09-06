@@ -125,7 +125,7 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
                 Open Bittensor, Hyperliquid, Polymarket, longevity workflows, or a blank chat.
               </OnboardingStep>
               <OnboardingStep title="Review before action">
-                Inspect evidence and external-signer handoffs before anything sensitive happens. Matterhorn never holds your keys.
+                Review evidence and exact wallet actions before anything sensitive happens. Matterhorn never holds your keys.
               </OnboardingStep>
             </div>
 

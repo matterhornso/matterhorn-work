@@ -102,16 +102,16 @@ function ReviewNotice({
   return (
     <div
       className={cn(
-        "mb-3 flex items-start gap-2 rounded-md px-3 py-2 text-xs leading-5",
+        "mb-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs leading-5",
         tone === "danger"
-          ? "bg-red-500/10 text-red-200"
-          : "bg-amber-500/10 text-amber-200",
+          ? "border-red-7/30 bg-red-3/40 text-red-12 dark:bg-red-3/10 dark:text-red-11"
+          : "border-amber-7/30 bg-amber-3/40 text-amber-12 dark:bg-amber-3/10 dark:text-amber-11",
       )}
     >
       <AlertTriangle
         className={cn(
           "mt-0.5 size-4 shrink-0",
-          tone === "danger" ? "text-red-300" : "text-amber-300",
+          tone === "danger" ? "text-red-11" : "text-amber-11",
         )}
       />
       <p>{children}</p>
@@ -132,13 +132,15 @@ function ApprovalStatusSummary({
   return (
     <div
       className={cn(
-        "mb-4 rounded-lg px-3.5 py-3 text-xs leading-5",
-        blocked ? "bg-red-500/10 text-red-100" : "bg-amber-500/10 text-amber-100",
+        "mb-4 rounded-lg border px-3.5 py-3 text-xs leading-5",
+        blocked
+          ? "border-red-7/30 bg-red-3/40 text-red-12 dark:bg-red-3/10 dark:text-red-11"
+          : "border-amber-7/30 bg-amber-3/40 text-amber-12 dark:bg-amber-3/10 dark:text-amber-11",
       )}
       role="status"
     >
       <div className="flex items-start gap-2.5">
-        <AlertTriangle className={cn("mt-0.5 size-4 shrink-0", blocked ? "text-red-300" : "text-amber-300")} />
+        <AlertTriangle className={cn("mt-0.5 size-4 shrink-0", blocked ? "text-red-11" : "text-amber-11")} />
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-current">{blocked ? "Action required" : "Review carefully"}</p>
           <p className="mt-0.5 text-current/85">{primaryNotice}</p>
@@ -424,7 +426,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
               <div className="font-mono text-sm">{pending.asset}</div>
             </ReviewField>
             <ReviewField label="Side">
-              <div className={cn("font-mono text-sm font-semibold", pending.isBuy ? "text-green-300" : "text-red-300")}>
+              <div className={cn("font-mono text-sm font-semibold", pending.isBuy ? "text-green-11" : "text-red-11")}>
                 {side}
               </div>
             </ReviewField>
@@ -441,7 +443,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
             </ReviewField>
             {pending.reduceOnly && (
               <ReviewField label="Reduce only">
-                <div className="font-mono text-sm text-amber-300">Yes</div>
+                <div className="font-mono text-sm text-amber-11">Yes</div>
               </ReviewField>
             )}
             <ReviewField label="Type">
@@ -651,14 +653,14 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
               <Shield className="size-5 text-dls-accent" />
             </div>
             <div>
-              <h2 id="matterhorn-transaction-approval-title" className="text-base font-semibold text-dls-text">Transaction Approval</h2>
-              <p className="text-xs text-dls-secondary">Review before signing</p>
+              <h2 id="matterhorn-transaction-approval-title" className="text-base font-semibold text-dls-text">Review wallet action</h2>
+              <p className="text-xs text-dls-secondary">Nothing moves until you continue in your wallet</p>
             </div>
           </div>
           <button
             type="button"
             data-approval-cancel
-            aria-label="Close transaction approval"
+            aria-label="Close wallet action review"
             className="rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover hover:text-dls-text transition-colors"
             onClick={() => {
               dispatchTxApprovalResponse(false);
@@ -673,7 +675,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
         <ApprovalStatusSummary blocked={isBlocked || Boolean(approvalError)} notices={reviewNotices} />
 
         <div className="matterhorn-raised-surface mb-4 rounded-lg px-4 py-4 text-center ring-1 ring-dls-border/25">
-          <p className="text-xs font-medium text-dls-secondary">Transaction value</p>
+          <p className="text-xs font-medium text-dls-secondary">Amount</p>
           <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-dls-text">{analysis.displayValue}</p>
           {usdValue > 0 || !analysis.valueUSDIsKnown || analysis.tokenAction?.isUnlimitedApproval ? (
             <p className="mt-1 font-mono text-sm tabular-nums text-dls-secondary">{usdLabel}</p>
@@ -682,7 +684,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
 
         {/* Details */}
         <div className="mb-6 space-y-2">
-          <ReviewField label="To">
+          <ReviewField label="Recipient">
             <div className="font-mono text-sm text-dls-text break-all" title={pending.to}>
               {ensName ?? truncateAddress(pending.to)}
             </div>
@@ -721,7 +723,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
           )}
 
           {analysis.tokenAction && (
-            <ReviewField label="Decoded Token Action">
+            <ReviewField label="Token action">
               <div className="text-sm text-dls-text">
                 {analysis.tokenAction.kind === "approve"
                   ? `Approve ${analysis.tokenAction.amountFormatted} ${analysis.tokenAction.tokenSymbol}`
@@ -740,21 +742,24 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
           )}
 
           {isContractInteraction && (
-            <ReviewField label="Calldata" icon={<FileCode className="size-3" />}>
-              {decoded?.signature && (
-                <div className="mb-1 text-xs font-medium text-green-300">{decoded.signature}</div>
-              )}
-              <div className="font-mono text-xs text-dls-text break-all max-h-24 overflow-y-auto scrollbar-thin">
-                {pending.data!.length > 120 ? `${pending.data!.slice(0, 60)}...${pending.data!.slice(-20)}` : pending.data}
-              </div>
-              {decoded && !decoded.signature && (
-                <div className="mt-1 text-xs text-amber-300">Unknown function selector: {decoded.selector}</div>
-              )}
+            <ReviewField label="Contract details" icon={<FileCode className="size-3" />}>
+              <details>
+                <summary className="min-h-7 cursor-pointer text-xs font-medium text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">Show technical data</summary>
+                {decoded?.signature && (
+                  <div className="mb-1 mt-1 text-xs font-medium text-green-11">{decoded.signature}</div>
+                )}
+                <div className="font-mono text-xs text-dls-text break-all max-h-24 overflow-y-auto scrollbar-thin">
+                  {pending.data!.length > 120 ? `${pending.data!.slice(0, 60)}...${pending.data!.slice(-20)}` : pending.data}
+                </div>
+                {decoded && !decoded.signature && (
+                  <div className="mt-1 text-xs text-amber-11">Unrecognized contract action: {decoded.selector}</div>
+                )}
+              </details>
             </ReviewField>
           )}
 
           {gasEstimate && (
-            <ReviewField label="Estimated gas" icon={<Fuel className="size-3" />}>
+            <ReviewField label="Network fee estimate" icon={<Fuel className="size-3" />}>
               {gasEstimate.success ? (
                 <div className="space-y-1">
                   <div className="font-mono text-sm text-dls-text">{gasEstimate.gasFormatted} units</div>
@@ -766,20 +771,20 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
                   )}
                 </div>
               ) : (
-                <div className="text-xs text-amber-300">{gasEstimate.error}</div>
+                <div className="text-xs text-amber-11">{gasEstimate.error}</div>
               )}
             </ReviewField>
           )}
 
-          <ReviewField label="Simulation" icon={simulation.status === "passed" ? <CheckCircle2 className="size-3" /> : <AlertTriangle className="size-3" />}>
+          <ReviewField label="Safety check" icon={simulation.status === "passed" ? <CheckCircle2 className="size-3" /> : <AlertTriangle className="size-3" />}>
             {simulation.status === "checking" ? (
-              <div className="text-sm text-dls-secondary">Checking transaction before approval...</div>
+              <div className="text-sm text-dls-secondary">Checking this action before wallet review…</div>
             ) : simulation.status === "passed" ? (
-              <div className="text-sm text-green-300">Passed pre-approval simulation.</div>
+              <div className="text-sm text-green-11">Checks passed. Your wallet can review this action.</div>
             ) : simulation.status === "failed" ? (
-              <div className="text-sm text-red-300">{simulation.error}</div>
+              <div className="text-sm text-red-11">{simulation.error}</div>
             ) : simulation.status === "unavailable" ? (
-              <div className="text-sm text-amber-300">{simulation.error}</div>
+              <div className="text-sm text-amber-11">{simulation.error}</div>
             ) : (
               <div className="text-sm text-dls-secondary">Waiting for wallet details.</div>
             )}
@@ -788,11 +793,11 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
           <ReviewField label="Network">
             <div className="flex items-center gap-2 text-sm text-dls-text">
               <span className={cn("size-2 rounded-full", isMainnet ? "bg-red-500" : "bg-yellow-500")} />
-              <span className={cn(isMainnet && "font-semibold text-red-400")}>{chainName}</span>
+              <span className={cn(isMainnet && "font-semibold text-red-11")}>{chainName}</span>
             </div>
           </ReviewField>
 
-          <ReviewField label="Proposed by">
+          <ReviewField label="Requested by">
             <div className="font-mono text-sm text-dls-text">{pending.proposedBy}</div>
           </ReviewField>
 
@@ -871,7 +876,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
             }}
           >
             <CheckCircle2 className="size-4" />
-            {approvalBusy ? "Approving..." : simulationChecking ? "Checking..." : isBlocked ? "Blocked" : isMainnet && countdown > 0 ? `Approve (${countdown})...` : "Approve"}
+            {approvalBusy ? "Opening wallet…" : simulationChecking ? "Checking…" : isBlocked ? "Blocked" : isMainnet && countdown > 0 ? `Continue in wallet (${countdown})…` : "Continue in wallet"}
           </Button>
         </div>
       </div>

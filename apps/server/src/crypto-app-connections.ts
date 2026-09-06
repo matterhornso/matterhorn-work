@@ -13,6 +13,7 @@ import {
   type MatterhornCryptoAppOAuthFlowRecord,
   type MatterhornCryptoAppOAuthTokenRecord,
   MatterhornCryptoAppConnectionStore,
+  MatterhornCryptoAppConnectionStoreError,
 } from "./crypto-app-connection-store.js";
 import { MatterhornCryptoAppRegistry } from "./crypto-app-registry.js";
 
@@ -69,7 +70,7 @@ function safeIdentifier(value: string, maxLength = 160): boolean {
     && value.length > 0
     && value.length <= maxLength
     && value === value.trim()
-    && !/[\u0000-\u001f\u007f]/.test(value);
+    && /^[A-Za-z0-9][A-Za-z0-9._:@+/-]*$/.test(value);
 }
 
 function uniqueNonEmpty(values: string[]): boolean {
@@ -257,11 +258,15 @@ export class MatterhornCryptoAppConnections {
 
   get(workspaceId: string, connectionId: string): MatterhornCryptoAppConnectionView | null {
     const connection = this.#store.get(workspaceId, connectionId);
+    if (connection) this.#assertStoredAuthority(connection);
     return connection ? this.#view(connection) : null;
   }
 
   list(workspaceId: string): MatterhornCryptoAppConnectionView[] {
-    return this.#store.list(workspaceId).map((connection) => this.#view(connection));
+    return this.#store.list(workspaceId).map((connection) => {
+      this.#assertStoredAuthority(connection);
+      return this.#view(connection);
+    });
   }
 
   resolveActive(workspaceId: string, connectionId: string): MatterhornCryptoAppConnection | null {
@@ -269,6 +274,7 @@ export class MatterhornCryptoAppConnections {
     if (!connection || connection.state !== "active") return null;
     const registryEntry = this.#registry.resolve(connection.appId);
     if (!registryEntry || registryEntry.manifestRevision !== connection.manifestRevision) return null;
+    this.#assertStoredAuthority(connection);
     return structuredClone(connection);
   }
 
@@ -279,6 +285,7 @@ export class MatterhornCryptoAppConnections {
   ): MatterhornCryptoAppConnectionView {
     const current = this.#store.get(workspaceId, connectionId);
     if (!current) throw new MatterhornCryptoAppConnectionError("connection_not_found");
+    this.#assertStoredAuthority(current);
     if (!TRANSITIONS[current.state].has(nextState)) {
       throw new MatterhornCryptoAppConnectionError("connection_transition_invalid");
     }
@@ -301,6 +308,29 @@ export class MatterhornCryptoAppConnections {
 
   purgeWorkspace(workspaceId: string): number {
     return this.#store.purgeWorkspace(workspaceId);
+  }
+
+  #assertStoredAuthority(connection: MatterhornCryptoAppConnection): void {
+    const registryEntry = this.#registry.resolve(connection.appId);
+    if (!registryEntry || registryEntry.manifestRevision !== connection.manifestRevision) return;
+    try {
+      this.#validateGrant({
+        workspaceId: connection.workspaceId,
+        createdBy: connection.createdBy,
+        appId: connection.appId,
+        grantedActionIds: connection.grantedActionIds,
+        grantedScopes: connection.grantedScopes,
+        grantedNetworks: connection.grantedNetworks,
+      });
+      if (!credentialValid(connection.credential, registryEntry.manifest.authentication)) {
+        throw new MatterhornCryptoAppConnectionError("connection_credential_invalid");
+      }
+    } catch (error) {
+      if (error instanceof MatterhornCryptoAppConnectionError) {
+        throw new MatterhornCryptoAppConnectionStoreError("crypto_app_connection_state_corrupt");
+      }
+      throw error;
+    }
   }
 
   #view(connection: MatterhornCryptoAppConnection): MatterhornCryptoAppConnectionView {

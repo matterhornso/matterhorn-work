@@ -6,11 +6,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import type { MatterhornCryptoAppResult } from "@matterhorn-work/types/crypto-coworkers";
 
+import { cryptoAppEvidenceIdentity } from "./crypto-app-evidence-identity.js";
 import { MatterhornCoworkerStore } from "./crypto-coworker-store.js";
 import { MatterhornCoworkerWatchRunner } from "./crypto-coworker-watch-runner.js";
 import { MatterhornCoworkers, type MatterhornCoworkerCreateInput } from "./crypto-coworkers.js";
 
 const roots: string[] = [];
+const COWORKER_INTEGRITY_SECRET = "coworker-watch-runner-integrity-secret-at-least-32-bytes";
 
 function profileInput(): MatterhornCoworkerCreateInput {
   return {
@@ -42,7 +44,7 @@ function profileInput(): MatterhornCoworkerCreateInput {
 
 function result(balance: string, now: Date): MatterhornCryptoAppResult {
   const completedAt = now.toISOString();
-  return {
+  const candidate: MatterhornCryptoAppResult = {
     version: "matterhorn.crypto-app-result.v1",
     app: {
       id: "matterhorn.sui-testnet",
@@ -66,6 +68,17 @@ function result(balance: string, now: Date): MatterhornCryptoAppResult {
     metering: { costMicros: 0, reservationId: "reservation_sui" },
     result: { balanceAtomic: balance, observedAt: completedAt },
   };
+  Object.assign(candidate.provenance, cryptoAppEvidenceIdentity({
+    appId: candidate.app.id,
+    manifestRevision: candidate.app.manifestRevision,
+    connectionId: candidate.app.connectionId,
+    actionId: candidate.action.id,
+    access: candidate.action.access,
+    network: candidate.action.network,
+    result: candidate.result,
+    observation: candidate.observation,
+  }));
+  return candidate;
 }
 
 function fixture(condition: {
@@ -76,7 +89,7 @@ function fixture(condition: {
 } = { id: "balance_changed", metric: "balanceAtomic", operator: "changed", value: null }) {
   const root = mkdtempSync(join(tmpdir(), "matterhorn-watch-runner-"));
   roots.push(root);
-  const store = new MatterhornCoworkerStore(join(root, "coworkers.db"));
+  const store = new MatterhornCoworkerStore(join(root, "coworkers.db"), COWORKER_INTEGRITY_SECRET);
   let now = new Date("2026-09-01T12:00:00.000Z");
   const coworkers = new MatterhornCoworkers({
     store,
@@ -147,6 +160,7 @@ describe("crypto coworker watch runner", () => {
 
       balance = "11";
       setup.advance("2026-09-01T12:10:00.000Z");
+      const expectedEvidenceHash = result(balance, setup.now()).provenance.observationHash;
       expect(await runner.tick()).toEqual({ claimed: 1, completed: 1, alerted: 1, failed: 0 });
       expect(setup.coworkers.listInbox({
         workspaceId: "ws_alpha",
@@ -155,6 +169,7 @@ describe("crypto coworker watch runner", () => {
       })[0]).toMatchObject({
         kind: "alert",
         reasonCodes: ["balance_changed"],
+        source: { evidenceReferenceHash: expectedEvidenceHash },
         budgetImpact: { readCallsConsumed: 1, modelTokensConsumed: 0, costMicros: 0 },
       });
       expect(setup.coworkers.getWatch("ws_alpha", "account_alpha", setup.profile.id, setup.watch.id)?.schedule)
@@ -243,6 +258,83 @@ describe("crypto coworker watch runner", () => {
       })[0];
       expect(item).toMatchObject({ kind: "notice", reasonCodes: ["watch_execution_failed"] });
       expect(JSON.stringify(item)).not.toContain("private key leaked by upstream");
+    } finally {
+      setup.store.close();
+    }
+  });
+
+  test("fails closed when certified evidence proofs are incomplete or malformed", async () => {
+    const setup = fixture();
+    const runner = new MatterhornCoworkerWatchRunner({
+      coworkers: setup.coworkers,
+      now: setup.now,
+      execute: async () => {
+        const candidate = result("10", setup.now());
+        candidate.provenance.observationHash = "malformed";
+        return candidate;
+      },
+    });
+    try {
+      setup.advance("2026-09-01T12:05:00.000Z");
+      expect(await runner.tick()).toEqual({ claimed: 1, completed: 0, alerted: 0, failed: 1 });
+      expect(setup.coworkers.listInbox({
+        workspaceId: "ws_alpha",
+        ownerId: "account_alpha",
+        coworkerId: setup.profile.id,
+      })[0]).toMatchObject({ kind: "notice", reasonCodes: ["adapter_output_invalid"] });
+    } finally {
+      setup.store.close();
+    }
+  });
+
+  test("fails closed before establishing a baseline when certified action authority was mutated", async () => {
+    const setup = fixture();
+    const runner = new MatterhornCoworkerWatchRunner({
+      coworkers: setup.coworkers,
+      now: setup.now,
+      execute: async () => {
+        const candidate = result("10", setup.now());
+        candidate.action.access = "prepare";
+        return candidate;
+      },
+    });
+    try {
+      setup.advance("2026-09-01T12:05:00.000Z");
+      expect(await runner.tick()).toEqual({ claimed: 1, completed: 0, alerted: 0, failed: 1 });
+      expect(setup.coworkers.listInbox({
+        workspaceId: "ws_alpha",
+        ownerId: "account_alpha",
+        coworkerId: setup.profile.id,
+      })[0]).toMatchObject({ kind: "notice", reasonCodes: ["adapter_output_invalid"] });
+      expect(setup.coworkers.getWatch("ws_alpha", "account_alpha", setup.profile.id, setup.watch.id)?.schedule)
+        .toMatchObject({ lastConditionValues: {} });
+    } finally {
+      setup.store.close();
+    }
+  });
+
+  test("rejects proof-less legacy evidence before establishing a baseline or alert", async () => {
+    const setup = fixture();
+    const runner = new MatterhornCoworkerWatchRunner({
+      coworkers: setup.coworkers,
+      now: setup.now,
+      execute: async () => {
+        const candidate = result("10", setup.now());
+        delete candidate.provenance.projectionHash;
+        delete candidate.provenance.observationHash;
+        return candidate;
+      },
+    });
+    try {
+      setup.advance("2026-09-01T12:05:00.000Z");
+      expect(await runner.tick()).toEqual({ claimed: 1, completed: 0, alerted: 0, failed: 1 });
+      expect(setup.coworkers.listInbox({
+        workspaceId: "ws_alpha",
+        ownerId: "account_alpha",
+        coworkerId: setup.profile.id,
+      })[0]).toMatchObject({ kind: "notice", reasonCodes: ["adapter_output_invalid"] });
+      expect(setup.coworkers.getWatch("ws_alpha", "account_alpha", setup.profile.id, setup.watch.id)?.schedule)
+        .toMatchObject({ lastConditionValues: {} });
     } finally {
       setup.store.close();
     }

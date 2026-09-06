@@ -97,7 +97,12 @@ const draft = defineCryptoAppManifest({
   description: "Bounded public reads and wallet-reviewed transaction preparation.",
   manifestRevision: "1.0.0",
   publisher: { id: "your-team", keyId: "publisher-1", algorithm: "ed25519" },
-  transport: { kind: "openapi", endpoint: "https://adapter.example/v1" },
+  transport: {
+    kind: "openapi",
+    endpoint: "https://adapter.example",
+    profile: "matterhorn.openapi-action.v1",
+    operations: [{ actionId: "your_read_action", method: "POST", path: "/v1/balance/read" }],
+  },
   authentication: { type: "none", scopes: [] },
   networks: [{ protocol: "sui", chainId: "sui:testnet", environment: "testnet" }],
   actions: [/* closed, typed read/watch/prepare/simulate actions */],

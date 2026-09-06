@@ -1,17 +1,17 @@
 # Matterhorn Desks
 
-Matterhorn Desks is a local-first agent workspace for chat, protocol research, workflow execution, project notes, memory review, generated outputs, and external-signer handoffs.
+Matterhorn Desks is a guarded agent workspace for chat, protocol research, persistent crypto coworkers, reviewed transaction preparation, project notes, Memory, encrypted Agent Files, and evidence-backed outputs.
 
 The customer experience is organized around desks rather than raw tools:
 
-- **Bittensor:** public TAO wallet reads, subnet and validator research, watches, unsigned action previews, and external-signer handoffs.
-- **Hyperliquid:** market, funding, orderbook, account, and position research with preview and handoff boundaries.
-- **Polymarket:** market discovery, outcome and liquidity research, compliance-aware previews, and receipts.
-- **Sui:** wallet-standard connection, public account reads, transfer previews, NFT/receipt evidence, and optional wallet-created non-content testnet anchors for encrypted Walrus records.
+- **Bittensor:** public TAO wallet reads, subnet and validator research, watches, and compatible connected-wallet review for supported testnet actions.
+- **Hyperliquid:** market, funding, orderbook, account, and position research with exact connected-wallet order review.
+- **Polymarket:** market discovery, outcome and liquidity research, jurisdiction-aware wallet previews, and receipts.
+- **Sui:** wallet-standard connection, public account reads, dry-run transfer review, receipt evidence, and optional wallet-created testnet lifecycle actions for encrypted Walrus records.
 - **Longevity:** non-medical service workflows for trainers, yoga instructors, dieticians, coaches, and client packet creation.
 - **Memory, Notes, and Outputs:** project-owned context, explicit memory review, and readable evidence rather than hidden persistence.
 
-Matterhorn does not ask for seed phrases, private keys, mnemonics, wallet exports, raw signatures, signed payloads, or API secrets. Signing stays in the user's wallet or external signer.
+Matterhorn does not ask for seed phrases, private keys, mnemonics, wallet exports, raw signatures, signed payloads, or API secrets. Matterhorn and its agents never sign or submit financial transactions; the connected wallet is the final authority on supported paths.
 
 ## Current Product Surfaces
 
@@ -89,7 +89,8 @@ Start with [docs/README.md](docs/README.md). It distinguishes current implementa
 
 Key guides:
 
-- [Platform architecture](docs/platform-architecture.md)
+- [Guarded Agent Architecture v3](docs/architecture/matterhorn-guarded-agent-architecture-v3.md)
+- [Core platform architecture](docs/platform-architecture.md)
 - [Product surfaces](docs/product-surfaces.md)
 - [Notes](docs/notes.md)
 - [Response perspectives](docs/response-perspectives.md)

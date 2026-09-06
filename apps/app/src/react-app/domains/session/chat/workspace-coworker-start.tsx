@@ -42,6 +42,28 @@ const HOME_COWORKER_CHOICES: ReadonlyArray<{
   },
 ];
 
+const HOME_START_EXAMPLES: ReadonlyArray<{
+  label: string;
+  outcome: string;
+  templateId: MatterhornCoworkerTemplateId;
+}> = [
+  {
+    label: "Compare validators",
+    outcome: "Compare Bittensor validators and save a cited recommendation.",
+    templateId: "market_analyst",
+  },
+  {
+    label: "Review account risk",
+    outcome: "Review my Hyperliquid account risk and alert me to important changes.",
+    templateId: "risk_monitor",
+  },
+  {
+    label: "Prepare a transfer",
+    outcome: "Prepare a Sui testnet transfer for my wallet to review.",
+    templateId: "transaction_coordinator",
+  },
+];
+
 export function WorkspaceCoworkerStart({
   disabled,
   onChoose,
@@ -51,6 +73,7 @@ export function WorkspaceCoworkerStart({
 }) {
   const [outcome, setOutcome] = useState("");
   const [chosenTemplateId, setChosenTemplateId] = useState<MatterhornCoworkerTemplateId | null>(null);
+  const [choicesOpen, setChoicesOpen] = useState(false);
   const suggestedTemplateId = useMemo(() => suggestCoworkerTemplate(outcome), [outcome]);
   const selectedTemplateId = chosenTemplateId ?? suggestedTemplateId;
   const selectedChoice = HOME_COWORKER_CHOICES.find((choice) => choice.id === selectedTemplateId)!;
@@ -58,9 +81,9 @@ export function WorkspaceCoworkerStart({
 
   return (
     <section className="border-y border-dls-border/55 py-4" aria-labelledby="workspace-coworker-start-title">
-      <h3 id="workspace-coworker-start-title" className="text-base font-semibold text-dls-text">What should Matterhorn help you do?</h3>
+      <h3 id="workspace-coworker-start-title" className="text-base font-semibold text-dls-text">What do you want to do?</h3>
       <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-        Describe the outcome in one sentence. Matterhorn will suggest the right coworker before anything starts.
+        Type a goal or choose an example. You can edit it before anything starts.
       </p>
       <form
         className="mt-4"
@@ -77,48 +100,105 @@ export function WorkspaceCoworkerStart({
           value={outcome}
           maxLength={1_200}
           disabled={disabled}
-          placeholder="For example: Compare Bittensor validators and save a cited recommendation."
-          onChange={(event) => setOutcome(event.currentTarget.value)}
+          placeholder="Compare Bittensor validators and save a recommendation."
+          onChange={(event) => {
+            const nextOutcome = event.currentTarget.value;
+            setOutcome(nextOutcome);
+            if (!nextOutcome.trim()) {
+              setChosenTemplateId(null);
+              setChoicesOpen(false);
+            }
+          }}
         />
 
-        <fieldset className="mt-3">
-          <legend className="text-xs font-medium text-dls-text">Choose a coworker</legend>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2" role="group" aria-label="Coworker role">
-            {HOME_COWORKER_CHOICES.map((choice) => {
-              const Icon = choice.icon;
-              const selected = choice.id === selectedTemplateId;
-              const suggested = choice.id === suggestedTemplateId;
-              return (
+        {!trimmedOutcome ? (
+          <div className="mt-3" role="group" aria-label="Example goals">
+            <p className="text-xs font-medium text-dls-secondary">Try an example</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {HOME_START_EXAMPLES.map((example) => (
                 <button
-                  key={choice.id}
+                  key={example.label}
                   type="button"
-                  aria-pressed={selected}
+                  className="inline-flex min-h-11 items-center rounded-md border border-dls-border/80 px-3 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9"
                   disabled={disabled}
-                  className={`grid min-h-11 grid-cols-[20px_minmax(0,1fr)_20px] items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50 ${
-                    selected
-                      ? "border-dls-text/45 bg-dls-hover/45 text-dls-text"
-                      : "border-dls-border/70 bg-transparent text-dls-secondary hover:bg-dls-hover/30 hover:text-dls-text"
-                  }`}
-                  onClick={() => setChosenTemplateId(choice.id)}
+                  onClick={() => {
+                    setOutcome(example.outcome);
+                    setChosenTemplateId(example.templateId);
+                    setChoicesOpen(false);
+                  }}
                 >
-                  <Icon className="size-4" strokeWidth={1.7} aria-hidden="true" />
-                  <span className="min-w-0 truncate font-medium">
-                    {choice.title}{suggested ? <span className="ml-2 font-normal text-dls-secondary">· Suggested</span> : null}
-                  </span>
-                  {selected ? <Check className="size-4" strokeWidth={1.8} aria-hidden="true" /> : <span aria-hidden="true" />}
+                  {example.label}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </fieldset>
+        ) : null}
+
+        {trimmedOutcome ? (
+          <div className="mt-3 border-t border-dls-border/40 pt-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-xs text-dls-secondary">{chosenTemplateId ? "Your choice" : "Matterhorn suggests"}</p>
+                <p className="mt-0.5 text-sm font-medium text-dls-text">{selectedChoice.title}</p>
+                <p className="mt-0.5 max-w-2xl text-xs leading-5 text-dls-secondary">{selectedChoice.description}</p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-9 shrink-0 items-center rounded-md border border-dls-border px-3 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-expanded={choicesOpen}
+                aria-controls="workspace-coworker-choices"
+                disabled={disabled}
+                onClick={() => setChoicesOpen((open) => !open)}
+              >
+                {choicesOpen ? "Close choices" : "Change"}
+              </button>
+            </div>
+
+            {choicesOpen ? (
+              <fieldset id="workspace-coworker-choices" className="mt-3 border-t border-dls-border/40 pt-3">
+                <legend className="text-xs font-medium text-dls-text">Choose a coworker</legend>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {HOME_COWORKER_CHOICES.map((choice) => {
+                    const Icon = choice.icon;
+                    const selected = choice.id === selectedTemplateId;
+                    return (
+                      <button
+                        key={choice.id}
+                        type="button"
+                        aria-pressed={selected}
+                        disabled={disabled}
+                        className={`grid min-h-14 grid-cols-[20px_minmax(0,1fr)_20px] items-start gap-2 rounded-md border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50 ${
+                          selected
+                            ? "border-dls-text/45 bg-dls-hover/45 text-dls-text"
+                            : "border-dls-border/70 bg-transparent text-dls-secondary hover:bg-dls-hover/30 hover:text-dls-text"
+                        }`}
+                        onClick={() => {
+                          setChosenTemplateId(choice.id);
+                          setChoicesOpen(false);
+                        }}
+                      >
+                        <Icon className="mt-0.5 size-4" strokeWidth={1.7} aria-hidden="true" />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium text-dls-text">{choice.title}</span>
+                          <span className="mt-0.5 block text-xs leading-4 text-dls-secondary">{choice.description}</span>
+                        </span>
+                        {selected ? <Check className="mt-0.5 size-4" strokeWidth={1.8} aria-hidden="true" /> : <span aria-hidden="true" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-3 flex flex-col gap-3 border-t border-dls-border/40 pt-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-dls-text">{selectedChoice.title}</p>
-            <p className="mt-0.5 text-xs leading-5 text-dls-secondary">{selectedChoice.description}</p>
-          </div>
+          <p id="workspace-coworker-safety" className="max-w-2xl text-xs leading-5 text-dls-secondary">
+            Next, choose the apps and information Matterhorn can use. It never sees private keys or sends funds on its own.
+          </p>
           <button
             type="submit"
+            aria-describedby="workspace-coworker-safety"
             className="inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-dls-text px-4 text-sm font-medium text-dls-background transition-colors hover:bg-dls-text/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-45"
             disabled={disabled || !trimmedOutcome}
           >
@@ -126,9 +206,6 @@ export function WorkspaceCoworkerStart({
           </button>
         </div>
       </form>
-      <p id="workspace-coworker-safety" className="mt-3 text-xs leading-5 text-dls-secondary">
-        You choose what it can access next. It cannot see private keys or send funds on its own.
-      </p>
     </section>
   );
 }

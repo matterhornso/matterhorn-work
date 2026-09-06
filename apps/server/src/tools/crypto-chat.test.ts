@@ -292,14 +292,14 @@ describe("unified crypto chat router", () => {
     expect(result.intent).toBe("market_execution_chain");
     expect(result.execution).toBe("read_only");
     expect(result.requiresClarification).toBe(false);
-    expect(result.responseText).toContain("agent prepares exact terms");
-    expect(result.responseText).toContain("connected wallet authorizes each supported submission");
-    expect(result.responseText).toContain("Reviewed terms are immutable");
+    expect(result.responseText).toContain("agent drafts exact terms");
+    expect(result.responseText).toContain("connected wallet authorizes each supported action");
+    expect(result.responseText).toContain("Reviewed terms cannot be changed");
     expect(result.responseText).toContain("watches cannot execute");
     expect(result.responseText).toContain("never takes private keys");
     expect(result.cards[0]).toMatchObject({
       kind: "market_execution_chain",
-      title: "Legacy evidence chain",
+      title: "Connected-wallet transaction path",
     });
     expect(result.sharedCards[0]).toMatchObject({
       kind: "readiness_report",
@@ -318,6 +318,7 @@ describe("unified crypto chat router", () => {
       safety?: {
         canSubmit?: boolean;
         liveSubmissionEnabled?: boolean;
+        connectedWalletRequired?: boolean;
         acceptsSecrets?: boolean;
         acceptsRawSignatures?: boolean;
         acceptsSignedPayloads?: boolean;
@@ -325,14 +326,15 @@ describe("unified crypto chat router", () => {
     };
     expect(guide.version).toBe("matterhorn.market.execution-chain-guide.v1");
     expect(guide.stages?.map((stage) => stage.id)).toEqual([
-      "preview_handoff",
-      "external_sign_request",
-      "redacted_artifact_validation",
-      "artifact_reconciliation",
-      "public_receipt_import",
+      "agent_draft",
+      "policy_and_simulation",
+      "wallet_review",
+      "wallet_submission",
+      "receipt_reconciliation",
     ]);
     expect(guide.safety?.canSubmit).toBe(false);
     expect(guide.safety?.liveSubmissionEnabled).toBe(false);
+    expect(guide.safety?.connectedWalletRequired).toBe(true);
     expect(guide.safety?.acceptsSecrets).toBe(false);
     expect(guide.safety?.acceptsRawSignatures).toBe(false);
     expect(guide.safety?.acceptsSignedPayloads).toBe(false);
@@ -343,20 +345,19 @@ describe("unified crypto chat router", () => {
 
   test("answers specific market execution-step prompts with focused guidance", async () => {
     const result = await executeUnifiedCryptoChatWorkflow({
-      message: "Create a Hyperliquid external sign request for testnet. What public context is needed?",
+      message: "What will I review before my connected wallet can authorize a Hyperliquid order?",
     });
 
     expect(result.venue).toBe("auto");
     expect(result.intent).toBe("market_execution_step_guidance");
     expect(result.execution).toBe("read_only");
-    expect(result.responseText).toContain("External sign request");
-    expect(result.responseText).toContain("Use only public/redacted inputs");
-    expect(result.responseText).toContain("fail closed on hash mismatches");
-    expect(result.responseText).toContain("separate exact-term connected-wallet ticket");
+    expect(result.responseText).toContain("Wallet review");
+    expect(result.responseText).toContain("cannot approve or submit");
+    expect(result.responseText).toContain("invalidates the ticket");
     expect(result.responseText).toContain("never takes private keys");
     expect(result.cards[0]).toMatchObject({
       kind: "market_execution_chain",
-      title: "Legacy evidence chain: External sign request",
+      title: "Transaction path: Wallet review",
     });
     expect(result.sharedCards[0]).toMatchObject({
       kind: "readiness_report",
@@ -368,9 +369,8 @@ describe("unified crypto chat router", () => {
       },
     });
     const highlightedStep = result.data.highlightedStep as { id?: string; commands?: string[] } | null;
-    expect(highlightedStep?.id).toBe("external_sign_request");
-    expect(highlightedStep?.commands?.join("\n")).toContain("matterhorn-work hyperliquid sign-request");
-    expect(highlightedStep?.commands?.join("\n")).toContain("testnet_external_signer");
+    expect(highlightedStep?.id).toBe("wallet_review");
+    expect(highlightedStep?.commands).toEqual([]);
     expect(JSON.stringify(result)).not.toContain("/orders/submit");
     expect(JSON.stringify(result)).not.toContain("privateKey");
     result.sharedCards.forEach((card) => expectSharedCardContract(card, "auto"));

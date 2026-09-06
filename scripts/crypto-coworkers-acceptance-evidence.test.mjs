@@ -83,7 +83,7 @@ const coworkerCommon = {
 };
 
 const input = {
-  version: "matterhorn.crypto-coworkers-acceptance-evidence.v1",
+  version: "matterhorn.crypto-coworkers-acceptance-evidence.v2",
   capturedAt: "2026-09-03T11:00:00.000Z",
   commit,
   environment: "deployed",
@@ -116,9 +116,11 @@ const input = {
       evidence: evidence("certification-bittensor"),
     },
     polymarket: {
-      status: "pass", network: "mainnet-public-readonly", signedManifests: true,
-      liveDiscovery: true, liveOrderbook: true, sealedRuntimeReport: true, promoted: true,
-      revisionPinned: true, noCredentialAuthority: true, noTransactionAuthority: true,
+      status: "pass", network: "polymarket:polygon", signedReadManifests: true,
+      signedWalletPreviewManifest: true, liveDiscovery: true, liveOrderbook: true,
+      trustedJurisdiction: true, walletSimulation: true, sealedReadRuntimeReport: true,
+      sealedWalletRuntimeReport: true, readPromoted: true, walletPreviewPromoted: true,
+      revisionPinned: true, noCredentialAuthority: true, noSubmitAuthority: true,
       evidence: evidence("certification-polymarket"),
     },
   },
@@ -157,9 +159,11 @@ const input = {
       walletOnly: true, receiptReconciled: true, evidence: evidence("transaction-bittensor"),
     },
     polymarket: {
-      status: "pass", network: "mainnet-public-readonly", discovery: true, orderbook: true,
-      regionDisclosure: true, transactionAuthorityAbsent: true, safeDeferralVisible: true,
-      evidence: evidence("transaction-polymarket-readonly"),
+      status: "pass", network: "polymarket:polygon", discovery: true, orderbook: true,
+      trustedJurisdiction: true, directVenueDenialRespected: true, prepare: true,
+      simulate: true, exactTokenBound: true, exactSignerBound: true, exactFakTermsBound: true,
+      reject: true, expire: true, tamperBlocked: true, refresh: true, walletOnly: true,
+      receiptReconciled: true, evidence: evidence("transaction-polymarket-wallet"),
     },
   },
   encryptedEvidence: {
@@ -255,7 +259,12 @@ try {
   assert.equal(pending.runtime.opencodeVersion, constants.opencodeVersion);
   assert.equal(pending.runtime.status, "pending");
   assert.equal(pending.certifications.sui.network, "sui-testnet");
-  assert.equal(pending.transactions.polymarket.network, "mainnet-public-readonly");
+  assert.equal(pending.certifications.polymarket.network, "polymarket:polygon");
+  assert.equal(pending.certifications.polymarket.signedWalletPreviewManifest, false);
+  assert.equal(pending.certifications.polymarket.walletPreviewPromoted, false);
+  assert.equal(pending.transactions.polymarket.network, "polymarket:polygon");
+  assert.equal(pending.transactions.polymarket.exactFakTermsBound, false);
+  assert.equal(pending.transactions.polymarket.walletOnly, false);
   assert.equal(pending.coworkers.transactionCoordinator.walletReviewRequired, false);
   assert.equal(pending.encryptedEvidence.recoveryKeyDestroyed, false);
   assert.equal(pending.encryptedEvidence.anchorWalletOnly, false);
@@ -313,7 +322,7 @@ try {
   const passing = await run(input);
   assert.equal(passing.code, 0, passing.stderr || passing.stdout);
   const report = JSON.parse(passing.stdout);
-  assert.equal(report.version, "matterhorn.crypto-coworkers-acceptance-readiness.v1");
+  assert.equal(report.version, "matterhorn.crypto-coworkers-acceptance-readiness.v2");
   assert.equal(report.decision, "GO");
   assert.equal(report.ready, true);
   assert.equal(report.checks.length, 21);
@@ -418,6 +427,24 @@ try {
   });
   assert.equal(unsafeCoworker.code, 1);
   assert.ok(JSON.parse(unsafeCoworker.stdout).blockers.some((item) => item.id === "coworker_transactionCoordinator"));
+
+  const incompletePolymarketCertification = structuredClone(input);
+  incompletePolymarketCertification.certifications.polymarket.walletPreviewPromoted = false;
+  const incompletePolymarketCertificationResult = await run(incompletePolymarketCertification);
+  assert.equal(incompletePolymarketCertificationResult.code, 1);
+  assert.ok(JSON.parse(incompletePolymarketCertificationResult.stdout).blockers.some((item) => item.id === "certification_polymarket"));
+
+  const unsafePolymarketAirlock = structuredClone(input);
+  unsafePolymarketAirlock.transactions.polymarket.exactSignerBound = false;
+  const unsafePolymarketAirlockResult = await run(unsafePolymarketAirlock);
+  assert.equal(unsafePolymarketAirlockResult.code, 1);
+  assert.ok(JSON.parse(unsafePolymarketAirlockResult.stdout).blockers.some((item) => item.id === "transaction_polymarket"));
+
+  const legacyReadOnlyEvidence = structuredClone(input);
+  legacyReadOnlyEvidence.version = "matterhorn.crypto-coworkers-acceptance-evidence.v1";
+  const legacyReadOnlyEvidenceResult = await run(legacyReadOnlyEvidence);
+  assert.equal(legacyReadOnlyEvidenceResult.code, 1);
+  assert.match(legacyReadOnlyEvidenceResult.stderr, /version must be matterhorn\.crypto-coworkers-acceptance-evidence\.v2/i);
 
   const incompleteShadow = await run({
     ...input,

@@ -90,7 +90,7 @@ Goal: validate the signing payload templates against official clients before any
 Build:
 
 - Hyperliquid testnet validation against the official SDK for L1 order action structure, asset index, nonce, agent domain, and connection id computation.
-- Polymarket testnet or client validation against `@polymarket/clob-client` for EIP-712 order domain, verifying contract, amount rounding, outcome token handling, and expiration.
+- Polymarket testnet or client validation against `@polymarket/clob-client-v2` for the CLOB V2 EIP-712 domain, verifying contract, pUSD amount rounding, outcome token handling, timestamp, metadata, builder code, and the separate unsigned wire expiration.
 - Evidence docs that say what was validated, what remains template-only, and why Matterhorn still does not sign or submit.
 - A local validation-track gate that keeps template payloads marked `requiresClientValidation: true`, keeps all previews/handoffs non-submittable, and documents the exact external official-client evidence required before future execution work.
 

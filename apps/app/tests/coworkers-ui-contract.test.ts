@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   readSessionPanelFromSearch,
@@ -7,7 +9,18 @@ import {
 } from "../src/react-app/shell/session-panel-route";
 import { buildCoworkerAppConnectionDraft } from "../src/react-app/domains/coworkers/coworker-app-connection";
 import {
+  boundedCoworkerUnreadCount,
+  coworkerListQueryKey,
+  coworkerUnreadBadgeLabel,
+  coworkerUnreadStatusLabel,
+} from "../src/react-app/domains/coworkers/coworker-query";
+import {
+  CoworkerResourceSaveActions,
   coworkerActivitySummary,
+  coworkerUnreadSummaryLabel,
+  coworkerPositionSource,
+  coworkerRememberedWorkSummary,
+  newestUnreadCoworkerId,
   resolveCoworkerNextStep,
 } from "../src/react-app/domains/coworkers/coworkers-panel";
 import {
@@ -16,6 +29,7 @@ import {
   resolveCoworkerWatchSources,
 } from "../src/react-app/domains/coworkers/coworker-watch-form";
 import { suggestCoworkerTemplate } from "../src/react-app/domains/session/chat/workspace-coworker-suggestion";
+import { WorkspaceCoworkerStart } from "../src/react-app/domains/session/chat/workspace-coworker-start";
 
 function appSource(path: string): string {
   return readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
@@ -32,6 +46,12 @@ describe("chat-operated coworker UI", () => {
     const route = appSource("react-app/domains/coworkers/coworker-access-route.tsx");
     const fragment = appSource("react-app/domains/coworkers/coworker-invite-fragment.ts");
     const shell = appSource("react-app/shell/app-root.tsx");
+    const viteConfig = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+    const deployments = ["../../../vercel.json", "../vercel.json"].map((path) => JSON.parse(
+      readFileSync(new URL(path, import.meta.url), "utf8"),
+    ) as {
+      rewrites: Array<{ source: string; destination: string; missing?: Array<{ type?: string; key: string; value: string }> }>;
+    });
     expect(route).toContain("Coworker access");
     expect(route).toContain("Your connected wallet always signs and sends.");
     expect(route).toContain("The one-time code was removed from the address bar");
@@ -40,31 +60,163 @@ describe("chat-operated coworker UI", () => {
     expect(route).not.toMatch(/localStorage|sessionStorage/);
     expect(shell).toContain('path="/coworker-access"');
     expect(shell).toContain("hasPendingCoworkerInvite");
+    expect(viteConfig).toContain('"/coworker-access": sameOriginWorkspaceProxy');
+    for (const deployment of deployments) {
+      expect(deployment.rewrites).toContainEqual({
+        source: "/coworker-access",
+        missing: [{ type: "header", key: "accept", value: ".*text/html.*" }],
+        destination: "/api/matterhorn-proxy?__matterhorn_path=/coworker-access",
+      });
+      expect(deployment.rewrites).toContainEqual({
+        source: "/coworker-access/:path*",
+        missing: [{ type: "header", key: "accept", value: ".*text/html.*" }],
+        destination: "/api/matterhorn-proxy?__matterhorn_path=/coworker-access/:path*",
+      });
+    }
   });
 
   test("lets a first-time user describe one outcome and confirm a suggested coworker from Home", () => {
     const home = appSource("react-app/domains/session/chat/session-page.tsx");
     const start = appSource("react-app/domains/session/chat/workspace-coworker-start.tsx");
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
-    expect(start).toContain("What should Matterhorn help you do?");
-    expect(start).toContain("Describe the outcome in one sentence.");
-    expect(start).toContain('role="group" aria-label="Coworker role"');
+    expect(start).toContain("What do you want to do?");
+    expect(start).toContain("Type a goal or choose an example.");
+    expect(start).toContain("Try an example");
+    expect(start).toContain("Compare validators");
+    expect(start).toContain("Review account risk");
+    expect(start).toContain("Prepare a transfer");
+    expect(start).toContain("setOutcome(example.outcome)");
+    expect(start).toContain("setChosenTemplateId(example.templateId)");
+    expect(start).toContain("trimmedOutcome ? (");
+    expect(start).toContain('aria-controls="workspace-coworker-choices"');
+    expect(start).toContain('id="workspace-coworker-choices"');
+    expect(start).toContain('{choicesOpen ? "Close choices" : "Change"}');
+    expect(start).toContain('{chosenTemplateId ? "Your choice" : "Matterhorn suggests"}');
     expect(start).toContain("aria-pressed={selected}");
-    expect(start).toContain("Suggested");
+    expect(start).toContain("setChoicesOpen(false)");
     expect(start).toContain('type="submit"');
+    expect(start).toContain('aria-describedby="workspace-coworker-safety"');
     expect(start).toContain("Continue");
+    expect(start).not.toContain("Review access");
     expect(start).toContain("Research markets");
     expect(start).toContain("Watch risk");
     expect(start).toContain("Prepare a wallet review");
     expect(start).toContain("Track balances");
-    expect(start).toContain("It cannot see private keys or send funds on its own.");
+    expect(start).toContain("It never sees private keys");
+    expect(start).toContain("or sends funds on its own.");
+    expect(start).toContain("if (!nextOutcome.trim()) {");
+    expect(start).toContain("setChosenTemplateId(null)");
+    expect(start).toContain("setChoicesOpen(false)");
+    expect(start.indexOf("trimmedOutcome ? (")).toBeLessThan(start.indexOf("HOME_COWORKER_CHOICES.map"));
     expect(home).toContain("setHomeCoworkerStart(request)");
     expect(home).toContain('setCurrentSidePanel("coworkers")');
     expect(panel).toContain("coworker.role === templateId");
     expect(panel).toContain("void createCoworker(templateId)");
     expect(panel).toContain("setPendingOutcome(props.initialOutcome?.trim() ?? \"\")");
     expect(panel).toContain('pendingOutcome || "Ask what outcome I want, then help me take the safest next step."');
-    expect(panel).toContain("Your outcome");
+    expect(panel).toContain("Your goal");
+  });
+
+  test("renders one accessible first step before asking the user to choose details", () => {
+    const html = renderToStaticMarkup(React.createElement(WorkspaceCoworkerStart, {
+      onChoose: () => undefined,
+    }));
+    const submitStart = html.indexOf('<button type="submit"');
+    const submitEnd = html.indexOf(">", submitStart);
+    const submitTag = html.slice(submitStart, submitEnd + 1);
+
+    expect(html).toContain('aria-labelledby="workspace-coworker-start-title"');
+    expect(html).toContain('id="workspace-coworker-start-title"');
+    expect(html).toContain('<label for="workspace-coworker-outcome"');
+    expect(html).toContain('<textarea id="workspace-coworker-outcome"');
+    expect(html).toContain('maxLength="1200"');
+    expect(html).toContain("Type a goal or choose an example.");
+    expect(submitTag).toContain('aria-describedby="workspace-coworker-safety"');
+    expect(submitTag).toContain("disabled");
+    expect(html).toContain('id="workspace-coworker-safety"');
+    expect(html).toContain("It never sees private keys or sends funds on its own.");
+    expect(html).toContain("Try an example");
+    expect(html).toContain("Compare validators");
+    expect(html).toContain("Review account risk");
+    expect(html).toContain("Prepare a transfer");
+    expect(html).toContain("Continue");
+    expect(html).not.toContain("Matterhorn suggests");
+    expect(html).not.toContain("Choose a coworker");
+    expect(html).not.toContain("Review access");
+    expect(html).not.toContain("Apps and information");
+
+    const disabledHtml = renderToStaticMarkup(React.createElement(WorkspaceCoworkerStart, {
+      disabled: true,
+      onChoose: () => undefined,
+    }));
+    const textareaStart = disabledHtml.indexOf('<textarea id="workspace-coworker-outcome"');
+    const textareaEnd = disabledHtml.indexOf(">", textareaStart);
+    expect(disabledHtml.slice(textareaStart, textareaEnd + 1)).toContain("disabled");
+  });
+
+  test("keeps first-run access focused on one app and continues with an unsent draft", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const sessionPage = appSource("react-app/domains/session/chat/session-page.tsx");
+    expect(panel).toContain("Add private information");
+    expect(panel).toContain("Optional · {resourceDraft.agentFileIds.length} files · {resourceDraft.memoryIds.length} memories");
+    expect(panel).toContain("Choose one app above. Then you can continue to chat.");
+    expect(panel).toContain("<CoworkerResourceSaveActions");
+    expect(panel).toContain("continuingToChat={guidedSetup}");
+    expect(panel).toContain("selectedAppCount={resourceDraft.connectionIds.length}");
+    expect(panel).toContain("if (sessionId && !pendingOutcome)");
+    expect(panel).toContain("if (pendingOutcome && resourceDraft.connectionIds.length > 0) startChat(selectedCoworker)");
+    expect(panel).toContain("sendImmediately: false");
+    expect(panel).toContain("onClose();\n      setPendingOutcome");
+    expect(panel).toContain("const cancelResourceSetup = useCallback(() => {");
+    expect(panel).toContain("if (guidedSetup) {\n      onClose();");
+    expect(panel).toContain("onCancel={cancelResourceSetup}");
+    expect(panel).toContain('guidedSetup ? "Choose what it can use" : "Coworkers"');
+    expect(panel).toContain("Pick one crypto app. Files and saved Memory are optional.");
+    expect(panel).toContain("Getting your helper ready…");
+    expect(panel).toContain("Nothing has started or been shared yet.");
+    expect(panel).toContain("{!guidedSetup && detailQuery.data ? (");
+    expect(panel).toContain("Private information only goes to a model approved for private data.");
+    expect(sessionPage).toContain("const closeCoworkersPane = useCallback(() => {");
+    expect(sessionPage).toContain("setHomeCoworkerStart(null);\n    closeRightPane();");
+    expect(sessionPage).toContain("onClose={closeCoworkersPane}");
+    expect(sessionPage).not.toContain("onInitialTemplateHandled={clearHomeCoworkerTemplate}");
+  });
+
+  test("renders an explicit, accessible app gate before continuing to chat", () => {
+    const blocked = renderToStaticMarkup(React.createElement(CoworkerResourceSaveActions, {
+      busy: false,
+      continuingToChat: true,
+      selectedAppCount: 0,
+      onSave: () => undefined,
+      onCancel: () => undefined,
+    }));
+    expect(blocked).toContain('id="coworker-resource-app-required"');
+    expect(blocked).toContain('role="status"');
+    expect(blocked).toContain("Choose one app above. Then you can continue to chat.");
+    expect(blocked).toContain('aria-describedby="coworker-resource-app-required"');
+    expect(blocked).toContain("disabled");
+    expect(blocked).toContain("Choose an app above");
+
+    const ready = renderToStaticMarkup(React.createElement(CoworkerResourceSaveActions, {
+      busy: false,
+      continuingToChat: true,
+      selectedAppCount: 1,
+      onSave: () => undefined,
+      onCancel: () => undefined,
+    }));
+    expect(ready).toContain("Save and open chat");
+    expect(ready).not.toContain('aria-describedby="coworker-resource-app-required"');
+    expect(ready).not.toContain("Choose an app above");
+
+    const saving = renderToStaticMarkup(React.createElement(CoworkerResourceSaveActions, {
+      busy: true,
+      continuingToChat: false,
+      selectedAppCount: 1,
+      onSave: () => undefined,
+      onCancel: () => undefined,
+    }));
+    expect(saving).toContain('aria-busy="true"');
+    expect(saving).toContain("Saving…");
   });
 
   test("suggests a coworker deterministically without sending the outcome anywhere", () => {
@@ -87,21 +239,33 @@ describe("chat-operated coworker UI", () => {
 
   test("exposes lifecycle, alerts, checks, limits, and wallet reviews without signing controls", () => {
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const session = appSource("react-app/domains/session/chat/session-page.tsx");
     expect(panel).toContain("Start chat");
     expect(panel).toContain("Add coworker");
     expect(panel).toContain("Research markets");
-    expect(panel).toContain("Monitor risk");
-    expect(panel).toContain("Prepare wallet actions");
-    expect(panel).toContain("Track treasury");
+    expect(panel).toContain("Watch risk");
+    expect(panel).toContain("Prepare a wallet review");
+    expect(panel).toContain("Track balances");
+    expect(panel).not.toContain('label: "Monitor risk"');
+    expect(panel).not.toContain('label: "Prepare wallet actions"');
+    expect(panel).not.toContain('label: "Track treasury"');
+    expect(session).toContain("compactHeader={overlaySidePanelOpen}");
+    expect(panel).toContain('props.compactHeader && !guidedSetup && "sr-only"');
+    expect(panel).toContain('props.compactHeader ? "py-3" : "py-4"');
+    expect(panel).toContain('props.compactHeader && "size-11"');
+    expect(session).toContain('className="size-11 rounded-md text-dls-secondary');
     expect(panel).toContain("Pause");
     expect(panel).toContain("Resume coworker");
     expect(panel).toContain("Disable permanently");
     expect(panel).toContain("Wallet activity");
     expect(panel).toContain("Wallet reviews per request");
-    expect(panel).toContain("Apps this role can use");
+    expect(panel).toContain("Apps allowed");
     expect(panel).toContain("Only your connected wallet can approve and send.");
-    expect(panel).toContain("Transaction details");
+    expect(panel).toContain("Wallet review details");
     expect(panel).toContain("Safety checks:");
+    expect(panel).toContain("Technical proof");
+    expect(panel).toContain("Network check ID:");
+    expect(panel).not.toContain("Preview reference:");
     expect(panel).toContain("Review in wallet");
     expect(panel).toContain("openWalletReview(item)");
     expect(panel).toContain("Cancel review");
@@ -255,14 +419,14 @@ describe("chat-operated coworker UI", () => {
       loading: true,
       loadFailed: false,
       connectedAppCount: 0,
-    })).toMatchObject({ action: "wait", label: "Checking setup…" });
+    })).toMatchObject({ action: "wait", label: "Checking…" });
     expect(resolveCoworkerNextStep({
       coworkerState: "active",
       ready: false,
       loading: false,
       loadFailed: true,
       connectedAppCount: 0,
-    })).toMatchObject({ action: "reload", label: "Reload setup" });
+    })).toMatchObject({ action: "reload", label: "Try again" });
     expect(resolveCoworkerNextStep({
       coworkerState: "active",
       ready: false,
@@ -270,7 +434,7 @@ describe("chat-operated coworker UI", () => {
       loadFailed: false,
       connectionsAvailable: false,
       connectedAppCount: 0,
-    })).toMatchObject({ action: "none", label: null, message: "App connections are currently unavailable." });
+    })).toMatchObject({ action: "none", label: null, message: "App connections aren't available here yet." });
     expect(resolveCoworkerNextStep({
       coworkerState: "active",
       ready: false,
@@ -278,7 +442,7 @@ describe("chat-operated coworker UI", () => {
       loadFailed: false,
       connectionsAvailable: true,
       connectedAppCount: 0,
-    })).toMatchObject({ action: "connect", label: "Connect an app" });
+    })).toMatchObject({ action: "connect", label: "Choose an app" });
     expect(resolveCoworkerNextStep({
       coworkerState: "active",
       ready: false,
@@ -286,7 +450,7 @@ describe("chat-operated coworker UI", () => {
       loadFailed: false,
       connectionsAvailable: true,
       connectedAppCount: 1,
-    })).toMatchObject({ action: "review", label: "Review access" });
+    })).toMatchObject({ action: "review", label: "Choose what it can use" });
     expect(resolveCoworkerNextStep({
       coworkerState: "paused",
       ready: false,
@@ -308,17 +472,34 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain("setResourcesOpen(true)");
     expect(panel).not.toContain("is ready`, description: \"Start a chat whenever you have an outcome in mind.");
     expect(panel).toContain("Safety and wallet control");
-    expect(panel).toContain("About this coworker");
+    expect(panel).toContain("What it does");
     expect(panel).toContain('onClick={props.onBrowseFiles}>Add file</Button>');
     expect(panel).toContain('onClick={props.onBrowseMemory}>Add memory</Button>');
     expect(panel).toContain('onClick={props.onBrowseApps}>Browse apps</Button>');
-    expect(panel.match(/onClick=\{props\.onBrowseApps\}>Browse apps<\/Button>/g)?.length).toBe(2);
+    expect(panel.match(/onClick=\{props\.onBrowseApps\}>Browse apps<\/Button>/g)?.length).toBe(1);
+    expect(panel).toContain("loadOptionalCoworkerResource(props.client.listAgentFiles(workspaceId))");
+    expect(panel).toContain("loadOptionalCoworkerResource(props.client.listWorkspaceMemory(workspaceId, { limit: 80 }))");
+    expect(panel).toContain("App connections aren't available here yet.");
+    expect(panel).toContain("Saved memory is unavailable right now.");
     expect(sessionPage).toContain('onBrowseFiles={() => setCurrentSidePanel("files")}');
     expect(sessionPage).toContain('onBrowseMemory={() => setCurrentSidePanel("memory")}');
     expect(panel).not.toContain("This invalidates the current intent.");
     expect(panel).toContain("Your wallet will no longer be able to approve or send this review.");
-    expect(panel).toContain("Safety limits");
+    expect(panel).toContain("Limits");
     expect(panel).toContain("<details className=\"border-b border-dls-border/70 py-4\">");
+  });
+
+  test("explains every first coworker choice without steering users to an arbitrary default", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const emptyState = panel.slice(
+      panel.indexOf("coworkers.length === 0"),
+      panel.indexOf(") : selectedCoworker ?"),
+    );
+    expect(emptyState).toContain("What do you want help with?");
+    expect(emptyState).toContain("Choose one to continue. You will choose what it can use before it starts.");
+    expect(emptyState).toContain("{choice.summary}");
+    expect(emptyState).toContain('className="h-auto min-h-14 justify-start whitespace-normal px-3 py-2 text-left"');
+    expect(emptyState).not.toContain('variant={index === 0 ? "default" : "outline"}');
   });
 
   test("collapses empty activity and destructive controls behind plain-language summaries", () => {
@@ -331,30 +512,139 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain(">Activity</span>");
     expect(panel).toContain("Pause or disable");
     expect(panel).not.toContain("Stop this coworker");
-    expect(panel).toContain("App lookups per request");
-    expect(panel).not.toContain("Reads per request");
+    expect(panel).toContain("App reads per request");
+    expect(panel).not.toContain("App lookups per request");
+  });
+
+  test("shows and lets the user clear the bounded state carried into future chats", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const client = appSource("app/lib/matterhorn-server.ts");
+    expect(coworkerRememberedWorkSummary(null)).toBe("Nothing remembered from earlier chats yet");
+    expect(coworkerRememberedWorkSummary({
+      version: "matterhorn.coworker-working-state.v1",
+      workspaceId: "workspace_one",
+      coworkerId: "coworker_one",
+      revision: 2,
+      profileRevision: 3,
+      decisions: [
+        { id: "decision_active", summary: "Keep a testnet reserve.", status: "active", evidenceReferenceIds: [], decidedAt: "2026-09-04T12:00:00.000Z" },
+        { id: "decision_old", summary: "Use the first quote.", status: "superseded", evidenceReferenceIds: [], decidedAt: "2026-09-03T12:00:00.000Z" },
+      ],
+      positions: [{
+        id: "position_one",
+        appId: "matterhorn.sui-testnet",
+        network: "sui:testnet",
+        asset: "SUI",
+        side: "long",
+        size: "10",
+        evidenceReferenceId: "evidence_one",
+        observedAt: "2026-09-04T12:00:00.000Z",
+      }],
+      unresolvedRisks: [{
+        id: "risk_one",
+        severity: "high",
+        summary: "Reserve is below the chosen floor.",
+        evidenceReferenceIds: ["evidence_one"],
+        openedAt: "2026-09-04T12:00:00.000Z",
+      }],
+      pendingActions: [
+        { id: "action_one", intentHash: "a".repeat(64), status: "wallet_review", expiresAt: "2026-09-04T12:05:00.000Z" },
+        { id: "action_old", intentHash: "b".repeat(64), status: "expired", expiresAt: "2026-09-04T11:00:00.000Z" },
+      ],
+      evidenceReferences: [{
+        id: "evidence_one",
+        appId: "matterhorn.sui-testnet",
+        actionId: "sui_account_read",
+        referenceHash: "c".repeat(64),
+        freshness: "fresh",
+        observedAt: "2026-09-04T12:00:00.000Z",
+      }],
+      approvedMemoryIds: ["memory_one"],
+      createdAt: "2026-09-04T11:00:00.000Z",
+      updatedAt: "2026-09-04T12:00:00.000Z",
+    })).toBe("1 decision · 1 position · 1 open risk · 1 pending action");
+    expect(coworkerPositionSource("matterhorn.sui-testnet", "sui:testnet")).toBe("Sui Testnet");
+    expect(coworkerPositionSource("matterhorn.hyperliquid-testnet", "hyperliquid:testnet-us"))
+      .toBe("Hyperliquid Testnet · Hyperliquid Testnet Us");
+    expect(panel).toContain("What it remembers");
+    expect(panel).toContain("Matterhorn does not replay the full conversation.");
+    expect(panel).toContain("Decisions");
+    expect(panel).toContain("Positions");
+    expect(panel).toContain("Open risks");
+    expect(panel).toContain("Pending actions");
+    expect(panel).toContain("Clear remembered work");
+    expect(panel).toContain("saved ${approvedMemoryIds.length === 1 ? \"memory item\" : \"memory items\"}");
+    expect(panel).toContain("Chats, files, saved Memory, app access, and wallet history stay in place.");
+    expect(panel).toContain("decisions: []");
+    expect(panel).not.toContain("referenceHash}</");
+    expect(client).toContain("setCoworkerState:");
+  });
+
+  test("routes unread updates to the coworker that most recently needs attention", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const client = appSource("app/lib/matterhorn-server.ts");
+    expect(coworkerUnreadSummaryLabel(1)).toBe("1 update needs your attention");
+    expect(coworkerUnreadSummaryLabel(3)).toBe("3 updates need your attention");
+    expect(newestUnreadCoworkerId([
+      { coworkerId: "coworker_older", unreadCount: 2, latestUnreadAt: "2026-09-04T11:00:00.000Z" },
+      { coworkerId: "coworker_newer", unreadCount: 1, latestUnreadAt: "2026-09-04T12:00:00.000Z" },
+      { coworkerId: "coworker_read", unreadCount: 0, latestUnreadAt: "2026-09-04T13:00:00.000Z" },
+    ])).toBe("coworker_newer");
+    expect(newestUnreadCoworkerId([])).toBeNull();
+    expect(panel).toContain("Latest from {latestUnreadCoworker.name}");
+    expect(panel).toContain("setPendingActivityCoworkerId(latestUnreadCoworker.id)");
+    expect(panel).toContain("prefers-reduced-motion: reduce");
+    expect(panel).toContain("ref={activitySectionRef}");
+    expect(client).toContain("totalUnread: number");
+    expect(client).toContain("byCoworker: MatterhornCoworkerInboxSummary[]");
+  });
+
+  test("surfaces a bounded content-free unread count in desktop and mobile workspace navigation", () => {
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const session = appSource("react-app/domains/session/chat/session-page.tsx");
+    expect(coworkerListQueryKey("workspace_one")).toEqual(["coworker-control", "workspace_one", "list"]);
+    expect(boundedCoworkerUnreadCount(undefined)).toBe(0);
+    expect(boundedCoworkerUnreadCount(-1)).toBe(0);
+    expect(boundedCoworkerUnreadCount(3.5)).toBe(0);
+    expect(boundedCoworkerUnreadCount(3)).toBe(3);
+    expect(boundedCoworkerUnreadCount(10_000)).toBe(100);
+    expect(coworkerUnreadBadgeLabel(0)).toBeNull();
+    expect(coworkerUnreadBadgeLabel(3)).toBe("3");
+    expect(coworkerUnreadBadgeLabel(100)).toBe("99+");
+    expect(coworkerUnreadStatusLabel(0)).toBe("No new coworker updates");
+    expect(coworkerUnreadStatusLabel(1)).toBe("1 new coworker update");
+    expect(coworkerUnreadStatusLabel(3)).toBe("3 new coworker updates");
+    expect(coworkerUnreadStatusLabel(100)).toBe("More than 99 new coworker updates");
+    expect(panel).toContain("coworkerListQueryKey(workspaceId)");
+    expect(session).toContain("coworkerListQueryKey(coworkerWorkspaceId)");
+    expect(session).toContain('refetchInterval: (query) => query.state.status === "error" ? false : 30_000');
+    expect(session).toContain("badge={coworkerUnreadBadge ? (");
+    expect(session.match(/<span className="sr-only">\{coworkerUnreadStatus\}<\/span>/g)?.length).toBe(2);
+    expect(session).toContain("title={coworkerNavigationTitle}");
   });
 
   test("lets the user approve an exact resource sandbox without privacy bypasses", () => {
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
     const client = appSource("app/lib/matterhorn-server.ts");
-    expect(panel).toContain("What this coworker can use");
+    expect(panel).toContain("What it can use");
+    expect(panel).not.toContain("Apps and information");
     expect(panel).toContain("Nothing is shared until you choose.");
     expect(panel).toContain("Connect at least one app before starting chat.");
     expect(panel).toContain("ready: canStartCoworker");
-    expect(panel).toContain("Suggested items");
-    expect(panel).toContain("Nothing changes until you review and save.");
+    expect(panel).toContain("Suggested for this coworker");
+    expect(panel).toContain("Nothing changes until you save.");
     expect(panel).toContain("Review");
-    expect(panel).toContain("Save access");
-    expect(panel).toContain("This coworker cannot bypass that rule.");
-    expect(panel).toContain("App connections are not enabled in this environment.");
+    expect(panel).toContain("Save choices");
+    expect(panel).not.toContain("Save access");
+    expect(panel).toContain("This coworker cannot change that.");
+    expect(panel).toContain("App connections aren't available here yet.");
     expect(panel).toContain("Private files are not enabled in this environment.");
-    expect(panel).toContain('cause.code === "crypto_app_gateway_disabled"');
-    expect(panel).toContain("Connect an app");
-    expect(panel).toContain("Nothing is shared until you save access.");
+    expect(panel).toContain("const cryptoAppsRequest = loadOptionalCoworkerResource(Promise.all([");
+    expect(panel).toContain("Choose an app");
+    expect(panel).toContain("Nothing is shared until you save.");
     expect(panel).toContain("createCryptoAppConnection");
     expect(panel).toContain("transitionCryptoAppConnection");
-    expect(panel).toContain("Review the selected access, then save it for this coworker.");
+    expect(panel).toContain("Review these choices, then save them for this coworker.");
     expect(panel).toContain("onClick={props.onBrowseApps}");
     expect(panel).toContain("setCoworkerResources");
     expect(client).toContain("getCoworkerResources:");
@@ -443,9 +733,26 @@ describe("chat-operated coworker UI", () => {
   test("binds the selected coworker through the authoritative privacy gateway", () => {
     const route = appSource("react-app/shell/session-route.tsx");
     const surface = appSource("react-app/domains/session/surface/session-surface.tsx");
+    const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const client = appSource("app/lib/matterhorn-server.ts");
     const context = appSource("react-app/domains/session/surface/coworker-context-store.ts");
     expect(route.match(/coworkerId: draft\.privacy\.coworkerId/g)).toHaveLength(2);
     expect(surface).toContain("...(coworkerId ? { coworkerId } : {})");
+    expect(surface).toContain('"coworker-session-binding"');
+    expect(surface).toContain("getCoworkerSessionBinding");
+    expect(panel).toContain("bindCoworkerSession");
+    expect(client).toContain("bindCoworkerSession:");
+    expect(client).toContain("inheritCoworkerSessionBinding:");
+    expect(client).toContain("unbindCoworkerSession:");
+    expect(route).toContain("getCoworkerSessionBinding");
+    expect(route).toContain("inheritCoworkerSessionBinding");
+    expect(route).toContain("Chat forked without its coworker");
+    expect(route.indexOf("const forked = await forkSession")).toBeLessThan(
+      route.indexOf("inheritCoworkerSessionBinding"),
+    );
+    expect(route.indexOf("inheritCoworkerSessionBinding")).toBeLessThan(
+      route.indexOf("navigateToWorkspaceSession(selectedWorkspaceId, forked.id)"),
+    );
     expect(context).not.toContain("mission:");
     expect(context).not.toContain("allowedActionIds");
   });

@@ -16,6 +16,8 @@ const {
   MEMORY_DESK_ACTION_REGISTRY,
   MCPS_DESK_ACTION_REGISTRY,
   DESK_TRANSACTION_LIFECYCLE_STAGES,
+  DESK_TRANSACTION_SUBMISSION_AUTHORITIES,
+  defineDeskTransactionContract,
   getDeskActionManifest,
   listDeskActions,
   listAllDeskActionIds,
@@ -102,6 +104,11 @@ assert.ok(listAllDeskActionIds().length >= 24, "listAllDeskActionIds must return
 // 5. Every action includes required fields and all safety boundaries reject secrets.
 const allActions = Object.values(DESK_ACTION_REGISTRY).flatMap((registry) => Object.values(registry));
 assert.ok(allActions.length >= 24, `expected at least 24 desk actions, found ${allActions.length}`);
+assert.equal(
+  DESK_TRANSACTION_SUBMISSION_AUTHORITIES.includes("matterhorn_after_signature"),
+  false,
+  "Matterhorn must never be a post-signature submission authority",
+);
 
 for (const action of allActions) {
   assert.ok(action.id, "action must have id");
@@ -183,6 +190,11 @@ for (const [actionId, [surface, result, executionState]] of Object.entries(expec
   assert.ok(transaction, `${actionId} must declare a transaction contract`);
   assert.equal(transaction.version, "matterhorn.desk.transaction.contract.v1", `${actionId} must use the current transaction contract`);
   assert.equal(transaction.agentCanSignOrSubmit, false, `${actionId} agent must never sign or submit`);
+  assert.equal(
+    transaction.submissionAuthority,
+    "connected_wallet",
+    `${actionId} must leave signing and submission in the connected wallet`,
+  );
   assert.equal(transaction.reviewRequired, true, `${actionId} must require review`);
   assert.equal(transaction.approvalRequiredEveryTime, true, `${actionId} must require approval every time`);
   assert.equal(transaction.receiptRequired, true, `${actionId} must require a public receipt`);
@@ -200,6 +212,21 @@ for (const [actionId, [surface, result, executionState]] of Object.entries(expec
     `${actionId} must truthfully declare in-app completion`,
   );
 }
+
+assert.throws(
+  () => defineDeskTransactionContract({
+    protocol: "sui",
+    family: "sui_transfer",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "external_client",
+    simulationPolicy: "required",
+    walletKinds: ["sui_wallet"],
+    networks: ["sui-testnet"],
+    limitations: [],
+  }),
+  /desk_transaction_submission_authority_invalid/,
+  "transaction contracts must reject a support/authority mismatch",
+);
 
 // 9. Workspace actions create a durable, non-financial result.
 for (const actionId of [

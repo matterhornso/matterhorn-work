@@ -8,6 +8,21 @@ tool access, reviewed transaction terms, retention, and security receipts.
 
 - The server runs privacy preflight before usage reservation, audit creation,
   OpenCode dispatch, or provider contact.
+- In hosted mode, the last managed OpenCode plugin replaces the final provider
+  system array with only the exact server-authorized bytes. Late environment,
+  skill, MCP, workspace, or provider additions are not forwarded.
+- Immediately before that release, the same last plugin submits OpenCode's
+  exact final message array to a runtime-only endpoint. Matterhorn bounds and
+  scans every restored user/assistant part and tool result, rejects mixed-chat
+  arrays and late-added secrets, attachments, or wallet/transaction intent,
+  marks tool output as untrusted external data, rechecks the accepted provider
+  policy, and records only a SHA-256 digest in transient memory. One validation
+  authorizes one immediate system release and expires after 30 seconds; a retry
+  or tool continuation must validate its new final array again.
+- OpenCode's provider-backed automatic title agent is disabled in hosted
+  configuration because upstream starts it before the final-message hook. Chat
+  names remain deterministic and user-editable; titles cannot race or bypass
+  the one-shot provider-message proof.
 - The OpenCode plugin receives a server-generated non-secret call id after model
   arguments exist. Signed capabilities remain inside the Matterhorn server.
 - The managed MCP bridge strips the reserved call id and atomically consumes the
@@ -32,8 +47,27 @@ tool access, reviewed transaction terms, retention, and security receipts.
 | `POST /workspace/:id/reviewed-actions/validate` | Revalidate a v2 handoff against current terms and simulation before wallet review or receipt import. |
 | `POST /workspace/:id/user-content/purge` | Owner-only purge of Matterhorn-managed content. Requires `confirm: purge:<workspaceId>`. |
 
+Raw OpenCode command dispatch is trusted/local-only. Because OpenCode expands a
+command's stored template and implicit runtime context after Matterhorn parses the
+request, Matterhorn cannot bind those final bytes to one exact consent challenge.
+Commands therefore require a local or currently verified no-training provider and
+fail before abort, allowance reservation, guarded-run creation, or upstream
+dispatch otherwise. Public research through a disclosed unverified provider must
+use the authoritative message endpoint, where the complete provider-bound request
+is hashable and preflighted.
+
 The internal capability and completion routes require
 `X-Matterhorn-Agent-Runtime-Secret`. They are not client APIs.
+
+The same runtime-only credential protects the provider-message validation and
+provider-system binding routes. The final-message request is bound to one active
+workspace, session, and run. The following system response is additionally
+bound to provider, model, request purpose, and the single-use message-validation
+digest; it carries a SHA-256 digest checked by the plugin and is held in memory
+only until the run ends. A restart discards these private bytes and makes the
+in-flight request fail closed. Hosted readiness requires the authoritative
+gateway, the managed OpenCode plugin, and a valid runtime credential even while
+per-tool capability rollout is `off`.
 
 Stored chats are private workspace context during compaction even when the
 original turn began as public research. Secret-shaped content in any stored
@@ -41,6 +75,51 @@ message or tool result blocks compaction before allowance reservation or model
 contact. Consent is bound to every canonical stored message hash, provider,
 model, workspace, and session; a concurrent message, edit, tool result, revert,
 provider change, or token replay fails closed.
+
+Normal message turns apply the same exact-history boundary. Matterhorn records
+only a content-free privacy floor for each tenant-scoped chat. A newly created
+public-research chat remains public; once an accepted request includes private
+workspace or wallet/transaction context, later history can never be downgraded.
+Legacy chats with stored history and no trustworthy floor are treated as private
+workspace context. The server hashes and scans every stored turn during
+preflight, re-reads the transcript immediately before run creation, and rejects
+changed consent, stored secrets, or a history too large to inspect safely. The
+floor is purged with the chat or workspace and otherwise expires after 365 days.
+
+Trusted local clients may still use the raw OpenCode prompt route, but its
+`system` field is not outside this boundary. Matterhorn scans and SHA-256 binds
+the exact final string forwarded upstream, including its enforced execution-mode
+suffix. Recognized workflow and environment blocks are workspace-private;
+account-linked wallet addresses and balances are wallet-private even though the
+underlying chain facts are public. Secrets in any system block are rejected
+before allowance reservation or provider contact, and changing one byte after
+consent invalidates that consent. Hosted account clients cannot author system
+context at all; the authoritative message gateway builds it server-side.
+
+Selected OpenCode agent instructions are also provider-bound context, even
+though OpenCode resolves them after accepting a prompt. Matterhorn therefore
+reads the effective session agent before preflight, includes the exact prompt
+hash and bytes in secret scanning and one-request consent, and sends that agent
+id explicitly upstream. An exact shipped Matterhorn agent prompt is public
+platform policy; any workspace-authored or modified agent prompt is
+workspace-private. Matterhorn re-reads the agent immediately before dispatch
+and returns `agent_context_changed` without contacting the provider if its id or
+prompt hash changed. The same boundary applies to trusted raw prompts and
+commands, so an agent file cannot hide secret or unconsented private context
+behind OpenCode's later prompt expansion.
+
+Compaction is a separate provider request and has its own hidden OpenCode agent.
+Matterhorn binds the exact pinned compaction-agent prompt and its first-party
+crypto compaction contract alongside the exact stored transcript. A custom or
+modified compaction prompt is workspace-private, secrets are blocked before
+usage reservation or provider contact, and a pre-dispatch re-read fails with
+`agent_context_changed` if the hidden prompt changes after authorization. The
+canonical prompt is versioned with the pinned OpenCode runtime so an upgrade
+cannot silently change provider-bound instructions.
+Managed OpenCode automatic compaction is disabled. Summaries may contact a
+provider only through Matterhorn's explicit compact endpoint, which binds the
+stored transcript and the `compaction` provider-system purpose to one protected
+run.
 
 ## Retention and deletion
 

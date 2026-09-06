@@ -415,9 +415,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     <LayoutStack className="gap-y-8">
       <LayoutSection>
         <LayoutSectionHeader>
-          <LayoutSectionTitle>Model provider</LayoutSectionTitle>
+          <LayoutSectionTitle>Choose a model</LayoutSectionTitle>
           <LayoutSectionDescription>
-            Connect a provider, then choose what answers chats and desk tasks.
+            Pick the AI that answers your chats. You can change it any time.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
         {props.pendingDeskTask ? (
@@ -430,7 +430,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 Finish setting up {props.pendingDeskTask.title}
               </div>
               <p className="mt-1 text-sm leading-5 text-dls-secondary">
-                Choose a provider and model, then return to this desk task. Nothing has been sent.
+                Choose a model, then return to this desk task. Nothing has been sent.
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
@@ -439,7 +439,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 disabled={props.busy || props.providerAuthBusy}
               >
                 <Plus data-icon="inline-start" />
-                Choose provider
+                Connect AI
               </Button>
               <Button
                 variant="outline"
@@ -494,48 +494,6 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 >
                   Choose model
                 </Button>
-                {canUseWorkspaceDefault ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setLocalModelStatus(
-                      "Using the workspace default in this app.",
-                    );
-                    void props.onUseWorkspaceDefault?.();
-                  }}
-                  disabled={props.busy}
-                >
-                  Use workspace default
-                </Button>
-              ) : null}
-                {canSaveWorkspaceDefault ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setLocalModelStatus(null);
-                    saveWorkspaceDefaultMutation.mutate();
-                  }}
-                  disabled={
-                    props.busy || saveWorkspaceDefaultMutation.isPending
-                  }
-                >
-                  Save for workspace
-                </Button>
-              ) : null}
-                {workspaceSelection ? (
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setLocalModelStatus(null);
-                    clearWorkspaceDefaultMutation.mutate();
-                  }}
-                  disabled={
-                    props.busy || clearWorkspaceDefaultMutation.isPending
-                  }
-                >
-                  Reset
-                </Button>
-              ) : null}
               </LayoutSectionItemHeaderActions>
             ) : null}
           </LayoutSectionItemHeader>
@@ -566,63 +524,6 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             </div>
           ) : null}
 
-          {modelProviderReady && behaviorOptions.length > 1 ? (
-            <div className="mt-1 border-t border-border/60 pt-3">
-              <div className="grid items-center gap-2 py-1.5 @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
-                <div>
-                  <div className="text-xs font-medium text-dls-text">
-                    Workspace reasoning
-                  </div>
-                  <div className="text-xs leading-5 text-muted-foreground">
-                    Default for new chats and desk tasks.
-                  </div>
-                </div>
-                <ModelBehaviorSelect
-                  title={props.modelBehaviorTitle ?? "Reasoning effort"}
-                  value={workspaceVariantDraft}
-                  label={workspaceVariantLabel}
-                  options={behaviorOptions}
-                  onChange={setWorkspaceVariantDraft}
-                  disabled={
-                    props.busy || saveWorkspaceDefaultMutation.isPending
-                  }
-                  isProviderDefault={workspaceVariantDraft == null}
-                />
-              </div>
-              <div className="grid items-center gap-2 py-1.5 @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
-                <div>
-                  <div className="text-xs font-medium text-dls-text">
-                    This app
-                  </div>
-                  <div className="text-xs leading-5 text-muted-foreground">
-                    {props.currentAppModelVariant
-                      ? "Overrides the workspace setting."
-                      : "Uses the workspace setting."}
-                  </div>
-                </div>
-                <ModelBehaviorSelect
-                  title={props.modelBehaviorTitle ?? "Reasoning effort"}
-                  value={props.currentAppModelVariant ?? null}
-                  label={currentAppVariantLabel}
-                  options={behaviorOptions}
-                  onChange={(value) => {
-                    recordModelReasoningLevelSelection({
-                      workspaceId: runtimeWorkspaceId,
-                      providerId: props.defaultModelProviderId,
-                      modelId: props.defaultModelId,
-                      reasoningLevel: value,
-                      source: "current_app",
-                    });
-                    props.onCurrentAppModelVariantChange?.(value);
-                  }}
-                  disabled={props.busy || !props.onCurrentAppModelVariantChange}
-                  isProviderDefault={props.currentAppModelVariant == null}
-                  defaultLabel="Workspace default"
-                />
-              </div>
-            </div>
-          ) : null}
-
           <Collapsible
             open={modelDetailsOpen}
             onOpenChange={setModelDetailsOpen}
@@ -635,7 +536,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                   size="xs"
                   className="mt-3 bg-dls-surface-muted/[0.22] text-dls-secondary hover:bg-dls-surface-muted/[0.38] hover:text-dls-text"
                 >
-                  How models work
+                  More model settings
                   <ChevronDown
                     className={cn(
                       "size-3.5 transition-transform",
@@ -646,6 +547,124 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               }
             />
             <CollapsibleContent>
+              {modelProviderReady ? (
+                <div className="mt-3 border-t border-border/60 pt-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3 py-1.5">
+                    <div>
+                      <div className="text-xs font-medium text-dls-text">
+                        Default model
+                      </div>
+                      <div className="text-xs leading-5 text-muted-foreground">
+                        Use this choice for new chats, or return this app to the saved workspace choice.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {canUseWorkspaceDefault ? (
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={() => {
+                            setLocalModelStatus(
+                              "Using the workspace default in this app.",
+                            );
+                            void props.onUseWorkspaceDefault?.();
+                          }}
+                          disabled={props.busy}
+                        >
+                          Use saved default
+                        </Button>
+                      ) : null}
+                      {canSaveWorkspaceDefault ? (
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={() => {
+                            setLocalModelStatus(null);
+                            saveWorkspaceDefaultMutation.mutate();
+                          }}
+                          disabled={
+                            props.busy || saveWorkspaceDefaultMutation.isPending
+                          }
+                        >
+                          Use for new chats
+                        </Button>
+                      ) : null}
+                      {workspaceSelection ? (
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => {
+                            setLocalModelStatus(null);
+                            clearWorkspaceDefaultMutation.mutate();
+                          }}
+                          disabled={
+                            props.busy || clearWorkspaceDefaultMutation.isPending
+                          }
+                        >
+                          Clear saved default
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {behaviorOptions.length > 1 ? (
+                    <>
+                      <div className="grid items-center gap-2 py-1.5 @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
+                        <div>
+                          <div className="text-xs font-medium text-dls-text">
+                            New chats
+                          </div>
+                          <div className="text-xs leading-5 text-muted-foreground">
+                            How much reasoning to use by default.
+                          </div>
+                        </div>
+                        <ModelBehaviorSelect
+                          title={props.modelBehaviorTitle ?? "Reasoning effort"}
+                          value={workspaceVariantDraft}
+                          label={workspaceVariantLabel}
+                          options={behaviorOptions}
+                          onChange={setWorkspaceVariantDraft}
+                          disabled={
+                            props.busy || saveWorkspaceDefaultMutation.isPending
+                          }
+                          isProviderDefault={workspaceVariantDraft == null}
+                        />
+                      </div>
+                      <div className="grid items-center gap-2 py-1.5 @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
+                        <div>
+                          <div className="text-xs font-medium text-dls-text">
+                            This app
+                          </div>
+                          <div className="text-xs leading-5 text-muted-foreground">
+                            {props.currentAppModelVariant
+                              ? "Uses a different reasoning level."
+                              : "Uses the setting for new chats."}
+                          </div>
+                        </div>
+                        <ModelBehaviorSelect
+                          title={props.modelBehaviorTitle ?? "Reasoning effort"}
+                          value={props.currentAppModelVariant ?? null}
+                          label={currentAppVariantLabel}
+                          options={behaviorOptions}
+                          onChange={(value) => {
+                            recordModelReasoningLevelSelection({
+                              workspaceId: runtimeWorkspaceId,
+                              providerId: props.defaultModelProviderId,
+                              modelId: props.defaultModelId,
+                              reasoningLevel: value,
+                              source: "current_app",
+                            });
+                            props.onCurrentAppModelVariantChange?.(value);
+                          }}
+                          disabled={props.busy || !props.onCurrentAppModelVariantChange}
+                          isProviderDefault={props.currentAppModelVariant == null}
+                          defaultLabel="New chats setting"
+                        />
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="mt-2 grid gap-1">
                 {[
                   modelReadiness.workspaceDefault,
@@ -697,47 +716,16 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         </LayoutSectionItem>
       </LayoutSection>
 
-      {modelProviderReady ? (
+      {props.showOpenWorkModelsSubscribe ? (
         <LayoutSection>
-        <LayoutSectionHeader>
-          <LayoutSectionTitle>Available models</LayoutSectionTitle>
-          <LayoutSectionDescription>
-            Models from the providers connected to this workspace.
-          </LayoutSectionDescription>
-        </LayoutSectionHeader>
-
-        <div className="overflow-hidden rounded-lg bg-dls-surface-raised/55">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
-            <div className="flex min-w-0 items-center gap-3">
-              <ProviderIcon
-                providerId="matterhorn"
-                size={20}
-                className="text-dls-text"
-              />
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-dls-text">
-                  Connected model catalog
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {providerCatalogLoading
-                    ? "Checking models..."
-                    : `${connectedModelCount} model${connectedModelCount === 1 ? "" : "s"} from ${connectedPromptProviders.length} provider${connectedPromptProviders.length === 1 ? "" : "s"}`}
-                </div>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => void props.onOpenModelPicker()}
-              disabled={
-                props.busy || providerCatalogLoading || opencodeSetupMissing
-              }
-            >
-              Browse models
-            </Button>
-          </div>
-
-          {props.showOpenWorkModelsSubscribe ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-4 py-3.5">
+          <LayoutSectionHeader>
+            <LayoutSectionTitle>More models</LayoutSectionTitle>
+            <LayoutSectionDescription>
+              Add models managed for your Matterhorn organization.
+            </LayoutSectionDescription>
+          </LayoutSectionHeader>
+          <div className="overflow-hidden rounded-lg bg-dls-surface-raised/55">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
               <div className="flex min-w-0 items-center gap-3">
                 <ProviderIcon
                   providerId="matterhorn"
@@ -761,10 +749,8 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 Subscribe
               </Button>
             </div>
-          ) : null}
-
-        </div>
-      </LayoutSection>
+          </div>
+        </LayoutSection>
       ) : null}
 
       {workspaceModelUsageQuery.data?.status ? (
@@ -825,10 +811,10 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         <LayoutSectionHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
-              <LayoutSectionTitle>Model providers</LayoutSectionTitle>
+              <LayoutSectionTitle>Provider connection</LayoutSectionTitle>
               <LayoutSectionDescription>
                 {props.providerCredentialsManaged
-                  ? "Matterhorn manages the provider used by this web workspace."
+                  ? "Matterhorn manages this connection for your workspace."
                   : "Connect a provider account or API key you control."}
               </LayoutSectionDescription>
             </div>
@@ -839,7 +825,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 disabled={props.busy || props.providerAuthBusy}
               >
                 <Plus data-icon="inline-start" />
-                {props.providerAuthBusy ? "Loading..." : "Choose provider"}
+                {props.providerAuthBusy ? "Loading..." : "Connect AI"}
               </Button>
             ) : null}
           </div>
@@ -1002,7 +988,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                     providerDetailsOpen && "rotate-180",
                   )}
                 />
-                Provider and data details
+                How provider data is handled
               </Button>
             }
           />

@@ -186,6 +186,23 @@ describe("session panel route state", () => {
       'className="fixed inset-0 flex min-h-0 w-full flex-col overflow-hidden bg-dls-background text-dls-text mac:bg-transparent"',
     );
   });
+
+  test("keeps the chat runtime out of the initial workspace route", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(source).toContain(
+      'import type { SessionSurfaceProps } from "../surface/session-surface";',
+    );
+    expect(source).toContain(
+      'const SessionSurface = lazy(() => import("../surface/session-surface")',
+    );
+    expect(source).toContain(
+      '<Suspense fallback={<LazyPanelFallback label="Loading chat" />}>',
+    );
+    expect(source).not.toContain(
+      'import { SessionSurface, type SessionSurfaceProps } from "../surface/session-surface";',
+    );
+  });
 });
 
 describe("route recovery feedback", () => {

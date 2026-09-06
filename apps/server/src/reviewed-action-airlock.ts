@@ -47,7 +47,7 @@ function exactTerms(handoff: ReviewedActionDraftHandoff, requestedSigner?: strin
       operation: handoff.draft.operation,
       amount: handoff.draft.amountUsdc == null
         ? handoff.draft.amountShares == null ? null : `${handoff.draft.amountShares} shares`
-        : `${handoff.draft.amountUsdc} USDC`,
+        : `${handoff.draft.amountUsdc} pUSD`,
       asset: handoff.draft.outcome,
       recipient: handoff.draft.marketId ?? (handoff.draft.cancelAll ? "all_open_orders" : handoff.draft.orderIds.join(",")),
       slippage: handoff.draft.slippageTolerance == null ? null : `${handoff.draft.slippageTolerance}%`,

@@ -31,7 +31,9 @@ import {
   POLYMARKET_CHAIN_ID,
   POLYMARKET_CANCEL_ALL_CONFIRMATION,
   POLYMARKET_CANCEL_CONFIRMATION,
+  POLYMARKET_COLLATERAL_SYMBOL,
   POLYMARKET_LIVE_CONFIRMATION,
+  assertPolymarketUserCanPlaceOrders,
   cancelPolymarketOrders,
   normalizePolymarketOrderIds,
   submitPolymarketOrder,
@@ -79,7 +81,11 @@ import {
   takePendingReviewedActionHandoff,
   type CoworkerWalletIntentHandoffContext,
 } from "../reviewed-action-handoff";
-import { bittensorWalletNetworkMatches } from "../../coworkers/coworker-wallet-intent-view";
+import {
+  bittensorWalletNetworkMatches,
+  polymarketCoworkerWalletMismatchReason,
+  polymarketCoworkerWalletReceiptInput,
+} from "../../coworkers/coworker-wallet-intent-view";
 import {
   createHyperliquidReviewDraft,
   type HyperliquidReviewDraft,
@@ -175,6 +181,10 @@ type PolymarketPreviewResponse = {
     outcome: string | null;
     size: number | null;
     price: number | null;
+    orderType: "FAK";
+    limitPrice: number | null;
+    tickSize: string | null;
+    negativeRisk: boolean | null;
     estimatedShares: number | null;
     previewSha256: string;
     expiresAt: string;
@@ -196,6 +206,10 @@ type PolymarketSellPreviewResponse = {
     shares: number;
     estimatedFillPrice: number | null;
     estimatedProceedsUsdc: number | null;
+    orderType: "FAK";
+    limitPrice: number | null;
+    tickSize: string | null;
+    negativeRisk: boolean | null;
     previewSha256: string;
     expiresAt: string;
     compliance: { status: "allowed" | "blocked" | "unknown"; reason: string | null };
@@ -252,18 +266,6 @@ const CUSTOMER_DEMO_COMMANDS = {
   executionChain: "matterhorn-work crypto execution-chain --json",
   executionChainApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-execution-chain\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
   sdkValidationApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-sdk-validation\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
-  executionChainSignRequest: [
-    "matterhorn-work hyperliquid sign-request BTC --side buy --size 0.001 --price <testnet-price> --execution-mode testnet_external_signer --json",
-    "matterhorn-work polymarket sign-request <testnet-market-id> --side yes --amount-usdc 1 --execution-mode testnet_external_signer --json",
-  ].join("\n"),
-  executionChainArtifact: [
-    "matterhorn-work hyperliquid validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
-    "matterhorn-work polymarket validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
-  ].join("\n"),
-  executionChainReceipt: [
-    "matterhorn-work hyperliquid receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
-    "matterhorn-work polymarket receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
-  ].join("\n"),
   sdkDoctor: "matterhorn-work crypto sdk-doctor --strict --json",
   sdkValidateFixture: [
     "matterhorn-work crypto sdk-validate-public",
@@ -386,7 +388,7 @@ const CUSTOMER_DEMO_PROMPTS = [
     id: "bittensor-image-subnets",
     label: "Bittensor discovery",
     betaVisible: true,
-    prompt: "Bittensor Agent task: Find Bittensor subnets useful for image generation. Return customer-safe cards and explain which actions are read-only, which are preview-only, and which require external signing.",
+    prompt: "Bittensor Agent task: Find Bittensor subnets useful for image generation. Return customer-safe cards and explain which actions are read-only, which are preview-only, and which require connected-wallet review.",
   },
   {
     id: "bittensor-tao-wallet",
@@ -408,7 +410,7 @@ const CUSTOMER_DEMO_PROMPTS = [
   },
   {
     id: "external-signer-preview",
-    label: "Signer preview",
+    label: "Wallet boundary",
     betaVisible: true,
     prompt: "Matterhorn protocol task: Explain the signing boundary across Bittensor, Hyperliquid, and Polymarket. A connected wallet can review and submit Bittensor transfer/stake/unstake calls, Hyperliquid place/cancel/modify/close actions, and eligible Polymarket buy/sell/cancel actions from separate tickets. Unsupported advanced calls stay unavailable. Matterhorn never signs, custodies keys, or auto-executes.",
   },
@@ -459,7 +461,7 @@ const BETA_TRY_PROMPTS = [
     label: "find Bittensor subnets for image generation",
     mode: "crypto",
     prompt:
-      "Bittensor Agent task: Find Bittensor subnets useful for image generation and return customer-safe cards. Explain which actions are read-only, which are preview-only, and which require external signing.",
+      "Bittensor Agent task: Find Bittensor subnets useful for image generation and return customer-safe cards. Explain which actions are read-only, which are preview-only, and which require connected-wallet review.",
   },
   {
     id: "beta-validators-14",
@@ -543,7 +545,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     safety: "Read-only discovery",
     outcome: "Subnet shortlist",
     prompt:
-      "Bittensor Agent task: Help me find Bittensor subnets for my goal. Explain each subnet in beginner language with utility, risks, source/freshness, adapter support, and which actions require external signing.",
+      "Bittensor Agent task: Help me find Bittensor subnets for my goal. Explain each subnet in beginner language with utility, risks, source/freshness, adapter support, and which actions require connected-wallet review.",
   },
   {
     id: "validator-compare",
@@ -1571,12 +1573,16 @@ function HyperliquidTradeExecution({
 function PolymarketTradeExecution({
   initialDraft,
   guardedHandoff: initialGuardedHandoff,
+  coworkerIntentContext: initialCoworkerIntentContext,
+  matterhornServerClient,
   initialOperation,
   workspaceId,
   sessionId,
 }: {
   initialDraft?: PolymarketDraftHandoff | null;
   guardedHandoff?: Extract<ReviewedActionHandoffV2, { protocol: "polymarket" }> | null;
+  coworkerIntentContext?: CoworkerWalletIntentHandoffContext | null;
+  matterhornServerClient?: MatterhornServerClient | null;
   initialOperation?: "buy" | "sell" | "cancel" | null;
   workspaceId?: string | null;
   sessionId?: string | null;
@@ -1603,7 +1609,13 @@ function PolymarketTradeExecution({
   const [busy, setBusy] = useState<"prepare" | "submit" | null>(null);
   const [tradeError, setTradeError] = useState<string | null>(null);
   const [guardedHandoff, setGuardedHandoff] = useState(initialGuardedHandoff ?? null);
+  const [coworkerIntentContext, setCoworkerIntentContext] = useState(initialCoworkerIntentContext ?? null);
+  const [coworkerReceiptWarning, setCoworkerReceiptWarning] = useState<string | null>(null);
   useEffect(() => setGuardedHandoff(initialGuardedHandoff ?? null), [initialGuardedHandoff]);
+  useEffect(() => {
+    setCoworkerIntentContext(initialCoworkerIntentContext ?? null);
+    setCoworkerReceiptWarning(null);
+  }, [initialCoworkerIntentContext]);
   const [marketQuery, setMarketQuery] = useState("");
   const [markets, setMarkets] = useState<PolymarketMarketSearchResult[]>([]);
   const [marketSearchBusy, setMarketSearchBusy] = useState(false);
@@ -1617,8 +1629,27 @@ function PolymarketTradeExecution({
     setReceipt(null);
     setEvidencePath(null);
     setEvidenceWarning(null);
+    setCoworkerReceiptWarning(null);
     setTradeError(null);
   }, []);
+
+  const reconcileCoworkerReceipt = useCallback(async (nextReceipt: PolymarketPublicReceipt) => {
+    if (!matterhornServerClient || !coworkerIntentContext) return;
+    try {
+      await matterhornServerClient.recordCoworkerWalletReceipt(
+        coworkerIntentContext.workspaceId,
+        coworkerIntentContext.coworkerId,
+        coworkerIntentContext.intentId,
+        polymarketCoworkerWalletReceiptInput(coworkerIntentContext, nextReceipt),
+      );
+      setCoworkerIntentContext(null);
+      setCoworkerReceiptWarning(null);
+    } catch {
+      setCoworkerReceiptWarning(
+        "The wallet action completed, but its result could not be linked to coworker history. Do not send it again; check Polymarket first.",
+      );
+    }
+  }, [coworkerIntentContext, matterhornServerClient]);
 
   useEffect(() => {
     if (initialDraft || !initialOperation) return;
@@ -1691,8 +1722,24 @@ function PolymarketTradeExecution({
   }, []);
 
   const prepareOrder = useCallback(async () => {
+    if (tradeAction !== "CANCEL") {
+      setBusy("prepare");
+      setTradeError(null);
+      try {
+        await assertPolymarketUserCanPlaceOrders();
+        setBusy(null);
+      } catch (error) {
+        setTradeError(error instanceof Error ? error.message : "Polymarket location verification failed. No order was prepared.");
+        setBusy(null);
+        return;
+      }
+    }
+    let validatedGuardedHandoff = guardedHandoff;
     try {
       const source = guardedHandoff?.source ?? "agent-card";
+      const exactDraft = guardedHandoff?.draft.operation === tradeAction.toLowerCase()
+        ? guardedHandoff.draft
+        : null;
       const currentDraft: ReviewedActionDraftHandoff = tradeAction === "CANCEL"
         ? {
             version: "matterhorn.reviewed-action-handoff.v1",
@@ -1715,9 +1762,14 @@ function PolymarketTradeExecution({
               protocol: "polymarket",
               source,
               draft: {
-                operation: "sell",
-                marketId: marketId.trim(),
-                outcome: outcome.trim(),
+              operation: "sell",
+              marketId: marketId.trim(),
+              tokenId: exactDraft?.operation === "sell" ? exactDraft.tokenId : null,
+              outcome: outcome.trim(),
+              orderType: exactDraft?.operation === "sell" ? exactDraft.orderType : null,
+              limitPrice: exactDraft?.operation === "sell" ? exactDraft.limitPrice : null,
+              tickSize: exactDraft?.operation === "sell" ? exactDraft.tickSize : null,
+              negativeRisk: exactDraft?.operation === "sell" ? exactDraft.negativeRisk : null,
                 amountUsdc: null,
                 amountShares: Number(amountShares),
                 slippageTolerance: Number(slippageTolerance),
@@ -1732,7 +1784,12 @@ function PolymarketTradeExecution({
               draft: {
                 operation: "buy",
                 marketId: marketId.trim(),
+                tokenId: exactDraft?.operation === "buy" ? exactDraft.tokenId : null,
                 outcome: outcome.trim(),
+                orderType: exactDraft?.operation === "buy" ? exactDraft.orderType : null,
+                limitPrice: exactDraft?.operation === "buy" ? exactDraft.limitPrice : null,
+                tickSize: exactDraft?.operation === "buy" ? exactDraft.tickSize : null,
+                negativeRisk: exactDraft?.operation === "buy" ? exactDraft.negativeRisk : null,
                 amountUsdc: Number(amountUsdc),
                 amountShares: null,
                 slippageTolerance: Number(slippageTolerance),
@@ -1747,6 +1804,7 @@ function PolymarketTradeExecution({
         originatedFromHandoff: Boolean(initialDraft),
       });
       setGuardedHandoff(refreshedHandoff);
+      validatedGuardedHandoff = refreshedHandoff;
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "This agent wallet draft must be regenerated before review.");
       return;
@@ -1763,6 +1821,46 @@ function PolymarketTradeExecution({
       }
       return;
     }
+    if (validatedGuardedHandoff?.protocol === "polymarket"
+      && (validatedGuardedHandoff.draft.operation === "buy" || validatedGuardedHandoff.draft.operation === "sell")) {
+      const exact = validatedGuardedHandoff.draft;
+      if (!exact.tokenId || exact.orderType !== "FAK" || !exact.limitPrice || !exact.tickSize
+        || typeof exact.negativeRisk !== "boolean") {
+        setTradeError("The certified Polymarket review is missing exact wallet execution bounds. Regenerate it from the desk.");
+        return;
+      }
+      setPrepared({
+        tradeSide: exact.operation === "buy" ? "BUY" : "SELL",
+        marketId: exact.marketId,
+        tokenId: exact.tokenId,
+        signerAddress: validatedGuardedHandoff.signer,
+        marketLabel: selectedMarket?.question ?? exact.marketId,
+        outcome: exact.outcome,
+        amountUsdc: exact.operation === "buy" ? exact.amountUsdc : null,
+        amountShares: exact.operation === "sell" ? exact.amountShares : null,
+        estimatedFillPrice: exact.limitPrice,
+        estimatedShares: exact.operation === "sell" ? exact.amountShares : null,
+        estimatedProceedsUsdc: exact.operation === "sell"
+          ? Number((exact.amountShares * exact.limitPrice).toFixed(6))
+          : null,
+        maxLossUsdc: exact.operation === "buy" ? exact.amountUsdc : null,
+        orderType: exact.orderType,
+        limitPrice: exact.limitPrice,
+        tickSize: exact.tickSize,
+        negativeRisk: exact.negativeRisk,
+        previewSha256: validatedGuardedHandoff.simulation.reference,
+        expiresAt: validatedGuardedHandoff.expiresAt,
+        compliance: { status: "allowed", reason: null },
+        warnings: [
+          "Exact FAK price and CLOB rules are hash-bound to this wallet review.",
+          "Your connected wallet remains the only component that can authorize and submit the order.",
+        ],
+      });
+      setHandoff(null);
+      setTradeError(null);
+      setReceipt(null);
+      return;
+    }
     const amount = Number(amountUsdc);
     const shares = Number(amountShares);
     if (!marketId.trim()) {
@@ -1770,7 +1868,7 @@ function PolymarketTradeExecution({
       return;
     }
     if (tradeAction === "BUY" && !(amount > 0)) {
-      setTradeError("Enter a positive USDC amount to spend.");
+      setTradeError(`Enter a positive ${POLYMARKET_COLLATERAL_SYMBOL} amount to spend.`);
       return;
     }
     if (tradeAction === "SELL" && !(shares > 0)) {
@@ -1796,10 +1894,24 @@ function PolymarketTradeExecution({
         if (!response.ok || !json.success || !json.preview) {
           throw new Error(json.error?.message ?? "Could not prepare the Polymarket sale.");
         }
+        const exactDraft = validatedGuardedHandoff?.draft.operation === "sell"
+          ? validatedGuardedHandoff.draft
+          : null;
+        if (exactDraft && (json.preview.tokenId !== exactDraft.tokenId
+          || json.preview.orderType !== exactDraft.orderType
+          || json.preview.limitPrice !== exactDraft.limitPrice
+          || json.preview.tickSize !== exactDraft.tickSize
+          || json.preview.negativeRisk !== exactDraft.negativeRisk)) {
+          throw new Error("Polymarket execution terms changed after review. Regenerate the wallet action.");
+        }
+        if (!json.preview.limitPrice || !json.preview.tickSize || typeof json.preview.negativeRisk !== "boolean") {
+          throw new Error("Polymarket did not return exact wallet execution bounds. No order was prepared.");
+        }
         setPrepared({
           tradeSide: "SELL",
           marketId: json.preview.marketId,
           tokenId: json.preview.tokenId,
+          signerAddress: address ?? null,
           marketLabel: json.preview.marketLabel,
           outcome: json.preview.outcome,
           amountUsdc: null,
@@ -1808,6 +1920,10 @@ function PolymarketTradeExecution({
           estimatedShares: json.preview.shares,
           estimatedProceedsUsdc: json.preview.estimatedProceedsUsdc,
           maxLossUsdc: null,
+          orderType: json.preview.orderType,
+          limitPrice: json.preview.limitPrice,
+          tickSize: json.preview.tickSize,
+          negativeRisk: json.preview.negativeRisk,
           previewSha256: json.preview.previewSha256,
           expiresAt: json.preview.expiresAt,
           compliance: json.preview.compliance,
@@ -1836,10 +1952,24 @@ function PolymarketTradeExecution({
       if (!json.preview.marketId || !json.preview.tokenId || !json.preview.marketLabel || !json.preview.outcome || !json.preview.size || !json.preview.risk) {
         throw new Error("The agent preview is missing an exact market, outcome, token, amount, or risk value.");
       }
+      const exactDraft = validatedGuardedHandoff?.draft.operation === "buy"
+        ? validatedGuardedHandoff.draft
+        : null;
+      if (exactDraft && (json.preview.tokenId !== exactDraft.tokenId
+        || json.preview.orderType !== exactDraft.orderType
+        || json.preview.limitPrice !== exactDraft.limitPrice
+        || json.preview.tickSize !== exactDraft.tickSize
+        || json.preview.negativeRisk !== exactDraft.negativeRisk)) {
+        throw new Error("Polymarket execution terms changed after review. Regenerate the wallet action.");
+      }
+      if (!json.preview.limitPrice || !json.preview.tickSize || typeof json.preview.negativeRisk !== "boolean") {
+        throw new Error("Polymarket did not return exact wallet execution bounds. No order was prepared.");
+      }
       setPrepared({
         tradeSide: "BUY",
         marketId: json.preview.marketId,
         tokenId: json.preview.tokenId,
+        signerAddress: address ?? null,
         marketLabel: json.preview.marketLabel,
         outcome: json.preview.outcome,
         amountUsdc: json.preview.size,
@@ -1848,6 +1978,10 @@ function PolymarketTradeExecution({
         estimatedShares: json.preview.estimatedShares,
         estimatedProceedsUsdc: null,
         maxLossUsdc: json.preview.risk.maxLossUsdc,
+        orderType: json.preview.orderType,
+        limitPrice: json.preview.limitPrice,
+        tickSize: json.preview.tickSize,
+        negativeRisk: json.preview.negativeRisk,
         previewSha256: json.preview.previewSha256,
         expiresAt: json.preview.expiresAt,
         compliance: json.preview.compliance,
@@ -1859,10 +1993,21 @@ function PolymarketTradeExecution({
     } finally {
       setBusy(null);
     }
-  }, [amountShares, amountUsdc, cancelAll, cancelOrderIds, guardedHandoff, initialDraft, marketId, outcome, slippageTolerance, tradeAction, workspaceId]);
+  }, [address, amountShares, amountUsdc, cancelAll, cancelOrderIds, guardedHandoff, initialDraft, marketId, outcome, selectedMarket, slippageTolerance, tradeAction, workspaceId]);
 
   const signAndSubmit = useCallback(async () => {
     if ((!prepared && !cancelReview) || !walletClient || !address) return;
+    if (coworkerIntentContext) {
+      const mismatch = polymarketCoworkerWalletMismatchReason(coworkerIntentContext, {
+        chainId: walletClient.chain?.id ?? null,
+        address,
+        operation: tradeAction.toLowerCase() as "buy" | "sell" | "cancel",
+      });
+      if (mismatch) {
+        setTradeError(mismatch);
+        return;
+      }
+    }
     const requiredConfirmation = cancelReview
       ? cancelReview.cancelAll
         ? POLYMARKET_CANCEL_ALL_CONFIRMATION
@@ -1914,12 +2059,13 @@ function PolymarketTradeExecution({
             setEvidenceWarning("The cancellation succeeded, but its public receipt was not added to this workspace.");
           }
         }
+        await reconcileCoworkerReceipt(publicReceipt);
         return;
       }
       if (!prepared) return;
       const publicReceipt = await submitPolymarketOrder({ walletClient, order: prepared });
       setReceipt(publicReceipt);
-      if (handoff) {
+      if (handoff || guardedHandoff) {
         const receiptPath = workspaceId
           ? `/workspace/${encodeURIComponent(workspaceId)}/polymarket/orders/receipt`
           : "/api/polymarket/orders/receipt";
@@ -1933,18 +2079,19 @@ function PolymarketTradeExecution({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               sessionId: sessionId || null,
-              handoff,
+              ...(handoff ? { handoff } : {}),
               ...(guardedHandoff ? {
                 reviewedAction: guardedHandoff,
                 receiptIntentHash: guardedHandoff.intentHash,
               } : {}),
               receipt: {
                 previewSha256: prepared.previewSha256,
-                handoffSha256: typeof handoff.handoffSha256 === "string" ? handoff.handoffSha256 : null,
+                handoffSha256: handoff && typeof handoff.handoffSha256 === "string" ? handoff.handoffSha256 : null,
                 orderId: publicReceipt.orderId,
                 txHash: publicReceipt.transactionHashes[0] ?? null,
                 status: publicReceipt.status,
                 marketId: prepared.marketId,
+                tokenId: prepared.tokenId,
                 outcome: prepared.outcome,
                 side: prepared.tradeSide.toLowerCase(),
                 submittedAt: publicReceipt.submittedAt,
@@ -1960,12 +2107,13 @@ function PolymarketTradeExecution({
           setEvidenceWarning("The order succeeded, but its public receipt was not added to this workspace.");
         }
       }
+      await reconcileCoworkerReceipt(publicReceipt);
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "Wallet authorization or Polymarket submission failed.");
     } finally {
       setBusy(null);
     }
-  }, [address, cancelReview, confirmation, guardedHandoff, handoff, prepared, sessionId, walletClient, workspaceId]);
+  }, [address, cancelReview, confirmation, coworkerIntentContext, guardedHandoff, handoff, prepared, reconcileCoworkerReceipt, sessionId, tradeAction, walletClient, workspaceId]);
 
   const firstConnector = connectors.find((connector) => connector.id !== "injected") ?? connectors[0];
   const onPolygon = walletClient?.chain?.id === POLYMARKET_CHAIN_ID;
@@ -2156,7 +2304,7 @@ function PolymarketTradeExecution({
           </label>
         )}
         <label className="space-y-1.5 text-xs text-dls-secondary">
-          {tradeAction === "BUY" ? "Amount (USDC)" : "Shares to sell"}
+          {tradeAction === "BUY" ? "Amount (Polymarket USD)" : "Shares to sell"}
           <Input
             value={tradeAction === "BUY" ? amountUsdc : amountShares}
             inputMode="decimal"
@@ -2186,16 +2334,16 @@ function PolymarketTradeExecution({
           <p className="text-xs font-medium leading-5 text-dls-text">{prepared.marketLabel}</p>
           <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs sm:grid-cols-3">
             {(prepared.tradeSide === "BUY" ? [
-              ["Spend", `$${(prepared.amountUsdc ?? 0).toFixed(2)} USDC`],
+              ["Spend", `${(prepared.amountUsdc ?? 0).toFixed(2)} ${POLYMARKET_COLLATERAL_SYMBOL}`],
               ["Estimated fill", prepared.estimatedFillPrice === null ? "Unavailable" : `${(prepared.estimatedFillPrice * 100).toFixed(1)}¢`],
               ["Estimated shares", prepared.estimatedShares?.toFixed(3) ?? "Unavailable"],
-              ["Maximum loss", `$${(prepared.maxLossUsdc ?? 0).toFixed(2)}`],
+              ["Maximum loss", `${(prepared.maxLossUsdc ?? 0).toFixed(2)} ${POLYMARKET_COLLATERAL_SYMBOL}`],
               ["Network", "Polygon · real funds"],
               ["Expires", new Date(prepared.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })],
             ] : [
               ["Shares", (prepared.amountShares ?? 0).toFixed(3)],
               ["Estimated fill", prepared.estimatedFillPrice === null ? "Unavailable" : `${(prepared.estimatedFillPrice * 100).toFixed(1)}¢`],
-              ["Estimated proceeds", prepared.estimatedProceedsUsdc === null ? "Unavailable" : `$${prepared.estimatedProceedsUsdc.toFixed(2)} USDC`],
+              ["Estimated proceeds", prepared.estimatedProceedsUsdc === null ? "Unavailable" : `${prepared.estimatedProceedsUsdc.toFixed(2)} ${POLYMARKET_COLLATERAL_SYMBOL}`],
               ["Network", "Polygon · real funds"],
               ["Expires", new Date(prepared.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })],
             ]).map(([label, value]) => (
@@ -2259,9 +2407,10 @@ function PolymarketTradeExecution({
         </div>
       ) : null}
       {evidenceWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Receipt not saved">{evidenceWarning}</Notice> : null}
+      {coworkerReceiptWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Coworker history not updated">{coworkerReceiptWarning}</Notice> : null}
       {tradeError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Polymarket order">{tradeError}</Notice> : null}
       <p className="text-[11px] leading-5 text-dls-secondary">
-        Browser-wallet EOA accounts are supported in this release. The temporary CLOB credential exists only in memory for this submission and is cleared immediately afterward.
+        Browser-wallet EOA accounts are supported in this release. Orders use Polymarket&apos;s current CLOB V2 and pUSD collateral. The temporary CLOB credential exists only in memory for this submission and is cleared immediately afterward.
       </p>
     </div>
   );
@@ -3337,7 +3486,7 @@ export default function BittensorPanel({
   };
 
   const askAgentAboutMarketExecutionReadiness = async () => {
-    const prompt = "Matterhorn protocol task: Review the current Hyperliquid and Polymarket execution contract. Explain which agent/server controls are passing, how the separate connected-wallet tickets submit exact reviewed terms, which Polymarket buy, sell, and cancel actions are eligible, which cases remain external handoffs, and the next safe operator action. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
+    const prompt = "Matterhorn protocol task: Review the current Hyperliquid and Polymarket execution contract. Explain which agent/server controls are passing, how the separate connected-wallet tickets submit exact reviewed terms, which Polymarket buy, sell, and cancel actions are eligible, which actions remain unavailable, and the next safe operator action. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
     await sendToChat(prompt, { marketExecutionReadiness }, { mode: "crypto", source: "market-execution-readiness-panel" });
   };
 
@@ -3474,7 +3623,7 @@ export default function BittensorPanel({
   const marketExecutionChainStages = marketExecutionChain?.stages ?? [];
   const marketExecutionChainStageCount = marketExecutionChainStages.length ? String(marketExecutionChainStages.length) : CHECK_PENDING_LABEL;
   const marketExecutionChainSubmitState = marketExecutionChain?.safety?.canSubmit === false ? "No" : CHECK_PENDING_LABEL;
-  const marketExecutionChainSignerState = marketExecutionChain?.safety?.externalSignerRequired === true ? "Required" : CHECK_PENDING_LABEL;
+  const marketExecutionChainSignerState = marketExecutionChain?.safety?.connectedWalletRequired === true ? "Required" : CHECK_PENDING_LABEL;
   const marketExecutionChainState = marketExecutionChain
     ? marketExecutionChain.safety?.liveSubmissionEnabled === false && marketExecutionChain.safety?.canSubmit === false
       ? "Safe"
@@ -3597,7 +3746,7 @@ export default function BittensorPanel({
                   {[
                     ["Can submit", activeManifestCanSubmit],
                     ["Live submission", activeManifestLiveSubmission],
-                    ["External signer", activeManifestSigner],
+                    ["Wallet approval", activeManifestSigner],
                     ["Status", activeManifestStatus],
                   ].map(([label, value]) => (
                     <div key={label} className="flex items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.08] px-2 py-1.5">
@@ -3707,6 +3856,8 @@ export default function BittensorPanel({
                   <PolymarketTradeExecution
                     initialDraft={draftHandoff?.protocol === "polymarket" ? draftHandoff.draft : null}
                     guardedHandoff={guardedHandoff?.protocol === "polymarket" ? guardedHandoff : null}
+                    coworkerIntentContext={coworkerIntentContext?.protocol === "polymarket" ? coworkerIntentContext : null}
+                    matterhornServerClient={matterhornServerClient}
                     initialOperation={initialOperation === "buy" || initialOperation === "sell" || initialOperation === "cancel" ? initialOperation : null}
                     workspaceId={workspaceId}
                     sessionId={sessionId}
@@ -3772,10 +3923,6 @@ export default function BittensorPanel({
                     <Button variant="ghost" size="sm" className="h-8 justify-start gap-1.5 px-2 text-xs text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate")}>
                       <Copy className="size-3.5" />
                       {copiedCustomerCommand === (venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate") ? "Copied" : "Copy watch setup command"}
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-8 justify-start gap-1.5 px-2 text-xs text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text" onClick={() => void copyCustomerDemoCommand("executionChainSignRequest")}>
-                      <Copy className="size-3.5" />
-                      {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Copy signer examples"}
                     </Button>
                     <Button variant="ghost" size="sm" className="h-8 justify-start gap-1.5 px-2 text-xs text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchDigest" : "polymarketWatchDigest")}>
                       <Copy className="size-3.5" />
@@ -4225,18 +4372,19 @@ export default function BittensorPanel({
                 <div className="grid grid-cols-2 gap-2">
                   <Metric label="Chain API" value={marketExecutionChainState} compact />
                   <Metric label="Stages" value={marketExecutionChainStageCount} compact />
-                  <Metric label="External signer" value={marketExecutionChainSignerState} compact />
+                  <Metric label="Connected wallet" value={marketExecutionChainSignerState} compact />
                   <Metric label="Can submit" value={marketExecutionChainSubmitState} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Testnet-only path: preview -&gt; external-signer request -&gt; redacted artifact validation -&gt; public receipt import. Each step is public/redacted and hash-bound before it can become customer evidence.
+                  The agent drafts exact terms. Matterhorn checks policy, compliance, network state, and simulation before opening a short-lived wallet ticket. Only the connected wallet can authorize the unchanged action.
                 </p>
                 <div className="grid grid-cols-1 gap-2">
                   {[
-                    ["Preview / handoff", "Build a no-submit plan with Can submit: No and Live submission: Off."],
-                    ["External-signer request", "Create public metadata for an operator-owned testnet signer only."],
-                    ["Validate artifact", "Accept public/redacted metadata; reject raw signatures, signed payloads, secrets, and hash mismatches."],
-                    ["Receipt import", "Attach public status or transaction evidence without private execution material."],
+                    ["Agent draft", "Turn the request into exact proposed terms without submission authority."],
+                    ["Safety checks", "Apply limits, compliance, network checks, and a fresh simulation."],
+                    ["Wallet review", "Show the exact action, fees, risks, expiry, and signer before approval."],
+                    ["Wallet authorization", "The connected wallet rejects or submits the unchanged supported action."],
+                    ["Receipt", "Match public protocol evidence back to the reviewed intent."],
                   ].map(([label, description]) => (
                     <div key={label} className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                       <p className="text-xs font-semibold text-dls-text">{label}</p>
@@ -4247,21 +4395,6 @@ export default function BittensorPanel({
                 <div className="grid grid-cols-1 gap-2">
                   <Button variant="ghost" size="icon-sm" className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" onClick={loadMarketExecutionChain} disabled={marketExecutionChainLoading} aria-label="Refresh execution chain" title="Refresh execution chain">
                     {marketExecutionChainLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChain")}>
-                    {copiedCustomerCommand === "executionChain" ? "Copied" : "Chain CLI"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainApi")}>
-                    {copiedCustomerCommand === "executionChainApi" ? "Copied" : "Chain API"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainSignRequest")}>
-                    {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Signer request"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainArtifact")}>
-                    {copiedCustomerCommand === "executionChainArtifact" ? "Copied" : "Validate artifact"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainReceipt")}>
-                    {copiedCustomerCommand === "executionChainReceipt" ? "Copied" : "Receipt import"}
                   </Button>
                 </div>
               </div>
@@ -4569,7 +4702,7 @@ export default function BittensorPanel({
         {venue === "bittensor" && tab === "actions" && (
           <div className="space-y-4">
             <Notice tone="info" icon={<Shield className="size-4" />} title="Reviewed Bittensor actions">
-              Transfer, stake, and unstake calls can be reviewed and submitted through a connected Bittensor wallet. Advanced calls remain external-signer handoffs until their runtime contracts are audited.
+              Transfer, stake, and unstake calls can be reviewed and submitted through a connected Bittensor wallet. Advanced calls stay unavailable until their runtime contracts are audited.
             </Notice>
             <Section title="Standard Bittensor actions" icon={<ListChecks className="size-4" />}>
               <div className="space-y-3">
