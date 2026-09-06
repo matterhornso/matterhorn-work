@@ -162,6 +162,17 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md) and [Gro
   requires an immutable version tag, the exact protected `dev` commit, typed
   operator confirmation, npm OIDC trusted publishing, and post-publish registry
   signature and SLSA provenance verification before it can report success.
+- Phase 5 hosted MCP access authority: complete in code and dormant. Invite-only
+  account keys are shown once and stored only as hashes, while every durable
+  ownership, workspace-scope, expiry, usage, and revocation field is authenticated
+  by a domain-separated HMAC derived from the independent server-only
+  `MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET`. Invite readiness fails closed
+  when that key is absent or restored state is malformed, unsealed, signed by a
+  different key, extended, reassigned to another tenant, or rolled back after
+  revocation. Authority-bearing updates rotate and compare the prior seal
+  atomically; the existing five-key, 30-day, account-deletion, and exact guarded
+  tool boundaries remain unchanged. The mode remains `off`, and no MCP package is
+  published or account invited by this change.
 - Phase 1–5 live acceptance gate: complete in code. `scripts/crypto-coworkers-acceptance-evidence.mjs` binds 21 live certification, coworker, transaction-airlock, encrypted-evidence, immutable Sui-anchor, developer-platform, design-partner, shadow-rollout, tenant-isolation, recovery, UX, and runtime-compatibility outcomes to one exact deployed commit. The encrypted-evidence outcome cannot pass without a connected-wallet-created immutable anchor whose exact package/function/arguments and public non-content object were verified, with mutation and replay rejected. Each report is a relative content-addressed file whose SHA-256 is rechecked; changed, missing, oversized, absolute, or traversing evidence fails closed. Credential- or signing-material fields are forbidden. This gate records no live success by itself and correctly remains `NO-GO` until operator-controlled acceptance evidence exists.
 - Phase 1–5 live acceptance template: complete in code. An operator can create one non-passing owner-only manifest bound to the exact candidate, deployed HTTPS origin, pinned runtime versions, required networks, and all 21 pending evidence groups. The command refuses overwrite and unsafe URLs, creates no evidence reports or hashes, and cannot convert a pending outcome into release proof.
 - All new production modes remain `off`; the new HTTP routes return a stable disabled response and no upstream adapter traffic is enabled.

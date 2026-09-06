@@ -1,5 +1,7 @@
 import {
   createHash,
+  createHmac,
+  hkdfSync,
   randomBytes,
   randomInt,
   randomUUID,
@@ -47,6 +49,19 @@ type SessionRow = {
   expires_at: number;
 };
 
+type HostedMcpAccessRow = {
+  id: string;
+  token_hash: string;
+  user_id: string;
+  active_org_id: string;
+  label: string;
+  expires_at: number;
+  created_at: number;
+  last_used_at: number | null;
+  revoked_at: number | null;
+  authority_seal: string | null;
+};
+
 type OrganizationRow = {
   id: string;
   name: string;
@@ -90,6 +105,7 @@ export type MatterhornAuthMaintenanceResult = {
   expiredEmailsTerminalized: number;
   finalizedEmailsDeleted: number;
   completedDeletionJobsDeleted: number;
+  expiredHostedMcpCredentialsDeleted: number;
 };
 
 export type MatterhornVerificationRequired = {
@@ -111,6 +127,27 @@ export type MatterhornAuthSession = {
   user: MatterhornAuthUser;
   activeOrgId: string | null;
   activeOrgSlug: string | null;
+  expiresAt: number;
+};
+
+export type MatterhornHostedMcpAccessSummary = {
+  id: string;
+  label: string;
+  activeOrgId: string;
+  createdAt: number;
+  expiresAt: number;
+  lastUsedAt: number | null;
+};
+
+export type MatterhornHostedMcpAccessCredential =
+  MatterhornHostedMcpAccessSummary & {
+    token: string;
+  };
+
+export type MatterhornHostedMcpAccessIdentity = {
+  credentialId: string;
+  user: MatterhornAuthUser;
+  activeOrgId: string;
   expiresAt: number;
 };
 
@@ -178,6 +215,9 @@ export class MatterhornAuthError extends Error {
       | "account_deletion_pending"
       | "organization_slug_taken"
       | "signup_capacity_reached"
+      | "hosted_mcp_access_invalid"
+      | "hosted_mcp_access_integrity_unavailable"
+      | "hosted_mcp_access_limit_reached"
       | "unauthorized",
     message: string,
   ) {
@@ -193,6 +233,19 @@ const EMAIL_VERIFICATION_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 const PASSWORD_MIN_LENGTH = 12;
 const PASSWORD_MAX_LENGTH = 256;
+export const HOSTED_MCP_ACCESS_MAX_DAYS = 30;
+const HOSTED_MCP_ACCESS_MAX_ACTIVE = 5;
+const HOSTED_MCP_ACCESS_TOKEN_PREFIX = "mhmcp_";
+const HOSTED_MCP_ACCESS_USAGE_WRITE_INTERVAL_MS = 5 * 60 * 1_000;
+const HOSTED_MCP_ACCESS_INTEGRITY_SECRET = "MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET";
+const HOSTED_MCP_ACCESS_AUTHORITY_KEY_SALT = "matterhorn:hosted-mcp-access-authority-key:v1";
+const HOSTED_MCP_ACCESS_AUTHORITY_DOMAIN = "matterhorn:hosted-mcp-access-authority:v1";
+const HOSTED_MCP_ACCESS_AUTHORITY_SECRET_MINIMUM_BYTES = 32;
+const HOSTED_MCP_ACCESS_AUTHORITY_SEAL_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const HOSTED_MCP_ACCESS_ID_PATTERN = /^mcp_[0-9a-f]{32}$/;
+const AUTH_USER_ID_PATTERN = /^usr_[0-9a-f]{32}$/;
+const AUTH_ORGANIZATION_ID_PATTERN = /^org_[0-9a-f]{32}$/;
+const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -335,6 +388,121 @@ function hashSessionToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function hashHostedMcpAccessToken(token: string): string {
+  return createHash("sha256")
+    .update("matterhorn-hosted-mcp-access\0")
+    .update(token)
+    .digest("hex");
+}
+
+function hostedMcpAccessAuthorityKey(secret: string): Buffer | null {
+  const input = Buffer.from(secret, "utf8");
+  if (input.byteLength < HOSTED_MCP_ACCESS_AUTHORITY_SECRET_MINIMUM_BYTES) {
+    input.fill(0);
+    return null;
+  }
+  const key = Buffer.from(hkdfSync(
+    "sha256",
+    input,
+    HOSTED_MCP_ACCESS_AUTHORITY_KEY_SALT,
+    HOSTED_MCP_ACCESS_AUTHORITY_DOMAIN,
+    32,
+  ));
+  input.fill(0);
+  return key;
+}
+
+function hostedMcpAccessAuthorityValue(row: HostedMcpAccessRow) {
+  return [
+    "matterhorn.hosted-mcp-access-authority.v1",
+    row.id,
+    row.token_hash,
+    row.user_id,
+    row.active_org_id,
+    row.label,
+    row.expires_at,
+    row.created_at,
+    row.last_used_at,
+    row.revoked_at,
+  ] as const;
+}
+
+function hostedMcpAccessRowStructurallyValid(row: HostedMcpAccessRow): boolean {
+  try {
+    return HOSTED_MCP_ACCESS_ID_PATTERN.test(row.id)
+      && SHA256_HEX_PATTERN.test(row.token_hash)
+      && AUTH_USER_ID_PATTERN.test(row.user_id)
+      && AUTH_ORGANIZATION_ID_PATTERN.test(row.active_org_id)
+      && normalizeHostedMcpAccessLabel(row.label) === row.label
+      && Number.isSafeInteger(row.created_at)
+      && row.created_at >= 0
+      && Number.isSafeInteger(row.expires_at)
+      && row.expires_at > row.created_at
+      && row.expires_at - row.created_at <= HOSTED_MCP_ACCESS_MAX_DAYS * 24 * 60 * 60 * 1_000
+      && (row.last_used_at === null || (
+        Number.isSafeInteger(row.last_used_at)
+        && row.last_used_at >= row.created_at
+        && row.last_used_at <= row.expires_at
+      ))
+      && (row.revoked_at === null || (
+        Number.isSafeInteger(row.revoked_at)
+        && row.revoked_at >= row.created_at
+      ));
+  } catch {
+    return false;
+  }
+}
+
+function sealHostedMcpAccessAuthority(row: HostedMcpAccessRow, key: Buffer): string {
+  return createHmac("sha256", key)
+    .update(JSON.stringify(hostedMcpAccessAuthorityValue(row)))
+    .digest("base64url");
+}
+
+function hostedMcpAccessAuthorityValid(row: HostedMcpAccessRow, key: Buffer): boolean {
+  if (
+    !hostedMcpAccessRowStructurallyValid(row)
+    || !row.authority_seal
+    || !HOSTED_MCP_ACCESS_AUTHORITY_SEAL_PATTERN.test(row.authority_seal)
+  ) return false;
+  const expected = Buffer.from(sealHostedMcpAccessAuthority(row, key), "utf8");
+  const actual = Buffer.from(row.authority_seal, "utf8");
+  try {
+    return expected.byteLength === actual.byteLength && timingSafeEqual(expected, actual);
+  } finally {
+    expected.fill(0);
+    actual.fill(0);
+  }
+}
+
+function normalizeHostedMcpAccessLabel(label: string): string {
+  const normalized = label.trim();
+  if (
+    normalized.length < 1
+    || normalized.length > 80
+    || /[\u0000-\u001f\u007f]/.test(normalized)
+  ) {
+    throw new MatterhornAuthError(
+      "hosted_mcp_access_invalid",
+      "Access key name must be 1-80 visible characters.",
+    );
+  }
+  return normalized;
+}
+
+function hostedMcpAccessSummaryFromRow(
+  row: HostedMcpAccessRow,
+): MatterhornHostedMcpAccessSummary {
+  return {
+    id: row.id,
+    label: row.label,
+    activeOrgId: row.active_org_id,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    lastUsedAt: row.last_used_at,
+  };
+}
+
 function hashPasswordResetToken(token: string): string {
   return createHash("sha256")
     .update("matterhorn-password-reset\0")
@@ -386,8 +554,13 @@ export function resolveMatterhornAuthDatabasePath(): string {
 
 export class MatterhornAuthStore {
   private readonly db: SqliteDatabase;
+  private readonly hostedMcpAccessAuthorityKey: Buffer | null;
 
-  constructor(path = resolveMatterhornAuthDatabasePath()) {
+  constructor(
+    path = resolveMatterhornAuthDatabasePath(),
+    hostedMcpAccessIntegritySecret = process.env[HOSTED_MCP_ACCESS_INTEGRITY_SECRET] ?? "",
+  ) {
+    this.hostedMcpAccessAuthorityKey = hostedMcpAccessAuthorityKey(hostedMcpAccessIntegritySecret);
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     this.db = openSqliteDatabase(path);
     if (path !== ":memory:") {
@@ -443,6 +616,63 @@ export class MatterhornAuthStore {
       CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at);
       CREATE INDEX IF NOT EXISTS organization_members_user_id_idx
         ON organization_members(user_id);
+
+      CREATE TABLE IF NOT EXISTS hosted_mcp_access_tokens (
+        id TEXT PRIMARY KEY,
+        token_hash TEXT NOT NULL UNIQUE,
+        user_id TEXT NOT NULL,
+        active_org_id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        last_used_at INTEGER,
+        revoked_at INTEGER,
+        authority_seal TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (active_org_id) REFERENCES organizations(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS hosted_mcp_access_tokens_user_idx
+        ON hosted_mcp_access_tokens(user_id, revoked_at, expires_at);
+      CREATE INDEX IF NOT EXISTS hosted_mcp_access_tokens_expiry_idx
+        ON hosted_mcp_access_tokens(expires_at, revoked_at);
+    `);
+    const hostedMcpAccessColumns = statement(
+      this.db,
+      "PRAGMA table_info(hosted_mcp_access_tokens)",
+    ).all() as Array<{ name?: string }>;
+    if (!hostedMcpAccessColumns.some((column) => column.name === "authority_seal")) {
+      this.db.exec("ALTER TABLE hosted_mcp_access_tokens ADD COLUMN authority_seal TEXT;");
+    }
+    if (this.hostedMcpAccessAuthorityKey) {
+      const legacyRows = statement(this.db, `
+        SELECT id, token_hash, user_id, active_org_id, label,
+          expires_at, created_at, last_used_at, revoked_at, authority_seal
+        FROM hosted_mcp_access_tokens WHERE authority_seal IS NULL
+      `).all() as HostedMcpAccessRow[];
+      for (const row of legacyRows) {
+        if (!hostedMcpAccessRowStructurallyValid(row)) {
+          throw new Error("hosted_mcp_access_state_integrity_invalid");
+        }
+        statement(this.db, `
+          UPDATE hosted_mcp_access_tokens SET authority_seal = ?
+          WHERE id = ? AND authority_seal IS NULL
+        `).run(sealHostedMcpAccessAuthority(row, this.hostedMcpAccessAuthorityKey), row.id);
+      }
+    }
+    this.db.exec(`
+      CREATE TRIGGER IF NOT EXISTS hosted_mcp_access_authority_seal_insert
+      BEFORE INSERT ON hosted_mcp_access_tokens
+      WHEN NEW.authority_seal IS NULL
+        OR length(NEW.authority_seal) <> 43
+        OR NEW.authority_seal GLOB '*[^A-Za-z0-9_-]*'
+      BEGIN SELECT RAISE(ABORT, 'hosted_mcp_access_state_integrity_invalid'); END;
+      CREATE TRIGGER IF NOT EXISTS hosted_mcp_access_authority_seal_update
+      BEFORE UPDATE ON hosted_mcp_access_tokens
+      WHEN NEW.authority_seal IS NULL
+        OR length(NEW.authority_seal) <> 43
+        OR NEW.authority_seal GLOB '*[^A-Za-z0-9_-]*'
+        OR NEW.authority_seal = OLD.authority_seal
+      BEGIN SELECT RAISE(ABORT, 'hosted_mcp_access_state_integrity_invalid'); END;
     `);
     const userColumns = statement(this.db, "PRAGMA table_info(users)").all() as Array<{ name?: string }>;
     if (!userColumns.some((column) => column.name === "email_verified_at")) {
@@ -529,7 +759,24 @@ export class MatterhornAuthStore {
   }
 
   close(): void {
+    this.hostedMcpAccessAuthorityKey?.fill(0);
     this.db.close();
+  }
+
+  hostedMcpAccessIntegrityReady(): boolean {
+    if (!this.hostedMcpAccessAuthorityKey) return false;
+    try {
+      const rows = statement(this.db, `
+        SELECT id, token_hash, user_id, active_org_id, label,
+          expires_at, created_at, last_used_at, revoked_at, authority_seal
+        FROM hosted_mcp_access_tokens
+      `).all() as HostedMcpAccessRow[];
+      return rows.every((row) =>
+        hostedMcpAccessAuthorityValid(row, this.hostedMcpAccessAuthorityKey!),
+      );
+    } catch {
+      return false;
+    }
   }
 
   maintainEphemeralSecurityState(now = Date.now()): MatterhornAuthMaintenanceResult {
@@ -576,6 +823,24 @@ export class MatterhornAuthStore {
         DELETE FROM account_deletion_jobs
         WHERE status = 'completed' AND completed_at IS NOT NULL AND completed_at < ?
       `).run(finalizedBefore).changes ?? 0;
+      let expiredHostedMcpCredentialsDeleted = 0;
+      if (this.hostedMcpAccessAuthorityKey) {
+        const expiredHostedMcpRows = statement(this.db, `
+          SELECT id, token_hash, user_id, active_org_id, label,
+            expires_at, created_at, last_used_at, revoked_at, authority_seal
+          FROM hosted_mcp_access_tokens
+          WHERE (revoked_at IS NOT NULL AND revoked_at < ?)
+            OR (expires_at < ?)
+        `).all(finalizedBefore, finalizedBefore) as HostedMcpAccessRow[];
+        for (const row of expiredHostedMcpRows) {
+          if (!hostedMcpAccessAuthorityValid(row, this.hostedMcpAccessAuthorityKey)) {
+            throw new Error("hosted_mcp_access_state_integrity_invalid");
+          }
+          expiredHostedMcpCredentialsDeleted += statement(this.db, `
+            DELETE FROM hosted_mcp_access_tokens WHERE id = ? AND authority_seal = ?
+          `).run(row.id, row.authority_seal).changes ?? 0;
+        }
+      }
       return {
         expiredSessionsDeleted,
         expiredVerificationChallengesDeleted,
@@ -583,7 +848,215 @@ export class MatterhornAuthStore {
         expiredEmailsTerminalized: expiredVerificationEmails + expiredPasswordResetEmails,
         finalizedEmailsDeleted,
         completedDeletionJobsDeleted,
+        expiredHostedMcpCredentialsDeleted,
       };
+    });
+  }
+
+  createHostedMcpAccessCredential(
+    sessionToken: string,
+    input: { label: string; expiresInDays?: number },
+  ): MatterhornHostedMcpAccessCredential {
+    const authorityKey = this.requireHostedMcpAccessAuthorityKey();
+    const session = this.requireSession(sessionToken);
+    if (!session.activeOrgId) {
+      throw new MatterhornAuthError(
+        "hosted_mcp_access_invalid",
+        "Select a workspace before creating an access key.",
+      );
+    }
+    const expiresInDays = input.expiresInDays ?? HOSTED_MCP_ACCESS_MAX_DAYS;
+    if (
+      !Number.isSafeInteger(expiresInDays)
+      || expiresInDays < 1
+      || expiresInDays > HOSTED_MCP_ACCESS_MAX_DAYS
+    ) {
+      throw new MatterhornAuthError(
+        "hosted_mcp_access_invalid",
+        `Access keys must expire within ${HOSTED_MCP_ACCESS_MAX_DAYS} days.`,
+      );
+    }
+    const label = normalizeHostedMcpAccessLabel(input.label);
+    return this.withTransaction(() => {
+      const now = Date.now();
+      const activeRows = statement(this.db, `
+        SELECT id, token_hash, user_id, active_org_id, label,
+          expires_at, created_at, last_used_at, revoked_at, authority_seal
+        FROM hosted_mcp_access_tokens
+        WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
+      `).all(session.user.id, now) as HostedMcpAccessRow[];
+      if (!activeRows.every((row) => hostedMcpAccessAuthorityValid(row, authorityKey))) {
+        throw new MatterhornAuthError(
+          "hosted_mcp_access_integrity_unavailable",
+          "External access is unavailable until its security state is repaired.",
+        );
+      }
+      if (activeRows.length >= HOSTED_MCP_ACCESS_MAX_ACTIVE) {
+        throw new MatterhornAuthError(
+          "hosted_mcp_access_limit_reached",
+          "Revoke an existing access key before creating another.",
+        );
+      }
+
+      const id = `mcp_${randomUUID().replaceAll("-", "")}`;
+      const token = `${HOSTED_MCP_ACCESS_TOKEN_PREFIX}${randomBytes(32).toString("base64url")}`;
+      const expiresAt = now + expiresInDays * 24 * 60 * 60 * 1_000;
+      const row: HostedMcpAccessRow = {
+        id,
+        token_hash: hashHostedMcpAccessToken(token),
+        user_id: session.user.id,
+        active_org_id: session.activeOrgId!,
+        label,
+        expires_at: expiresAt,
+        created_at: now,
+        last_used_at: null,
+        revoked_at: null,
+        authority_seal: null,
+      };
+      const authoritySeal = sealHostedMcpAccessAuthority(row, authorityKey);
+      statement(this.db, `
+        INSERT INTO hosted_mcp_access_tokens(
+          id, token_hash, user_id, active_org_id, label,
+          expires_at, created_at, last_used_at, revoked_at, authority_seal
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)
+      `).run(
+        id,
+        row.token_hash,
+        row.user_id,
+        row.active_org_id,
+        label,
+        expiresAt,
+        now,
+        authoritySeal,
+      );
+      return {
+        id,
+        token,
+        label,
+        activeOrgId: row.active_org_id,
+        createdAt: now,
+        expiresAt,
+        lastUsedAt: null,
+      };
+    });
+  }
+
+  listHostedMcpAccessCredentials(
+    sessionToken: string,
+  ): MatterhornHostedMcpAccessSummary[] {
+    const authorityKey = this.requireHostedMcpAccessAuthorityKey();
+    const session = this.requireSession(sessionToken);
+    const now = Date.now();
+    const rows = statement(this.db, `
+      SELECT id, token_hash, user_id, active_org_id, label,
+        expires_at, created_at, last_used_at, revoked_at, authority_seal
+      FROM hosted_mcp_access_tokens
+      WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
+      ORDER BY created_at DESC
+    `).all(session.user.id, now) as HostedMcpAccessRow[];
+    if (!rows.every((row) => hostedMcpAccessAuthorityValid(row, authorityKey))) {
+      throw new MatterhornAuthError(
+        "hosted_mcp_access_integrity_unavailable",
+        "External access is unavailable until its security state is repaired.",
+      );
+    }
+    return rows.map(hostedMcpAccessSummaryFromRow);
+  }
+
+  resolveHostedMcpAccessCredential(
+    token: string,
+    now = Date.now(),
+  ): MatterhornHostedMcpAccessIdentity | null {
+    const authorityKey = this.hostedMcpAccessAuthorityKey;
+    if (!authorityKey) return null;
+    if (!token.startsWith(HOSTED_MCP_ACCESS_TOKEN_PREFIX)) return null;
+    return this.withTransaction(() => {
+      const row = statement(this.db, `
+        SELECT t.id, t.token_hash, t.user_id, t.active_org_id, t.label,
+          t.expires_at, t.created_at, t.last_used_at, t.revoked_at,
+          t.authority_seal, u.email, u.name, u.email_verified_at
+        FROM hosted_mcp_access_tokens t
+        JOIN users u ON u.id = t.user_id
+        JOIN organization_members m
+          ON m.organization_id = t.active_org_id AND m.user_id = t.user_id
+        WHERE t.token_hash = ? AND t.revoked_at IS NULL AND t.expires_at > ?
+        LIMIT 1
+      `).get(hashHostedMcpAccessToken(token), now) as
+        (HostedMcpAccessRow & {
+          email: string;
+          name: string | null;
+          email_verified_at: number | null;
+        }) | undefined;
+      if (
+        !row
+        || !hostedMcpAccessAuthorityValid(row, authorityKey)
+        || this.hasPendingAccountDeletion(row.user_id)
+      ) return null;
+      if (
+        row.last_used_at === null
+        || row.last_used_at <= now - HOSTED_MCP_ACCESS_USAGE_WRITE_INTERVAL_MS
+      ) {
+        const updatedRow: HostedMcpAccessRow = {
+          ...row,
+          last_used_at: now,
+          authority_seal: null,
+        };
+        const nextSeal = sealHostedMcpAccessAuthority(updatedRow, authorityKey);
+        const updated = statement(this.db, `
+          UPDATE hosted_mcp_access_tokens
+          SET last_used_at = ?, authority_seal = ?
+          WHERE id = ? AND authority_seal = ?
+        `).run(now, nextSeal, row.id, row.authority_seal).changes ?? 0;
+        if (updated !== 1) return null;
+      }
+      return {
+        credentialId: row.id,
+        user: {
+          id: row.user_id,
+          email: row.email,
+          name: row.name,
+          emailVerified: row.email_verified_at !== null,
+        },
+        activeOrgId: row.active_org_id,
+        expiresAt: row.expires_at,
+      };
+    });
+  }
+
+  revokeHostedMcpAccessCredential(
+    sessionToken: string,
+    credentialId: string,
+  ): boolean {
+    const authorityKey = this.requireHostedMcpAccessAuthorityKey();
+    const session = this.requireSession(sessionToken);
+    return this.withTransaction(() => {
+      const row = statement(this.db, `
+        SELECT id, token_hash, user_id, active_org_id, label,
+          expires_at, created_at, last_used_at, revoked_at, authority_seal
+        FROM hosted_mcp_access_tokens
+        WHERE id = ? AND user_id = ? AND revoked_at IS NULL
+        LIMIT 1
+      `).get(credentialId, session.user.id) as HostedMcpAccessRow | undefined;
+      if (!row) return false;
+      if (!hostedMcpAccessAuthorityValid(row, authorityKey)) {
+        throw new MatterhornAuthError(
+          "hosted_mcp_access_integrity_unavailable",
+          "External access is unavailable until its security state is repaired.",
+        );
+      }
+      const revokedAt = Date.now();
+      const updatedRow: HostedMcpAccessRow = {
+        ...row,
+        revoked_at: revokedAt,
+        authority_seal: null,
+      };
+      const nextSeal = sealHostedMcpAccessAuthority(updatedRow, authorityKey);
+      const result = statement(this.db, `
+        UPDATE hosted_mcp_access_tokens
+        SET revoked_at = ?, authority_seal = ?
+        WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND authority_seal = ?
+      `).run(revokedAt, nextSeal, credentialId, session.user.id, row.authority_seal);
+      return (result.changes ?? 0) === 1;
     });
   }
 
@@ -1336,7 +1809,7 @@ export class MatterhornAuthStore {
         "session_count",
       ],
       excludes: [
-        "Session tokens, password hashes, reset challenges, and verification codes are never exported.",
+        "Session tokens, MCP access keys and hashes, password hashes, reset challenges, and verification codes are never exported.",
         "Workspace chats, files, notes, outputs, and memory are exported separately from each workspace.",
       ],
     };
@@ -1667,6 +2140,16 @@ export class MatterhornAuthStore {
     return Boolean(statement(this.db, `
       SELECT 1 FROM email_suppressions WHERE email_hash = ? LIMIT 1
     `).get(hashEmail(email)));
+  }
+
+  private requireHostedMcpAccessAuthorityKey(): Buffer {
+    if (!this.hostedMcpAccessAuthorityKey) {
+      throw new MatterhornAuthError(
+        "hosted_mcp_access_integrity_unavailable",
+        "External access is unavailable until its security state is configured.",
+      );
+    }
+    return this.hostedMcpAccessAuthorityKey;
   }
 
   private requireSession(token: string): MatterhornAuthSession {
