@@ -74,7 +74,6 @@ export type SessionCoworkersPanelProps = {
   client: MatterhornServerClient | null;
   initialTemplateId?: MatterhornCoworkerTemplateId | null;
   initialOutcome?: string | null;
-  onInitialTemplateHandled?: () => void;
   workspaceId: string | null;
   selectedSessionId: string | null;
   selectedWorkspaceId: string;
@@ -337,7 +336,7 @@ export function CoworkerResourceSaveActions(props: {
             : appRequired
               ? "Choose an app above"
               : props.continuingToChat
-                ? "Save and continue"
+                ? "Save and open chat"
                 : "Save choices"}
         </Button>
         <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancel}>Cancel</Button>
@@ -435,6 +434,8 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
   const [watchValues, setWatchValues] = useState<Record<string, string | boolean>>({});
   const [watchFormError, setWatchFormError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const guidedOutcome = pendingOutcome || props.initialOutcome?.trim() || "";
+  const guidedSetup = Boolean(guidedOutcome);
   const handledInitialTemplateRef = useRef<MatterhornCoworkerTemplateId | null>(null);
   const newlyConnectedAppRef = useRef<string | null>(null);
   const activitySectionRef = useRef<HTMLDetailsElement | null>(null);
@@ -779,6 +780,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
         setError("The chat did not start. Try again.");
         return;
       }
+      onClose();
       setPendingOutcome("");
     })().catch((cause) => setError(coworkerErrorMessage(cause)));
   }, [onClose, onStartTask, pendingOutcome, props.client, selectedSessionId, selectedWorkspaceId, showToast, workspaceId]);
@@ -811,6 +813,14 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       setBusyAction(null);
     }
   }, [pendingOutcome, props.client, queryClient, resourceDraft, resourceKey, resourceQuery.data?.scope.resources?.revision, resourceRecommendationHash, selectedCoworker, showToast, startChat, workspaceId]);
+
+  const cancelResourceSetup = useCallback(() => {
+    if (guidedSetup) {
+      onClose();
+      return;
+    }
+    setResourcesOpen(false);
+  }, [guidedSetup, onClose]);
 
   const connectApp = useCallback(async (app: MatterhornCryptoAppCatalogSummary) => {
     if (!props.client || !workspaceId || !selectedCoworker) return;
@@ -888,14 +898,13 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
 
     handledInitialTemplateRef.current = templateId;
     setPendingOutcome(props.initialOutcome?.trim() ?? "");
-    props.onInitialTemplateHandled?.();
     const existingCoworker = coworkers.find((coworker) => coworker.role === templateId);
     if (existingCoworker) {
       setCoworkerChoice(existingCoworker.id);
       return;
     }
     void createCoworker(templateId);
-  }, [coworkers, createCoworker, listQuery.data, props.initialOutcome, props.initialTemplateId, props.onInitialTemplateHandled]);
+  }, [coworkers, createCoworker, listQuery.data, props.initialOutcome, props.initialTemplateId]);
 
   useEffect(() => {
     if (!pendingOutcome || !selectedCoworker || !resourceQuery.data) return;
@@ -1142,21 +1151,25 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       )}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className={cn("text-base font-semibold text-dls-text", props.compactHeader && "sr-only")}>Coworkers</h2>
+            <h2 className={cn("text-base font-semibold text-dls-text", props.compactHeader && !guidedSetup && "sr-only")}>{guidedSetup ? "Choose what it can use" : "Coworkers"}</h2>
             <p className={cn("text-xs leading-5 text-dls-secondary", !props.compactHeader && "mt-1")}>
-              Choose who helps. You decide what they can see and use.
+              {guidedSetup
+                ? "Pick one crypto app. Files and saved Memory are optional."
+                : "Choose who helps. You decide what they can see and use."}
             </p>
           </div>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            className={cn(props.compactHeader && "size-11")}
-            title="Refresh coworkers"
-            aria-label="Refresh coworkers"
-            onClick={() => void refresh()}
-          >
-            <RefreshCw aria-hidden="true" />
-          </Button>
+          {!guidedSetup ? (
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              className={cn(props.compactHeader && "size-11")}
+              title="Refresh coworkers"
+              aria-label="Refresh coworkers"
+              onClick={() => void refresh()}
+            >
+              <RefreshCw aria-hidden="true" />
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -1172,6 +1185,11 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
             <h3 className="text-sm font-semibold text-dls-text">Couldn't load coworkers</h3>
             <p className="mt-2 text-sm leading-6 text-dls-secondary">{coworkerErrorMessage(listQuery.error)}</p>
             <Button className="mt-4" size="sm" onClick={() => void listQuery.refetch()}>Try again</Button>
+          </div>
+        ) : coworkers.length === 0 && guidedSetup ? (
+          <div className="py-8" role="status">
+            <h3 className="text-sm font-semibold text-dls-text">Getting your helper ready…</h3>
+            <p className="mt-2 text-sm leading-6 text-dls-secondary">Nothing has started or been shared yet.</p>
           </div>
         ) : coworkers.length === 0 ? (
           <div className="py-8">
@@ -1201,6 +1219,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
           </div>
         ) : selectedCoworker ? (
           <>
+            {!guidedSetup ? (
             <div className="sticky top-0 z-[var(--matterhorn-layer-sticky)] -mx-4 border-b border-dls-border/70 bg-dls-background px-4 py-3">
               <div className="flex items-end gap-2">
                 <label className="grid min-w-0 flex-1 gap-1.5 text-xs font-medium text-dls-text">
@@ -1270,26 +1289,29 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                 </button>
               ) : null}
             </div>
+            ) : null}
 
             <section className="py-4" aria-labelledby="coworker-summary-title">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 id="coworker-summary-title" className="truncate text-sm font-semibold text-dls-text">{selectedCoworker.name}</h3>
-                    <span className={cn(
-                      "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-                      selectedCoworker.state === "active" ? "bg-status-success/10 text-status-success" : "bg-dls-surface-muted text-dls-secondary",
-                    )}>{selectedCoworker.state === "active" ? "Active" : selectedCoworker.state === "paused" ? "Paused" : "Disabled"}</span>
+                    {!guidedSetup ? (
+                      <span className={cn(
+                        "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                        selectedCoworker.state === "active" ? "bg-status-success/10 text-status-success" : "bg-dls-surface-muted text-dls-secondary",
+                      )}>{selectedCoworker.state === "active" ? "Active" : selectedCoworker.state === "paused" ? "Paused" : "Disabled"}</span>
+                    ) : null}
                   </div>
                   <p className="mt-2 text-sm leading-6 text-dls-secondary">{coworkerSummary(selectedCoworker.role)}</p>
-                  <details className="mt-2">
+                  {!guidedSetup ? <details className="mt-2">
                     <summary className="min-h-8 cursor-pointer text-xs text-dls-secondary outline-none focus-visible:text-dls-text focus-visible:ring-2 focus-visible:ring-ring/35">What it does</summary>
                     <p className="mt-1 border-l border-dls-border/70 pl-3 text-xs leading-5 text-dls-secondary">{selectedCoworker.mission}</p>
-                  </details>
-                  {pendingOutcome ? (
+                  </details> : null}
+                  {guidedOutcome ? (
                     <div className="mt-4 border-y border-dls-border/70 py-3">
                       <p className="text-xs font-medium text-dls-text">Your goal</p>
-                      <p className="mt-1 line-clamp-3 text-xs leading-5 text-dls-secondary">{pendingOutcome}</p>
+                      <p className="mt-1 line-clamp-3 text-xs leading-5 text-dls-secondary">{guidedOutcome}</p>
                     </div>
                   ) : null}
                 </div>
@@ -1335,12 +1357,14 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
             <section className="border-b border-dls-border/70 py-4" aria-labelledby="coworker-resources-title">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 id="coworker-resources-title" className="text-sm font-semibold text-dls-text">What it can use</h3>
+                  <h3 id="coworker-resources-title" className="text-sm font-semibold text-dls-text">{guidedSetup ? "Choose an app" : "What it can use"}</h3>
                   <p className="mt-1 text-xs leading-5 text-dls-secondary">
                     {resourceQuery.isLoading
                       ? "Loading choices…"
                       : resourceQuery.isError
                         ? "These choices could not be loaded."
+                        : guidedSetup && !resourceQuery.data?.scope.resources
+                          ? "Pick one app for this goal. Nothing is shared until you save."
                         : !resourceQuery.data?.scope.resources
                           ? "Nothing is shared until you choose."
                           : !resourceQuery.data.scope.active
@@ -1385,7 +1409,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                     </p>
                   ) : null}
                   <fieldset aria-describedby="coworker-apps-help">
-                    <legend className="text-xs font-medium text-dls-text">Apps</legend>
+                    <legend className="text-xs font-medium text-dls-text">{guidedSetup ? "Crypto app" : "Apps"}</legend>
                     <p id="coworker-apps-help" className="mt-1 text-xs leading-5 text-dls-secondary">
                       Choose one app for this coworker. Nothing is shared until you save.
                     </p>
@@ -1562,16 +1586,16 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
 
                   <CoworkerResourceSaveActions
                     busy={busyAction === `resources:${selectedCoworker.id}`}
-                    continuingToChat={Boolean(pendingOutcome)}
+                    continuingToChat={guidedSetup}
                     selectedAppCount={resourceDraft.connectionIds.length}
                     onSave={() => void saveResources()}
-                    onCancel={() => setResourcesOpen(false)}
+                    onCancel={cancelResourceSetup}
                   />
                 </div>
               ) : null}
             </section>
 
-            {detailQuery.data ? (
+            {!guidedSetup && detailQuery.data ? (
               <details className="border-b border-dls-border/70 py-4">
                 <summary className="min-h-8 cursor-pointer list-none outline-none focus-visible:ring-2 focus-visible:ring-ring/35 [&::-webkit-details-marker]:hidden">
                   <span className="block text-sm font-semibold text-dls-text">What it remembers</span>
@@ -1676,7 +1700,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
               </details>
             ) : null}
 
-            <details className="border-b border-dls-border/70 py-4">
+            {!guidedSetup ? <details className="border-b border-dls-border/70 py-4">
               <summary className="min-h-8 cursor-pointer text-sm font-semibold text-dls-text outline-none focus-visible:ring-2 focus-visible:ring-ring/35">
                 Limits
               </summary>
@@ -1689,9 +1713,9 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Maximum per wallet action</dt><dd className="text-dls-text">{selectedCoworker.limits.perActionUsd > 0 ? `Up to $${selectedCoworker.limits.perActionUsd.toLocaleString()}` : "Not allowed"}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-dls-secondary">Maximum per day</dt><dd className="text-dls-text">{selectedCoworker.limits.dailyUsd > 0 ? `Up to $${selectedCoworker.limits.dailyUsd.toLocaleString()}` : "Not allowed"}</dd></div>
               </dl>
-            </details>
+            </details> : null}
 
-            {detailQuery.isLoading ? (
+            {!guidedSetup ? detailQuery.isLoading ? (
               <div className="space-y-3 border-t border-dls-border/70 py-4" role="status" aria-label="Loading coworker activity">
                 <Skeleton className="h-16 w-full rounded-md" />
                 <Skeleton className="h-16 w-full rounded-md" />
@@ -1958,11 +1982,11 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   </section>
                 </div>
               </details>
-            )}
+            ) : null}
 
             {error ? <p className="border-t border-dls-border/70 py-3 text-sm leading-6 text-destructive" role="alert">{error}</p> : null}
 
-            <details className="border-t border-dls-border/70 py-4">
+            {!guidedSetup ? <details className="border-t border-dls-border/70 py-4">
               <summary className="min-h-8 cursor-pointer text-sm font-semibold text-dls-text outline-none focus-visible:ring-2 focus-visible:ring-ring/35">
                 Pause or disable
               </summary>
@@ -1981,7 +2005,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
                   </Button>
                 )}
               </div>
-            </details>
+            </details> : null}
           </>
         ) : null}
       </div>

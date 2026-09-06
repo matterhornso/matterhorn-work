@@ -137,16 +137,30 @@ describe("chat-operated coworker UI", () => {
 
   test("keeps first-run access focused on one app and continues with an unsent draft", () => {
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
+    const sessionPage = appSource("react-app/domains/session/chat/session-page.tsx");
     expect(panel).toContain("Add private information");
     expect(panel).toContain("Optional · {resourceDraft.agentFileIds.length} files · {resourceDraft.memoryIds.length} memories");
     expect(panel).toContain("Choose one app above. Then you can continue to chat.");
     expect(panel).toContain("<CoworkerResourceSaveActions");
-    expect(panel).toContain("continuingToChat={Boolean(pendingOutcome)}");
+    expect(panel).toContain("continuingToChat={guidedSetup}");
     expect(panel).toContain("selectedAppCount={resourceDraft.connectionIds.length}");
     expect(panel).toContain("if (sessionId && !pendingOutcome)");
     expect(panel).toContain("if (pendingOutcome && resourceDraft.connectionIds.length > 0) startChat(selectedCoworker)");
     expect(panel).toContain("sendImmediately: false");
+    expect(panel).toContain("onClose();\n      setPendingOutcome");
+    expect(panel).toContain("const cancelResourceSetup = useCallback(() => {");
+    expect(panel).toContain("if (guidedSetup) {\n      onClose();");
+    expect(panel).toContain("onCancel={cancelResourceSetup}");
+    expect(panel).toContain('guidedSetup ? "Choose what it can use" : "Coworkers"');
+    expect(panel).toContain("Pick one crypto app. Files and saved Memory are optional.");
+    expect(panel).toContain("Getting your helper ready…");
+    expect(panel).toContain("Nothing has started or been shared yet.");
+    expect(panel).toContain("{!guidedSetup && detailQuery.data ? (");
     expect(panel).toContain("Private information only goes to a model approved for private data.");
+    expect(sessionPage).toContain("const closeCoworkersPane = useCallback(() => {");
+    expect(sessionPage).toContain("setHomeCoworkerStart(null);\n    closeRightPane();");
+    expect(sessionPage).toContain("onClose={closeCoworkersPane}");
+    expect(sessionPage).not.toContain("onInitialTemplateHandled={clearHomeCoworkerTemplate}");
   });
 
   test("renders an explicit, accessible app gate before continuing to chat", () => {
@@ -171,7 +185,7 @@ describe("chat-operated coworker UI", () => {
       onSave: () => undefined,
       onCancel: () => undefined,
     }));
-    expect(ready).toContain("Save and continue");
+    expect(ready).toContain("Save and open chat");
     expect(ready).not.toContain('aria-describedby="coworker-resource-app-required"');
     expect(ready).not.toContain("Choose an app above");
 
@@ -217,7 +231,7 @@ describe("chat-operated coworker UI", () => {
     expect(panel).not.toContain('label: "Prepare wallet actions"');
     expect(panel).not.toContain('label: "Track treasury"');
     expect(session).toContain("compactHeader={overlaySidePanelOpen}");
-    expect(panel).toContain('props.compactHeader && "sr-only"');
+    expect(panel).toContain('props.compactHeader && !guidedSetup && "sr-only"');
     expect(panel).toContain('props.compactHeader ? "py-3" : "py-4"');
     expect(panel).toContain('props.compactHeader && "size-11"');
     expect(session).toContain('className="size-11 rounded-md text-dls-secondary');
