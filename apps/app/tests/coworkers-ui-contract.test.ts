@@ -79,9 +79,8 @@ describe("chat-operated coworker UI", () => {
     const home = appSource("react-app/domains/session/chat/session-page.tsx");
     const start = appSource("react-app/domains/session/chat/workspace-coworker-start.tsx");
     const panel = appSource("react-app/domains/coworkers/coworkers-panel.tsx");
-    expect(start).toContain("What do you want to do?");
-    expect(start).toContain("Type a goal or choose an example.");
-    expect(start).toContain("Try an example");
+    expect(start).toContain("Start something");
+    expect(start).toContain('aria-label="Example goals"');
     expect(start).toContain("Compare validators");
     expect(start).toContain("Review account risk");
     expect(start).toContain("Prepare a transfer");
@@ -90,20 +89,18 @@ describe("chat-operated coworker UI", () => {
     expect(start).toContain("trimmedOutcome ? (");
     expect(start).toContain('aria-controls="workspace-coworker-choices"');
     expect(start).toContain('id="workspace-coworker-choices"');
-    expect(start).toContain('{choicesOpen ? "Close choices" : "Change"}');
-    expect(start).toContain('{chosenTemplateId ? "Your choice" : "Matterhorn suggests"}');
+    expect(start).toContain('{choicesOpen ? "Close" : "Change"}');
+    expect(start).toContain("Coworker:");
     expect(start).toContain("aria-pressed={selected}");
     expect(start).toContain("setChoicesOpen(false)");
     expect(start).toContain('type="submit"');
     expect(start).toContain('aria-describedby="workspace-coworker-safety"');
     expect(start).toContain("Continue");
-    expect(start).not.toContain("Review access");
+    expect(start).toContain("You review access before anything starts.");
     expect(start).toContain("Research markets");
     expect(start).toContain("Watch risk");
     expect(start).toContain("Prepare a wallet review");
     expect(start).toContain("Track balances");
-    expect(start).toContain("It never sees private keys");
-    expect(start).toContain("or sends funds on its own.");
     expect(start).toContain("if (!nextOutcome.trim()) {");
     expect(start).toContain("setChosenTemplateId(null)");
     expect(start).toContain("setChoicesOpen(false)");
@@ -130,19 +127,16 @@ describe("chat-operated coworker UI", () => {
     expect(html).toContain('<label for="workspace-coworker-outcome"');
     expect(html).toContain('<textarea id="workspace-coworker-outcome"');
     expect(html).toContain('maxLength="1200"');
-    expect(html).toContain("Type a goal or choose an example.");
     expect(submitTag).toContain('aria-describedby="workspace-coworker-safety"');
     expect(submitTag).toContain("disabled");
     expect(html).toContain('id="workspace-coworker-safety"');
-    expect(html).toContain("It never sees private keys or sends funds on its own.");
-    expect(html).toContain("Try an example");
+    expect(html).toContain("You review access before anything starts.");
     expect(html).toContain("Compare validators");
     expect(html).toContain("Review account risk");
     expect(html).toContain("Prepare a transfer");
     expect(html).toContain("Continue");
     expect(html).not.toContain("Matterhorn suggests");
     expect(html).not.toContain("Choose a coworker");
-    expect(html).not.toContain("Review access");
     expect(html).not.toContain("Apps and information");
 
     const disabledHtml = renderToStaticMarkup(React.createElement(WorkspaceCoworkerStart, {

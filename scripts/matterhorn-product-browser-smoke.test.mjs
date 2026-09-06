@@ -86,10 +86,9 @@ for (const stageId of [
 
 for (const visibleText of [
   "Workspace home",
-  "Continue active work, start a focused desk task, or create something new.",
   "New chat",
   "New note",
-  "Open a desk",
+  "Protocol desks",
   "Jot a note",
   "Wallet readiness",
   "Wallet readiness details",

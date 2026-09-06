@@ -169,14 +169,11 @@ assert.equal(
 );
 
 for (const phrase of [
-  "Describe an outcome, continue your work, or open a protocol desk.",
+  "Start something",
+  "Protocol desks",
   "New project",
   "New chat",
   "Open Bittensor desk",
-  "Open a desk",
-  "Each desk starts a focused agent task.",
-  "Risk details stay behind each info button.",
-  "Outputs and receipts stay with this project.",
   "Wallet details",
   "Agents prepare drafts only. TAO transfers, stake, and unstake calls require exact review and connected Bittensor-wallet approval. Other runtime calls remain unavailable until separately audited.",
   "Agents prepare drafts only.",

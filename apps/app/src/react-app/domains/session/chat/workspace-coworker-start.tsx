@@ -80,13 +80,10 @@ export function WorkspaceCoworkerStart({
   const trimmedOutcome = outcome.trim();
 
   return (
-    <section className="border-y border-dls-border/55 py-4" aria-labelledby="workspace-coworker-start-title">
-      <h3 id="workspace-coworker-start-title" className="text-base font-semibold text-dls-text">What do you want to do?</h3>
-      <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-        Type a goal or choose an example. You can edit it before anything starts.
-      </p>
+    <section className="border-y border-dls-border/55 py-3" aria-labelledby="workspace-coworker-start-title">
+      <h3 id="workspace-coworker-start-title" className="text-sm font-semibold text-dls-text">Start something</h3>
       <form
-        className="mt-4"
+        className="mt-3"
         onSubmit={(event) => {
           event.preventDefault();
           if (!trimmedOutcome || disabled) return;
@@ -96,7 +93,7 @@ export function WorkspaceCoworkerStart({
         <label htmlFor="workspace-coworker-outcome" className="sr-only">Outcome</label>
         <textarea
           id="workspace-coworker-outcome"
-          className="min-h-24 w-full resize-y rounded-lg border border-dls-border bg-dls-canvas/35 px-3 py-3 text-sm leading-6 text-dls-text outline-none placeholder:text-dls-secondary focus:border-ring focus:ring-2 focus:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-h-20 w-full resize-y rounded-md border border-dls-border bg-dls-canvas/35 px-3 py-2.5 text-sm leading-6 text-dls-text outline-none placeholder:text-dls-secondary focus:border-ring focus:ring-2 focus:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50"
           value={outcome}
           maxLength={1_200}
           disabled={disabled}
@@ -112,14 +109,12 @@ export function WorkspaceCoworkerStart({
         />
 
         {!trimmedOutcome ? (
-          <div className="mt-3" role="group" aria-label="Example goals">
-            <p className="text-xs font-medium text-dls-secondary">Try an example</p>
-            <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Example goals">
               {HOME_START_EXAMPLES.map((example) => (
                 <button
                   key={example.label}
                   type="button"
-                  className="inline-flex min-h-11 items-center rounded-md border border-dls-border/80 px-3 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9"
+                  className="inline-flex min-h-11 items-center rounded-md px-3 text-xs font-medium text-dls-secondary transition-colors hover:bg-dls-hover/30 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8"
                   disabled={disabled}
                   onClick={() => {
                     setOutcome(example.outcome);
@@ -130,18 +125,15 @@ export function WorkspaceCoworkerStart({
                   {example.label}
                 </button>
               ))}
-            </div>
           </div>
         ) : null}
 
         {trimmedOutcome ? (
           <div className="mt-3 border-t border-dls-border/40 pt-3">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-xs text-dls-secondary">{chosenTemplateId ? "Your choice" : "Matterhorn suggests"}</p>
-                <p className="mt-0.5 text-sm font-medium text-dls-text">{selectedChoice.title}</p>
-                <p className="mt-0.5 max-w-2xl text-xs leading-5 text-dls-secondary">{selectedChoice.description}</p>
-              </div>
+            <div className="flex items-center justify-between gap-4">
+              <p className="min-w-0 truncate text-xs text-dls-secondary">
+                Coworker: <span className="font-medium text-dls-text">{selectedChoice.title}</span>
+              </p>
               <button
                 type="button"
                 className="inline-flex h-9 shrink-0 items-center rounded-md border border-dls-border px-3 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50"
@@ -150,7 +142,7 @@ export function WorkspaceCoworkerStart({
                 disabled={disabled}
                 onClick={() => setChoicesOpen((open) => !open)}
               >
-                {choicesOpen ? "Close choices" : "Change"}
+                {choicesOpen ? "Close" : "Change"}
               </button>
             </div>
 
@@ -193,8 +185,8 @@ export function WorkspaceCoworkerStart({
         ) : null}
 
         <div className="mt-3 flex flex-col gap-3 border-t border-dls-border/40 pt-3 sm:flex-row sm:items-center sm:justify-between">
-          <p id="workspace-coworker-safety" className="max-w-2xl text-xs leading-5 text-dls-secondary">
-            Next, choose the apps and information Matterhorn can use. It never sees private keys or sends funds on its own.
+          <p id="workspace-coworker-safety" className="text-xs text-dls-secondary">
+            You review access before anything starts.
           </p>
           <button
             type="submit"

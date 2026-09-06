@@ -580,9 +580,9 @@ async function startPrimaryDeskTask(page, config, desk) {
     timeout: 30_000,
   });
   await ensureWorkspaceHomeVisible(page);
-  await page
-    .getByText("Open a desk", { exact: true })
-    .waitFor({ state: "visible", timeout: 20_000 });
+  const protocolDesks = page.getByText("Protocol desks", { exact: true });
+  await protocolDesks.waitFor({ state: "visible", timeout: 20_000 });
+  await protocolDesks.click();
   await clickFirstVisible(
     page.getByTestId(`open-${desk.id}-desk`),
     `${desk.openLabel} desk card`,
@@ -995,19 +995,13 @@ async function runSmoke(config) {
       "Check workspace home shell",
       async () => {
         await page
-          .getByText(
-            "Continue active work, start a focused desk task, or create something new.",
-            { exact: true },
-          )
-          .waitFor({ state: "visible", timeout: 15_000 });
-        await page
           .getByRole("button", { name: "New chat", exact: true })
           .waitFor({ state: "visible", timeout: 15_000 });
         await page
           .getByRole("button", { name: "New note", exact: true })
           .waitFor({ state: "visible", timeout: 15_000 });
         await page
-          .getByText("Open a desk", { exact: true })
+          .getByText("Protocol desks", { exact: true })
           .waitFor({ state: "visible", timeout: 15_000 });
         await page
           .getByLabel("Jot a note", { exact: true })
@@ -1193,9 +1187,9 @@ async function runSmoke(config) {
           timeout: 30_000,
         });
         await ensureWorkspaceHomeVisible(page);
-        await page
-          .getByText("Open a desk", { exact: true })
-          .waitFor({ state: "visible", timeout: 20_000 });
+        const protocolDesks = page.getByText("Protocol desks", { exact: true });
+        await protocolDesks.waitFor({ state: "visible", timeout: 20_000 });
+        await protocolDesks.click();
         const longevityCard = page.getByTestId("open-wellness-desk");
         if (await longevityCard.count() === 0) {
           report.artifacts.longevityPrimaryNavigation = "hidden_for_crypto_public_beta";

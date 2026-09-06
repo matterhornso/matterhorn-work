@@ -15,9 +15,10 @@ describe("workspace mission overview", () => {
     expect(mission).toContain("getWorkspaceMissionOverview");
     expect(mission).toContain("updateWorkspaceMission");
     expect(mission).toContain("deleteWorkspaceMission");
-    expect(mission).toContain("Give Matterhorn one outcome to coordinate across chats, desks, outputs, and wallet review.");
-    expect(mission).toContain("Needs attention");
-    expect(mission).toContain("Nothing needs your attention");
+    expect(mission).toContain("Project goal");
+    expect(mission).toContain('item{attention.length === 1 ? "" : "s"} need attention');
+    expect(mission).toContain("Review");
+    expect(mission).not.toContain("Nothing needs your attention");
     expect(mission).toContain("matterhorn:task-log-updated");
     expect(mission).toContain("matterhorn:project-evidence-updated");
   });
@@ -43,7 +44,7 @@ describe("workspace mission overview", () => {
     expect(mission).toContain("Mission could not be removed. Check your connection and try again.");
     expect(mission).not.toContain("error instanceof Error ? error.message");
     expect(mission).not.toContain('font-semibold uppercase tracking-[0.08em]');
-    expect(mission).toContain('block break-words text-xs font-medium leading-5');
-    expect(mission).toContain('block break-words text-[11px] leading-4');
+    expect(mission).toContain("items-center justify-between");
+    expect(mission).not.toContain("item.summary");
   });
 });
