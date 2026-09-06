@@ -173,6 +173,16 @@ Reference patterns: [Monid reference audit](./monid-reference-audit.md) and [Gro
   atomically; the existing five-key, 30-day, account-deletion, and exact guarded
   tool boundaries remain unchanged. The mode remains `off`, and no MCP package is
   published or account invited by this change.
+- Phase 5 hosted MCP live acceptance: complete as a dormant operator probe. One
+  exact-release run uses two disposable invited account sessions supplied only
+  through process environment, creates one-day keys, verifies hash-only listing,
+  exact tenant workspace isolation, bounded chat lifecycle access, denial of
+  host, raw OpenCode, account, file, compaction, preflight, and execution-mode
+  controls, one-character token tamper rejection, independent immediate
+  revocation, and cleanup. Its report contains no session, key, account,
+  workspace, chat, prompt, wallet, or credential material. The probe cannot
+  enable invite mode, publish a package, or grant wallet authority; a real
+  hosted two-account pass remains operator-controlled evidence.
 - Phase 1–5 live acceptance gate: complete in code. `scripts/crypto-coworkers-acceptance-evidence.mjs` binds 21 live certification, coworker, transaction-airlock, encrypted-evidence, immutable Sui-anchor, developer-platform, design-partner, shadow-rollout, tenant-isolation, recovery, UX, and runtime-compatibility outcomes to one exact deployed commit. The encrypted-evidence outcome cannot pass without a connected-wallet-created immutable anchor whose exact package/function/arguments and public non-content object were verified, with mutation and replay rejected. Each report is a relative content-addressed file whose SHA-256 is rechecked; changed, missing, oversized, absolute, or traversing evidence fails closed. Credential- or signing-material fields are forbidden. This gate records no live success by itself and correctly remains `NO-GO` until operator-controlled acceptance evidence exists.
 - Phase 1–5 live acceptance template: complete in code. An operator can create one non-passing owner-only manifest bound to the exact candidate, deployed HTTPS origin, pinned runtime versions, required networks, and all 21 pending evidence groups. The command refuses overwrite and unsafe URLs, creates no evidence reports or hashes, and cannot convert a pending outcome into release proof.
 - All new production modes remain `off`; the new HTTP routes return a stable disabled response and no upstream adapter traffic is enabled.
