@@ -46,6 +46,12 @@ describe("chat-operated coworker UI", () => {
     const route = appSource("react-app/domains/coworkers/coworker-access-route.tsx");
     const fragment = appSource("react-app/domains/coworkers/coworker-invite-fragment.ts");
     const shell = appSource("react-app/shell/app-root.tsx");
+    const viteConfig = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+    const deployments = ["../../../vercel.json", "../vercel.json"].map((path) => JSON.parse(
+      readFileSync(new URL(path, import.meta.url), "utf8"),
+    ) as {
+      rewrites: Array<{ source: string; destination: string; missing?: Array<{ type?: string; key: string; value: string }> }>;
+    });
     expect(route).toContain("Coworker access");
     expect(route).toContain("Your connected wallet always signs and sends.");
     expect(route).toContain("The one-time code was removed from the address bar");
@@ -54,6 +60,19 @@ describe("chat-operated coworker UI", () => {
     expect(route).not.toMatch(/localStorage|sessionStorage/);
     expect(shell).toContain('path="/coworker-access"');
     expect(shell).toContain("hasPendingCoworkerInvite");
+    expect(viteConfig).toContain('"/coworker-access": sameOriginWorkspaceProxy');
+    for (const deployment of deployments) {
+      expect(deployment.rewrites).toContainEqual({
+        source: "/coworker-access",
+        missing: [{ type: "header", key: "accept", value: ".*text/html.*" }],
+        destination: "/api/matterhorn-proxy?__matterhorn_path=/coworker-access",
+      });
+      expect(deployment.rewrites).toContainEqual({
+        source: "/coworker-access/:path*",
+        missing: [{ type: "header", key: "accept", value: ".*text/html.*" }],
+        destination: "/api/matterhorn-proxy?__matterhorn_path=/coworker-access/:path*",
+      });
+    }
   });
 
   test("lets a first-time user describe one outcome and confirm a suggested coworker from Home", () => {

@@ -5,7 +5,9 @@ const INTERNAL_PATH_PARAM = "__matterhorn_path";
 const ALLOWED_ROOTS = new Set([
   "api",
   "capabilities",
+  "coworker-access",
   "crypto-apps",
+  "developer",
   "env",
   "experimental",
   "files",
