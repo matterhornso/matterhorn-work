@@ -2343,9 +2343,10 @@ export function SessionPage(props: SessionPageProps) {
     setHomeCoworkerStart(request);
     setCurrentSidePanel("coworkers");
   }, [setCurrentSidePanel]);
-  const clearHomeCoworkerTemplate = useCallback(() => {
+  const closeCoworkersPane = useCallback(() => {
     setHomeCoworkerStart(null);
-  }, []);
+    closeRightPane();
+  }, [closeRightPane]);
   const openAgentFilesRailPane = useCallback(() => {
     toggleCurrentSidePanel("files");
   }, [toggleCurrentSidePanel]);
@@ -2480,12 +2481,11 @@ export function SessionPage(props: SessionPageProps) {
       client={props.matterhornServerClient}
       initialTemplateId={homeCoworkerStart?.templateId}
       initialOutcome={homeCoworkerStart?.outcome}
-      onInitialTemplateHandled={clearHomeCoworkerTemplate}
       workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
       selectedSessionId={props.selectedSessionId}
       selectedWorkspaceId={props.selectedWorkspaceId}
       compactHeader={overlaySidePanelOpen}
-      onClose={closeRightPane}
+      onClose={closeCoworkersPane}
       onBrowseApps={() => navigate(`/workspace/${encodeURIComponent(props.selectedWorkspaceId)}/crypto-apps`)}
       onBrowseFiles={() => setCurrentSidePanel("files")}
       onBrowseMemory={() => setCurrentSidePanel("memory")}
