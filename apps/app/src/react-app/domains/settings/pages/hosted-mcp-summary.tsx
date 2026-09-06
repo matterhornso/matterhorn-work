@@ -3,8 +3,12 @@ import {
   Check,
   CheckCircle2,
   CircleAlert,
+  CircleX,
+  Code2,
   FileCheck2,
   ExternalLink,
+  ListTree,
+  MessageSquareText,
   SearchCheck,
   WalletCards,
 } from "lucide-react";
@@ -45,6 +49,54 @@ const MANAGED_TOOL_GROUPS = [
       "Supported transactions move to a separate wallet review before anything is signed or submitted.",
     icon: WalletCards,
   },
+] as const;
+
+const GUARDED_MCP_CLIENTS = [
+  "Codex",
+  "Claude Code",
+  "Claude Desktop",
+  "Cursor",
+] as const;
+
+const GUARDED_MCP_CAPABILITIES = [
+  {
+    title: "Find your work",
+    description: "Check Matterhorn and list only the workspaces and chats your client token can access.",
+    count: 3,
+    icon: ListTree,
+  },
+  {
+    title: "Work in chat",
+    description: "Create and read chats, then send requests through Matterhorn's privacy and tool-policy gateway.",
+    count: 4,
+    icon: MessageSquareText,
+  },
+  {
+    title: "Follow progress",
+    description: "Read bounded status, event, and session snapshots without opening server administration.",
+    count: 3,
+    icon: SearchCheck,
+  },
+  {
+    title: "Delete a chat",
+    description: "Delete one authorized chat. The MCP cannot delete a workspace or another account's data.",
+    count: 1,
+    icon: CircleX,
+  },
+] as const;
+
+const GUARDED_MCP_TOOL_NAMES = [
+  "matterhorn_status",
+  "matterhorn_list_workspaces",
+  "matterhorn_create_session",
+  "matterhorn_list_sessions",
+  "matterhorn_get_session",
+  "matterhorn_get_session_messages",
+  "matterhorn_submit_session_prompt",
+  "matterhorn_get_session_status",
+  "matterhorn_watch_session_events",
+  "matterhorn_get_session_snapshot",
+  "matterhorn_delete_session",
 ] as const;
 
 function HostedMcpCompactSummary({
@@ -254,13 +306,74 @@ export function HostedMcpSummary(props: HostedMcpSummaryProps) {
           id="external-agent-tools-heading"
           className="text-base font-semibold text-dls-text"
         >
-          Use Matterhorn in Codex or Claude
+          Use Matterhorn from another AI app
         </SectionHeading>
         <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
-          Matterhorn also ships local MCP servers for Codex, Claude Code,
-          Claude Desktop, and Cursor. They connect a trusted local agent client
-          to your running Matterhorn workspace; they are separate from the
-          managed tools above.
+          The guarded MCP lets another AI app work in Matterhorn chats. It
+          cannot approve wallet actions, change server settings, or reach work
+          outside its client token.
+        </p>
+
+        <ul
+          className="mt-4 grid gap-x-6 border-y border-dls-border/70 sm:grid-cols-2"
+          aria-label="Supported AI apps"
+        >
+          {GUARDED_MCP_CLIENTS.map((client) => (
+            <li
+              key={client}
+              className="flex min-h-11 items-center gap-2 border-b border-dls-border/50 py-2.5 last:border-b-0 sm:[&:nth-last-child(-n+2)]:border-b-0"
+            >
+              <Code2 className="size-3.5 shrink-0 text-dls-secondary" aria-hidden="true" />
+              <span className="text-xs font-medium text-dls-text">{client}</span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-5">
+          <ItemHeading className="text-sm font-medium text-dls-text">
+            What it can do
+          </ItemHeading>
+          <div className="mt-2 divide-y divide-dls-border/50">
+            {GUARDED_MCP_CAPABILITIES.map((capability) => {
+              const Icon = capability.icon;
+              return (
+                <div
+                  key={capability.title}
+                  className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 py-3"
+                >
+                  <Icon className="mt-0.5 size-4 text-dls-secondary" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-dls-text">{capability.title}</p>
+                    <p className="mt-0.5 text-[11px] leading-4 text-dls-secondary">
+                      {capability.description}
+                    </p>
+                  </div>
+                  <span className="text-[11px] tabular-nums text-dls-muted">
+                    {capability.count} {capability.count === 1 ? "tool" : "tools"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <details className="mt-3 text-[11px] leading-5 text-dls-secondary">
+          <summary className="w-fit cursor-pointer font-medium text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.35)]">
+            View all 11 tool names
+          </summary>
+          <ul className="mt-2 grid gap-x-4 gap-y-1 border-y border-dls-border/60 py-3 sm:grid-cols-2">
+            {GUARDED_MCP_TOOL_NAMES.map((tool) => (
+              <li key={tool}>
+                <code className="break-all font-mono text-[10px] text-dls-secondary">{tool}</code>
+              </li>
+            ))}
+          </ul>
+        </details>
+
+        <p className="mt-5 max-w-2xl text-xs leading-5 text-dls-secondary">
+          External setup is available today with Matterhorn Desktop or a
+          self-hosted Matterhorn server. Connecting an external client directly
+          to this hosted account is not available in this release.
         </p>
         <a
           href="https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-mcp-install.md"
@@ -268,12 +381,12 @@ export function HostedMcpSummary(props: HostedMcpSummaryProps) {
           rel="noreferrer"
           className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-dls-surface-muted/30 px-3 text-xs font-semibold text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.35)]"
         >
-          Open MCP install guide
+          Set up with Matterhorn Desktop
           <ExternalLink className="size-3.5" aria-hidden="true" />
         </a>
         <p className="mt-2 text-[11px] leading-4 text-dls-muted">
-          Current release: install from the Matterhorn repository. Public npm
-          packages are not available yet.
+          The current setup uses a trusted local checkout and a client-only
+          token. The MCP package is not published to npm yet.
         </p>
       </section>
 
