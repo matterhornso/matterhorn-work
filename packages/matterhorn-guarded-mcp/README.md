@@ -32,6 +32,30 @@ Until the package is published, run the checked-out entrypoint with Node:
 node /absolute/path/to/matterhorn-work/packages/matterhorn-guarded-mcp/index.mjs
 ```
 
+## Hosted acceptance
+
+Before invite mode is enabled for design partners, run the exact-release,
+two-account acceptance probe. Supply two disposable account session values only
+through the invoking process environment; the command accepts no credential
+flags and never includes sessions, access keys, workspace IDs, or chat IDs in
+its report. It creates one short-lived key per account, proves hash-only listing,
+tenant isolation, the bounded chat route set, denial of host/OpenCode/file and
+policy controls, token-tamper rejection, immediate revocation, and cleanup.
+
+```sh
+# Inject both MATTERHORN_HOSTED_MCP_ACCEPTANCE_ACCOUNT_*_SESSION values from an
+# ephemeral secret manager into this process environment first.
+pnpm accept:hosted-mcp-access -- \
+  --origin https://candidate.example \
+  --expected-commit <40-character-release-commit> \
+  --strict \
+  --json
+```
+
+Use separate acceptance accounts, keep shell history private, and revoke their
+other browser sessions after the run. A passing report is required evidence; it
+does not enable invite mode, publish this package, or grant wallet authority.
+
 The package accepts only `guarded` or `guarded_client` when the legacy
 `MATTERHORN_WORK_MCP_PROFILE` variable is present. Any broader profile fails at
 startup.

@@ -155,6 +155,8 @@
     "verify:guarded-mcp-provenance": "node scripts/guarded-mcp-provenance.mjs",
     "test:guarded-mcp-provenance": "node scripts/guarded-mcp-provenance.test.mjs",
     "test:guarded-mcp-publish-workflow": "node scripts/guarded-mcp-publish-workflow.test.mjs",
+    "accept:hosted-mcp-access": "node scripts/hosted-mcp-access-acceptance.mjs",
+    "test:hosted-mcp-access-acceptance": "node scripts/hosted-mcp-access-acceptance.test.mjs",
     "test:agent-control-doctor": "node scripts/agent-control-doctor.test.mjs",
     "test:agent-control-live-qa": "node scripts/agent-control-live-qa.test.mjs",
     "test:agent-operator-workflow": "node scripts/agent-operator-workflow.test.mjs",
