@@ -10,8 +10,11 @@ import {
 } from "../api/matterhorn-proxy.mjs";
 
 assert.equal(normalizeProxyPath("/api/auth/sign-in/email"), "/api/auth/sign-in/email");
+assert.equal(normalizeProxyPath("/coworker-access"), "/coworker-access");
+assert.equal(normalizeProxyPath("/coworker-access/accept"), "/coworker-access/accept");
 assert.equal(normalizeProxyPath("/crypto-apps"), "/crypto-apps");
 assert.equal(normalizeProxyPath("/crypto-apps/matterhorn.sui-testnet"), "/crypto-apps/matterhorn.sui-testnet");
+assert.equal(normalizeProxyPath("/developer/crypto-apps/status"), "/developer/crypto-apps/status");
 assert.equal(normalizeProxyPath("/workspace/ws_123/opencode/session"), "/workspace/ws_123/opencode/session");
 assert.equal(normalizeProxyPath("/opencode/global/health"), "/opencode/global/health");
 for (const rejected of [
@@ -159,18 +162,55 @@ try {
   else process.env.VERCEL = priorVercel;
 }
 
-for (const configPath of ["vercel.json", "apps/app/vercel.json"]) {
-  const config = JSON.parse(readFileSync(configPath, "utf8"));
+const deploymentConfigs = ["vercel.json", "apps/app/vercel.json"].map((configPath) => ({
+  configPath,
+  config: JSON.parse(readFileSync(configPath, "utf8")),
+}));
+assert.deepEqual(
+  deploymentConfigs[0].config.rewrites,
+  deploymentConfigs[1].config.rewrites,
+  "root and app-scoped Vercel deployments must expose the same proxy boundary",
+);
+
+for (const { configPath, config } of deploymentConfigs) {
   const serialized = JSON.stringify(config.rewrites);
-  for (const route of ["/api/:path*", "/workspaces", "/workspace/:path*", "/opencode/:path*", "/health/:path*"]) {
+  for (const route of [
+    "/api/:path*",
+    "/coworker-access",
+    "/crypto-apps",
+    "/developer/:path*",
+    "/workspaces",
+    "/workspace/:path*",
+    "/opencode/:path*",
+    "/health/:path*",
+  ]) {
     assert.ok(serialized.includes(route), `${configPath} must proxy ${route}`);
   }
-  const workspaceProxy = config.rewrites.find((rewrite) => rewrite.source === "/workspace/:path*");
-  assert.deepEqual(
-    workspaceProxy?.missing,
-    [{ type: "header", key: "accept", value: ".*text/html.*" }],
-    `${configPath} must let HTML workspace deep links fall through to the SPA`,
-  );
+  for (const route of [
+    "/coworker-access",
+    "/coworker-access/:path*",
+    "/developer/:path*",
+    "/workspace/:path*",
+  ]) {
+    const pageAwareProxy = config.rewrites.find((rewrite) => rewrite.source === route);
+    assert.deepEqual(
+      pageAwareProxy?.missing,
+      [{ type: "header", key: "accept", value: ".*text/html.*" }],
+      `${configPath} must let HTML navigation for ${route} fall through to the SPA`,
+    );
+  }
+  for (const rewrite of config.rewrites.slice(0, -1)) {
+    const destination = new URL(rewrite.destination, "https://app.example.com");
+    const forwardedPath = destination.searchParams
+      .get("__matterhorn_path")
+      ?.replaceAll(":path*", "test-path");
+    assert.ok(forwardedPath, `${configPath} rewrite ${rewrite.source} must declare one proxy path`);
+    assert.equal(
+      normalizeProxyPath(forwardedPath),
+      forwardedPath,
+      `${configPath} rewrite ${rewrite.source} must be admitted by the closed proxy allowlist`,
+    );
+  }
   assert.equal(config.rewrites.at(-1)?.destination, "/index.html");
 }
 

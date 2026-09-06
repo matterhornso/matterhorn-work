@@ -61,6 +61,28 @@
       "destination": "/api/matterhorn-proxy?__matterhorn_path=/crypto-apps/:path*"
     },
     {
+      "source": "/coworker-access",
+      "missing": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/html.*"
+        }
+      ],
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/coworker-access"
+    },
+    {
+      "source": "/coworker-access/:path*",
+      "missing": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/html.*"
+        }
+      ],
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/coworker-access/:path*"
+    },
+    {
       "source": "/developer/:path*",
       "missing": [
         {

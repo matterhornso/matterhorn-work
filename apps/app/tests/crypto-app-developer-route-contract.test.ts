@@ -18,9 +18,9 @@ describe("invite-only crypto app developer route", () => {
   test("is lazy, account-gated, and absent from public trust paths", () => {
     const appRoot = readAppSource("shell/app-root.tsx");
     const viteConfig = readRepoSource("apps/app/vite.config.ts");
-    const vercel = JSON.parse(readRepoSource("vercel.json")) as {
-      rewrites: Array<{ source: string; destination: string; missing?: Array<{ key: string; value: string }> }>;
-    };
+    const deployments = ["vercel.json", "apps/app/vercel.json"].map((path) => JSON.parse(readRepoSource(path)) as {
+      rewrites: Array<{ source: string; destination: string; missing?: Array<{ type?: string; key: string; value: string }> }>;
+    });
 
     expect(appRoot).toContain('path="/developer/crypto-apps"');
     expect(appRoot).toContain('import("../domains/developer/crypto-app-developer-route")');
@@ -30,11 +30,13 @@ describe("invite-only crypto app developer route", () => {
     expect(appRoot.indexOf("<DenSigninGate>")).toBeLessThan(appRoot.indexOf('path="/developer/crypto-apps"'));
     expect(appRoot).not.toContain('pathname === "/developer/crypto-apps"');
     expect(viteConfig).toContain('"/developer": sameOriginWorkspaceProxy');
-    expect(vercel.rewrites).toContainEqual({
-      source: "/developer/:path*",
-      missing: [{ type: "header", key: "accept", value: ".*text/html.*" }],
-      destination: "/api/matterhorn-proxy?__matterhorn_path=/developer/:path*",
-    });
+    for (const deployment of deployments) {
+      expect(deployment.rewrites).toContainEqual({
+        source: "/developer/:path*",
+        missing: [{ type: "header", key: "accept", value: ".*text/html.*" }],
+        destination: "/api/matterhorn-proxy?__matterhorn_path=/developer/:path*",
+      });
+    }
   });
 
   test("exposes one guided testnet certification step without custody controls", () => {
