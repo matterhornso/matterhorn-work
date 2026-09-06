@@ -53,6 +53,14 @@
       "destination": "/api/matterhorn-proxy?__matterhorn_path=/api/:path*"
     },
     {
+      "source": "/crypto-apps",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/crypto-apps"
+    },
+    {
+      "source": "/crypto-apps/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/crypto-apps/:path*"
+    },
+    {
       "source": "/workspaces",
       "destination": "/api/matterhorn-proxy?__matterhorn_path=/workspaces"
     },

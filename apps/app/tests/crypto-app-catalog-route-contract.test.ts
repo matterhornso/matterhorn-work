@@ -8,6 +8,13 @@ function readAppSource(path: string): string {
 describe("invite-only crypto app catalog route", () => {
   test("is lazy, account-gated and workspace scoped", () => {
     const appRoot = readAppSource("react-app/shell/app-root.tsx");
+    const viteConfig = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+    const rootVercel = JSON.parse(readFileSync(new URL("../../../vercel.json", import.meta.url), "utf8")) as {
+      rewrites: Array<{ source: string; destination: string }>;
+    };
+    const appVercel = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as {
+      rewrites: Array<{ source: string; destination: string }>;
+    };
 
     expect(appRoot).toContain('path="/workspace/:workspaceId/crypto-apps"');
     expect(appRoot).toContain('path="/workspace/:workspaceId/evidence-proofs"');
@@ -18,6 +25,17 @@ describe("invite-only crypto app catalog route", () => {
     expect(appRoot).not.toContain('pathname === "/workspace/:workspaceId/crypto-apps"');
     expect(appRoot).not.toContain('pathname === "/workspace/:workspaceId/evidence-proofs"');
     expect(readAppSource("react-app/shell/providers.tsx")).toContain("evidence-proofs");
+    expect(viteConfig).toContain('"/crypto-apps": sameOriginMatterhornProxy');
+    for (const deployment of [rootVercel, appVercel]) {
+      expect(deployment.rewrites).toContainEqual({
+        source: "/crypto-apps",
+        destination: "/api/matterhorn-proxy?__matterhorn_path=/crypto-apps",
+      });
+      expect(deployment.rewrites).toContainEqual({
+        source: "/crypto-apps/:path*",
+        destination: "/api/matterhorn-proxy?__matterhorn_path=/crypto-apps/:path*",
+      });
+    }
   });
 
   test("keeps encrypted evidence publication explicit, testnet-only and redacted", () => {
@@ -80,11 +98,16 @@ describe("invite-only crypto app catalog route", () => {
   test("keeps catalog decisions understandable while exposing complete safe details", () => {
     const route = readAppSource("react-app/domains/crypto-apps/crypto-app-catalog-route.tsx");
 
-    expect(route).toContain("Apps for your coworkers");
-    expect(route).toContain("Search apps or tasks");
+    expect(route).toContain("Connect a crypto app");
+    expect(route).toContain("Search by app or task");
+    expect(route).toContain("Choose app");
+    expect(route).toContain("More filters");
+    expect(route).toContain("Clear filters");
+    expect(route).toContain("Show all apps");
     expect(route).toContain("Any protocol");
     expect(route).toContain("Any network");
     expect(route).toContain('item.chainId === network');
+    expect(route).toContain("Safety details");
     expect(route).toContain("What this app can do");
     expect(route).toContain("Safety checked");
     expect(route).toContain("Passed for the listed test networks");

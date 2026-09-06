@@ -32,6 +32,26 @@ type WalletFamily = "evm" | "sui";
 
 const QUERY_PREFIX = "crypto-app-catalog";
 
+function cryptoAppCatalogHasFilters(input: {
+  search: string;
+  access: AccessFilter;
+  protocol: string;
+  network: string;
+}): boolean {
+  return Boolean(input.search.trim())
+    || input.access !== "all"
+    || input.protocol !== "all"
+    || input.network !== "all";
+}
+
+function cryptoAppCatalogActionLabel(input: {
+  connected: boolean;
+  expanded: boolean;
+}): string {
+  if (input.expanded) return "Close";
+  return input.connected ? "Manage" : "Choose app";
+}
+
 function userMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
     if (error.code === "crypto_app_gateway_disabled") return "App connections are currently unavailable.";
@@ -149,6 +169,8 @@ export function CryptoAppCatalogRoute() {
   const evmSigner = useSignMessage();
   const suiAccount = useCurrentAccount();
   const suiWallets = useWallets();
+
+  const filtersActive = cryptoAppCatalogHasFilters({ search, access, protocol, network });
 
   const queryKey = [QUERY_PREFIX, workspaceId] as const;
   const catalog = useQuery({
@@ -324,7 +346,7 @@ export function CryptoAppCatalogRoute() {
           <Button
             variant="ghost"
             size="sm"
-            className="-ml-2"
+            className="-ml-2 min-h-11 sm:min-h-9"
             onClick={() => navigate(`/workspace/${encodeURIComponent(workspaceId)}/session`)}
           >
             <ArrowLeft aria-hidden="true" className="size-4" />
@@ -333,6 +355,7 @@ export function CryptoAppCatalogRoute() {
           <Button
             variant="outline"
             size="sm"
+            className="min-h-11 sm:min-h-9"
             onClick={() => navigate(`/workspace/${encodeURIComponent(workspaceId)}/evidence-proofs`)}
           >
             <ShieldCheck aria-hidden="true" className="size-4" />
@@ -341,15 +364,15 @@ export function CryptoAppCatalogRoute() {
         </div>
 
         <header className="border-b border-border pb-6">
-          <h1 className="text-2xl font-semibold tracking-[-0.02em]">Apps for your coworkers</h1>
+          <h1 className="text-2xl font-semibold tracking-[-0.02em]">Connect a crypto app</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Choose what a coworker may research, monitor, or prepare for your wallet. You can pause or remove access at any time.
+            Choose an app, then decide whether your coworkers can research only or also prepare wallet reviews.
           </p>
           <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground" aria-label="Crypto app safety boundary">
             <span>Testing networks only</span>
             <span>Never paste keys in chat</span>
             <span>Your wallet approves every transaction</span>
-            <span>{snapshot?.mode === "enforce" ? "Access controls active" : "Preview access only"}</span>
+            <span>{snapshot?.mode === "enforce" ? "Safety controls active" : "Connections are in preview"}</span>
           </div>
         </header>
 
@@ -362,59 +385,98 @@ export function CryptoAppCatalogRoute() {
           <section className="py-10" aria-live="polite">
             <h2 className="text-base font-semibold">Apps are unavailable</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">{userMessage(catalog.error)}</p>
-            <Button className="mt-5" onClick={() => void catalog.refetch()}>Try again</Button>
+            <Button className="mt-5 min-h-11 sm:min-h-9" onClick={() => void catalog.refetch()}>Try again</Button>
           </section>
         ) : (
           <>
-            <section className="grid gap-3 border-b border-border py-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_10rem_10rem_12rem]" aria-label="Catalog filters">
+            <section className="border-b border-border py-5" aria-label="Find a crypto app">
               <label className="relative block">
                 <span className="sr-only">Search apps</span>
                 <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search apps or tasks" />
+                <Input className="h-11 pl-9 sm:h-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by app or task" />
               </label>
-              <label>
-                <span className="sr-only">Filter by what the app can do</span>
-                <select
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={access}
-                  onChange={(event) => setAccess(event.target.value as AccessFilter)}
-                >
-                  <option value="all">Any task</option>
-                  <option value="read">Research</option>
-                  <option value="watch">Monitoring</option>
-                  <option value="prepare">Wallet review</option>
-                  <option value="simulate">Safety checks</option>
-                </select>
-              </label>
-              <label>
-                <span className="sr-only">Filter by protocol</span>
-                <select
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={protocol}
-                  onChange={(event) => setProtocol(event.target.value)}
-                >
-                  <option value="all">Any protocol</option>
-                  {protocols.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-              </label>
-              <label>
-                <span className="sr-only">Filter by network</span>
-                <select
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={network}
-                  onChange={(event) => setNetwork(event.target.value)}
-                >
-                  <option value="all">Any network</option>
-                  {networks.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-              </label>
+              <details className="mt-3">
+                <summary className="inline-flex min-h-11 cursor-pointer list-none items-center text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-9 [&::-webkit-details-marker]:hidden">
+                  More filters{filtersActive ? " · Applied" : ""}
+                </summary>
+                <div className="mt-3 grid gap-3 border-t border-border pt-4 sm:grid-cols-3">
+                  <label>
+                    <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Task</span>
+                    <select
+                      className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-9"
+                      value={access}
+                      onChange={(event) => setAccess(event.target.value as AccessFilter)}
+                    >
+                      <option value="all">Any task</option>
+                      <option value="read">Research</option>
+                      <option value="watch">Monitoring</option>
+                      <option value="prepare">Wallet review</option>
+                      <option value="simulate">Safety checks</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Protocol</span>
+                    <select
+                      className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-9"
+                      value={protocol}
+                      onChange={(event) => setProtocol(event.target.value)}
+                    >
+                      <option value="all">Any protocol</option>
+                      {protocols.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Network</span>
+                    <select
+                      className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-9"
+                      value={network}
+                      onChange={(event) => setNetwork(event.target.value)}
+                    >
+                      <option value="all">Any network</option>
+                      {networks.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </label>
+                </div>
+                {filtersActive ? (
+                  <Button
+                    className="mt-3 min-h-11 sm:min-h-9"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSearch("");
+                      setAccess("all");
+                      setProtocol("all");
+                      setNetwork("all");
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                ) : null}
+              </details>
             </section>
 
             {error ? <p className="border-b border-border py-4 text-sm text-destructive" role="alert">{error}</p> : null}
 
             <section className="py-2" aria-label="Available apps">
               {filtered.length === 0 ? (
-                <p className="py-10 text-sm text-muted-foreground">No test-network apps match these filters.</p>
+                <div className="py-10">
+                  <p className="text-sm text-muted-foreground">No test-network apps match your search.</p>
+                  {filtersActive ? (
+                    <Button
+                      className="mt-4 min-h-11 sm:min-h-9"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSearch("");
+                        setAccess("all");
+                        setProtocol("all");
+                        setNetwork("all");
+                      }}
+                    >
+                      Show all apps
+                    </Button>
+                  ) : null}
+                </div>
               ) : filtered.map((app) => {
                 const connection = activeConnection(snapshot.connections, app.appId);
                 const revokedConnections = snapshot.connections.filter((item) => (
@@ -445,50 +507,20 @@ export function CryptoAppCatalogRoute() {
                         </p>
                       </div>
                       <Button
-                        variant="ghost"
+                        variant={connection ? "outline" : "default"}
                         size="sm"
-                        className="self-start"
+                        className="min-h-11 self-start sm:min-h-9"
                         aria-expanded={expanded}
                         onClick={() => setExpandedAppId(expanded ? null : app.appId)}
                       >
-                        {expanded ? "Hide details" : "Review access"}
+                        {cryptoAppCatalogActionLabel({ connected: Boolean(connection), expanded })}
                         {expanded ? <ChevronUp aria-hidden="true" className="size-4" /> : <ChevronDown aria-hidden="true" className="size-4" />}
                       </Button>
                     </div>
 
                     {expanded ? (
                       <div className="mt-5 grid gap-6 border-t border-border pt-5 md:grid-cols-[minmax(0,1fr)_18rem]">
-                        <div>
-                          <h3 className="text-sm font-medium">What this app can do</h3>
-                          <ul className="mt-3 space-y-4">
-                            {app.actions.map((action) => (
-                              <li key={action.id} className="text-sm">
-                                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                                  <span className="font-medium">{action.title}</span>
-                                  <span className="text-xs text-muted-foreground">{accessLabel(action.access)} · {riskLabel(action.risk)}</span>
-                                </div>
-                                <p className="mt-1 leading-6 text-muted-foreground">{action.description}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {action.requiresFreshness ? `Data refreshed within ${Math.round((action.freshnessMaxAgeMs ?? 0) / 1_000)}s` : "Uses stable data"}
-                                  {action.requiredScopes.length ? ` · Needs ${action.requiredScopes.length} approved ${action.requiredScopes.length === 1 ? "permission" : "permissions"}` : " · No account permission needed"}
-                                  {action.walletSubmissionOnly && (action.access === "prepare" || action.access === "simulate") ? " · Your wallet submits" : ""}
-                                </p>
-                              </li>
-                            ))}
-                          </ul>
-                          <dl className="mt-6 grid gap-3 border-t border-border pt-5 text-xs sm:grid-cols-2">
-                            <div><dt className="text-muted-foreground">Version</dt><dd className="mt-1 break-words">{app.manifestRevision}</dd></div>
-                            <div><dt className="text-muted-foreground">Safety check</dt><dd className="mt-1">Passed for the listed test networks</dd></div>
-                            <div><dt className="text-muted-foreground">Task cost</dt><dd className="mt-1">Measured per run and shown in its receipt</dd></div>
-                            <div><dt className="text-muted-foreground">Connection history</dt><dd className="mt-1">{revokedConnections.length ? `${revokedConnections.length} previously removed` : "No previous removals"}</dd></div>
-                          </dl>
-                          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm">
-                            <a className="underline underline-offset-4" href={app.support.privacyPolicyUrl} target="_blank" rel="noreferrer">How this provider handles data</a>
-                            {app.support.statusUrl ? <a className="underline underline-offset-4" href={app.support.statusUrl} target="_blank" rel="noreferrer">Check service status</a> : <span className="text-muted-foreground">No public status page</span>}
-                          </div>
-                        </div>
-
-                        <div className="border-t border-border pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0">
+                        <div className="md:order-2 md:border-l md:border-border md:pl-6">
                           {connection ? (
                             <div>
                               <div className="flex items-center gap-2 text-sm font-medium">
@@ -501,18 +533,18 @@ export function CryptoAppCatalogRoute() {
                               {connection.availability !== "available" ? <p className="mt-3 text-xs leading-5 text-destructive">Safety review expired. This connection cannot run.</p> : null}
                               <div className="mt-4 flex flex-wrap gap-2">
                                 {connection.state === "active" ? (
-                                  <Button variant="outline" size="sm" disabled={busyId === connection.id} onClick={() => void mutate(connection.id, (client) => client.transitionCryptoAppConnection(workspaceId, connection.id, "paused"))}>
+                                  <Button className="min-h-11 sm:min-h-9" variant="outline" size="sm" disabled={busyId === connection.id} onClick={() => void mutate(connection.id, (client) => client.transitionCryptoAppConnection(workspaceId, connection.id, "paused"))}>
                                     <Pause aria-hidden="true" className="size-4" /> Pause
                                   </Button>
                                 ) : (
-                                  <Button variant="outline" size="sm" disabled={busyId === connection.id || connection.availability !== "available"} onClick={() => void mutate(connection.id, (client) => client.transitionCryptoAppConnection(workspaceId, connection.id, "active"))}>
+                                  <Button className="min-h-11 sm:min-h-9" variant="outline" size="sm" disabled={busyId === connection.id || connection.availability !== "available"} onClick={() => void mutate(connection.id, (client) => client.transitionCryptoAppConnection(workspaceId, connection.id, "active"))}>
                                     <Play aria-hidden="true" className="size-4" /> Resume
                                   </Button>
                                 )}
                                 {confirmRevokeId === connection.id ? (
-                                  <Button variant="destructive" size="sm" disabled={busyId === connection.id} onClick={() => void mutate(connection.id, (client) => client.revokeCryptoAppConnection(workspaceId, connection.id))}>Remove access</Button>
+                                  <Button className="min-h-11 sm:min-h-9" variant="destructive" size="sm" disabled={busyId === connection.id} onClick={() => void mutate(connection.id, (client) => client.revokeCryptoAppConnection(workspaceId, connection.id))}>Remove access</Button>
                                 ) : (
-                                  <Button variant="ghost" size="sm" onClick={() => setConfirmRevokeId(connection.id)}><X aria-hidden="true" className="size-4" /> Remove access</Button>
+                                  <Button className="min-h-11 sm:min-h-9" variant="ghost" size="sm" onClick={() => setConfirmRevokeId(connection.id)}><X aria-hidden="true" className="size-4" /> Remove access</Button>
                                 )}
                               </div>
                               {confirmRevokeId === connection.id ? <p className="mt-3 text-xs leading-5 text-muted-foreground">This removal cannot be undone. You can connect the app again later.</p> : null}
@@ -547,7 +579,7 @@ export function CryptoAppCatalogRoute() {
                                   <span><span className="font-medium">Research + wallet previews</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">Adds preparation and simulation. Your connected wallet still signs and submits.</span></span>
                                 </label>
                               ) : null}
-                              <Button className="mt-5" disabled={busyId === app.appId} onClick={() => connectApp(app)}>
+                              <Button className="mt-5 min-h-11 sm:min-h-9" disabled={busyId === app.appId} onClick={() => connectApp(app)}>
                                 <ShieldCheck aria-hidden="true" className="size-4" />
                                 {busyId === app.appId ? "Connecting…" : walletConnection ? "Connect wallet" : signInConnection ? "Sign in to connect" : "Connect to workspace"}
                               </Button>
@@ -559,6 +591,41 @@ export function CryptoAppCatalogRoute() {
                             </div>
                           )}
                         </div>
+
+                        <details className="border-t border-border pt-5 md:order-1 md:border-t-0 md:pt-0">
+                          <summary className="inline-flex min-h-11 cursor-pointer list-none items-center text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-9 [&::-webkit-details-marker]:hidden">
+                            Safety details
+                          </summary>
+                          <div className="mt-3 border-t border-border pt-4">
+                            <h3 className="text-sm font-medium">What this app can do</h3>
+                            <ul className="mt-3 space-y-4">
+                              {app.actions.map((action) => (
+                                <li key={action.id} className="text-sm">
+                                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                    <span className="font-medium">{action.title}</span>
+                                    <span className="text-xs text-muted-foreground">{accessLabel(action.access)} · {riskLabel(action.risk)}</span>
+                                  </div>
+                                  <p className="mt-1 leading-6 text-muted-foreground">{action.description}</p>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {action.requiresFreshness ? `Data refreshed within ${Math.round((action.freshnessMaxAgeMs ?? 0) / 1_000)}s` : "Uses stable data"}
+                                    {action.requiredScopes.length ? ` · Needs ${action.requiredScopes.length} approved ${action.requiredScopes.length === 1 ? "permission" : "permissions"}` : " · No account permission needed"}
+                                    {action.walletSubmissionOnly && (action.access === "prepare" || action.access === "simulate") ? " · Your wallet submits" : ""}
+                                  </p>
+                                </li>
+                              ))}
+                            </ul>
+                            <dl className="mt-6 grid gap-3 border-t border-border pt-5 text-xs sm:grid-cols-2">
+                              <div><dt className="text-muted-foreground">Version</dt><dd className="mt-1 break-words">{app.manifestRevision}</dd></div>
+                              <div><dt className="text-muted-foreground">Safety check</dt><dd className="mt-1">Passed for the listed test networks</dd></div>
+                              <div><dt className="text-muted-foreground">Task cost</dt><dd className="mt-1">Measured per run and shown in its receipt</dd></div>
+                              <div><dt className="text-muted-foreground">Connection history</dt><dd className="mt-1">{revokedConnections.length ? `${revokedConnections.length} previously removed` : "No previous removals"}</dd></div>
+                            </dl>
+                            <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                              <a className="underline underline-offset-4" href={app.support.privacyPolicyUrl} target="_blank" rel="noreferrer">How this provider handles data</a>
+                              {app.support.statusUrl ? <a className="underline underline-offset-4" href={app.support.statusUrl} target="_blank" rel="noreferrer">Check service status</a> : <span className="text-muted-foreground">No public status page</span>}
+                            </div>
+                          </div>
+                        </details>
                       </div>
                     ) : null}
                   </article>
