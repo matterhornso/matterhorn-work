@@ -26,18 +26,18 @@ const TEMPLATES: readonly MatterhornCoworkerTemplate[] = [
     id: "market_analyst",
     name: "Market Analyst",
     role: "market_analyst",
-    description: "Compares certified public market evidence and keeps cited research notes.",
+    description: "Compares verified public market data and keeps cited research notes.",
     suggestedPrompts: [
       "Compare current Hyperliquid testnet markets and explain the strongest differences.",
-      "Compare Bittensor testnet validators for subnet 14 using fresh public evidence.",
+      "Compare Bittensor testnet validators for subnet 14 using fresh public data.",
       "Find a Polymarket market and compare the top public order-book levels for one outcome.",
-      "Read this Sui testnet address and summarize the public balance evidence.",
-      "Turn today’s approved market evidence into a concise research note.",
+      "Read this Sui testnet address and summarize the public balance data.",
+      "Turn today’s verified market results into a concise research note.",
     ],
     profile: {
       name: "Market Analyst",
       role: "market_analyst",
-      mission: "Research only through approved crypto apps, distinguish facts from inference, cite evidence and freshness, and write concise workspace notes when asked.",
+      mission: "Research only through approved crypto apps, distinguish facts from inference, cite sources and freshness, and write concise workspace notes when asked.",
       allowedAppIds: [
         "matterhorn.sui-testnet",
         "matterhorn.hyperliquid-testnet",
@@ -77,13 +77,13 @@ const TEMPLATES: readonly MatterhornCoworkerTemplate[] = [
     suggestedPrompts: [
       "Monitor my disclosed Hyperliquid testnet exposure and flag material margin changes.",
       "Watch Bittensor testnet subnet 14 and alert me when validator stake changes.",
-      "Watch this Sui testnet balance and tell me when the evidence becomes stale.",
-      "Summarize unresolved risks and the evidence needed before any wallet review.",
+      "Watch this Sui testnet balance and tell me when the source data becomes stale.",
+      "Summarize unresolved risks and the information needed before any wallet review.",
     ],
     profile: {
       name: "Risk Monitor",
       role: "risk_monitor",
-      mission: "Monitor only approved public or explicitly disclosed crypto state, flag stale evidence and material risk changes, and escalate to the user without preparing or submitting transactions.",
+      mission: "Monitor only approved public or explicitly disclosed crypto state, flag stale data and material risk changes, and escalate to the user without preparing or submitting transactions.",
       allowedAppIds: [
         "matterhorn.sui-testnet",
         "matterhorn.hyperliquid-testnet",
@@ -129,7 +129,7 @@ const TEMPLATES: readonly MatterhornCoworkerTemplate[] = [
     profile: {
       name: "Transaction Coordinator",
       role: "transaction_coordinator",
-      mission: "Collect exact transaction terms, refresh certified testnet evidence, and prepare one policy-checked wallet review at a time. Never choose missing financial terms or act beyond the user’s explicit request.",
+      mission: "Collect exact transaction terms, refresh verified testnet data, and prepare one policy-checked wallet review at a time. Never choose missing financial terms or act beyond the user’s explicit request.",
       allowedAppIds: ["matterhorn.sui-testnet", "matterhorn.hyperliquid-testnet", "matterhorn.bittensor-testnet"],
       allowedActionIds: [
         "sui_account_read",
@@ -173,7 +173,7 @@ const TEMPLATES: readonly MatterhornCoworkerTemplate[] = [
       "Summarize the approved Sui and Hyperliquid testnet balances I have shared.",
       "Prepare an exact Sui testnet treasury transfer and stop at wallet review.",
       "Prepare an exact Bittensor testnet TAO transfer and stop at wallet review.",
-      "List unresolved treasury risks and the fresh evidence needed before I move funds.",
+      "List unresolved treasury risks and the fresh source data needed before I move funds.",
     ],
     profile: {
       name: "Treasury Coworker",

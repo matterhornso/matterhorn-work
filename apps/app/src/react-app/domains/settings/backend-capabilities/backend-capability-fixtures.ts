@@ -160,7 +160,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
     description: "The engine can read and save user-visible deliverables in workspace output stores.",
   },
   evidence: {
-    ...cap("working", "Evidence / Activity"),
+    ...cap("working", "Records / Activity"),
     sources: ["notes", "memory", "task_events", "task_runs", "outputs", "workflow_runs"],
     description: "Project activity is built from task events, notes, outputs, and workflow receipts.",
   },

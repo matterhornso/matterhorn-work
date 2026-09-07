@@ -2526,7 +2526,7 @@ export function SettingsOverviewView(props: {
                     />
                     <Row
                       label="Project history"
-                      hint="Activity and saved evidence stay with this workspace."
+                      hint="Activity and saved records stay with this workspace."
                       value={
                         <CapabilityBadge
                           status={backendCapabilities.evidence.status}
@@ -2552,7 +2552,7 @@ export function SettingsOverviewView(props: {
                     <div className="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-xs leading-5 text-dls-secondary">
                         Download the workspace archive, redacted project
-                        evidence, or a support report with backend, billing,
+                        saved records, or a support report with backend, billing,
                         wallet, and data-policy readiness.
                       </p>
                       <div className="flex flex-wrap items-center gap-1">
@@ -2768,7 +2768,7 @@ export function SettingsOverviewView(props: {
             <CollapsibleContent>
               <div className="mt-3 space-y-2">
                 <OverviewControlGroup
-                  title="Work & evidence"
+                  title="Work & records"
                   description="Task history, activity, notes, memory, and feedback."
                 >
           {/* 1b. Task History */}
@@ -2929,7 +2929,7 @@ export function SettingsOverviewView(props: {
                     showToast({
                       title: "Create a workspace before opening notes",
                       description:
-                        "Notes are stored as project evidence inside a Matterhorn workspace.",
+                        "Notes are saved inside the current Matterhorn workspace.",
                       tone: "warning",
                     });
                     return;
@@ -2950,7 +2950,7 @@ export function SettingsOverviewView(props: {
                     showToast({
                       title: "Create a workspace before saving notes",
                       description:
-                        "Notes are stored as project evidence inside a Matterhorn workspace.",
+                        "Notes are saved inside the current Matterhorn workspace.",
                       tone: "warning",
                     });
                     return;
@@ -3291,7 +3291,7 @@ export function SettingsOverviewView(props: {
               {RELEASE_DOCTOR_COMMAND}
             </code>
             <p className="text-xs leading-5 text-dls-secondary">
-              See the first-run and customer-evidence docs for the full
+              See the first-run and customer verification docs for the full
               checklist.
             </p>
           </SettingsCard>

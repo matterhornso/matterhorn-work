@@ -143,7 +143,7 @@ function nftPreviewTitle(entry: MatterhornProjectDataLedgerEntry) {
 }
 
 function sourceLabel(source: MatterhornProjectDataLedgerEntry["source"]) {
-  if (source === "project_evidence") return "Project evidence";
+  if (source === "project_evidence") return "Project history";
   if (source === "opencode_runtime") return "Chat runtime";
   return source.replace(/_/g, " ");
 }

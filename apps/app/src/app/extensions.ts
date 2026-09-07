@@ -185,7 +185,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     schemaVersion: 1,
     id: "matterhorn-crypto",
     name: "Matterhorn Protocols",
-    description: "Shared safety, readiness, and evidence layer behind the Bittensor, Hyperliquid, and Polymarket protocol desks.",
+    description: "Shared safety, readiness, and transaction-record layer behind the Bittensor, Hyperliquid, and Polymarket protocol desks.",
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { src: "/matterhorn-wallet.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. " },
@@ -215,7 +215,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     icon: { src: "/matterhorn-mark.svg" },
     composer: { prompt: "Use Matterhorn Memory context to " },
     setup: {
-      instructions: "No hidden memory. Matterhorn Memory is visible and opt-in. Use it to save confirmed public or private context, review sources, forget records, export evidence, and apply selected memories to chat. It never auto-captures hidden memory and never stores seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+      instructions: "No hidden memory. Matterhorn Memory is visible and opt-in. Use it to save confirmed public or private context, review sources, forget records, export your saved context, and apply selected memories to chat. It never auto-captures hidden memory and never stores seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
       primaryCta: "Open Memory",
     },
     resources: [

@@ -102,7 +102,7 @@ export function WorkspaceMissionOverview({
   const evidenceCount = missionQuery.data?.evidence.summary.total ?? 0;
   const summary = useMemo(() => {
     const parts = [`${completedRuns} completed run${completedRuns === 1 ? "" : "s"}`];
-    parts.push(`${evidenceCount} evidence entr${evidenceCount === 1 ? "y" : "ies"}`);
+    parts.push(`${evidenceCount} saved record${evidenceCount === 1 ? "" : "s"}`);
     return parts.join(" · ");
   }, [completedRuns, evidenceCount]);
 

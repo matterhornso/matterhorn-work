@@ -67,17 +67,17 @@ function statusLabel(item: MatterhornEvidenceVerificationPacket): string {
 
 function userMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
-    if (error.code === "crypto_evidence_unavailable") return "Encrypted coworker evidence is not enabled for this deployment.";
-    if (error.code === "crypto_evidence_not_found") return "This evidence record no longer exists or belongs to another workspace.";
+    if (error.code === "crypto_evidence_unavailable") return "Encrypted coworker records are not enabled for this deployment.";
+    if (error.code === "crypto_evidence_not_found") return "This secure record no longer exists or belongs to another workspace.";
     if (error.code === "crypto_evidence_verification_unavailable") return "Live verification is temporarily unavailable. No proof state was changed.";
     if (error.code === "crypto_evidence_walrus_confirmation_required") return "Confirm the public encrypted-copy notice before continuing.";
-    if (error.code === "crypto_evidence_revision_conflict") return "This evidence record changed. Refresh and try again.";
+    if (error.code === "crypto_evidence_revision_conflict") return "This secure record changed. Refresh and try again.";
     if (error.code === "crypto_evidence_walrus_publication_in_progress") return "This encrypted copy is already being stored.";
-    if (error.code === "crypto_evidence_walrus_publish_state_invalid") return "This evidence record cannot be stored again.";
-    if (error.code === "crypto_evidence_publication_unavailable") return "Encrypted testnet storage is temporarily unavailable. Your local encrypted evidence is unchanged.";
-    if (error.code === "crypto_evidence_key_destruction_confirmation_required") return "Confirm that you understand this evidence cannot be recovered after its key is deleted.";
-    if (error.code === "crypto_evidence_operation_in_progress") return "This evidence record is being updated. Try again shortly.";
-    if (error.code === "crypto_evidence_key_destruction_unavailable") return "The recovery key could not be deleted. The evidence record is unchanged.";
+    if (error.code === "crypto_evidence_walrus_publish_state_invalid") return "This secure record cannot be stored again.";
+    if (error.code === "crypto_evidence_publication_unavailable") return "Encrypted testnet storage is temporarily unavailable. Your local encrypted record is unchanged.";
+    if (error.code === "crypto_evidence_key_destruction_confirmation_required") return "Confirm that you understand this record cannot be recovered after its key is deleted.";
+    if (error.code === "crypto_evidence_operation_in_progress") return "This secure record is being updated. Try again shortly.";
+    if (error.code === "crypto_evidence_key_destruction_unavailable") return "The recovery key could not be deleted. The secure record is unchanged.";
     if (error.code === "crypto_evidence_walrus_renewal_not_due") return "This encrypted copy does not need renewal yet.";
     if (error.code === "crypto_evidence_walrus_renewal_in_progress") return "A renewal is already waiting for wallet review.";
     if (error.code === "crypto_evidence_walrus_renewal_expired_or_replayed") return "This renewal expired or was already used. Check the proof and try again.";
@@ -96,12 +96,12 @@ function userMessage(error: unknown): string {
     if (error.code === "crypto_evidence_sui_anchor_unavailable") return "Sui testnet anchoring is not available in this deployment.";
     if (error.code === "crypto_evidence_sui_anchor_in_progress") return "An anchor is already waiting for wallet review.";
     if (error.code === "crypto_evidence_sui_anchor_expired_or_replayed") return "This anchor request expired or was already used. Prepare a new one.";
-    if (error.code === "crypto_evidence_sui_anchor_exists") return "This evidence is already anchored on Sui.";
+    if (error.code === "crypto_evidence_sui_anchor_exists") return "This record is already anchored on Sui.";
     if (error.code === "crypto_evidence_sui_anchor_certification_changed") return "The Walrus proof changed or expired. Check the proof before anchoring.";
     if (error.code === "crypto_evidence_sui_anchor_transaction_failed") return "The Sui wallet transaction failed. The anchor was not recorded.";
     if (error.code.includes("crypto_evidence_sui_anchor") && error.code.includes("mismatch")) return "The anchor changed after review. Nothing was recorded; prepare it again.";
   }
-  return "Matterhorn could not load the evidence proof. Try again.";
+  return "Matterhorn could not load the record details. Try again.";
 }
 
 async function loadEvidence(workspaceId: string): Promise<{
@@ -283,7 +283,7 @@ export function CryptoEvidenceRoute() {
       await queryClient.invalidateQueries({ queryKey });
     } catch (cause) {
       const message = userMessage(cause);
-      setError(message === "Matterhorn could not load the evidence proof. Try again."
+      setError(message === "Matterhorn could not load the record details. Try again."
         && cause instanceof Error ? cause.message : message);
     } finally {
       setRenewingId(null);
@@ -339,7 +339,7 @@ export function CryptoEvidenceRoute() {
       await queryClient.invalidateQueries({ queryKey });
     } catch (cause) {
       const message = userMessage(cause);
-      setError(message === "Matterhorn could not load the evidence proof. Try again."
+      setError(message === "Matterhorn could not load the record details. Try again."
         && cause instanceof Error ? cause.message : message);
     } finally {
       setCloudDeletingId(null);
@@ -385,7 +385,7 @@ export function CryptoEvidenceRoute() {
       await queryClient.invalidateQueries({ queryKey });
     } catch (cause) {
       const message = userMessage(cause);
-      setError(message === "Matterhorn could not load the evidence proof. Try again."
+      setError(message === "Matterhorn could not load the record details. Try again."
         && cause instanceof Error ? cause.message : message);
     } finally {
       setAnchoringId(null);
@@ -928,7 +928,7 @@ export function CryptoEvidenceRoute() {
                         {canDeleteRecoveryKey && confirmingDelete ? (
                           <div className="mt-5 border-t border-border pt-4">
                             <p className="text-xs leading-5 text-foreground">
-                              This cannot be undone. Matterhorn will no longer be able to open this evidence.
+                              This cannot be undone. Matterhorn will no longer be able to open this record.
                             </p>
                             <p className="mt-2 text-xs leading-5 text-muted-foreground">
                               {item.publication
@@ -942,7 +942,7 @@ export function CryptoEvidenceRoute() {
                                 onChange={(event) => setDeleteAcknowledged(event.target.checked)}
                                 className="mt-0.5 size-4 shrink-0 accent-destructive"
                               />
-                              <span>I understand this evidence cannot be recovered.</span>
+                              <span>I understand this record cannot be recovered.</span>
                             </label>
                             <div className="mt-4 flex gap-2">
                               <Button
@@ -978,7 +978,7 @@ export function CryptoEvidenceRoute() {
                                 ? deletedFromWalrus
                                   ? "The wallet-confirmed Walrus deletion and recovery-key deletion are recorded."
                                   : "The recovery key has been deleted, so this record can no longer be opened."
-                                : "Live verification is available only for published testnet evidence."}
+                                : "Live verification is available only for published testnet records."}
                           </p>
                         ) : null}
                         {verification?.reason ? (

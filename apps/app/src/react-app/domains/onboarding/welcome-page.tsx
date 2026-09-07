@@ -46,7 +46,7 @@ function ShowcasePanel() {
         </div>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           The aim is not just faster answers. It is safer progress: clear
-          context, visible evidence, editable next steps, and outputs that stay
+          context, cited sources, editable next steps, and outputs that stay
           attached to the project.
         </p>
       </div>
@@ -119,13 +119,13 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
                 </h2>
               </div>
               <OnboardingStep title="Create your workspace">
-                Pick a folder where Matterhorn saves chats, artifacts, receipts, QA evidence, and workflow files.
+                Pick a folder where Matterhorn saves chats, files, transaction receipts, QA reports, and workflows.
               </OnboardingStep>
               <OnboardingStep title="Choose a product lane">
                 Open Bittensor, Hyperliquid, Polymarket, longevity workflows, or a blank chat.
               </OnboardingStep>
               <OnboardingStep title="Review before action">
-                Review evidence and exact wallet actions before anything sensitive happens. Matterhorn never holds your keys.
+                Review sources and exact transaction details before anything sensitive happens. Matterhorn never holds your keys.
               </OnboardingStep>
             </div>
 

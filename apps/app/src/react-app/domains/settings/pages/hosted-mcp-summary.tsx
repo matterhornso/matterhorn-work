@@ -51,9 +51,9 @@ const MANAGED_TOOL_GROUPS = [
     icon: SearchCheck,
   },
   {
-    title: "Workspace evidence",
+    title: "Saved workspace records",
     description:
-      "Notes, memory, saved outputs, and evidence stay attached to the current workspace.",
+      "Notes, memory, saved outputs, and receipts stay attached to the current workspace.",
     icon: FileCheck2,
   },
   {

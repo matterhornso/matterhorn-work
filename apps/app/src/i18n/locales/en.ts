@@ -795,7 +795,7 @@ export default {
   "welcome.capability_files_desc": "Create longevity, customer, research, and operator workflow artifacts.",
   "welcome.capability_automate": "Plan services",
   "welcome.capability_automate_desc": "Preview decentralized hosting, storage, email, payments, and identity.",
-  "welcome.capability_content": "Collect evidence",
+  "welcome.capability_content": "Save sources and results",
   "welcome.capability_content_desc": "Export readiness packets, receipts, and QA reports.",
   "welcome.capability_apis": "Connect agents",
   "welcome.capability_apis_desc": "Use Matterhorn MCP and CLI from Codex, Claude Code, and other tools.",

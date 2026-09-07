@@ -359,7 +359,7 @@ export function CryptoAppCatalogRoute() {
             onClick={() => navigate(`/workspace/${encodeURIComponent(workspaceId)}/evidence-proofs`)}
           >
             <ShieldCheck aria-hidden="true" className="size-4" />
-            Evidence proofs
+            Secure records
           </Button>
         </div>
 

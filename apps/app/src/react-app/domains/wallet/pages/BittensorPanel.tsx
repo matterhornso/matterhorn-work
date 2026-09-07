@@ -367,7 +367,7 @@ const MONDAY_BETA_LAUNCH_CHECKLIST = [
     title: "Mac tester build and doctor pass",
     owner: "Engineer",
     commandKey: "mondayBetaDesktopProof",
-    proof: "Unsigned local DMG/ZIP evidence and desktop doctor output are captured before sending the app to a customer.",
+    proof: "Unsigned local DMG/ZIP verification results and desktop doctor output are captured before sending the app to a customer.",
   },
   {
     id: "beta-wellness-proof",
@@ -424,13 +424,13 @@ const CUSTOMER_DEMO_PROMPTS = [
     id: "market-execution-chain",
     label: "Safe execution chain",
     betaVisible: false,
-    prompt: "Matterhorn protocol task: Explain the Hyperliquid and Polymarket agent draft -> exact wallet ticket -> connected-wallet authorization -> public receipt evidence chain. Confirm that the agent artifact cannot submit, reviewed terms cannot be changed after authorization, and Matterhorn rejects secrets, arbitrary signed payloads, hash mismatches, and unattended submission.",
+    prompt: "Matterhorn protocol task: Explain the Hyperliquid and Polymarket agent draft -> exact wallet ticket -> connected-wallet authorization -> public transaction receipt chain. Confirm that the agent artifact cannot submit, reviewed terms cannot be changed after authorization, and Matterhorn rejects secrets, arbitrary signed payloads, hash mismatches, and unattended submission.",
   },
   {
     id: "market-sdk-validation",
     label: "SDK validation",
     betaVisible: false,
-    prompt: "Matterhorn protocol task: Explain official SDK validation for Hyperliquid and Polymarket. Show fixture and operator-owned test modes, public/redacted evidence, the non-submitting agent boundary, the separately wallet-authorized execution ticket, and why Matterhorn never receives keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.",
+    prompt: "Matterhorn protocol task: Explain official SDK validation for Hyperliquid and Polymarket. Show fixture and operator-owned test modes, public/redacted test results, the non-submitting agent boundary, the separately wallet-authorized execution ticket, and why Matterhorn never receives keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.",
   },
   {
     id: "hyperliquid-watch",
@@ -603,18 +603,18 @@ const BITTENSOR_STANDARD_ACTIONS = [
     safety: "Read-only monitoring",
     outcome: "Watch plan",
     prompt:
-      "Bittensor Agent task: Create a read-only watch plan for the public wallet, subnet, validator, emissions, or provider freshness in context. Explain what will be checked, alert thresholds, source/freshness, and how the watch produces evidence without signing or moving funds.",
+      "Bittensor Agent task: Create a read-only watch plan for the public wallet, subnet, validator, emissions, or provider freshness in context. Explain what will be checked, alert thresholds, source/freshness, and how the watch saves results without signing or moving funds.",
   },
   {
     id: "receipt-import",
     step: "9",
     intent: "Read",
     title: "Import receipt",
-    summary: "Review a public Bittensor receipt and attach it to the session evidence trail.",
+    summary: "Review a public Bittensor receipt and attach it to the session transaction history.",
     safety: "Public receipt only",
     outcome: "Receipt status",
     prompt:
-      "Bittensor Agent task: Import and explain a public Bittensor receipt. Verify the public transaction evidence, summarize what changed, link it to the active watch or wallet context if possible, and do not ask for raw signatures, signed payloads, seed phrases, private keys, mnemonics, or wallet exports.",
+      "Bittensor Agent task: Import and explain a public Bittensor receipt. Verify the public transaction record, summarize what changed, link it to the active watch or wallet context if possible, and do not ask for raw signatures, signed payloads, seed phrases, private keys, mnemonics, or wallet exports.",
   },
   {
     id: "keys-explainer",
@@ -869,7 +869,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
     canSubmit: "Eligible buy, sell, and cancel actions",
     liveSubmission: "After wallet authorization",
     signer: "Connected Polygon wallet",
-    source: "Polymarket Gamma/Data/CLOB public reads and fixture/testnet evidence",
+    source: "Polymarket Gamma/Data/CLOB public reads and fixture/testnet results",
     prompts: [
       {
         label: "Find markets",
@@ -2677,13 +2677,13 @@ function BittensorConnectedWalletExecution({
           body: JSON.stringify(workspaceId ? { sessionId: sessionId || null, payload } : payload),
         });
         if (!response.ok || !json.success) {
-          throw new Error(json.error?.message ?? "Could not save public transaction evidence.");
+          throw new Error(json.error?.message ?? "Could not save the public transaction receipt.");
         }
         setEvidencePath(json.evidence?.outputPath ?? null);
       } catch (error) {
         setEvidenceWarning(
           `The ${prepared.action} finalized, but Matterhorn could not save its public receipt: ${
-            error instanceof Error ? error.message : "unknown evidence error"
+            error instanceof Error ? error.message : "unknown receipt error"
           }`,
         );
       }
@@ -3063,7 +3063,7 @@ export default function BittensorPanel({
             ? `Local Matterhorn API unavailable for /api/crypto/readiness: ${err.message}`
             : "Local Matterhorn API unavailable for /api/crypto/readiness.",
         }],
-        warnings: ["This blocks live customer evidence collection until the local server/auth token is healthy, but it is not a protocol or wallet failure."],
+        warnings: ["This blocks live customer record collection until the local server/auth token is healthy, but it is not a protocol or wallet failure."],
         nextActions: ["Run pnpm smoke:customer-ready-crypto or restart Matterhorn Desks, then refresh this panel."],
       });
     } finally {
@@ -3904,7 +3904,7 @@ export default function BittensorPanel({
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
                   <Metric label="Readiness" value={venue === "hyperliquid" ? hyperliquidReadinessState : polymarketReadinessState} compact />
                   <Metric label="Transaction status" value={activeTransactionStatus} compact />
-                  <Metric label="SDK evidence" value={marketSdkValidationState} compact />
+                  <Metric label="SDK verification" value={marketSdkValidationState} compact />
                 </div>
                 <Notice tone="info" icon={<Shield className="size-4" />} title="Execution boundary">
                   {venue === "hyperliquid"
@@ -4135,7 +4135,7 @@ export default function BittensorPanel({
 
             <Section title="Guided test scenarios" icon={<Star className="size-4" />}>
               <p className="text-[11px] leading-5 text-dls-secondary">
-                Use these five operator scripts to verify customer journeys. Each task is editable and each evidence command is fixture/offline unless you supply public inputs.
+                Use these five operator scripts to verify customer journeys. Each task is editable and each verification command is fixture/offline unless you supply public inputs.
               </p>
               <div className="mt-2 grid grid-cols-1 gap-2">
                 {MONDAY_BETA_DEMO_SCENARIOS.map((scenario) => {
@@ -4162,7 +4162,7 @@ export default function BittensorPanel({
                           Stage demo task
                         </Button>
                         <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyMondayBetaScenarioCommand(scenario.id)}>
-                          {copied ? "Copied" : "Copy evidence command"}
+                          {copied ? "Copied" : "Copy verification command"}
                         </Button>
                       </div>
                     </div>
@@ -4173,7 +4173,7 @@ export default function BittensorPanel({
 
             <Section title="Release test checklist" icon={<Shield className="size-4" />}>
               <p className="text-[11px] leading-5 text-dls-secondary">
-                Run this launch-room checklist before customer use. Every command is local, public/redacted, and evidence-oriented; none signs, submits, custodies, or broadcasts.
+                Run this launch-room checklist before customer use. Every command is local and uses public or redacted inputs; none signs, submits, custodies, or broadcasts.
               </p>
               <div className="mt-2 grid grid-cols-1 gap-2">
                 {MONDAY_BETA_LAUNCH_CHECKLIST.map((item) => {
@@ -4232,7 +4232,7 @@ export default function BittensorPanel({
               </div>
             </Section>
 
-            <Section title="Evidence / QA" icon={<Database className="size-4" />}>
+            <Section title="Verification / QA" icon={<Database className="size-4" />}>
               <div className="grid grid-cols-1 gap-2">
                 <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                   <p className="text-xs font-semibold text-dls-text">Customer readiness smoke</p>
@@ -4243,7 +4243,7 @@ export default function BittensorPanel({
                   <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">pnpm beta:bittensor:packet</code>
                 </div>
                 <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
-                  <p className="text-xs font-semibold text-dls-text">Market SDK validation evidence</p>
+                  <p className="text-xs font-semibold text-dls-text">Market SDK validation report</p>
                   <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">matterhorn-work crypto sdk-validate-public --mode fixture</code>
                 </div>
               </div>
@@ -4278,7 +4278,7 @@ export default function BittensorPanel({
                 ) : null}
                 {localReadinessApiUnavailable ? (
                   <Notice tone="info" icon={<Shield className="size-4" />} title="Local API check">
-                    The protocol desks are installed, but the desktop panel cannot reach the local readiness API yet. This usually means the Matterhorn Desks server/auth token is still starting or stale; restart or reconnect, then refresh. You can still copy the evidence commands below for a terminal check.
+                    The protocol desks are installed, but the desktop panel cannot reach the local readiness API yet. This usually means the Matterhorn Desks server/auth token is still starting or stale; restart or reconnect, then refresh. You can still copy the verification commands below for a terminal check.
                   </Notice>
                 ) : null}
                 {/* Right-rail command groups stay single-column; viewport breakpoints are too wide for this side panel. */}
@@ -4301,7 +4301,7 @@ export default function BittensorPanel({
             <Section title="Desktop release checks" icon={<ExternalLink className="size-4" />}>
               <div className="space-y-3">
                 <p className="text-xs leading-5 text-dls-secondary">
-                  First-run test path: build an unsigned local DMG/ZIP, run the desktop release doctor, then capture install, launch, readiness, and safety evidence before customer use.
+                  First-run test path: build an unsigned local DMG/ZIP, run the desktop release doctor, then capture install, launch, readiness, and safety results before customer use.
                 </p>
                 <div className="grid grid-cols-1 gap-2">
                   <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
@@ -4384,7 +4384,7 @@ export default function BittensorPanel({
                     ["Safety checks", "Apply limits, compliance, network checks, and a fresh simulation."],
                     ["Wallet review", "Show the exact action, fees, risks, expiry, and signer before approval."],
                     ["Wallet authorization", "The connected wallet rejects or submits the unchanged supported action."],
-                    ["Receipt", "Match public protocol evidence back to the reviewed intent."],
+                    ["Receipt", "Match the public protocol record back to the reviewed intent."],
                   ].map(([label, description]) => (
                     <div key={label} className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                       <p className="text-xs font-semibold text-dls-text">{label}</p>
@@ -4409,7 +4409,7 @@ export default function BittensorPanel({
                   <Metric label="Private SDK run" value={marketSdkValidationPrivateSdkState} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Official SDK validation is public/redacted evidence only. Fixture mode runs in CI; operator-owned testnet mode validates Hyperliquid testnet and Polygon Amoy artifacts without sending keys, API secrets, raw signatures, signed payloads, wallet exports, or live orders to Matterhorn.
+                  Official SDK validation uses only public or redacted test results. Fixture mode runs in CI; operator-owned testnet mode validates Hyperliquid testnet and Polygon Amoy artifacts without sending keys, API secrets, raw signatures, signed payloads, wallet exports, or live orders to Matterhorn.
                 </p>
                 <div className="grid grid-cols-1 gap-2">
                   <Button variant="ghost" size="icon-sm" className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" onClick={loadMarketSdkValidation} disabled={marketSdkValidationLoading} aria-label="Refresh SDK validation" title="Refresh SDK validation">
@@ -4502,10 +4502,10 @@ export default function BittensorPanel({
               </div>
             </Section>
 
-            <Section title="Evidence" icon={<Database className="size-4" />}>
+            <Section title="Verification" icon={<Database className="size-4" />}>
               <div className="space-y-3">
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Copy customer-safe commands for smoke, route contracts, live public QA, customer packet, and evidence verification.
+                  Copy customer-safe commands for smoke, route contracts, live public QA, customer report, and transaction verification.
                 </p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("smoke")}>
@@ -4521,7 +4521,7 @@ export default function BittensorPanel({
                     {copiedCustomerCommand === "packet" ? "Copied" : "Customer packet"}
                   </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("evidenceVerify")}>
-                    {copiedCustomerCommand === "evidenceVerify" ? "Copied" : "Evidence verify"}
+                    {copiedCustomerCommand === "evidenceVerify" ? "Copied" : "Verify report"}
                   </Button>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

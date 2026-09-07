@@ -39,7 +39,7 @@ function buildScopeCapabilities(): MatterhornTeamAccessScopeCapabilities {
     collaborator: {
       scope: "collaborator",
       label: "Collaborator",
-      description: "Can read and write project notes, memory actions, outputs, feedback, and task evidence through this local server.",
+      description: "Can read and write project notes, memory actions, outputs, feedback, and task records through this local server.",
       canReadWorkspace: true,
       canWriteWorkspace: true,
       canManageLocalTokens: false,
@@ -48,7 +48,7 @@ function buildScopeCapabilities(): MatterhornTeamAccessScopeCapabilities {
     viewer: {
       scope: "viewer",
       label: "Viewer",
-      description: "Can inspect workspace state and evidence but cannot write notes, memory, feedback, outputs, or team tokens.",
+      description: "Can inspect workspace state and saved records but cannot write notes, memory, feedback, outputs, or team tokens.",
       canReadWorkspace: true,
       canWriteWorkspace: false,
       canManageLocalTokens: false,

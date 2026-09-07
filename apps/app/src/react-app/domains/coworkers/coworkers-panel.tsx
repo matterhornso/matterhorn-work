@@ -972,7 +972,7 @@ export function SessionCoworkersPanel(props: SessionCoworkersPanelProps) {
       await queryClient.invalidateQueries({ queryKey: detailKey });
       showToast({
         title: "Remembered work cleared",
-        description: "Future chats will start without this coworker's saved decisions, positions, risks, or evidence.",
+        description: "Future chats will start without this coworker's saved decisions, positions, risks, or source records.",
         tone: "success",
       });
     } catch (cause) {

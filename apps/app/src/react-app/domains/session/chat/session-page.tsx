@@ -956,7 +956,7 @@ function ProtocolDeskEmptyState({
       ? "Open workspace"
       : "Platform setup";
   const deskSafetyInfo = !MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions
-    ? "Public Beta keeps this desk read-only. Research, monitoring, and public evidence remain available; transaction preparation and wallet actions stay hidden."
+    ? "Public Beta keeps this desk read-only. Research, monitoring, and cited public data remain available; transaction preparation and wallet actions stay hidden."
     : panel === "bittensor"
       ? "Uses public wallet details and prepares exact transaction drafts. You approve transfer, stake, and unstake calls in your connected Bittensor wallet; unsupported advanced calls stay unavailable."
       : panel === "polymarket"
@@ -1118,7 +1118,7 @@ function ProtocolDeskEmptyState({
       {!MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions ? (
         <div className="mx-1 flex items-start gap-2 rounded-md bg-dls-surface-muted/35 px-3 py-2 text-xs leading-5 text-dls-secondary" role="status">
           <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" aria-hidden="true" />
-          <span><strong className="font-semibold text-dls-text">Public Beta is read-only.</strong> Research, watches, and public evidence are available; wallet actions stay hidden.</span>
+          <span><strong className="font-semibold text-dls-text">Public Beta is read-only.</strong> Research, watches, and cited public data are available; wallet actions stay hidden.</span>
         </div>
       ) : null}
 
@@ -1242,7 +1242,7 @@ function PublicBetaProtocolRail({
         </div>
       </div>
       <div className="mt-4 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] px-3 py-2.5 text-xs leading-5 text-dls-secondary">
-        Research, monitoring, and public evidence are available. Transaction preparation and wallet actions stay hidden in Public Beta.
+        Research, monitoring, and cited public data are available. Transaction preparation and wallet actions stay hidden in Public Beta.
       </div>
       <div className="mt-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-dls-muted">
@@ -2376,7 +2376,7 @@ export function SessionPage(props: SessionPageProps) {
     if (!workspaceNotesAvailable) {
       showToast({
         title: "Create a workspace before opening notes",
-        description: "Notes are project evidence and need a workspace folder.",
+        description: "Notes need a workspace folder before they can be saved.",
         tone: "warning",
       });
       return;
@@ -2387,7 +2387,7 @@ export function SessionPage(props: SessionPageProps) {
     if (!workspaceNotesAvailable) {
       showToast({
         title: "Create a workspace before saving notes",
-        description: "Notes are stored as project evidence inside a Matterhorn workspace.",
+        description: "Notes are saved inside the current Matterhorn workspace.",
         tone: "warning",
       });
       return;
@@ -3497,7 +3497,7 @@ export function SessionPage(props: SessionPageProps) {
                                 </span>
                               </summary>
                               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                                Operator-only guided runs. Each inserts an editable prompt and points to a redacted evidence command.
+                                Operator-only guided runs. Each inserts an editable prompt and points to a redacted verification command.
                               </p>
                               <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-2">
                                 {mondayBetaDemoCards.map((demo) => {
@@ -3844,7 +3844,7 @@ export function SessionPage(props: SessionPageProps) {
                 memoryRailActive && RAIL_ACTIVE_CLASS,
               )}
               onClick={openMemoryRailPane}
-              title={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export evidence.`}
+              title={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export saved context.`}
               aria-pressed={memoryRailActive}
             >
               <Brain size={17} />

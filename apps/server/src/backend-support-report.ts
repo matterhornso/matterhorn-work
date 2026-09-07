@@ -334,7 +334,7 @@ export async function buildBackendSupportReport(options: {
       "Support reports include backend status, readiness, sanitized storage locations, local access counts, and data-policy summaries.",
       "Support reports do not include raw chat transcripts, provider credentials, bearer tokens, host tokens, or full model provider payloads.",
       "Support reports include billing readiness and usage only; they do not create checkout sessions, open portals, process cards, or contact payment providers.",
-      "Open the project data ledger export separately when row-level redacted evidence is needed.",
+      "Open the project data ledger export separately when row-level redacted records are needed.",
     ],
   };
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Static gate for the beta-tester protocol workspace panel UX.
-// Verifies the venue desks, "Ask Agent ->" tasks, safety strip/card, and "Evidence / QA"
+// Verifies the venue desks, "Ask Agent ->" tasks, safety strip/card, and "Verification / QA"
 // card exist; that prompt buttons insert (not auto-send) via the handoff event;
 // and that only the explicit Hyperliquid wallet ticket can submit.
 import assert from "node:assert/strict";
@@ -68,7 +68,7 @@ for (const phrase of [
 assert.equal(panel.includes("Crypto workspace"), false, "Panel should not render a generic Crypto workspace title");
 
 // 3. The beta-tester sections exist.
-for (const section of ["Ask Agent ->", "Guided test scenarios", "Release test checklist", "Safety status", "Evidence / QA"]) {
+for (const section of ["Ask Agent ->", "Guided test scenarios", "Release test checklist", "Safety status", "Verification / QA"]) {
   assert.ok(panel.includes(`title="${section}"`), `Panel should render a "${section}" section`);
 }
 assert.ok(
@@ -137,7 +137,7 @@ assert.ok(panel.includes("Review an order before wallet signing and submission."
 assert.ok(panel.includes("Prepare exact YES/NO terms for compliance and wallet review."), "Polymarket cards should use concise wallet-review summaries");
 
 // 5b. Monday beta customer scenarios are sourced from the shared registry and
-//     support task staging plus evidence command copy.
+//     support task staging plus verification command copy.
 for (const phrase of [
   "MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS",
   "MONDAY_BETA_DEMO_SCENARIOS",
@@ -147,7 +147,7 @@ for (const phrase of [
   "copyMondayBetaScenarioCommand",
   "node scripts/customer-demo-evidence-pack.mjs --scenario",
   "Stage demo task",
-  "Copy evidence command",
+  "Copy verification command",
   "assignedBetaCustomers",
   "expectedArtifacts",
 ]) {
@@ -159,7 +159,7 @@ for (const phrase of [
 for (const phrase of [
   "MONDAY_BETA_LAUNCH_CHECKLIST",
   "Run this launch-room checklist before customer use.",
-  "Every command is local, public/redacted, and evidence-oriented; none signs, submits, custodies, or broadcasts.",
+  "Every command is local and uses public or redacted inputs; none signs, submits, custodies, or broadcasts.",
   "App opens with first-class desks",
   "Crypto safety smoke is green",
   "Production app typecheck passes",
@@ -194,21 +194,21 @@ for (const phrase of [
   "each supported action requires a separate, short-lived wallet approval.",
   "Public reads work without connecting an EVM wallet.",
   "Local Matterhorn API unavailable for /api/crypto/readiness",
-  "This blocks live customer evidence collection until the local server/auth token is healthy",
+  "This blocks live customer record collection until the local server/auth token is healthy",
   "Local API check",
   "Check pending",
-  "You can still copy the evidence commands below for a terminal check.",
+  "You can still copy the verification commands below for a terminal check.",
 ]) {
   assert.ok(panel.includes(phrase), `Panel safety copy should include: ${phrase}`);
 }
 
-// 7. Evidence / QA card names the three artifacts and their commands.
+// 7. Verification / QA card names the three artifacts and their commands.
 for (const phrase of [
   "Customer readiness smoke",
   "pnpm smoke:customer-ready-crypto",
   "Bittensor beta packet",
   "pnpm beta:bittensor:packet",
-  "Market SDK validation evidence",
+  "Market SDK validation report",
   "matterhorn-work crypto sdk-validate-public --mode fixture",
 ]) {
   assert.ok(panel.includes(phrase), `Panel evidence card should include: ${phrase}`);

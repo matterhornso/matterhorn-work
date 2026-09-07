@@ -41,7 +41,7 @@ export function walletFamilySigningCopy(family: MatterhornWalletFamilyCapability
     }
     return {
       label: "Not supported here",
-      hint: "Sui direct wallet connect is not available in this runtime. Transaction drafts and receipt evidence remain available when the workspace engine supports them.",
+      hint: "Sui direct wallet connect is not available in this runtime. Transaction drafts and receipts remain available when the workspace engine supports them.",
     };
   }
 

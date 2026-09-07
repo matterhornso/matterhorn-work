@@ -51,7 +51,7 @@ function firstBlockingReason(input: SuiWorkflowAvailabilityInput): {
     return { nextAction: "connect_engine", reason: "Matterhorn Desks engine is offline." };
   }
   if (!input.workspaceReady) {
-    return { nextAction: "open_workspace", reason: "Open a workspace before saving Sui evidence." };
+    return { nextAction: "open_workspace", reason: "Open a workspace before saving this Sui record." };
   }
   if (!hasValue(input.sender)) {
     return { nextAction: "enter_sender", reason: "Enter the public sender address." };
@@ -97,7 +97,7 @@ export function getSuiWorkflowAvailability(input: SuiWorkflowAvailabilityInput):
   if (!input.clientReady) {
     importReceiptReason = "Matterhorn Desks engine is offline.";
   } else if (!input.workspaceReady) {
-    importReceiptReason = "Open a workspace before saving Sui evidence.";
+    importReceiptReason = "Open a workspace before saving this Sui record.";
   } else if (!hasValue(input.digest)) {
     importReceiptReason = "Paste the public Sui transaction digest.";
   }

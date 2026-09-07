@@ -334,7 +334,7 @@ function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCrypto
     case "external_signer_handoff":
       return `Connected-wallet handoff from ${venue}; the agent cannot approve or submit it.`;
     case "receipt_status":
-      return `Public receipt/status evidence from ${venue}.`;
+      return `Public transaction receipt or status from ${venue}.`;
     case "watch_alert":
       return `Monitoring or alert context from ${venue}.`;
     default:
@@ -599,7 +599,7 @@ function marketSdkValidationResult(input: UnifiedCryptoChatInput, message: strin
   const guide = buildMarketSdkValidationGuide();
   const cards = [buildMarketSdkValidationCard(guide)];
   const warnings = [
-    "Official SDK validation is public/redacted evidence only.",
+    "Official SDK validation uses public or redacted test results only.",
     "The agent workflow does not sign or submit. Supported execution happens only in a separate connected-wallet ticket.",
   ];
   const route: UnifiedCryptoRoutePlan = {
@@ -616,7 +616,7 @@ function marketSdkValidationResult(input: UnifiedCryptoChatInput, message: strin
     requestedVenue: normalizeVenue(input.venue),
     intent: "market_sdk_validation",
     execution: "read_only",
-    responseText: "Can submit: No. Live submission: Off. Use fixture or operator-owned testnet SDK validation for the agent workflow. The agent artifact cannot submit; supported Hyperliquid and Polymarket actions continue in a separate connected-wallet ticket. Matterhorn accepts public/redacted evidence only and never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.",
+    responseText: "Can submit: No. Live submission: Off. Use fixture or operator-owned testnet SDK validation for the agent workflow. The agent artifact cannot submit; supported Hyperliquid and Polymarket actions continue in a separate connected-wallet ticket. Matterhorn accepts only public or redacted test results and never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.",
     cards,
     sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
     data: { guide },

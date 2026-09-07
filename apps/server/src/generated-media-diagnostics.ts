@@ -696,7 +696,7 @@ function buildProductionSmokePlan(
       requiresPublicWrite: false,
       summary: isProductionImageProvider
         ? "OpenAI image generation is configured; a production smoke can create a workspace output."
-        : "Only local/mock image generation is ready. Configure OpenAI before treating this as production evidence.",
+        : "Only local/mock image generation is ready. Configure OpenAI before treating this as production-ready.",
       setupRequirements: [
         ...unresolvedRequirements(imageProvider.setupRequirements),
         ...productionImageRequirement,
@@ -712,7 +712,7 @@ function buildProductionSmokePlan(
       summary: isProductionWalrus
         ? "Walrus endpoints responded. Uploading image bytes is a public storage action and still requires explicit user confirmation."
         : walrusStorage.status === "pass"
-          ? "Local Walrus endpoints passed safe diagnostics, but production evidence requires public HTTPS publisher and relay endpoints."
+          ? "Local Walrus endpoints passed safe diagnostics, but production verification requires public HTTPS publisher and relay endpoints."
           : "Walrus upload is blocked until publisher and relay setup pass diagnostics.",
       setupRequirements: [
         ...unresolvedRequirements(walrusStorage.setupRequirements),
@@ -729,7 +729,7 @@ function buildProductionSmokePlan(
       summary: isProductionSuiMinting
         ? "Mint preview can be prepared; the user must review and sign with a Sui wallet."
         : suiMinting.status === "pass"
-          ? "Local mint previews work, but production evidence requires a Sui NFT package verified on the selected network."
+          ? "Local mint previews work, but production verification requires a Sui NFT package verified on the selected network."
           : "Minting is blocked until the Sui NFT package is configured and verified on the selected network.",
       setupRequirements: [
         ...unresolvedRequirements(suiMinting.setupRequirements),
@@ -746,7 +746,7 @@ function buildProductionSmokePlan(
       summary: isProductionSuiListing
         ? "Kiosk listing preview can be prepared; the user must review and sign with a Sui wallet."
         : suiListing.status === "pass"
-          ? "Local listing previews work, but production evidence requires Kiosk and TransferPolicy packages verified on the selected network."
+          ? "Local listing previews work, but production verification requires Kiosk and TransferPolicy packages verified on the selected network."
           : "Marketplace listing is blocked until the Kiosk and TransferPolicy packages are configured and verified on the selected network.",
       setupRequirements: [
         ...unresolvedRequirements(suiListing.setupRequirements),

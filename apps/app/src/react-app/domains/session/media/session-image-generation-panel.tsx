@@ -481,7 +481,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       await queryClient.invalidateQueries({ queryKey: generatedMediaHistoryQueryKey });
       props.onNotice?.({
         title: "Listing receipt recorded",
-        description: "The marketplace handoff is now part of this image's evidence.",
+        description: "The marketplace handoff is now attached to this image's saved record.",
         tone: "success",
       });
     } catch (nextError) {

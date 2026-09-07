@@ -349,7 +349,7 @@ export function PublicWebSigninPage({
           </h1>
           <p className="public-auth-description">
             Open a private workspace for focused AI desks, tools, and durable
-            project evidence.
+            saved project files and receipts.
           </p>
 
           <div className="public-auth-mode" aria-label="Account access">

@@ -94,7 +94,7 @@ function ShowcasePanel() {
         <p className="mt-4 text-[13px] leading-6 text-dls-secondary">
           The vision is simple: AI should not only answer questions. It should
           help people understand complex systems, prepare safe next steps, keep
-          evidence visible, and carry work all the way into saved outputs.
+          sources visible, and carry work all the way into saved outputs.
         </p>
         <p className="mt-3 text-[13px] leading-6 text-dls-secondary">
           Matterhorn turns chat into an operating layer for projects, protocols,

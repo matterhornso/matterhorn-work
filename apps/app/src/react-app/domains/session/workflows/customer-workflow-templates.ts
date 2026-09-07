@@ -100,10 +100,10 @@ export type CustomerWorkflowStarterCard = {
 };
 
 const PUBLIC_BETA_STARTER_PROMPTS: Partial<Record<CustomerProtocolDeskVisual["id"], string>> = {
-  bittensor: "Use the Bittensor desk to compare active subnets and validators using public evidence. Keep the task read-only.",
-  hyperliquid: "Use the Hyperliquid desk to review BTC-PERP market structure, exposure, funding, and public evidence. Keep the task read-only.",
-  polymarket: "Use the Polymarket desk to research active markets, liquidity, and compliance context using public evidence. Keep the task read-only.",
-  sui: "Use the Sui desk to review public account, object, network, fee, and receipt evidence. Keep the task read-only.",
+  bittensor: "Use the Bittensor desk to compare active subnets and validators using cited public data. Keep the task read-only.",
+  hyperliquid: "Use the Hyperliquid desk to review BTC-PERP market structure, exposure, funding, and cited public data. Keep the task read-only.",
+  polymarket: "Use the Polymarket desk to research active markets, liquidity, and compliance context using cited public data. Keep the task read-only.",
+  sui: "Use the Sui desk to review public account, object, network, fees, and transaction receipts. Keep the task read-only.",
 };
 
 export type CustomerBetaDemoStarterCard = {
@@ -269,7 +269,7 @@ function buildCustomerWorkflowPromptFromText(template: CustomerWorkflowTemplate,
     case "polymarket":
       return `Polymarket task: ${prompt}. Scope: market discovery, outcomes, probabilities, liquidity, compliance checks, external trade handoffs, watches, and receipts. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
     case "sui":
-      return `Sui task: ${prompt}. Scope: Sui public addresses, wallet-standard account reads, balance reads, transfer previews, wallet signing handoffs, public transaction digests, explorer links, and receipt evidence. ${SUI_SUFFIX} ${intentContext}`.trim();
+      return `Sui task: ${prompt}. Scope: Sui public addresses, wallet-standard account reads, balance reads, transfer previews, wallet signing handoffs, public transaction digests, explorer links, and transaction receipts. ${SUI_SUFFIX} ${intentContext}`.trim();
     case "wellness": {
       const task = /build the full 7-stage longevity workflow/i.test(prompt)
         ? "Start the Longevity workflow for my clients"

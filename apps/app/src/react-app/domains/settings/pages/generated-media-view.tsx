@@ -735,7 +735,7 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
     if (!canDeleteDraft(draft)) {
       setDeleteStatus("Public storage, mint, or listing state is retained for accountability.");
       showToast({
-        title: "Draft has public evidence",
+        title: "Draft has source details",
         description: "Public storage, mint, or listing records are retained for accountability.",
         tone: "warning",
       });
@@ -972,14 +972,14 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
           <summary className="flex cursor-pointer list-none items-start justify-between gap-3 py-2">
             <span>
               <span className="block text-sm font-medium text-dls-text">Storage and data controls</span>
-              <span className="mt-1 block text-xs leading-5 text-dls-secondary">Review retention, exports, deletion controls, and saved evidence.</span>
+              <span className="mt-1 block text-xs leading-5 text-dls-secondary">Review retention, exports, deletion controls, and saved records.</span>
             </span>
             <ChevronDown className="mt-0.5 size-4 shrink-0 text-dls-secondary transition-transform group-open:rotate-180" />
           </summary>
           <div className="grid gap-3 pt-3">
             <Button variant="ghost" size="sm" className="w-fit gap-1.5 px-0 text-xs text-dls-secondary hover:bg-transparent hover:text-dls-text" onClick={props.onOpenRunHistory}>
               <FileText className="size-3.5" />
-              Review evidence
+              Review saved records
               <ArrowRight className="size-3.5" />
             </Button>
             {dataControlsQuery.isError ? <SettingsNotice tone="error">Generated media data controls could not load.</SettingsNotice> : null}

@@ -388,7 +388,7 @@ export async function submitBittensorWalletAction(input: {
           const txHash = result.txHash?.toHex();
           const blockHash = result.status.asFinalized?.toHex();
           if (!txHash || !blockHash) {
-            finish(() => reject(new Error("Bittensor finalized without public transaction evidence.")));
+            finish(() => reject(new Error("Bittensor finalized without a public transaction receipt.")));
             return;
           }
           finish(() => resolve({

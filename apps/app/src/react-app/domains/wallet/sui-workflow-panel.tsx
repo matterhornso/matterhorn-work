@@ -144,7 +144,7 @@ function EvidencePath({ path }: { path?: string }) {
   if (!path) return null;
   return (
     <div className="rounded-lg bg-dls-surface-muted/[0.08] px-2.5 py-2 text-[11px] leading-4 text-dls-secondary">
-      <span className="font-medium text-dls-text">Saved evidence:</span>{" "}
+      <span className="font-medium text-dls-text">Saved record:</span>{" "}
       <span className="font-mono">{path}</span>
     </div>
   );
@@ -342,7 +342,7 @@ export function SuiWorkflowPanel(props: {
       return;
     }
     if (!workspaceId) {
-      setError("Open a workspace before saving Sui evidence.");
+      setError("Open a workspace before saving this Sui record.");
       return;
     }
     setError(null);
@@ -519,7 +519,7 @@ export function SuiWorkflowPanel(props: {
       return;
     }
     if (!workspaceId) {
-      setError("Open a workspace before saving Sui evidence.");
+      setError("Open a workspace before saving this Sui record.");
       return;
     }
     setError(null);
@@ -567,7 +567,7 @@ export function SuiWorkflowPanel(props: {
       return;
     }
     if (!workspaceId) {
-      setError("Open a workspace before saving Sui evidence.");
+      setError("Open a workspace before saving this Sui record.");
       return;
     }
     if (!previewResponse?.preview) {
@@ -1000,7 +1000,7 @@ export function SuiWorkflowPanel(props: {
           </WorkflowField>
         ) : null}
 
-        <WorkflowField label="Memo" htmlFor={fieldId("memo")} help="Optional. Saved with the handoff evidence, not signed by Matterhorn.">
+        <WorkflowField label="Memo" htmlFor={fieldId("memo")} help="Optional. Saved with the handoff record, not signed by Matterhorn.">
           <Textarea
             id={fieldId("memo")}
             className={SUI_PANEL_TEXTAREA_CLASS}
@@ -1097,7 +1097,7 @@ export function SuiWorkflowPanel(props: {
         <div>
           <p className="text-sm font-semibold text-dls-text">Import receipt</p>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            Paste the public digest. Matterhorn will verify its status against the selected Sui network before saving evidence. Do not paste signatures or signed payloads.
+            Paste the public digest. Matterhorn will verify its status against the selected Sui network before saving the transaction receipt. Do not paste signatures or signed payloads.
           </p>
         </div>
         <WorkflowField label="Transaction digest" htmlFor={fieldId("digest")}>

@@ -372,7 +372,7 @@ function MatterhornDeskFocusedEmptyState({
     reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
   }).flatMap((group) => group.starters);
   const boundary = !MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions
-    ? "Public Beta keeps this desk read-only. Research, monitoring, and public evidence remain available; transaction preparation and wallet actions stay hidden."
+    ? "Public Beta keeps this desk read-only. Research, monitoring, and cited public data remain available; transaction preparation and wallet actions stay hidden."
     : mode === "bittensor"
       ? "Uses public wallet details and prepares transaction drafts. You approve TAO transfers, staking, and unstaking in your wallet; unsupported advanced calls stay unavailable."
       : mode === "wellness"

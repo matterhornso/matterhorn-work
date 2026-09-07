@@ -179,7 +179,7 @@ export class MatterhornCoworkerWatchRunner {
           kind: "alert",
           severity: "medium",
           title: `${watch.name} needs review`,
-          summary: `${matched.length} approved watch condition${matched.length === 1 ? "" : "s"} matched fresh certified evidence.`,
+          summary: `${matched.length} approved watch condition${matched.length === 1 ? "" : "s"} matched fresh verified data.`,
           reasonCodes: matched,
           source: {
             appId: watch.appId,
@@ -193,7 +193,7 @@ export class MatterhornCoworkerWatchRunner {
             modelTokensConsumed: 0,
             costMicros: result.metering.costMicros,
           },
-          nextSafeAction: { kind: "review", label: "Review the certified evidence" },
+          nextSafeAction: { kind: "review", label: "Review the verified results" },
         };
       }
       if (result.metering.costMicros > watch.budgets.maxCostMicrosPerCheck) {
