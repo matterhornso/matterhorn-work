@@ -254,6 +254,7 @@ const IDLE_STATUS: SessionStatus = { type: "idle" };
 const DEFAULT_COMPOSER_CONTROL_TEXT = "Help me outline the next Matterhorn task.";
 
 const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof BrainCircuit> = {
+  private_ai: BrainCircuit,
   bittensor: BrainCircuit,
   hyperliquid: BarChart3,
   polymarket: ShieldCheck,

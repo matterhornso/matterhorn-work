@@ -11,6 +11,7 @@ import {
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 
 export type CustomerProtocolDeskId =
+  | "private_ai"
   | "bittensor"
   | "hyperliquid"
   | "polymarket"
@@ -20,6 +21,7 @@ export type CustomerProtocolDeskId =
   | "mcps";
 
 export const CUSTOMER_PROTOCOL_DESK_IDS = [
+  "private_ai",
   "bittensor",
   "hyperliquid",
   "polymarket",
@@ -30,6 +32,7 @@ export const CUSTOMER_PROTOCOL_DESK_IDS = [
 ] as const satisfies readonly CustomerProtocolDeskId[];
 
 export const CUSTOMER_LAUNCHER_DESK_IDS = [
+  "private_ai",
   "bittensor",
   "hyperliquid",
   "polymarket",
@@ -38,6 +41,7 @@ export const CUSTOMER_LAUNCHER_DESK_IDS = [
 ] as const satisfies readonly CustomerProtocolDeskId[];
 
 export const CUSTOMER_RAIL_DESK_IDS = [
+  "private_ai",
   "bittensor",
   "hyperliquid",
   "polymarket",
@@ -87,6 +91,7 @@ const STATUS_LABELS: Record<ProtocolDeskVisualStatus, string> = {
 };
 
 const DESK_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
+  private_ai: "Private workspace",
   bittensor: "Transfer, stake & unstake",
   hyperliquid: "Review in wallet",
   polymarket: "Buy, sell & cancel",
@@ -94,6 +99,9 @@ const DESK_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
 };
 
 const WORKSPACE_TO_DESK_ID: Record<string, CustomerProtocolDeskId | undefined> = {
+  general: "private_ai",
+  private_ai: "private_ai",
+  "private-ai": "private_ai",
   bittensor: "bittensor",
   hyperliquid: "hyperliquid",
   polymarket: "polymarket",
@@ -141,6 +149,9 @@ function capabilityBullets(manifest: ProtocolDeskManifest): string[] {
 }
 
 function safetySummary(manifest: ProtocolDeskManifest): string {
+  if (manifest.id === "private_ai") {
+    return "Matterhorn blocks secrets and shows which model provider will receive private context before anything is sent.";
+  }
   if (manifest.id === "bittensor") {
     return "Agents prepare drafts only. TAO transfers, stake, and unstake calls require exact review and connected Bittensor-wallet approval. Other runtime calls remain unavailable until separately audited.";
   }
@@ -166,6 +177,9 @@ function safetySummary(manifest: ProtocolDeskManifest): string {
 }
 
 function railTitle(manifest: ProtocolDeskManifest): string {
+  if (manifest.id === "private_ai") {
+    return "Private AI: custom workflows, files, notes, memory, and approved tools";
+  }
   if (manifest.id === "bittensor") {
     return "Bittensor: TAO reads, subnets, validators, wallet-reviewed transfers, stake, unstake, watches, and receipts";
   }
@@ -185,11 +199,15 @@ function railTitle(manifest: ProtocolDeskManifest): string {
 }
 
 function sessionTitle(manifest: ProtocolDeskManifest): string {
+  if (manifest.id === "private_ai") return "Private AI task";
   if (manifest.id === "wellness") return "Longevity workflow session";
   return `${manifest.displayName} session`;
 }
 
 function sessionBoundary(manifest: ProtocolDeskManifest): string {
+  if (manifest.id === "private_ai") {
+    return "Use only the context you choose. Matterhorn blocks secrets and discloses the selected model provider before private context is sent.";
+  }
   if (manifest.id === "bittensor") {
     return "Public wallet details and transaction drafts. You approve TAO transfers, stake, and unstake calls in your connected wallet; unsupported advanced calls are not presented as executable.";
   }
@@ -364,6 +382,7 @@ export const CUSTOMER_LAUNCHER_DESK_VISUALS: CustomerProtocolDeskVisual[] = CUST
   .filter((visual): visual is CustomerProtocolDeskVisual => Boolean(visual));
 
 const DESK_WORKFLOW_ID: Record<CustomerProtocolDeskId, string | undefined> = {
+  private_ai: undefined,
   bittensor: "bittensor_operator",
   hyperliquid: "hyperliquid_preview",
   polymarket: "polymarket_preview",

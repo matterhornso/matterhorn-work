@@ -585,6 +585,10 @@ export function PublicWebSigninPage({
           </p>
           <dl className="public-auth-desk-list">
             <div>
+              <dt>Private AI</dt>
+              <dd>Run custom workflows with the files, context, and tools you choose.</dd>
+            </div>
+            <div>
               <dt>Bittensor</dt>
               <dd>Explore subnets, compare validators, and inspect wallet activity.</dd>
             </div>

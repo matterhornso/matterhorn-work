@@ -10,7 +10,7 @@ import {
 } from "@matterhorn-work/types/desk-agents";
 
 describe("desk workflow stage panel metadata", () => {
-  test.each(CUSTOMER_LAUNCHER_DESK_IDS)("%s has a workflow manifest and desk visual", (deskId) => {
+  test.each(CUSTOMER_LAUNCHER_DESK_IDS.filter((deskId) => deskId !== "private_ai"))("%s has a workflow manifest and desk visual", (deskId) => {
     const visual = getCustomerProtocolDeskVisual(deskId);
     const manifest = getDeskWorkflowManifest(deskId);
     expect(visual).not.toBeNull();
@@ -20,6 +20,14 @@ describe("desk workflow stage panel metadata", () => {
     expect(manifest?.steps.length).toBeGreaterThan(0);
     expect(manifest?.inputPrompts.length).toBeGreaterThan(0);
     expect(manifest?.generatedArtifacts.length).toBeGreaterThan(0);
+  });
+
+  test("Private AI opens directly into the guarded general agent", () => {
+    const visual = getCustomerProtocolDeskVisual("private_ai");
+    expect(visual?.displayName).toBe("Private AI");
+    expect(visual?.agentId).toBe("matterhorn");
+    expect(visual?.category).toBe("general");
+    expect(getDeskWorkflowManifest("private_ai")).toBeNull();
   });
 
   test("Longevity exposes the full 7-stage workflow", () => {

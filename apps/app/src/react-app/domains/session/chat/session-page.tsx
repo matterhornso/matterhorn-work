@@ -273,6 +273,7 @@ function LazyModalBoundary({ children }: { children: ReactNode }) {
 }
 
 const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof BrainCircuit> = {
+  private_ai: Brain,
   bittensor: BrainCircuit,
   hyperliquid: BarChart3,
   polymarket: ShieldCheck,
@@ -565,7 +566,7 @@ function HomeCapabilityOverview({
       style={{ contentVisibility: "auto", containIntrinsicSize: "360px" } as CSSProperties}
     >
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1 text-left marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/35">
-        <span className="text-sm font-semibold text-dls-text">Protocol desks</span>
+        <span className="text-sm font-semibold text-dls-text">Desks</span>
         <ChevronRight className="size-4 shrink-0 text-dls-secondary" aria-hidden="true" />
       </summary>
       <section className="mt-2" aria-label="Desk capability overview">
@@ -591,7 +592,7 @@ function HomeCapabilityOverview({
                   <p className="mt-0.5 line-clamp-1 text-[12px] leading-5 text-dls-secondary sm:line-clamp-none">{item.summary}</p>
                 </div>
                 <span className="hidden items-center gap-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:inline-flex">
-                  {item.id === "wellness" ? "Start workflow" : "Open desk"}
+                  {item.id === "private_ai" ? "Start task" : item.id === "wellness" ? "Start workflow" : "Open desk"}
                   <ChevronRight className="size-3.5" aria-hidden="true" />
                 </span>
               </button>
@@ -1282,7 +1283,7 @@ type WorkflowDeskLaunchState = {
 };
 
 export type WorkflowDeskId = Extract<
-  CustomerProtocolDeskId,
+  Exclude<CustomerProtocolDeskId, "private_ai">,
   CustomerWorkflowIconHint
 >;
 
@@ -3019,6 +3020,12 @@ export function SessionPage(props: SessionPageProps) {
 
                     <div className="my-1 h-px bg-dls-border" aria-hidden="true" />
                     <p className="px-3 pb-1 pt-2 text-xs font-medium text-dls-muted">Desks</p>
+                    <MobileWorkspaceMenuAction
+                      icon={<DeskBrandMark id="private_ai" size={20} />}
+                      label={getCustomerProtocolDeskVisual("private_ai")?.displayName ?? "Private AI"}
+                      onSelect={() => runMobileWorkspaceAction(() => props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId))}
+                      style={deskToneStyle("private_ai")}
+                    />
                     {VENUE_SIDE_PANELS.map((panel) => {
                       const visual = getCustomerProtocolDeskVisualForLaunch(
                         panel,
@@ -3468,6 +3475,10 @@ export function SessionPage(props: SessionPageProps) {
                         ) : null}
                         <HomeCapabilityOverview
                           onOpenCapability={(id) => {
+                            if (id === "private_ai") {
+                              props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
+                              return;
+                            }
                             if (id === "bittensor" || id === "hyperliquid" || id === "polymarket" || id === "sui") {
                               openVenueRailPane(id);
                               return;
@@ -3876,6 +3887,18 @@ export function SessionPage(props: SessionPageProps) {
             <div className={RAIL_SECTION_LABEL_CLASS}>
               Desks
             </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              style={deskToneStyle("private_ai")}
+              className={RAIL_DESK_BUTTON_CLASS}
+              onClick={() => props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId)}
+              title={getCustomerProtocolDeskVisual("private_ai")?.railTitle ?? "Start a private AI task"}
+              aria-label={getCustomerProtocolDeskVisual("private_ai")?.railTitle ?? "Start a private AI task"}
+            >
+              <DeskBrandMark id="private_ai" size={22} />
+              <span className={RAIL_LABEL_CLASS}>{getCustomerProtocolDeskVisual("private_ai")?.displayName ?? "Private AI"}</span>
+            </Button>
             {VENUE_SIDE_PANELS.map((panel) => {
               const visual = getCustomerProtocolDeskVisualForLaunch(
                 panel,

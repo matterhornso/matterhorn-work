@@ -8,6 +8,7 @@ export const MATTERHORN_WORKFLOW_STATUSES = [
 export type MatterhornWorkflowStatus = (typeof MATTERHORN_WORKFLOW_STATUSES)[number];
 
 export const MATTERHORN_WORKFLOW_CATEGORIES = [
+  "general",
   "wellness",
   "web3",
   "bittensor",
@@ -2044,6 +2045,7 @@ export type MatterhornCustomerWorkflowRecommendedSurface =
   (typeof MATTERHORN_CUSTOMER_WORKFLOW_RECOMMENDED_SURFACES)[number];
 
 export const MATTERHORN_CUSTOMER_WORKFLOW_ICON_HINTS = [
+  "private_ai",
   "bittensor",
   "hyperliquid",
   "polymarket",
@@ -2849,10 +2851,10 @@ export const DECENTRALIZED_SERVICES_OPERATOR_CUSTOMER_TEMPLATE: MatterhornCustom
 export const BLANK_CHAT_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTemplate = {
   version: "matterhorn.customer.workflow.template.v1",
   id: "blank_chat_workflow",
-  name: "Chat",
-  summary: "Start a flexible chat session with the Matterhorn Desks engine.",
-  promise: "Open-ended assistance. You choose the goal.",
-  category: "future",
+  name: "Private AI",
+  summary: "Run a custom workflow with the context and tools you choose.",
+  promise: "A flexible workspace for research, writing, planning, files, and custom tasks.",
+  category: "general",
   examplePrompts: [
     "What can you do?",
     "Help me think through a problem",
@@ -2880,17 +2882,17 @@ export const BLANK_CHAT_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTe
   serviceHooks: [],
   chatMode: "free chat",
   launch: {
-    primaryCta: "Start chat",
+    primaryCta: "Start a task",
     secondaryCta: "Browse templates",
     defaultPrompt: "What can you do?",
     handoffContextLabel: "Goal",
     recommendedSurface: "workflow_chat",
   },
   ui: {
-    iconHint: "blank",
+    iconHint: "private_ai",
     accent: "neutral",
     shortDescription:
-      "Start a flexible chat with the Matterhorn Desks engine.",
+      "Custom workflows, files, notes, and everyday tasks.",
   },
   routing: {
     chatMode: "general",
@@ -3990,6 +3992,7 @@ export const PROTOCOL_DESK_VISUAL_STATUSES = [
 export type ProtocolDeskVisualStatus = (typeof PROTOCOL_DESK_VISUAL_STATUSES)[number];
 
 export const PROTOCOL_DESK_CATEGORIES = [
+  "general",
   "web3",
   "bittensor",
   "sui",
@@ -4658,6 +4661,123 @@ export const SUI_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   },
 };
 
+export const PRIVATE_AI_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
+  version: "matterhorn.protocol.desk.manifest.v1",
+  id: "private_ai",
+  displayName: "Private AI",
+  shortDescription: "Custom workflows, files, notes, and everyday tasks.",
+  launcherTitle: "Private AI",
+  launcherDescription: "Start with any outcome and add only the context and tools you want to use.",
+  launcherPrompt: "What would you like to work on?",
+  rightRailSummary: "A flexible workspace for custom work, with provider disclosure and privacy controls before private context is sent.",
+  logoAssetId: "private-ai-logo",
+  officialLogoAssetId: "private-ai-logo",
+  logoAlt: "Matterhorn Private AI mark",
+  category: "general",
+  status: "live",
+  readinessTone: "live",
+  backendStatus: "live",
+  actionStatus: "workflow_only",
+  extensionStatus: "built_in_live",
+  statusBadgeLabel: "Available",
+  statusBadgeTone: "success",
+  routeOrPanelId: "new-private-chat",
+  logoAssetKey: "private_ai-logo",
+  preferredColorToken: "--matterhorn-blue",
+  lightThemeTokenHints: {
+    background: "#F7FBFD",
+    surface: "#FFFFFF",
+    accent: "#147D92",
+    accentHover: "#0F687A",
+    textPrimary: "#111827",
+    textSecondary: "#5B6472",
+    border: "#DCE7EB",
+    safetyStrip: "#E6F5F8",
+    iconFill: "#147D92",
+  },
+  darkThemeTokenHints: {
+    background: "#070A0C",
+    surface: "#10161A",
+    accent: "#9EDAE7",
+    accentHover: "#BDE8F0",
+    textPrimary: "#F8FAFC",
+    textSecondary: "#AAB5BF",
+    border: "#26323A",
+    safetyStrip: "#0D2D35",
+    iconFill: "#9EDAE7",
+  },
+  primaryActions: [
+    {
+      actionId: "start-private-task",
+      label: "Start a task",
+      iconHint: "message",
+      intent: "start a private custom task",
+      requiresConfirmation: false,
+      surface: "chat",
+    },
+    {
+      actionId: "work-with-files",
+      label: "Work with files",
+      iconHint: "file",
+      intent: "start a private task using selected files",
+      requiresConfirmation: false,
+      surface: "chat",
+    },
+  ],
+  primaryActionLabel: "Start a task",
+  secondaryActions: [
+    {
+      actionId: "use-memory",
+      label: "Use selected memory",
+      iconHint: "memory",
+      intent: "start a task using selected memory",
+      requiresConfirmation: false,
+      surface: "chat",
+    },
+  ],
+  walletRequirements: ["none"],
+  walletRailMode: "none",
+  safetyBoundaries: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    medicalClaimsAllowed: false,
+  },
+  customerVisible: true,
+  capabilityBullets: [
+    "Handle open-ended research, writing, planning, and analysis",
+    "Work with files, notes, and explicitly selected memory",
+    "Use only tools allowed by the workspace",
+  ],
+  safetySummary: "Matterhorn blocks secrets and discloses the selected model provider before private context is sent.",
+  customerCapabilitySummary: "Run custom AI workflows with your selected files, notes, memory, and approved tools.",
+  noCustodySafetyLine: "No wallet access is required. Secrets, private keys, and raw signatures are blocked.",
+  suggestedPromptTitles: [
+    "Analyze these files",
+    "Draft a project plan",
+    "Research a topic",
+    "Turn my notes into a clear brief",
+  ],
+  emptyStateCopy: {
+    headline: "What do you want to accomplish?",
+    body: "Describe the outcome. Add files, notes, memory, or approved tools only when they help.",
+    primaryActionId: "start-private-task",
+  },
+  degradedStateCopy: {
+    headline: "Private AI is temporarily unavailable",
+    body: "Your workspace content remains saved. Try again when the model connection is restored.",
+    primaryActionId: "start-private-task",
+  },
+};
+
 export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   version: "matterhorn.protocol.desk.manifest.v1",
   id: "wellness",
@@ -5007,6 +5127,7 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
 };
 
 export const PROTOCOL_DESK_MANIFEST_REGISTRY: Record<string, ProtocolDeskManifest> = {
+  private_ai: PRIVATE_AI_PROTOCOL_DESK_MANIFEST,
   bittensor: BITTENSOR_PROTOCOL_DESK_MANIFEST,
   hyperliquid: HYPERLIQUID_PROTOCOL_DESK_MANIFEST,
   polymarket: POLYMARKET_PROTOCOL_DESK_MANIFEST,
@@ -5017,6 +5138,7 @@ export const PROTOCOL_DESK_MANIFEST_REGISTRY: Record<string, ProtocolDeskManifes
 };
 
 export const CUSTOMER_DESK_ORDER: string[] = [
+  "private_ai",
   "bittensor",
   "hyperliquid",
   "polymarket",
@@ -5145,6 +5267,17 @@ export const WELLNESS_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
   fallbackInitials: "LO",
 };
 
+export const PRIVATE_AI_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
+  version: "matterhorn.protocol.brand.asset.v1",
+  assetKey: "private_ai-logo",
+  protocol: "matterhorn",
+  sourceUrl: "https://matterhorn.so/brand",
+  allowedUseNote: "Matterhorn-owned asset. Free to use across Matterhorn Desks UI surfaces.",
+  lightAssetPath: "/matterhorn-logo-square.svg",
+  darkAssetPath: "/matterhorn-logo-square.svg",
+  fallbackInitials: "AI",
+};
+
 export const MEMORY_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
   version: "matterhorn.protocol.brand.asset.v1",
   assetKey: "memory-logo",
@@ -5168,6 +5301,7 @@ export const MCP_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
 };
 
 export const PROTOCOL_BRAND_ASSET_REGISTRY: Record<string, ProtocolBrandAssetManifest> = {
+  "private_ai-logo": PRIVATE_AI_BRAND_ASSET_MANIFEST,
   "bittensor-logo": BITTENSOR_BRAND_ASSET_MANIFEST,
   "hyperliquid-logo": HYPERLIQUID_BRAND_ASSET_MANIFEST,
   "polymarket-logo": POLYMARKET_BRAND_ASSET_MANIFEST,

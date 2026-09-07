@@ -117,6 +117,7 @@ export type MatterhornWorkflowPromptPack = {
 };
 
 type MatterhornCustomerWorkflowCategory =
+  | "general"
   | "bittensor"
   | "markets"
   | "web3"
@@ -183,7 +184,7 @@ type MatterhornCustomerWorkflowTemplate = {
     recommendedSurface: "protocol_desk" | "workflow_chat" | "future_service";
   };
   ui: {
-    iconHint: "bittensor" | "hyperliquid" | "polymarket" | "sui" | "wellness" | "services" | "blank";
+    iconHint: "private_ai" | "bittensor" | "hyperliquid" | "polymarket" | "sui" | "wellness" | "services" | "blank";
     accent: "matterhorn_blue" | "neutral" | "caution";
     shortDescription: string;
   };
@@ -843,11 +844,11 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
   },
   {
     id: "blank_chat_workflow",
-    name: "Chat",
-    summary: "Start a flexible chat session with the Matterhorn Desks engine.",
-    promise: "Open-ended assistance. You choose the goal.",
-    category: "future",
-    examplePrompts: ["What can you do?", "Help me think through a problem", "Draft an email"],
+    name: "Private AI",
+    summary: "Run a custom workflow with the context and tools you choose.",
+    promise: "A flexible workspace for research, writing, planning, files, and custom tasks.",
+    category: "general",
+    examplePrompts: ["Analyze these files", "Draft a project plan", "Turn my notes into a brief"],
     expectedArtifacts: [],
     requiredContext: [],
     optionalContext: [],
@@ -863,16 +864,16 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     serviceHooks: [],
     chatMode: "free chat",
     launch: {
-      primaryCta: "Start chat",
+      primaryCta: "Start a task",
       secondaryCta: "Browse templates",
-      defaultPrompt: "What can you do?",
-      handoffContextLabel: "Goal",
+      defaultPrompt: "What would you like to work on?",
+      handoffContextLabel: "Outcome",
       recommendedSurface: "workflow_chat",
     },
     ui: {
-      iconHint: "blank",
+      iconHint: "private_ai",
       accent: "neutral",
-      shortDescription: "Start a flexible chat with the Matterhorn Desks engine.",
+      shortDescription: "Custom workflows, files, notes, and everyday tasks.",
     },
     routing: {
       chatMode: "general",

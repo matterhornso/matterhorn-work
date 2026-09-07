@@ -71,6 +71,8 @@ describe("customer-facing Matterhorn Desks branding", () => {
       "Open a private workspace for focused AI desks, tools, and durable",
     );
     expect(publicSignIn).toContain("Choose a desk. Ask for the outcome.");
+    expect(publicSignIn).toContain("Private AI");
+    expect(publicSignIn).toContain("Run custom workflows with the files, context, and tools you choose.");
     expect(publicSignIn).toContain("Bittensor");
     expect(publicSignIn).toContain("Hyperliquid");
     expect(publicSignIn).toContain("Polymarket");

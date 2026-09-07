@@ -170,7 +170,7 @@ assert.equal(
 
 for (const phrase of [
   "Start something",
-  "Protocol desks",
+  "Desks",
   "New project",
   "New chat",
   "Open Bittensor desk",
@@ -209,7 +209,7 @@ for (const phrase of [
   "Open Hyperliquid desk",
   "Open Polymarket desk",
   "Start longevity workflow",
-  "Start chat",
+  "Start a task",
   "ProtocolLogo",
   "Bittensor task:",
   "Hyperliquid task:",

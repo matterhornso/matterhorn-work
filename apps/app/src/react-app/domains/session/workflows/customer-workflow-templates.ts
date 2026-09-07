@@ -25,6 +25,7 @@ import {
 } from "./protocol-desk-ui";
 
 export type CustomerWorkflowIconHint =
+  | "private_ai"
   | "bittensor"
   | "hyperliquid"
   | "polymarket"
@@ -38,7 +39,7 @@ export type CustomerWorkflowTemplate = {
   name: string;
   summary: string;
   promise: string;
-  category: "bittensor" | "markets" | "wellness" | "decentralized_services" | "future" | "web3";
+  category: "general" | "bittensor" | "markets" | "wellness" | "decentralized_services" | "future" | "web3";
   status: "live" | "beta_ready" | "preview_only" | "planned_not_live" | "workflow_ready" | "blank";
   examplePrompts: string[];
   launch: {
@@ -546,23 +547,23 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   },
   {
     id: "blank_chat_workflow",
-    name: "Chat",
-    summary: "Start a flexible session with the default Matterhorn Agent.",
-    promise: "Open-ended assistance. You choose the goal.",
-    category: "future",
-    status: "blank",
-    examplePrompts: ["What can you do?"],
+    name: "Private AI",
+    summary: "Run a custom workflow with the context and tools you choose.",
+    promise: "A flexible workspace for research, writing, planning, files, and custom tasks.",
+    category: "general",
+    status: "live",
+    examplePrompts: ["Analyze these files", "Draft a project plan", "Turn my notes into a brief"],
     launch: {
-      primaryCta: "Start chat",
+      primaryCta: "Start a task",
       secondaryCta: "Browse templates",
-      defaultPrompt: "What can you do?",
-      handoffContextLabel: "Goal",
+      defaultPrompt: "What would you like to work on?",
+      handoffContextLabel: "Outcome",
       recommendedSurface: "workflow_chat",
     },
     ui: {
-      iconHint: "blank",
+      iconHint: "private_ai",
       accent: "neutral",
-      shortDescription: "Start a flexible chat with the default Matterhorn Agent.",
+      shortDescription: "Custom workflows, files, notes, and everyday tasks.",
     },
     routing: { chatMode: "general", startsSession: true },
     safetyBoundaries: {
@@ -610,15 +611,20 @@ function normalizeWorkflowTemplateCopy(template: CustomerWorkflowTemplate): Cust
 
   return {
     ...template,
-    name: "Chat",
-    summary: "Start a flexible session with the default Matterhorn Agent.",
+    name: "Private AI",
+    summary: "Run a custom workflow with the context and tools you choose.",
+    category: "general",
+    status: "live",
     launch: {
       ...template.launch,
-      primaryCta: "Start chat",
+      primaryCta: "Start a task",
+      defaultPrompt: "What would you like to work on?",
+      handoffContextLabel: "Outcome",
     },
     ui: {
       ...template.ui,
-      shortDescription: "Start a flexible chat with the default Matterhorn Agent.",
+      iconHint: "private_ai",
+      shortDescription: "Custom workflows, files, notes, and everyday tasks.",
     },
   };
 }

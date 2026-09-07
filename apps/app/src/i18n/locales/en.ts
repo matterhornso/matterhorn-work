@@ -29,7 +29,7 @@ export default {
   "app.unknown_error": "Unknown error",
   "blueprint.automation_body": "Start from a reusable workflow or type your own task below.",
   "blueprint.automation_title": "What do you want to automate?",
-  "blueprint.csv_session_assistant": "I can help you start with Bittensor, Hyperliquid, Polymarket, notes, outputs, or a blank Matterhorn chat. What do you want to work on first?",
+  "blueprint.csv_session_assistant": "I can start a Private AI task or help with Bittensor, Hyperliquid, Polymarket, Sui, notes, or outputs. What do you want to work on first?",
   "blueprint.csv_session_title": "Matterhorn desk ideas",
   "blueprint.csv_session_user": "I want to open a protocol desk and run a safe preview task.",
   "blueprint.empty_body": "Choose a desk starter or type directly in the composer.",
