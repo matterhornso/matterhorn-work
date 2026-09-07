@@ -688,8 +688,18 @@ async function startPrimaryDeskTask(page, config, desk) {
     `active ${desk.name} desk session`,
     30_000,
   );
-  const perspectiveSelector = page.getByRole("radiogroup", {
+  const chatOptions = page.getByRole("button", {
+    name: "Chat options",
+    exact: true,
+  });
+  await chatOptions.waitFor({ state: "visible", timeout: 15_000 });
+  await chatOptions.click();
+  const perspectiveSelector = page.getByRole("dialog", {
+    name: "Chat options",
+    exact: true,
+  }).getByRole("radiogroup", {
     name: "Response perspective",
+    exact: true,
   });
   await perspectiveSelector.waitFor({ state: "visible", timeout: 15_000 });
   await perspectiveSelector
@@ -741,6 +751,9 @@ async function verifyReviewedActionChatHandoff(page, config) {
     timeout: 30_000,
   });
   await ensureWorkspaceHomeVisible(page);
+  const protocolDesks = page.getByText("Protocol desks", { exact: true });
+  await protocolDesks.waitFor({ state: "visible", timeout: 20_000 });
+  await protocolDesks.click();
   await clickFirstVisible(
     page.getByTestId("open-hyperliquid-desk"),
     "Open Hyperliquid desk card",
@@ -787,7 +800,7 @@ async function verifyReviewedActionChatHandoff(page, config) {
   const composer = page.getByTestId("session-composer-shell");
   await composer.waitFor({ state: "visible", timeout: 20_000 });
   const editor = composer.getByRole("textbox", {
-    name: /Ask Matterhorn about Bittensor, markets, longevity, files, or workflows/,
+    name: /^Ask about a market, wallet, transaction, or risk/i,
   });
   await editor.waitFor({ state: "visible", timeout: 15_000 });
   const savedDraft = (await editor.innerText()).trim();
@@ -1163,7 +1176,11 @@ async function runSmoke(config) {
             );
           }
           await refreshPage
-            .getByRole("radiogroup", { name: "Response perspective" })
+            .getByRole("button", { name: "Chat options", exact: true })
+            .click();
+          await refreshPage
+            .getByRole("dialog", { name: "Chat options", exact: true })
+            .getByRole("radiogroup", { name: "Response perspective", exact: true })
             .waitFor({ state: "visible", timeout: 20_000 });
           if (refreshPage.url() !== directSessionUrl) {
             throw new Error(
@@ -1539,11 +1556,11 @@ async function runSmoke(config) {
           .getByRole("heading", { name: "Models", exact: true })
           .waitFor({ state: "visible", timeout: 20_000 });
         const availableModels = page.getByRole("heading", {
-          name: "Available models",
+          name: "Choose a model",
           exact: true,
         });
         const modelProviders = page.getByRole("heading", {
-          name: "Model providers",
+          name: "Provider connection",
           exact: true,
         });
         const addCudosKey = page.getByRole("button", {
@@ -1559,10 +1576,7 @@ async function runSmoke(config) {
 
         if (await availableModels.isVisible().catch(() => false)) {
           await page
-            .getByText("Connected model catalog", { exact: true })
-            .waitFor({ state: "visible", timeout: 20_000 });
-          await page
-            .getByRole("button", { name: "Browse models", exact: true })
+            .getByRole("button", { name: "Choose model", exact: true })
             .click();
           const modelDialog = page.getByRole("dialog", { name: "Models" });
           await modelDialog.waitFor({ state: "visible", timeout: 20_000 });

@@ -30,6 +30,7 @@ assert.ok(
     script.includes('session.revert = { messageID }') &&
     script.includes("currentMessages.slice(0, revertIndex + 1)") &&
     script.includes("delete session.revert") &&
+    script.includes('action === "abort"') &&
     script.includes('action === "prompt_async"') &&
     script.includes('action === "todo"'),
   "generated-media smoke launcher should include a fake OpenCode engine for browser chat sessions, response retry, and title updates",
@@ -71,8 +72,15 @@ assert.ok(
 assert.ok(
   script.includes('MATTERHORN_COWORKER_MODE: "internal"') &&
     script.includes('MATTERHORN_COWORKER_POLICY_VERSION: "generated-media-smoke-v1"') &&
+    script.includes('MATTERHORN_COWORKER_INTEGRITY_SECRET: "generated-media-smoke-integrity-secret-v1"') &&
     script.includes("MATTERHORN_COWORKER_DB:"),
   "generated-media smoke launcher should expose an isolated internal coworker runtime for full-surface browser QA",
+);
+assert.ok(
+  script.includes("MATTERHORN_GUARDED_RUNTIME_DB:") &&
+    script.includes('MATTERHORN_AGENT_RUNTIME_SECRET: "generated-media-smoke-runtime-secret-v1"') &&
+    script.includes('MATTERHORN_CAPABILITY_SIGNING_SECRET: "generated-media-smoke-capability-secret-v1"'),
+  "generated-media smoke launcher should isolate and authenticate guarded runtime state",
 );
 assert.ok(
   script.includes('smokePlanId !== "max" || imageLimit !== null') &&

@@ -312,7 +312,7 @@ function startFakeOpencode() {
         time: { created: now, completed: now },
         parentID: parentId,
         modelID: "smoke-model",
-        providerID: "matterhorn-smoke",
+        providerID: "local",
         mode: "work",
         agent: "matterhorn",
         path: { cwd: workspaceRoot, root: workspaceRoot },
@@ -395,7 +395,7 @@ function startFakeOpencode() {
         },
       },
       {
-        id: "matterhorn-smoke",
+        id: "local",
         name: "Matterhorn smoke provider",
         source: "config",
         models: {
@@ -405,9 +405,9 @@ function startFakeOpencode() {
     ],
     default: {
       opencode: "big-pickle",
-      "matterhorn-smoke": "smoke-model",
+      local: "smoke-model",
     },
-    connected: ["opencode", "matterhorn-smoke"],
+    connected: ["opencode", "local"],
   };
   const mcpStatuses = {
     wallet: { status: "connected" },
@@ -584,6 +584,11 @@ function startFakeOpencode() {
         return;
       }
 
+      if (action === "abort" && request.method === "POST") {
+        json(response, 200, { ok: true });
+        return;
+      }
+
       if (action === "prompt_async" && request.method === "POST") {
         const body = await readJsonBody(request);
         const now = Math.floor(Date.now() / 1000);
@@ -620,7 +625,7 @@ function startFakeOpencode() {
               time: { created: now },
               agent: "matterhorn",
               model: {
-                providerID: "matterhorn-smoke",
+                providerID: "local",
                 modelID: "smoke-model",
               },
             },
@@ -819,10 +824,14 @@ async function main() {
       ...process.env,
       OPENWORK_DEV_MODE: "1",
       MATTERHORN_WORK_REQUEST_RATE_LIMIT_MAX: requestRateLimitMax,
+      MATTERHORN_GUARDED_RUNTIME_DB: path.join(os.tmpdir(), `matterhorn-generated-media-smoke-guarded-${process.pid}.db`),
+      MATTERHORN_AGENT_RUNTIME_SECRET: "generated-media-smoke-runtime-secret-v1",
+      MATTERHORN_CAPABILITY_SIGNING_SECRET: "generated-media-smoke-capability-secret-v1",
       MATTERHORN_BILLING_CURRENT_PLAN: "max",
       MATTERHORN_BILLING_ACCOUNT_PATH: path.join(os.tmpdir(), `matterhorn-generated-media-smoke-billing-${process.pid}.json`),
       MATTERHORN_COWORKER_MODE: "internal",
       MATTERHORN_COWORKER_POLICY_VERSION: "generated-media-smoke-v1",
+      MATTERHORN_COWORKER_INTEGRITY_SECRET: "generated-media-smoke-integrity-secret-v1",
       MATTERHORN_COWORKER_DB: path.join(os.tmpdir(), `matterhorn-generated-media-smoke-coworkers-${process.pid}.db`),
       MATTERHORN_IMAGE_PROVIDER: "mock",
       MATTERHORN_WALRUS_PUBLISHER_URL: fakeWalrusUrl,
