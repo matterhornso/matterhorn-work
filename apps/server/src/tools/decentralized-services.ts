@@ -333,7 +333,7 @@ export function buildDecentralizedServicesCapabilityCatalog(input: {
     nextBuildPhases: [
       "Add preview-only provider adapters with cost and consequence text.",
       "Add explicit confirmation and external-provider handoff packets.",
-      "Add public receipt import and rollback evidence.",
+      "Add public transaction receipt import and rollback records.",
       "Promote a provider only after security review and customer QA.",
     ],
     references: [

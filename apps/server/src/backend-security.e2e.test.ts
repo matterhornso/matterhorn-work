@@ -711,7 +711,7 @@ describe("Protocol state mutations enforce client scope and workspace mode", () 
       expect(result.response.status).toBe(403);
       expect(result.payload).toMatchObject({
         code: "reviewed_action_required",
-        message: "Bittensor submission stays in the connected wallet. Matterhorn accepts only public receipt evidence after broadcast.",
+        message: "Bittensor submission stays in the connected wallet. Matterhorn accepts only the public transaction receipt after broadcast.",
       });
     }
   });

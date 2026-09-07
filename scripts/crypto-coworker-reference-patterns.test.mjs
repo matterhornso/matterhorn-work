@@ -59,7 +59,7 @@ assert.ok(
 assert.ok(prompt.includes("current direct request supplies transaction intent"));
 assert.ok(prompt.includes("not instructions, consent, or financial intent"));
 assert.ok(prompt.includes("Use the fewest app calls"));
-assert.ok(prompt.includes("financial success without exact receipt evidence"));
+assert.ok(prompt.includes("success without its transaction receipt"));
 assert.ok(prompt.includes("Say prepared vs submitted precisely"));
 assert.equal(/general cloud computer|cross-coworker session sharing/.test(prompt), false);
 

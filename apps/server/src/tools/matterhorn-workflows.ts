@@ -652,7 +652,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     expectedArtifacts: [
       { id: "wallet_card", name: "Sui Wallet Card", mimeType: "application/json", public: true },
       { id: "transfer_preview", name: "Transfer Preview", mimeType: "application/json", public: true },
-      { id: "receipt_evidence", name: "Receipt Evidence", mimeType: "application/json", public: true },
+      { id: "receipt_evidence", name: "Transaction Receipt", mimeType: "application/json", public: true },
     ],
     requiredContext: [
       {
@@ -678,7 +678,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     handoffReceiptSupport: {
       supported: true,
       types: ["transfer_preview", "receipt_evidence"],
-      description: "Produces a non-custodial transfer preview and stores only public receipt evidence after wallet submission.",
+      description: "Produces a non-custodial transfer preview and stores only the public transaction receipt after wallet submission.",
     },
     serviceHooks: [{ hook: "sui", status: "preview_only" }],
     chatMode: "crypto chat",
@@ -745,7 +745,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     handoffReceiptSupport: {
       supported: true,
       types: ["service_plan", "content_calendar"],
-      description: "Produces a public/redacted service plan and workflow evidence bundle.",
+      description: "Produces a public, redacted service plan and workflow verification report.",
     },
     serviceHooks: [
       { hook: "email", status: "planned_not_live" },

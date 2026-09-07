@@ -2420,7 +2420,7 @@ export function auditBittensorSubnetAdapterRuntimeApprovals(): BittensorSubnetAd
     ),
     nextActions: activeCount
       ? ["Use approvals only for the exact reviewed canary request SHA-256.", "Remove approvals after canary completion or expiry."]
-      : ["Run preview, review evidence, and add one short-lived exact request SHA-256 approval if a real canary is explicitly approved."],
+      : ["Run the preview, review the results, and add one short-lived exact request SHA-256 approval if a real canary is explicitly approved."],
   };
 }
 
@@ -2475,7 +2475,7 @@ export function auditBittensorSubnetAdapterCanaryGate(): BittensorSubnetAdapterC
     ]
     : status === "preview_ready"
       ? [
-        "Confirm the preview request hash, provider identity, evidence review, and rollback owner before setting BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1.",
+        "Confirm the preview request hash, provider identity, verification review, and rollback owner before setting BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1.",
         "Keep general real subnet service execution disabled until the canary report is accepted.",
       ]
       : status === "blocked"
@@ -2541,7 +2541,7 @@ export function buildBittensorSubnetAdapterRuntimeApprovalTemplate(input: {
     approvedBy: input.approvedBy?.trim() || "operator",
     approvedAt: generatedAt,
     expiresAt,
-    reason: input.reason?.trim() || "Reviewed canary fixture, evidence bundle, and rollback plan.",
+    reason: input.reason?.trim() || "Reviewed canary fixture, verification report, and rollback plan.",
   };
   return {
     kind: "bittensor_subnet_adapter_runtime_approval_template",
@@ -2557,7 +2557,7 @@ export function buildBittensorSubnetAdapterRuntimeApprovalTemplate(input: {
       "The request SHA-256 must match the preview card exactly.",
     ],
     nextActions: [
-      "Confirm evidence review, provider identity, canary fixture, and rollback owner before using this template.",
+      "Confirm the verification review, provider identity, canary fixture, and rollback owner before using this template.",
       "Set BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1 only for the reviewed canary window.",
       "Set BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1 only while invoking the reviewed canary request.",
       "Audit approvals after the canary and remove stale entries.",
@@ -3329,7 +3329,7 @@ function buildBittensorSubnetAdapterEvidencePreflight(input: {
     result: {
       mode: "mock",
       requestSha256: "f".repeat(64),
-      output: "Evidence bundle preflight sample output.",
+      output: "Verification report preflight sample output.",
       warnings: [],
     },
   });
@@ -3359,7 +3359,7 @@ export async function buildBittensorSubnetAdapterEvidenceBundle(input: {
     },
     {
       id: "preflight_packet",
-      label: "Manifest and sample result preflight packet with readiness for conformance and canary evidence",
+      label: "Manifest and sample result preflight report with readiness for conformance and canary testing",
       source: "preflight",
       requiredBeforeRealCanary: true,
     },
@@ -3392,13 +3392,13 @@ export async function buildBittensorSubnetAdapterEvidenceBundle(input: {
       preflight.errors,
       canaryReview.warnings,
       [
-        "This bundle is evidence for review only; it does not authorize real subnet service execution.",
-        "Do not paste credential values, signing material, wallet recovery material, host tokens, or private user data into evidence notes.",
+        "This report is for review only; it does not authorize real subnet service execution.",
+        "Do not paste credential values, signing material, wallet recovery material, host tokens, or private user data into review notes.",
       ],
     ),
     nextActions: [
-      "Attach the preflight packet to the evidence bundle before any mock dry-run or real canary review.",
-      "Collect evidence for every required artifact before any real HTTPS canary.",
+      "Attach the preflight report to the verification report before any mock dry-run or real canary review.",
+      "Collect a verification result for every required artifact before any real HTTPS canary.",
       "Run mock dry-run and metadata conformance before manual real-adapter review.",
       "Require exact preview request SHA-256 confirmation for any future canary invocation.",
     ],
@@ -3431,11 +3431,11 @@ export function renderBittensorSubnetAdapterEvidenceMarkdown(bundle: BittensorSu
   const reviewItems = bundle.canaryReview.reviewItems.map((item) => {
     const required = item.required ? "required" : "optional";
     const blocker = item.blockerIfMissing ? "blocker if missing" : "not a blocker";
-    return `- ${sanitizeEvidenceMarkdownText(item.label)}: ${required}, ${blocker}. Evidence: ${sanitizeEvidenceMarkdownText(item.evidence)}`;
+    return `- ${sanitizeEvidenceMarkdownText(item.label)}: ${required}, ${blocker}. Verification: ${sanitizeEvidenceMarkdownText(item.evidence)}`;
   });
 
   return [
-    "# Bittensor Subnet Adapter Evidence Export",
+    "# Bittensor Subnet Adapter Verification Report",
     "",
     `Generated: ${sanitizeEvidenceMarkdownText(bundle.generatedAt)}`,
     `Adapter: ${sanitizeEvidenceMarkdownText(adapter)}`,
@@ -3446,7 +3446,7 @@ export function renderBittensorSubnetAdapterEvidenceMarkdown(bundle: BittensorSu
     markdownBullet(`Launch gate: ${bundle.launchGate.status}`),
     markdownBullet(`Preflight: ${bundle.preflight.status}`),
     markdownBullet(`Preflight ready for conformance: ${bundle.preflight.readyForConformance ? "yes" : "no"}`),
-    markdownBullet(`Preflight ready for canary evidence: ${bundle.preflight.readyForCanaryEvidence ? "yes" : "no"}`),
+    markdownBullet(`Preflight ready for canary testing: ${bundle.preflight.readyForCanaryEvidence ? "yes" : "no"}`),
     markdownBullet(`Ready mock adapters: ${bundle.launchGate.readyMockCount}`),
     markdownBullet(`Ready real adapters: ${bundle.launchGate.readyRealCount}`),
     markdownBullet(`Blocked adapters: ${bundle.launchGate.blockedCount}`),
@@ -3467,7 +3467,7 @@ export function renderBittensorSubnetAdapterEvidenceMarkdown(bundle: BittensorSu
     ...bundle.nextActions.map(markdownBullet),
     "",
     "## Safety Boundary",
-    "- This export is evidence for review only. It does not authorize real subnet service execution.",
+    "- This report is for review only. It does not authorize real subnet service execution.",
     "- Do not include credential values, recovery phrases, signing material, wallet backup files, host tokens, or private user data in review notes.",
     "- A future real canary still requires a separate explicit preview, exact request SHA-256 confirmation, and operator approval.",
     "",
@@ -3510,7 +3510,7 @@ export async function reviewBittensorSubnetAdapterEvidence(input: {
       ? ["Preflight: manifest validation is not ready for endpoint conformance."]
       : []),
     ...(!bundle.preflight.readyForCanaryEvidence
-      ? ["Preflight: validated adapter result evidence is incomplete."]
+      ? ["Preflight: the validated adapter result is incomplete."]
       : []),
     ...bundle.launchGate.requirements
       .filter((requirement) => requirement.status === "blocked" || requirement.status === "not_configured")
@@ -3532,12 +3532,12 @@ export async function reviewBittensorSubnetAdapterEvidence(input: {
     ? `Run the Bittensor mock adapter dry-run harness${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`} and summarize failures.`
     : status === "manual_real_canary_review_required"
       ? `Prepare a manual real-adapter canary review packet${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`} without invoking the subnet.`
-      : `Help me unblock the Bittensor adapter evidence review${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`}.`;
+      : `Help me unblock the Bittensor adapter verification review${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`}.`;
   const summary = status === "mock_dry_run_ready"
-    ? "Mock adapter evidence is ready for the dry-run harness. Real subnet execution remains disabled."
+    ? "Mock adapter results are ready for the dry-run harness. Real subnet execution remains disabled."
     : status === "manual_real_canary_review_required"
       ? "A real adapter needs manual review before any canary. This decision does not authorize invocation."
-      : "Adapter evidence is blocked or incomplete. Resolve the listed reasons before any canary.";
+      : "Adapter verification is blocked or incomplete. Resolve the listed reasons before any canary.";
 
   return {
     kind: "bittensor_subnet_adapter_evidence_review",
@@ -3550,10 +3550,10 @@ export async function reviewBittensorSubnetAdapterEvidence(input: {
     launchGateStatus: bundle.launchGate.status,
     onboardingStatus: bundle.onboarding.status,
     allowedNextActions: status === "mock_dry_run_ready"
-      ? ["Run mock dry-run only.", "Keep real adapters disabled.", "Export evidence markdown for human review."]
+      ? ["Run mock dry-run only.", "Keep real adapters disabled.", "Export the verification report for human review."]
       : status === "manual_real_canary_review_required"
-        ? ["Export evidence markdown.", "Confirm provider identity and rollback owner.", "Do not invoke until exact preview request SHA-256 is separately confirmed."]
-        : ["Resolve blocked launch-gate and onboarding reasons.", "Run doctor, conformance, and evidence export again.", "Do not invoke any subnet adapter."],
+        ? ["Export the verification report.", "Confirm provider identity and rollback owner.", "Do not invoke until exact preview request SHA-256 is separately confirmed."]
+        : ["Resolve blocked launch-gate and onboarding reasons.", "Run doctor, conformance, and verification again.", "Do not invoke any subnet adapter."],
     blockedReasons: blockedReasons.length ? uniqueWarnings(blockedReasons) : [],
     warnings: uniqueWarnings(
       bundle.exportWarnings,
@@ -3587,7 +3587,7 @@ export async function buildBittensorSubnetAdapterCanaryOperatorPacket(input: {
     evidenceExport.warnings,
     evidenceReview.warnings,
     providerRegistry.warnings,
-    evidenceReview.status === "blocked" ? ["Evidence review is blocked. Resolve blockers before generating an approval template."] : [],
+    evidenceReview.status === "blocked" ? ["Verification review is blocked. Resolve blockers before generating an approval template."] : [],
     evidenceReview.status === "mock_dry_run_ready" ? ["Mock dry-run is ready, but this is not enough to approve a real subnet adapter canary."] : [],
     requestSha256 && !hashIsValid ? ["The preview request SHA-256 is malformed; approval templates require a 64-character SHA-256 hex string."] : [],
     serviceAdapter === "universal" || serviceAdapter === "unsupported" ? ["A direct subnet service adapter kind is required before a real canary approval can be generated."] : [],
@@ -3636,8 +3636,8 @@ export async function buildBittensorSubnetAdapterCanaryOperatorPacket(input: {
           "Do not invoke any real subnet adapter until the packet includes an approval template and the operator confirms it.",
         ]
         : [
-          "Resolve blocked evidence review items before requesting a real adapter approval template.",
-          "Continue with mock dry-runs, conformance, and evidence review; do not invoke real subnet services.",
+          "Resolve blocked verification items before requesting a real adapter approval template.",
+          "Continue with mock dry-runs, conformance, and verification review; do not invoke real subnet services.",
         ],
   };
 }
@@ -3651,7 +3651,7 @@ export function renderBittensorSubnetAdapterCanaryPacketMarkdown(packet: Bittens
     `Adapter: ${sanitizeEvidenceMarkdownText(packet.requested.adapter ?? "not specified")}`,
     `Netuid: ${sanitizeEvidenceMarkdownText(packet.requested.netuid ?? "not specified")}`,
     `Packet status: ${sanitizeEvidenceMarkdownText(packet.status)}`,
-    `Evidence review: ${sanitizeEvidenceMarkdownText(packet.evidenceReview.status)}`,
+    `Verification review: ${sanitizeEvidenceMarkdownText(packet.evidenceReview.status)}`,
     `Launch gate: ${sanitizeEvidenceMarkdownText(packet.evidenceReview.launchGateStatus)}`,
     `Preview request SHA-256 prefix: ${sanitizeEvidenceMarkdownText(packet.previewRequestSha256Prefix ?? "not included")}`,
     "",
@@ -3663,9 +3663,9 @@ export function renderBittensorSubnetAdapterCanaryPacketMarkdown(packet: Bittens
     "## Approval Template",
     approval
       ? `- Available for operator copy in Matterhorn UI/MCP card only. Env key: ${approval.env.key}. Full env value intentionally omitted from this markdown export.`
-      : "- Not included. Evidence is blocked, only mock-ready, missing a valid preview hash, or missing a direct adapter kind.",
+      : "- Not included. Verification is blocked, only mock-ready, missing a valid preview hash, or missing a direct adapter kind.",
     "",
-    "## Evidence Export Summary",
+    "## Verification Report Summary",
     markdownBullet(`Onboarding: ${packet.evidenceExport.summary.onboardingStatus}`),
     markdownBullet(`Launch gate: ${packet.evidenceExport.summary.launchGateStatus}`),
     markdownBullet(`Required artifacts: ${packet.evidenceExport.summary.requiredArtifactCount}`),
@@ -3804,17 +3804,17 @@ export function buildBittensorSubnetAdapterCanaryOutcomeReport(input: {
     !actualHashValid ? ["Adapter result did not include a valid requestSha256 value."] : [],
     hashMismatch ? ["Canary outcome request SHA-256 does not match the reviewed preview request SHA-256."] : [],
     !supported ? ["Adapter invocation did not report a supported successful result."] : [],
-    status === "warning" && canaryGate.status !== "canary_armed" ? ["Canary gate is not armed; treat this as mock or rehearsal evidence only."] : [],
+    status === "warning" && canaryGate.status !== "canary_armed" ? ["Canary gate is not armed; treat this as a mock or rehearsal result only."] : [],
   );
   const nextActions = status === "pass"
     ? [
       "Archive this sanitized report with the operator canary notes.",
       "Remove short-lived approvals after the canary window closes.",
-      "Review provider and rollback evidence before promoting the adapter beyond canary.",
+      "Review provider checks and rollback readiness before promoting the adapter beyond canary.",
     ]
     : status === "warning"
       ? [
-        "Keep this as rehearsal evidence until the canary gate and provider evidence are complete.",
+        "Keep this as a rehearsal result until the canary gate and provider review are complete.",
         "Confirm the exact preview request SHA-256 and adapter result envelope before any real canary.",
       ]
       : status === "fail"
@@ -4320,8 +4320,8 @@ export function validateBittensorSubnetAdapterResult(resultInput: unknown, optio
     errors,
     warnings,
     nextActions: status === "fail"
-      ? ["Fix result envelope errors before using this adapter output in chat or canary evidence."]
-      : ["Attach this validation to the canary evidence bundle before any real adapter review.", "Keep response limits and redaction checks enabled for live invocations."],
+      ? ["Fix result envelope errors before using this adapter output in chat or canary testing."]
+      : ["Attach this validation to the canary verification report before any real adapter review.", "Keep response limits and redaction checks enabled for live invocations."],
   };
 }
 
@@ -4343,7 +4343,7 @@ export function buildBittensorSubnetAdapterPreflightPacket(input: {
   const warnings = uniqueWarnings(
     manifestValidation.warnings,
     resultValidation?.warnings ?? [],
-    resultValidation ? [] : ["No adapter result sample was supplied; canary evidence is incomplete."],
+    resultValidation ? [] : ["No adapter result sample was supplied; canary verification is incomplete."],
   );
   const readyForConformance = manifestValidation.status !== "fail";
   const readyForCanaryEvidence = readyForConformance && Boolean(resultValidation) && resultValidation?.status !== "fail";
@@ -4363,10 +4363,10 @@ export function buildBittensorSubnetAdapterPreflightPacket(input: {
     errors,
     warnings,
     nextActions: errors.length
-      ? ["Fix manifest/result validation errors before endpoint conformance or canary evidence review."]
+      ? ["Fix manifest/result validation errors before endpoint conformance or canary verification review."]
       : readyForCanaryEvidence
-        ? ["Run endpoint metadata conformance, then attach this preflight packet to the canary evidence bundle."]
-        : ["Add a validated adapter result sample before canary evidence review.", "Run endpoint metadata conformance only after manifest validation remains non-failing."],
+        ? ["Run endpoint metadata conformance, then attach this preflight report to the canary verification report."]
+        : ["Add a validated adapter result sample before canary verification review.", "Run endpoint metadata conformance only after manifest validation remains non-failing."],
   };
 }
 
@@ -4377,7 +4377,7 @@ function renderBittensorSubnetAdapterPreflightPacketMarkdown(packet: BittensorSu
     `- Checked: ${packet.checkedAt}`,
     `- Status: ${packet.status}`,
     `- Ready for conformance: ${packet.readyForConformance ? "yes" : "no"}`,
-    `- Ready for canary evidence: ${packet.readyForCanaryEvidence ? "yes" : "no"}`,
+    `- Ready for canary testing: ${packet.readyForCanaryEvidence ? "yes" : "no"}`,
     "",
     "## Manifest Validation",
     `- Status: ${packet.manifestValidation.status}`,
@@ -4480,7 +4480,7 @@ function subnetAdapterRuntimeGateBlockers(adapter: BittensorConfiguredSubnetAdap
   const endpoint = summarizeSubnetAdapterEndpoint(adapter.endpoint);
   const auth = validateSubnetAdapterAuth(adapter.requiredAuth, adapter.authEnv ?? null);
   const realAdapterBlocked = endpoint.mode !== "mock" && !realSubnetAdaptersEnabled()
-    ? "Real subnet service adapters are disabled until BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1 after evidence review and operator approval."
+    ? "Real subnet service adapters are disabled until BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1 after verification review and operator approval."
     : null;
   const canaryAcknowledgementBlocked = endpoint.mode !== "mock" && requestSha256 && !realSubnetAdapterCanaryAcknowledged()
     ? "Real subnet service adapter invocation requires BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1 for the reviewed canary window."
@@ -4905,7 +4905,7 @@ export async function buildBittensorSubnetAdapterDryRunExport(input: {
     markdown: renderBittensorSubnetAdapterDryRunMarkdown(report),
     warnings: uniqueWarnings(
       report.warnings,
-      ["Dry-run exports are mock-adapter evidence only and do not authorize real subnet service execution."],
+      ["Dry-run exports are mock-adapter test results only and do not authorize real subnet service execution."],
     ),
   };
 }
@@ -5239,7 +5239,7 @@ export async function buildBittensorSubnetAdapterConformanceExport(input: {
     markdown: renderBittensorSubnetAdapterConformanceMarkdown(report),
     warnings: uniqueWarnings(
       report.warnings,
-      ["Conformance exports are metadata evidence only and do not authorize real subnet service execution."],
+      ["Conformance exports are metadata verification results only and do not authorize real subnet service execution."],
     ),
   };
 }
@@ -5256,8 +5256,8 @@ function renderBittensorSubnetAdapterOperatorHandoffMarkdown(handoff: Omit<Bitte
     `Status: ${sanitizeEvidenceMarkdownText(handoff.status)}`,
     "",
     "## Gate Summary",
-    markdownBullet(`Evidence review: ${handoff.evidenceReview.status}`),
-    markdownBullet(`Evidence export warnings: ${handoff.evidenceExport.summary.warningCount}`),
+    markdownBullet(`Verification review: ${handoff.evidenceReview.status}`),
+    markdownBullet(`Verification report warnings: ${handoff.evidenceExport.summary.warningCount}`),
     markdownBullet(`Conformance: ${handoff.conformanceExport.status}`),
     markdownBullet(`Conformance passed: ${handoff.conformanceExport.summary.passed}/${handoff.conformanceExport.summary.total}`),
     markdownBullet(`Dry-run: ${handoff.dryRunExport.status}`),
@@ -5266,7 +5266,7 @@ function renderBittensorSubnetAdapterOperatorHandoffMarkdown(handoff: Omit<Bitte
     markdownBullet("Matching reviewed providers: " + handoff.providerRegistry.matchingReadyProviderCount),
     "",
     "## Blockers",
-    ...(handoff.evidenceReview.blockedReasons.length ? handoff.evidenceReview.blockedReasons.map(markdownBullet) : ["- None from evidence review"]),
+    ...(handoff.evidenceReview.blockedReasons.length ? handoff.evidenceReview.blockedReasons.map(markdownBullet) : ["- None from verification review"]),
     "",
     "## Warnings",
     ...(handoff.warnings.length ? handoff.warnings.map(markdownBullet) : ["- None"]),
@@ -5275,7 +5275,7 @@ function renderBittensorSubnetAdapterOperatorHandoffMarkdown(handoff: Omit<Bitte
     ...(handoff.nextActions.length ? handoff.nextActions.map(markdownBullet) : ["- None"]),
     "",
     "## Subreports",
-    "- Export individual evidence, conformance, and dry-run markdown when the reviewer needs full detail.",
+    "- Export individual verification, conformance, and dry-run reports when the reviewer needs full detail.",
     "- This handoff intentionally summarizes subreports instead of embedding raw metadata, task text, adapter output, endpoint URLs, credentials, or full request hashes.",
     "",
     "## Safety Boundary",
@@ -5310,17 +5310,17 @@ export async function buildBittensorSubnetAdapterOperatorHandoff(input: {
       : "mock_rehearsal_ready";
   const nextActions = status === "blocked"
     ? [
-      "Resolve evidence, conformance, or dry-run blockers before any adapter launch work continues.",
-      "Export individual evidence/conformance/dry-run reports for detailed reviewer notes.",
+      "Resolve verification, conformance, or dry-run blockers before any adapter launch work continues.",
+      "Export individual verification, conformance, and dry-run reports for detailed reviewer notes.",
       "Do not invoke real subnet services.",
     ]
     : status === "mock_rehearsal_ready"
       ? [
-        "Run or archive the mock dry-run evidence before any real adapter canary review.",
+        "Run or archive the mock dry-run results before any real adapter canary review.",
         "Keep real subnet adapters disabled until manual provider/canary/rollback review passes.",
       ]
       : [
-        "Export individual evidence/conformance/dry-run reports for human review.",
+        "Export individual verification, conformance, and dry-run reports for human review.",
         "Prepare a real-adapter canary packet only after exact preview request SHA-256 confirmation.",
       ];
   const providerRegistry = summarizeBittensorSubnetAdapterProviderRegistry({ adapter: evidenceReview.requested.adapter, netuid: evidenceReview.requested.netuid });
@@ -5330,7 +5330,7 @@ export async function buildBittensorSubnetAdapterOperatorHandoff(input: {
     conformanceExport.warnings,
     dryRunExport.warnings,
     providerRegistry.warnings,
-    ["This handoff is evidence only and does not authorize real subnet service execution."],
+    ["This handoff is a review record only and does not authorize real subnet service execution."],
   );
   const base = {
     kind: "bittensor_subnet_adapter_operator_handoff" as const,
@@ -6855,7 +6855,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     const providerRegistry = getBittensorSubnetAdapterProviderRegistry();
     return {
       plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_provider_registry"] },
-      responseText: `Bittensor adapter provider registry is ${providerRegistry.status.replace(/_/g, " ")} with ${providerRegistry.readyForCanaryCount} reviewed canary-ready provider(s). This is read-only evidence and does not configure or invoke a subnet service.`,
+      responseText: `Bittensor adapter provider registry is ${providerRegistry.status.replace(/_/g, " ")} with ${providerRegistry.readyForCanaryCount} reviewed canary-ready provider(s). This is a read-only provider record and does not configure or invoke a subnet service.`,
       cards: [buildBittensorAdapterProviderRegistryCard(providerRegistry)],
       data: { providerRegistry },
       warnings: uniqueWarnings(warnings, providerRegistry.warnings),
@@ -6879,7 +6879,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     const card = buildBittensorAdapterMarketplaceCard(marketplace);
     return {
       plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_marketplace"] },
-      responseText: `Built a redacted Bittensor adapter marketplace markdown export with ${marketplaceExport.summary.total} entr${marketplaceExport.summary.total === 1 ? "y" : "ies"}. This is evidence only; it does not invoke or authorize real subnet service execution.`,
+      responseText: `Built a redacted Bittensor adapter marketplace report with ${marketplaceExport.summary.total} entr${marketplaceExport.summary.total === 1 ? "y" : "ies"}. This is a review report only; it does not invoke or authorize real subnet service execution.`,
       cards: [{
         ...card,
         actions: [
@@ -6911,7 +6911,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     const card = buildBittensorAdapterRoadmapCard(roadmap);
     return {
       plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_roadmap"] },
-      responseText: `Built a redacted Bittensor adapter roadmap markdown export with ${roadmapExport.summary.recommendationCount} recommendation${roadmapExport.summary.recommendationCount === 1 ? "" : "s"}. This is planning evidence only; it does not configure, invoke, approve, sign, or broadcast anything.`,
+      responseText: `Built a redacted Bittensor adapter roadmap report with ${roadmapExport.summary.recommendationCount} recommendation${roadmapExport.summary.recommendationCount === 1 ? "" : "s"}. This is a planning report only; it does not configure, invoke, approve, sign, or broadcast anything.`,
       cards: [{
         ...card,
         actions: [
@@ -6938,7 +6938,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     });
     return {
       plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_roadmap"] },
-      responseText: `Built a Bittensor adapter roadmap with ${roadmap.recommendations.length} recommendation${roadmap.recommendations.length === 1 ? "" : "s"}. This is planning evidence only; it does not configure, invoke, approve, sign, or broadcast anything.`,
+      responseText: `Built a Bittensor adapter roadmap with ${roadmap.recommendations.length} recommendation${roadmap.recommendations.length === 1 ? "" : "s"}. This is a planning report only; it does not configure, invoke, approve, sign, or broadcast anything.`,
       cards: [buildBittensorAdapterRoadmapCard(roadmap)],
       data: { roadmap },
       warnings: uniqueWarnings(warnings, roadmap.warnings),
@@ -6956,7 +6956,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     });
     return {
       plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_marketplace"] },
-      responseText: `Found ${marketplace.total} Bittensor subnet adapter marketplace entr${marketplace.total === 1 ? "y" : "ies"}. This is evidence only; it does not invoke or authorize real subnet service execution.`,
+      responseText: `Found ${marketplace.total} Bittensor subnet adapter marketplace entr${marketplace.total === 1 ? "y" : "ies"}. This is a read-only listing; it does not invoke or authorize real subnet service execution.`,
       cards: [buildBittensorAdapterMarketplaceCard(marketplace)],
       data: { marketplace },
       warnings: uniqueWarnings(warnings, marketplace.warnings),
@@ -6981,7 +6981,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     });
     return {
       plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_operator_handoff"] },
-      responseText: `Built a ${handoff.status.replace(/_/g, " ")} Bittensor adapter handoff for subnet ${netuid}. This is evidence only; it does not authorize real subnet service execution.`,
+      responseText: `Built a ${handoff.status.replace(/_/g, " ")} Bittensor adapter handoff for subnet ${netuid}. This is a review record only; it does not authorize real subnet service execution.`,
       cards: [buildBittensorAdapterOperatorHandoffCard(handoff)],
       data: { handoff },
       warnings: uniqueWarnings(warnings, handoff.warnings),
@@ -8036,7 +8036,7 @@ function nextActionsForAdapterMarketplaceEntry(
   }
   if (entryStatus === "manual_review_required") {
     return [
-      `Review conformance, evidence, dry-run, and canary packets for subnet ${capability.netuid}.`,
+      `Review conformance, verification, dry-run, and canary reports for subnet ${capability.netuid}.`,
       "Require exact request-hash approval before any real adapter invocation.",
       "Confirm rollback, rate limits, auth scope, and provider terms before enabling a real adapter.",
     ];
@@ -8140,7 +8140,7 @@ export async function listBittensorSubnetAdapterMarketplace(input: {
     ...(doctor.warnings ?? []),
     ...(summary.blocked ? ["Some configured subnet service adapters are blocked and must not be invoked."] : []),
     ...(summary.mockReady + summary.manualReviewRequired ? [] : ["No configured subnet service adapter is ready for mock rehearsal or manual review."]),
-    "Marketplace status is read-only evidence; it does not authorize real subnet service execution.",
+    "Marketplace status is a read-only listing; it does not authorize real subnet service execution.",
   ];
   const nextActions = [
     ...(summary.blocked ? ["Fix blocked adapter doctor entries first."] : []),
@@ -8202,7 +8202,7 @@ export async function exportBittensorSubnetAdapterMarketplace(input: {
     ]),
     "## Safety",
     "",
-    "- This export is evidence only and does not authorize or invoke subnet services.",
+    "- This report is for review only and does not authorize or invoke subnet services.",
     "- It intentionally omits endpoint URLs, credential values, auth environment names, raw task text, wallet data, signing payloads, and full request hashes.",
     "- Real subnet service invocation still requires preview, exact request SHA-256 confirmation, short-lived approval, and explicit operator/user confirmation.",
     "",
@@ -8269,7 +8269,7 @@ export async function planBittensorSubnetAdapterRoadmap(input: {
       : statusCounts.needs_adapter
         ? `${statusCounts.needs_adapter} subnet${statusCounts.needs_adapter === 1 ? "" : "s"} would benefit from a ${serviceAdapter.replace(/_/g, " ")} adapter.`
         : statusCounts.mock_ready
-          ? `${statusCounts.mock_ready} ${serviceAdapter.replace(/_/g, " ")} adapter entr${statusCounts.mock_ready === 1 ? "y is" : "ies are"} mock-ready and should move through evidence handoff.`
+          ? `${statusCounts.mock_ready} ${serviceAdapter.replace(/_/g, " ")} adapter entr${statusCounts.mock_ready === 1 ? "y is" : "ies are"} mock-ready and should move through verification review.`
           : statusCounts.manual_review_required
             ? `${statusCounts.manual_review_required} ${serviceAdapter.replace(/_/g, " ")} adapter entr${statusCounts.manual_review_required === 1 ? "y needs" : "ies need"} manual canary review.`
             : `No immediate ${serviceAdapter.replace(/_/g, " ")} adapter work is visible in the current marketplace slice.`;
@@ -8281,7 +8281,7 @@ export async function planBittensorSubnetAdapterRoadmap(input: {
       rationale,
       nextPrompt,
       warnings: [
-        "Roadmap is planning evidence only and does not configure, invoke, or approve subnet services.",
+        "Roadmap is a planning report only and does not configure, invoke, or approve subnet services.",
         ...(entries.some((entry) => entry.status === "blocked") ? ["Blocked adapter entries must be fixed before dry-run, handoff, or canary review."] : []),
       ],
     };
@@ -8298,7 +8298,7 @@ export async function planBittensorSubnetAdapterRoadmap(input: {
     recommendations,
     warnings: uniqueWarnings(
       marketplace.warnings,
-      ["Roadmap is evidence only; it does not authorize real subnet service execution."],
+      ["Roadmap is a planning report only; it does not authorize real subnet service execution."],
     ),
     nextActions,
   };
@@ -8344,7 +8344,7 @@ export async function exportBittensorSubnetAdapterRoadmap(input: {
     ]) : ["- No prioritized adapter work is visible in the current marketplace slice."]),
     "## Safety",
     "",
-    "- This export is planning evidence only and does not configure, approve, invoke, or authorize subnet services.",
+    "- This export is a planning report only and does not configure, approve, invoke, or authorize subnet services.",
     "- It intentionally omits endpoint URLs, credential values, auth environment names, raw task text, wallet data, signing payloads, and full request hashes.",
     "- Real subnet service invocation still requires preview, exact request SHA-256 confirmation, short-lived approval, explicit operator/user confirmation, and real-adapter launch gates.",
     "",
@@ -8548,7 +8548,7 @@ export function createBittensorSigningHandoff(preview: BittensorExtrinsicPreview
       "Review the action, network, netuid, amount, destination, fee, and slippage in Matterhorn.",
       "Open the reviewed action in the connected Bittensor wallet.",
       "Confirm the wallet shows the same payload SHA-256 before signing and broadcasting.",
-      "After broadcast, return only the public transaction hash or public receipt evidence to Matterhorn.",
+      "After broadcast, return only the public transaction hash or transaction receipt to Matterhorn.",
     ],
     warnings: [
       ...preview.warnings,
@@ -8583,7 +8583,7 @@ export function createBittensorSigningReceipt(input: {
   const explorerUrl = input.result?.explorerUrl ?? null;
   const message = input.result?.message ?? (
     status === "signed_payload_received"
-      ? "Legacy signature evidence was received, but Matterhorn cannot broadcast it. Regenerate the action and use the connected wallet."
+      ? "A legacy signature record was received, but Matterhorn cannot broadcast it. Regenerate the action and use the connected wallet."
       : "Connected-wallet review is required before this Bittensor action can be signed and broadcast."
   );
   const nextActions =
@@ -8610,7 +8610,7 @@ export function createBittensorSigningReceipt(input: {
       "Import only the public transaction receipt after broadcast.",
     ] : [
       "Sign only after matching the payload SHA-256 in the connected wallet.",
-      "Return only public receipt evidence, never signatures, seed phrases, or private keys.",
+      "Return only the public transaction receipt, never signatures, seed phrases, or private keys.",
     ];
 
   return {
@@ -10527,7 +10527,7 @@ function buildProviderRegistryEntry(input: unknown, index: number): BittensorSub
   if (websiteOrigin.error) warnings.push(websiteOrigin.error);
   if (!contact) warnings.push("Provider contact or rollback owner is not declared.");
   const evidenceComplete = Object.values(evidence).every(Boolean);
-  if (!evidenceComplete) warnings.push("Provider evidence is incomplete; keep this provider in candidate review.");
+  if (!evidenceComplete) warnings.push("Provider review is incomplete; keep this provider in candidate review.");
   const readyForCanary = errors.length === 0 && reviewStatus === "reviewed" && evidenceComplete;
   return {
     providerId,
@@ -10582,10 +10582,10 @@ export function buildBittensorSubnetAdapterProviderRegistryTemplate(input: {
       value: JSON.stringify([rawProvider], null, 2),
     },
     provider,
-    warnings: ["This template is provider-review evidence only and does not configure or invoke a subnet service adapter."],
+    warnings: ["This template is a provider-review record only and does not configure or invoke a subnet service adapter."],
     nextActions: [
       "Replace placeholder provider identity, contact, netuids, adapter kind, and endpoint origin.",
-      "Mark review evidence true only after human review of provider identity, privacy, terms, rate limits, rollback owner, and canary fixture.",
+      "Mark each review check true only after human review of provider identity, privacy, terms, rate limits, rollback owner, and canary fixture.",
       "Run the provider registry audit before generating any real adapter canary packet.",
     ],
   };
@@ -10609,7 +10609,7 @@ function summarizeBittensorSubnetAdapterProviderRegistry(input: {
   const warnings = uniqueWarnings(
     registry.warnings,
     matching.length
-      ? ["Matching reviewed provider evidence exists, but this does not authorize real subnet execution."]
+      ? ["A matching reviewed provider record exists, but this does not authorize real subnet execution."]
       : ["No matching canary-ready provider registry entry was found for the requested adapter/netuid."],
   );
   return {
@@ -10620,7 +10620,7 @@ function summarizeBittensorSubnetAdapterProviderRegistry(input: {
     matchingProviderIds: matching.map((entry) => entry.providerId).slice(0, 5),
     warnings,
     nextActions: matching.length
-      ? ["Use provider registry evidence as review context only; keep canary gate, exact request-hash approval, and user confirmation separate."]
+      ? ["Use the provider registry as review context only; keep the canary gate, exact request-hash approval, and user confirmation separate."]
       : ["Add or review a provider registry entry before treating a real adapter canary as provider-reviewed."],
   };
 }
@@ -10641,7 +10641,7 @@ export function getBittensorSubnetAdapterProviderRegistry(): BittensorSubnetAdap
       entries: [],
       template,
       warnings: ["No Bittensor subnet adapter provider registry is configured."],
-      nextActions: ["Copy the provider registry template, complete human evidence review, then rerun this audit."],
+      nextActions: ["Copy the provider registry template, complete the human review, then rerun this audit."],
     };
   }
   let parsed: unknown[];
@@ -10682,7 +10682,7 @@ export function getBittensorSubnetAdapterProviderRegistry(): BittensorSubnetAdap
     template,
     warnings,
     nextActions: status === "ready_for_canary"
-      ? ["Use reviewed provider entries as evidence input only; keep canary gates and exact request-hash approval separate.", "Audit the real-adapter canary gate before and after any canary."]
+      ? ["Use reviewed provider entries as review context only; keep canary gates and exact request-hash approval separate.", "Audit the real-adapter canary gate before and after any canary."]
       : status === "blocked"
         ? ["Fix provider registry errors before using any provider entry in a canary packet."]
         : ["Complete provider identity, privacy, terms, rate-limit, rollback, and canary-fixture review."],
@@ -10890,7 +10890,7 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
       summary: preflight
         ? preflight.readyForCanaryEvidence
           ? "Adapter manifest and result preflight checks pass before endpoint conformance or canary review."
-          : "Adapter preflight is available, but canary evidence is incomplete."
+          : "Adapter preflight is available, but canary verification is incomplete."
         : "No adapter manifest example was available for preflight.",
       details: {
         readyForConformance: preflight?.readyForConformance ?? false,
@@ -10961,10 +10961,10 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
       label: "Subnet adapter operator handoff",
       status: handoff.status === "blocked" ? "warning" : "pass",
       summary: handoff.status === "mock_rehearsal_ready"
-        ? "Adapter operator handoff can summarize evidence, conformance, and dry-run gates for mock rehearsal."
+        ? "Adapter operator handoff can summarize verification, conformance, and dry-run gates for mock rehearsal."
         : handoff.status === "manual_review_required"
           ? "Adapter operator handoff is available for manual real-canary review, but does not authorize execution."
-          : "Adapter operator handoff is available but blocked or incomplete until adapter evidence, conformance, and dry-run gates are resolved.",
+          : "Adapter operator handoff is available but blocked or incomplete until adapter verification, conformance, and dry-run gates are resolved.",
       details: {
         status: handoff.status,
         evidenceReviewStatus: handoff.evidenceReview.status,
@@ -12083,13 +12083,13 @@ export function buildBittensorAdapterEvidenceBundleCard(bundle: BittensorSubnetA
   const preflight = bundle.requiredArtifacts.filter((artifact) => artifact.source === "preflight").length;
   const blocked = bundle.launchGate.status === "blocked";
   const nextPrompt = blocked
-    ? `Help me unblock the Bittensor adapter evidence bundle${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`}.`
-    : `Review the Bittensor adapter evidence bundle${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`} before any real canary.`;
+    ? `Help me unblock the Bittensor adapter verification report${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`}.`
+    : `Review the Bittensor adapter verification report${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`} before any real canary.`;
   return {
     kind: "adapter_evidence_bundle",
-    title: "Bittensor adapter evidence bundle",
+    title: "Bittensor adapter verification report",
     subtitle: titleCase(bundle.launchGate.status),
-    summary: bundle.nextActions[0] ?? "Collect evidence before any real subnet adapter canary.",
+    summary: bundle.nextActions[0] ?? "Complete the required checks before any real subnet adapter canary.",
     tone: blocked ? "danger" : bundle.launchGate.status === "mock_ready" ? "good" : "warning",
     items: [
       cardItem("Adapter", bundle.requested.adapter ?? "Any"),
@@ -12097,7 +12097,7 @@ export function buildBittensorAdapterEvidenceBundleCard(bundle: BittensorSubnetA
       cardItem("Onboarding", titleCase(bundle.onboarding.status), bundle.onboarding.status === "ready_for_preview_review" ? "good" : bundle.onboarding.status === "blocked" ? "danger" : "warning"),
       cardItem("Launch gate", titleCase(bundle.launchGate.status), blocked ? "danger" : bundle.launchGate.status === "mock_ready" ? "good" : "warning"),
       cardItem("Preflight", titleCase(bundle.preflight.status), bundle.preflight.status === "pass" ? "good" : bundle.preflight.status === "warning" ? "warning" : "danger"),
-      cardItem("Canary evidence", bundle.preflight.readyForCanaryEvidence ? "Ready" : "Incomplete", bundle.preflight.readyForCanaryEvidence ? "good" : "warning"),
+      cardItem("Canary checks", bundle.preflight.readyForCanaryEvidence ? "Ready" : "Incomplete", bundle.preflight.readyForCanaryEvidence ? "good" : "warning"),
       cardItem("Required artifacts", required, required ? "warning" : "muted"),
       cardItem("Preflight artifacts", preflight, preflight ? "warning" : "muted"),
       cardItem("Canary items", canary, canary ? "warning" : "muted"),
@@ -12122,7 +12122,7 @@ export function buildBittensorAdapterEvidenceBundleCard(bundle: BittensorSubnetA
 export function buildBittensorAdapterEvidenceReviewCard(review: BittensorSubnetAdapterEvidenceReviewDecision): BittensorChatCard {
   return {
     kind: "adapter_evidence_review",
-    title: "Bittensor adapter evidence review",
+    title: "Bittensor adapter verification review",
     subtitle: titleCase(review.status),
     summary: review.summary,
     tone: review.status === "mock_dry_run_ready" ? "good" : review.status === "manual_real_canary_review_required" ? "warning" : "danger",
@@ -12167,10 +12167,10 @@ export function buildBittensorAdapterOperatorHandoffCard(handoff: BittensorSubne
     items: [
       cardItem("Adapter", handoff.requested.adapter ?? "Any"),
       cardItem("Netuid", handoff.requested.netuid ?? "Any", handoff.requested.netuid === null ? "muted" : "default"),
-      cardItem("Evidence review", titleCase(handoff.evidenceReview.status), handoff.evidenceReview.status === "blocked" ? "danger" : handoff.evidenceReview.status === "mock_dry_run_ready" ? "good" : "warning"),
+      cardItem("Verification review", titleCase(handoff.evidenceReview.status), handoff.evidenceReview.status === "blocked" ? "danger" : handoff.evidenceReview.status === "mock_dry_run_ready" ? "good" : "warning"),
       cardItem("Conformance", titleCase(handoff.conformanceExport.status), handoff.conformanceExport.status === "pass" ? "good" : handoff.conformanceExport.status === "warning" ? "warning" : "danger"),
       cardItem("Dry-run", titleCase(handoff.dryRunExport.status), handoff.dryRunExport.status === "pass" ? "good" : handoff.dryRunExport.status === "warning" ? "warning" : "danger"),
-      cardItem("Provider evidence", handoff.providerRegistry.matchingReadyProviderCount, handoff.providerRegistry.matchingReadyProviderCount ? "warning" : "muted"),
+      cardItem("Reviewed providers", handoff.providerRegistry.matchingReadyProviderCount, handoff.providerRegistry.matchingReadyProviderCount ? "warning" : "muted"),
       cardItem("Warnings", handoff.warnings.length, handoff.warnings.length ? "warning" : "muted"),
       cardItem("Next actions", handoff.nextActions.length, handoff.nextActions.length ? "default" : "muted"),
     ],
@@ -12271,7 +12271,7 @@ export function buildBittensorAdapterRoadmapCard(roadmap: BittensorSubnetAdapter
 export function buildBittensorAdapterApprovalAuditCard(report: BittensorSubnetAdapterRuntimeApprovalAudit): BittensorChatCard {
   const nextPrompt = report.activeCount
     ? "Review active Bittensor adapter request approvals and remove any stale entries."
-    : "Help me prepare a safe exact-SHA Bittensor adapter request approval after evidence review.";
+    : "Help me prepare a safe exact-SHA Bittensor adapter request approval after verification review.";
   return {
     kind: "adapter_approval_audit",
     title: "Bittensor adapter approval audit",
@@ -12345,7 +12345,7 @@ export function buildBittensorAdapterProviderRegistryCard(registry: BittensorSub
     kind: "adapter_provider_registry",
     title: "Bittensor adapter provider registry",
     subtitle: registry.status.replace(/_/g, " "),
-    summary: registry.warnings[0] ?? "Reviewed provider candidates are tracked as evidence only.",
+    summary: registry.warnings[0] ?? "Reviewed provider candidates are tracked as review records only.",
     tone,
     items: [
       cardItem("Configured", registry.configured ? "Yes" : "No", registry.configured ? "default" : "warning"),
@@ -12367,7 +12367,7 @@ export function buildBittensorAdapterProviderRegistryCard(registry: BittensorSub
       kind: "send_to_chat",
       payload: {
         prompt: registry.status === "ready_for_canary"
-          ? "Audit the Bittensor adapter canary gate before using this provider registry evidence."
+          ? "Audit the Bittensor adapter canary gate before using this provider registry."
           : "Help me complete the Bittensor adapter provider registry review without real execution.",
         providerRegistryStatus: registry.status,
       },
@@ -12458,19 +12458,19 @@ export function buildBittensorAdapterCanaryOperatorPacketCard(packet: BittensorS
     title: "Bittensor adapter canary packet",
     subtitle: titleCase(packet.status),
     summary: packet.status === "approval_template_ready"
-      ? "Evidence review reached manual real-canary review and an exact request-hash approval template is ready for operator review."
+      ? "Verification review reached manual real-canary review and an exact request-hash approval template is ready for operator review."
       : packet.status === "needs_preview_hash"
-        ? "Evidence review reached manual real-canary review, but the exact preview request SHA-256 is still required."
-        : "Evidence is blocked or only mock-ready. No real adapter approval template is included.",
+        ? "Verification review reached manual real-canary review, but the exact preview request SHA-256 is still required."
+        : "Verification is blocked or only mock-ready. No real adapter approval template is included.",
     tone,
     items: [
       cardItem("Adapter", packet.requested.adapter ?? "Any"),
       cardItem("Netuid", packet.requested.netuid ?? "Any", packet.requested.netuid === null ? "muted" : "default"),
       cardItem("Packet status", titleCase(packet.status), packet.status === "approval_template_ready" ? "warning" : packet.status === "blocked" ? "danger" : "warning"),
-      cardItem("Evidence review", titleCase(packet.evidenceReview.status), packet.evidenceReview.status === "manual_real_canary_review_required" ? "warning" : packet.evidenceReview.status === "mock_dry_run_ready" ? "good" : "danger"),
+      cardItem("Verification review", titleCase(packet.evidenceReview.status), packet.evidenceReview.status === "manual_real_canary_review_required" ? "warning" : packet.evidenceReview.status === "mock_dry_run_ready" ? "good" : "danger"),
       cardItem("Launch gate", titleCase(packet.evidenceReview.launchGateStatus), packet.evidenceReview.launchGateStatus === "manual_review_required" ? "warning" : packet.evidenceReview.launchGateStatus === "mock_ready" ? "good" : "danger"),
       cardItem("Request hash", packet.previewRequestSha256Prefix ? `${packet.previewRequestSha256Prefix}...` : "Required", packet.previewRequestSha256Prefix ? "muted" : "warning"),
-      cardItem("Provider evidence", packet.providerRegistry.matchingReadyProviderCount, packet.providerRegistry.matchingReadyProviderCount ? "warning" : "muted"),
+      cardItem("Reviewed providers", packet.providerRegistry.matchingReadyProviderCount, packet.providerRegistry.matchingReadyProviderCount ? "warning" : "muted"),
       cardItem("Approval env", packet.approvalTemplate ? packet.approvalTemplate.env.key : "Not included", packet.approvalTemplate ? "warning" : "muted"),
     ],
     actions,
@@ -12493,7 +12493,7 @@ export function buildBittensorAdapterCanaryOutcomeReportCard(report: BittensorSu
       ? "No adapter result is attached yet. Run a preview-confirm-invoke loop before archiving a canary outcome."
       : report.status === "fail"
         ? "The adapter outcome failed request-hash, result-validation, or invocation-success checks."
-        : "Sanitized adapter outcome evidence is ready for review. Full hashes and operator secrets are omitted.",
+        : "A sanitized adapter outcome report is ready for review. Full hashes and operator secrets are omitted.",
     tone,
     items: [
       cardItem("Adapter", report.requested.adapter ?? "Any"),
@@ -12505,7 +12505,7 @@ export function buildBittensorAdapterCanaryOutcomeReportCard(report: BittensorSu
       cardItem("Actual hash", report.requestHash.actualPrefix ? `${report.requestHash.actualPrefix}...` : "Missing", report.requestHash.actualPrefix ? "muted" : "warning"),
       cardItem("Result validation", titleCase(report.resultValidation.status), report.resultValidation.status === "pass" ? "good" : report.resultValidation.status === "warning" ? "warning" : "danger"),
       cardItem("Canary gate", titleCase(report.canaryGate.status), report.canaryGate.status === "canary_armed" ? "warning" : "muted"),
-      cardItem("Provider evidence", report.providerRegistry.matchingReadyProviderCount, report.providerRegistry.matchingReadyProviderCount ? "warning" : "muted"),
+      cardItem("Reviewed providers", report.providerRegistry.matchingReadyProviderCount, report.providerRegistry.matchingReadyProviderCount ? "warning" : "muted"),
       cardItem("Full hash redacted", "Yes", "good"),
     ],
     actions: [{
@@ -12583,7 +12583,7 @@ export function buildBittensorAdapterResultValidationCard(validation: BittensorS
       payload: {
         prompt: validation.status === "fail"
           ? "Help me fix this Bittensor adapter result envelope before canary review."
-          : "Attach this Bittensor adapter result validation to the canary evidence bundle.",
+          : "Attach this Bittensor adapter result validation to the canary verification report.",
         validationStatus: validation.status,
       },
     }],
