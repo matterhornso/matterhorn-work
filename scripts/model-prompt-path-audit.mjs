@@ -139,8 +139,9 @@ function runChecks(sources) {
     "Settings exposes workspace default model controls",
     FILES.settingsAiView,
     containsAll(settingsAiView, [
-      "Use workspace default",
-      "Save for workspace",
+      "Use saved default",
+      "Use for new chats",
+      "Clear saved default",
       "saveWorkspaceModelSelection",
       "clearWorkspaceModelSelection",
       "notifyWorkspaceModelSelectionChanged",

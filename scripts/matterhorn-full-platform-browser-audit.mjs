@@ -119,8 +119,7 @@ const panelSurfaces = [
 ];
 
 const chatSurfaceMarkers = [
-  "Cautious",
-  "Perspective",
+  "Chat options",
   "Start work",
   "Choose a desk to begin",
 ];
@@ -214,10 +213,25 @@ async function openOverviewSecondaryControls(page) {
 }
 
 async function waitForChatComposer(page, timeoutMs = 20_000) {
-  // Compact layouts collapse the visual label, but retain the named control users operate.
-  const group = page.getByRole("radiogroup", { name: "Response perspective", exact: true });
+  const composer = page.getByTestId("session-composer-shell");
+  await composer.waitFor({ state: "visible", timeout: timeoutMs });
+  await composer.scrollIntoViewIfNeeded();
+  if (await composer.count() !== 1) {
+    throw new Error("Session composer is missing or duplicated.");
+  }
+  return composer;
+}
+
+async function openResponsePerspectiveControls(page, timeoutMs = 20_000) {
+  const composer = await waitForChatComposer(page, timeoutMs);
+  const dialog = page.getByRole("dialog", { name: "Chat options", exact: true });
+  if (!await dialog.isVisible().catch(() => false)) {
+    const trigger = page.getByRole("button", { name: "Chat options", exact: true });
+    await clickUnique(trigger, "Chat options");
+  }
+  await dialog.waitFor({ state: "visible", timeout: timeoutMs });
+  const group = dialog.getByRole("radiogroup", { name: "Response perspective", exact: true });
   await group.waitFor({ state: "visible", timeout: timeoutMs });
-  await group.scrollIntoViewIfNeeded();
   if (await group.count() !== 1) {
     throw new Error("Response perspective selector is missing or duplicated.");
   }
@@ -859,18 +873,26 @@ async function run() {
     const connectedServerSummary = page.locator('[aria-label^="Connected MCP servers:"]');
     const emptySummary = page.getByText("No external MCPs connected.", { exact: true });
     await page.waitForFunction(
-      () => Boolean(
-        document.querySelector('[aria-label^="Connected MCP servers:"]')
-        || Array.from(document.querySelectorAll("*")).some((element) => {
+      () => {
+        const visible = (element) => {
+          const style = getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+        };
+        const connected = document.querySelector('[aria-label^="Connected MCP servers:"]');
+        return Boolean(
+          (connected && visible(connected))
+          || Array.from(document.querySelectorAll("*")).some((element) => {
           const text = element.textContent?.trim();
-          return text === "Matterhorn Desks MCP" || text === "No external MCPs connected.";
-        }),
-      ),
+            return visible(element) && (text === "Matterhorn Desks MCP" || text === "No external MCPs connected.");
+          })
+        );
+      },
       undefined,
       { timeout: 20_000 },
     );
-    const connectedSummaryCount = await connectedServerSummary.count();
-    const connectedSummaryLabel = connectedSummaryCount > 0
+    const connectedSummaryVisible = await connectedServerSummary.first().isVisible().catch(() => false);
+    const connectedSummaryLabel = connectedSummaryVisible
       ? await connectedServerSummary.first().getAttribute("aria-label")
       : null;
     if (connectedSummaryLabel?.startsWith("Connected MCP servers:")) {
@@ -928,7 +950,7 @@ async function run() {
     });
     await recordInteraction(report, "response-perspective-controls", async () => {
       await gotoWithTransientRetry(page, chatUrl, { waitUntil: "load" });
-      const group = await waitForChatComposer(page);
+      const group = await openResponsePerspectiveControls(page);
       for (const label of ["Cautious", "Balanced", "Optimistic"]) {
         const radio = group.getByRole("radio", { name: label, exact: true });
         await clickUnique(radio, `${label} perspective`);
