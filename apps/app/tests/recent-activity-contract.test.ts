@@ -188,6 +188,8 @@ describe("Project Activity contract tests", () => {
 
       expect(source).toContain("const homePrimaryAction = props.modelUnavailable");
       expect(source).toContain('eyebrow: "Setup required"');
+      expect(source).toContain('metaTooltip: "Required before chats and desk tasks can run"');
+      expect(source).toContain("aria-label={metaTooltip}");
       expect(source).toContain('eyebrow: activeHomeSession ? "Active" : "Recent"');
       expect(source).toContain("homePrimaryAction ? <WorkspaceHomePrimaryAction");
       expect(source).toContain("<WorkspaceCoworkerStart");
