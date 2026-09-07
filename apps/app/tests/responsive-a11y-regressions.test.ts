@@ -74,8 +74,8 @@ describe("responsive accessibility regressions", () => {
     expect(surface).toContain("sm:size-6");
     expect(workflowPanel).toContain("inline-flex size-11 shrink-0");
     expect(workflowPanel).toContain("sm:size-6");
-    expect(sessionPage.match(/inline-flex size-11 shrink-0/g)?.length).toBe(3);
-    expect(sessionPage.match(/sm:size-6/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(sessionPage.match(/inline-flex size-11 shrink-0/g)?.length).toBe(2);
+    expect(sessionPage.match(/sm:size-6/g)?.length).toBeGreaterThanOrEqual(2);
     expect(composer).toContain("after:-inset-0.5");
     expect(editor).toContain("after:-inset-1");
   });

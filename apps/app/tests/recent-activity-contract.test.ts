@@ -160,11 +160,11 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("const homeSurfaceTitle = activeWorkflowDeskId");
       expect(source).toContain(': "Home";');
       expect(source).toContain('aria-label="Recommended next action"');
-      expect(source).toContain('aria-label="Secondary creation actions"');
-      expect(source).toContain("Describe an outcome, continue your work, or open a protocol desk.");
-      expect(coworkerStart).toContain("What do you want to do?");
-      expect(coworkerStart).toContain("Try an example");
-      expect(source).toContain("Browse protocol desks");
+      expect(source).toContain('aria-label="Create"');
+      expect(source).not.toContain("Describe an outcome, continue your work, or open a protocol desk.");
+      expect(coworkerStart).toContain("Start something");
+      expect(coworkerStart).toContain('aria-label="Example goals"');
+      expect(source).toContain("Protocol desks");
       expect(source).toContain("Project folder");
       expect(source).toContain("Saved outputs");
       expect(source).toContain("grid-cols-[auto_minmax(0,1fr)_auto]");
@@ -188,7 +188,9 @@ describe("Project Activity contract tests", () => {
 
       expect(source).toContain("const homePrimaryAction = props.modelUnavailable");
       expect(source).toContain('eyebrow: "Setup required"');
-      expect(source).toContain('eyebrow: activeHomeSession ? "Active task" : "Continue where you left off"');
+      expect(source).toContain('metaTooltip: "Required before chats and desk tasks can run"');
+      expect(source).toContain("aria-label={metaTooltip}");
+      expect(source).toContain('eyebrow: activeHomeSession ? "Active" : "Recent"');
       expect(source).toContain("homePrimaryAction ? <WorkspaceHomePrimaryAction");
       expect(source).toContain("<WorkspaceCoworkerStart");
       expect(source).toContain('import("./workspace-coworker-start")');

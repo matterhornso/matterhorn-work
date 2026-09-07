@@ -565,38 +565,10 @@ function HomeCapabilityOverview({
       style={{ contentVisibility: "auto", containIntrinsicSize: "360px" } as CSSProperties}
     >
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1 text-left marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/35">
-        <span>
-          <span className="block text-sm font-semibold text-dls-text">Browse protocol desks</span>
-          <span className="mt-0.5 block text-xs text-dls-secondary">Open Bittensor, Hyperliquid, Polymarket, or Sui directly.</span>
-        </span>
+        <span className="text-sm font-semibold text-dls-text">Protocol desks</span>
         <ChevronRight className="size-4 shrink-0 text-dls-secondary" aria-hidden="true" />
       </summary>
-      <section className="mt-3 space-y-2" aria-label="Desk capability overview">
-        <div className="flex items-center gap-2">
-          <h3 className="text-xs font-medium text-dls-secondary">Available desks</h3>
-        <Popover>
-          <PopoverTrigger
-            render={
-              <button
-                type="button"
-                aria-label="Open a desk details"
-                className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35 sm:size-6"
-              >
-                <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
-              </button>
-            }
-          />
-          <PopoverContent
-            side="right"
-            align="start"
-            className="w-60 gap-1 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-[11px] leading-5 text-dls-text shadow-none"
-          >
-            <span>Each desk starts a focused agent task.</span>
-            <span>Risk details stay behind each info button.</span>
-            <span>Outputs and receipts stay with this project.</span>
-          </PopoverContent>
-        </Popover>
-        </div>
+      <section className="mt-2" aria-label="Desk capability overview">
         <div className="overflow-hidden rounded-lg bg-dls-canvas/35 ring-1 ring-inset ring-dls-border/45">
         {homeCapabilityStatusItems().map((item) => {
           return (
@@ -656,36 +628,52 @@ function HomeCapabilityOverview({
 function WorkspaceHomePrimaryAction({
   eyebrow,
   title,
-  description,
   meta,
+  metaTooltip,
   actionLabel,
   disabled,
   onAction,
 }: {
   eyebrow: string;
   title: string;
-  description: string;
-  meta: string;
+  meta?: string;
+  metaTooltip?: string;
   actionLabel: string;
   disabled?: boolean;
   onAction: () => void;
 }) {
   return (
     <section
-      className="grid gap-4 rounded-lg bg-[rgb(var(--matterhorn-blue-rgb)/0.075)] px-4 py-4 ring-1 ring-inset ring-[rgb(var(--matterhorn-blue-rgb)/0.14)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"
+      className="grid gap-3 border-y border-dls-border/55 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
       aria-label="Recommended next action"
     >
       <div className="min-w-0">
-        <p className="text-[11px] font-medium text-[var(--dls-accent)]">
-          {eyebrow}
-        </p>
-        <h3 className="mt-1 truncate text-[15px] font-semibold text-dls-text">{title}</h3>
-        <p className="mt-1 max-w-2xl text-[12px] leading-5 text-dls-secondary">{description}</p>
-        <p className="mt-2 text-[11px] font-medium text-dls-secondary/80">{meta}</p>
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <h3 className="truncate text-sm font-semibold text-dls-text">{title}</h3>
+          <span className="inline-flex items-center gap-1 text-[11px] text-dls-secondary">
+            {eyebrow}
+            {metaTooltip ? (
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex" />}>
+                  <button
+                    type="button"
+                    aria-label={metaTooltip}
+                    title={metaTooltip}
+                    className="inline-flex size-6 items-center justify-center rounded-full text-dls-secondary transition-colors hover:bg-dls-hover hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+                  >
+                    <Info className="size-3.5" strokeWidth={1.7} aria-hidden="true" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{metaTooltip}</TooltipContent>
+              </Tooltip>
+            ) : null}
+          </span>
+        </div>
+        {meta ? <p className="mt-0.5 text-[11px] text-dls-secondary">{meta}</p> : null}
       </div>
       <Button
         type="button"
-        className="h-11 w-full shrink-0 justify-center px-4 sm:h-9 sm:w-auto"
+        className="h-11 w-full shrink-0 justify-center px-4 sm:h-8 sm:w-auto"
         disabled={disabled}
         onClick={onAction}
       >
@@ -2779,8 +2767,7 @@ export function SessionPage(props: SessionPageProps) {
     ? {
         eyebrow: "Setup required",
         title: "Connect a model to start agent work",
-        description: "Choose a model provider once, then return here with your project and draft intact.",
-        meta: "Required before chats and desk tasks can run",
+        metaTooltip: "Required before chats and desk tasks can run",
         actionLabel: "Set up model",
         disabled: false,
         onAction: () => {
@@ -2793,14 +2780,11 @@ export function SessionPage(props: SessionPageProps) {
       }
     : homeResumeSession
       ? {
-          eyebrow: activeHomeSession ? "Active task" : "Continue where you left off",
+          eyebrow: activeHomeSession ? "Active" : "Recent",
           title: getDisplaySessionTitle(homeResumeSession.title),
-          description: activeHomeSession
-            ? homeResumeStatus === "waiting"
-              ? "Matterhorn needs your review or input before this task can continue."
-              : "Matterhorn is still working. Open the task to follow progress and evidence."
-            : "Resume the latest task with its conversation, context, and saved outputs in place.",
-          meta: formatHomeSessionRecency(homeResumeSession.time?.updated ?? homeResumeSession.time?.created),
+          meta: activeHomeSession && homeResumeStatus === "waiting"
+            ? "Waiting for you"
+            : formatHomeSessionRecency(homeResumeSession.time?.updated ?? homeResumeSession.time?.created),
           actionLabel: activeHomeSession ? "Open task" : "Continue",
           disabled: false,
           onAction: () => props.sidebar.onOpenSession(props.selectedWorkspaceId, homeResumeSession.id),
@@ -3318,15 +3302,12 @@ export function SessionPage(props: SessionPageProps) {
                       className="absolute inset-0 flex items-start justify-center overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 pb-24 pt-6 sm:px-6 sm:pb-28 sm:pt-8"
                       style={{ scrollbarGutter: "stable" } as CSSProperties}
                     >
-                      <div className="relative w-full max-w-5xl space-y-6">
-                        <section className="space-y-4" aria-label="Workspace home">
+                      <div className="relative w-full max-w-4xl space-y-5">
+                        <section className="space-y-3" aria-label="Workspace home">
                           <div className="min-w-0">
                             <h2 className="truncate text-xl font-semibold leading-7 text-dls-text">
                               {homeProjectName}
                             </h2>
-                            <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-                              Describe an outcome, continue your work, or open a protocol desk.
-                            </p>
                           </div>
 
                           {homePrimaryAction ? <WorkspaceHomePrimaryAction {...homePrimaryAction} /> : (
@@ -3339,10 +3320,9 @@ export function SessionPage(props: SessionPageProps) {
                           )}
 
                           <div
-                            className="flex flex-wrap items-center gap-1.5 border-t border-dls-border/40 pt-3"
-                            aria-label="Secondary creation actions"
+                            className="flex flex-wrap items-center gap-1"
+                            aria-label="Create"
                           >
-                            <span className="mr-1 text-[11px] font-medium text-dls-secondary">Create</span>
                             <Button
                               type="button"
                               variant="secondary"
@@ -3392,11 +3372,9 @@ export function SessionPage(props: SessionPageProps) {
                             </Suspense>
                           ) : null}
 
-                          <details className="group rounded-md bg-dls-canvas/28 px-3 py-2 text-xs text-dls-secondary">
+                          <details className="group border-t border-dls-border/40 py-2 text-xs text-dls-secondary">
                             <summary className="cursor-pointer list-none font-medium text-dls-text marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-border">
-                              Project storage
-                              <span className="ml-1 text-dls-secondary" aria-hidden="true">·</span>
-                              <span className="ml-1 font-normal text-dls-secondary">Files and saved outputs</span>
+                              Files and outputs
                             </summary>
                             <div className="mt-2 grid min-w-0 gap-2 border-t border-dls-border/40 pt-2 lg:grid-cols-2">
                               {canExposeLocalPaths ? (
@@ -3483,7 +3461,6 @@ export function SessionPage(props: SessionPageProps) {
                             runtimeWorkspaceId={props.runtimeWorkspaceId}
                             limit={8}
                             title="Project Activity"
-                            description="Latest event. Open history for the full run log."
                             defaultExpanded={false}
                             onOpenOutputPath={openOutputPathFromActivity}
                             onOpenHistory={openRunHistory}
