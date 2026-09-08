@@ -971,7 +971,7 @@ function ProtocolDeskEmptyState({
   const blankChatTitle = `${visual?.displayName ?? panel} chat`;
   const blankChatDetail = panel === "polymarket"
     ? "Research freely and prepare wallet-reviewed buy, sell, and cancel actions."
-    : "The desk agent and its working context are already selected.";
+    : null;
 
   const startTask = useCallback((
     prompt: string,
@@ -1073,9 +1073,11 @@ function ProtocolDeskEmptyState({
             >
               {launchingTaskTitle === blankChatTitle ? "Starting chat..." : `Start ${visual?.displayName ?? panel} chat`}
             </Button>
-            <p className="max-w-xs text-xs leading-5 text-dls-secondary lg:text-right">
-              {blankChatDetail}
-            </p>
+            {blankChatDetail ? (
+              <p className="max-w-xs text-xs leading-5 text-dls-secondary lg:text-right">
+                {blankChatDetail}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

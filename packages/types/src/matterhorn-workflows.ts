@@ -1053,7 +1053,7 @@ export const SUI_WALLET_WORKFLOW: MatterhornWorkflowManifest = {
   category: "web3",
   targetUserPersona: "Sui wallet user or builder",
   description:
-    "Read public Sui account context, prepare transfer previews, hand off signing to the user's wallet, and save public receipt evidence.",
+    "Read public Sui account context, prepare transfer previews, hand off signing to the user's wallet, and save the public transaction receipt.",
   status: "preview_only",
   inputPrompts: [
     {
@@ -1156,8 +1156,8 @@ export const SUI_WALLET_WORKFLOW: MatterhornWorkflowManifest = {
     },
     {
       id: "stage_4_receipt_evidence",
-      name: "Receipt evidence",
-      description: "Import a public transaction digest and save receipt evidence after the user acts in their wallet.",
+      name: "Transaction receipt",
+      description: "Import a public transaction digest and save the receipt after the user acts in their wallet.",
       serviceHook: "sui",
       inputPromptIds: ["transaction_digest"],
       outputArtifactIds: ["receipt_evidence"],
@@ -1184,7 +1184,7 @@ export const SUI_WALLET_WORKFLOW: MatterhornWorkflowManifest = {
       "Only public Sui addresses and public transaction digests are accepted",
       "Transfer previews are non-custodial and non-submittable",
       "Signing happens in the user's Sui wallet or external client",
-      "Receipt evidence stores public transaction metadata only",
+      "Saved receipts contain public transaction metadata only",
     ],
     requiredTests: ["apps/server/src/tools/sui.test.ts"],
     successCriteria: [
@@ -2555,7 +2555,7 @@ export const SUI_WALLET_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTe
     supported: true,
     types: ["transfer_preview", "receipt_evidence"],
     description:
-      "Produces a non-custodial transfer preview and stores only public receipt evidence after wallet submission.",
+      "Produces a non-custodial transfer preview and stores only the public transaction receipt after wallet submission.",
   },
   serviceHooks: [{ hook: "sui", status: "preview_only" }],
   chatMode: "crypto chat",
@@ -4547,7 +4547,7 @@ export const SUI_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   version: "matterhorn.protocol.desk.manifest.v1",
   id: "sui",
   displayName: "Sui",
-  shortDescription: "Sui account reads, wallet-approved transfers, and receipt evidence.",
+  shortDescription: "Sui account reads, wallet-approved transfers, and saved transaction receipts.",
   launcherTitle: "Sui",
   launcherDescription: "Connect a Sui wallet on web to review and submit transfers, or prepare an external wallet handoff on desktop.",
   launcherPrompt: "Show my Sui wallet or prepare a Sui transfer",
@@ -4638,10 +4638,10 @@ export const SUI_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     "Read public Sui account and balance context",
     "Review exact transfers without custody",
     "Sign and submit only in the user's connected Sui wallet",
-    "Import public transaction receipts as project evidence",
+    "Save public transaction receipts in Files and outputs",
   ],
   safetySummary: "Sui signing stays in the user's wallet. Matterhorn never asks for seed phrases, private keys, raw signatures, or wallet exports.",
-  customerCapabilitySummary: "Read Sui accounts and balances, review connected-wallet transfers, and save public receipts to project evidence.",
+  customerCapabilitySummary: "Read Sui accounts and balances, review connected-wallet transfers, and save public receipts in Files and outputs.",
   noCustodySafetyLine: "Matterhorn never holds Sui keys. Web signing happens in the connected wallet; desktop uses an external handoff.",
   suggestedPromptTitles: [
     "Show my Sui wallet",

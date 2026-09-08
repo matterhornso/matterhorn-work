@@ -40,6 +40,12 @@ const config = {
   sessionId: arg("--session-id") || "",
   filePath: arg("--path") || arg("--file-path") || "",
   prompt: arg("--message") || arg("--prompt") || "Matterhorn Desks live QA: reply with a short ok.",
+  agentId: arg("--agent-id") || "",
+  privacyMode: arg("--privacy-mode") || "public_research",
+  consentPrivate: flag("--consent-private"),
+  approveHarmlessPrompt: flag("--approve-harmless-prompt"),
+  skipEventStream: flag("--skip-event-stream"),
+  waitReplySeconds: Number(arg("--wait-reply-seconds", "90")),
   title: arg("--title") || `Agent control live QA ${new Date().toISOString()}`,
   maxEvents: Number(arg("--max-events", "5")),
   ttlSeconds: Number(arg("--ttl-seconds", "300")),
@@ -183,31 +189,118 @@ async function runSessionFlow(workspaceId) {
     if (!sessionId) throw new Error("session id missing after session creation");
     artifacts.sessionId = sessionId;
 
-    const prompt = await request(`/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages`, {
+    const messageBody = {
+      message: config.prompt,
+      privacyMode: config.privacyMode,
+      ...(config.agentId ? { agentId: config.agentId } : {}),
+      ...(config.skipReply ? { noReply: true } : {}),
+    };
+    let privacyConsentToken = "";
+    if (config.consentPrivate) {
+      const preflight = await request(`/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages/preflight`, {
+        method: "POST",
+        body: messageBody,
+      });
+      const decision = preflight.body?.decision;
+      add(decision === "blocked" ? "fail" : "pass", "session.preflight", "Run exact-request privacy preflight", {
+        latencyMs: preflight.latencyMs,
+        decision: decision || null,
+        effectiveMode: preflight.body?.effectiveMode || null,
+      });
+      if (decision === "blocked") throw new Error("privacy preflight blocked the harmless QA prompt");
+      if (decision === "consent_required") {
+        const challengeId = preflight.body?.challenge?.id;
+        const requestHash = preflight.body?.requestHash;
+        if (!challengeId || !requestHash) throw new Error("privacy preflight omitted the consent challenge");
+        const confirmed = await request(`/workspace/${encodeURIComponent(workspaceId)}/privacy-consents/${encodeURIComponent(challengeId)}/confirm`, {
+          method: "POST",
+          body: { sessionId, requestHash },
+        });
+        privacyConsentToken = confirmed.body?.consentToken || "";
+        if (!privacyConsentToken) throw new Error("privacy consent confirmation omitted its token");
+        add("pass", "session.consent", "Confirm one-request privacy consent", { latencyMs: confirmed.latencyMs });
+      }
+    }
+
+    const promptRequest = request(`/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages`, {
       method: "POST",
-      body: { message: config.prompt, ...(config.skipReply ? { noReply: true } : {}) },
+      body: {
+        ...messageBody,
+        ...(privacyConsentToken ? { privacyConsentToken } : {}),
+      },
     });
-    add("pass", "session.prompt", "Submit harmless prompt", { latencyMs: prompt.latencyMs, skipReply: config.skipReply });
+    if (config.approveHarmlessPrompt) {
+      if (!config.hostToken) throw new Error("--approve-harmless-prompt requires a host token");
+      let approved = false;
+      for (let attempt = 0; attempt < 40 && !approved; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const approvals = await request("/approvals", { auth: "host" });
+        const pending = Array.isArray(approvals.body?.items)
+          ? approvals.body.items.find((item) => item?.action === "session.prompt" && String(item?.summary || "").includes(sessionId))
+          : undefined;
+        if (!pending?.id) continue;
+        const decision = await request(`/approvals/${encodeURIComponent(pending.id)}`, {
+          method: "POST",
+          auth: "host",
+          body: { reply: "allow" },
+        });
+        approved = decision.body?.allowed === true;
+        add(approved ? "pass" : "fail", "session.approval", "Approve harmless QA prompt", { latencyMs: decision.latencyMs });
+      }
+      if (!approved) throw new Error("harmless QA prompt approval was not available before timeout");
+    }
+    const prompt = await promptRequest;
+    add("pass", "session.prompt", "Submit harmless prompt", {
+      latencyMs: prompt.latencyMs,
+      skipReply: config.skipReply,
+      agentId: config.agentId || null,
+    });
 
     const status = await request(`/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/status`);
     add("pass", "session.status", "Read session status", { latencyMs: status.latencyMs });
 
-    const events = await request(`/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/events?snapshot=true&details=true&maxEvents=${encodeURIComponent(String(config.maxEvents))}`, {
-      accept: "text/event-stream",
-    });
-    const parsed = parseSse(events.text);
-    const eventTypes = parsed.map((event) => event.event).filter(Boolean);
-    add(parsed.length ? "pass" : "warn", "session.events", "Read bounded session event stream", {
-      latencyMs: events.latencyMs,
-      eventCount: parsed.length,
-      eventTypes,
-    });
-    if (config.expectedEvents.length) {
-      const missing = config.expectedEvents.filter((eventType) => !eventTypes.includes(eventType));
-      add(missing.length ? "fail" : "pass", "session.event-expectations", "Validate expected session event types", {
-        expectedEvents: config.expectedEvents,
-        missingEvents: missing,
+    if (!config.skipReply) {
+      const deadline = Date.now() + Math.max(1, config.waitReplySeconds) * 1_000;
+      let assistantTextLength = 0;
+      let assistantMessageCount = 0;
+      while (Date.now() < deadline && assistantTextLength === 0) {
+        const messages = await request(`/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages?limit=30`);
+        const assistantMessages = Array.isArray(messages.body?.items)
+          ? messages.body.items.filter((item) => item?.info?.role === "assistant")
+          : [];
+        assistantMessageCount = assistantMessages.length;
+        assistantTextLength = assistantMessages.reduce((total, item) => total + (Array.isArray(item?.parts)
+          ? item.parts.reduce((partTotal, part) => partTotal + (part?.type === "text" && typeof part.text === "string" ? part.text.trim().length : 0), 0)
+          : 0), 0);
+        if (assistantTextLength === 0) await new Promise((resolve) => setTimeout(resolve, 1_000));
+      }
+      add(assistantTextLength > 0 ? "pass" : "fail", "session.reply", "Receive completed assistant response", {
+        assistantMessageCount,
+        assistantTextLength,
       });
+      if (assistantTextLength === 0) throw new Error(`assistant response did not arrive within ${config.waitReplySeconds} seconds`);
+    }
+
+    if (!config.skipEventStream) {
+      const events = await request(`/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/events?snapshot=true&details=true&maxEvents=${encodeURIComponent(String(config.maxEvents))}`, {
+        accept: "text/event-stream",
+      });
+      const parsed = parseSse(events.text);
+      const eventTypes = parsed.map((event) => event.event).filter(Boolean);
+      add(parsed.length ? "pass" : "warn", "session.events", "Read bounded session event stream", {
+        latencyMs: events.latencyMs,
+        eventCount: parsed.length,
+        eventTypes,
+      });
+      if (config.expectedEvents.length) {
+        const missing = config.expectedEvents.filter((eventType) => !eventTypes.includes(eventType));
+        add(missing.length ? "fail" : "pass", "session.event-expectations", "Validate expected session event types", {
+          expectedEvents: config.expectedEvents,
+          missingEvents: missing,
+        });
+      }
+    } else {
+      add("skip", "session.events", "Read bounded session event stream", { hint: "Skipped with --skip-event-stream." });
     }
   } catch (error) {
     add("fail", "session.flow", "Chat session prompt/event flow", { error: error.message });

@@ -370,7 +370,7 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("Start a blank chat or choose a task below.");
     expect(src).toContain('onClick={() => startTask("", blankChatTitle, { sendImmediately: false })}');
     expect(src).toContain('`Start ${visual?.displayName ?? panel} chat`');
-    expect(src).toContain("The desk agent and its working context are already selected.");
+    expect(src).not.toContain("The desk agent and its working context are already selected.");
     expect(src).toContain("Research freely and prepare wallet-reviewed buy, sell, and cancel actions.");
     expect(src).toContain("agent: agentIdForDesk(focusedProtocolPanel)");
     expect(src).toContain("deskId: focusedProtocolPanel");
