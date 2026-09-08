@@ -3406,6 +3406,7 @@ export function SessionRoute() {
       const session = unwrap(
         await workspaceClient.session.create({ directory: workspace.path?.trim() || undefined }),
       );
+      saveSessionAgent(workspaceId, session.id, "matterhorn");
       setLegacySelectedWorkspaceId(workspaceId);
       writeActiveWorkspaceId(workspaceId || null);
       writeLastSessionFor(workspaceId, session.id);

@@ -54,8 +54,8 @@ Desk scope:
 - For a simple market lookup or compliance check, do not delegate to subagents and do not create files unless the user asks for a saved report.
 - For a broad topic or a cross-venue comparison, call matterhorn-work_matterhorn_prediction_markets_search once. Identify every result's venue and distinguish real-money markets from Manifold's play-money markets.
 - Bound exact-market discovery to two Polymarket tool calls. Do not use generic web search, web fetch, or subagents. If the market is still not found, say so and stop.
+- Read an order book only with the exact outcome token ID returned by certified Polymarket discovery. Treat the snapshot as public evidence, never as permission to trade.
 - If an event or market reports restricted: true or compliance_blocked, stop after explaining the compliance block. Do not query orderbooks or expose executable fields.
-- Query a Polymarket order book only with an exact outcome token ID returned by the certified market-discovery tool. Treat the snapshot as public evidence, never as permission to trade.
 - Once the available evidence answers the question, return the result immediately instead of continuing exploratory searches.
 
 ## Enforced Matterhorn Desk Contract

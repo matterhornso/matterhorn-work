@@ -368,7 +368,7 @@ function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
       visual.id,
       MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
     ) ?? visual
-  ).filter((visual) => !isPublicBetaWebDeployment() || visual.id !== "wellness").map((visual) => ({
+  ).filter((visual) => MATTERHORN_LAUNCH_FEATURES.longevity || visual.id !== "wellness").map((visual) => ({
       id: visual.id as CustomerWorkflowIconHint,
       title: visual.displayName,
       statusLabel: visual.statusLabel,
@@ -1699,10 +1699,10 @@ export function SessionPage(props: SessionPageProps) {
     const cards = buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data, {
       reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
     });
-    return hostedManagedTools
-      ? cards.filter((card) => card.iconHint !== "wellness")
-      : cards;
-  }, [customerWorkflowTemplatesQuery.data, hostedManagedTools]);
+    return MATTERHORN_LAUNCH_FEATURES.longevity
+      ? cards
+      : cards.filter((card) => card.iconHint !== "wellness");
+  }, [customerWorkflowTemplatesQuery.data]);
   const mondayBetaDemoCards = useMemo(
     () => buildCustomerBetaDemoStarterCards(customerWorkflowTemplatesQuery.data),
     [customerWorkflowTemplatesQuery.data],
@@ -1715,7 +1715,11 @@ export function SessionPage(props: SessionPageProps) {
   const coworkerListQuery = useQuery({
     queryKey: coworkerListQueryKey(coworkerWorkspaceId),
     queryFn: () => props.matterhornServerClient!.listCoworkers(coworkerWorkspaceId),
-    enabled: Boolean(props.matterhornServerClient && coworkerWorkspaceId),
+    enabled: Boolean(
+      MATTERHORN_LAUNCH_FEATURES.coworkers
+      && props.matterhornServerClient
+      && coworkerWorkspaceId,
+    ),
     retry: false,
     refetchInterval: (query) => query.state.status === "error" ? false : 30_000,
   });
@@ -2949,26 +2953,30 @@ export function SessionPage(props: SessionPageProps) {
                 >
                   <nav aria-label="Workspace menu" className="grid gap-0.5">
                     <p className="px-3 pb-1 pt-2 text-xs font-medium text-dls-muted">Workspace</p>
-                    <MobileWorkspaceMenuAction
-                      active={coworkersRailActive}
-                      badge={coworkerUnreadBadge ? (
-                        <>
-                          <span className="sr-only">{coworkerUnreadStatus}</span>
-                          <span aria-hidden="true" className="rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-semibold text-dls-secondary">
-                            {coworkerUnreadBadge}
-                          </span>
-                        </>
-                      ) : null}
-                      icon={<UsersRound className="size-4" />}
-                      label="Coworkers"
-                      onSelect={() => runMobileWorkspaceAction(openCoworkersRailPane)}
-                    />
-                    <MobileWorkspaceMenuAction
-                      active={filesRailActive}
-                      icon={<Files className="size-4" />}
-                      label="Coworker files"
-                      onSelect={() => runMobileWorkspaceAction(openAgentFilesRailPane)}
-                    />
+                    {MATTERHORN_LAUNCH_FEATURES.coworkers ? (
+                      <>
+                        <MobileWorkspaceMenuAction
+                          active={coworkersRailActive}
+                          badge={coworkerUnreadBadge ? (
+                            <>
+                              <span className="sr-only">{coworkerUnreadStatus}</span>
+                              <span aria-hidden="true" className="rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-semibold text-dls-secondary">
+                                {coworkerUnreadBadge}
+                              </span>
+                            </>
+                          ) : null}
+                          icon={<UsersRound className="size-4" />}
+                          label="Coworkers"
+                          onSelect={() => runMobileWorkspaceAction(openCoworkersRailPane)}
+                        />
+                        <MobileWorkspaceMenuAction
+                          active={filesRailActive}
+                          icon={<Files className="size-4" />}
+                          label="Coworker files"
+                          onSelect={() => runMobileWorkspaceAction(openAgentFilesRailPane)}
+                        />
+                      </>
+                    ) : null}
                     <MobileWorkspaceMenuAction
                       active={extensionsRailActive}
                       icon={<Settings2 className="size-4" />}
@@ -3042,7 +3050,7 @@ export function SessionPage(props: SessionPageProps) {
                         />
                       );
                     })}
-                    {!hostedManagedTools && wellnessRailLauncher ? (
+                    {MATTERHORN_LAUNCH_FEATURES.longevity && wellnessRailLauncher ? (
                       <MobileWorkspaceMenuAction
                         icon={<Dumbbell className="size-4" />}
                         label={getCustomerProtocolDeskVisual("wellness")?.displayName ?? "Longevity"}
@@ -3793,43 +3801,47 @@ export function SessionPage(props: SessionPageProps) {
                 <span className={RAIL_LABEL_CLASS}>Outputs</span>
               </Button>
             ) : null}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={cn(
-                `relative ${RAIL_BUTTON_CLASS}`,
-                coworkersRailActive && RAIL_ACTIVE_CLASS,
-              )}
-              onClick={openCoworkersRailPane}
-              title={coworkerNavigationTitle}
-              aria-pressed={coworkersRailActive}
-            >
-              <UsersRound size={17} aria-hidden="true" />
-              <span className={RAIL_LABEL_CLASS}>Coworkers</span>
-              {coworkerUnreadCount > 0 ? (
-                <>
-                  <span className="sr-only">{coworkerUnreadStatus}</span>
-                  <span aria-hidden="true" className="absolute right-1 top-1 flex min-w-3 items-center justify-center rounded-md bg-dls-hover px-1 text-[9px] font-semibold leading-3 text-dls-secondary ring-1 ring-dls-border/40">
-                    {coworkerUnreadBadge}
-                  </span>
-                </>
-              ) : null}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={cn(
-                RAIL_BUTTON_CLASS,
-                filesRailActive && RAIL_ACTIVE_CLASS,
-              )}
-              onClick={openAgentFilesRailPane}
-              title="Files for your coworker"
-              aria-label="Files for your coworker"
-              aria-pressed={filesRailActive}
-            >
-              <Files size={17} />
-              <span className={RAIL_LABEL_CLASS}>Files</span>
-            </Button>
+            {MATTERHORN_LAUNCH_FEATURES.coworkers ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn(
+                    `relative ${RAIL_BUTTON_CLASS}`,
+                    coworkersRailActive && RAIL_ACTIVE_CLASS,
+                  )}
+                  onClick={openCoworkersRailPane}
+                  title={coworkerNavigationTitle}
+                  aria-pressed={coworkersRailActive}
+                >
+                  <UsersRound size={17} aria-hidden="true" />
+                  <span className={RAIL_LABEL_CLASS}>Coworkers</span>
+                  {coworkerUnreadCount > 0 ? (
+                    <>
+                      <span className="sr-only">{coworkerUnreadStatus}</span>
+                      <span aria-hidden="true" className="absolute right-1 top-1 flex min-w-3 items-center justify-center rounded-md bg-dls-hover px-1 text-[9px] font-semibold leading-3 text-dls-secondary ring-1 ring-dls-border/40">
+                        {coworkerUnreadBadge}
+                      </span>
+                    </>
+                  ) : null}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn(
+                    RAIL_BUTTON_CLASS,
+                    filesRailActive && RAIL_ACTIVE_CLASS,
+                  )}
+                  onClick={openAgentFilesRailPane}
+                  title="Files for your coworker"
+                  aria-label="Files for your coworker"
+                  aria-pressed={filesRailActive}
+                >
+                  <Files size={17} />
+                  <span className={RAIL_LABEL_CLASS}>Files</span>
+                </Button>
+              </>
+            ) : null}
             <Button
               variant="ghost"
               size="icon-sm"
@@ -3931,7 +3943,7 @@ export function SessionPage(props: SessionPageProps) {
                 </Button>
               );
             })}
-            {!hostedManagedTools ? ([
+            {MATTERHORN_LAUNCH_FEATURES.longevity ? ([
               {
                 id: "wellness_creator_workflow",
                 label: getCustomerProtocolDeskVisual("wellness")?.displayName ?? "Longevity",

@@ -113,7 +113,7 @@ describe("hosted MCP summary", () => {
     expect(html).toContain("MCPs &amp; Tools");
     expect(html).toContain("Managed tools for this web workspace");
     expect(html).toContain("Desk research");
-    expect(html).toContain("Workspace evidence");
+    expect(html).toContain("Saved workspace records");
     expect(html).toContain("Reviewed wallet actions");
     expect(html).toContain("Matterhorn Desktop");
     expect(html).toContain("Use Matterhorn from another AI app");

@@ -38,12 +38,12 @@ describe("invite-only crypto app catalog route", () => {
     }
   });
 
-  test("keeps encrypted evidence publication explicit, testnet-only and redacted", () => {
+  test("keeps encrypted record publication explicit, testnet-only and redacted", () => {
     const catalog = readAppSource("react-app/domains/crypto-apps/crypto-app-catalog-route.tsx");
     const route = readAppSource("react-app/domains/crypto-apps/crypto-evidence-route.tsx");
     const client = readAppSource("app/lib/matterhorn-server.ts");
 
-    expect(catalog).toContain("Evidence proofs");
+    expect(catalog).toContain("Secure records");
     expect(route).toContain("Readable only by you");
     expect(route).toContain("Nothing stored publicly without your approval");
     expect(route).toContain("Coworkers cannot use your wallet");
@@ -56,7 +56,7 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).toContain("only your connected wallet can sign and submit it");
     expect(route).toContain("Only encrypted bytes go to the public Walrus test network");
     expect(route).toContain("I understand that the encrypted public bytes may remain.");
-    expect(route).toContain("I understand this evidence cannot be recovered.");
+    expect(route).toContain("I understand this record cannot be recovered.");
     expect(client).toContain("/crypto-evidence?limit=");
     expect(client).toContain("/crypto-evidence/${encodeURIComponent(evidenceId)}/publish");
     expect(client).toContain("/crypto-evidence/${encodeURIComponent(evidenceId)}/verify");

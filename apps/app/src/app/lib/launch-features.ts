@@ -5,7 +5,9 @@ import { isMatterhornPublicBetaWebDeployment } from "./matterhorn-deployment";
 export type MatterhornLaunchFeaturePolicy = {
   billing: boolean;
   cloud: boolean;
+  coworkers: boolean;
   generatedMedia: boolean;
+  longevity: boolean;
   publicOauthConnectors: string[];
   reviewedDeskActions: boolean;
 };
@@ -32,7 +34,9 @@ export function resolveMatterhornLaunchFeaturePolicy(
   return {
     billing: readBooleanFlag(env, "VITE_MATTERHORN_BILLING_ENABLED"),
     cloud: cloudEnabled,
+    coworkers: readBooleanFlag(env, "VITE_MATTERHORN_COWORKERS_ENABLED"),
     generatedMedia: readBooleanFlag(env, "VITE_MATTERHORN_GENERATED_MEDIA_ENABLED"),
+    longevity: readBooleanFlag(env, "VITE_MATTERHORN_LONGEVITY_ENABLED"),
     publicOauthConnectors: readListFlag(env, "VITE_MATTERHORN_PUBLIC_OAUTH_CONNECTORS"),
     reviewedDeskActions: !publicBetaWeb
       || readBooleanFlag(env, "VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED"),

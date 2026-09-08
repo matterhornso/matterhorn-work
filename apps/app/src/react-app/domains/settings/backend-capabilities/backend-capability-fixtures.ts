@@ -180,18 +180,18 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
       },
       sui: {
         family: "sui",
-        ...cap("preview", "Sui wallet"),
+        ...cap("working", "Sui wallet"),
         custody: false,
         directConnect: true,
         publicRead: true,
         preview: true,
         signing: "client_wallet",
         supportedChains: ["sui-testnet", "sui-mainnet"],
-        description: "Sui wallet connection is in a limited release. Matterhorn Desks never holds keys.",
+        description: "Sui wallet connection, reviewed transactions, and receipt verification are available. Matterhorn Desks never holds keys.",
         runtimeSupport: {
           web: {
             runtime: "web",
-            ...cap("preview", "Web wallet-standard connect", "Connect a supported Sui wallet in the web app. The user reviews and signs every transaction in that wallet."),
+            ...cap("working", "Web wallet-standard connect", "Connect a supported Sui wallet in the web app. The user reviews and signs every transaction in that wallet."),
             custody: false,
             directConnect: true,
             publicRead: true,
@@ -200,7 +200,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
           },
           desktop: {
             runtime: "desktop",
-            ...cap("preview", "Desktop external handoff", "Desktop prepares Sui transaction drafts. The user reviews, signs, and submits them in a Sui wallet or protocol client."),
+            ...cap("working", "Desktop external handoff", "Desktop prepares Sui transaction drafts. The user reviews, signs, and submits them in a Sui wallet or protocol client."),
             custody: false,
             directConnect: false,
             publicRead: true,
@@ -209,7 +209,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
           },
           electron: {
             runtime: "electron",
-            ...cap("preview", "Electron external handoff", "Electron prepares Sui transaction drafts. The user reviews, signs, and submits them in a Sui wallet or protocol client."),
+            ...cap("working", "Electron external handoff", "Electron prepares Sui transaction drafts. The user reviews, signs, and submits them in a Sui wallet or protocol client."),
             custody: false,
             directConnect: false,
             publicRead: true,

@@ -480,7 +480,7 @@ describe("Hyperliquid L1 order-action payload", () => {
     expect(result.canSubmit).toBe(false);
     expect(result.publicAuditReceiptCandidate?.version).toBe("matterhorn.market.receipt.v1");
     expect(result.publicAuditReceiptCandidate?.status).toBe("received");
-    expect(result.publicAuditReceiptCandidate?.warnings.join(" ")).toContain("not exchange submission evidence");
+    expect(result.publicAuditReceiptCandidate?.warnings.join(" ")).toContain("not proof of exchange submission");
   });
 
   test("Phase 2 rejects hash mismatch and raw artifact material", async () => {

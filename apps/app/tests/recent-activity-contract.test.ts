@@ -164,7 +164,7 @@ describe("Project Activity contract tests", () => {
       expect(source).not.toContain("Describe an outcome, continue your work, or open a protocol desk.");
       expect(coworkerStart).toContain("Start something");
       expect(coworkerStart).toContain('aria-label="Example goals"');
-      expect(source).toContain("Protocol desks");
+      expect(source).toContain("Desks");
       expect(source).toContain("Project folder");
       expect(source).toContain("Saved outputs");
       expect(source).toContain("grid-cols-[auto_minmax(0,1fr)_auto]");

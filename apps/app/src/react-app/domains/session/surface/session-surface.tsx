@@ -195,6 +195,7 @@ import {
   deskToneStyle,
   getCustomerProtocolDeskVisual,
   getCustomerProtocolDeskVisualForLaunch,
+  isPrivateAiDeskAgent,
 } from "../workflows/protocol-desk-ui";
 import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
@@ -1569,8 +1570,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
       reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
     })
       .filter((card) => card.id !== "blank_chat_workflow")
-      .filter((card) => !publicBetaWeb || card.iconHint !== "wellness"),
-    [customerWorkflowTemplatesQuery.data, publicBetaWeb],
+      .filter((card) => MATTERHORN_LAUNCH_FEATURES.longevity || card.iconHint !== "wellness"),
+    [customerWorkflowTemplatesQuery.data],
   );
 
   const currentSnapshot = snapshotQuery.data?.session.id === props.sessionId ? snapshotQuery.data : null;
@@ -1791,6 +1792,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const selectedWorkflowDeskAgent = useMemo(
     () => getMatterhornDeskAgentById(props.selectedAgent),
     [props.selectedAgent],
+  );
+  const privateAiActive = useMemo(
+    () => isPrivateAiDeskAgent(linkedWorkflowRun?.agentId) || isPrivateAiDeskAgent(props.selectedAgent),
+    [linkedWorkflowRun?.agentId, props.selectedAgent],
   );
   const linkedWorkflowDeskMode = useMemo(
     () => matterhornDeskModeForAgent(linkedWorkflowRun?.agentId),
@@ -3305,7 +3310,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     }}
                   />
                 </div>
-              ) : shellConfig.starterCards ? (
+              ) : privateAiActive ? null : shellConfig.starterCards ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-5 sm:px-6">
                   <div className="w-full max-w-[880px]">
                     <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -3443,6 +3448,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         <DevProfiler id="SessionComposer">
         <ReactSessionComposer
           draft={draft}
+          placeholder={privateAiActive ? "Message Private AI…" : undefined}
           mentions={mentions}
           onDraftChange={handleComposerDraftChange}
         onSend={handleSend}
@@ -3484,8 +3490,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
         executionModesEnabled={props.executionModesEnabled}
         onExecutionModeChange={props.onExecutionModeChange}
         agentLabel={props.agentLabel}
-        agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode)}
-        hideLockedAgentLabel={Boolean(activeDeskMode)}
+        agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode || privateAiActive)}
+        hideLockedAgentLabel={Boolean(activeDeskMode || privateAiActive)}
         agentSelectionLockedReason={
           linkedWorkflowRun?.deskId === "blank"
             ? "This chat keeps the agent selected when it started."

@@ -182,7 +182,7 @@ describe("plain-language response details", () => {
     expect(html).toContain("Context compiler: matterhorn.coworker-context-compiler.v2");
     expect(html).toContain("matterhorn_work_hyperliquid_markets · read · untrusted_external · success · 80ms");
     expect(html).toContain("certified_cache · age 10000ms · freshness limit 30000ms");
-    expect(html).toContain(`evidence proof ${"a".repeat(64)}`);
+    expect(html).toContain(`result fingerprint ${"a".repeat(64)}`);
     expect(html).toContain(`observation proof ${"b".repeat(64)}`);
     expect(html).toContain("Intent intent-proof · policy policy-proof · simulation simulation-proof · not sent");
     expect(html).not.toContain("workspace_private");
@@ -243,7 +243,7 @@ describe("plain-language response details", () => {
 
     expect(html).toContain("Used recently checked public data");
     expect(html).toContain("certified_cache · age 10000ms · freshness limit 30000ms");
-    expect(html).not.toContain("evidence proof");
+    expect(html).not.toContain("result fingerprint");
     expect(html).not.toContain("observation proof");
     expect(html).not.toContain("undefined");
   });

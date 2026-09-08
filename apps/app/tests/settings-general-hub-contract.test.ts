@@ -6,11 +6,11 @@ function readReactSource(path: string) {
 }
 
 describe("Settings general hub project surfaces", () => {
-  test("shows backend-backed project evidence surfaces", () => {
+  test("shows backend-backed project record surfaces", () => {
     const source = readReactSource("domains/settings/pages/general-view.tsx");
 
     expect(source).toContain("Project surfaces");
-    expect(source).toContain("Open the workspace evidence surfaces with live backend status.");
+    expect(source).toContain("Open workspace history and saved records with live backend status.");
     expect(source).toContain('section: "memory"');
     expect(source).toContain('section: "notes"');
     expect(source).toContain('section: "outputs"');

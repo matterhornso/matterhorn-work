@@ -320,10 +320,10 @@ describe("Shared primitives UI contract", () => {
     expect(composer).toContain("props.hideLockedAgentLabel ? null");
     expect(composer).toContain("<LockKeyhole");
     expect(sessionSurface).toContain(
-      "agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode)}",
+      "agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode || privateAiActive)}",
     );
     expect(sessionSurface).toContain(
-      "hideLockedAgentLabel={Boolean(activeDeskMode)}",
+      "hideLockedAgentLabel={Boolean(activeDeskMode || privateAiActive)}",
     );
     expect(sessionSurface).toContain(
       'linkedWorkflowRun?.deskId === "blank"',

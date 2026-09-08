@@ -8,7 +8,10 @@ import {
   type ProtocolDeskManifest,
   type ProtocolDeskVisualStatus,
 } from "@matterhorn-work/types/matterhorn-workflows";
-import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
+import {
+  getMatterhornDeskAgent,
+  getMatterhornDeskAgentById,
+} from "@matterhorn-work/types/desk-agents";
 
 export type CustomerProtocolDeskId =
   | "private_ai"
@@ -121,6 +124,10 @@ export function protocolDeskIdForWorkspace(workspaceId: string | null | undefine
 export function protocolDeskIdForChatMode(chatMode: string | null | undefined): CustomerProtocolDeskId | null {
   if (!chatMode) return null;
   return WORKSPACE_TO_DESK_ID[chatMode] ?? null;
+}
+
+export function isPrivateAiDeskAgent(agentId: string | null | undefined): boolean {
+  return getMatterhornDeskAgentById(agentId)?.deskId === "blank";
 }
 
 function compactActionLabel(label: string): string {

@@ -1088,7 +1088,7 @@ describe("Security capability classification", () => {
     expect(caps.version).toBe("matterhorn.backend.capabilities.v1");
     expect(caps.security.memoryWriteGuards.status).toBe("working");
     expect(caps.outputs.status).toBe("working");
-    expect(caps.wallets.families.sui.status).toBe("preview");
+    expect(caps.wallets.families.sui.status).toBe("working");
     expect(caps.wallets.families.sui.signing).toBe("client_wallet");
   });
 

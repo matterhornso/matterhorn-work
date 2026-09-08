@@ -74,7 +74,7 @@ describe("Backend capability status helpers", () => {
 
     expect(copy.label).toBe("Not supported here");
     expect(copy.hint).toContain("Sui direct wallet connect is not available in this runtime.");
-    expect(copy.hint).toContain("Transaction drafts and receipt evidence remain available");
+    expect(copy.hint).toContain("Transaction drafts and receipts remain available");
     expect(copy.hint).not.toContain("not implemented");
   });
 });
@@ -88,7 +88,7 @@ describe("Backend capability fixtures", () => {
     expect(f.notes.scope).toBe("workspace");
     expect(f.wallets.families.evm.directConnect).toBe(true);
     expect(f.wallets.families.evm.signing).toBe("client_wallet");
-    expect(f.wallets.families.sui.status).toBe("preview");
+    expect(f.wallets.families.sui.status).toBe("working");
     expect(f.wallets.families.sui.directConnect).toBe(true);
     expect(f.wallets.families.sui.signing).toBe("client_wallet");
     expect(f.wallets.families.bittensor.publicRead).toBe(true);
@@ -226,7 +226,7 @@ describe("Backend capabilities section renders all capability states", () => {
     expect(html).toContain("MATTERHORN_SUI_KIOSK_PACKAGE_ID");
     expect(html).toContain("Connect here");
     expect(html).toContain("Read here · Prepare only");
-    expect(html).toContain("Connect here · Limited release");
+    expect(html).not.toContain("Connect here · Limited release");
     expect(html).toContain("Machine / global");
     expect(html).toContain("Structured feedback is stored locally for evaluation, routing, and product quality only.");
     expect(html).toContain("Route: /settings/wallet");
@@ -238,7 +238,7 @@ describe("Backend capabilities section renders all capability states", () => {
     const html = renderCapabilitiesSection(backendCapabilitiesNeedsSetupFixture);
     expect(html).toContain("Needs setup");
     expect(html).toContain("EVM wallet");
-    expect(html).toContain("Connect here · Limited release");
+    expect(html).not.toContain("Connect here · Limited release");
   });
 
   test("preview state", () => {

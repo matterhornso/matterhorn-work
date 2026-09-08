@@ -122,7 +122,7 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
                 Pick a folder where Matterhorn saves chats, files, transaction receipts, QA reports, and workflows.
               </OnboardingStep>
               <OnboardingStep title="Choose a product lane">
-                Start a Private AI task or open Bittensor, Hyperliquid, Polymarket, Sui, or Longevity.
+                Start a Private AI task or open Bittensor, Hyperliquid, Polymarket, or Sui.
               </OnboardingStep>
               <OnboardingStep title="Review before action">
                 Review sources and exact transaction details before anything sensitive happens. Matterhorn never holds your keys.

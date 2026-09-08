@@ -68,6 +68,7 @@ function formatComposerMcpConnection(entry: McpServerEntry) {
 
 type ComposerProps = {
   draft: string;
+  placeholder?: string;
   mentions: Record<string, "agent" | "file">;
   onDraftChange: (value: string) => void;
   onSend: () => void | Promise<void>;
@@ -1258,7 +1259,7 @@ export function ReactSessionComposer(props: ComposerProps) {
               mentions={props.mentions}
               pastedText={pastedTextTokens}
               disabled={props.disabled}
-              placeholder={t("composer.placeholder")}
+              placeholder={props.placeholder ?? t("composer.placeholder")}
               onChange={props.onDraftChange}
               onSubmit={props.onSend}
               onExpandPastedText={handleExpandPastedText}

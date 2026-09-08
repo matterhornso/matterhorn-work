@@ -7040,7 +7040,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const sui = walletFamily({
     family: "sui",
     ...capability(
-      "preview",
+      "working",
       "Sui wallet",
       "Connect a supported Sui wallet in the web app for account reads and transaction previews. The user reviews and signs every transaction in that wallet.",
       {
@@ -7063,7 +7063,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     runtimeSupport: {
       web: {
         runtime: "web",
-        ...capability("preview", "Web wallet-standard connect", "Connect a supported Sui wallet in the web app. The user reviews and signs every transaction in that wallet."),
+        ...capability("working", "Web wallet-standard connect", "Connect a supported Sui wallet in the web app. The user reviews and signs every transaction in that wallet."),
         custody: false,
         directConnect: true,
         publicRead: true,
@@ -7072,7 +7072,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       desktop: {
         runtime: "desktop",
-        ...capability("preview", "Desktop external handoff", "Desktop can prepare Sui reads, transaction drafts, and receipts. The user reviews, signs, and submits them in a Sui wallet or protocol client outside Matterhorn."),
+        ...capability("working", "Desktop external handoff", "Desktop can prepare Sui reads, transaction drafts, and receipts. The user reviews, signs, and submits them in a Sui wallet or protocol client outside Matterhorn."),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -7081,7 +7081,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       electron: {
         runtime: "electron",
-        ...capability("preview", "Electron external handoff", "Electron can prepare Sui reads, transaction drafts, and receipts. The user reviews, signs, and submits them in a Sui wallet or protocol client outside Matterhorn."),
+        ...capability("working", "Electron external handoff", "Electron can prepare Sui reads, transaction drafts, and receipts. The user reviews, signs, and submits them in a Sui wallet or protocol client outside Matterhorn."),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -7090,11 +7090,14 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
     },
   });
-  const bittensorSidecarConfigured = Boolean(process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL?.trim());
-  const bittensorCapabilityStatus: MatterhornCapabilityStatus = bittensorSidecarConfigured ? "working" : "preview";
-  const bittensorCapabilityDescription = bittensorSidecarConfigured
+  const bittensorSidecar = await checkSubtensorSidecarHealth();
+  const bittensorLiveProviderHealthy = bittensorSidecar.status === "healthy" && bittensorSidecar.canRead && bittensorSidecar.canPrepare;
+  const bittensorCapabilityStatus: MatterhornCapabilityStatus = bittensorLiveProviderHealthy ? "working" : "needs_setup";
+  const bittensorCapabilityDescription = bittensorLiveProviderHealthy
     ? "Bittensor uses live provider-backed public SS58 reads and prepares supported actions for exact connected-wallet review."
-    : "Bittensor public workflows are available with clearly labeled fallback data. Configure the Subtensor sidecar for live-chain reads.";
+    : bittensorSidecar.configured
+      ? "The configured Bittensor live provider is unavailable. Restore the Subtensor sidecar before relying on live-chain reads."
+      : "Bittensor public workflows are available with clearly labeled fallback data. Configure the Subtensor sidecar for live-chain reads.";
   const bittensor = walletFamily({
     family: "bittensor",
     ...capability(
@@ -7102,8 +7105,9 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       "Bittensor",
       bittensorCapabilityDescription,
       {
-        dataMode: bittensorSidecarConfigured ? "live_provider" : "curated_fallback",
-        liveProviderConfigured: bittensorSidecarConfigured,
+        dataMode: bittensorLiveProviderHealthy ? "live_provider" : "curated_fallback",
+        liveProviderConfigured: bittensorSidecar.configured,
+        liveProviderHealthy: bittensorLiveProviderHealthy,
         providerSetup: "BITTENSOR_SUBTENSOR_SIDECAR_URL",
       },
     ),
@@ -7146,7 +7150,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const memoryStatus = memoryCounts.status;
   const notesStatus: MatterhornCapabilityStatus = "working";
   const evidenceStatus: MatterhornCapabilityStatus = "working";
-  const walletStatus: MatterhornCapabilityStatus = "preview";
+  const walletStatus: MatterhornCapabilityStatus = bittensorLiveProviderHealthy ? "working" : "needs_setup";
 
   const imageProviderConfig = resolveImageGenerationProviderFromEnv(process.env);
   const imageProvider = createImageGenerationProvider(imageProviderConfig);

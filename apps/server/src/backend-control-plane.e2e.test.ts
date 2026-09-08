@@ -50,6 +50,7 @@ const priorEnv = {
   stripePriceIdPlus: process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS,
   stripePriceIdMax: process.env.MATTERHORN_STRIPE_PRICE_ID_MAX,
   stripeTestCustomerId: process.env.MATTERHORN_STRIPE_TEST_CUSTOMER_ID,
+  bittensorSidecarUrl: process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL,
 };
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
@@ -112,6 +113,27 @@ async function startProviderCatalogServer(payload: unknown): Promise<string> {
     }
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify(payload));
+  });
+  const port = await new Promise<number>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address() as AddressInfo;
+      resolve(address.port);
+    });
+  });
+  stops.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  return `http://127.0.0.1:${port}`;
+}
+
+async function startBittensorSidecarServer(): Promise<string> {
+  const server = createHttpServer((request, response) => {
+    if (request.url !== "/liveness") {
+      response.writeHead(404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: "not_found" }));
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ canRead: true, canPrepare: true, canSubmit: false }));
   });
   const port = await new Promise<number>((resolve, reject) => {
     server.once("error", reject);
@@ -320,10 +342,12 @@ afterEach(async () => {
   restoreEnv("stripePriceIdPlus", "MATTERHORN_STRIPE_PRICE_ID_PLUS");
   restoreEnv("stripePriceIdMax", "MATTERHORN_STRIPE_PRICE_ID_MAX");
   restoreEnv("stripeTestCustomerId", "MATTERHORN_STRIPE_TEST_CUSTOMER_ID");
+  restoreEnv("bittensorSidecarUrl", "BITTENSOR_SUBTENSOR_SIDECAR_URL");
 });
 
 describe("backend control plane routes", () => {
   test("GET /api/backend/capabilities reports truthful backend status without secrets", async () => {
+    delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
     const { base } = await boot();
 
     const result = await jsonFetch(base, "/api/backend/capabilities");
@@ -360,18 +384,18 @@ describe("backend control plane routes", () => {
     });
     expect(result.payload.memory.scope).toBe("machine_global");
     expect(result.payload.wallets.families.evm.status).toBe("working");
-    expect(result.payload.wallets.families.bittensor.status).toBe("preview");
+    expect(result.payload.wallets.families.bittensor.status).toBe("needs_setup");
     expect(result.payload.wallets.families.bittensor.signing).toBe("external_signer");
     expect(result.payload.wallets.families.bittensor.details).toMatchObject({
       dataMode: "curated_fallback",
       liveProviderConfigured: false,
       providerSetup: "BITTENSOR_SUBTENSOR_SIDECAR_URL",
     });
-    expect(result.payload.wallets.families.sui.status).toBe("preview");
+    expect(result.payload.wallets.families.sui.status).toBe("working");
     expect(result.payload.wallets.families.sui.directConnect).toBe(true);
     expect(result.payload.wallets.families.sui.signing).toBe("client_wallet");
     expect(result.payload.wallets.families.sui.runtimeSupport.web).toMatchObject({
-      status: "preview",
+      status: "working",
       label: "Web wallet-standard connect",
       directConnect: true,
       publicRead: true,
@@ -379,7 +403,7 @@ describe("backend control plane routes", () => {
       signing: "client_wallet",
     });
     expect(result.payload.wallets.families.sui.runtimeSupport.desktop).toMatchObject({
-      status: "preview",
+      status: "working",
       label: "Desktop external handoff",
       directConnect: false,
       publicRead: true,
@@ -392,7 +416,7 @@ describe("backend control plane routes", () => {
       signing: "external_signer",
     });
     expect(result.payload.wallets.families.bittensor.runtimeSupport.electron).toMatchObject({
-      status: "preview",
+      status: "needs_setup",
       directConnect: false,
       signing: "external_signer",
     });
@@ -428,6 +452,28 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
     expect(serialized).not.toContain("Sui is not implemented yet");
+  });
+
+  test("reports Bittensor as working when the production live provider is configured", async () => {
+    process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = await startBittensorSidecarServer();
+    const { base } = await boot();
+
+    const result = await jsonFetch(base, "/api/backend/capabilities");
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.wallets.status).toBe("working");
+    expect(result.payload.wallets.families.bittensor).toMatchObject({
+      status: "working",
+      publicRead: true,
+      preview: true,
+      signing: "external_signer",
+      details: {
+        dataMode: "live_provider",
+        liveProviderConfigured: true,
+        liveProviderHealthy: true,
+      },
+    });
+    expect(result.payload.wallets.families.bittensor.runtimeSupport.web.status).toBe("working");
   });
 
   test("GET /api/backend/capabilities reports outputs as read-only preview when writes are disabled", async () => {

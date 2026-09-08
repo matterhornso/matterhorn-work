@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   getCustomerProtocolDeskVisual,
   getDeskWorkflowManifest,
+  isPrivateAiDeskAgent,
   CUSTOMER_LAUNCHER_DESK_IDS,
 } from "../src/react-app/domains/session/workflows/protocol-desk-ui";
 import {
@@ -28,6 +29,20 @@ describe("desk workflow stage panel metadata", () => {
     expect(visual?.agentId).toBe("matterhorn");
     expect(visual?.category).toBe("general");
     expect(getDeskWorkflowManifest("private_ai")).toBeNull();
+    expect(isPrivateAiDeskAgent("matterhorn")).toBe(true);
+    expect(isPrivateAiDeskAgent("matterhorn-bittensor")).toBe(false);
+
+    const routeSource = readFileSync(
+      "apps/app/src/react-app/shell/session-route.tsx",
+      "utf8",
+    );
+    const surfaceSource = readFileSync(
+      "apps/app/src/react-app/domains/session/surface/session-surface.tsx",
+      "utf8",
+    );
+    expect(routeSource).toContain('saveSessionAgent(workspaceId, session.id, "matterhorn")');
+    expect(surfaceSource).toContain("privateAiActive ? null : shellConfig.starterCards");
+    expect(surfaceSource).toContain('placeholder={privateAiActive ? "Message Private AI…" : undefined}');
   });
 
   test("Longevity exposes the full 7-stage workflow", () => {

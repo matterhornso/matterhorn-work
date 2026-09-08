@@ -74,7 +74,7 @@ function capabilities(overrides: Partial<MatterhornBackendCapabilitiesResponse> 
           supportedChains: ["Base Sepolia", "Base"],
         },
         sui: {
-          status: "preview",
+          status: "working",
           label: "Sui wallet",
           family: "sui",
           custody: false,
@@ -86,7 +86,7 @@ function capabilities(overrides: Partial<MatterhornBackendCapabilitiesResponse> 
           runtimeSupport: {
             web: {
               runtime: "web",
-              status: "preview",
+              status: "working",
               label: "Web wallet-standard connect",
               description: "Sui wallet-standard wallets can connect in the web app through Mysten dApp Kit.",
               custody: false,
@@ -97,7 +97,7 @@ function capabilities(overrides: Partial<MatterhornBackendCapabilitiesResponse> 
             },
             desktop: {
               runtime: "desktop",
-              status: "preview",
+              status: "working",
               label: "Desktop external handoff",
               description: "Desktop prepares Sui handoffs; signing happens in an external Sui wallet or protocol client.",
               custody: false,
@@ -108,7 +108,7 @@ function capabilities(overrides: Partial<MatterhornBackendCapabilitiesResponse> 
             },
             electron: {
               runtime: "electron",
-              status: "preview",
+              status: "working",
               label: "Electron external handoff",
               description: "Electron prepares Sui handoffs; signing happens in an external Sui wallet or protocol client.",
               custody: false,
@@ -507,7 +507,7 @@ describe("backend capability UI contract", () => {
     expect(backendCapabilityTone("unsupported")).toBe("neutral");
   });
 
-  test("model and wallet helpers explain limited Sui support instead of hiding it", () => {
+  test("model and wallet helpers report production Sui support and signing boundaries", () => {
     const result = capabilities();
     expect(summarizeModelSource(result)).toBe("Included models / Big Pickle");
     expect(summarizeModelRoutingPolicy(result)).toContain(
@@ -520,18 +520,17 @@ describe("backend capability UI contract", () => {
     const walletRows = walletFamilySummary(result);
     expect(walletRows.map((row) => [row.family, row.label, row.status])).toEqual([
       ["EVM", "EVM direct connect", "working"],
-      ["Sui", "Sui wallet", "preview"],
+      ["Sui", "Sui wallet", "working"],
       ["Bittensor", "Bittensor external signer", "preview"],
     ]);
     expect(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.web.directConnect).toBe(true);
     expect(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.desktop.directConnect).toBe(false);
     expect(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.desktop.signing).toBe("external_signer");
     const webCopy = walletRuntimeSupportSummary(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.web);
-    expect(webCopy.label).toBe("Connect here · Limited release");
+    expect(webCopy.label).toBe("Connect here");
     expect(webCopy.detail).toContain("review and sign every transaction in your wallet");
-    expect(webCopy.detail).toContain("Wallet compatibility is still expanding");
     const desktopCopy = walletRuntimeSupportSummary(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.desktop);
-    expect(desktopCopy.label).toBe("Prepare only · Limited release");
+    expect(desktopCopy.label).toBe("Prepare only");
     expect(desktopCopy.detail).toContain("Review, sign, and submit it in your own wallet or protocol client");
   });
 
