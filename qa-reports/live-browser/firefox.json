@@ -1,0 +1,134 @@
+{
+  "version": "matterhorn.live-browser-accessibility-acceptance.v1",
+  "generatedAt": "2026-09-08T11:57:58.081Z",
+  "browser": "firefox",
+  "appUrl": "https://matterhorn-desks-canary.vercel.app",
+  "status": "pass",
+  "checks": [
+    {
+      "id": "page_title",
+      "label": "Page title",
+      "status": "pass",
+      "summary": "Document title is Matterhorn Desks."
+    },
+    {
+      "id": "landmark",
+      "label": "Main landmark",
+      "status": "pass",
+      "summary": "Found 1 main landmarks."
+    },
+    {
+      "id": "headings",
+      "label": "Heading structure",
+      "status": "pass",
+      "summary": "Found 2 headings."
+    },
+    {
+      "id": "control_names",
+      "label": "Control names",
+      "status": "pass",
+      "summary": "Found 0 unnamed visible controls.",
+      "examples": []
+    },
+    {
+      "id": "input_names",
+      "label": "Input names",
+      "status": "pass",
+      "summary": "Found 2 visible inputs and all have names."
+    },
+    {
+      "id": "responsive",
+      "label": "Responsive layout",
+      "status": "pass",
+      "summary": "No tested viewport has horizontal overflow.",
+      "viewports": [
+        {
+          "width": 320,
+          "horizontalOverflow": 0,
+          "unnamedControlCount": 0
+        },
+        {
+          "width": 375,
+          "horizontalOverflow": 0,
+          "unnamedControlCount": 0
+        },
+        {
+          "width": 768,
+          "horizontalOverflow": 0,
+          "unnamedControlCount": 0
+        },
+        {
+          "width": 1024,
+          "horizontalOverflow": 0,
+          "unnamedControlCount": 0
+        },
+        {
+          "width": 1440,
+          "horizontalOverflow": 0,
+          "unnamedControlCount": 0
+        }
+      ]
+    },
+    {
+      "id": "responsive_names",
+      "label": "Responsive control names",
+      "status": "pass",
+      "summary": "No tested viewport exposes unnamed controls."
+    },
+    {
+      "id": "keyboard_order",
+      "label": "Keyboard order",
+      "status": "pass",
+      "summary": "Keyboard traversal reached 5 distinct controls."
+    },
+    {
+      "id": "focus_visible",
+      "label": "Visible focus",
+      "status": "pass",
+      "summary": "Every inspected keyboard stop has a visible focus indicator."
+    },
+    {
+      "id": "auth_or_workspace",
+      "label": "Application shell",
+      "status": "pass",
+      "summary": "Matterhorn auth or workspace shell is visible."
+    }
+  ],
+  "focusStops": [
+    {
+      "name": "Sign in",
+      "tag": "BUTTON",
+      "visibleIndicator": true
+    },
+    {
+      "name": "Create account",
+      "tag": "BUTTON",
+      "visibleIndicator": true
+    },
+    {
+      "name": "",
+      "tag": "INPUT",
+      "visibleIndicator": true
+    },
+    {
+      "name": "",
+      "tag": "INPUT",
+      "visibleIndicator": true
+    },
+    {
+      "name": "Sign in",
+      "tag": "BUTTON",
+      "visibleIndicator": true
+    },
+    {
+      "name": "Security",
+      "tag": "A",
+      "visibleIndicator": true
+    },
+    {
+      "name": "Privacy",
+      "tag": "A",
+      "visibleIndicator": true
+    }
+  ]
+}
