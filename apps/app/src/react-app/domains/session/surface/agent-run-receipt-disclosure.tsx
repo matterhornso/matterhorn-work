@@ -268,7 +268,7 @@ export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgen
                     {tool.source ? ` · ${tool.source}` : ""}
                     {tool.freshness ? ` · ${tool.freshness}` : ""}
                     {tool.evidence ? ` · ${tool.evidence.delivery} · age ${tool.evidence.ageMs ?? "unknown"}ms · freshness limit ${tool.evidence.freshnessMaxAgeMs ?? "none"}ms` : ""}
-                    {tool.evidence?.projectionHash ? ` · evidence proof ${tool.evidence.projectionHash}` : ""}
+                    {tool.evidence?.projectionHash ? ` · result fingerprint ${tool.evidence.projectionHash}` : ""}
                     {tool.evidence?.observationHash ? ` · observation proof ${tool.evidence.observationHash}` : ""}
                   </li>
                 ))}

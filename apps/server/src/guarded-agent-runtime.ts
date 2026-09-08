@@ -2103,7 +2103,7 @@ export class MatterhornGuardedAgentRuntime {
       throw new GuardedRuntimeError(
         409,
         "crypto_evidence_finalization_state_invalid",
-        "Matterhorn could not verify pending encrypted evidence.",
+        "Matterhorn could not verify the pending secure record.",
       );
     }
     let sealed = 0;
@@ -2232,7 +2232,7 @@ export class MatterhornGuardedAgentRuntime {
       throw new GuardedRuntimeError(
         503,
         "crypto_evidence_finalization_integrity_unavailable",
-        "Matterhorn cannot safely persist pending encrypted evidence.",
+        "Matterhorn cannot safely save the pending secure record.",
       );
     }
     return this.finalizedRunAuthorityKey;

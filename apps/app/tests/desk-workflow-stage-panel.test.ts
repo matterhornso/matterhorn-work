@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   getCustomerProtocolDeskVisual,
   getDeskWorkflowManifest,
+  isPrivateAiDeskAgent,
   CUSTOMER_LAUNCHER_DESK_IDS,
 } from "../src/react-app/domains/session/workflows/protocol-desk-ui";
 import {
@@ -10,7 +11,7 @@ import {
 } from "@matterhorn-work/types/desk-agents";
 
 describe("desk workflow stage panel metadata", () => {
-  test.each(CUSTOMER_LAUNCHER_DESK_IDS)("%s has a workflow manifest and desk visual", (deskId) => {
+  test.each(CUSTOMER_LAUNCHER_DESK_IDS.filter((deskId) => deskId !== "private_ai"))("%s has a workflow manifest and desk visual", (deskId) => {
     const visual = getCustomerProtocolDeskVisual(deskId);
     const manifest = getDeskWorkflowManifest(deskId);
     expect(visual).not.toBeNull();
@@ -20,6 +21,28 @@ describe("desk workflow stage panel metadata", () => {
     expect(manifest?.steps.length).toBeGreaterThan(0);
     expect(manifest?.inputPrompts.length).toBeGreaterThan(0);
     expect(manifest?.generatedArtifacts.length).toBeGreaterThan(0);
+  });
+
+  test("Private AI opens directly into the guarded general agent", () => {
+    const visual = getCustomerProtocolDeskVisual("private_ai");
+    expect(visual?.displayName).toBe("Private AI");
+    expect(visual?.agentId).toBe("matterhorn");
+    expect(visual?.category).toBe("general");
+    expect(getDeskWorkflowManifest("private_ai")).toBeNull();
+    expect(isPrivateAiDeskAgent("matterhorn")).toBe(true);
+    expect(isPrivateAiDeskAgent("matterhorn-bittensor")).toBe(false);
+
+    const routeSource = readFileSync(
+      "apps/app/src/react-app/shell/session-route.tsx",
+      "utf8",
+    );
+    const surfaceSource = readFileSync(
+      "apps/app/src/react-app/domains/session/surface/session-surface.tsx",
+      "utf8",
+    );
+    expect(routeSource).toContain('saveSessionAgent(workspaceId, session.id, "matterhorn")');
+    expect(surfaceSource).toContain("privateAiActive ? null : shellConfig.starterCards");
+    expect(surfaceSource).toContain('placeholder={privateAiActive ? "Message Private AI…" : undefined}');
   });
 
   test("Longevity exposes the full 7-stage workflow", () => {

@@ -69,7 +69,7 @@ export function buildMarketExecutionReadinessReport(checkedAt = new Date().toISO
       { id: "preview_hash_binding", status: "pass", summary: "Every supported submission is bound to one exact, expiring reviewed intent." },
       { id: "connected_wallet_only", status: "pass", summary: "The connected wallet authorizes each supported action. Matterhorn never signs or custodies keys." },
       { id: "policy_and_simulation", status: "pass", summary: "Policy and fresh protocol checks run before wallet review; changed terms require a new ticket." },
-      { id: "public_receipt_import", status: "pass", summary: "Receipt evidence is public status only and not treated as exchange submission authority." },
+      { id: "public_receipt_import", status: "pass", summary: "A transaction receipt is public status only and is not treated as exchange submission authority." },
       { id: "route_level_kill_switch", status: "pass", summary: hyperliquidExecution ? "The deployment kill switch enables Hyperliquid execution." : "The deployment kill switch currently disables Hyperliquid execution." },
       {
         id: "live_submit_routes",
@@ -185,7 +185,7 @@ export function buildMarketExecutionChainGuide() {
       {
         id: "receipt_reconciliation",
         label: "Receipt",
-        purpose: "Match public protocol evidence back to the reviewed intent hash.",
+        purpose: "Match the public protocol record back to the reviewed intent hash.",
         commands: [],
         output: "A public status receipt that never contains secrets, signatures, or raw wallet material.",
       },
@@ -294,18 +294,18 @@ export function buildMarketSdkValidationCard(guide = buildMarketSdkValidationGui
   return {
     kind: "market_sdk_validation",
     title: "Official SDK validation",
-    summary: "Validate Hyperliquid and Polymarket signing templates with public/redacted fixture or operator-owned testnet evidence only.",
+    summary: "Validate Hyperliquid and Polymarket signing templates with public/redacted fixtures or operator-owned testnet results only.",
     tone: "info",
     source: { source: "matterhorn.sdk-validation", freshness: "live" },
     items: [
-      { label: "Hyperliquid", value: "Testnet evidence", tone: "info" },
-      { label: "Polymarket", value: "Polygon Amoy evidence", tone: "info" },
+      { label: "Hyperliquid", value: "Testnet results", tone: "info" },
+      { label: "Polymarket", value: "Polygon Amoy results", tone: "info" },
       { label: "Can submit", value: "No", tone: "good" },
       { label: "Live submission", value: "Off", tone: "good" },
       { label: "Secret intake", value: "Never", tone: "good" },
     ],
     warnings: [
-      "Official SDK validation is public/redacted evidence only.",
+      "Official SDK validation uses public or redacted test results only.",
       "Matterhorn does not run private SDK signing, compute final signatures, call exchanges, or submit orders.",
     ],
     data: { guide },

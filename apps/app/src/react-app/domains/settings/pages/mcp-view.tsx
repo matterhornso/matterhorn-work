@@ -522,8 +522,8 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
           title: "Use this MCP for",
           items: [
             "TAO balance, stake, hotkey, coldkey, subnet, validator, and watch context.",
-            "Transfer, stake, and unstake drafts plus subnet previews and public receipt evidence.",
-            "Customer evidence bundles and readiness checks before a connected-wallet review.",
+            "Transfer, stake, and unstake drafts plus subnet previews and public transaction receipts.",
+            "Customer verification reports and readiness checks before a connected-wallet review.",
           ],
         },
         {
@@ -531,7 +531,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
           items: [
             "Reads use public SS58, coldkey, hotkey, subnet, validator, and receipt data.",
             "Transfer, stake, and unstake drafts can move to a separate installed-wallet review; unsupported advanced calls are not offered.",
-            "Matterhorn never stores signing material; public receipts can be imported as evidence.",
+            "Matterhorn never stores signing material; public receipts can be attached to the transaction record.",
           ],
         },
         {
@@ -669,7 +669,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
           items: [
             "No live bet placement, no hidden wallet connection, and no signed payload storage.",
             "Handoffs stay external and compliance-gated.",
-            "Receipt checks are evidence tools, not a Matterhorn submission path.",
+            "Receipt checks verify transactions; they are not a Matterhorn submission path.",
           ],
         },
       ],
@@ -709,7 +709,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
           items: [
             "Searching, listing, reading, capturing, updating, forgetting, and exporting memory records.",
             "Keeping agent work consistent across Matterhorn desks without hidden capture.",
-            "Exporting user-safe evidence bundles for review.",
+            "Exporting user-safe verification reports for review.",
           ],
         },
         {
@@ -811,9 +811,9 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
   },
   {
     id: "evidence",
-    name: "Evidence MCP",
+    name: "Verification MCP",
     description:
-      "Customer-safe evidence packets, readiness checks, public QA, and receipt validation.",
+      "Customer-safe verification reports, readiness checks, public QA, and receipt validation.",
     command: "matterhorn-work mcp config --target claude --profile full",
     tools: [
       "matterhorn_crypto_chat",
@@ -828,26 +828,26 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
       "matterhorn_crypto_customer_packet",
     ],
     toolSummary:
-      "10 tools for evidence, readiness, QA, reconciliation, and receipts.",
+      "10 tools for verification, readiness, QA, reconciliation, and receipts.",
     boundary:
-      "Public or redacted evidence only. No keys, exchange secrets, signatures, payload imports, or live submit.",
+      "Public or redacted records only. No keys, exchange secrets, signatures, payload imports, or live submit.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
     docs: mcpDocs(
       "evidence",
-      "Use customer-safe readiness, QA, reconciliation, packet, and receipt evidence tools from agents.",
+      "Use customer-safe readiness, QA, reconciliation, report, and receipt-verification tools from agents.",
       [
         {
           title: "Use this MCP for",
           items: [
             "Crypto readiness, market execution readiness, live public QA, SDK validation, and reconciliation.",
-            "Bittensor and market customer evidence verification.",
+            "Bittensor and market transaction verification.",
             "Customer packets that summarize public or redacted proof without secrets.",
           ],
         },
         {
           title: "How it works",
           items: [
-            "Evidence tools assemble deterministic reports from public, redacted, or server-held safe context.",
+            "Verification tools assemble deterministic reports from public, redacted, or server-held safe context.",
             "Readiness tools state missing dependencies before production use or a handoff.",
             "Verification tools reconcile artifacts against expected Matterhorn safety boundaries.",
           ],
@@ -855,8 +855,8 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
         {
           title: "Safety boundary",
           items: [
-            "Evidence packets must not include keys, exchange secrets, signatures, signed payloads, or wallet exports.",
-            "Market evidence does not submit trades or bets.",
+            "Verification reports must not include keys, exchange secrets, signatures, signed payloads, or wallet exports.",
+            "Market verification tools do not submit trades or bets.",
             "Receipts are validation artifacts, not custody or execution authority.",
           ],
         },
@@ -867,14 +867,14 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
         "Reconcile this market artifact and explain whether it is safe to show.",
       ],
     ),
-    statusLabel: "Evidence MCP",
+    statusLabel: "Verification MCP",
     backendBacked: true,
   },
   {
     id: "workflow",
     name: "Workflow MCP",
     description:
-      "Customer templates, prompt packs, workflow catalogs, and evidence bundles.",
+      "Customer templates, prompt packs, workflow catalogs, and verification reports.",
     command: "matterhorn-work mcp config --target json --profile full",
     tools: [
       "matterhorn_services_get_capabilities",
@@ -2372,7 +2372,7 @@ function MatterhornMcpProductSection(props: {
                 : "max-w-2xl text-xs leading-5 text-dls-secondary"
             }
           >
-            Use them for protocol reads, previews, memory, workflow, evidence,
+            Use them for protocol reads, previews, memory, workflow, verification,
             and agent control. Cards show command, clients, tools, and safety
             limits.
           </p>

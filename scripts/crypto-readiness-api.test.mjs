@@ -35,7 +35,7 @@ for (const phrase of [
   "canSubmit: hyperliquidExecution",
   "requiresWalletApproval: true",
   "autoExecutionEnabled: false",
-  "Attach offline smoke/CI evidence",
+  "Attach offline smoke/CI reports",
 ]) {
   assert.ok(readinessRoute.includes(phrase), `server crypto readiness route should include ${phrase}`);
 }

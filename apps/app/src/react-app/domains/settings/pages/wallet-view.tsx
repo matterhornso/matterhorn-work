@@ -658,7 +658,7 @@ function SuiWalletPreviewSection(props: {
                 Prepare Sui actions
               </h4>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Matterhorn prepares the action and receipt evidence. Review,
+                Matterhorn prepares the action details and transaction receipt. Review,
                 sign, and submit it in your Sui wallet or protocol client.
               </p>
             </div>

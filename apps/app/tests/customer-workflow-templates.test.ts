@@ -27,14 +27,17 @@ describe("customer workflow template launch cards", () => {
     expect(titles).toContain("Polymarket");
     expect(titles).toContain("Sui");
     expect(titles).toContain("Longevity");
+    expect(titles).toContain("Start a task");
   });
 
-  test("blank chat starter uses concise chat copy without a status badge", () => {
+  test("generic starter is presented as the privacy-aware Private AI desk", () => {
     const cards = buildCustomerWorkflowStarterCards(FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES);
-    const blankChat = cards.find((card) => card.id === "blank_chat_workflow");
+    const privateAi = cards.find((card) => card.id === "blank_chat_workflow");
 
-    expect(blankChat?.title).toBe("Start chat");
-    expect(blankChat?.statusLabel).toBe("");
+    expect(privateAi?.title).toBe("Start a task");
+    expect(privateAi?.description).toContain("Custom workflows");
+    expect(privateAi?.statusLabel).toBe("Private workspace");
+    expect(privateAi?.agentId).toBe("matterhorn");
   });
 
   test("healthy workflow-ready starter states stay silent", () => {

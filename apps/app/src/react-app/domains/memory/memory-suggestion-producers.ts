@@ -335,7 +335,7 @@ function buildSuiSuggestions(input: MatterhornMemorySuggestionProducerInput): Ma
       kind: "receipt",
       scope: "workspace",
       title: "Sui receipt context",
-      summary: "Public Sui receipt context for future project evidence review.",
+      summary: "Public Sui receipt details for future transaction review.",
       body: {
         venue: "sui",
         publicReceiptOnly: true,
@@ -351,7 +351,7 @@ function buildSuiSuggestions(input: MatterhornMemorySuggestionProducerInput): Ma
       "sui",
       record,
       "sui_receipt_context",
-      "A Sui receipt workflow appeared in visible chat. I can reuse this public receipt context for future project evidence review after you confirm.",
+      "A Sui receipt workflow appeared in visible chat. I can reuse these public receipt details in future transaction reviews after you confirm.",
       0.64,
     );
     if (receiptSuggestion) suggestions.push(receiptSuggestion);

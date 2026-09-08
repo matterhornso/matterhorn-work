@@ -32,11 +32,11 @@ describe("Sui workflow state", () => {
     });
   });
 
-  test("requires a workspace before saving Sui evidence", () => {
+  test("requires a workspace before saving a Sui record", () => {
     const result = getSuiWorkflowAvailability({ ...READY_INPUT, workspaceReady: false });
 
     expect(result.canPreparePreview).toBe(false);
-    expect(result.preparePreviewReason).toBe("Open a workspace before saving Sui evidence.");
+    expect(result.preparePreviewReason).toBe("Open a workspace before saving this Sui record.");
     expect(result.nextAction).toBe("open_workspace");
   });
 

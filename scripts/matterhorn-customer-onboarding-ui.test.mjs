@@ -87,7 +87,7 @@ assert.equal(
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
   "Ask about a market, wallet, transaction, or risk...",
-  "Matterhorn saves chats, artifacts, receipts, QA evidence, and workflow files.",
+  "Matterhorn saves chats, files, transaction receipts, QA reports, and workflows.",
   "Matterhorn never holds your keys.",
   '"composer.assistant_identity": "Matterhorn"',
   '"composer.run_task": "Ask"',
@@ -170,7 +170,7 @@ assert.equal(
 
 for (const phrase of [
   "Start something",
-  "Protocol desks",
+  "Desks",
   "New project",
   "New chat",
   "Open Bittensor desk",
@@ -209,7 +209,7 @@ for (const phrase of [
   "Open Hyperliquid desk",
   "Open Polymarket desk",
   "Start longevity workflow",
-  "Start chat",
+  "Start a task",
   "ProtocolLogo",
   "Bittensor task:",
   "Hyperliquid task:",
@@ -866,7 +866,7 @@ for (const phrase of [
   "Matterhorn MCPs",
   "Install Matterhorn MCPs for Codex, Claude Code, Claude Desktop, and",
   "Cursor.",
-  "Use them for protocol reads, previews, memory, workflow, evidence, and agent control.",
+  "Use them for protocol reads, previews, memory, workflow, verification, and agent control.",
   "Cards show command, clients, tools, and safety limits.",
   "@container/matterhorn-mcps",
   "matterhorn-mcp-stream",

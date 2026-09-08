@@ -43,7 +43,7 @@ const DESK_TASK_STARTER_GROUPS = [
   },
   {
     id: "evidence",
-    label: "Watches & evidence",
+    label: "Watches & receipts",
     description: "Track public changes or save public receipts without signing.",
   },
   {
@@ -202,8 +202,8 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     {
       id: "import-receipt",
       title: "Import a receipt",
-      detail: "Save public transaction evidence after it is signed elsewhere.",
-      prompt: "Import a Bittensor receipt from this public transaction digest: <paste public transaction digest>. Use public receipt metadata only and save the evidence without collecting signing material.",
+      detail: "Save the public transaction receipt after it is signed elsewhere.",
+      prompt: "Import a Bittensor receipt from this public transaction digest: <paste public transaction digest>. Use public receipt details only and save the receipt without collecting signing material.",
     },
   ],
   hyperliquid: [
@@ -294,7 +294,7 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     {
       id: "import-receipt",
       title: "Import a receipt",
-      detail: "Save public trade evidence after a wallet-approved action.",
+      detail: "Save the public trade receipt after a wallet-approved action.",
       prompt: "Import a public Hyperliquid trade receipt after a wallet-approved order is completed. Use public receipt metadata only and never request API secrets, private keys, raw signatures, or signed payloads.",
     },
   ],
@@ -377,7 +377,7 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     {
       id: "import-receipt",
       title: "Import a receipt",
-      detail: "Save public evidence from an external wallet flow.",
+      detail: "Save the public transaction receipt from an external wallet flow.",
       prompt: "Import a Polymarket receipt from this public receipt or transaction reference: <paste public receipt or transaction reference>. Use public receipt metadata only and do not collect signing material.",
     },
   ],
@@ -464,7 +464,7 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
       id: "import-receipt",
       title: "Import transaction receipt",
       detail: "Save public transaction metadata after signing elsewhere.",
-      prompt: "Import a Sui transaction receipt from this public transaction digest: <paste transaction digest>. Use public receipt metadata only and save the receipt as project evidence.",
+      prompt: "Import a Sui transaction receipt from this public transaction digest: <paste transaction digest>. Use public receipt details only and save the receipt in project history.",
     },
   ],
   wellness: [

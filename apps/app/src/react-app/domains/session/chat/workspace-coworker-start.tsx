@@ -19,7 +19,7 @@ const HOME_COWORKER_CHOICES: ReadonlyArray<{
   {
     id: "market_analyst",
     title: "Research markets",
-    description: "Compare current public evidence and save cited notes.",
+    description: "Compare current public sources and save cited notes.",
     icon: BarChart3,
   },
   {

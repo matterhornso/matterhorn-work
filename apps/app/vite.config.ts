@@ -77,6 +77,13 @@ const publicAuthStaticShell = `<main class="public-auth-shell" data-matterhorn-s
     <aside class="public-auth-context" aria-labelledby="public-auth-context-title">
       <h2 id="public-auth-context-title">Choose a desk. Ask for the outcome.</h2>
       <p class="public-auth-context-lead">Each desk gives your conversation the right working context, tools, and outputs from the first message.</p>
+      <dl class="public-auth-desk-list">
+        <div><dt>Private AI</dt><dd>Run custom workflows with the files, context, and tools you choose.</dd></div>
+        <div><dt>Bittensor</dt><dd>Explore subnets, compare validators, and inspect wallet activity.</dd></div>
+        <div><dt>Hyperliquid</dt><dd>Study markets, funding, open orders, and account risk.</dd></div>
+        <div><dt>Polymarket</dt><dd>Discover markets, compare outcomes, and inspect liquidity.</dd></div>
+        <div><dt>Sui</dt><dd>Inspect accounts and objects, then review transfers in your wallet.</dd></div>
+      </dl>
     </aside>
   </div>
 </main>`;

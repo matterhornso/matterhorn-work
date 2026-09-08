@@ -115,7 +115,7 @@ const projectSurfaceCards: ProjectSurfaceCard[] = [
     section: "outputs",
     icon: FileText,
     title: "Outputs",
-    desc: "Receipts, files, and run evidence.",
+    desc: "Receipts, files, and run details.",
     actionLabel: "Review",
   },
   {
@@ -437,7 +437,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
       <section className={SETTINGS_HUB_SECTION_CLASS}>
         <div className="px-2 pb-1 text-sm font-semibold text-dls-text">Project surfaces</div>
         <p className="px-2 pb-2 text-[12px] leading-5 text-dls-secondary">
-          Open the workspace evidence surfaces with live backend status.
+          Open workspace history and saved records with live backend status.
         </p>
         <div className={SETTINGS_HUB_GRID_CLASS}>
           {projectSurfaceCards.map((card) => (

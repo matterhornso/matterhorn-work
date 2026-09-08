@@ -243,6 +243,6 @@ assert.ok(
   "MCP page should tell users built-in Matterhorn MCPs are backend-backed and ready to install",
 );
 assert.ok(appMcpView.includes("Core Agent MCP"), "MCP page should expose the backend core agent MCP tools");
-assert.ok(appMcpView.includes("Evidence MCP"), "MCP page should expose the backend evidence MCP tools");
+assert.ok(appMcpView.includes("Verification MCP"), "MCP page should expose the backend verification MCP tools");
 
 console.log("MCP catalog contract check passed.");

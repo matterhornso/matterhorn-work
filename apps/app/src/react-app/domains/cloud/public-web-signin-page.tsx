@@ -349,7 +349,7 @@ export function PublicWebSigninPage({
           </h1>
           <p className="public-auth-description">
             Open a private workspace for focused AI desks, tools, and durable
-            project evidence.
+            saved project files and receipts.
           </p>
 
           <div className="public-auth-mode" aria-label="Account access">
@@ -584,6 +584,10 @@ export function PublicWebSigninPage({
             and outputs from the first message.
           </p>
           <dl className="public-auth-desk-list">
+            <div>
+              <dt>Private AI</dt>
+              <dd>Run custom workflows with the files, context, and tools you choose.</dd>
+            </div>
             <div>
               <dt>Bittensor</dt>
               <dd>Explore subnets, compare validators, and inspect wallet activity.</dd>

@@ -15,7 +15,9 @@ describe("stable launch feature policy", () => {
     expect(resolveMatterhornLaunchFeaturePolicy(undefined)).toEqual({
       billing: false,
       cloud: false,
+      coworkers: false,
       generatedMedia: false,
+      longevity: false,
       publicOauthConnectors: [],
       reviewedDeskActions: true,
     });
@@ -24,14 +26,31 @@ describe("stable launch feature policy", () => {
   test("accepts explicit production build flags", () => {
     expect(resolveMatterhornLaunchFeaturePolicy({
       VITE_MATTERHORN_BILLING_ENABLED: "true",
+      VITE_MATTERHORN_COWORKERS_ENABLED: "true",
       VITE_MATTERHORN_GENERATED_MEDIA_ENABLED: "1",
+      VITE_MATTERHORN_LONGEVITY_ENABLED: "1",
     }, true)).toEqual({
       billing: true,
       cloud: true,
+      coworkers: true,
       generatedMedia: true,
+      longevity: true,
       publicOauthConnectors: [],
       reviewedDeskActions: true,
     });
+  });
+
+  test("keeps unfinished coworker and longevity surfaces out of stable launch navigation", () => {
+    const stablePolicy = resolveMatterhornLaunchFeaturePolicy(undefined);
+    const previewPolicy = resolveMatterhornLaunchFeaturePolicy({
+      VITE_MATTERHORN_COWORKERS_ENABLED: "1",
+      VITE_MATTERHORN_LONGEVITY_ENABLED: "true",
+    });
+
+    expect(stablePolicy.coworkers).toBe(false);
+    expect(stablePolicy.longevity).toBe(false);
+    expect(previewPolicy.coworkers).toBe(true);
+    expect(previewPolicy.longevity).toBe(true);
   });
 
   test("fails closed on reviewed desk actions in public Beta until explicitly enabled", () => {

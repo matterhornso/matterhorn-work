@@ -4559,10 +4559,10 @@ function coworkerAccessApiError(error: unknown): ApiError {
 function cryptoEvidencePublicationApiError(error: unknown): ApiError {
   const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
   if (code === "crypto_evidence_not_found") {
-    return new ApiError(404, code, "Evidence record not found.");
+    return new ApiError(404, code, "Secure record not found.");
   }
   if (code === "crypto_evidence_revision_conflict") {
-    return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
+    return new ApiError(409, code, "This secure record changed. Refresh and try again.");
   }
   if (code === "crypto_evidence_walrus_publication_in_progress") {
     return new ApiError(409, code, "This encrypted copy is already being stored.");
@@ -4571,13 +4571,13 @@ function cryptoEvidencePublicationApiError(error: unknown): ApiError {
     return new ApiError(409, code, "This storage request expired or changed. Start it again.");
   }
   if (code === "crypto_evidence_operation_in_progress") {
-    return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
+    return new ApiError(409, code, "This secure record is being updated. Try again shortly.");
   }
   if (code === "crypto_evidence_walrus_publish_state_invalid") {
-    return new ApiError(409, code, "This evidence record cannot be stored again.");
+    return new ApiError(409, code, "This secure record cannot be stored again.");
   }
   if (code === "crypto_evidence_key_destroyed") {
-    return new ApiError(410, code, "The recovery key for this evidence was deleted.");
+    return new ApiError(410, code, "The recovery key for this record was deleted.");
   }
   if (code === "crypto_evidence_walrus_aborted") {
     return new ApiError(408, code, "Storing the encrypted copy was cancelled. Nothing was attached.");
@@ -4598,7 +4598,7 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
       return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
     }
     if (error.code === "crypto_evidence_not_found") {
-      return new ApiError(404, error.code, "Evidence record not found.");
+      return new ApiError(404, error.code, "Secure record not found.");
     }
     if (error.code === "crypto_evidence_walrus_renewal_signer_invalid") {
       return new ApiError(400, error.code, "Connect a valid Sui testnet wallet.");
@@ -4614,7 +4614,7 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
       return new ApiError(409, error.code, "This encrypted copy does not need renewal yet.");
     }
     if (error.code === "crypto_evidence_walrus_renewal_in_progress") {
-      return new ApiError(409, error.code, "A wallet renewal is already waiting for this evidence.");
+      return new ApiError(409, error.code, "A wallet renewal is already waiting for this record.");
     }
     if (error.code === "crypto_evidence_walrus_renewal_transaction_failed") {
       return new ApiError(409, error.code, "The wallet transaction failed. Prepare a new renewal.");
@@ -4625,19 +4625,19 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
   }
   const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
   if (code === "crypto_evidence_not_found") {
-    return new ApiError(404, code, "Evidence record not found.");
+    return new ApiError(404, code, "Secure record not found.");
   }
   if (code === "crypto_evidence_revision_conflict") {
-    return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
+    return new ApiError(409, code, "This secure record changed. Refresh and try again.");
   }
   if (code === "crypto_evidence_walrus_renewal_in_progress") {
-    return new ApiError(409, code, "A wallet renewal is already waiting for this evidence.");
+    return new ApiError(409, code, "A wallet renewal is already waiting for this record.");
   }
   if (code === "crypto_evidence_walrus_renewal_claim_invalid") {
     return new ApiError(409, code, "This renewal is no longer current. Prepare it again.");
   }
   if (code === "crypto_evidence_operation_in_progress") {
-    return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
+    return new ApiError(409, code, "This secure record is being updated. Try again shortly.");
   }
   return new ApiError(
     503,
@@ -4652,7 +4652,7 @@ function cryptoEvidenceDeletionApiError(error: unknown): ApiError {
       return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
     }
     if (error.code === "crypto_evidence_not_found") {
-      return new ApiError(404, error.code, "Evidence record not found.");
+      return new ApiError(404, error.code, "Secure record not found.");
     }
     if (error.code === "crypto_evidence_walrus_deletion_signer_invalid") {
       return new ApiError(400, error.code, "Connect a valid Sui testnet wallet.");
@@ -4668,7 +4668,7 @@ function cryptoEvidenceDeletionApiError(error: unknown): ApiError {
       return new ApiError(409, error.code, "This Walrus copy was not created as deletable.");
     }
     if (error.code === "crypto_evidence_walrus_deletion_in_progress") {
-      return new ApiError(409, error.code, "A wallet deletion is already waiting for this evidence.");
+      return new ApiError(409, error.code, "A wallet deletion is already waiting for this record.");
     }
     if (error.code === "crypto_evidence_walrus_deletion_transaction_failed") {
       return new ApiError(409, error.code, "The wallet transaction failed. Prepare a new deletion.");
@@ -4679,17 +4679,17 @@ function cryptoEvidenceDeletionApiError(error: unknown): ApiError {
   }
   const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
   if (code === "crypto_evidence_not_found") {
-    return new ApiError(404, code, "Evidence record not found.");
+    return new ApiError(404, code, "Secure record not found.");
   }
   if (code === "crypto_evidence_revision_conflict") {
-    return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
+    return new ApiError(409, code, "This secure record changed. Refresh and try again.");
   }
   if (code === "crypto_evidence_operation_in_progress"
     || code === "crypto_evidence_walrus_renewal_in_progress") {
-    return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
+    return new ApiError(409, code, "This secure record is being updated. Try again shortly.");
   }
   if (code === "crypto_evidence_walrus_deletion_in_progress") {
-    return new ApiError(409, code, "A wallet deletion is already waiting for this evidence.");
+    return new ApiError(409, code, "A wallet deletion is already waiting for this record.");
   }
   if (code === "crypto_evidence_walrus_deletion_claim_invalid") {
     return new ApiError(409, code, "This deletion is no longer current. Prepare it again.");
@@ -4707,7 +4707,7 @@ function cryptoEvidenceSuiAnchorApiError(error: unknown): ApiError {
       return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
     }
     if (error.code === "crypto_evidence_not_found") {
-      return new ApiError(404, error.code, "Evidence record not found.");
+      return new ApiError(404, error.code, "Secure record not found.");
     }
     if (error.code === "crypto_evidence_sui_anchor_signer_invalid") {
       return new ApiError(400, error.code, "Connect a valid Sui testnet wallet.");
@@ -4716,13 +4716,13 @@ function cryptoEvidenceSuiAnchorApiError(error: unknown): ApiError {
       return new ApiError(410, error.code, "This anchor request expired or was already used. Prepare a new one.");
     }
     if (error.code === "crypto_evidence_sui_anchor_exists") {
-      return new ApiError(409, error.code, "This evidence is already anchored on Sui.");
+      return new ApiError(409, error.code, "This record is already anchored on Sui.");
     }
     if (error.code === "crypto_evidence_sui_anchor_in_progress") {
       return new ApiError(409, error.code, "A Sui anchor is already waiting for wallet review.");
     }
     if (error.code === "crypto_evidence_sui_anchor_certification_changed") {
-      return new ApiError(409, error.code, "The Walrus proof changed or expired. Verify the evidence and try again.");
+      return new ApiError(409, error.code, "The Walrus proof changed or expired. Verify the record and try again.");
     }
     if (error.code === "crypto_evidence_sui_anchor_transaction_failed") {
       return new ApiError(409, error.code, "The wallet transaction failed. Prepare a new Sui anchor.");
@@ -4736,17 +4736,17 @@ function cryptoEvidenceSuiAnchorApiError(error: unknown): ApiError {
   }
   const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
   if (code === "crypto_evidence_not_found") {
-    return new ApiError(404, code, "Evidence record not found.");
+    return new ApiError(404, code, "Secure record not found.");
   }
   if (code === "crypto_evidence_revision_conflict") {
-    return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
+    return new ApiError(409, code, "This secure record changed. Refresh and try again.");
   }
   if (code === "crypto_evidence_operation_in_progress"
     || code === "crypto_evidence_walrus_renewal_in_progress") {
-    return new ApiError(409, code, "This evidence record is being updated. Try again shortly.");
+    return new ApiError(409, code, "This secure record is being updated. Try again shortly.");
   }
   if (code === "crypto_evidence_sui_anchor_exists") {
-    return new ApiError(409, code, "This evidence is already anchored on Sui.");
+    return new ApiError(409, code, "This record is already anchored on Sui.");
   }
   if (code === "crypto_evidence_sui_anchor_state_invalid") {
     return new ApiError(409, code, "Store and verify the encrypted Walrus copy before anchoring it on Sui.");
@@ -4761,23 +4761,23 @@ function cryptoEvidenceSuiAnchorApiError(error: unknown): ApiError {
 function cryptoEvidenceKeyDestructionApiError(error: unknown): ApiError {
   const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
   if (code === "crypto_evidence_not_found") {
-    return new ApiError(404, code, "Evidence record not found.");
+    return new ApiError(404, code, "Secure record not found.");
   }
   if (code === "crypto_evidence_revision_conflict") {
-    return new ApiError(409, code, "This evidence record changed. Refresh and try again.");
+    return new ApiError(409, code, "This secure record changed. Refresh and try again.");
   }
   if (code === "crypto_evidence_operation_in_progress"
     || code === "crypto_evidence_walrus_publication_in_progress"
     || code === "crypto_evidence_walrus_renewal_in_progress") {
-    return new ApiError(409, "crypto_evidence_operation_in_progress", "This evidence record is being updated. Try again shortly.");
+    return new ApiError(409, "crypto_evidence_operation_in_progress", "This secure record is being updated. Try again shortly.");
   }
   if (code === "crypto_evidence_key_destroyed") {
-    return new ApiError(410, code, "The recovery key for this evidence was already deleted.");
+    return new ApiError(410, code, "The recovery key for this record was already deleted.");
   }
   return new ApiError(
     503,
     "crypto_evidence_key_destruction_unavailable",
-    "The recovery key could not be deleted. The evidence record is unchanged.",
+    "The recovery key could not be deleted. The secure record is unchanged.",
   );
 }
 
@@ -7040,7 +7040,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const sui = walletFamily({
     family: "sui",
     ...capability(
-      "preview",
+      "working",
       "Sui wallet",
       "Connect a supported Sui wallet in the web app for account reads and transaction previews. The user reviews and signs every transaction in that wallet.",
       {
@@ -7063,7 +7063,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     runtimeSupport: {
       web: {
         runtime: "web",
-        ...capability("preview", "Web wallet-standard connect", "Connect a supported Sui wallet in the web app. The user reviews and signs every transaction in that wallet."),
+        ...capability("working", "Web wallet-standard connect", "Connect a supported Sui wallet in the web app. The user reviews and signs every transaction in that wallet."),
         custody: false,
         directConnect: true,
         publicRead: true,
@@ -7072,7 +7072,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       desktop: {
         runtime: "desktop",
-        ...capability("preview", "Desktop external handoff", "Desktop can prepare Sui reads, transaction drafts, and receipts. The user reviews, signs, and submits them in a Sui wallet or protocol client outside Matterhorn."),
+        ...capability("working", "Desktop external handoff", "Desktop can prepare Sui reads, transaction drafts, and receipts. The user reviews, signs, and submits them in a Sui wallet or protocol client outside Matterhorn."),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -7081,7 +7081,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       electron: {
         runtime: "electron",
-        ...capability("preview", "Electron external handoff", "Electron can prepare Sui reads, transaction drafts, and receipts. The user reviews, signs, and submits them in a Sui wallet or protocol client outside Matterhorn."),
+        ...capability("working", "Electron external handoff", "Electron can prepare Sui reads, transaction drafts, and receipts. The user reviews, signs, and submits them in a Sui wallet or protocol client outside Matterhorn."),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -7090,11 +7090,14 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
     },
   });
-  const bittensorSidecarConfigured = Boolean(process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL?.trim());
-  const bittensorCapabilityStatus: MatterhornCapabilityStatus = bittensorSidecarConfigured ? "working" : "preview";
-  const bittensorCapabilityDescription = bittensorSidecarConfigured
+  const bittensorSidecar = await checkSubtensorSidecarHealth();
+  const bittensorLiveProviderHealthy = bittensorSidecar.status === "healthy" && bittensorSidecar.canRead && bittensorSidecar.canPrepare;
+  const bittensorCapabilityStatus: MatterhornCapabilityStatus = bittensorLiveProviderHealthy ? "working" : "needs_setup";
+  const bittensorCapabilityDescription = bittensorLiveProviderHealthy
     ? "Bittensor uses live provider-backed public SS58 reads and prepares supported actions for exact connected-wallet review."
-    : "Bittensor public workflows are available with clearly labeled fallback data. Configure the Subtensor sidecar for live-chain reads.";
+    : bittensorSidecar.configured
+      ? "The configured Bittensor live provider is unavailable. Restore the Subtensor sidecar before relying on live-chain reads."
+      : "Bittensor public workflows are available with clearly labeled fallback data. Configure the Subtensor sidecar for live-chain reads.";
   const bittensor = walletFamily({
     family: "bittensor",
     ...capability(
@@ -7102,8 +7105,9 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       "Bittensor",
       bittensorCapabilityDescription,
       {
-        dataMode: bittensorSidecarConfigured ? "live_provider" : "curated_fallback",
-        liveProviderConfigured: bittensorSidecarConfigured,
+        dataMode: bittensorLiveProviderHealthy ? "live_provider" : "curated_fallback",
+        liveProviderConfigured: bittensorSidecar.configured,
+        liveProviderHealthy: bittensorLiveProviderHealthy,
         providerSetup: "BITTENSOR_SUBTENSOR_SIDECAR_URL",
       },
     ),
@@ -7146,7 +7150,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const memoryStatus = memoryCounts.status;
   const notesStatus: MatterhornCapabilityStatus = "working";
   const evidenceStatus: MatterhornCapabilityStatus = "working";
-  const walletStatus: MatterhornCapabilityStatus = "preview";
+  const walletStatus: MatterhornCapabilityStatus = bittensorLiveProviderHealthy ? "working" : "needs_setup";
 
   const imageProviderConfig = resolveImageGenerationProviderFromEnv(process.env);
   const imageProvider = createImageGenerationProvider(imageProviderConfig);
@@ -7260,7 +7264,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       { readable: true, writable: writeEnabled },
     ),
     evidence: {
-      ...capability(evidenceStatus, "Project evidence", "Project Activity is derived from notes, memory suggestions, task events, task runs, outputs, and workflow run receipts."),
+      ...capability(evidenceStatus, "Project history", "Project Activity is derived from notes, memory suggestions, task events, task runs, outputs, and workflow run receipts."),
       sources: ["notes", "memory", "task_events", "task_runs", "outputs", "workflow_runs"],
     },
     wallets: {
@@ -7507,7 +7511,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
       }),
       imageOutputs: dataStore({
         id: "imageOutputs",
-        ...capability(existsSync(imageOutputsPath) ? "working" : "preview", "Generated images", "AI-generated images are stored under .matterhorn-work/outputs/images with metadata and linked to project evidence."),
+        ...capability(existsSync(imageOutputsPath) ? "working" : "preview", "Generated images", "AI-generated images are stored under .matterhorn-work/outputs/images with metadata and linked to project history."),
         scope: "workspace",
         path: imageOutputsPath,
         format: "directory",
@@ -7579,7 +7583,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         id: "walletEvidence",
         ...capability(
           existsSync(walletEvidencePath) ? "working" : "preview",
-          "Wallet evidence",
+          "Transaction receipts",
           "Wallet previews and receipts are stored as user-visible output artifacts plus redacted audit-backed ledger rows.",
           {
             families: ["sui"],
@@ -7598,7 +7602,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
       }),
       evidence: dataStore({
         id: "evidence",
-        ...capability("working", "Project evidence", "Project Activity is a normalized read layer across notes, memory suggestions, task events, task runs, outputs, and workflow runs."),
+        ...capability("working", "Project history", "Project Activity is a normalized read layer across notes, memory suggestions, task events, task runs, outputs, and workflow runs."),
         scope: "workspace",
         paths: evidencePaths,
         format: "mixed",
@@ -7821,7 +7825,7 @@ function buildDataControlStore(
     deletionCapability = dataControlCapability({
       status: "working",
       label: "Delete project mission",
-      summary: "Collaborators can remove the mission while preserving append-only audit evidence of the deletion.",
+      summary: "Collaborators can remove the mission while preserving an append-only audit record of the deletion.",
       actions: [
         dataControlAction({
           id: "mission.delete",
@@ -8061,7 +8065,7 @@ function buildDataControlStore(
         appRouteDataControlAction({
           id: "outputs.open-history",
           label: "Open Project history",
-          description: "Opens Project history, where output receipts and workflow evidence are reviewed.",
+          description: "Opens Project history, where output receipts and workflow records are reviewed.",
           href: appRoutes.outputHistory,
         }),
         dataControlAction({
@@ -8247,7 +8251,7 @@ function buildDataControlStore(
         }),
         dataControlAction({
           id: "wallet-evidence.ledger",
-          label: "Export wallet evidence",
+          label: "Export transaction receipts",
           description: "Returns redacted wallet preview and receipt ledger entries.",
           kind: "api_route",
           status: "working",
@@ -8258,7 +8262,7 @@ function buildDataControlStore(
     });
     deletionCapability = dataControlCapability({
       status: "unsupported",
-      label: "Audit-backed evidence",
+      label: "Audit-backed records",
       summary: "Wallet audit events are retained for accountability. Output files can be removed from the outputs folder.",
       actions: [],
     });
@@ -8305,7 +8309,7 @@ function buildDataControlStore(
         appRouteDataControlAction({
           id: `${storeId}.open-history`,
           label: "Open Project history",
-          description: "Opens Project history for append-only project activity and evidence.",
+          description: "Opens Project history for append-only project activity and saved records.",
           href: storeId === "audit" ? appRoutes.auditHistory : storeId === "evidence" ? appRoutes.history : appRoutes.taskHistory,
         }),
         dataControlAction({
@@ -8322,7 +8326,7 @@ function buildDataControlStore(
     deletionCapability = dataControlCapability({
       status: "unsupported",
       label: "Append-only events",
-      summary: "Audit, task, workflow, and evidence events are retained for accountability in v1.",
+      summary: "Audit, task, workflow, and saved-record events are retained for accountability in v1.",
       actions: [],
     });
   }
@@ -8399,7 +8403,7 @@ function featureLabel(featureId: MatterhornBackendReadinessFeatureId): string {
   if (featureId === "save_notes") return "Save notes";
   if (featureId === "review_memory") return "Review memory";
   if (featureId === "save_memory") return "Save memory";
-  return "Export evidence";
+  return "Export records";
 }
 
 function readinessFeature(
@@ -11819,7 +11823,7 @@ function createRoutes(
     const rawLimit = ctx.url.searchParams.get("limit");
     const limit = rawLimit === null ? 50 : Number(rawLimit);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
-      throw new ApiError(400, "crypto_evidence_query_invalid", "Evidence query limit must be between 1 and 100.");
+      throw new ApiError(400, "crypto_evidence_query_invalid", "Record query limit must be between 1 and 100.");
     }
     const items = cryptoEvidenceRuntime.verification
       ? cryptoEvidenceRuntime.verification.list({
@@ -11850,7 +11854,7 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const evidenceId = ctx.params.evidenceId?.trim() ?? "";
       if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
-        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Record identifier is invalid.");
       }
       if (!cryptoEvidenceRuntime.publisher) {
         throw new ApiError(
@@ -11859,7 +11863,7 @@ function createRoutes(
           "Encrypted testnet storage is not enabled for this deployment.",
         );
       }
-      const body = await readJsonBody(ctx.request, 4_096, "Encrypted evidence storage");
+      const body = await readJsonBody(ctx.request, 4_096, "Encrypted record storage");
       const expectedRevision = isRecord(body)
         && typeof body.expectedRevision === "number"
         && Number.isSafeInteger(body.expectedRevision)
@@ -11916,16 +11920,16 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const evidenceId = ctx.params.evidenceId?.trim() ?? "";
       if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
-        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Record identifier is invalid.");
       }
       if (!cryptoEvidenceSuiAnchor) {
         throw new ApiError(
           503,
           "crypto_evidence_sui_anchor_unavailable",
-          "Immutable Sui testnet evidence anchoring is not enabled for this deployment.",
+          "Immutable Sui testnet record anchoring is not enabled for this deployment.",
         );
       }
-      const body = await readJsonBody(ctx.request, 4_096, "Sui evidence anchor");
+      const body = await readJsonBody(ctx.request, 4_096, "Sui record anchor");
       const expectedRevision = isRecord(body)
         && typeof body.expectedRevision === "number"
         && Number.isSafeInteger(body.expectedRevision)
@@ -11972,16 +11976,16 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const evidenceId = ctx.params.evidenceId?.trim() ?? "";
       if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
-        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Record identifier is invalid.");
       }
       if (!cryptoEvidenceSuiAnchor) {
         throw new ApiError(
           503,
           "crypto_evidence_sui_anchor_unavailable",
-          "Immutable Sui testnet evidence anchoring is not enabled for this deployment.",
+          "Immutable Sui testnet record anchoring is not enabled for this deployment.",
         );
       }
-      const body = await readJsonBody(ctx.request, 4_096, "Sui evidence anchor confirmation");
+      const body = await readJsonBody(ctx.request, 4_096, "Sui record anchor confirmation");
       if (!isRecord(body)
         || Object.keys(body).some((key) => ![
           "intentId", "intentHash", "transactionDigest",
@@ -12018,7 +12022,7 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const evidenceId = ctx.params.evidenceId?.trim() ?? "";
       if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
-        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Record identifier is invalid.");
       }
       if (!cryptoEvidenceWalrusRenewal) {
         throw new ApiError(
@@ -12027,7 +12031,7 @@ function createRoutes(
           "Encrypted testnet storage renewal is not enabled for this deployment.",
         );
       }
-      const body = await readJsonBody(ctx.request, 4_096, "Encrypted evidence renewal");
+      const body = await readJsonBody(ctx.request, 4_096, "Encrypted record renewal");
       const expectedRevision = isRecord(body)
         && typeof body.expectedRevision === "number"
         && Number.isSafeInteger(body.expectedRevision)
@@ -12074,7 +12078,7 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const evidenceId = ctx.params.evidenceId?.trim() ?? "";
       if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
-        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Record identifier is invalid.");
       }
       if (!cryptoEvidenceWalrusRenewal) {
         throw new ApiError(
@@ -12083,7 +12087,7 @@ function createRoutes(
           "Encrypted testnet storage renewal is not enabled for this deployment.",
         );
       }
-      const body = await readJsonBody(ctx.request, 4_096, "Encrypted evidence renewal confirmation");
+      const body = await readJsonBody(ctx.request, 4_096, "Encrypted record renewal confirmation");
       if (!isRecord(body)
         || Object.keys(body).some((key) => ![
           "intentId", "intentHash", "transactionDigest",
@@ -12120,7 +12124,7 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const evidenceId = ctx.params.evidenceId?.trim() ?? "";
       if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
-        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Record identifier is invalid.");
       }
       if (!cryptoEvidenceWalrusDeletion) {
         throw new ApiError(
@@ -12129,7 +12133,7 @@ function createRoutes(
           "Encrypted Walrus deletion is not enabled for this deployment.",
         );
       }
-      const body = await readJsonBody(ctx.request, 4_096, "Encrypted evidence deletion");
+      const body = await readJsonBody(ctx.request, 4_096, "Encrypted record deletion");
       const expectedRevision = isRecord(body)
         && typeof body.expectedRevision === "number"
         && Number.isSafeInteger(body.expectedRevision)
@@ -12176,7 +12180,7 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const evidenceId = ctx.params.evidenceId?.trim() ?? "";
       if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
-        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Record identifier is invalid.");
       }
       if (!cryptoEvidenceWalrusDeletion) {
         throw new ApiError(
@@ -12185,7 +12189,7 @@ function createRoutes(
           "Encrypted Walrus deletion is not enabled for this deployment.",
         );
       }
-      const body = await readJsonBody(ctx.request, 4_096, "Encrypted evidence deletion confirmation");
+      const body = await readJsonBody(ctx.request, 4_096, "Encrypted record deletion confirmation");
       if (!isRecord(body)
         || Object.keys(body).some((key) => ![
           "intentId", "intentHash", "transactionDigest",
@@ -12222,16 +12226,16 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const evidenceId = ctx.params.evidenceId?.trim() ?? "";
       if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
-        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Record identifier is invalid.");
       }
       if (!cryptoEvidenceStore) {
         throw new ApiError(
           503,
           "crypto_evidence_unavailable",
-          "Encrypted coworker evidence is not enabled for this deployment.",
+          "Encrypted coworker records are not enabled for this deployment.",
         );
       }
-      const body = await readJsonBody(ctx.request, 4_096, "Evidence recovery-key deletion");
+      const body = await readJsonBody(ctx.request, 4_096, "Secure-record recovery-key deletion");
       const expectedRevision = isRecord(body)
         && typeof body.expectedRevision === "number"
         && Number.isSafeInteger(body.expectedRevision)
@@ -12245,7 +12249,7 @@ function createRoutes(
         throw new ApiError(
           400,
           "crypto_evidence_key_destruction_confirmation_required",
-          "Confirm deletion of this evidence recovery key.",
+          "Confirm deletion of this record's recovery key.",
         );
       }
       try {
@@ -12278,13 +12282,13 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const evidenceId = ctx.params.evidenceId?.trim() ?? "";
       if (!/^evidence_[A-Za-z0-9_-]{1,120}$/.test(evidenceId)) {
-        throw new ApiError(400, "crypto_evidence_id_invalid", "Evidence identifier is invalid.");
+        throw new ApiError(400, "crypto_evidence_id_invalid", "Record identifier is invalid.");
       }
       if (!cryptoEvidenceRuntime.verification) {
         throw new ApiError(
           503,
           "crypto_evidence_unavailable",
-          "Encrypted coworker evidence is not enabled for this deployment.",
+          "Encrypted coworker records are not enabled for this deployment.",
         );
       }
       try {
@@ -12296,9 +12300,9 @@ function createRoutes(
         }));
       } catch (error) {
         if (error instanceof Error && error.message === "crypto_evidence_not_found") {
-          throw new ApiError(404, "crypto_evidence_not_found", "Evidence record not found.");
+          throw new ApiError(404, "crypto_evidence_not_found", "Secure record not found.");
         }
-        throw new ApiError(503, "crypto_evidence_verification_unavailable", "Evidence verification is temporarily unavailable.");
+        throw new ApiError(503, "crypto_evidence_verification_unavailable", "Record verification is temporarily unavailable.");
       }
     },
   );
@@ -18988,7 +18992,7 @@ function createRoutes(
     ];
     const warnings = [
       ...bittensor.warnings,
-      "This route summarizes runtime and static safety surfaces. Attach offline smoke/CI evidence before saying a customer packet is complete.",
+      "This route summarizes runtime and static safety surfaces. Attach offline smoke/CI reports before saying a customer report is complete.",
     ];
     const ready = blockers.length === 0;
     const report = {
@@ -19187,7 +19191,7 @@ function createRoutes(
     const receiptBinding = assertOptionalReviewedActionReceiptBinding(body, "hyperliquid");
     const forbidden = findForbiddenHyperliquidCredentialInput(body);
     if (forbidden) {
-      throw new ApiError(400, "market_secret_rejected", `Hyperliquid receipt evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+      throw new ApiError(400, "market_secret_rejected", `A Hyperliquid transaction receipt must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
     }
     const handoff = coerceHyperliquidHandoffReference(body.handoff);
     if (!handoff) {
@@ -19642,7 +19646,7 @@ function createRoutes(
     const receiptBinding = assertOptionalReviewedActionReceiptBinding(body, "polymarket");
     const forbidden = findForbiddenPolymarketCredentialInput(body);
     if (forbidden) {
-      throw new ApiError(400, "market_secret_rejected", `Polymarket receipt evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+      throw new ApiError(400, "market_secret_rejected", `A Polymarket transaction receipt must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
     }
     const handoff = coercePolymarketHandoffReference(body.handoff);
     if (!handoff && !receiptBinding) {
@@ -19747,7 +19751,7 @@ function createRoutes(
     const receiptBinding = assertOptionalReviewedActionReceiptBinding(body, "polymarket");
     const forbidden = findForbiddenPolymarketCredentialInput(body);
     if (forbidden) {
-      throw new ApiError(400, "market_secret_rejected", `Polymarket cancellation evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+      throw new ApiError(400, "market_secret_rejected", `A Polymarket cancellation record must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
     }
 
     const cancellation = body.cancellation && typeof body.cancellation === "object"
@@ -19764,10 +19768,10 @@ function createRoutes(
           .filter(Boolean)))
       : [];
     if ((cancelAll && orderIds.length > 0) || (!cancelAll && orderIds.length === 0)) {
-      throw new ApiError(400, "invalid_cancellation", "Cancellation evidence must identify either cancel-all or one or more exact order IDs.");
+      throw new ApiError(400, "invalid_cancellation", "The cancellation record must identify either cancel-all or one or more exact order IDs.");
     }
     if (orderIds.length > 50 || orderIds.some((id) => id.length < 6 || id.length > 160 || !/^[A-Za-z0-9_-]+$/.test(id))) {
-      throw new ApiError(400, "invalid_cancellation", "Cancellation evidence contains an invalid Polymarket order ID.");
+      throw new ApiError(400, "invalid_cancellation", "The cancellation record contains an invalid Polymarket order ID.");
     }
     const status = typeof receiptInput?.status === "string" ? receiptInput.status.trim().slice(0, 80) : "";
     const submittedAt = typeof receiptInput?.submittedAt === "string" ? receiptInput.submittedAt.trim() : "";
@@ -20995,7 +20999,7 @@ function createRoutes(
       status: status as BittensorSignedResult["status"],
       txHash: normalizeBittensorReceiptString(record.txHash),
       blockHash: normalizeBittensorReceiptString(record.blockHash),
-      message: normalizeBittensorReceiptString(record.message) ?? "Public wallet receipt evidence imported by Matterhorn.",
+      message: normalizeBittensorReceiptString(record.message) ?? "Public wallet transaction receipt imported by Matterhorn.",
       explorerUrl: normalizeBittensorReceiptString(record.explorerUrl),
     };
   }
@@ -21036,7 +21040,7 @@ function createRoutes(
       throw new ApiError(
         400,
         "bittensor_evidence_secret_rejected",
-        `Bittensor evidence must contain only public read metadata (${forbidden}). Do not submit seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports.`,
+        `A Bittensor saved record must contain only public read metadata (${forbidden}). Do not submit seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports.`,
       );
     }
 
@@ -21044,7 +21048,7 @@ function createRoutes(
     const requestedSessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
     const sessionSlug = normalizeSessionSlug(requestedSessionId || `bittensor_${kind}`);
     const taskId = compactBittensorEvidenceText(body.taskId, `bittensor_${kind}_${shortId()}`, 96);
-    const title = compactBittensorEvidenceText(body.title, "Bittensor public-read evidence saved", 120);
+    const title = compactBittensorEvidenceText(body.title, "Bittensor public-read record saved", 120);
     const summary = compactBittensorEvidenceText(body.summary, "Saved a public Bittensor read result for this workspace.", 240);
     const payload = body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
       ? body.payload as Record<string, unknown>
@@ -21112,7 +21116,7 @@ function createRoutes(
       throw new ApiError(
         400,
         "bittensor_receipt_secret_rejected",
-        `Bittensor receipt evidence must contain only public hashes and routing metadata (${forbidden}). Do not submit seed phrases, private keys, raw signatures, signed payloads, or wallet exports.`,
+        `A Bittensor transaction receipt must contain only public hashes and routing metadata (${forbidden}). Do not submit seed phrases, private keys, raw signatures, signed payloads, or wallet exports.`,
       );
     }
     if (!payload || typeof payload !== "object" || Array.isArray(payload) || !("preview" in payload) || typeof (payload as Record<string, unknown>).preview !== "object") {
@@ -21201,7 +21205,7 @@ function createRoutes(
     throw new ApiError(
       403,
       "reviewed_action_required",
-      "Bittensor submission stays in the connected wallet. Matterhorn accepts only public receipt evidence after broadcast.",
+      "Bittensor submission stays in the connected wallet. Matterhorn accepts only the public transaction receipt after broadcast.",
     );
   });
 

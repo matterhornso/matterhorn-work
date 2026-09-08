@@ -2365,7 +2365,7 @@ describe("executeBittensorChatWorkflow", () => {
         limit: 3,
       });
       expect(result.execution).toBe("answered");
-      expect(result.responseText).toContain("roadmap markdown export");
+      expect(result.responseText).toContain("roadmap report");
       expect(result.cards[0]?.kind).toBe("adapter_roadmap");
       expect(result.cards[0]?.actions?.some((action) => action.kind === "copy_payload")).toBe(true);
       const roadmapExport = result.data.roadmapExport as { kind?: string; markdown?: string } | undefined;
@@ -2629,7 +2629,7 @@ describe("executeBittensorChatWorkflow", () => {
     expect(card.kind).toBe("adapter_evidence_bundle");
     expect(card.items.find((item) => item.label === "Preflight")?.value).toBe("Pass");
     expect(card.items.find((item) => item.label === "Required artifacts")?.value).toBe(String(bundle.requiredArtifacts.length));
-    expect(card.actions?.[0]?.payload?.prompt).toContain("evidence bundle");
+    expect(card.actions?.[0]?.payload?.prompt).toContain("verification report");
     expect(JSON.stringify(bundle)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
   });
 
@@ -2641,11 +2641,11 @@ describe("executeBittensorChatWorkflow", () => {
     expect(evidenceExport.summary.preflightStatus).toBe("pass");
     expect(evidenceExport.summary.readyForConformance).toBe(true);
     expect(evidenceExport.summary.readyForCanaryEvidence).toBe(true);
-    expect(evidenceExport.markdown).toContain("# Bittensor Subnet Adapter Evidence Export");
+    expect(evidenceExport.markdown).toContain("# Bittensor Subnet Adapter Verification Report");
     expect(evidenceExport.markdown).toContain("Launch gate:");
     expect(evidenceExport.markdown).toContain("Preflight:");
-    expect(evidenceExport.markdown).toContain("Preflight ready for canary evidence: yes");
-    expect(evidenceExport.markdown).toContain("This export is evidence for review only");
+    expect(evidenceExport.markdown).toContain("Preflight ready for canary testing: yes");
+    expect(evidenceExport.markdown).toContain("This report is for review only");
     expect(evidenceExport.markdown).toContain("request SHA-256 confirmation");
     expect(evidenceExport.markdown).not.toContain("Evidence bundle preflight sample output");
     expect(evidenceExport.warnings.join(" ")).toContain("does not authorize real subnet service execution");
@@ -2708,7 +2708,7 @@ describe("executeBittensorChatWorkflow", () => {
         expect(handoff.providerRegistry.matchingProviderIds).toContain("reviewed-provider");
         expect(handoff.markdown).toContain("Matching reviewed providers: 1");
         const card = buildBittensorAdapterOperatorHandoffCard(handoff);
-        expect(card.items.find((item) => item.label === "Provider evidence")?.value).toBe("1");
+        expect(card.items.find((item) => item.label === "Reviewed providers")?.value).toBe("1");
         expectNoBittensorSecretMaterial(handoff);
       } finally {
         if (previousAdapters === undefined) {
@@ -2821,7 +2821,7 @@ describe("executeBittensorChatWorkflow", () => {
       expect(packet.providerRegistry.matchingReadyProviderCount).toBe(1);
       expect(packet.providerRegistry.matchingProviderIds).toContain("reviewed-provider");
       const card = buildBittensorAdapterCanaryOperatorPacketCard(packet);
-      expect(card.items.find((item) => item.label === "Provider evidence")?.value).toBe("1");
+      expect(card.items.find((item) => item.label === "Reviewed providers")?.value).toBe("1");
       const exported = renderBittensorSubnetAdapterCanaryPacketMarkdown(packet);
       expect(exported).toContain("Provider Registry");
       expect(exported).toContain("Matching reviewed providers: 1");
@@ -2844,7 +2844,7 @@ describe("executeBittensorChatWorkflow", () => {
     expect(packet.kind).toBe("bittensor_subnet_adapter_canary_operator_packet");
     expect(packet.status).toBe("blocked");
     expect(packet.approvalTemplate).toBeNull();
-    expect(packet.warnings.join(" ")).toContain("Evidence review is blocked");
+    expect(packet.warnings.join(" ")).toContain("Verification review is blocked");
     const card = buildBittensorAdapterCanaryOperatorPacketCard(packet);
     expect(card.kind).toBe("adapter_canary_packet");
     expect(card.actions?.some((action) => action.kind === "copy_payload")).toBe(false);
@@ -3129,7 +3129,7 @@ describe("executeBittensorChatWorkflow", () => {
         expect(handoff.conformanceExport.status).toBe("pass");
         expect(handoff.dryRunExport.status).toBe("pass");
         expect(handoff.markdown).toContain("Bittensor Adapter Operator Handoff");
-        expect(handoff.markdown).toContain("Evidence review: mock_dry_run_ready");
+        expect(handoff.markdown).toContain("Verification review: mock_dry_run_ready");
         expect(handoff.markdown).toContain("Conformance: pass");
         expect(handoff.markdown).toContain("Dry-run: pass");
         expect(handoff.markdown).not.toContain("private context");
@@ -3244,7 +3244,7 @@ describe("executeBittensorChatWorkflow", () => {
         message: "Export the Bittensor adapter marketplace as markdown for compute.",
       });
       expect(result.execution).toBe("answered");
-      expect(result.responseText).toContain("markdown export");
+      expect(result.responseText).toContain("marketplace report");
       expect(result.cards[0]?.kind).toBe("adapter_marketplace");
       expect(result.cards[0]?.actions?.some((action) => action.label === "Copy markdown" && action.kind === "copy_payload")).toBe(true);
       const marketplaceExport = result.data.marketplaceExport as { kind?: string; markdown?: string } | undefined;

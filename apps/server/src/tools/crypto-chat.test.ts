@@ -638,7 +638,7 @@ describe("unified crypto chat router", () => {
     expect(actionPreview?.title).toContain("Agent Draft");
     expect(actionPreview?.summary).toContain("artifact cannot submit");
     expect(actionPreview?.summary).toContain("separate wallet ticket");
-    expect(shared.find((card) => card.kind === "receipt_status")?.summary).toContain("receipt/status");
+    expect(shared.find((card) => card.kind === "receipt_status")?.summary).toContain("transaction receipt or status");
   });
 
   test("locks shared-card contract for representative Bittensor workflows", async () => {

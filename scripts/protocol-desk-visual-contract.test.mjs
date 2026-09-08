@@ -50,7 +50,7 @@ for (const token of [
   assert.ok(types.includes(token), `types missing protocol desk visual token: ${token}`);
 }
 
-const expectedDeskIds = ["bittensor", "hyperliquid", "polymarket", "sui", "wellness", "memory", "mcps"];
+const expectedDeskIds = ["private_ai", "bittensor", "hyperliquid", "polymarket", "sui", "wellness", "memory", "mcps"];
 
 for (const descriptor of [
   "TAO wallet · subnets · validators",
@@ -348,7 +348,7 @@ assert.ok(deskBlocks.bittensor.includes('walletRailMode: "external_signer"'), "B
 assert.ok(deskBlocks.hyperliquid.includes('walletRailMode: "evm_connect"'), "Hyperliquid walletRailMode must be evm_connect");
 assert.ok(deskBlocks.polymarket.includes('walletRailMode: "evm_preview"'), "Polymarket walletRailMode must be evm_preview");
 assert.ok(deskBlocks.sui.includes('walletRailMode: "sui_wallet"'), "Sui walletRailMode must be sui_wallet");
-for (const id of ["wellness", "memory", "mcps"]) {
+for (const id of ["private_ai", "wellness", "memory", "mcps"]) {
   assert.ok(deskBlocks[id].includes('walletRailMode: "none"'), `${id} walletRailMode must be none`);
 }
 
@@ -365,6 +365,7 @@ for (const id of expectedDeskIds) {
 
 // 19. Readiness tones are present and match desk posture.
 const expectedReadinessTones = {
+  private_ai: "live",
   bittensor: "beta_ready",
   hyperliquid: "live",
   polymarket: "beta_ready",

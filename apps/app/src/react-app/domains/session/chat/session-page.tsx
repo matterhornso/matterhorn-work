@@ -273,6 +273,7 @@ function LazyModalBoundary({ children }: { children: ReactNode }) {
 }
 
 const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof BrainCircuit> = {
+  private_ai: Brain,
   bittensor: BrainCircuit,
   hyperliquid: BarChart3,
   polymarket: ShieldCheck,
@@ -367,7 +368,7 @@ function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
       visual.id,
       MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
     ) ?? visual
-  ).filter((visual) => !isPublicBetaWebDeployment() || visual.id !== "wellness").map((visual) => ({
+  ).filter((visual) => MATTERHORN_LAUNCH_FEATURES.longevity || visual.id !== "wellness").map((visual) => ({
       id: visual.id as CustomerWorkflowIconHint,
       title: visual.displayName,
       statusLabel: visual.statusLabel,
@@ -565,7 +566,7 @@ function HomeCapabilityOverview({
       style={{ contentVisibility: "auto", containIntrinsicSize: "360px" } as CSSProperties}
     >
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1 text-left marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/35">
-        <span className="text-sm font-semibold text-dls-text">Protocol desks</span>
+        <span className="text-sm font-semibold text-dls-text">Desks</span>
         <ChevronRight className="size-4 shrink-0 text-dls-secondary" aria-hidden="true" />
       </summary>
       <section className="mt-2" aria-label="Desk capability overview">
@@ -591,7 +592,7 @@ function HomeCapabilityOverview({
                   <p className="mt-0.5 line-clamp-1 text-[12px] leading-5 text-dls-secondary sm:line-clamp-none">{item.summary}</p>
                 </div>
                 <span className="hidden items-center gap-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:inline-flex">
-                  {item.id === "wellness" ? "Start workflow" : "Open desk"}
+                  {item.id === "private_ai" ? "Start task" : item.id === "wellness" ? "Start workflow" : "Open desk"}
                   <ChevronRight className="size-3.5" aria-hidden="true" />
                 </span>
               </button>
@@ -956,7 +957,7 @@ function ProtocolDeskEmptyState({
       ? "Open workspace"
       : "Platform setup";
   const deskSafetyInfo = !MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions
-    ? "Public Beta keeps this desk read-only. Research, monitoring, and public evidence remain available; transaction preparation and wallet actions stay hidden."
+    ? "Public Beta keeps this desk read-only. Research, monitoring, and cited public data remain available; transaction preparation and wallet actions stay hidden."
     : panel === "bittensor"
       ? "Uses public wallet details and prepares exact transaction drafts. You approve transfer, stake, and unstake calls in your connected Bittensor wallet; unsupported advanced calls stay unavailable."
       : panel === "polymarket"
@@ -1118,7 +1119,7 @@ function ProtocolDeskEmptyState({
       {!MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions ? (
         <div className="mx-1 flex items-start gap-2 rounded-md bg-dls-surface-muted/35 px-3 py-2 text-xs leading-5 text-dls-secondary" role="status">
           <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" aria-hidden="true" />
-          <span><strong className="font-semibold text-dls-text">Public Beta is read-only.</strong> Research, watches, and public evidence are available; wallet actions stay hidden.</span>
+          <span><strong className="font-semibold text-dls-text">Public Beta is read-only.</strong> Research, watches, and cited public data are available; wallet actions stay hidden.</span>
         </div>
       ) : null}
 
@@ -1242,7 +1243,7 @@ function PublicBetaProtocolRail({
         </div>
       </div>
       <div className="mt-4 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] px-3 py-2.5 text-xs leading-5 text-dls-secondary">
-        Research, monitoring, and public evidence are available. Transaction preparation and wallet actions stay hidden in Public Beta.
+        Research, monitoring, and cited public data are available. Transaction preparation and wallet actions stay hidden in Public Beta.
       </div>
       <div className="mt-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-dls-muted">
@@ -1282,7 +1283,7 @@ type WorkflowDeskLaunchState = {
 };
 
 export type WorkflowDeskId = Extract<
-  CustomerProtocolDeskId,
+  Exclude<CustomerProtocolDeskId, "private_ai">,
   CustomerWorkflowIconHint
 >;
 
@@ -1698,10 +1699,10 @@ export function SessionPage(props: SessionPageProps) {
     const cards = buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data, {
       reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
     });
-    return hostedManagedTools
-      ? cards.filter((card) => card.iconHint !== "wellness")
-      : cards;
-  }, [customerWorkflowTemplatesQuery.data, hostedManagedTools]);
+    return MATTERHORN_LAUNCH_FEATURES.longevity
+      ? cards
+      : cards.filter((card) => card.iconHint !== "wellness");
+  }, [customerWorkflowTemplatesQuery.data]);
   const mondayBetaDemoCards = useMemo(
     () => buildCustomerBetaDemoStarterCards(customerWorkflowTemplatesQuery.data),
     [customerWorkflowTemplatesQuery.data],
@@ -1714,7 +1715,11 @@ export function SessionPage(props: SessionPageProps) {
   const coworkerListQuery = useQuery({
     queryKey: coworkerListQueryKey(coworkerWorkspaceId),
     queryFn: () => props.matterhornServerClient!.listCoworkers(coworkerWorkspaceId),
-    enabled: Boolean(props.matterhornServerClient && coworkerWorkspaceId),
+    enabled: Boolean(
+      MATTERHORN_LAUNCH_FEATURES.coworkers
+      && props.matterhornServerClient
+      && coworkerWorkspaceId,
+    ),
     retry: false,
     refetchInterval: (query) => query.state.status === "error" ? false : 30_000,
   });
@@ -2376,7 +2381,7 @@ export function SessionPage(props: SessionPageProps) {
     if (!workspaceNotesAvailable) {
       showToast({
         title: "Create a workspace before opening notes",
-        description: "Notes are project evidence and need a workspace folder.",
+        description: "Notes need a workspace folder before they can be saved.",
         tone: "warning",
       });
       return;
@@ -2387,7 +2392,7 @@ export function SessionPage(props: SessionPageProps) {
     if (!workspaceNotesAvailable) {
       showToast({
         title: "Create a workspace before saving notes",
-        description: "Notes are stored as project evidence inside a Matterhorn workspace.",
+        description: "Notes are saved inside the current Matterhorn workspace.",
         tone: "warning",
       });
       return;
@@ -2948,26 +2953,30 @@ export function SessionPage(props: SessionPageProps) {
                 >
                   <nav aria-label="Workspace menu" className="grid gap-0.5">
                     <p className="px-3 pb-1 pt-2 text-xs font-medium text-dls-muted">Workspace</p>
-                    <MobileWorkspaceMenuAction
-                      active={coworkersRailActive}
-                      badge={coworkerUnreadBadge ? (
-                        <>
-                          <span className="sr-only">{coworkerUnreadStatus}</span>
-                          <span aria-hidden="true" className="rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-semibold text-dls-secondary">
-                            {coworkerUnreadBadge}
-                          </span>
-                        </>
-                      ) : null}
-                      icon={<UsersRound className="size-4" />}
-                      label="Coworkers"
-                      onSelect={() => runMobileWorkspaceAction(openCoworkersRailPane)}
-                    />
-                    <MobileWorkspaceMenuAction
-                      active={filesRailActive}
-                      icon={<Files className="size-4" />}
-                      label="Coworker files"
-                      onSelect={() => runMobileWorkspaceAction(openAgentFilesRailPane)}
-                    />
+                    {MATTERHORN_LAUNCH_FEATURES.coworkers ? (
+                      <>
+                        <MobileWorkspaceMenuAction
+                          active={coworkersRailActive}
+                          badge={coworkerUnreadBadge ? (
+                            <>
+                              <span className="sr-only">{coworkerUnreadStatus}</span>
+                              <span aria-hidden="true" className="rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-semibold text-dls-secondary">
+                                {coworkerUnreadBadge}
+                              </span>
+                            </>
+                          ) : null}
+                          icon={<UsersRound className="size-4" />}
+                          label="Coworkers"
+                          onSelect={() => runMobileWorkspaceAction(openCoworkersRailPane)}
+                        />
+                        <MobileWorkspaceMenuAction
+                          active={filesRailActive}
+                          icon={<Files className="size-4" />}
+                          label="Coworker files"
+                          onSelect={() => runMobileWorkspaceAction(openAgentFilesRailPane)}
+                        />
+                      </>
+                    ) : null}
                     <MobileWorkspaceMenuAction
                       active={extensionsRailActive}
                       icon={<Settings2 className="size-4" />}
@@ -3019,6 +3028,12 @@ export function SessionPage(props: SessionPageProps) {
 
                     <div className="my-1 h-px bg-dls-border" aria-hidden="true" />
                     <p className="px-3 pb-1 pt-2 text-xs font-medium text-dls-muted">Desks</p>
+                    <MobileWorkspaceMenuAction
+                      icon={<DeskBrandMark id="private_ai" size={20} />}
+                      label={getCustomerProtocolDeskVisual("private_ai")?.displayName ?? "Private AI"}
+                      onSelect={() => runMobileWorkspaceAction(() => props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId))}
+                      style={deskToneStyle("private_ai")}
+                    />
                     {VENUE_SIDE_PANELS.map((panel) => {
                       const visual = getCustomerProtocolDeskVisualForLaunch(
                         panel,
@@ -3035,7 +3050,7 @@ export function SessionPage(props: SessionPageProps) {
                         />
                       );
                     })}
-                    {!hostedManagedTools && wellnessRailLauncher ? (
+                    {MATTERHORN_LAUNCH_FEATURES.longevity && wellnessRailLauncher ? (
                       <MobileWorkspaceMenuAction
                         icon={<Dumbbell className="size-4" />}
                         label={getCustomerProtocolDeskVisual("wellness")?.displayName ?? "Longevity"}
@@ -3468,6 +3483,10 @@ export function SessionPage(props: SessionPageProps) {
                         ) : null}
                         <HomeCapabilityOverview
                           onOpenCapability={(id) => {
+                            if (id === "private_ai") {
+                              props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
+                              return;
+                            }
                             if (id === "bittensor" || id === "hyperliquid" || id === "polymarket" || id === "sui") {
                               openVenueRailPane(id);
                               return;
@@ -3497,7 +3516,7 @@ export function SessionPage(props: SessionPageProps) {
                                 </span>
                               </summary>
                               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                                Operator-only guided runs. Each inserts an editable prompt and points to a redacted evidence command.
+                                Operator-only guided runs. Each inserts an editable prompt and points to a redacted verification command.
                               </p>
                               <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-2">
                                 {mondayBetaDemoCards.map((demo) => {
@@ -3782,43 +3801,47 @@ export function SessionPage(props: SessionPageProps) {
                 <span className={RAIL_LABEL_CLASS}>Outputs</span>
               </Button>
             ) : null}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={cn(
-                `relative ${RAIL_BUTTON_CLASS}`,
-                coworkersRailActive && RAIL_ACTIVE_CLASS,
-              )}
-              onClick={openCoworkersRailPane}
-              title={coworkerNavigationTitle}
-              aria-pressed={coworkersRailActive}
-            >
-              <UsersRound size={17} aria-hidden="true" />
-              <span className={RAIL_LABEL_CLASS}>Coworkers</span>
-              {coworkerUnreadCount > 0 ? (
-                <>
-                  <span className="sr-only">{coworkerUnreadStatus}</span>
-                  <span aria-hidden="true" className="absolute right-1 top-1 flex min-w-3 items-center justify-center rounded-md bg-dls-hover px-1 text-[9px] font-semibold leading-3 text-dls-secondary ring-1 ring-dls-border/40">
-                    {coworkerUnreadBadge}
-                  </span>
-                </>
-              ) : null}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={cn(
-                RAIL_BUTTON_CLASS,
-                filesRailActive && RAIL_ACTIVE_CLASS,
-              )}
-              onClick={openAgentFilesRailPane}
-              title="Files for your coworker"
-              aria-label="Files for your coworker"
-              aria-pressed={filesRailActive}
-            >
-              <Files size={17} />
-              <span className={RAIL_LABEL_CLASS}>Files</span>
-            </Button>
+            {MATTERHORN_LAUNCH_FEATURES.coworkers ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn(
+                    `relative ${RAIL_BUTTON_CLASS}`,
+                    coworkersRailActive && RAIL_ACTIVE_CLASS,
+                  )}
+                  onClick={openCoworkersRailPane}
+                  title={coworkerNavigationTitle}
+                  aria-pressed={coworkersRailActive}
+                >
+                  <UsersRound size={17} aria-hidden="true" />
+                  <span className={RAIL_LABEL_CLASS}>Coworkers</span>
+                  {coworkerUnreadCount > 0 ? (
+                    <>
+                      <span className="sr-only">{coworkerUnreadStatus}</span>
+                      <span aria-hidden="true" className="absolute right-1 top-1 flex min-w-3 items-center justify-center rounded-md bg-dls-hover px-1 text-[9px] font-semibold leading-3 text-dls-secondary ring-1 ring-dls-border/40">
+                        {coworkerUnreadBadge}
+                      </span>
+                    </>
+                  ) : null}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn(
+                    RAIL_BUTTON_CLASS,
+                    filesRailActive && RAIL_ACTIVE_CLASS,
+                  )}
+                  onClick={openAgentFilesRailPane}
+                  title="Files for your coworker"
+                  aria-label="Files for your coworker"
+                  aria-pressed={filesRailActive}
+                >
+                  <Files size={17} />
+                  <span className={RAIL_LABEL_CLASS}>Files</span>
+                </Button>
+              </>
+            ) : null}
             <Button
               variant="ghost"
               size="icon-sm"
@@ -3844,7 +3867,7 @@ export function SessionPage(props: SessionPageProps) {
                 memoryRailActive && RAIL_ACTIVE_CLASS,
               )}
               onClick={openMemoryRailPane}
-              title={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export evidence.`}
+              title={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export saved context.`}
               aria-pressed={memoryRailActive}
             >
               <Brain size={17} />
@@ -3876,6 +3899,18 @@ export function SessionPage(props: SessionPageProps) {
             <div className={RAIL_SECTION_LABEL_CLASS}>
               Desks
             </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              style={deskToneStyle("private_ai")}
+              className={RAIL_DESK_BUTTON_CLASS}
+              onClick={() => props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId)}
+              title={getCustomerProtocolDeskVisual("private_ai")?.railTitle ?? "Start a private AI task"}
+              aria-label={getCustomerProtocolDeskVisual("private_ai")?.railTitle ?? "Start a private AI task"}
+            >
+              <DeskBrandMark id="private_ai" size={22} />
+              <span className={RAIL_LABEL_CLASS}>{getCustomerProtocolDeskVisual("private_ai")?.displayName ?? "Private AI"}</span>
+            </Button>
             {VENUE_SIDE_PANELS.map((panel) => {
               const visual = getCustomerProtocolDeskVisualForLaunch(
                 panel,
@@ -3908,7 +3943,7 @@ export function SessionPage(props: SessionPageProps) {
                 </Button>
               );
             })}
-            {!hostedManagedTools ? ([
+            {MATTERHORN_LAUNCH_FEATURES.longevity ? ([
               {
                 id: "wellness_creator_workflow",
                 label: getCustomerProtocolDeskVisual("wellness")?.displayName ?? "Longevity",

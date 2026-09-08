@@ -13,7 +13,7 @@ export const RESPONSE_PERSPECTIVE_OPTIONS: Array<{
   {
     value: "balanced",
     label: "Balanced",
-    description: "Normal: answer directly with evidence, tradeoffs, and no directional spin.",
+    description: "Normal: answer directly with sources, tradeoffs, and no directional spin.",
   },
   {
     value: "optimistic",

@@ -133,7 +133,7 @@ describe("Settings overview backend capability integration", () => {
     );
     expect(source).toContain("group/overview-advanced");
     expect(source).toContain("OverviewControlGroup");
-    expect(source).toContain("Work & evidence");
+    expect(source).toContain("Work & records");
     expect(source).toContain("Wallet & protocols");
     expect(source).toContain("Workspace & diagnostics");
   });

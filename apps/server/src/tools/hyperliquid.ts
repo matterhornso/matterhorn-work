@@ -1613,7 +1613,7 @@ export function validateHyperliquidRedactedArtifactEnvelope(
         side: null,
         submittedAt: null,
         warnings: [
-          "Public audit receipt candidate only. It proves redacted metadata matched the sign request; it is not exchange submission evidence.",
+          "Public audit receipt candidate only. It proves redacted metadata matched the sign request; it is not proof of exchange submission.",
           `signedArtifactPublicHash=${artifact.signedArtifactPublicHash}`,
           ...(artifact.signerAddress ? [`signerAddress=${artifact.signerAddress}`] : []),
         ],

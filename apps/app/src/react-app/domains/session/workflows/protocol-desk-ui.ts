@@ -8,9 +8,13 @@ import {
   type ProtocolDeskManifest,
   type ProtocolDeskVisualStatus,
 } from "@matterhorn-work/types/matterhorn-workflows";
-import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
+import {
+  getMatterhornDeskAgent,
+  getMatterhornDeskAgentById,
+} from "@matterhorn-work/types/desk-agents";
 
 export type CustomerProtocolDeskId =
+  | "private_ai"
   | "bittensor"
   | "hyperliquid"
   | "polymarket"
@@ -20,6 +24,7 @@ export type CustomerProtocolDeskId =
   | "mcps";
 
 export const CUSTOMER_PROTOCOL_DESK_IDS = [
+  "private_ai",
   "bittensor",
   "hyperliquid",
   "polymarket",
@@ -30,6 +35,7 @@ export const CUSTOMER_PROTOCOL_DESK_IDS = [
 ] as const satisfies readonly CustomerProtocolDeskId[];
 
 export const CUSTOMER_LAUNCHER_DESK_IDS = [
+  "private_ai",
   "bittensor",
   "hyperliquid",
   "polymarket",
@@ -38,6 +44,7 @@ export const CUSTOMER_LAUNCHER_DESK_IDS = [
 ] as const satisfies readonly CustomerProtocolDeskId[];
 
 export const CUSTOMER_RAIL_DESK_IDS = [
+  "private_ai",
   "bittensor",
   "hyperliquid",
   "polymarket",
@@ -87,6 +94,7 @@ const STATUS_LABELS: Record<ProtocolDeskVisualStatus, string> = {
 };
 
 const DESK_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
+  private_ai: "Private workspace",
   bittensor: "Transfer, stake & unstake",
   hyperliquid: "Review in wallet",
   polymarket: "Buy, sell & cancel",
@@ -94,6 +102,9 @@ const DESK_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
 };
 
 const WORKSPACE_TO_DESK_ID: Record<string, CustomerProtocolDeskId | undefined> = {
+  general: "private_ai",
+  private_ai: "private_ai",
+  "private-ai": "private_ai",
   bittensor: "bittensor",
   hyperliquid: "hyperliquid",
   polymarket: "polymarket",
@@ -113,6 +124,10 @@ export function protocolDeskIdForWorkspace(workspaceId: string | null | undefine
 export function protocolDeskIdForChatMode(chatMode: string | null | undefined): CustomerProtocolDeskId | null {
   if (!chatMode) return null;
   return WORKSPACE_TO_DESK_ID[chatMode] ?? null;
+}
+
+export function isPrivateAiDeskAgent(agentId: string | null | undefined): boolean {
+  return getMatterhornDeskAgentById(agentId)?.deskId === "blank";
 }
 
 function compactActionLabel(label: string): string {
@@ -141,6 +156,9 @@ function capabilityBullets(manifest: ProtocolDeskManifest): string[] {
 }
 
 function safetySummary(manifest: ProtocolDeskManifest): string {
+  if (manifest.id === "private_ai") {
+    return "Matterhorn blocks secrets and shows which model provider will receive private context before anything is sent.";
+  }
   if (manifest.id === "bittensor") {
     return "Agents prepare drafts only. TAO transfers, stake, and unstake calls require exact review and connected Bittensor-wallet approval. Other runtime calls remain unavailable until separately audited.";
   }
@@ -166,6 +184,9 @@ function safetySummary(manifest: ProtocolDeskManifest): string {
 }
 
 function railTitle(manifest: ProtocolDeskManifest): string {
+  if (manifest.id === "private_ai") {
+    return "Private AI: custom workflows, files, notes, memory, and approved tools";
+  }
   if (manifest.id === "bittensor") {
     return "Bittensor: TAO reads, subnets, validators, wallet-reviewed transfers, stake, unstake, watches, and receipts";
   }
@@ -176,7 +197,7 @@ function railTitle(manifest: ProtocolDeskManifest): string {
     return "Polymarket: markets, liquidity, compliance, watches, and wallet-reviewed buy, sell, and cancel actions";
   }
   if (manifest.id === "sui") {
-    return "Sui: account reads, native and custom coin transfers, object transfers, batch transfers, and receipt evidence";
+    return "Sui: account reads, native and custom coin transfers, object transfers, batch transfers, and transaction receipts";
   }
   if (manifest.id === "wellness") {
     return "Longevity: standalone service workflows, program packets, progress check-ins, and client handoffs";
@@ -185,11 +206,15 @@ function railTitle(manifest: ProtocolDeskManifest): string {
 }
 
 function sessionTitle(manifest: ProtocolDeskManifest): string {
+  if (manifest.id === "private_ai") return "Private AI task";
   if (manifest.id === "wellness") return "Longevity workflow session";
   return `${manifest.displayName} session`;
 }
 
 function sessionBoundary(manifest: ProtocolDeskManifest): string {
+  if (manifest.id === "private_ai") {
+    return "Use only the context you choose. Matterhorn blocks secrets and discloses the selected model provider before private context is sent.";
+  }
   if (manifest.id === "bittensor") {
     return "Public wallet details and transaction drafts. You approve TAO transfers, stake, and unstake calls in your connected wallet; unsupported advanced calls are not presented as executable.";
   }
@@ -274,8 +299,8 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
   Record<CustomerProtocolDeskId, PublicBetaProtocolDeskCopy>
 > = {
   bittensor: {
-    shortDescription: "Read TAO context, compare subnets and validators, and collect public evidence.",
-    capabilityBullets: ["TAO context", "Subnet and validator research", "Watches and evidence"],
+    shortDescription: "Read TAO data, compare subnets and validators, and save cited results.",
+    capabilityBullets: ["TAO data", "Subnet and validator research", "Watches and saved results"],
     primaryActions: [
       publicBetaAction("read_tao_context", "Read public TAO context", "Read public TAO context"),
       publicBetaAction("compare_subnets", "Compare subnets", "Compare public subnet data"),
@@ -283,16 +308,16 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
     ],
     secondaryActions: [
       publicBetaAction("create_watch", "Create a watch", "Monitor public Bittensor data"),
-      publicBetaAction("save_public_evidence", "Save public evidence", "Save public Bittensor evidence"),
+      publicBetaAction("save_public_evidence", "Save result", "Save the cited Bittensor result"),
     ],
-    safetySummary: "Public Beta is limited to Bittensor research, monitoring, and public evidence.",
-    railTitle: "Bittensor: TAO reads, subnet and validator research, watches, and public evidence",
+    safetySummary: "Public Beta is limited to Bittensor research, monitoring, and cited public data.",
+    railTitle: "Bittensor: TAO reads, subnet and validator research, watches, and saved results",
     sessionBoundary: "Public Beta keeps this desk read-only. Transaction preparation, staking, transfers, and wallet actions stay hidden.",
     agentDescription: "Researches public TAO, subnet, and validator context without preparing wallet actions.",
   },
   hyperliquid: {
-    shortDescription: "Research markets, exposure, funding, and watch evidence.",
-    capabilityBullets: ["Markets and orderbooks", "Exposure and funding", "Watches and evidence"],
+    shortDescription: "Research markets, exposure, funding, and saved watch results.",
+    capabilityBullets: ["Markets and orderbooks", "Exposure and funding", "Watches and saved results"],
     primaryActions: [
       publicBetaAction("read_market_structure", "Read market structure", "Read public market structure"),
       publicBetaAction("review_exposure", "Review exposure", "Review public exposure data"),
@@ -300,16 +325,16 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
     ],
     secondaryActions: [
       publicBetaAction("create_watch", "Create a watch", "Monitor public Hyperliquid data"),
-      publicBetaAction("save_public_evidence", "Save public evidence", "Save public Hyperliquid evidence"),
+      publicBetaAction("save_public_evidence", "Save result", "Save the cited Hyperliquid result"),
     ],
-    safetySummary: "Public Beta is limited to Hyperliquid research, monitoring, and public evidence.",
-    railTitle: "Hyperliquid: orderbooks, exposure, funding, watches, and public evidence",
+    safetySummary: "Public Beta is limited to Hyperliquid research, monitoring, and cited public data.",
+    railTitle: "Hyperliquid: orderbooks, exposure, funding, watches, and saved results",
     sessionBoundary: "Public Beta keeps this desk read-only. Order preparation, trade tickets, and wallet actions stay hidden.",
     agentDescription: "Researches public market, exposure, and funding context without preparing orders.",
   },
   polymarket: {
-    shortDescription: "Research prediction markets across venues, with Polymarket liquidity, compliance, and watch evidence.",
-    capabilityBullets: ["Cross-venue research", "Polymarket liquidity and compliance", "Watches and evidence"],
+    shortDescription: "Research prediction markets across venues, including Polymarket liquidity, compliance, and saved watch results.",
+    capabilityBullets: ["Cross-venue research", "Polymarket liquidity and compliance", "Watches and saved results"],
     primaryActions: [
       publicBetaAction("research_markets", "Research markets", "Research public prediction-market data"),
       publicBetaAction("review_liquidity", "Review liquidity", "Review public liquidity data"),
@@ -317,27 +342,27 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
     ],
     secondaryActions: [
       publicBetaAction("create_watch", "Create a watch", "Monitor public Polymarket data"),
-      publicBetaAction("save_public_evidence", "Save public evidence", "Save public Polymarket evidence"),
+      publicBetaAction("save_public_evidence", "Save result", "Save the cited Polymarket result"),
     ],
     safetySummary: "Public Beta supports cross-venue research. Kalshi and Manifold remain research-only; Polymarket wallet actions stay hidden.",
-    railTitle: "Prediction markets: cross-venue research, Polymarket compliance, watches, and public evidence",
+    railTitle: "Prediction markets: cross-venue research, Polymarket compliance, watches, and saved results",
     sessionBoundary: "Public Beta keeps this desk read-only. Kalshi and Manifold have no transaction path, and Polymarket wallet actions stay hidden.",
     agentDescription: "Researches public prediction markets across supported venues without preparing trades.",
   },
   sui: {
-    shortDescription: "Read public Sui account, object, network, and receipt evidence.",
-    capabilityBullets: ["Account and object reads", "Network and fee research", "Receipt evidence"],
+    shortDescription: "Read public Sui account, object, network, and transaction details.",
+    capabilityBullets: ["Account and object reads", "Network and fee research", "Transaction receipts"],
     primaryActions: [
       publicBetaAction("read_account_context", "Read account context", "Read public Sui account context"),
       publicBetaAction("inspect_objects", "Inspect objects", "Inspect public Sui objects"),
       publicBetaAction("review_network_context", "Review network context", "Review public Sui network context"),
     ],
     secondaryActions: [
-      publicBetaAction("import_public_receipts", "Import public receipts", "Import public Sui receipt evidence"),
-      publicBetaAction("save_public_evidence", "Save public evidence", "Save public Sui evidence"),
+      publicBetaAction("import_public_receipts", "Import public receipts", "Import public Sui transaction receipts"),
+      publicBetaAction("save_public_evidence", "Save result", "Save the cited Sui result"),
     ],
-    safetySummary: "Public Beta is limited to public Sui reads, monitoring, and receipt evidence.",
-    railTitle: "Sui: account and object reads, network research, watches, and receipt evidence",
+    safetySummary: "Public Beta is limited to public Sui reads, monitoring, and transaction receipts.",
+    railTitle: "Sui: account and object reads, network research, watches, and transaction receipts",
     sessionBoundary: "Public Beta keeps this desk read-only. Transfer preparation, signing handoffs, and wallet actions stay hidden.",
     agentDescription: "Researches public Sui account, object, network, and receipt context without preparing transfers.",
   },
@@ -364,6 +389,7 @@ export const CUSTOMER_LAUNCHER_DESK_VISUALS: CustomerProtocolDeskVisual[] = CUST
   .filter((visual): visual is CustomerProtocolDeskVisual => Boolean(visual));
 
 const DESK_WORKFLOW_ID: Record<CustomerProtocolDeskId, string | undefined> = {
+  private_ai: undefined,
   bittensor: "bittensor_operator",
   hyperliquid: "hyperliquid_preview",
   polymarket: "polymarket_preview",

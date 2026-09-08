@@ -100,7 +100,7 @@ for (const phrase of [
   "Chain API",
   "Stages",
   "SDK validation",
-  "Official SDK validation is public/redacted evidence only.",
+  "Official SDK validation uses only public or redacted test results.",
   "operator-owned testnet mode validates Hyperliquid testnet and Polygon Amoy artifacts",
   "matterhorn-work crypto sdk-doctor --strict --json",
   "matterhorn-work crypto sdk-validate-public",

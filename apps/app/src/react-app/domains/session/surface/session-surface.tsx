@@ -195,6 +195,7 @@ import {
   deskToneStyle,
   getCustomerProtocolDeskVisual,
   getCustomerProtocolDeskVisualForLaunch,
+  isPrivateAiDeskAgent,
 } from "../workflows/protocol-desk-ui";
 import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
@@ -254,6 +255,7 @@ const IDLE_STATUS: SessionStatus = { type: "idle" };
 const DEFAULT_COMPOSER_CONTROL_TEXT = "Help me outline the next Matterhorn task.";
 
 const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof BrainCircuit> = {
+  private_ai: BrainCircuit,
   bittensor: BrainCircuit,
   hyperliquid: BarChart3,
   polymarket: ShieldCheck,
@@ -372,7 +374,7 @@ function MatterhornDeskFocusedEmptyState({
     reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
   }).flatMap((group) => group.starters);
   const boundary = !MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions
-    ? "Public Beta keeps this desk read-only. Research, monitoring, and public evidence remain available; transaction preparation and wallet actions stay hidden."
+    ? "Public Beta keeps this desk read-only. Research, monitoring, and cited public data remain available; transaction preparation and wallet actions stay hidden."
     : mode === "bittensor"
       ? "Uses public wallet details and prepares transaction drafts. You approve TAO transfers, staking, and unstaking in your wallet; unsupported advanced calls stay unavailable."
       : mode === "wellness"
@@ -1568,8 +1570,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
       reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
     })
       .filter((card) => card.id !== "blank_chat_workflow")
-      .filter((card) => !publicBetaWeb || card.iconHint !== "wellness"),
-    [customerWorkflowTemplatesQuery.data, publicBetaWeb],
+      .filter((card) => MATTERHORN_LAUNCH_FEATURES.longevity || card.iconHint !== "wellness"),
+    [customerWorkflowTemplatesQuery.data],
   );
 
   const currentSnapshot = snapshotQuery.data?.session.id === props.sessionId ? snapshotQuery.data : null;
@@ -1790,6 +1792,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const selectedWorkflowDeskAgent = useMemo(
     () => getMatterhornDeskAgentById(props.selectedAgent),
     [props.selectedAgent],
+  );
+  const privateAiActive = useMemo(
+    () => isPrivateAiDeskAgent(linkedWorkflowRun?.agentId) || isPrivateAiDeskAgent(props.selectedAgent),
+    [linkedWorkflowRun?.agentId, props.selectedAgent],
   );
   const linkedWorkflowDeskMode = useMemo(
     () => matterhornDeskModeForAgent(linkedWorkflowRun?.agentId),
@@ -3304,7 +3310,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     }}
                   />
                 </div>
-              ) : shellConfig.starterCards ? (
+              ) : privateAiActive ? null : shellConfig.starterCards ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-5 sm:px-6">
                   <div className="w-full max-w-[880px]">
                     <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -3442,6 +3448,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         <DevProfiler id="SessionComposer">
         <ReactSessionComposer
           draft={draft}
+          placeholder={privateAiActive ? "Message Private AI…" : undefined}
           mentions={mentions}
           onDraftChange={handleComposerDraftChange}
         onSend={handleSend}
@@ -3483,8 +3490,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
         executionModesEnabled={props.executionModesEnabled}
         onExecutionModeChange={props.onExecutionModeChange}
         agentLabel={props.agentLabel}
-        agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode)}
-        hideLockedAgentLabel={Boolean(activeDeskMode)}
+        agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode || privateAiActive)}
+        hideLockedAgentLabel={Boolean(activeDeskMode || privateAiActive)}
         agentSelectionLockedReason={
           linkedWorkflowRun?.deskId === "blank"
             ? "This chat keeps the agent selected when it started."

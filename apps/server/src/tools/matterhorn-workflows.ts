@@ -117,6 +117,7 @@ export type MatterhornWorkflowPromptPack = {
 };
 
 type MatterhornCustomerWorkflowCategory =
+  | "general"
   | "bittensor"
   | "markets"
   | "web3"
@@ -183,7 +184,7 @@ type MatterhornCustomerWorkflowTemplate = {
     recommendedSurface: "protocol_desk" | "workflow_chat" | "future_service";
   };
   ui: {
-    iconHint: "bittensor" | "hyperliquid" | "polymarket" | "sui" | "wellness" | "services" | "blank";
+    iconHint: "private_ai" | "bittensor" | "hyperliquid" | "polymarket" | "sui" | "wellness" | "services" | "blank";
     accent: "matterhorn_blue" | "neutral" | "caution";
     shortDescription: string;
   };
@@ -652,7 +653,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     expectedArtifacts: [
       { id: "wallet_card", name: "Sui Wallet Card", mimeType: "application/json", public: true },
       { id: "transfer_preview", name: "Transfer Preview", mimeType: "application/json", public: true },
-      { id: "receipt_evidence", name: "Receipt Evidence", mimeType: "application/json", public: true },
+      { id: "receipt_evidence", name: "Transaction Receipt", mimeType: "application/json", public: true },
     ],
     requiredContext: [
       {
@@ -678,7 +679,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     handoffReceiptSupport: {
       supported: true,
       types: ["transfer_preview", "receipt_evidence"],
-      description: "Produces a non-custodial transfer preview and stores only public receipt evidence after wallet submission.",
+      description: "Produces a non-custodial transfer preview and stores only the public transaction receipt after wallet submission.",
     },
     serviceHooks: [{ hook: "sui", status: "preview_only" }],
     chatMode: "crypto chat",
@@ -745,7 +746,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     handoffReceiptSupport: {
       supported: true,
       types: ["service_plan", "content_calendar"],
-      description: "Produces a public/redacted service plan and workflow evidence bundle.",
+      description: "Produces a public, redacted service plan and workflow verification report.",
     },
     serviceHooks: [
       { hook: "email", status: "planned_not_live" },
@@ -843,11 +844,11 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
   },
   {
     id: "blank_chat_workflow",
-    name: "Chat",
-    summary: "Start a flexible chat session with the Matterhorn Desks engine.",
-    promise: "Open-ended assistance. You choose the goal.",
-    category: "future",
-    examplePrompts: ["What can you do?", "Help me think through a problem", "Draft an email"],
+    name: "Private AI",
+    summary: "Run a custom workflow with the context and tools you choose.",
+    promise: "A flexible workspace for research, writing, planning, files, and custom tasks.",
+    category: "general",
+    examplePrompts: ["Analyze these files", "Draft a project plan", "Turn my notes into a brief"],
     expectedArtifacts: [],
     requiredContext: [],
     optionalContext: [],
@@ -863,16 +864,16 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     serviceHooks: [],
     chatMode: "free chat",
     launch: {
-      primaryCta: "Start chat",
+      primaryCta: "Start a task",
       secondaryCta: "Browse templates",
-      defaultPrompt: "What can you do?",
-      handoffContextLabel: "Goal",
+      defaultPrompt: "What would you like to work on?",
+      handoffContextLabel: "Outcome",
       recommendedSurface: "workflow_chat",
     },
     ui: {
-      iconHint: "blank",
+      iconHint: "private_ai",
       accent: "neutral",
-      shortDescription: "Start a flexible chat with the Matterhorn Desks engine.",
+      shortDescription: "Custom workflows, files, notes, and everyday tasks.",
     },
     routing: {
       chatMode: "general",
