@@ -142,7 +142,7 @@ const DEFAULT_MODEL_POLICY: MatterhornDeskModelPolicy = {
 const PROHIBITED_EXECUTION_CLAIMS = [
   "Do not claim that Matterhorn signed on the user's behalf.",
   "Do not claim that an agent, automation, or watch submitted a transaction.",
-  "Do not claim completion without the required receipt evidence.",
+  "Do not claim completion without the required public transaction receipt.",
 ];
 
 export const LONGEVITY_PRIMARY_GOAL_OPTIONS = [
@@ -496,7 +496,7 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     },
     modelPolicy: { ...DEFAULT_MODEL_POLICY, temperature: 0.1 },
     displayName: "Sui Agent",
-    description: "Sui wallet-standard account reads, transfer previews, wallet signing handoffs, and public receipt evidence.",
+    description: "Sui wallet-standard account reads, transfer previews, wallet signing handoffs, and saved public transaction receipts.",
     instructions: [
       AGENT_SHARED_BOUNDARY,
       "",
@@ -507,7 +507,7 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "- Call the Sui transfer preview tool once. If it fails, say that no valid preview was generated, do not calculate replacement transaction details yourself, and do not recommend signing or execution.",
       "- Never invent a gas budget, digest, preview hash, or handoff. Show those fields only when the tool returns them.",
       "- Never ask for seed phrases, private keys, mnemonics, wallet exports, raw signatures, signed payloads, or custody.",
-      "- Save previews and public receipts as project evidence under outputs/sui/<session-slug>/ when available.",
+      "- Save previews and public receipts under Files and outputs at outputs/sui/<session-slug>/ when available.",
     ].join("\n"),
   },
   wellness: {
