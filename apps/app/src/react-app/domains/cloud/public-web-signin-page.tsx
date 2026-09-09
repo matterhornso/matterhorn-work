@@ -348,8 +348,8 @@ export function PublicWebSigninPage({
             Serious work deserves more than a chat.
           </h1>
           <p className="public-auth-description">
-            Open a private workspace for focused AI desks, tools, and durable
-            saved project files and receipts.
+            Chat with focused AI, use crypto tools, and keep your files and
+            transaction history in one private workspace.
           </p>
 
           <div className="public-auth-mode" aria-label="Account access">

@@ -1,5 +1,9 @@
 import { openworkExtensionsPreviewPluginPath } from "./openwork-extensions-plugin-path.js";
-import { buildManagedCudosProviderConfig, CUDOS_PROVIDER_ID } from "./cudos-provider.js";
+import {
+  buildManagedCudosProviderConfig,
+  CUDOS_PROVIDER_ID,
+  type CudosModel,
+} from "./cudos-provider.js";
 import { matterhornGuardPluginPath } from "./matterhorn-guard-plugin-path.js";
 import {
   buildManagedVeniceProviderConfig,
@@ -41,6 +45,7 @@ export function buildManagedOpencodeRuntimeConfig(input: {
   serverUrl: string;
   clientToken: string;
   enableCudosProvider?: boolean;
+  cudosModels?: readonly CudosModel[];
   venicePrivateModels?: readonly VenicePrivateModel[];
 }): string {
   let serverUrl = input.serverUrl.trim();
@@ -52,7 +57,7 @@ export function buildManagedOpencodeRuntimeConfig(input: {
 
   const managedProviders = {
     ...(input.enableCudosProvider
-      ? { [CUDOS_PROVIDER_ID]: buildManagedCudosProviderConfig() }
+      ? { [CUDOS_PROVIDER_ID]: buildManagedCudosProviderConfig(input.cudosModels) }
       : {}),
     ...(input.venicePrivateModels?.length
       ? {

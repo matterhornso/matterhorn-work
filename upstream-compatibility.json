@@ -1,10 +1,10 @@
 {
   "version": "matterhorn.upstream-compatibility.v1",
-  "reviewedAt": "2026-09-03",
+  "reviewedAt": "2026-09-09",
   "openwork": {
     "repository": "https://github.com/different-ai/openwork",
-    "version": "v0.18.42",
-    "commit": "1785d362d304ffab5d8ee5db9963335f5076ad2f",
+    "version": "v0.18.44",
+    "commit": "cac94b079906b9ef45788dfaa07444524976a6a0",
     "integrationStrategy": "compatibility_port",
     "adoptedContracts": [
       "untimed_web_opencode_event_streams",
@@ -17,7 +17,11 @@
       "truthful_terminal_session_status",
       "admission_aware_queued_message_drain",
       "bounded_session_hydration_and_coalescing",
-      "provider_sync_context_isolation"
+      "provider_sync_context_isolation",
+      "cached_session_live_progress_preservation",
+      "composer_draft_persistence_during_restore",
+      "instant_send_visibility",
+      "isolated_mcp_callback_mode_integrity"
     ],
     "preservedMatterhornBoundaries": [
       "hosted_account_and_workspace_isolation",
@@ -28,9 +32,9 @@
   },
   "opencode": {
     "repository": "https://github.com/anomalyco/opencode",
-    "version": "v1.18.27",
-    "commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
-    "sdkVersion": "1.18.27",
+    "version": "v1.18.30",
+    "commit": "3104c1428ec91f809e5ab86631300de41eb6952e",
+    "sdkVersion": "1.18.30",
     "requiredPluginHooks": [
       "experimental.chat.messages.transform",
       "experimental.chat.system.transform",

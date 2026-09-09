@@ -70,7 +70,7 @@ const publicAuthStaticShell = `<main class="public-auth-shell" data-matterhorn-s
       <div class="public-auth-brand"><img src="/matterhorn-logo-square.svg" alt="" aria-hidden="true" /><span>Matterhorn Desks</span></div>
       <p class="public-auth-kicker">Public beta</p>
       <h1 id="public-auth-title" class="public-auth-title">Serious work deserves more than a chat.</h1>
-      <p class="public-auth-description">Open a private workspace for focused AI desks, tools, and durable project evidence.</p>
+      <p class="public-auth-description">Chat with focused AI, use crypto tools, and keep your files and transaction history in one private workspace.</p>
       <p class="public-auth-status" role="status" aria-live="polite">Opening secure account access…</p>
       <div aria-hidden="true" style="min-height: 300px"></div>
     </section>

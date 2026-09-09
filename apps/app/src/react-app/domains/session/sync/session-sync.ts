@@ -50,6 +50,7 @@ type SyncEntry = {
 
 const idleStatus: SessionStatus = { type: "idle" };
 const syncs = new Map<string, SyncEntry>();
+const todoSnapshotFirstSeen = new WeakMap<MatterhornSessionSnapshot, number>();
 const retainedSessionTtlMs = 10 * 60_000;
 const idleRetainedSessionTtlMs = 10_000;
 
@@ -1017,6 +1018,26 @@ export function seedSessionState(workspaceId: string, snapshot: MatterhornSessio
   const queryClient = getReactQueryClient();
   const key = transcriptKey(workspaceId, snapshot.session.id);
   const incoming = snapshotToUIMessages(snapshot);
+
+  // Stream events can arrive while a snapshot is in flight. Flush known
+  // deltas before reconciliation, then fold still-undeclared cumulative
+  // deltas into the snapshot exactly once so restored progress never moves
+  // backwards or duplicates text.
+  for (const entry of syncs.values()) {
+    if (entry.input.workspaceId !== workspaceId) continue;
+    flushDeltas(entry, workspaceId);
+    for (const message of incoming) {
+      for (const part of message.parts) {
+        if (part.type !== "text" && part.type !== "reasoning") continue;
+        const partId = getPartMetadataId(part);
+        if (!partId) continue;
+        const pending = entry.pendingDeltas.get(partId);
+        if (!pending || pending.messageId !== message.id) continue;
+        if (pending.text.length > part.text.length) part.text = pending.text;
+        entry.pendingDeltas.delete(partId);
+      }
+    }
+  }
   const existing = queryClient.getQueryData<UIMessage[]>(key);
 
   useSessionActivityStore.getState().seedSessionRun(
@@ -1033,7 +1054,13 @@ export function seedSessionState(workspaceId: string, snapshot: MatterhornSessio
   }));
 
   queryClient.setQueryData(statusKey(workspaceId, snapshot.session.id), snapshot.status);
-  queryClient.setQueryData(todoKey(workspaceId, snapshot.session.id), snapshot.todos);
+  const todosKey = todoKey(workspaceId, snapshot.session.id);
+  const snapshotFirstSeen = todoSnapshotFirstSeen.get(snapshot) ?? Date.now();
+  todoSnapshotFirstSeen.set(snapshot, snapshotFirstSeen);
+  const todosState = queryClient.getQueryState(todosKey);
+  if (!todosState || snapshotFirstSeen > todosState.dataUpdatedAt) {
+    queryClient.setQueryData(todosKey, snapshot.todos, { updatedAt: snapshotFirstSeen });
+  }
 }
 
 export function trackWorkspaceSessionSync(input: SyncOptions, sessionId: string | null | undefined) {

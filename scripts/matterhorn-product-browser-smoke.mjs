@@ -580,7 +580,7 @@ async function startPrimaryDeskTask(page, config, desk) {
     timeout: 30_000,
   });
   await ensureWorkspaceHomeVisible(page);
-  const protocolDesks = page.getByText("Protocol desks", { exact: true });
+  const protocolDesks = page.getByText("Desks", { exact: true }).first();
   await protocolDesks.waitFor({ state: "visible", timeout: 20_000 });
   await protocolDesks.click();
   await clickFirstVisible(
@@ -751,7 +751,7 @@ async function verifyReviewedActionChatHandoff(page, config) {
     timeout: 30_000,
   });
   await ensureWorkspaceHomeVisible(page);
-  const protocolDesks = page.getByText("Protocol desks", { exact: true });
+  const protocolDesks = page.getByText("Desks", { exact: true }).first();
   await protocolDesks.waitFor({ state: "visible", timeout: 20_000 });
   await protocolDesks.click();
   await clickFirstVisible(
@@ -1014,7 +1014,8 @@ async function runSmoke(config) {
           .getByRole("button", { name: "New note", exact: true })
           .waitFor({ state: "visible", timeout: 15_000 });
         await page
-          .getByText("Protocol desks", { exact: true })
+          .getByText("Desks", { exact: true })
+          .first()
           .waitFor({ state: "visible", timeout: 15_000 });
         await page
           .getByLabel("Jot a note", { exact: true })
@@ -1204,7 +1205,7 @@ async function runSmoke(config) {
           timeout: 30_000,
         });
         await ensureWorkspaceHomeVisible(page);
-        const protocolDesks = page.getByText("Protocol desks", { exact: true });
+        const protocolDesks = page.getByText("Desks", { exact: true }).first();
         await protocolDesks.waitFor({ state: "visible", timeout: 20_000 });
         await protocolDesks.click();
         const longevityCard = page.getByTestId("open-wellness-desk");
@@ -1436,7 +1437,7 @@ async function runSmoke(config) {
         });
         await moreWorkspaceControls.click();
         const workAndEvidence = page.getByRole("button", {
-          name: /Work & evidence/i,
+          name: /Work & records/i,
         });
         await workAndEvidence.waitFor({ state: "visible", timeout: 20_000 });
         await workAndEvidence.click();

@@ -1194,6 +1194,7 @@ export function ReactSessionComposer(props: ComposerProps) {
         {/* Main composer panel */}
         <div
           data-testid="session-composer-shell"
+          data-model-unavailable={props.modelUnavailable ? "true" : "false"}
           className={`relative overflow-visible rounded-xl border border-transparent bg-dls-surface-muted/[0.16] shadow-none transition-colors focus-within:border-dls-border/25 focus-within:bg-dls-surface-muted/[0.23] ${panelRoundedClass}`}
         >
           {props.topAccessory ? <div className="relative z-10 px-3 pt-3 sm:px-4">{props.topAccessory}</div> : null}
@@ -1800,19 +1801,21 @@ export function ReactSessionComposer(props: ComposerProps) {
               />
             ) : null}
             {props.modelUnavailable ? (
-              props.onOpenAiProviders ? (
-                <button
-                  type="button"
-                  className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[rgb(var(--dls-accent-rgb)/0.16)] px-2.5 text-xs font-semibold text-dls-text transition-colors hover:bg-[rgb(var(--dls-accent-rgb)/0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.35)]"
-                  onClick={props.onOpenAiProviders}
-                  title="Connect a model for general chat. Complete reviewed-action commands can still open a local ticket."
-                >
-                  <Plug size={12} />
-                  Connect a model
-                </button>
-              ) : (
-                <span className="text-xs font-medium text-red-10">Connect a model to send</span>
-              )
+              <button
+                type="button"
+                className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[rgb(var(--dls-accent-rgb)/0.16)] px-2.5 text-xs font-semibold text-dls-text transition-colors hover:bg-[rgb(var(--dls-accent-rgb)/0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.35)]"
+                onClick={() => {
+                  if (props.onOpenAiProviders) {
+                    props.onOpenAiProviders();
+                    return;
+                  }
+                  props.onModelPickerOpenChange(true);
+                }}
+                title="Connect a model for general chat. Complete reviewed-action commands can still open a local ticket."
+              >
+                <Plug size={12} />
+                Connect a model
+              </button>
             ) : null}
 
             <ModelBehaviorSelect

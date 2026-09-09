@@ -1,5 +1,5 @@
 ---
-description: Sui wallet-standard account reads, transfer previews, wallet signing handoffs, and public receipt evidence.
+description: Sui wallet-standard account reads, transfer previews, wallet signing handoffs, and saved public transaction receipts.
 mode: primary
 temperature: 0.1
 permission:
@@ -36,7 +36,7 @@ Desk scope:
 - Call the Sui transfer preview tool once. If it fails, say that no valid preview was generated, do not calculate replacement transaction details yourself, and do not recommend signing or execution.
 - Never invent a gas budget, digest, preview hash, or handoff. Show those fields only when the tool returns them.
 - Never ask for seed phrases, private keys, mnemonics, wallet exports, raw signatures, signed payloads, or custody.
-- Save previews and public receipts as project evidence under outputs/sui/<session-slug>/ when available.
+- Save previews and public receipts under Files and outputs at outputs/sui/<session-slug>/ when available.
 
 ## Enforced Matterhorn Desk Contract
 Contract: matterhorn.desk.agent.v2
@@ -56,7 +56,7 @@ Never claim an action completed without a matching public receipt or confirmed r
 Tool-call budget: at most 1 calls for one user turn unless the user explicitly starts a broader saved workflow.
 Do not claim that Matterhorn signed on the user's behalf.
 Do not claim that an agent, automation, or watch submitted a transaction.
-Do not claim completion without the required receipt evidence.
+Do not claim completion without the required public transaction receipt.
 
 <!-- MATTERHORN_ARTIFACTS_START -->
 ## Matterhorn Desks Artifacts

@@ -973,7 +973,7 @@ await acceptanceCase(
   "Feedback review filters",
   "Every filter becomes the selected filter",
   async () => {
-    await openOverviewControlGroup(page, "Work & evidence");
+    await openOverviewControlGroup(page, "Work & records");
     const all = await firstVisible(
       page.getByRole("button", { name: /^All\s+\d+$/ }),
       "All feedback",
@@ -1005,7 +1005,7 @@ await acceptanceCase(
   "Quick Jot",
   "Opens the note composer and Cancel writes nothing",
   async () => {
-    await openOverviewControlGroup(page, "Work & evidence");
+    await openOverviewControlGroup(page, "Work & records");
     await clickVisible(page.getByRole("button", { name: "Quick Jot", exact: true }), "Quick Jot");
     const dialog = await firstVisible(page.getByRole("dialog"), "Quick Jot dialog");
     await firstVisible(dialog.getByPlaceholder("Note title"), "Note title");
@@ -1020,7 +1020,7 @@ await acceptanceCase(
   "Open notes",
   "Opens the workspace Notes panel",
   async () => {
-    await openOverviewControlGroup(page, "Work & evidence");
+    await openOverviewControlGroup(page, "Work & records");
     await clickVisible(page.getByRole("button", { name: "Open notes", exact: true }), "Open notes");
     await waitForUrl(page, /(?:\?|&)panel=notes(?:&|$)/, "Open notes");
     await assertText(page, "Notes");
@@ -1034,7 +1034,7 @@ await acceptanceCase(
   "Open Memory review",
   "Opens the workspace Memory panel",
   async () => {
-    await openOverviewControlGroup(page, "Work & evidence");
+    await openOverviewControlGroup(page, "Work & records");
     await clickVisible(
       page.getByRole("button", { name: "Open Memory review", exact: true }),
       "Open Memory review",

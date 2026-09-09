@@ -68,8 +68,9 @@ describe("customer-facing Matterhorn Desks branding", () => {
     expect(publicSignIn).toContain("<span>Matterhorn Desks</span>");
     expect(publicSignIn).toContain("Serious work deserves more than a chat.");
     expect(publicSignIn).toContain(
-      "Open a private workspace for focused AI desks, tools, and durable",
+      "Chat with focused AI, use crypto tools, and keep your files and",
     );
+    expect(publicSignIn).toContain("transaction history in one private workspace.");
     expect(publicSignIn).toContain("Choose a desk. Ask for the outcome.");
     expect(publicSignIn).toContain("Private AI");
     expect(publicSignIn).toContain("Run custom workflows with the files, context, and tools you choose.");

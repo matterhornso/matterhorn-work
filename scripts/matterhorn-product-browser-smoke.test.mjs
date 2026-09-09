@@ -88,7 +88,7 @@ for (const visibleText of [
   "Workspace home",
   "New chat",
   "New note",
-  "Protocol desks",
+  "Desks",
   "Jot a note",
   "Wallet readiness",
   "Wallet readiness details",

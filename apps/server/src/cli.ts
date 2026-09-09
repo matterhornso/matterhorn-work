@@ -11,6 +11,7 @@ import {
 import { createServerLogger, startServer } from "./server.js";
 import { ensureWorkspaceFiles } from "./workspace-init.js";
 import { buildManagedOpencodeRuntimeConfig } from "./managed-opencode-runtime-config.js";
+import { resolveManagedCudosModelCatalog } from "./cudos-provider.js";
 import {
   resolveManagedVenicePrivateModels,
   startManagedVenicePrivateModelRegistryRefresh,
@@ -62,11 +63,13 @@ if (!config.opencodeBaseUrl && process.env.OPENWORK_MANAGE_OPENCODE === "1") {
   const workspace = config.workspaces[0];
   if (workspace?.path) {
     const venicePrivateModels = await resolveManagedVenicePrivateModels();
+    const cudosCatalog = await resolveManagedCudosModelCatalog();
     stopVenicePrivateModelRefresh = startManagedVenicePrivateModelRegistryRefresh().stop;
     const managedRuntimeConfig = buildManagedOpencodeRuntimeConfig({
       serverUrl,
       clientToken: config.token,
       enableCudosProvider: Boolean(process.env.CUDOS_API_KEY?.trim()),
+      cudosModels: cudosCatalog.models,
       venicePrivateModels,
     });
     const managedOpencodeCwd = process.env.OPENWORK_MANAGED_OPENCODE_CWD?.trim() || workspace.path;
@@ -96,6 +99,9 @@ if (!config.opencodeBaseUrl && process.env.OPENWORK_MANAGE_OPENCODE === "1") {
       entry.directory ??= entry.path;
     }
     logger.log("info", `Managed OpenCode listening on ${managedOpencode.url}`);
+    if (process.env.CUDOS_API_KEY?.trim()) {
+      logger.log("info", `Managed CUDOS catalog loaded ${cudosCatalog.models.length} models from ${cudosCatalog.source}`);
+    }
   }
 }
 
