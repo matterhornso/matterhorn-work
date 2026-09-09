@@ -130,6 +130,10 @@ assert.deepEqual(
     "low",
   ],
 );
+assert.deepEqual(
+  stages.find((item) => item.id === "workspace_prerequisites").command,
+  ["pnpm", "--dir", "packages/crypto-app-sdk", "build"],
+);
 assert.ok(stages.some((item) => item.id === "app_tests"));
 assert.ok(stages.some((item) => item.id === "server_tests"));
 assert.ok(stages.some((item) => item.id === "production_build"));

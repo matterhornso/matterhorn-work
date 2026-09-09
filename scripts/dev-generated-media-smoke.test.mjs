@@ -52,11 +52,12 @@ assert.ok(
 );
 assert.ok(
   script.includes('url.pathname === "/global/health"') &&
+    script.includes('url.pathname === "/instance/dispose"') &&
     script.includes('url.pathname === "/config"') &&
     script.includes('url.pathname === "/event"') &&
     script.includes('url.pathname === "/permission"') &&
     script.includes('url.pathname === "/question"'),
-  "generated-media smoke launcher should quiet normal OpenCode health, config, event, permission, and question side channels",
+  "generated-media smoke launcher should support normal OpenCode health, reload, config, event, permission, and question side channels",
 );
 assert.ok(
   script.includes('MATTERHORN_IMAGE_PROVIDER: "mock"'),

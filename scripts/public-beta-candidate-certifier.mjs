@@ -368,6 +368,12 @@ export function buildStages(config) {
       "--audit-level",
       "low",
     ]),
+    stage("workspace_prerequisites", "Build workspace packages required by tests", [
+      "pnpm",
+      "--dir",
+      "packages/crypto-app-sdk",
+      "build",
+    ]),
     stage("app_tests", "Complete app test suite", [
       "pnpm",
       "exec",
