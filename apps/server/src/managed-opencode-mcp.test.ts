@@ -69,6 +69,24 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(content).not.toContain("apiKey");
   });
 
+  test("registers the live CUDOS catalog supplied by the trusted server", () => {
+    const content = buildManagedOpencodeRuntimeConfig({
+      serverUrl: "http://127.0.0.1:4130/",
+      clientToken: "test-client-token",
+      enableCudosProvider: true,
+      cudosModels: [
+        { id: "asi1-mini", name: "ASI1 Mini" },
+        { id: "provider/new-model", name: "New Provider Model" },
+      ],
+    });
+    const config = JSON.parse(content);
+
+    expect(config.provider.cudos.models).toEqual({
+      "asi1-mini": { name: "ASI1 Mini" },
+      "provider/new-model": { name: "New Provider Model" },
+    });
+  });
+
   test("registers only verified Venice private models without embedding its API key", () => {
     const content = buildManagedOpencodeRuntimeConfig({
       serverUrl: "http://127.0.0.1:4130/",

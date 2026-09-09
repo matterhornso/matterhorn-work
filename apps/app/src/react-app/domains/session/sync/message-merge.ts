@@ -1,7 +1,22 @@
 import type { UIMessage } from "ai";
 
 function mergeMessageParts(snapshotMessage: UIMessage, cachedMessage: UIMessage) {
+  const cachedTools = new Map(cachedMessage.parts.flatMap((part) =>
+    part.type === "dynamic-tool" ? [[part.toolCallId, part] as const] : []));
+  const snapshotToolIds = new Set(snapshotMessage.parts.flatMap((part) =>
+    part.type === "dynamic-tool" ? [part.toolCallId] : []));
   const parts = snapshotMessage.parts.map((part, index) => {
+    if (part.type === "dynamic-tool") {
+      const cachedPart = cachedTools.get(part.toolCallId);
+      if (
+        cachedPart?.toolName === part.toolName
+        && (cachedPart.state === "output-available" || cachedPart.state === "output-error")
+        && (part.state === "input-streaming" || part.state === "input-available")
+      ) {
+        return cachedPart;
+      }
+      return part;
+    }
     const cachedPart = cachedMessage.parts[index];
     if (!cachedPart) return part;
 
@@ -16,9 +31,9 @@ function mergeMessageParts(snapshotMessage: UIMessage, cachedMessage: UIMessage)
     return part;
   });
 
-  if (cachedMessage.parts.length > snapshotMessage.parts.length) {
-    parts.push(...cachedMessage.parts.slice(snapshotMessage.parts.length));
-  }
+  parts.push(...cachedMessage.parts.filter((part, index) => part.type === "dynamic-tool"
+    ? !snapshotToolIds.has(part.toolCallId)
+    : index >= snapshotMessage.parts.length));
 
   return parts;
 }

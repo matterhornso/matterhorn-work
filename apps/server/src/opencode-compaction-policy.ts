@@ -1,7 +1,7 @@
 /**
  * Canonical provider-bound compaction context for the pinned OpenCode runtime.
  *
- * Keep the agent prompt byte-for-byte aligned with OpenCode 1.18.27. The
+ * Keep the agent prompt byte-for-byte aligned with OpenCode 1.18.30. The
  * compatibility gate must update this value before the runtime version moves.
  */
 export const OPEN_CODE_1_18_27_COMPACTION_AGENT_PROMPT = [

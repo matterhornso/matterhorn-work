@@ -206,9 +206,9 @@ async function openOverviewSecondaryControls(page) {
   const disclosure = page.getByRole("button", { name: /More workspace controls/i });
   await disclosure.waitFor({ state: "visible", timeout: 20_000 });
   await clickUnique(disclosure, "More workspace controls");
-  const workAndEvidence = page.getByRole("button", { name: /Work & evidence/i });
-  await workAndEvidence.waitFor({ state: "visible", timeout: 20_000 });
-  await clickUnique(workAndEvidence, "Work & evidence");
+  const workAndRecords = page.getByRole("button", { name: /Work & records/i });
+  await workAndRecords.waitFor({ state: "visible", timeout: 20_000 });
+  await clickUnique(workAndRecords, "Work & records");
   await quickJot.waitFor({ state: "visible", timeout: 20_000 });
 }
 
@@ -580,7 +580,7 @@ async function ensureAuditChat(page, report, existingChatUrl) {
   if (existingChatUrl) return existingChatUrl;
 
   await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load", timeout: 30_000 });
-  await visibleMarker(page, ["Protocol desks", "Wallet readiness"]);
+  await visibleMarker(page, ["Desks", "Wallet readiness"]);
   const home = page.getByLabel("Workspace home");
   const newChat = home.getByRole("button", { name: "New chat", exact: true });
   await clickUnique(newChat, "Workspace home New chat");
@@ -621,7 +621,7 @@ async function inspectResponsiveSurfaceCatalog(page, report, prefix, viewportNam
     report,
     `${prefix}workspace-home`,
     workspaceUrl("session"),
-    ["Protocol desks", "Wallet readiness"],
+    ["Desks", "Wallet readiness"],
     viewportName,
   );
   await inspectSurface(
@@ -709,10 +709,10 @@ async function run() {
   attachDiagnostics(page);
   let chatUrl = await latestSmokeSessionUrl();
 
-  await inspectSurface(page, report, "workspace-home", workspaceUrl("session"), ["Protocol desks", "Wallet readiness"], "desktop");
+  await inspectSurface(page, report, "workspace-home", workspaceUrl("session"), ["Desks", "Wallet readiness"], "desktop");
   await recordInteraction(report, "home-new-project-dialog", async () => {
     await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
-    await visibleMarker(page, ["Protocol desks", "Wallet readiness"]);
+    await visibleMarker(page, ["Desks", "Wallet readiness"]);
     const home = page.getByLabel("Workspace home");
     await clickUnique(home.getByRole("button", { name: "New project", exact: true }), "Workspace home New project");
     await visibleMarker(page, ["Create project", "Add a project", "New project"]);
@@ -721,7 +721,7 @@ async function run() {
   });
   await recordInteraction(report, "home-jot-note-dialog", async () => {
     await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
-    await visibleMarker(page, ["Protocol desks", "Wallet readiness"]);
+    await visibleMarker(page, ["Desks", "Wallet readiness"]);
     await clickUnique(page.getByRole("button", { name: "Jot a note", exact: true }), "Jot a note");
     await visibleMarker(page, ["Quick note", "Jot a note", "Save note"]);
     await page.keyboard.press("Escape");
@@ -734,7 +734,7 @@ async function run() {
   });
   await recordInteraction(report, "sidebar-collapse-expand", async () => {
     await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
-    await visibleMarker(page, ["Protocol desks", "Wallet readiness"]);
+    await visibleMarker(page, ["Desks", "Wallet readiness"]);
     const toggle = page.getByRole("button", { name: "Toggle Sidebar", exact: true });
     await clickUnique(toggle, "Toggle Sidebar");
     await clickUnique(toggle, "Toggle Sidebar");
@@ -765,7 +765,7 @@ async function run() {
       await initial.newWorkspace.setChecked(false);
 
       await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
-      await visibleMarker(page, ["Protocol desks", "Wallet readiness"]);
+      await visibleMarker(page, ["Desks", "Wallet readiness"]);
       const hiddenWorkspaceAction = page.locator('[data-sidebar="footer"]').getByRole("button", { name: "New project", exact: true });
       if (await hiddenWorkspaceAction.count() !== 0) throw new Error("New project sidebar action stayed visible after being hidden.");
 
@@ -776,16 +776,8 @@ async function run() {
       if (await hiddenModelPicker.isVisible().catch(() => false)) {
         throw new Error("Model picker stayed visible after being hidden.");
       }
-      const composer = page.getByRole("textbox", { name: /^Ask (Matterhorn|about)/i });
-      const composerEditable = await composer.isEditable().catch(() => false);
-      let composerUnavailable = !composerEditable;
-      if (composerEditable) {
-        await composer.fill("Verify the current connected model remains usable.");
-        composerUnavailable = await page.getByRole("button", { name: "Ask", exact: true })
-          .isDisabled()
-          .catch(() => false);
-        await composer.fill("");
-      }
+      const composerShell = page.getByTestId("session-composer-shell");
+      const composerUnavailable = await composerShell.getAttribute("data-model-unavailable") === "true";
       if (composerUnavailable
         && !await page.getByRole("button", { name: "Connect a model", exact: true }).isVisible().catch(() => false)) {
         throw new Error("A hidden model picker left no clear model recovery action.");
@@ -797,7 +789,7 @@ async function run() {
     }
 
     await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
-    await visibleMarker(page, ["Protocol desks", "Wallet readiness"]);
+    await visibleMarker(page, ["Desks", "Wallet readiness"]);
     const restoredWorkspaceAction = page.locator('[data-sidebar="footer"]').getByRole("button", { name: "New project", exact: true });
     const restoredWorkspaceVisible = await restoredWorkspaceAction.isVisible().catch(() => false);
     if (restoredWorkspaceVisible !== initiallyShowingNewWorkspace) {
@@ -928,7 +920,7 @@ async function run() {
     await gotoWithTransientRetry(page, workspaceUrl("session/ses_missing_browser_audit"), { waitUntil: "load" });
     await visibleMarker(page, ["Chat no longer available"]);
     await page.waitForURL(workspaceUrl("session"), { timeout: 10_000 });
-    await visibleMarker(page, ["Protocol desks", "Wallet readiness"]);
+    await visibleMarker(page, ["Desks", "Wallet readiness"]);
     const staleDeskHeading = page.getByRole("heading", { name: "Sui desk", exact: true });
     if (await staleDeskHeading.isVisible().catch(() => false)) {
       throw new Error("Recovered stale chat reopened the previously focused desk instead of Project Home.");

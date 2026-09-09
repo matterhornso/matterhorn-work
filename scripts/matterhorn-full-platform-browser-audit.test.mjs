@@ -91,7 +91,7 @@ for (const signal of [
   "waitForChatComposer",
   "openResponsePerspectiveControls",
   "chatSurfaceMarkers",
-  "name: /^Ask (Matterhorn|about)/i",
+  'getAttribute("data-model-unavailable")',
   'name: "Chat options", exact: true',
   "Choose a desk to begin",
   "document.getAnimations()",

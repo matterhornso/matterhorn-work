@@ -1,7 +1,7 @@
 # Matterhorn Guarded Agent Architecture v3
 
 **Status:** Current implementation guide  
-**Runtime compatibility:** OpenWork `v0.18.42`, OpenCode `v1.18.27`  
+**Runtime compatibility:** OpenWork `v0.18.44`, OpenCode `v1.18.30`
 **Release posture:** Built behind fail-closed flags; live Phase 1–5 acceptance is still `NO-GO` until operator-controlled evidence passes
 
 ## The decision

@@ -73,7 +73,7 @@ Never claim an action completed without a matching public receipt or confirmed r
 Tool-call budget: at most 2 calls for one user turn unless the user explicitly starts a broader saved workflow.
 Do not claim that Matterhorn signed on the user's behalf.
 Do not claim that an agent, automation, or watch submitted a transaction.
-Do not claim completion without the required receipt evidence.
+Do not claim completion without the required public transaction receipt.
 
 <!-- MATTERHORN_ARTIFACTS_START -->
 ## Matterhorn Desks Artifacts
