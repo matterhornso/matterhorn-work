@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 
 export const DEFAULTS = {
   upstreamUrl: process.env.OPENWORK_UPSTREAM_REMOTE || "https://github.com/different-ai/openwork.git",
-  upstreamBranch: process.env.OPENWORK_UPSTREAM_BRANCH || "main",
+  upstreamBranch: process.env.OPENWORK_UPSTREAM_BRANCH || "dev",
   baseBranch: process.env.MATTERHORN_WORK_BASE_BRANCH || "dev",
 };
 

@@ -1366,7 +1366,7 @@ async function runSmoke(config) {
           .first()
           .waitFor({ state: "visible", timeout: 20_000 });
         await page
-          .getByText("Review suggestions before saving.", { exact: true })
+          .getByLabel("Search saved memories", { exact: true })
           .waitFor({ state: "visible", timeout: 20_000 });
         await page
           .getByText("Memory review", { exact: true })

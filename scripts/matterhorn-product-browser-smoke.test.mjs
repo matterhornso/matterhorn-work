@@ -121,7 +121,6 @@ for (const visibleText of [
   "Search notes",
   "Filter notes",
   "Memory",
-  "Review suggestions before saving.",
   "Memory review",
   "Memory inbox filters",
   "Refresh memory review",
@@ -166,6 +165,11 @@ for (const visibleText of [
     `product browser smoke should exercise ${visibleText}`,
   );
 }
+
+assert.ok(
+  script.includes('getByLabel("Search saved memories", { exact: true })'),
+  "product browser smoke should wait for the stable Memory search control",
+);
 
 assert.equal(
   script.includes("Describe market"),
