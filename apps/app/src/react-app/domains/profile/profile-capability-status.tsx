@@ -96,30 +96,15 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
           </div>
           <div className="min-w-0">
             <h2 className="text-base font-semibold leading-6 text-dls-text">Local profile</h2>
-            <p className="mt-0.5 text-sm leading-5 text-dls-secondary">
-              This workspace works locally. No account is required.
-            </p>
           </div>
         </div>
 
-        <div className="grid min-w-0 gap-1 rounded-lg bg-dls-surface-muted/[0.10] p-1.5">
-          <div className="rounded-md px-3 py-2.5">
-            <p className="text-[13px] font-medium leading-5 text-dls-text">Preferences and workspace access</p>
-            <p className="mt-0.5 text-[12px] leading-5 text-dls-secondary">
-              Available from this Matterhorn Desks engine.
-            </p>
-          </div>
-          <div className="rounded-md px-3 py-2.5">
-            <div className="flex items-start gap-2.5">
-              <Users className="mt-0.5 size-3.5 shrink-0 text-dls-secondary" />
-              <div className="min-w-0">
-                <p className="text-[13px] font-medium leading-5 text-dls-text">Local teammate access</p>
-                <p className="mt-0.5 text-[12px] leading-5 text-dls-secondary">
-                  Share this workspace with scoped local tokens. This is separate from Cloud collaboration.
-                </p>
-              </div>
-            </div>
-          </div>
+        <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-dls-surface-muted/[0.10] px-3 py-2.5">
+          <span className="flex min-w-0 items-center gap-2.5 text-[13px] font-medium text-dls-text">
+            <Users className="size-3.5 shrink-0 text-dls-secondary" />
+            Local sharing
+          </span>
+          <ProfileStatusText status={localTeamStatus} />
         </div>
 
         <details className="group rounded-lg bg-dls-surface-muted/[0.20] px-3 py-2.5 text-xs text-dls-secondary transition-colors hover:bg-dls-surface-muted/[0.30]">

@@ -191,14 +191,11 @@ export function DeskWorkflowStagePanel({
         onClick={() => onStartStage?.(step.id, buildStagePrompt(deskId, step, manifest))}
         className="group flex min-h-12 w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] disabled:cursor-not-allowed disabled:opacity-45"
       >
-        <span className="min-w-0">
+        <span className="min-w-0 flex-1">
           <span className="block text-[13px] font-semibold leading-5 text-dls-text">{step.name}</span>
-          <span className="line-clamp-1 block text-[11px] leading-4 text-dls-secondary">
-            {step.description}
-          </span>
           {step.requiresExternalSigner ? (
             <span className="mt-0.5 block text-[10px] font-medium text-[var(--matterhorn-desk-color)]">
-              Continues in your wallet
+              Wallet review
             </span>
           ) : null}
           {stageActionDisabled ? (
@@ -254,12 +251,7 @@ export function DeskWorkflowStagePanel({
         ) : null}
 
         <section aria-label={`${visual.displayName} starting points`}>
-          <div className="px-1 pb-1">
-            <p className="text-[13px] font-semibold text-dls-text">What would you like to do?</p>
-            <p className="mt-0.5 text-[11px] leading-5 text-dls-secondary">
-              Ask in your own words below, or choose a starting point.
-            </p>
-          </div>
+          <p className="px-1 text-[13px] font-semibold text-dls-text">Start here</p>
           <div className="mt-1 grid divide-y divide-dls-border/55 overflow-hidden rounded-lg bg-dls-surface-muted/20 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             {primarySteps.map(renderTaskButton)}
           </div>
@@ -268,7 +260,7 @@ export function DeskWorkflowStagePanel({
         {moreSteps.length || requiredInputs.length || optionalInputs.length || visibleArtifacts.length ? (
           <details className="group border-t border-dls-border/55 pt-1">
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-2 text-[11px] font-medium text-dls-secondary marker:hidden hover:bg-dls-surface-muted/20 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]">
-              <span>More ways to use this desk</span>
+              <span>More</span>
               <ChevronRight
                 className="size-3.5 transition-transform duration-150 group-open:rotate-90"
                 aria-hidden="true"

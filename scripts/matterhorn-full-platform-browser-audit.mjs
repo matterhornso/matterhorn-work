@@ -120,7 +120,7 @@ const panelSurfaces = [
   ["panel-profile", "profile", ["Profile"]],
   ["panel-wallet", "wallet", ["Wallets", "Save policy"]],
   ["panel-outputs", "artifacts", ["Outputs"]],
-  ["panel-extensions", "extensions", ["MCP connections"]],
+  ["panel-extensions", "extensions", ["Manage MCPs"]],
   ["panel-memory", "memory", ["Memory", "Review suggestions before saving."]],
   ["panel-notes", "notes", ["Notes", "New note"]],
   ["desk-bittensor", "bittensor", ["Bittensor desk"]],
@@ -890,7 +890,7 @@ async function run() {
   });
   await recordInteraction(report, "mcp-rail-availability-and-disclosure", async () => {
     await gotoWithTransientRetry(page, workspaceUrl("session", "?panel=extensions"), { waitUntil: "load" });
-    await visibleMarker(page, ["MCP connections"]);
+    await visibleMarker(page, ["Manage MCPs"]);
     const connectionSummary = page.getByRole("region", { name: "MCP connection summary", exact: true });
     await connectionSummary.waitFor({ state: "visible", timeout: 20_000 });
     const configuredServer = page.getByText("Matterhorn Desks MCP", { exact: true });

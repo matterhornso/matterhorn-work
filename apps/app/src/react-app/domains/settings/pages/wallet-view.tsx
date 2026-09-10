@@ -429,14 +429,7 @@ function WalletProtocolSupportMap(props: {
           )}
           onKeyDown={handleWalletDisclosureSummaryKeyDown}
         >
-          <span>
-            <span className="block font-medium text-dls-text">
-              Supported wallets and desks
-            </span>
-            <span className="mt-0.5 block text-xs text-dls-secondary">
-              What works here and what you finish elsewhere
-            </span>
-          </span>
+          <span className="font-medium text-dls-text">Supported wallets and desks</span>
           <ChevronDown className="size-4 shrink-0 text-dls-muted transition-transform group-open:rotate-180" />
         </summary>
         <div className="mt-3 grid gap-3 rounded-md bg-dls-surface-muted/[0.055] px-3 py-3">
@@ -948,14 +941,7 @@ function WalletRuntimeExplainer(props: {
           )}
           onKeyDown={handleWalletDisclosureSummaryKeyDown}
         >
-          <span>
-            <span className="block font-medium text-dls-text">
-              How signing works
-            </span>
-            <span className="mt-0.5 block text-xs text-dls-secondary">
-              {label} · keys stay in your wallet
-            </span>
-          </span>
+          <span className="font-medium text-dls-text">How signing works</span>
           <ChevronDown className="size-4 shrink-0 text-dls-muted transition-transform group-open:rotate-180" />
         </summary>
         <div className="mt-3 grid gap-2 border-t border-dls-border/40 pt-3 text-xs leading-5 text-dls-secondary">
@@ -1203,16 +1189,6 @@ function WalletSafetyPolicyControls(props: {
     props.runtimeWorkspaceId &&
     policyQuery.data?.controls.writable !== false,
   );
-  const sourceLabel = policyQuery.data
-    ? policyQuery.data.storage.exists
-      ? "Workspace policy"
-      : "Workspace defaults"
-    : props.matterhornServerClient && props.runtimeWorkspaceId
-      ? policyQuery.isError
-        ? "Local fallback"
-        : "Loading"
-      : "Local only";
-
   const updateForm = useCallback(
     (key: keyof WalletSafetyPolicyForm, value: string | boolean) => {
       setSaveError(null);
@@ -1325,16 +1301,7 @@ function WalletSafetyPolicyControls(props: {
           : "rounded-lg bg-dls-surface-muted/[0.045] px-4 py-4",
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h4 className="text-sm font-semibold text-dls-text">
-            Base transaction limits
-          </h4>
-        </div>
-        <span className="shrink-0 text-xs font-medium text-dls-secondary">
-          Base only · {sourceLabel}
-        </span>
-      </div>
+      <h4 className="text-sm font-semibold text-dls-text">Base transaction limits</h4>
 
       <div className="mt-2 text-xs text-dls-secondary">
         <Button

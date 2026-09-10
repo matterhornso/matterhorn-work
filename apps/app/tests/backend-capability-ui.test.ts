@@ -298,9 +298,7 @@ describe("Profile capability status renders all states", () => {
   test("compact profile prioritizes local capability and hides technical state", () => {
     const html = renderProfile(backendCapabilitiesWorkingFixture, null, false, true);
     expect(html).toContain("Local profile");
-    expect(html).toContain("No account is required");
-    expect(html).toContain("Preferences and workspace access");
-    expect(html).toContain("Local teammate access");
+    expect(html).toContain("Local sharing");
     expect(html).toContain("Workspace details");
     expect(html).not.toContain("Cloud account");
     expect(html).not.toContain("Cloud teammates");

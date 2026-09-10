@@ -109,7 +109,7 @@ for (const signal of [
   'element.getAttribute("aria-label") === "Auto context compaction"',
   'element.getAttribute("aria-hidden") === "true"',
   'id.endsWith("panel-memory")',
-  '["panel-extensions", "extensions", ["MCP connections"]]',
+  '["panel-extensions", "extensions", ["Manage MCPs"]]',
   '["settings-privacy", "settings/privacy", ["Model processing", "Workspace data", "Complete workspace archive"]]',
   'getByRole("button", { name: "Manage MCPs", exact: true })',
   'workspaceUrl("settings/extensions")',

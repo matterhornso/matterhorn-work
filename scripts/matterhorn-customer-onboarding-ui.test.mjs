@@ -731,8 +731,7 @@ for (const phrase of [
 }
 for (const phrase of [
   "Local profile",
-  "Preferences and workspace access",
-  "Local teammate access",
+  "Local sharing",
   "Workspace details",
   "Backend version",
   "Profile capability",

@@ -14,7 +14,7 @@ describe("Memory panel UI contract", () => {
     const source = readAppSource("domains/memory/memory-panel.tsx");
 
     expect(source).toContain(">Memory</div>");
-    expect(source).toContain("Review suggestions before saving.");
+    expect(source).not.toContain("Review suggestions before saving.");
     expect(source).toContain('useState<SuggestionInboxFilter>("needs_review")');
     expect(source).toContain('label: "Needs review"');
     expect(source).toContain('label: "Saved"');
@@ -25,7 +25,8 @@ describe("Memory panel UI contract", () => {
   test("keeps safety copy compact and removes lifecycle stat cards", () => {
     const source = readAppSource("domains/memory/memory-panel.tsx");
 
-    expect(source).toContain("Nothing is saved until you choose Remember or Save edited.");
+    expect(source).toContain("Never save secrets, wallet exports, signatures, or private health records.");
+    expect(source).not.toContain("Nothing is saved until you choose Remember or Save edited.");
     expect(source).not.toContain("No hidden memory");
     expect(source).not.toContain("No hidden save");
     expect(source).not.toContain("Memory inbox lifecycle summary");
@@ -62,9 +63,9 @@ describe("Memory panel UI contract", () => {
     const source = readAppSource("domains/memory/memory-panel.tsx");
 
     expect(source).toContain("Saved memories");
-    expect(source).toContain("No saved memories yet");
+    expect(source).toContain("No saved memories");
     expect(source).toContain("manualCaptureOpen");
-    expect(source).toContain("Add memory manually");
+    expect(source).toContain("Add memory");
     expect(source).toContain("Save memory");
   });
 
