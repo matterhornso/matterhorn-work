@@ -71,7 +71,7 @@ for (const required of [
   "connected-wallet-only signing and submission",
   "matterhorn.reviewed-action-handoff.v2",
   "matterhorn.agent-run-receipt.v1",
-  "OpenWork `v0.18.44`, OpenCode `v1.18.30`",
+  "OpenWork `v0.18.46`, OpenCode `v1.18.30`",
   "Agent Files are the user-controlled data sandbox",
   "Walrus stores only generic AES-GCM ciphertext envelopes",
   "live Phase 1–5 gate stays `NO-GO`",

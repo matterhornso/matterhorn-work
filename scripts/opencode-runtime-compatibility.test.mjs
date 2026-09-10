@@ -10,6 +10,7 @@ const constants = readJson("constants.json");
 const upstream = readJson("upstream-compatibility.json");
 const pinnedVersion = String(constants.opencodeVersion ?? "").trim().replace(/^v/, "");
 const openworkVersion = String(constants.openworkUpstreamVersion ?? "").trim();
+const openworkPatchReview = readText("docs/upstream-openwork-0.18.46-compatibility.md");
 
 assert.match(pinnedVersion, /^\d+\.\d+\.\d+$/, "constants.json must pin an exact OpenCode version");
 assert.match(openworkVersion, /^v\d+\.\d+\.\d+$/, "constants.json must pin an exact OpenWork upstream version");
@@ -25,6 +26,32 @@ assert.deepEqual(upstream.opencode?.requiredPluginHooks, [
 assert.equal(upstream.openwork?.integrationStrategy, "compatibility_port");
 assert.match(upstream.openwork?.commit ?? "", /^[a-f0-9]{40}$/);
 assert.match(upstream.opencode?.commit ?? "", /^[a-f0-9]{40}$/);
+assert.equal(openworkVersion, "v0.18.46", "the reviewed OpenWork patch baseline must stay current");
+assert.equal(
+  upstream.openwork?.commit,
+  "a0d6bd1de8debf4f09d22b8538e124b2ff45b339",
+  "the OpenWork compatibility baseline must bind the reviewed 0.18.46 commit",
+);
+for (const contract of [
+  "route_render_crash_recovery_without_sensitive_details",
+  "bounded_workspace_background_work_and_retained_output",
+  "newly_submitted_message_visibility",
+  "cached_session_history_reuse",
+  "scoped_session_progress_preservation",
+]) {
+  assert.ok(
+    upstream.openwork?.adoptedContracts?.includes(contract),
+    `OpenWork compatibility review is missing adopted contract ${contract}`,
+  );
+}
+for (const phrase of [
+  "Managed desktop policy plugin unregister fix",
+  "Matterhorn does not register or inject OpenWork's managed-policy plugin",
+  "server-authoritative privacy gateway",
+  "connected wallet reviews and submits exact v2 handoffs",
+]) {
+  assert.ok(openworkPatchReview.includes(phrase), `OpenWork patch review is missing: ${phrase}`);
+}
 
 const packagePaths = [
   "apps/app/package.json",
@@ -75,6 +102,7 @@ for (const asset of [
 }
 
 const runtimeConfig = readText("apps/server/src/managed-opencode-runtime-config.ts");
+assert.doesNotMatch(runtimeConfig, /managed-policy|OPENWORK_POLICY_TOKEN/);
 for (const contract of [
   '"*": "deny"',
   '"matterhorn-work_*": "allow"',

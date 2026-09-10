@@ -1,10 +1,10 @@
 {
   "version": "matterhorn.upstream-compatibility.v1",
-  "reviewedAt": "2026-09-09",
+  "reviewedAt": "2026-09-11",
   "openwork": {
     "repository": "https://github.com/different-ai/openwork",
-    "version": "v0.18.44",
-    "commit": "cac94b079906b9ef45788dfaa07444524976a6a0",
+    "version": "v0.18.46",
+    "commit": "a0d6bd1de8debf4f09d22b8538e124b2ff45b339",
     "integrationStrategy": "compatibility_port",
     "adoptedContracts": [
       "untimed_web_opencode_event_streams",
@@ -21,13 +21,20 @@
       "cached_session_live_progress_preservation",
       "composer_draft_persistence_during_restore",
       "instant_send_visibility",
-      "isolated_mcp_callback_mode_integrity"
+      "isolated_mcp_callback_mode_integrity",
+      "route_render_crash_recovery_without_sensitive_details",
+      "bounded_workspace_background_work_and_retained_output",
+      "newly_submitted_message_visibility",
+      "cached_session_history_reuse",
+      "scoped_session_progress_preservation"
     ],
     "preservedMatterhornBoundaries": [
       "hosted_account_and_workspace_isolation",
       "crypto_desk_action_registry",
       "wallet_review_and_audit_controls",
-      "matterhorn_public_beta_deployment_topology"
+      "matterhorn_public_beta_deployment_topology",
+      "server_authoritative_provider_and_capability_policy",
+      "no_upstream_managed_policy_plugin_registration"
     ]
   },
   "opencode": {

@@ -13,6 +13,7 @@ assert.equal(
 );
 
 const welcome = read("apps/app/src/react-app/domains/onboarding/welcome-page.tsx");
+const appHtml = read("apps/app/index.html");
 const english = read("apps/app/src/i18n/locales/en.ts");
 const appCss = read("apps/app/src/app/index.css");
 const sessionPage = read("apps/app/src/react-app/domains/session/chat/session-page.tsx");
@@ -54,6 +55,17 @@ const publicTrustContent = read("apps/app/src/react-app/domains/public/public-tr
 const reactEntry = read("apps/app/src/index.react.tsx");
 const normalizeWhitespace = (value) => value.replace(/\s+/g, " ").trim();
 const normalizedMcpView = normalizeWhitespace(settingsRoute);
+
+assert.ok(
+  appHtml.includes("Matterhorn Desks is a private AI and crypto workspace"),
+  "public metadata should lead with the private AI and crypto product",
+);
+assert.equal(
+  /<meta[^>]+(?:name="description"|property="og:description")[^>]+content="[^"]*longevity/i.test(appHtml)
+    || /<meta[^>]+content="[^"]*longevity[^>]+(?:name="description"|property="og:description")/i.test(appHtml),
+  false,
+  "primary public metadata should not position Longevity as part of the crypto product",
+);
 
 const denHelpLink = read("apps/app/src/react-app/domains/workspace/matterhorn-den-help-link.tsx");
 const remoteWorkspaceDiagnostics = read("apps/app/src/react-app/domains/workspace/remote-workspace-diagnostics.ts");
