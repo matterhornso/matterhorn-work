@@ -1085,6 +1085,38 @@ export function parseSessionError(thrown: unknown): SessionError {
       retryable: false,
     };
   }
+  if (/secret_detected|agent_privacy_blocked/i.test(diagnostic)) {
+    return {
+      message: "Matterhorn blocked sensitive signing or account information.",
+      detail: "Remove credentials, private keys, seed phrases, or signatures before sending. Nothing was shared with the model provider.",
+      kind: "privacy-blocked",
+      retryable: false,
+    };
+  }
+  if (/model_usage_exceeded/i.test(diagnostic)) {
+    return {
+      message: "This workspace has reached its current model allowance.",
+      detail: "Requests will resume when the allowance resets. You can see the reset date in Models.",
+      kind: "generic",
+      retryable: false,
+    };
+  }
+  if (/wallet_airlock_required/i.test(diagnostic)) {
+    return {
+      message: "This action needs your wallet review.",
+      detail: "Open Wallet to review the exact transaction. Matterhorn will not sign or send it for you.",
+      kind: "generic",
+      retryable: false,
+    };
+  }
+  if (/hosted_operation_not_allowed/i.test(diagnostic)) {
+    return {
+      message: "This chat is no longer connected to the current workspace.",
+      detail: "Return to Home and reopen the chat before sending. Nothing was sent.",
+      kind: "generic",
+      retryable: false,
+    };
+  }
   if (/no provider available|provider.{0,72}(?:not available|unavailable|not configured|not authenticated)/i.test(diagnostic)) {
     return {
       message: "This model is not ready in this workspace.",
@@ -1114,6 +1146,14 @@ export function parseSessionError(thrown: unknown): SessionError {
       message: "The selected model is not available.",
       detail: "Choose another model or reconnect its provider. Your prompt is still available.",
       kind: "model-not-found",
+    };
+  }
+  if (parsed && typeof parsed === "object") {
+    return {
+      message: "Matterhorn could not complete this request.",
+      detail: "Your prompt is still available. Try again, or reopen the chat if the problem continues.",
+      kind: "generic",
+      retryable: true,
     };
   }
   return {

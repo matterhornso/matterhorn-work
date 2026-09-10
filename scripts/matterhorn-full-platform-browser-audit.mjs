@@ -32,6 +32,17 @@ function knownNonBlockingBrowserDiagnostic(message) {
   ) {
     return "vite_dev_csp_eval_blocked";
   }
+  if (
+    browserName === "webkit"
+    && isLoopbackUrl(baseUrl)
+    && /\/(?:evidence\?limit=\d+|mission\/overview) due to access control checks\.$/i.test(message)
+  ) {
+    // Playwright WebKit emits this exception when React Query requests are
+    // cancelled by the audit's immediate route changes. The same-origin
+    // responses complete successfully when the surface is held open, and a
+    // genuine HTTP failure is still captured independently by onResponse.
+    return "webkit_navigation_request_cancelled";
+  }
   return null;
 }
 
@@ -683,7 +694,7 @@ async function run() {
   const page = await desktop.newPage();
 
   const attachDiagnostics = (target) => {
-    target.on("console", (message) => {
+    const onConsole = (message) => {
       if (message.type() !== "error") return;
       const text = message.text();
       if (/Failed to load resource.*404/i.test(text) || isTransientBrowserNetworkError(text)) return;
@@ -693,9 +704,16 @@ async function run() {
         return;
       }
       report.consoleErrors.push({ url: target.url(), message: text });
-    });
-    target.on("pageerror", (error) => report.pageErrors.push({ url: target.url(), message: error.message }));
-    target.on("response", (response) => {
+    };
+    const onPageError = (error) => {
+      const category = knownNonBlockingBrowserDiagnostic(error.message);
+      if (category) {
+        report.browserWarnings.push({ url: target.url(), category, message: error.message });
+        return;
+      }
+      report.pageErrors.push({ url: target.url(), message: error.message });
+    };
+    const onResponse = (response) => {
       const status = response.status();
       if (status < 400) return;
       const url = response.url();
@@ -704,9 +722,21 @@ async function run() {
       if (status >= 500 || pathname.startsWith("/api/") || pathname.startsWith("/workspace/")) {
         report.networkFailures.push({ status, method: response.request().method(), url });
       }
-    });
+    };
+    target.on("console", onConsole);
+    target.on("pageerror", onPageError);
+    target.on("response", onResponse);
+    return () => {
+      // WebKit reports cancelled in-flight fetches as page errors while a
+      // Playwright context is closing. Stop audit diagnostics immediately
+      // before the intentional close so those harness-only cancellations do
+      // not become false runtime failures.
+      target.off("console", onConsole);
+      target.off("pageerror", onPageError);
+      target.off("response", onResponse);
+    };
   };
-  attachDiagnostics(page);
+  const detachDesktopDiagnostics = attachDiagnostics(page);
   let chatUrl = await latestSmokeSessionUrl();
 
   await inspectSurface(page, report, "workspace-home", workspaceUrl("session"), ["Desks", "Wallet readiness"], "desktop");
@@ -990,6 +1020,7 @@ async function run() {
   );
   await page.screenshot({ path: desktopShot, fullPage: true });
   report.screenshots.push(desktopShot);
+  detachDesktopDiagnostics();
   await desktop.close();
 
   const responsiveViewportFilter = new Set(
@@ -1010,7 +1041,7 @@ async function run() {
     });
     await authenticateAuditContext(context);
     const responsivePage = await context.newPage();
-    attachDiagnostics(responsivePage);
+    const detachResponsiveDiagnostics = attachDiagnostics(responsivePage);
     await inspectResponsiveSurfaceCatalog(
       responsivePage,
       report,
@@ -1043,6 +1074,7 @@ async function run() {
       await responsivePage.screenshot({ path: chatShot, fullPage: true });
       report.screenshots.push(chatShot);
     }
+    detachResponsiveDiagnostics();
     await context.close();
   }
   await browser.close();

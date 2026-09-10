@@ -533,13 +533,19 @@ for (const [id, control, route, heading] of settingsRoutes) {
     `Settings sidebar: ${control}`,
     `Routes to ${route}, exposes ${heading}, and has one main landmark`,
     async () => {
-      await clickVisible(page.getByRole("button", { name: control, exact: true }), control);
+      const navigationName = id === "NAV-WALLET"
+        ? /^Wallet(?:\s+Connect wallet)?$/
+        : control;
+      await clickVisible(page.getByRole("button", { name: navigationName, exact: true }), control);
       await waitForUrl(
         page,
         new RegExp(`/settings/${route.replace("/", "\\/")}(?:\\?|$)`),
         control,
       );
-      await assertText(page, heading);
+      await firstVisible(
+        page.getByRole("heading", { name: heading, exact: true }),
+        `${heading} heading`,
+      );
       await assertSingleMain(page);
       await inventorySurface(page, report, `settings-${route.replace("/", "-")}`);
       return `${page.url()} · main=1`;
@@ -655,20 +661,21 @@ await acceptanceCase(
 await open(page, workspaceUrl(config.url, "settings/ai"));
 await acceptanceCase(
   "AI-MODELS",
-  "Browse models",
+  "Choose model",
   "Opens a searchable model dialog without legacy branding and cancel changes nothing",
   async () => {
-    const browseModels = await visibleOrNull(
-      page.getByRole("button", { name: "Browse models", exact: true }),
+    const chooseModel = await visibleOrNull(
+      page.getByRole("button", { name: /^(?:Choose model|Browse models)$/, exact: true }),
     );
-    if (!browseModels) {
-      const addProvider = await firstVisible(
-        page.getByRole("button", { name: "Add provider", exact: true }),
-        "Add provider recovery",
+    if (!chooseModel) {
+      await firstVisible(
+        page.getByRole("heading", { name: "Provider connection", exact: true }),
+        "Provider connection",
       );
-      return `No model catalog is connected; ${await addProvider.innerText()} is available to recover.`;
+      await assertText(page, "ASI:Cloud");
+      return "No model catalog is connected; provider status explains what must be configured.";
     }
-    await browseModels.click();
+    await chooseModel.click();
     await settle(page);
     const dialog = await firstVisible(page.getByRole("dialog"), "Models dialog");
     const body = await dialog.innerText();
@@ -713,11 +720,14 @@ await acceptanceCase(
       return "Provider catalog opened, filtered, and closed without exposing a credential";
     }
 
-    await assertText(page, "Model providers");
+    await firstVisible(
+      page.getByRole("heading", { name: "Provider connection", exact: true }),
+      "Provider connection",
+    );
     await assertText(page, "ASI:Cloud");
     await firstVisible(
       page.getByText(
-        "Matterhorn manages the provider used by this web workspace.",
+        "Matterhorn manages this connection for your workspace.",
         { exact: true },
       ),
       "deployment-managed provider description",
@@ -1076,17 +1086,23 @@ await acceptanceCase(
   "CHAT-MODES",
   "Discuss, Plan, and Work modes",
   "Every mode becomes the visible current mode; Work is restored",
-    async () => {
+  async () => {
+    await openChat(page);
+    await clickVisible(page.getByRole("button", { name: /^Chat options/ }), "Chat options");
+    const dialog = await firstVisible(
+      page.getByRole("dialog", { name: "Chat options", exact: true }),
+      "Chat options dialog",
+    );
+    const executionModes = dialog.getByRole("radiogroup", { name: "Execution mode", exact: true });
     for (const name of ["Discuss", "Plan", "Work"]) {
-      await clickVisible(page.getByRole("button", { name: /^Mode\s+/ }), "Mode menu");
-      await clickVisible(
-        page.getByRole("menuitemradio", { name: new RegExp(`^${name}`) }),
+      const radio = await firstVisible(
+        executionModes.getByRole("radio", { name: new RegExp(`^${name}`) }),
         name,
       );
-      await firstVisible(
-        page.getByRole("button", { name: new RegExp(`^Mode\\s+${name}$`) }),
-        `Mode ${name}`,
-      );
+      await radio.click();
+      if ((await radio.getAttribute("aria-checked")) !== "true") {
+        throw new Error(`${name} did not become checked.`);
+      }
     }
     return "Discuss → Plan → Work; Work restored";
   },
@@ -1098,10 +1114,16 @@ await acceptanceCase(
   "Every perspective becomes checked; Normal is restored",
   async () => {
     await openChat(page);
+    await clickVisible(page.getByRole("button", { name: /^Chat options/ }), "Chat options");
+    const dialog = await firstVisible(
+      page.getByRole("dialog", { name: "Chat options", exact: true }),
+      "Chat options dialog",
+    );
+    const perspectives = dialog.getByRole("radiogroup", { name: "Response perspective", exact: true });
     const labels = ["Cautious", "Balanced", "Optimistic"];
     for (const label of labels) {
       const radio = await firstVisible(
-        page.getByRole("radio", { name: label, exact: true }),
+        perspectives.getByRole("radio", { name: label, exact: true }),
         label,
       );
       await radio.click();
@@ -1110,7 +1132,7 @@ await acceptanceCase(
       }
     }
     await clickVisible(
-      page.getByRole("radio", { name: "Balanced", exact: true }),
+      perspectives.getByRole("radio", { name: "Balanced", exact: true }),
       "Balanced",
     );
     return "Cautious → Balanced → Optimistic → Balanced";
