@@ -3081,9 +3081,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
       config: entry.config as McpServerEntry["config"],
     } satisfies McpServerEntry));
 
-    let statuses: McpStatusMap = {};
+    let statuses = (response.statuses ?? {}) as McpStatusMap;
     try {
-      if (props.workspaceRoot.trim()) {
+      // Backward compatibility for older local engines. Hosted account
+      // sessions receive safe status data from the Matterhorn server.
+      if (response.statuses === undefined && props.workspaceRoot.trim()) {
         statuses = unwrap(await opencodeClient.mcp.status({ directory: props.workspaceRoot.trim() })) as McpStatusMap;
       }
     } catch {

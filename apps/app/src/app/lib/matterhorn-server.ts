@@ -703,6 +703,19 @@ export type MatterhornMcpItem = {
   disabledByTools?: boolean;
 };
 
+export type MatterhornMcpRuntimeStatus =
+  | { status: "connected" }
+  | { status: "disabled" }
+  | { status: "failed"; error: string }
+  | { status: "needs_auth" }
+  | { status: "needs_client_registration"; error: string };
+
+export type MatterhornMcpListResponse = {
+  items: MatterhornMcpItem[];
+  /** Safe, workspace-scoped runtime state. Added by newer servers. */
+  statuses?: Record<string, MatterhornMcpRuntimeStatus>;
+};
+
 export type MatterhornWorkspaceExport = {
   workspaceId: string;
   exportedAt: number;
@@ -2808,7 +2821,7 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         },
       ),
     listMcp: (workspaceId: string) =>
-      requestJson<{ items: MatterhornMcpItem[] }>(baseUrl, `/workspace/${workspaceId}/mcp`, { token, hostToken }),
+      requestJson<MatterhornMcpListResponse>(baseUrl, `/workspace/${workspaceId}/mcp`, { token, hostToken }),
     addMcp: (workspaceId: string, payload: { name: string; config: Record<string, unknown> }) =>
       requestJson<{ items: MatterhornMcpItem[] }>(baseUrl, `/workspace/${workspaceId}/mcp`, {
         token,

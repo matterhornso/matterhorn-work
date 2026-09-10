@@ -16975,7 +16975,35 @@ function createRoutes(
         source: "config.remote",
       });
     }
-    return jsonResponse({ items });
+
+    // Account sessions intentionally cannot call the raw OpenCode MCP status
+    // route. Resolve it server-side so the UI can show the managed connection
+    // state without widening the hosted OpenCode allowlist.
+    const configuredNames = new Set(items.map((item) => item.name));
+    const statuses: Record<string, Record<string, string>> = {};
+    try {
+      const opencode = createWorkspaceOpencodeClient(config, workspace);
+      const directory = resolveOpencodeDirectory(workspace) ?? undefined;
+      const runtimeStatuses = unwrapOpencodeResult(
+        await opencode.mcp.status({ ...(directory ? { directory } : {}) }),
+        "/mcp",
+      ) as Record<string, unknown>;
+      for (const [name, rawStatus] of Object.entries(runtimeStatuses)) {
+        if (!configuredNames.has(name) || !rawStatus || typeof rawStatus !== "object") continue;
+        const status = String((rawStatus as { status?: unknown }).status ?? "");
+        if (status === "connected" || status === "disabled" || status === "needs_auth") {
+          statuses[name] = { status };
+        } else if (status === "failed") {
+          statuses[name] = { status, error: "Connection unavailable." };
+        } else if (status === "needs_client_registration") {
+          statuses[name] = { status, error: "Client registration required." };
+        }
+      }
+    } catch {
+      // MCP configuration remains useful when the runtime is starting or
+      // unavailable. An absent status is rendered as offline by the client.
+    }
+    return jsonResponse({ items, statuses });
   });
 
   addRoute(routes, "POST", "/workspace/:id/mcp", "client", async (ctx) => {

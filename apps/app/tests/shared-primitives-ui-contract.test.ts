@@ -1057,6 +1057,8 @@ describe("Shared primitives UI contract", () => {
     expect(connectionsStore).not.toContain(
       "!started || disposed || !isDesktopRuntime() || !changed",
     );
+    expect(connectionsStore).toContain("response.statuses ?? {}");
+    expect(connectionsStore).toContain("response.statuses === undefined");
     expect(compactSettingsRoute).toContain(
       'matterhornServerSnapshot.matterhornServerStatus !== "connected" || !runtimeWorkspaceId',
     );
