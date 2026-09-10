@@ -255,7 +255,6 @@ for (const phrase of [
   "CustomerProtocolDeskVisual",
   "enrichCustomerWorkflowTemplate",
   "buildCustomerBetaDemoStarterCards",
-  "Start a blank chat or choose a task below.",
   "Allowed workspace intents",
   "Read and preview",
   "Preview only",
@@ -272,6 +271,15 @@ for (const phrase of [
     `starter UI should expose Matterhorn task: ${phrase}`,
   );
 }
+
+assert.ok(
+  !sessionPage.includes('Start a blank chat or choose a task below.'),
+  "focused desk landing should not repeat an instruction already expressed by its primary action and task list",
+);
+assert.ok(
+  !sessionPage.includes('objective={item.detail}'),
+  "recommended desk task cards should keep descriptions in hover help instead of repeating them in the landing layout",
+);
 
 assert.ok(!sessionSurface.includes("Connect MCPs"), "Home starter should not show a Connect MCPs CTA");
 assert.equal(

@@ -284,17 +284,19 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     const src = readAppSource("domains/session/chat/session-page.tsx");
     // Each prompt item should become a WorkflowStageCard.
     expect(src).toContain("<WorkflowStageCard");
-    expect(src).toContain("objective={item.detail}");
+    expect(src).not.toContain("objective={item.detail}");
+    expect(src).toContain(": item.detail)}");
     expect(src).not.toContain("rawPrompt={item.prompt}");
     // The old giant raw-prompt text display is gone.
     expect(src).not.toContain("item.prompt}</span>");
     expect(src).not.toContain('className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-4 py-4');
   });
 
-  test("uses user-facing task details instead of prompt-derived objective text", () => {
+  test("keeps user-facing task details as accessible help instead of repeated card text", () => {
     const src = readAppSource("domains/session/chat/session-page.tsx");
     expect(src).toContain("detail:");
-    expect(src).toContain("objective={item.detail}");
+    expect(src).not.toContain("objective={item.detail}");
+    expect(src).toContain(": item.detail)}");
     expect(src).not.toContain("objective = item.prompt");
     expect(src).not.toContain("slice(0, 90)");
   });
@@ -367,7 +369,7 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     const src = readAppSource("domains/session/chat/session-page.tsx");
 
     expect(src).toContain('const blankChatTitle = `${visual?.displayName ?? panel} chat`;');
-    expect(src).toContain("Start a blank chat or choose a task below.");
+    expect(src).not.toContain("Start a blank chat or choose a task below.");
     expect(src).toContain('onClick={() => startTask("", blankChatTitle, { sendImmediately: false })}');
     expect(src).toContain('`Start ${visual?.displayName ?? panel} chat`');
     expect(src).not.toContain("The desk agent and its working context are already selected.");

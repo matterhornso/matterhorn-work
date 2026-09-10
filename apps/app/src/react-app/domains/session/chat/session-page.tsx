@@ -1060,7 +1060,7 @@ function ProtocolDeskEmptyState({
                 </Popover>
               </div>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
-                {visual?.shortDescription ?? "Focused protocol workspace."} Start a blank chat or choose a task below.
+                {visual?.shortDescription ?? "Focused protocol workspace."}
               </p>
             </div>
           </div>
@@ -1138,7 +1138,6 @@ function ProtocolDeskEmptyState({
               <h3 id={`desk-task-group-${panel}-${group.id}`} className="text-[13px] font-semibold text-dls-text">
                 {group.label}
               </h3>
-              <p className="mt-0.5 text-[11px] leading-5 text-dls-secondary">{group.description}</p>
             </div>
             <div className={cn(
               "grid grid-cols-1 gap-2",
@@ -1161,7 +1160,6 @@ function ProtocolDeskEmptyState({
                   <div key={item.id} className="space-y-2">
                     <WorkflowStageCard
                       title={item.title}
-                      objective={item.detail}
                       status="idle"
                       evidenceHints={[evidenceHint]}
                       actionLabel={opensReviewedAction
@@ -1176,7 +1174,7 @@ function ProtocolDeskEmptyState({
                         ? "Start an editable chat request. Exact terms move to Wallet for review and signature."
                         : startTaskBlocker ?? (inputRequirement
                           ? `Start this task, then answer the ${inputRequirement.label.toLowerCase()} question in chat.`
-                          : undefined)}
+                          : item.detail)}
                       actionPlacement="below"
                       onAction={() => handleTaskAction(item)}
                     />
