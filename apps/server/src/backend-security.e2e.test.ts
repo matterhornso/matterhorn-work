@@ -14,6 +14,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
+import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -1157,6 +1158,42 @@ describe("Security capability classification", () => {
     expect(toggleResult.payload).toMatchObject({
       code: "payload_too_large",
     });
+  });
+
+  test("returns safe managed MCP runtime status without exposing unconfigured servers", async () => {
+    const runtime = createHttpServer((request, response) => {
+      if (request.url?.startsWith("/mcp")) {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({
+          "matterhorn-work": { status: "connected" },
+          "unconfigured-runtime-server": { status: "failed", error: "/private/runtime/secret-path" },
+        }));
+        return;
+      }
+      response.writeHead(404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ code: "not_found" }));
+    });
+    const runtimePort = await new Promise<number>((resolve, reject) => {
+      runtime.once("error", reject);
+      runtime.listen(0, "127.0.0.1", () => resolve((runtime.address() as AddressInfo).port));
+    });
+    stops.push(() => new Promise<void>((resolve) => runtime.close(() => resolve())));
+
+    const { base, collaboratorToken } = await boot(false, {
+      opencodeBaseUrl: `http://127.0.0.1:${runtimePort}`,
+      managedOpencodeMcp: true,
+    });
+    const result = await jsonFetch(base, "/workspace/ws_security/mcp", collaboratorToken);
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "matterhorn-work", source: "config.remote" }),
+    ]));
+    expect(result.payload.statuses).toEqual({
+      "matterhorn-work": { status: "connected" },
+    });
+    expect(JSON.stringify(result.payload)).not.toContain("secret-path");
+    expect(JSON.stringify(result.payload)).not.toContain("unconfigured-runtime-server");
   });
 
   test("host control mutations reject overlarge JSON bodies", async () => {

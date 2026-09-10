@@ -269,9 +269,12 @@ export function createConnectionsStore(options: {
       source: entry.source,
     }));
 
-    let nextStatuses: McpStatusMap = {};
+    let nextStatuses = filterConfiguredStatuses((response.statuses ?? {}) as McpStatusMap, next);
     const activeClient = options.client();
-    if (activeClient && projectDir) {
+    // Older local engines do not include safe runtime statuses in listMcp.
+    // Preserve their direct OpenCode fallback without making hosted account
+    // sessions call a route that the security boundary intentionally denies.
+    if (response.statuses === undefined && activeClient && projectDir) {
       try {
         const status = unwrap(await activeClient.mcp.status({ directory: projectDir }));
         nextStatuses = filterConfiguredStatuses(status as McpStatusMap, next);
