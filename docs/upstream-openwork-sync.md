@@ -6,7 +6,7 @@ Default upstream source:
 
 ```bash
 OPENWORK_UPSTREAM_REMOTE=https://github.com/different-ai/openwork.git
-OPENWORK_UPSTREAM_BRANCH=main
+OPENWORK_UPSTREAM_BRANCH=dev
 MATTERHORN_WORK_BASE_BRANCH=dev
 ```
 

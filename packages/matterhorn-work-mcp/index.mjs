@@ -82,7 +82,7 @@ const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 const UPSTREAM_SOURCE_DEFAULTS = {
   upstreamUrl: process.env.MATTERHORN_UPSTREAM_SOURCE_REMOTE || process.env.OPENWORK_UPSTREAM_REMOTE || "",
-  upstreamBranch: process.env.MATTERHORN_UPSTREAM_SOURCE_BRANCH || process.env.OPENWORK_UPSTREAM_BRANCH || "main",
+  upstreamBranch: process.env.MATTERHORN_UPSTREAM_SOURCE_BRANCH || process.env.OPENWORK_UPSTREAM_BRANCH || "dev",
   baseBranch: process.env.MATTERHORN_WORK_BASE_BRANCH || "dev",
 };
 

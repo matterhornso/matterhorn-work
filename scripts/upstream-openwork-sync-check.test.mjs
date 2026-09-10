@@ -13,7 +13,7 @@ const result = run([
   "--upstream-url",
   "https://github.com/different-ai/openwork.git",
   "--upstream-branch",
-  "main",
+  "dev",
   "--base-branch",
   "dev",
   "--date",
@@ -24,7 +24,7 @@ assert.equal(result.status, 0, result.stderr);
 
 const plan = JSON.parse(result.stdout);
 assert.equal(plan.upstreamUrl, "https://github.com/different-ai/openwork.git");
-assert.equal(plan.upstreamBranch, "main");
+assert.equal(plan.upstreamBranch, "dev");
 assert.equal(plan.baseBranch, "dev");
 assert.equal(plan.syncBranch, "codex/sync-openwork-2026-06-12");
 assert.equal(plan.remoteStatus.status, "skipped");
@@ -34,7 +34,7 @@ assert.ok(plan.conflictZones.some((zone) => zone.name === "Agent control surface
 assert.ok(plan.verificationCommands.includes("pnpm test:cli-packaging-rename"));
 assert.ok(plan.verificationCommands.includes("pnpm test:opencode-abstraction-copy"));
 assert.ok(plan.verificationCommands.includes("pnpm test:bittensor-operator-playbook"));
-assert.ok(plan.nextCommands.some((command) => command.includes("git fetch openwork-upstream main")));
+assert.ok(plan.nextCommands.some((command) => command.includes("git fetch openwork-upstream dev")));
 
 const human = run(["--date", "2026-06-12"]);
 assert.equal(human.status, 0, human.stderr);

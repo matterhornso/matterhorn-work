@@ -1414,6 +1414,7 @@ try {
   }));
   assert.equal(upstream.ok, true);
   assert.equal(upstream.safety.mode, "read_only_intake");
+  assert.equal(upstream.plan.upstreamBranch, "dev");
   assert.equal(upstream.plan.syncBranch, "codex/sync-runtime-2026-06-12");
   assert.equal(upstream.plan.remoteStatus.status, "not_configured");
   assert.ok(upstream.plan.conflictZones.some((zone) => zone.name === "Bittensor safety"));
