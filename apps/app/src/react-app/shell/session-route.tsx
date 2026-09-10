@@ -406,6 +406,9 @@ function describeTaskCreateError(error: unknown) {
   if (isProviderPrivacyUnverifiedError(error)) {
     return "The selected model provider is not approved to receive prompts yet. Its no-training and retention terms must be verified first.";
   }
+  if (lower.includes("hosted_operation_not_allowed")) {
+    return "This chat is no longer connected to the current workspace. Return to Home and reopen it before sending. Nothing was sent.";
+  }
   if (
     lower.includes("opencode_unconfigured") ||
     lower.includes("opencode base url is missing")
@@ -422,6 +425,9 @@ function describeTaskCreateError(error: unknown) {
     lower.includes("unexpected server error")
   ) {
     return "The Matterhorn Desks engine is unavailable for this workspace. Retry once it restarts, or restart Matterhorn Desks if the problem continues.";
+  }
+  if (/^\s*[\[{]/.test(message)) {
+    return "Matterhorn could not start this task. Your prompt is saved; try again or reopen the chat.";
   }
   return message;
 }

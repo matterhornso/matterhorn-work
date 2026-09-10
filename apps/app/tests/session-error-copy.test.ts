@@ -67,6 +67,50 @@ describe("session error copy", () => {
     expect(`${parsed.message} ${parsed.detail}`).not.toContain("TimeoutError");
   });
 
+  test("replaces hosted route denials with a safe workspace recovery path", () => {
+    const parsed = parseSessionError(new Error(JSON.stringify({
+      code: "hosted_operation_not_allowed",
+      message: "This operation is not available in Matterhorn web workspaces.",
+    })));
+
+    expect(parsed.kind).toBe("generic");
+    expect(parsed.retryable).toBe(false);
+    expect(parsed.message).toBe("This chat is no longer connected to the current workspace.");
+    expect(parsed.detail).toContain("Return to Home");
+    expect(`${parsed.message} ${parsed.detail}`).not.toContain("hosted_operation_not_allowed");
+  });
+
+  test("does not expose unknown structured API diagnostics", () => {
+    const parsed = parseSessionError(new Error(JSON.stringify({
+      code: "provider_request_invalid",
+      message: "Unrecognized request argument supplied: agent_id",
+      details: { internalRoute: "/session/example/prompt_async" },
+    })));
+
+    expect(parsed.kind).toBe("generic");
+    expect(parsed.retryable).toBe(true);
+    expect(parsed.message).toBe("Matterhorn could not complete this request.");
+    expect(parsed.detail).toContain("prompt is still available");
+    expect(`${parsed.message} ${parsed.detail}`).not.toMatch(/agent_id|prompt_async|provider_request_invalid/);
+  });
+
+  test("keeps structured security and allowance failures actionable", () => {
+    const secret = parseSessionError(new Error(JSON.stringify({ code: "secret_detected" })));
+    expect(secret.kind).toBe("privacy-blocked");
+    expect(secret.retryable).toBe(false);
+    expect(secret.detail).toContain("Nothing was shared");
+
+    const allowance = parseSessionError(new Error(JSON.stringify({ code: "model_usage_exceeded" })));
+    expect(allowance.retryable).toBe(false);
+    expect(allowance.message).toContain("model allowance");
+    expect(allowance.detail).toContain("reset date");
+
+    const wallet = parseSessionError(new Error(JSON.stringify({ code: "wallet_airlock_required" })));
+    expect(wallet.retryable).toBe(false);
+    expect(wallet.message).toContain("wallet review");
+    expect(wallet.detail).toContain("will not sign or send");
+  });
+
   test("extracts an exact-request privacy challenge from a nested provider error", () => {
     const preflight = {
       version: "matterhorn.agent-privacy-preflight.v1",

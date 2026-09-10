@@ -177,6 +177,9 @@ for (const signal of [
   "Show this help without starting a browser.",
   "rootText:",
   "failure.png",
+  "webkit_navigation_request_cancelled",
+  "detachDesktopDiagnostics()",
+  "detachResponsiveDiagnostics()",
   "activeBrowser?.close()",
 ]) {
   assert.ok(source.includes(signal), `full platform audit missing ${signal}`);

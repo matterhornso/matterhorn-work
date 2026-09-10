@@ -46,7 +46,8 @@ test("RC16 acceptance distinguishes hidden controls and provider-free recovery",
   assert.match(source, /More workspace controls/);
   assert.match(source, /escapeRegExp/);
   assert.match(source, /Connect a model recovery/);
-  assert.match(source, /Add provider recovery/);
+  assert.match(source, /Provider connection/);
+  assert.match(source, /Chat options dialog/);
   assert.match(source, /Workspace details/);
 });
 
