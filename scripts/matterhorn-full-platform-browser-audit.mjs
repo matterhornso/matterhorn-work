@@ -861,9 +861,10 @@ async function run() {
   await recordInteraction(report, "mcp-rail-availability-and-disclosure", async () => {
     await gotoWithTransientRetry(page, workspaceUrl("session", "?panel=extensions"), { waitUntil: "load" });
     await visibleMarker(page, ["MCP connections"]);
+    const connectionSummary = page.getByRole("region", { name: "MCP connection summary", exact: true });
+    await connectionSummary.waitFor({ state: "visible", timeout: 20_000 });
     const configuredServer = page.getByText("Matterhorn Desks MCP", { exact: true });
     const connectedServerSummary = page.locator('[aria-label^="Connected MCP servers:"]');
-    const emptySummary = page.getByText("No external MCPs connected.", { exact: true });
     await page.waitForFunction(
       () => {
         const visible = (element) => {
@@ -871,13 +872,16 @@ async function run() {
           const rect = element.getBoundingClientRect();
           return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
         };
+        const summary = document.querySelector('[aria-label="MCP connection summary"]');
+        const summaryText = summary?.textContent?.trim() ?? "";
         const connected = document.querySelector('[aria-label^="Connected MCP servers:"]');
         return Boolean(
           (connected && visible(connected))
-          || Array.from(document.querySelectorAll("*")).some((element) => {
-          const text = element.textContent?.trim();
-            return visible(element) && (text === "Matterhorn Desks MCP" || text === "No external MCPs connected.");
-          })
+          || (
+            summary
+            && visible(summary)
+            && /(?:No external MCPs connected\.|Matterhorn Desks MCP|connections? ready|MCP connections (?:offline|unavailable)|connections? (?:has|have) an error)/.test(summaryText)
+          )
         );
       },
       undefined,
@@ -904,7 +908,13 @@ async function run() {
       await page.getByText("Ready", { exact: true })
         .waitFor({ state: "visible", timeout: 20_000 });
     } else {
-      await emptySummary.waitFor({ state: "visible", timeout: 20_000 });
+      const compactState = connectionSummary.locator('[role="status"], [role="alert"]').first();
+      await compactState.waitFor({ state: "visible", timeout: 20_000 });
+      const stateText = (await compactState.textContent())?.trim() ?? "";
+      const stateSettled = /(?:No external MCPs connected\.|connections? ready|MCP connections (?:offline|unavailable)|connections? (?:has|have) an error)/.test(stateText);
+      if (!stateSettled) {
+        throw new Error(`MCP connection summary did not settle: ${stateText || "missing state"}`);
+      }
     }
     if (await page.getByText("Available MCPs & connectors", { exact: true }).count() !== 0) {
       throw new Error("Embedded MCP rail exposed the full connector catalog.");

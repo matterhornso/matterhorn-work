@@ -431,6 +431,11 @@ function startFakeOpencode() {
       return;
     }
 
+    if (url.pathname === "/instance/dispose" && request.method === "POST") {
+      json(response, 200, { ok: true });
+      return;
+    }
+
     if (url.pathname === "/config" && request.method === "GET") {
       json(response, 200, {
         disabled_providers: [],
