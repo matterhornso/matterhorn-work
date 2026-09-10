@@ -14,7 +14,7 @@ function assistant(parts: UIMessage["parts"]): UIMessage {
   return { id: "assistant", role: "assistant", parts };
 }
 
-describe("OpenWork v0.18.44 session reliability contracts", () => {
+describe("OpenWork v0.18.46 session reliability contracts", () => {
   for (const [name, merge] of [
     ["live merge", mergeSnapshotAndLiveMessages],
     ["cached restore", mergeSnapshotIntoCachedMessages],
