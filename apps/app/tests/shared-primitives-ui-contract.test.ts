@@ -762,10 +762,10 @@ describe("Shared primitives UI contract", () => {
     }
 
     expect(sourceByPath.get("domains/memory/memory-panel.tsx")).toContain(
-      "Add memory manually",
+      "Add memory",
     );
     expect(sourceByPath.get("domains/memory/memory-panel.tsx")).toContain(
-      "bg-dls-surface-muted/[0.08]",
+      "Export memory",
     );
     expect(
       sourceByPath.get("domains/session/surface/session-surface.tsx"),

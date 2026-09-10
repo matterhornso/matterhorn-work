@@ -776,12 +776,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
   return (
     <div className="matterhorn-rail-content flex h-full min-h-0 flex-col bg-dls-background text-dls-text">
       <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-4 pt-5">
-        <div className="min-w-0">
-          <div className="text-lg font-semibold">Memory</div>
-          <p className="mt-1 max-w-[34rem] text-sm leading-6 text-dls-secondary">
-            Review suggestions before saving.
-          </p>
-        </div>
+        <div className="min-w-0 text-lg font-semibold">Memory</div>
         <Button className={MEMORY_ICON_ACTION_CLASS} variant="ghost" size="icon-sm" onClick={props.onClose} aria-label="Close Memory panel">
           <X size={16} />
         </Button>
@@ -797,7 +792,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 className={cn("h-10 pl-9", MEMORY_FIELD_CLASS)}
-                placeholder="Search saved memories..."
+                placeholder="Search memory"
               />
             </label>
             <Button className={cn("justify-center", MEMORY_ICON_ACTION_CLASS)} variant="ghost" size="icon-sm" onClick={() => void refresh()} disabled={loading} aria-label="Refresh saved memories">
@@ -852,9 +847,6 @@ export function MemoryPanel(props: MemoryPanelProps) {
               </span>
               <div>
                 <div className="text-sm font-semibold">Memory review</div>
-                <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                  Nothing is saved until you choose Remember or Save edited.
-                </p>
               </div>
             </div>
             <Button className={cn("shrink-0", MEMORY_ICON_ACTION_CLASS)} variant="ghost" size="icon-sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client} aria-label="Refresh memory review">
@@ -1081,24 +1073,17 @@ export function MemoryPanel(props: MemoryPanelProps) {
           ) : (
             !suggestionsLoading && !suggestionEntries.length ? (
               <div className="rounded-lg bg-dls-surface-muted/15 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
-                No suggestions yet. Matterhorn will show visible candidates here before anything is remembered.
+                No suggestions
               </div>
             ) : null
           )}
         </section>
 
         <section className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold">Saved memories</div>
-              <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Confirmed records you can use in chat, forget, or export.
-              </p>
-            </div>
-          </div>
+          <div className="text-sm font-semibold">Saved memories</div>
           {records.length === 0 && !loading ? (
             <div className="rounded-lg bg-dls-surface-muted/15 px-4 py-8 text-center">
-              <div className="text-sm font-medium">No saved memories yet</div>
+              <div className="text-sm font-medium">No saved memories</div>
               {manualCaptureOpen ? (
                 <p className="mt-2 text-xs leading-5 text-dls-secondary">
                   Complete the manual capture form below to save a visible memory.
@@ -1180,17 +1165,12 @@ export function MemoryPanel(props: MemoryPanelProps) {
           onToggle={(event) => setManualCaptureOpen(event.currentTarget.open)}
         >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-3">
-            <div>
-              <div className="text-sm font-semibold">Add memory manually</div>
-              <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Manual capture only. Do not paste secrets or hidden clinical records.
-              </p>
-            </div>
+            <div className="text-sm font-semibold">Add memory</div>
             <ChevronDown className="size-4 shrink-0 text-dls-secondary transition-transform group-open:rotate-180" />
           </summary>
           <div className="grid gap-2 pb-3 pt-1">
             <div className="rounded-md bg-dls-background/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
-              Tags set desk defaults. Use <span className="font-medium text-dls-text">bittensor</span>, <span className="font-medium text-dls-text">hyperliquid</span>, <span className="font-medium text-dls-text">polymarket</span>, or <span className="font-medium text-dls-text">longevity</span>.
+              Never save secrets, wallet exports, signatures, or private health records.
             </div>
             <Input
               aria-label="Memory title"
@@ -1266,19 +1246,11 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </div>
         </details>
 
-        <section className="rounded-md bg-dls-surface-muted/[0.08] px-3.5 py-3">
-          <div className="flex flex-col gap-3">
-            <div>
-              <div className="text-sm font-semibold">Create memory export</div>
-              <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Saves a public-safe bundle in this workspace&apos;s outputs folder.
-              </p>
-            </div>
-            <Button className={cn("w-full justify-center", MEMORY_SECONDARY_ACTION_CLASS)} variant="ghost" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
-              <Archive className="mr-2 size-3.5" />
-              Create export bundle
-            </Button>
-          </div>
+        <section>
+          <Button className={cn("w-full justify-center", MEMORY_SECONDARY_ACTION_CLASS)} variant="ghost" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
+            <Archive className="mr-2 size-3.5" />
+            Export memory
+          </Button>
           {exportStatus ? <div className="mt-3 text-xs text-dls-secondary">{exportStatus}</div> : null}
         </section>
       </div>

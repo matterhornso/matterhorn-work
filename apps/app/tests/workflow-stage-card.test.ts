@@ -220,10 +220,10 @@ describe("DeskWorkflowStagePanel — uses WorkflowStageCard", () => {
     expect(panelSrc).toContain('const chatFirstSequence = presentation === "chat-first"');
     expect(panelSrc).toContain("visibleSteps.slice(0, 3)");
     expect(panelSrc).toContain("visibleSteps.slice(3)");
-    expect(panelSrc).toContain("What would you like to do?");
-    expect(panelSrc).toContain("Ask in your own words below, or choose a starting point.");
-    expect(panelSrc).toContain("More ways to use this desk");
-    expect(panelSrc).toContain("Continues in your wallet");
+    expect(panelSrc).toContain("Start here");
+    expect(panelSrc).toContain("More");
+    expect(panelSrc).toContain("Wallet review");
+    expect(panelSrc).not.toContain("Ask in your own words below, or choose a starting point.");
     expect(chatFirstStart).toBeGreaterThan(-1);
     expect(chatFirstBlock).toContain('presentation="chat-first"');
     expect(chatFirstBlock).toContain("showAgentHeader={false}");

@@ -95,9 +95,9 @@ function activityDisplayTitle(item: RecentActivityItem) {
   if (item.kind === "task_stage_started") return "Stage started";
   if (item.kind === "task_output_saved") return nftPreviewTitle(item.nftReceipt?.kind) ?? "Output saved";
   if (item.kind === "task_output_deleted") return "Output deleted";
-  if (item.kind === "task_completed") return `${deskLabel(item.desk)} run completed`;
-  if (item.kind === "task_failed") return `${deskLabel(item.desk)} run failed`;
-  if (item.kind === "task_cancelled") return `${deskLabel(item.desk)} run cancelled`;
+  if (item.kind === "task_completed") return "Run completed";
+  if (item.kind === "task_failed") return "Run failed";
+  if (item.kind === "task_cancelled") return "Run cancelled";
   if (item.kind === "note_created") return item.title || "Note created";
   if (item.kind === "memory_suggested") return "Memory review suggested";
   return item.title || "Project activity";
@@ -221,13 +221,12 @@ function ActivityRow(props: { item: RecentActivityItem; onSelect: () => void }) 
 
 function LatestActivitySummary({ item }: { item: RecentActivityItem }) {
   const title = activityDisplayTitle(item);
-  const context = item.desk ? deskLabel(item.desk) : item.source.replace(/_/g, " ");
 
   return (
     <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
       <span className="truncate text-sm font-medium leading-5 text-dls-text">{title}</span>
       <span className="truncate text-xs leading-5 text-dls-secondary">
-        {context} · {formatActivityTimestamp(item.timestamp)}
+        {formatActivityTimestamp(item.timestamp)}
       </span>
     </span>
   );

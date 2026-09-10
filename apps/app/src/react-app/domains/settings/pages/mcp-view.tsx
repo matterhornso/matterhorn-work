@@ -1416,10 +1416,6 @@ export function McpView(props: McpViewProps) {
           : compactState.kind === "offline"
             ? <Unplug className="size-3.5 shrink-0" aria-hidden="true" />
             : <CircleAlert className={cn("size-3.5 shrink-0", compactState.kind === "error" ? "text-red-10" : "text-amber-10")} aria-hidden="true" />;
-    const syncRecency = props.mcpLastUpdatedAt
-      ? `${t("mcp.last_synced")} ${formatRelativeTime(props.mcpLastUpdatedAt)}`
-      : "Not synced yet";
-
     return (
       <section
         className="space-y-4"
@@ -1428,27 +1424,23 @@ export function McpView(props: McpViewProps) {
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-dls-text">MCP connections</h2>
-            <p className="mt-1 text-xs leading-5 text-dls-secondary">
-              Tools available to the current project and agent session.
-            </p>
+            <h2 className="text-base font-semibold text-dls-text">MCPs</h2>
           </div>
           <span className="shrink-0 rounded-md bg-dls-surface-muted/25 px-2 py-1 text-[10px] font-semibold text-dls-secondary">
             {compactState.kind === "skeleton" ? "Checking" : `${connectedServers.length} connected`}
           </span>
         </div>
 
-        <div
-          className="flex items-start gap-2 text-xs leading-5 text-dls-secondary"
-          role={compactState.announcementRole}
-          aria-live={compactState.announcementRole === "status" ? "polite" : undefined}
-        >
-          {stateIcon}
-          <span className="min-w-0">
-            <span className="block font-medium text-dls-text">{compactState.label}</span>
-            <span className="block">{compactState.description}</span>
-          </span>
-        </div>
+        <span className="sr-only" role={compactState.announcementRole} aria-live={compactState.announcementRole === "status" ? "polite" : undefined}>
+          {compactState.label}. {compactState.description}
+        </span>
+
+        {compactState.kind !== "success" && compactState.kind !== "skeleton" ? (
+          <div className="flex items-center gap-2 text-xs leading-5 text-dls-secondary">
+            {stateIcon}
+            <span className="font-medium text-dls-text">{compactState.label}</span>
+          </div>
+        ) : null}
 
         {compactState.kind === "skeleton" ? (
           <div className="space-y-1.5" aria-label="Loading configured MCP servers">
@@ -1493,13 +1485,6 @@ export function McpView(props: McpViewProps) {
             Built-in tools remain available when their workspace requirements are met.
           </div>
         )}
-
-        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px] leading-4 text-dls-secondary">
-          <dt>Current client</dt>
-          <dd className="truncate text-right text-dls-text">Matterhorn Desks</dd>
-          <dt>Connection sync</dt>
-          <dd className="truncate text-right text-dls-text">{syncRecency}</dd>
-        </dl>
 
         {props.onManageMcp ? (
           <Button

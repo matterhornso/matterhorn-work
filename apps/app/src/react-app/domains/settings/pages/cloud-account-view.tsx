@@ -220,9 +220,7 @@ function ProfileReadinessSupportSection({
       "flex flex-col gap-2 text-xs leading-5 text-dls-secondary",
       compact ? "matterhorn-rail-section" : "rounded-lg bg-dls-surface-muted/[0.08] px-3 py-3",
     )}>
-      <h4 className="font-semibold text-dls-text">
-        {compact ? "Help and support" : readiness.stateCopy.headline}
-      </h4>
+      {compact ? null : <h4 className="font-semibold text-dls-text">{readiness.stateCopy.headline}</h4>}
       {compact ? null : <p>{readiness.stateCopy.body}</p>}
       <div className="flex flex-wrap gap-2">
         {onSendFeedback ? (

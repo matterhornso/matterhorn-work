@@ -166,9 +166,7 @@ export function WorkspaceMissionOverview({
             </div>
             {mission ? (
               <p className="mt-1 max-w-3xl text-sm leading-6 text-dls-text">{mission.objective}</p>
-            ) : (
-              <p className="mt-0.5 text-xs text-dls-secondary">Optional</p>
-            )}
+            ) : null}
             {mission ? <p className="mt-1 text-[11px] text-dls-secondary">{summary}</p> : null}
           </div>
         </div>

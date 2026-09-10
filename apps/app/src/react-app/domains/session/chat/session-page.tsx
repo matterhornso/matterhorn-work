@@ -635,7 +635,7 @@ function WorkspaceHomePrimaryAction({
   disabled,
   onAction,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   meta?: string;
   metaTooltip?: string;
@@ -651,24 +651,26 @@ function WorkspaceHomePrimaryAction({
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <h3 className="truncate text-sm font-semibold text-dls-text">{title}</h3>
-          <span className="inline-flex items-center gap-1 text-[11px] text-dls-secondary">
-            {eyebrow}
-            {metaTooltip ? (
-              <Tooltip>
-                <TooltipTrigger render={<span className="inline-flex" />}>
-                  <button
-                    type="button"
-                    aria-label={metaTooltip}
-                    title={metaTooltip}
-                    className="inline-flex size-6 items-center justify-center rounded-full text-dls-secondary transition-colors hover:bg-dls-hover hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
-                  >
-                    <Info className="size-3.5" strokeWidth={1.7} aria-hidden="true" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{metaTooltip}</TooltipContent>
-              </Tooltip>
-            ) : null}
-          </span>
+          {eyebrow || metaTooltip ? (
+            <span className="inline-flex items-center gap-1 text-[11px] text-dls-secondary">
+              {eyebrow ? <span>{eyebrow}</span> : null}
+              {metaTooltip ? (
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex" />}>
+                    <button
+                      type="button"
+                      aria-label={metaTooltip}
+                      title={metaTooltip}
+                      className="inline-flex size-6 items-center justify-center rounded-full text-dls-secondary transition-colors hover:bg-dls-hover hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+                    >
+                      <Info className="size-3.5" strokeWidth={1.7} aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{metaTooltip}</TooltipContent>
+                </Tooltip>
+              ) : null}
+            </span>
+          ) : null}
         </div>
         {meta ? <p className="mt-0.5 text-[11px] text-dls-secondary">{meta}</p> : null}
       </div>
@@ -2772,7 +2774,6 @@ export function SessionPage(props: SessionPageProps) {
     : null;
   const homePrimaryAction = props.modelUnavailable
     ? {
-        eyebrow: "Setup required",
         title: "Connect a model to start agent work",
         metaTooltip: "Required before chats and desk tasks can run",
         actionLabel: "Set up model",
