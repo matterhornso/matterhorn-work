@@ -105,4 +105,16 @@ describe("CUDOS provider preset", () => {
       "Matterhorn manages this connection for your workspace.",
     );
   });
+
+  test("turns forbidden hosted provider setup into a customer-safe message", () => {
+    const storeSource = readFileSync(
+      resolve(import.meta.dir, "../src/react-app/domains/connections/provider-auth/store.ts"),
+      "utf8",
+    );
+
+    expect(storeSource).toContain("hosted_operation_not_allowed");
+    expect(storeSource).toContain(
+      "Model providers are managed for this workspace. Choose an available model or ask the workspace owner to enable one.",
+    );
+  });
 });

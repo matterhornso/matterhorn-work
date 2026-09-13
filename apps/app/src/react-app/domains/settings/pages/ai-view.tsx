@@ -333,6 +333,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
   );
   const modelProviderReady =
     connectedPromptProviders.length > 0 &&
+    connectedModelCount > 0 &&
     !opencodeSetupMissing &&
     !catalogQueryFailed;
   const cudosConnected = Boolean(props.cudosConnected || cudosProvider);
@@ -430,17 +431,32 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 Finish setting up {props.pendingDeskTask.title}
               </div>
               <p className="mt-1 text-sm leading-5 text-dls-secondary">
-                Choose a model, then return to this desk task. Nothing has been sent.
+                {props.providerCredentialsManaged
+                  ? connectedModelCount > 0
+                    ? "Choose a model, then return to this desk. Nothing has been sent."
+                    : "AI is not available in this workspace yet. Nothing has been sent."
+                  : "Connect a provider, choose a model, then return to this desk. Nothing has been sent."}
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
-              <Button
-                onClick={() => void props.onOpenProviderAuth()}
-                disabled={props.busy || props.providerAuthBusy}
-              >
-                <Plus data-icon="inline-start" />
-                Connect AI
-              </Button>
+              {props.providerCredentialsManaged ? (
+                connectedModelCount > 0 ? (
+                  <Button
+                    onClick={() => void props.onOpenModelPicker()}
+                    disabled={props.busy}
+                  >
+                    Choose model
+                  </Button>
+                ) : null
+              ) : (
+                <Button
+                  onClick={() => void props.onOpenProviderAuth()}
+                  disabled={props.busy || props.providerAuthBusy}
+                >
+                  <Plus data-icon="inline-start" />
+                  Connect AI
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={() => void props.onResumePendingDeskTask?.()}
@@ -484,7 +500,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 ? "Loading the models managed for this workspace."
                 : modelProviderReady
                 ? `${modelReadiness.currentChoice.value}. ${modelReadiness.currentChoice.detail}`
-                : "Connect a provider below, then choose a model for chats and desk tasks."}
+                : props.providerCredentialsManaged
+                  ? "No models are currently available in this workspace."
+                  : "Connect a provider below, then choose a model for chats and desk tasks."}
             </LayoutSectionItemDescription>
             {modelProviderReady && !providerStateLoading ? (
               <LayoutSectionItemHeaderActions>
@@ -677,7 +695,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               <p className="mt-3 border-t border-border/60 pt-3 text-xs leading-5 text-dls-secondary">
                 {modelProviderReady
                   ? "Choose a model for this chat, then save it here when you want new chats and desk tasks to use the same default."
-                  : "A model catalog is only a list. Connect a provider before chats and desk tasks can start."}
+                  : props.providerCredentialsManaged
+                    ? "Ask the workspace owner to enable a model before starting chats or desk tasks."
+                    : "Connect a provider before chats and desk tasks can start."}
               </p>
               {modelReadiness.catalogRows.length ? (
                 <div className="mt-3 border-t border-border/60 pt-3">

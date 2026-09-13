@@ -247,7 +247,7 @@ const RAIL_OPTIONAL_LABEL_CLASS = `hidden ${RAIL_LABEL_CLASS} 2xl:inline`;
 const RAIL_SECTION_LABEL_CLASS =
   "mt-2 w-full pt-1 text-center text-[10px] font-medium tracking-normal text-dls-secondary";
 
-function isVenueSidePanel(panel: SidePanelItem | null): panel is VenueSidePanel {
+function isVenueSidePanel(panel: string | null | undefined): panel is VenueSidePanel {
   return panel === "bittensor" || panel === "hyperliquid" || panel === "polymarket" || panel === "sui";
 }
 
@@ -2143,6 +2143,11 @@ export function SessionPage(props: SessionPageProps) {
     if (pendingDeskRecoveryKeyRef.current === recoveryKey) return;
     pendingDeskRecoveryKeyRef.current = recoveryKey;
     restoredPendingDeskWorkspaceRef.current = props.selectedWorkspaceId;
+    if (isVenueSidePanel(pendingDeskTask.deskId)) {
+      setCurrentSidePanel(pendingDeskTask.deskId);
+      props.onPendingDeskTaskRestored?.();
+      return;
+    }
     openWorkflowDesk(pendingDeskTask.deskId, pendingDeskTask.title, {
       title: pendingDeskTask.title,
       recovery: true,
@@ -2155,6 +2160,7 @@ export function SessionPage(props: SessionPageProps) {
     props.pendingDeskTask?.deskId,
     props.pendingDeskTask?.title,
     props.selectedWorkspaceId,
+    setCurrentSidePanel,
   ]);
 
   const toggleCurrentSidePanel = useCallback((panel: SidePanelItem) => {

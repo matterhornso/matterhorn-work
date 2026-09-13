@@ -537,8 +537,8 @@ export const BITTENSOR_OPERATOR_WORKFLOW: MatterhornWorkflowManifest = {
     },
     {
       id: "stage_7_receipt_evidence",
-      name: "Receipt and evidence",
-      description: "Capture the signed-transaction hash, block reference, and evidence bundle after the user submits externally.",
+      name: "Transaction receipt",
+      description: "Save the transaction hash and block reference after the wallet submits.",
       serviceHook: "bittensor",
       inputPromptIds: ["wallet_address"],
       outputArtifactIds: ["receipt_evidence"],

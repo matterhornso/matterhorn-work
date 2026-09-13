@@ -16,6 +16,13 @@ export type PendingDeskTaskNavigation = {
 const STORAGE_PREFIX = "matterhorn.pending-desk-task.v1";
 export const PENDING_DESK_TASK_RETURN_PARAM = "resumeDeskTask";
 
+const compactDeskTaskIds = [
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "sui",
+] as const satisfies readonly PendingDeskTaskId[];
+
 const pendingDeskTaskReturnTitles: Record<PendingDeskTaskId, string> = {
   bittensor: "Bittensor desk",
   hyperliquid: "Hyperliquid desk",
@@ -26,6 +33,24 @@ const pendingDeskTaskReturnTitles: Record<PendingDeskTaskId, string> = {
 
 export function isPendingDeskTaskId(value: unknown): value is PendingDeskTaskId {
   return typeof value === "string" && pendingDeskTaskDeskIds.includes(value as PendingDeskTaskId);
+}
+
+export function isCompactPendingDeskTaskId(
+  value: unknown,
+): value is (typeof compactDeskTaskIds)[number] {
+  return typeof value === "string" && compactDeskTaskIds.includes(
+    value as (typeof compactDeskTaskIds)[number],
+  );
+}
+
+/**
+ * Crypto desks use the compact task-first panel. The legacy `desk=` route is
+ * retained only for staged non-crypto workflows such as Longevity.
+ */
+export function pendingDeskTaskReturnSearch(deskId: PendingDeskTaskId): string {
+  const params = new URLSearchParams();
+  params.set(isCompactPendingDeskTaskId(deskId) ? "panel" : "desk", deskId);
+  return `?${params.toString()}`;
 }
 
 function normalizePendingDeskTask(value: unknown): PendingDeskTaskNavigation | null {

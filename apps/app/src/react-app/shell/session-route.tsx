@@ -96,6 +96,7 @@ import { usePlatform } from "../kernel/platform";
 import {
   clearPendingDeskTask,
   isPendingDeskTaskId,
+  pendingDeskTaskReturnSearch,
   readPendingDeskTaskNavigation,
   readPendingDeskTaskReturn,
   writePendingDeskTask,
@@ -734,14 +735,13 @@ export function SessionRoute() {
     clearPendingDeskTask(workspaceId);
     if (!workspaceId || !pendingDeskTask) return;
     navigate(
-      `${workspaceSessionRoute(workspaceId, selectedSessionId)}?desk=${encodeURIComponent(pendingDeskTask.deskId)}`,
+      `${workspaceSessionRoute(workspaceId)}${pendingDeskTaskReturnSearch(pendingDeskTask.deskId)}`,
       { replace: true },
     );
   }, [
     navigate,
     pendingDeskTask,
     routeWorkspaceId,
-    selectedSessionId,
     selectedWorkspaceId,
   ]);
   const selectedWorkspace = useMemo(

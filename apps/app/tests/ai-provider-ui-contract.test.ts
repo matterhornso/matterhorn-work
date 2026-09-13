@@ -111,7 +111,9 @@ describe("AI provider UI contract", () => {
     expect(viewSource).toContain("<LayoutSectionTitle>Provider connection</LayoutSectionTitle>");
     expect(viewSource).toContain("Connect AI");
     expect(viewSource).toContain("How provider data is handled");
-    expect(viewSource).toContain("A model catalog is only a list.");
+    expect(viewSource).toContain(
+      "Ask the workspace owner to enable a model before starting chats or desk tasks.",
+    );
     expect(viewSource).not.toContain("<LayoutSectionTitle>Available models</LayoutSectionTitle>");
     expect(viewSource).not.toContain("Connected model catalog");
     expect(viewSource).not.toContain("Browse models");

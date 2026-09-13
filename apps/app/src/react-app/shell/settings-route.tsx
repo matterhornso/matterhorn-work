@@ -74,7 +74,8 @@ import {
 import ProviderAuthModal from "../domains/connections/provider-auth/provider-auth-modal";
 import ConnectionsModals from "../domains/connections/modals";
 import {
-  PENDING_DESK_TASK_RETURN_PARAM,
+  clearPendingDeskTask,
+  pendingDeskTaskReturnSearch,
   readPendingDeskTaskNavigation,
   readStoredPendingDeskTask,
 } from "./pending-desk-task";
@@ -3034,8 +3035,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             pendingDeskTask={pendingDeskTask}
             onResumePendingDeskTask={() => {
               if (!pendingDeskTask || !selectedWorkspaceId) return;
+              clearPendingDeskTask(selectedWorkspaceId);
               navigate(
-                `${workspaceSessionRoute(selectedWorkspaceId)}?${PENDING_DESK_TASK_RETURN_PARAM}=${encodeURIComponent(pendingDeskTask.deskId)}`,
+                `${workspaceSessionRoute(selectedWorkspaceId)}${pendingDeskTaskReturnSearch(pendingDeskTask.deskId)}`,
               );
             }}
             onOpenModelPicker={() => {
