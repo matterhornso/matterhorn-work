@@ -48,16 +48,18 @@ describe("session provider recovery", () => {
     expect(route).toContain('reason: "model_unavailable"');
     expect(route).toContain("writePendingDeskTask(workspaceId, pendingDeskTask)");
     expect(route).toContain("clearPendingDeskTask(workspaceId);");
-    expect(route).toContain("`${workspaceSessionRoute(workspaceId, selectedSessionId)}?desk=${encodeURIComponent(pendingDeskTask.deskId)}`");
+    expect(route).toContain("pendingDeskTaskReturnSearch(pendingDeskTask.deskId)");
     expect(route).toContain("{ replace: true }");
     expect(route).toContain("readPendingDeskTaskReturn(location.search)");
     expect(route).not.toContain("readStoredPendingDeskTask(routeWorkspaceId)");
     expect(route).toContain('handleOpenSettings("/settings/ai", workspaceId, { pendingDeskTask })');
     expect(settings).toContain("readPendingDeskTaskNavigation");
     expect(settings).toContain("readStoredPendingDeskTask(selectedWorkspaceId)");
-    expect(settings).toContain("PENDING_DESK_TASK_RETURN_PARAM");
+    expect(settings).toContain("clearPendingDeskTask(selectedWorkspaceId)");
+    expect(settings).toContain("pendingDeskTaskReturnSearch(pendingDeskTask.deskId)");
     expect(settings).toContain("onResumePendingDeskTask");
-    expect(settings).toContain("${PENDING_DESK_TASK_RETURN_PARAM}=${encodeURIComponent(pendingDeskTask.deskId)}");
+    expect(page).toContain("isVenueSidePanel(pendingDeskTask.deskId)");
+    expect(page).toContain("setCurrentSidePanel(pendingDeskTask.deskId)");
     expect(page).toContain("recovery: true");
     expect(page).toContain("restoredPendingDeskWorkspaceRef.current = props.selectedWorkspaceId;");
     expect(page).toContain("restoredPendingDeskWorkspaceRef.current === props.selectedWorkspaceId");
@@ -68,6 +70,9 @@ describe("session provider recovery", () => {
     expect(ai).toContain("Finish setting up");
     expect(ai).toContain("Return to desk");
     expect(ai).toContain("Nothing has been sent.");
+    expect(ai).toContain("props.providerCredentialsManaged");
+    expect(ai).toContain("connectedModelCount > 0");
+    expect(ai).toContain("Choose model");
   });
 
   test("never exposes engineering-only workspace skills in the customer composer", () => {

@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { AiSettingsView } from "../src/react-app/domains/settings/pages/ai-view";
 
-function renderReadySettings() {
+function renderReadySettings(overrides: Record<string, unknown> = {}) {
   const queryClient = new QueryClient();
   return renderToStaticMarkup(
     React.createElement(
@@ -33,6 +33,7 @@ function renderReadySettings() {
         onOpenProviderAuth: () => undefined,
         onDisconnectProvider: () => undefined,
         canDisconnectProvider: () => false,
+        ...overrides,
       }),
     ),
   );
@@ -54,5 +55,36 @@ describe("AI settings rendered hierarchy", () => {
     expect(html).not.toContain("New chats</div>");
     expect(html).not.toContain("Connected model catalog");
     expect(html).not.toContain("Browse models");
+  });
+
+
+  test("never offers hosted users a provider action the web runtime forbids", () => {
+    const html = renderReadySettings({
+      connectedModelCount: 0,
+      defaultModelLabel: "Connect provider",
+      defaultModelRef: "",
+      connectedProviders: [],
+      pendingDeskTask: { deskId: "bittensor", title: "Explore subnets" },
+    });
+    const handoff = html.slice(
+      html.indexOf('data-testid="pending-desk-task-handoff"'),
+      html.indexOf("Selected model"),
+    );
+
+    expect(handoff).toContain("AI is not available in this workspace yet.");
+    expect(handoff).toContain("Return to desk");
+    expect(html).not.toContain("Connect AI");
+    expect(html).not.toContain("Choose model");
+    expect(html).toContain("No models are currently available in this workspace.");
+  });
+
+  test("lets hosted users choose a model when the managed catalog is ready", () => {
+    const html = renderReadySettings({
+      pendingDeskTask: { deskId: "bittensor", title: "Explore subnets" },
+    });
+
+    expect(html).toContain("Choose model");
+    expect(html).toContain("Return to desk");
+    expect(html).not.toContain("Connect AI");
   });
 });

@@ -1043,6 +1043,11 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
       firstString(["message", "detail", "reason", "error"]) ||
       (typeof error === "string" ? readString(error) : null);
 
+    const diagnostic = [code, raw, response].filter(Boolean).join(" ");
+    if (/hosted_operation_not_allowed/i.test(diagnostic)) {
+      return "Model providers are managed for this workspace. Choose an available model or ask the workspace owner to enable one.";
+    }
+
     const implementationLeak = /\b(?:open(?:code|work)|opencode\.jsonc|local_[\w-]+)\b|\.opencode\b/i;
     const safeRaw = raw && !implementationLeak.test(raw) ? raw : null;
     const safeResponse = response && !implementationLeak.test(response) ? response : null;

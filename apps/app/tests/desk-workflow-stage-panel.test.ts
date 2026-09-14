@@ -68,7 +68,7 @@ describe("desk workflow stage panel metadata", () => {
     expect(titles).toContain("Validator comparison");
     expect(titles).toContain("Review stake");
     expect(titles).toContain("Wallet review handoff");
-    expect(titles).toContain("Receipt and evidence");
+    expect(titles).toContain("Transaction receipt");
   });
 
   test("Hyperliquid and Polymarket show read/research/handoff stages", () => {
