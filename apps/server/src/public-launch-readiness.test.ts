@@ -27,6 +27,7 @@ function launchEnvironment(): Record<string, string> {
     MATTERHORN_SES_EVENT_SECRET: "ses-event-secret-at-least-32-characters",
     MATTERHORN_APP_URL: "https://matterhorn.example",
     MATTERHORN_HOST_BACKUP_REQUIRED: "1",
+    AWS_REGION: "us-east-1",
     MATTERHORN_BACKUP_S3_BUCKET: "matterhorn-private-backups",
     MATTERHORN_BACKUP_KMS_KEY_ID: "alias/matterhorn-backups",
     MATTERHORN_BACKUP_AWS_ACCESS_KEY_ID: "backup-access-key",
@@ -65,6 +66,19 @@ function evaluate(input?: {
 }
 
 describe("public launch readiness", () => {
+  test("requires the backup region used by the uploader, not the SES-only region", () => {
+    const env = launchEnvironment();
+    delete env.AWS_REGION;
+    env.AWS_SES_REGION = "us-east-1";
+    expect(evaluate({ env }).checks.backupConfiguration).toBe(false);
+    expect(evaluate({ env }).ready).toBe(false);
+    env.AWS_REGION = "   ";
+    expect(evaluate({ env }).checks.backupConfiguration).toBe(false);
+    env.AWS_DEFAULT_REGION = "us-east-1";
+    expect(evaluate({ env }).checks.backupConfiguration).toBe(true);
+    expect(evaluate({ env }).ready).toBe(true);
+  });
+
   test("requires every production launch boundary", () => {
     const result = evaluate();
     expect(result.ready).toBe(true);

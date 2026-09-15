@@ -22262,7 +22262,7 @@ async function resolveAuthoritativeAgentMessage(input: {
   const requestedMemoryIds = [...new Set([
     ...promptPrivateContextIds(input.body, "memoryIds", "selectedMemoryIds"),
     ...(input.coworkerState?.approvedMemoryIds ?? []),
-  ])].sort().slice(0, AGENT_MESSAGE_MAX_MEMORY_IDS);
+  ])].sort();
   const requestedAgentFileIds = promptPrivateContextIds(input.body, "agentFileIds");
   if (input.resourceScope) {
     const allowedMemoryIds = new Set(input.resourceScope.memories.map((memory) => memory.id));

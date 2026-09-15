@@ -298,6 +298,10 @@ the backend then fails `/health/ready` when the last verified upload is older
 than 36 hours. The backup job uses its dedicated credential names and never
 falls back to the SES AWS credentials.
 
+Set `AWS_REGION` (or `AWS_DEFAULT_REGION`) for the backup bucket/KMS region.
+The SES-only `AWS_SES_REGION` does not configure backup uploads; launch readiness
+now checks the same region requirement as the uploader.
+
 **Upgrade requirement:** legacy PutObject-only markers are no longer accepted
 as fresh. Run a new verified upload before enabling required-backup readiness
 on a candidate. Do not hand-edit a marker to pass this gate. The backup principal
