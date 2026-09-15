@@ -93,6 +93,10 @@ user failure.
    Attach `AWS_SES_CONFIGURATION_SET` to an EventBridge API Destination that
    calls `/api/auth/email-events/ses` with the independent
    `MATTERHORN_SES_EVENT_SECRET`; verify delivery, bounce, and complaint events.
+   An SES message ID proves acceptance, not delivery; the outbox waits for
+   the delivery event. Missing or blank SES message IDs are treated as failed
+   acknowledgements and retain the queued message for the existing retry policy.
+   Only explicit local console transport can complete without a message ID.
    Configure the Turnstile site key and secret, and set
    `TURNSTILE_HOSTNAMES` to the exact public app hostname without localhost.
    Set the approved Terms and Privacy versions and enable legal acceptance.

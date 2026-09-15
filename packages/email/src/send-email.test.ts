@@ -1,13 +1,17 @@
 import { afterEach, expect, mock, test } from "bun:test"
 
 const sent: Array<Record<string, unknown>> = []
+let sesResult: { MessageId?: string } | Error = { MessageId: "ses-test-message" }
+let destroyed = 0
 
 mock.module("@aws-sdk/client-sesv2", () => ({
   SESv2Client: class {
     async send(command: { input: Record<string, unknown> }) {
       sent.push(command.input)
-      return { MessageId: "ses-test-message" }
+      if (sesResult instanceof Error) throw sesResult
+      return sesResult
     }
+    destroy() { destroyed += 1 }
   },
   SendEmailCommand: class {
     input: Record<string, unknown>
@@ -22,6 +26,8 @@ const originalConsoleInfo = console.info
 
 afterEach(() => {
   sent.length = 0
+  sesResult = { MessageId: "ses-test-message" }
+  destroyed = 0
   console.info = originalConsoleInfo
   setConsoleEmailPreviewSink(null)
 })
@@ -64,6 +70,27 @@ test("sends existing templates only through AWS SES v2", async () => {
   expect(sent[0].FromEmailAddress).toBe("Matterhorn Desks <updates@matterhorn.so>")
   expect(sent[0].ConfigurationSetName).toBe("matterhorn-transactional")
   expect(JSON.stringify(sent[0])).toContain("654321")
+  expect(destroyed).toBe(1)
+})
+
+test("missing SES acknowledgement never counts as acceptance and releases the client", async () => {
+  for (const messageId of [undefined, "", "   "]) {
+    sesResult = { MessageId: messageId }
+    await expect(sendEmail({
+      to: "user@example.com", template: "verification", props: { verificationCode: "654321" },
+      config: { from: "updates@example.com", awsSes: { region: "us-east-1", accessKeyId: "fixture", secretAccessKey: "fixture" } },
+    })).rejects.toMatchObject({ name: "EmailSendError", reason: "ses_rejected" })
+  }
+  expect(destroyed).toBe(3)
+})
+
+test("SES failures release the client without exposing upstream error details", async () => {
+  sesResult = new Error("sensitive provider response")
+  await expect(sendEmail({
+    to: "user@example.com", template: "verification", props: { verificationCode: "654321" },
+    config: { from: "updates@example.com", awsSes: { region: "us-east-1", accessKeyId: "fixture", secretAccessKey: "fixture" } },
+  })).rejects.toMatchObject({ message: "Email delivery failed: ses_rejected" })
+  expect(destroyed).toBe(1)
 })
 
 test("fails closed without complete SES configuration and rejects header injection", async () => {

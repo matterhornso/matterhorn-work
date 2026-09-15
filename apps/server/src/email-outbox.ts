@@ -1,4 +1,4 @@
-import { sendEmail, type EmailSendConfig, type SendEmailResult } from "@matterhorn-work/email";
+import { EmailSendError, sendEmail, type EmailSendConfig, type SendEmailResult } from "@matterhorn-work/email";
 import type { MatterhornAuthStore, MatterhornEmailOutboxItem } from "./auth-store.js";
 
 export type MatterhornEmailDeliver = (input:
@@ -44,6 +44,11 @@ export async function drainMatterhornEmailOutbox(input: {
   for (const item of input.authStore.claimDueEmailOutbox()) {
     try {
       const result = await deliver(deliveryInput(item, input.config));
+      // Only console delivery can complete without a provider acknowledgement.
+      // SES acceptance is tracked until its later delivery event arrives.
+      if (result.provider === "ses" && !result.messageId?.trim()) {
+        throw new EmailSendError({ template: item.template, reason: "ses_rejected" });
+      }
       input.authStore.markEmailAccepted(item.id, result.messageId);
       accepted += 1;
     } catch (error) {
