@@ -11,10 +11,8 @@ for (const required of [
   "actions/dependency-review-action@v4",
   "fail-on-severity: low",
   "rustsec/audit-check@v2.0.0",
-  "cargo tree --locked --target all --manifest-path examples/microsandbox-openwork-rust/Cargo.toml -i rsa",
-  "RUSTSEC-2023-0071 is reachable and may not be ignored",
-  "cargo tree --locked --target all --manifest-path examples/microsandbox-openwork-rust/Cargo.toml -i 'lru@0.16.3'",
-  "RUSTSEC-2026-0253 is reachable through lru 0.16.3",
+  "node --test scripts/rust-dependency-policy.test.mjs",
+  "node scripts/rust-dependency-policy.mjs",
   "ignore: RUSTSEC-2023-0071",
   "working-directory: examples/microsandbox-openwork-rust",
   "cargo check --locked --manifest-path examples/microsandbox-openwork-rust/Cargo.toml --all-targets",
@@ -31,5 +29,7 @@ for (const required of [
 assert.match(workflow, /schedule:\s*\n\s*- cron:/);
 assert.match(workflow, /security-events:\s*write/);
 assert.match(workflow, /rust-security:[\s\S]*checks:\s*write[\s\S]*issues:\s*write/);
+assert.ok(workflow.indexOf("node scripts/rust-dependency-policy.mjs") < workflow.indexOf("uses: rustsec/audit-check@"));
+assert.ok(!workflow.includes("--prefix none 2>/dev/null | grep"), "cargo resolution failures must not be swallowed by a conditional pipeline");
 
 console.log("security-workflow-contract tests: PASS");
