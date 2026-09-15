@@ -107,6 +107,7 @@ import {
 import {
   readSessionDeskFromSearch,
   readSessionPanelFromSearch,
+  resolvePendingDeskPanel,
   resolveSessionDeskNavigation,
   resolveSessionPanelNavigation,
 } from "../../../shell/session-panel-route";
@@ -1627,7 +1628,11 @@ export function SessionPage(props: SessionPageProps) {
     () => readSessionDeskFromSearch(location.search),
     [location.search],
   );
-  const activeSidePanel = routeSidePanel;
+  const activeSidePanel = routeSidePanel ?? resolvePendingDeskPanel({
+    search: location.search,
+    selectedSessionId: props.selectedSessionId,
+    pendingDeskId: props.pendingDeskTask?.deskId,
+  });
   const [reviewedActionEntryProtocol, setReviewedActionEntryProtocol] = useState<VenueSidePanel | null>(null);
   const [reviewedActionEntryOperation, setReviewedActionEntryOperation] = useState<ReviewedActionOperation | null>(null);
   const browserRailActive = activeSidePanel === "browser";

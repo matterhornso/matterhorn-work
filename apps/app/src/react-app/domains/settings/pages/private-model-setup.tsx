@@ -8,7 +8,7 @@ export function PrivateModelSetup(props: {
   policy?: MatterhornProviderPrivacyPolicy;
   loading: boolean;
   failed: boolean;
-  onRefresh: () => void;
+  onRefresh?: () => void;
   onChooseModel: () => void;
 }) {
   const [, recheck] = useReducer((value: number) => value + 1, 0);
@@ -19,14 +19,15 @@ export function PrivateModelSetup(props: {
     return () => window.clearTimeout(timer);
   }, [props.policy?.verificationExpiresAt]);
   const provider = props.catalog?.providers.find((item) => item.id === "venice" && item.connected);
-  const ready = !props.loading && !props.failed && provider?.modelIds.some((modelID) =>
+  const ready = Boolean(props.onRefresh) && !props.loading && !props.failed && provider?.modelIds.some((modelID) =>
     isVerifiedPrivateModePolicy(props.policy, { providerID: "venice", modelID }),
   );
   return (
     <section aria-label="Private model setup" className="space-y-3 border-b border-border pb-5">
       <h3 className="text-sm font-semibold">Private model</h3>
       <p className="max-w-[65ch] text-sm text-muted-foreground" role="status">
-        {props.loading ? "Checking private models…"
+        {!props.onRefresh ? "Workspace connection unavailable. Reconnect your workspace to check Private."
+          : props.loading ? "Checking private models…"
           : props.failed ? "Private models could not be checked. Try again."
           : ready ? "A verified Venice model is available. Select it in your chat to turn Private on."
           : provider ? "Venice is connected, but its private-model verification is unavailable. Private stays off."
@@ -34,7 +35,7 @@ export function PrivateModelSetup(props: {
       </p>
       <div className="flex flex-wrap gap-2">
         {ready ? <Button size="sm" onClick={props.onChooseModel}>Choose model</Button> : null}
-        <Button size="sm" variant="outline" disabled={props.loading} onClick={props.onRefresh}>Check again</Button>
+        <Button size="sm" variant="outline" disabled={props.loading || !props.onRefresh} onClick={props.onRefresh}>Check again</Button>
       </div>
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer py-1 focus-visible:outline focus-visible:outline-2">Setup and privacy details</summary>

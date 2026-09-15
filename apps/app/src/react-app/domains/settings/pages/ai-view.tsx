@@ -421,10 +421,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         policy={providerPrivacyPolicies.find((policy) => policy.providerId === "venice")}
         loading={workspaceBackendModelsQuery.isFetching || backendModelsQuery.isFetching}
         failed={catalogQueryFailed || !props.matterhornServerClient}
-        onRefresh={() => {
-          if (!props.matterhornServerClient) return;
+        onRefresh={props.matterhornServerClient ? () => {
           void (runtimeWorkspaceId ? workspaceBackendModelsQuery.refetch() : backendModelsQuery.refetch());
-        }}
+        } : undefined}
         onChooseModel={() => void props.onOpenModelPicker()}
       /> : null}
       <LayoutSection>

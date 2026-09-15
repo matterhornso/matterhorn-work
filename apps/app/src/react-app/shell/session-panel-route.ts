@@ -16,6 +16,27 @@ export type SessionPanelNavigation = {
 
 export type SessionDeskNavigation = SessionPanelNavigation;
 
+// A settings handoff exists before the effect that restores its URL. Keep the
+// requested desk visible on that first render, without overriding a destination
+// explicitly selected in the URL or an existing conversation.
+export function resolvePendingDeskPanel(options: {
+  search: string;
+  selectedSessionId?: string | null;
+  pendingDeskId?: string | null;
+}): SidePanelItem | null {
+  const params = new URLSearchParams(options.search);
+  if (options.selectedSessionId || params.has("panel") || params.has("desk")) return null;
+  switch (options.pendingDeskId) {
+    case "bittensor":
+    case "hyperliquid":
+    case "polymarket":
+    case "sui":
+      return options.pendingDeskId;
+    default:
+      return null;
+  }
+}
+
 export function readSessionPanelFromSearch(
   search: string,
   options?: { notesAvailable?: boolean },

@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { CryptoDeskLinks } from "../src/react-app/domains/crypto-apps/crypto-desk-links";
 import { SigninBoundary } from "../src/react-app/shell/signin-boundary";
 import { PrivateModelSetup } from "../src/react-app/domains/settings/pages/private-model-setup";
+import { resolvePendingDeskPanel } from "../src/react-app/shell/session-panel-route";
 import type { MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
 
 describe("authentication during navigation", () => {
@@ -22,6 +23,22 @@ describe("authentication during navigation", () => {
   });
   test("public trust pages do not require authentication", () => {
     expect(renderToStaticMarkup(<SigninBoundary required={false} status="checking" loading="Checking" signedOut="Sign in">Privacy</SigninBoundary>)).toBe("Privacy");
+  });
+});
+
+describe("desk handoff before workspace reconnection", () => {
+  test("all four protocol desks are available on the first render", () => {
+    for (const pendingDeskId of ["bittensor", "hyperliquid", "polymarket", "sui"]) {
+      expect(resolvePendingDeskPanel({ search: "", pendingDeskId })).toBe(pendingDeskId);
+    }
+  });
+  test("does not replace explicit destinations, chats or Private AI with a stale handoff", () => {
+    for (const search of ["?panel=memory", "?panel=", "?desk=wellness", "?desk=private-ai"]) {
+      expect(resolvePendingDeskPanel({ search, pendingDeskId: "sui" })).toBeNull();
+    }
+    expect(resolvePendingDeskPanel({ search: "", pendingDeskId: "sui", selectedSessionId: "chat" })).toBeNull();
+    expect(resolvePendingDeskPanel({ search: "", pendingDeskId: "private-ai" })).toBeNull();
+    expect(resolvePendingDeskPanel({ search: "" })).toBeNull();
   });
 });
 
@@ -60,6 +77,12 @@ describe("Private setup", () => {
     expect(setup({ loading: true })).not.toContain("Choose model");
     expect(setup({ failed: true })).toContain("could not be checked");
     expect(setup({ failed: true })).not.toContain("Choose model");
+  });
+  test("disconnected workspaces do not offer a no-op refresh", () => {
+    const html = setup({ onRefresh: undefined });
+    expect(html).toContain("Reconnect your workspace");
+    expect(html).toContain('disabled=""');
+    expect(html).not.toContain("Choose model");
   });
 });
 
