@@ -95,3 +95,12 @@ Next: finish remote CI review, then continue the model/authenticated acceptance 
 - Logs: `/tmp/mh-solo-email-ack-{before,after,backend,transport,auth,typecheck,build,gate-contract,safety}.log`. The `before` log intentionally records the reproduced failures; subsequent runs are green. No visual change or screenshot for this packet.
 
 Next: inspect fresh CI after these pushes; check authenticated browser access only if available. Continue safe local acceptance/recovery work without printing or downloading credentials or backup contents. Reserve the final 25 minutes for final verification and a candid launch decision; the original 20:07 UTC deadline is unchanged.
+
+### Fifth packet: challenge replacement queue cleanup
+
+- At 18:52 UTC, all 11 remote checks passed on `e367765829`. Browser tab 4 remains signed out; live model/desk/memory acceptance remains unverified. No authentication bypass or production account provisioning was attempted.
+- Reproduced two recovery UX defects: a replacement verification challenge left the old retry queued, and a replacement password-reset challenge left the old pending link queued. Both tests offered two messages even though only the newest challenge was valid.
+- In the existing challenge/enqueue transaction, retire older pending/retrying messages for the same user and template, exclude the same idempotency key, label them `challenge_superseded`, and clear obsolete codes/links. Already accepted or claimed messages are unchanged; this does not recall an email already in flight. Documented that this terminal status is not an SES outage.
+- Regression coverage verifies the latest code/link, unrelated-account isolation, preserved accepted-message history and atomic rollback when a replacement insert fails. The rollback test also completes verification using the original retained code.
+- Verification: 97 outbox/auth/backend security tests, seven auth maintenance/verification tests, server typecheck, production configuration contract, full platform safety gate and zero-finding secret scan passed. No provider configuration, expiry times, rate limits or production state changed.
+- Logs: `/tmp/mh-solo-email-superseded-{before,regression,maintenance,typecheck,safety}.log`. The `before` log records the two reproduced failures; regression and final gate runs passed. No visual change in this packet.

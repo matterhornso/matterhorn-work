@@ -2117,6 +2117,18 @@ export class MatterhornAuthStore {
   }): void {
     const recipient = normalizeEmail(input.recipient);
     const suppressed = this.isEmailSuppressed(recipient);
+    // Replacing a challenge invalidates its previous code/link. Do not send
+    // obsolete messages after an outage; retain only their non-secret status.
+    // Already accepted or claimed sends are left alone here.
+    if (input.userId) {
+      statement(this.db, `
+        UPDATE email_outbox
+        SET state = 'terminal', last_error_code = 'challenge_superseded',
+          props_json = '{}', updated_at = ?
+        WHERE user_id = ? AND template = ? AND idempotency_key <> ?
+          AND state IN ('pending', 'retry')
+      `).run(input.now, input.userId, input.template, input.idempotencyKey);
+    }
     statement(this.db, `
       INSERT OR IGNORE INTO email_outbox
         (id, idempotency_key, user_id, recipient, template, props_json, state,

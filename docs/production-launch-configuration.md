@@ -97,6 +97,10 @@ user failure.
    the delivery event. Missing or blank SES message IDs are treated as failed
    acknowledgements and retain the queued message for the existing retry policy.
    Only explicit local console transport can complete without a message ID.
+   Requesting a replacement challenge retires older pending/retrying messages
+   for that user and template as `challenge_superseded`, clearing their code/link.
+   This status is not a provider outage. Already claimed or accepted messages
+   cannot be recalled by this queue cleanup; old challenges remain invalid.
    Configure the Turnstile site key and secret, and set
    `TURNSTILE_HOSTNAMES` to the exact public app hostname without localhost.
    Set the approved Terms and Privacy versions and enable legal acceptance.

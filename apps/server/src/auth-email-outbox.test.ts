@@ -20,6 +20,68 @@ afterEach(() => {
 });
 
 describe("durable transactional email outbox", () => {
+  test("a failed replacement enqueue rolls back retirement of the previous challenge", () => {
+    const { store, path } = fixture();
+    const db = new Database(path);
+    try {
+      store.createAccountOrQueueVerification({ email: "rollback@example.com", password: PASSWORD });
+      db.run("CREATE TRIGGER reject_replacement BEFORE INSERT ON email_outbox BEGIN SELECT RAISE(ABORT, 'fixture enqueue failure'); END");
+      expect(() => store.queueEmailVerification("rollback@example.com")).toThrow("fixture enqueue failure");
+      expect(db.query("SELECT state, last_error_code FROM email_outbox").get()).toEqual({ state: "pending", last_error_code: null });
+      const [original] = store.claimDueEmailOutbox();
+      if (!original?.props.verificationCode) throw new Error("Expected original verification payload");
+      expect(store.verifyEmail("rollback@example.com", original.props.verificationCode).user.email).toBe("rollback@example.com");
+    } finally {
+      db.close();
+      store.close();
+    }
+  });
+
+  test("a fresh verification challenge retires only that user's unsent obsolete messages", () => {
+    const { store, path } = fixture();
+    try {
+      store.createAccountOrQueueVerification({ email: "replace@example.com", password: PASSWORD });
+      const [old] = store.claimDueEmailOutbox();
+      if (!old) throw new Error("Expected initial verification email");
+      store.markEmailFailed(old.id, "ses_rejected", 1);
+      store.createAccountOrQueueVerification({ email: "unrelated@example.com", password: PASSWORD });
+      const fresh = store.queueEmailVerification("replace@example.com");
+      if (!fresh) throw new Error("Expected fresh verification challenge");
+      const due = store.claimDueEmailOutbox(10, Date.now() + 120_000);
+      expect(due.filter((mail) => mail.recipient === "replace@example.com")).toHaveLength(1);
+      expect(due.find((mail) => mail.recipient === "replace@example.com")?.props.verificationCode).toBe(fresh.verificationCode);
+      expect(due.filter((mail) => mail.recipient === "unrelated@example.com")).toHaveLength(1);
+      const db = new Database(path, { readonly: true });
+      try {
+        expect(db.query("SELECT state, last_error_code, props_json FROM email_outbox WHERE id = ?").get(old.id)).toEqual({
+          state: "terminal", last_error_code: "challenge_superseded", props_json: "{}",
+        });
+      } finally { db.close(); }
+    } finally { store.close(); }
+  });
+
+  test("a fresh password reset retires pending links without altering accepted delivery history", () => {
+    const { store, path } = fixture();
+    try {
+      store.createAccount({ email: "reset-replace@example.com", password: PASSWORD });
+      store.queuePasswordReset("reset-replace@example.com", "https://desks.example.com/");
+      const [accepted] = store.claimDueEmailOutbox();
+      if (!accepted) throw new Error("Expected initial reset email");
+      store.markEmailAccepted(accepted.id, "accepted-reset-message");
+      store.queuePasswordReset("reset-replace@example.com", "https://desks.example.com/");
+      const fresh = store.queuePasswordReset("reset-replace@example.com", "https://desks.example.com/");
+      if (!fresh) throw new Error("Expected fresh reset challenge");
+      const due = store.claimDueEmailOutbox();
+      expect(due).toHaveLength(1);
+      expect(due[0]?.props.resetLink).toContain(fresh.resetToken);
+      const db = new Database(path, { readonly: true });
+      try {
+        expect(db.query("SELECT state FROM email_outbox WHERE id = ?").get(accepted.id)).toEqual({ state: "accepted" });
+        expect(db.query("SELECT COUNT(*) AS count FROM email_outbox WHERE state = 'terminal' AND last_error_code = 'challenge_superseded' AND props_json = '{}'").get()).toEqual({ count: 1 });
+      } finally { db.close(); }
+    } finally { store.close(); }
+  });
+
   test("commits account, verification challenge, legal acceptance, and email atomically", () => {
     const { store, path } = fixture();
     const result = store.createAccountOrQueueVerification({
