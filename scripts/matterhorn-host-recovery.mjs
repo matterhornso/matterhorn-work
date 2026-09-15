@@ -7,7 +7,8 @@ import { dirname, join, resolve, sep } from "node:path";
 import process from "node:process";
 import { gzip, gunzip } from "node:zlib";
 import { promisify } from "node:util";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { S3Client } from "@aws-sdk/client-s3";
+import { uploadVerifiedHostBackup } from "./lib/verified-host-backup-upload.mjs";
 
 const requireFromServer = createRequire(new URL("../apps/server/package.json", import.meta.url));
 const Database = requireFromServer("better-sqlite3");
@@ -386,7 +387,7 @@ async function createBundle(config) {
   }
 }
 
-async function uploadBundle(bundle) {
+async function uploadBundle(bundle, dataRoot) {
   const bucket = process.env.MATTERHORN_BACKUP_S3_BUCKET?.trim() || "";
   const kmsKeyId = process.env.MATTERHORN_BACKUP_KMS_KEY_ID?.trim() || "";
   const region = process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim() || "";
@@ -398,35 +399,15 @@ async function uploadBundle(bundle) {
   }
   const date = bundle.manifest.capturedAt.slice(0, 10);
   const key = `host-recovery/${date}/${bundle.manifest.capturedAt.replaceAll(":", "-")}.json.gz`;
-  const checksum = createHash("sha256").update(bundle.compressed).digest("base64");
   const client = new S3Client({
     region,
     credentials: { accessKeyId, secretAccessKey, ...(sessionToken ? { sessionToken } : {}) },
   });
-  await client.send(new PutObjectCommand({
-    Bucket: bucket,
-    Key: key,
-    Body: bundle.compressed,
-    ContentType: "application/gzip",
-    ChecksumSHA256: checksum,
-    ServerSideEncryption: "aws:kms",
-    SSEKMSKeyId: kmsKeyId,
-    BucketKeyEnabled: true,
-    Metadata: {
-      "matterhorn-version": VERSION,
-      "matterhorn-build": bundle.manifest.buildCommit ?? "unknown",
-    },
-  }));
-  const freshnessPath = join(resolve(process.env.MATTERHORN_WORK_DATA_DIR || "."), "backups", "last-success.json");
-  await mkdir(dirname(freshnessPath), { recursive: true, mode: 0o700 });
-  await writeFile(freshnessPath, `${JSON.stringify({
-    version: VERSION,
-    capturedAt: bundle.manifest.capturedAt,
-    bucket,
-    key,
-    sha256: sha256(bundle.compressed),
-  })}\n`, { mode: 0o600 });
-  return { bucket, key };
+  try {
+    return await uploadVerifiedHostBackup({ client, bundle, bucket, key, kmsKeyId, dataRoot });
+  } finally {
+    client.destroy();
+  }
 }
 
 async function restoreBundle(config) {
@@ -502,7 +483,7 @@ async function main() {
     return;
   }
   const bundle = await createBundle(config);
-  const uploaded = config.upload ? await uploadBundle(bundle) : null;
+  const uploaded = config.upload ? await uploadBundle(bundle, config.dataRoot) : null;
   process.stdout.write(`${JSON.stringify({
     version: VERSION,
     operation: "backup",

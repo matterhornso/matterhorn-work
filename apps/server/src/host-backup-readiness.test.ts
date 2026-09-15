@@ -17,6 +17,7 @@ function marker(capturedAt: string, overrides: Record<string, unknown> = {}) {
   mkdirSync(join(root, "backups"), { recursive: true });
   writeFileSync(join(root, "backups", "last-success.json"), JSON.stringify({
     version: MATTERHORN_HOST_BACKUP_VERSION,
+    verification: "s3-head-sha256-kms-v1",
     capturedAt,
     sha256: "a".repeat(64),
     ...overrides,
@@ -40,5 +41,7 @@ describe("host backup readiness", () => {
     expect(hostBackupFresh({ dataRoot: marker("2026-08-20T10:06:00.000Z"), now })).toBe(false);
     expect(hostBackupFresh({ dataRoot: marker("not-a-date"), now })).toBe(false);
     expect(hostBackupFresh({ dataRoot: marker("2026-08-20T09:00:00.000Z", { version: "wrong" }), now })).toBe(false);
+    expect(hostBackupFresh({ dataRoot: marker("2026-08-20T09:00:00.000Z", { verification: undefined }), now })).toBe(false);
+    expect(hostBackupFresh({ dataRoot: marker("2026-08-20T09:00:00.000Z", { verification: "put-only" }), now })).toBe(false);
   });
 });

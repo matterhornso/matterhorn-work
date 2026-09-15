@@ -276,14 +276,37 @@ pnpm backup:matterhorn-host -- \
   --upload --json
 ```
 
-Run this daily from the backup-only job. A successful upload writes only a
-non-secret freshness marker under `backups/last-success.json`. Restore into a
+Run this daily from the backup-only job. After `PutObject`, the job uses
+`HeadObject` with checksum retrieval to verify the SHA-256 checksum, byte count,
+content type, SSE-KMS key, bucket-key setting, version/ETag and release metadata.
+It does not download the archive. Only a verified upload atomically writes a
+non-secret freshness marker under the **explicit `--data-root`** directory's
+`backups/last-success.json`. A failed verification preserves the prior marker
+without advancing its capture time. Restore into a
 clean, separate root with `--restore`, verify every SQLite `quick_check`, then
 start an isolated backend against the restored paths before declaring the
 backup usable. Set `MATTERHORN_HOST_BACKUP_REQUIRED=1` for launch readiness;
 the backend then fails `/health/ready` when the last verified upload is older
 than 36 hours. The backup job uses its dedicated credential names and never
 falls back to the SES AWS credentials.
+
+**Upgrade requirement:** legacy PutObject-only markers are no longer accepted
+as fresh. Run a new verified upload before enabling required-backup readiness
+on a candidate. Do not hand-edit a marker to pass this gate. The backup principal
+needs `s3:PutObject` and metadata-read authorization (`s3:GetObject`, plus
+`s3:GetObjectVersion` for versioned objects) scoped to the backup prefix.
+Checksum retrieval for KMS-encrypted objects requires the appropriate
+`kms:Decrypt` permission; retain the upload's `kms:GenerateDataKey` permission
+on the selected CMK. Both identity and key policies must permit the required
+operations. Prefer a full customer-managed key ARN. Key IDs and aliases are
+also supported; aliases are resolved by S3 and HEAD must confirm the same
+resolved key as PUT. No IAM permissions are changed by this tool.
+See [AWS HeadObject permissions and checksum behavior](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html).
+
+A verified upload is **not** a verified restore. Keep the independent restore
+drill, deletion/erasure reconciliation, private/versioned bucket configuration
+and operator access review as release requirements. These code-level checks
+do not provision S3/KMS or prove real cloud recovery.
 
 The erasure ledger is a separate rollback domain and is never embedded in the
 host archive. Retain its current SQLite file independently of each archive.

@@ -6,6 +6,7 @@ export const DEFAULT_HOST_BACKUP_MAX_AGE_MS = 36 * 60 * 60 * 1_000;
 
 type HostBackupMarker = {
   version?: unknown;
+  verification?: unknown;
   capturedAt?: unknown;
   sha256?: unknown;
 };
@@ -29,6 +30,7 @@ export function hostBackupFresh(input: {
       readFileSync(join(dataRoot, "backups", "last-success.json"), "utf8"),
     ) as HostBackupMarker;
     if (marker.version !== MATTERHORN_HOST_BACKUP_VERSION) return false;
+    if (marker.verification !== "s3-head-sha256-kms-v1") return false;
     if (typeof marker.capturedAt !== "string") return false;
     if (typeof marker.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(marker.sha256)) return false;
     const capturedAt = Date.parse(marker.capturedAt);
