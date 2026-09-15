@@ -1,4 +1,5 @@
 import type { Message, Part, Session, Todo } from "@opencode-ai/sdk/v2/client";
+import { validatePrivacyConsentToken } from "./agent-privacy-consent";
 import type {
   MatterhornMemoryExportManifest,
   MatterhornMemoryRecord,
@@ -2434,21 +2435,24 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.sessionRead,
       },
     ),
-    sendAgentMessage: (
+    sendAgentMessage: async (
       workspaceId: string,
       sessionId: string,
       input: MatterhornAgentMessageRequest,
-    ) => requestJson<MatterhornAgentMessageResponse>(
-      baseUrl,
-      `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages`,
-      {
-        token,
-        hostToken,
-        method: "POST",
-        body: input,
-        timeoutMs: timeouts.sessionRead,
-      },
-    ),
+    ) => {
+      validatePrivacyConsentToken(input.privacyConsentToken);
+      return requestJson<MatterhornAgentMessageResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: input,
+          timeoutMs: timeouts.sessionRead,
+        },
+      );
+    },
     preflightAgentMessage: (
       workspaceId: string,
       sessionId: string,

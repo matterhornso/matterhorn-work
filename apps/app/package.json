@@ -15,6 +15,7 @@
     "pretypecheck": "pnpm --dir ../../packages/crypto-app-sdk build && pnpm --dir ../../packages/ui build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "cd ../.. && bun test apps/app/tests",
+    "test:composer-browser": "bun test scripts/composer-submit.browser.test.ts",
     "test:health": "node scripts/health.mjs",
     "test:mention-send": "node scripts/mention-send.mjs",
     "test:sessions": "node scripts/sessions.mjs",
