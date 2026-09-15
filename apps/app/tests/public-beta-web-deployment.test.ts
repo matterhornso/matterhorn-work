@@ -88,7 +88,9 @@ describe("public Beta web deployment", () => {
     expect(remoteLinks).toContain("if (isPublicBetaWebDeployment())");
     expect(sessionRoute).toContain("onConfirmRemote={publicBetaWeb ? undefined : handleCreateRemoteWorkspace}");
     expect(sessionRoute).toContain("onRecoverWorkspace: publicBetaWeb");
-    expect(workspaceModal).toContain("Public web does not accept worker URLs or access tokens.");
+    expect(workspaceModal).toContain("{allowDirectWorkspaceConnections ? (");
+    expect(workspaceModal).toContain('window.location.assign("/onboarding")');
+    expect(workspaceModal).toContain("Additional cloud workers are not available in this beta.");
     expect(viteConfig).toContain('name: "matterhorn-public-auth-critical-render"');
     expect(viteConfig).toContain("data-matterhorn-static-auth");
     expect(viteConfig).toContain("publicAuthCriticalCss");
@@ -101,8 +103,10 @@ describe("public Beta web deployment", () => {
     );
 
     expect(appRoot).toContain("!isPublicTrustPath(location.pathname)");
-    expect(appRoot).toContain("requireSignin &&");
-    expect(appRoot).toContain('(denAuth.status === "checking" || !denAuth.isSignedIn)');
+    expect(appRoot).toContain("required={!isPublicTrustPath(location.pathname) && requireSignin}");
+    expect(appRoot).toContain("status={denAuth.status}");
+    expect(appRoot).toContain("loading={<RouteFallback />}");
+    expect(appRoot).toContain("signedOut={<ForcedSigninPage developerMode={false} />}");
   });
 
   test("keeps Cloud connectivity failures actionable without exposing browser internals", () => {

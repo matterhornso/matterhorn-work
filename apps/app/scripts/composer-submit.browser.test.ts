@@ -65,6 +65,23 @@ async function fixturePage() {
   return page;
 }
 
+test("auth rechecks never flash sign-in or expose the desk before confirmation", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?authBoundary`);
+    await page.getByRole("heading", { name: "Authenticated desk" }).waitFor();
+    await page.getByRole("button", { name: "Recheck session" }).click();
+    await page.getByRole("status").waitFor();
+    expect(await page.getByRole("heading").count()).toBe(0);
+    await page.getByRole("button", { name: "Confirm session" }).click();
+    await page.getByRole("heading", { name: "Authenticated desk" }).waitFor();
+    expect(await page.getByRole("heading", { name: "Sign in", exact: true }).count()).toBe(0);
+    await page.getByRole("button", { name: "Expire session" }).click();
+    await page.getByRole("heading", { name: "Sign in", exact: true }).waitFor();
+    expect(await page.getByRole("heading", { name: "Authenticated desk" }).count()).toBe(0);
+  } finally { await page.close(); }
+});
+
 test("Ask click sends a serializable request without a React event as consent", async () => {
   const page = await fixturePage();
   try {

@@ -814,9 +814,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
           <section className="rounded-lg bg-[rgb(var(--matterhorn-blue-rgb)/0.08)] p-3.5">
             <div className="flex flex-col gap-3">
               <div>
-                <div className="text-sm font-semibold">Using memories in chat</div>
+                <div className="text-sm font-semibold">Selected memories</div>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                  Selected records appear as visible composer chips.
+                  Add to your next message. Nothing is sent yet.
                 </p>
               </div>
               <Button className="w-full justify-center" size="sm" onClick={() => dispatchMemoryContext(visibleSelectedRecords)}>
@@ -830,7 +830,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                   type="button"
                   className="rounded-md bg-dls-hover/45 px-3 py-1 text-xs text-dls-text transition-colors hover:bg-red-500/10 hover:text-red-200"
                   onClick={() => toggleSelectedRecord(record)}
-                  title="Remove memory from chat context"
+                  title="Remove from selection"
                 >
                   {record.title} <span className="text-dls-secondary">x</span>
                 </button>
@@ -1138,10 +1138,11 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     className={cn(!selected && MEMORY_SECONDARY_ACTION_CLASS)}
                     disabled={!policyDecision.canUseInChat}
                     onClick={() => toggleSelectedRecord(record)}
-                    title={policyDecision.canUseInChat ? "Use this visible memory in chat" : `Chat use blocked: ${policyDecision.blockedReasons.join("; ") || policyDecision.warnings.join("; ")}`}
+                    aria-pressed={selected}
+                    title={policyDecision.canUseInChat ? "Select this memory, then choose Use in chat" : `Chat use blocked: ${policyDecision.blockedReasons.join("; ") || policyDecision.warnings.join("; ")}`}
                   >
                     <Eye className="mr-2 size-3.5" />
-                    {selected ? "Selected" : "Use in chat"}
+                    {selected ? "Selected" : "Select for chat"}
                   </Button>
                   <Button
                     variant="ghost"

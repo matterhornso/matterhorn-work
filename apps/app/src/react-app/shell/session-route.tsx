@@ -2774,7 +2774,7 @@ export function SessionRoute() {
       onPrivateModeChange: (enabled: boolean) => {
         if (enabled) {
           if (!privateModeModel || !privateModeVerified) {
-            handleOpenSettings("/settings/ai");
+            handleOpenSettings("/settings/ai?setup=private");
             return;
           }
           storeSessionModelChoice(selectedWorkspaceId, selectedSessionId, {

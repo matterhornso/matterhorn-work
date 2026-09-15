@@ -4,8 +4,22 @@ import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ReactSessionComposer } from "../../src/react-app/domains/session/surface/composer/composer";
 import { useComposerSubmission } from "../../src/react-app/domains/session/surface/composer/use-composer-submission";
+import { SigninBoundary } from "../../src/react-app/shell/signin-boundary";
+import type { DenAuthStatus } from "../../src/react-app/domains/cloud/den-auth-provider";
 
 const noop = () => {};
+
+function AuthFixture() {
+  const [status, setStatus] = useState<DenAuthStatus>("signed_in");
+  return <>
+    <button onClick={() => setStatus("checking")}>Recheck session</button>
+    <button onClick={() => setStatus("signed_in")}>Confirm session</button>
+    <button onClick={() => setStatus("signed_out")}>Expire session</button>
+    <SigninBoundary required status={status} loading={<p role="status">Checking session</p>} signedOut={<h1>Sign in</h1>}>
+      <h1>Authenticated desk</h1>
+    </SigninBoundary>
+  </>;
+}
 
 function Fixture() {
   const [draft, setDraft] = useState("Explain a blockchain in one sentence.");
@@ -98,4 +112,4 @@ function Fixture() {
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing fixture root");
-createRoot(root).render(<Fixture />);
+createRoot(root).render(new URLSearchParams(location.search).has("authBoundary") ? <AuthFixture /> : <Fixture />);

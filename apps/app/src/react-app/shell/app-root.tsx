@@ -30,6 +30,7 @@ import {
   hasPendingCoworkerInvite,
 } from "../domains/coworkers/coworker-invite-fragment";
 import { UnknownRouteRecovery } from "./route-recovery";
+import { SigninBoundary } from "./signin-boundary";
 
 // Strip one-time invite fragments before the app shell, route
 // controls, or telemetry can inspect the initial browser location.
@@ -262,15 +263,16 @@ function DenSigninGate({ children }: DenSigninGateProps) {
     return () => window.removeEventListener(denSessionUpdatedEvent, handler);
   }, [navigate, publicBetaWeb]);
 
-  if (
-    !isPublicTrustPath(location.pathname) &&
-    requireSignin &&
-    (denAuth.status === "checking" || !denAuth.isSignedIn)
-  ) {
-    return <ForcedSigninPage developerMode={false} />;
-  }
-
-  return <>{children}</>;
+  return (
+    <SigninBoundary
+      required={!isPublicTrustPath(location.pathname) && requireSignin}
+      status={denAuth.status}
+      loading={<RouteFallback />}
+      signedOut={<ForcedSigninPage developerMode={false} />}
+    >
+      {children}
+    </SigninBoundary>
+  );
 }
 
 export function AppRoot() {

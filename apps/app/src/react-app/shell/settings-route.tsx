@@ -2989,6 +2989,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "ai":
         return (
           <AiSettingsView
+            privateSetupRequested={new URLSearchParams(location.search).get("setup") === "private"}
             busy={busy}
             providerAuthBusy={providerAuthSnapshot.providerAuthBusy}
             matterhornServerClient={settingsCapabilityClient}

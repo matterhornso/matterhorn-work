@@ -477,16 +477,16 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
           ) : null}
           <div className="min-w-0 flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <DialogTitle>{headerTitle}</DialogTitle>
+              <DialogTitle>{allowDirectWorkspaceConnections ? headerTitle : "Workspace"}</DialogTitle>
             </div>
-            <DialogDescription>{headerSubtitle}</DialogDescription>
+            <DialogDescription>{allowDirectWorkspaceConnections ? headerSubtitle : "Access your hosted workspace."}</DialogDescription>
           </div>
         </DialogHeader>
 
         {screen === "chooser" ? (
           <div className={modalBodyClass}>
             <div className="space-y-3">
-              <WorkspaceOptionCard
+              {allowDirectWorkspaceConnections ? <WorkspaceOptionCard
                 title={t("dashboard.create_local_workspace_title")}
                 description={
                   props.localDisabled
@@ -504,7 +504,7 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
                     </span>
                   ) : undefined
                 }
-              />
+              /> : null}
               {allowDirectWorkspaceConnections ? (
                 <>
                   <WorkspaceOptionCard
@@ -523,9 +523,9 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
               ) : (
                 <div className="flex flex-col gap-3 rounded-xl border border-dls-border bg-dls-hover/50 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 space-y-1">
-                    <p className="text-sm font-medium text-foreground">Matterhorn Cloud assigns your project</p>
+                    <p className="text-sm font-medium text-foreground">Hosted workspace</p>
                     <p className="text-sm leading-5 text-muted-foreground">
-                      Public web does not accept worker URLs or access tokens. Open Matterhorn Cloud to create or access a project for this account.
+                      Open your account's workspace setup. Additional cloud workers are not available in this beta.
                     </p>
                   </div>
                   <Button
@@ -533,15 +533,12 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
                     variant="outline"
                     className="shrink-0"
                     onClick={() => {
-                      const url = resolveDenBaseUrls(cloudSettings.baseUrl).baseUrl;
                       if (typeof window !== "undefined") {
-                        window.location.assign(url);
-                        return;
+                        window.location.assign("/onboarding");
                       }
-                      platform.openLink(url);
                     }}
                   >
-                    Open Matterhorn Cloud
+                    Open workspace setup
                   </Button>
                 </div>
               )}

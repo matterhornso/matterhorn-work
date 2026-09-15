@@ -18,6 +18,7 @@ import { Input } from "../../../components/ui/input";
 import { createMatterhornServerClient, MatterhornServerError } from "../../../app/lib/matterhorn-server";
 import { resolveMatterhornConnection } from "../../shell/matterhorn-connection";
 import { suiDAppKit } from "../../infra/sui-dapp-kit";
+import { CryptoDeskLinks } from "./crypto-desk-links";
 
 type CatalogSnapshot = {
   mode: "shadow" | "enforce";
@@ -180,6 +181,8 @@ export function CryptoAppCatalogRoute() {
     retry: false,
   });
   const snapshot = catalog.data?.snapshot;
+  const gatewayDisabled = catalog.error instanceof MatterhornServerError
+    && catalog.error.code === "crypto_app_gateway_disabled";
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase("en-US");
@@ -364,19 +367,31 @@ export function CryptoAppCatalogRoute() {
         </div>
 
         <header className="border-b border-border pb-6">
-          <h1 className="text-2xl font-semibold tracking-[-0.02em]">Connect a crypto app</h1>
+          <h1 className="text-2xl font-semibold tracking-[-0.02em]">{gatewayDisabled ? "Crypto apps" : "Connect a crypto app"}</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Choose an app, then decide whether your coworkers can research only or also prepare wallet reviews.
+            {gatewayDisabled ? "Choose a built-in desk to get started."
+              : "Choose an app, then decide whether your coworkers can research only or also prepare wallet reviews."}
           </p>
-          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground" aria-label="Crypto app safety boundary">
+          {!gatewayDisabled ? <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground" aria-label="Crypto app safety boundary">
             <span>Testing networks only</span>
             <span>Never paste keys in chat</span>
             <span>Your wallet approves every transaction</span>
-            <span>{snapshot?.mode === "enforce" ? "Safety controls active" : "Connections are in preview"}</span>
-          </div>
+            {snapshot ? <span>{snapshot.mode === "enforce" ? "Safety controls active" : "Connections are in preview"}</span> : null}
+          </div> : null}
         </header>
 
-        {catalog.isLoading ? (
+        {gatewayDisabled ? (
+          <>
+            <CryptoDeskLinks workspaceId={workspaceId} />
+            <section className="py-4" aria-live="polite">
+              <h2 className="text-base font-semibold">Additional app connections are not enabled</h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                Use the built-in desks above. Your operator must configure and safety-check the app gateway before you can add connections.
+              </p>
+              <Button variant="outline" className="mt-4" onClick={() => void catalog.refetch()}>Check again</Button>
+            </section>
+          </>
+        ) : catalog.isLoading ? (
           <div className="flex min-h-64 items-center gap-3 text-sm text-muted-foreground" role="status">
             <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
             Loading apps…

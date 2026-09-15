@@ -33,6 +33,7 @@ import {
   LayoutStack,
 } from "../settings-layout";
 import { notifyWorkspaceModelSelectionChanged } from "../model-selection-events";
+import { PrivateModelSetup } from "./private-model-setup";
 import {
   buildModelReadinessSummary,
   countConnectedCatalogModels,
@@ -47,6 +48,7 @@ type ConnectedProvider = {
 };
 
 export type AiSettingsViewProps = {
+  privateSetupRequested?: boolean;
   busy: boolean;
   providerAuthBusy: boolean;
   matterhornServerClient?: MatterhornServerClient | null;
@@ -414,6 +416,17 @@ export function AiSettingsView(props: AiSettingsViewProps) {
 
   return (
     <LayoutStack className="gap-y-8">
+      {props.privateSetupRequested ? <PrivateModelSetup
+        catalog={catalog}
+        policy={providerPrivacyPolicies.find((policy) => policy.providerId === "venice")}
+        loading={workspaceBackendModelsQuery.isFetching || backendModelsQuery.isFetching}
+        failed={catalogQueryFailed || !props.matterhornServerClient}
+        onRefresh={() => {
+          if (!props.matterhornServerClient) return;
+          void (runtimeWorkspaceId ? workspaceBackendModelsQuery.refetch() : backendModelsQuery.refetch());
+        }}
+        onChooseModel={() => void props.onOpenModelPicker()}
+      /> : null}
       <LayoutSection>
         <LayoutSectionHeader>
           <LayoutSectionTitle>Choose a model</LayoutSectionTitle>
