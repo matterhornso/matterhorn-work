@@ -50,7 +50,7 @@
     "backup:workspace-user-data": "node scripts/workspace-user-data-recovery.mjs",
     "test:workspace-user-data-recovery": "node scripts/workspace-user-data-recovery.test.mjs",
     "backup:matterhorn-host": "node scripts/matterhorn-host-recovery.mjs",
-    "test:matterhorn-host-recovery": "node scripts/matterhorn-host-recovery.test.mjs",
+    "test:matterhorn-host-recovery": "node scripts/matterhorn-host-recovery.test.mjs && node --test scripts/verified-host-backup-upload.test.mjs",
     "archive:bittensor-legacy-timeline": "node scripts/bittensor-wallet-timeline-legacy-archive.mjs",
     "test:bittensor-legacy-timeline-archive": "node scripts/bittensor-wallet-timeline-legacy-archive.test.mjs",
     "drill:product-hunt-rollback": "node scripts/product-hunt-rollback-rehearsal.mjs",

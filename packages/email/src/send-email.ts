@@ -159,8 +159,9 @@ export async function sendEmail<Template extends EmailTemplate>(input: SendEmail
     render(component),
     render(component, { plainText: true }),
   ])
+  let client: SESv2Client | undefined
   try {
-    const client = new SESv2Client({
+    client = new SESv2Client({
       region: awsSes.region,
       credentials: {
         accessKeyId: awsSes.accessKeyId,
@@ -182,8 +183,13 @@ export async function sendEmail<Template extends EmailTemplate>(input: SendEmail
         },
       },
     }))
+    if (!result.MessageId?.trim()) {
+      throw new EmailSendError({ template: input.template, reason: "ses_rejected" })
+    }
     return { provider, messageId: result.MessageId }
   } catch {
     throw new EmailSendError({ template: input.template, reason: "ses_rejected" })
+  } finally {
+    client?.destroy()
   }
 }

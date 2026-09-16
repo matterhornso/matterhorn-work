@@ -24,6 +24,7 @@ import type {
 import type { MatterhornWorkflowRunListItem } from "@matterhorn-work/types/workflow-runs";
 
 import { createClient, unwrap } from "../../app/lib/opencode";
+import { validatePrivacyConsentToken } from "../../app/lib/agent-privacy-consent";
 import { forkSession, revertSession, shellInSession } from "../../app/lib/opencode-session";
 import {
   buildMatterhornWorkspaceBaseUrl,
@@ -2773,7 +2774,7 @@ export function SessionRoute() {
       onPrivateModeChange: (enabled: boolean) => {
         if (enabled) {
           if (!privateModeModel || !privateModeVerified) {
-            handleOpenSettings("/settings/ai");
+            handleOpenSettings("/settings/ai?setup=private");
             return;
           }
           storeSessionModelChoice(selectedWorkspaceId, selectedSessionId, {
@@ -2812,6 +2813,7 @@ export function SessionRoute() {
         handleOpenSettings(section === "skills" ? "/settings/skills" : section === "mcps" || section === "extensions" ? "/settings/extensions/mcp" : section === "plugins" ? "/settings/extensions/plugins" : "/settings/general");
       },
       onSendDraft: async (draft: ComposerDraft) => {
+        validatePrivacyConsentToken(draft.privacy?.consentToken);
         const text = (draft.resolvedText ?? draft.text).trim();
         if (!text && draft.attachments.length === 0) return;
         if (selectedModelUnavailable) throw new Error("Selected model is unavailable. Choose another model before sending.");

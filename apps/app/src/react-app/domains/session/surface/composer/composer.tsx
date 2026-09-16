@@ -1647,7 +1647,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 {props.busy && !canSend ? (
                   <button
                     type="button"
-                    onClick={props.onStop}
+                    onClick={() => props.onStop()}
                     className="inline-flex h-8 max-h-8 items-center gap-1.5 rounded-md bg-dls-hover/70 px-2.5 text-[12px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
                     title={t("composer.stop")}
                   >
@@ -1657,7 +1657,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 ) : (
                   <button
                     type="button"
-                    onClick={canSend ? props.onSend : props.busy ? props.onStop : undefined}
+                    onClick={canSend ? () => props.onSend() : props.busy ? () => props.onStop() : undefined}
                     disabled={(props.sendDisabled ?? props.disabled) || (!canSend && !props.busy)}
                     className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium transition-colors ${
                       !canSend || (props.sendDisabled ?? props.disabled)

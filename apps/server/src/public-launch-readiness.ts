@@ -81,6 +81,7 @@ function backupConfigurationReady(env: PublicLaunchEnvironment): boolean {
   const emailAccessKey = env.AWS_ACCESS_KEY_ID?.trim() ?? "";
   const emailSecret = env.AWS_SECRET_ACCESS_KEY?.trim() ?? "";
   return enabled(env.MATTERHORN_HOST_BACKUP_REQUIRED)
+    && Boolean(env.AWS_REGION?.trim() || env.AWS_DEFAULT_REGION?.trim())
     && Boolean(env.MATTERHORN_BACKUP_S3_BUCKET?.trim())
     && Boolean(env.MATTERHORN_BACKUP_KMS_KEY_ID?.trim())
     && Boolean(backupAccessKey)

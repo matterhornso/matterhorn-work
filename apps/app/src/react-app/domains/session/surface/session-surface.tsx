@@ -66,6 +66,7 @@ import {
 } from "../../../shell/app-inspector";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { ReactSessionComposer } from "./composer/composer";
+import { useComposerSubmission } from "./composer/use-composer-submission";
 import type { ResponsePerspective } from "../perspectives/response-perspective";
 import { decodeComposerMentionValue, encodeComposerMentionValue } from "./composer/mention-encoding";
 import { DevProfiler } from "../../../shell/dev-profiler";
@@ -2175,7 +2176,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
   };
 
-  const handleSend = useCallback(async (privacyConsentToken?: string) => {
+  const sendDraft = useCallback(async (privacyConsentToken?: string) => {
     const text = draft.trim();
     if (!text && attachments.length === 0) return;
     const reviewedActionHandoff = attachments.length === 0
@@ -2300,6 +2301,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
   }, [activeWorkflowDeskAgent, attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.modelVariant, props.onDraftChange, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
 
+  // UI callbacks accept no arguments. Consent enters only through confirmation.
+  const { send: handleSend, sendWithConsent } = useComposerSubmission(sendDraft);
+
   const handleConfirmPrivacy = useCallback(async () => {
     const preflight = error?.privacyPreflight;
     const challenge = preflight?.challenge;
@@ -2312,13 +2316,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
         { sessionId: props.sessionId, requestHash: preflight.requestHash },
       );
       setError(null);
-      await handleSend(consent.consentToken);
+      await sendWithConsent(consent.consentToken);
     } catch (nextError) {
       setError(parseSessionError(nextError));
     } finally {
       setConfirmingPrivacy(false);
     }
-  }, [confirmingPrivacy, error?.privacyPreflight, handleSend, props.client, props.sessionId, props.workspaceId, sending]);
+  }, [confirmingPrivacy, error?.privacyPreflight, sendWithConsent, props.client, props.sessionId, props.workspaceId, sending]);
 
   const handleAbort = useCallback(async () => {
     if (!chatStreaming) return;

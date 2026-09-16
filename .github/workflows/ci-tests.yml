@@ -244,6 +244,12 @@ jobs:
       - name: Run full web app test suite
         run: pnpm --filter @matterhorn-work/app test
 
+      - name: Install composer test browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Test real composer interactions
+        run: pnpm --filter @matterhorn-work/app test:composer-browser
+
       - name: Run full backend test suite
         run: pnpm --dir apps/server test
 

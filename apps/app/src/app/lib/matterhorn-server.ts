@@ -1,4 +1,5 @@
 import type { Message, Part, Session, Todo } from "@opencode-ai/sdk/v2/client";
+import { validatePrivacyConsentToken } from "./agent-privacy-consent";
 import type {
   MatterhornMemoryExportManifest,
   MatterhornMemoryRecord,
@@ -1579,14 +1580,17 @@ const DEFAULT_OPENWORK_SERVER_TIMEOUT_MS = 10_000;
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-async function fetchWithTimeout(
+// One deadline covers both headers and body consumption. Streams use separate
+// OpenCode transports and do not pass through this finite-response reader.
+export async function fetchResponseWithTimeout<T>(
   fetchImpl: FetchLike,
   url: string,
   init: RequestInit,
   timeoutMs: number,
-) {
+  readResponse: (response: Response) => Promise<T>,
+): Promise<T> {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    return fetchImpl(url, init);
+    return readResponse(await fetchImpl(url, init));
   }
 
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
@@ -1606,10 +1610,9 @@ async function fetchWithTimeout(
   });
 
   try {
-    return await Promise.race([fetchImpl(url, initWithSignal), timeoutPromise]);
+    return await Promise.race([fetchImpl(url, initWithSignal).then(readResponse), timeoutPromise]);
   } catch (error) {
-    const name = (error && typeof error === "object" && "name" in error ? (error as any).name : "") as string;
-    if (name === "AbortError") {
+    if (error && typeof error === "object" && "name" in error && error.name === "AbortError") {
       throw new Error("Request timed out.");
     }
     throw error;
@@ -1625,7 +1628,7 @@ async function requestJson<T>(
 ): Promise<T> {
   const url = `${baseUrl}${path}`;
   const fetchImpl = resolveFetch(url);
-  const response = await fetchWithTimeout(
+  const { response, text } = await fetchResponseWithTimeout(
     fetchImpl,
     url,
     {
@@ -1635,9 +1638,8 @@ async function requestJson<T>(
       credentials: "same-origin",
     },
     options.timeoutMs ?? DEFAULT_OPENWORK_SERVER_TIMEOUT_MS,
+    async (response) => ({ response, text: await response.text() }),
   );
-
-  const text = await response.text();
   const json = parseJsonResponse(text, response.status);
 
   if (!response.ok) {
@@ -1668,7 +1670,7 @@ async function requestMultipartRaw(
 ): Promise<{ ok: boolean; status: number; text: string }>{
   const url = `${baseUrl}${path}`;
   const fetchImpl = resolveFetch(url);
-  const response = await fetchWithTimeout(
+  const { response, text } = await fetchResponseWithTimeout(
     fetchImpl,
     url,
     {
@@ -1678,8 +1680,8 @@ async function requestMultipartRaw(
       credentials: "same-origin",
     },
     options.timeoutMs ?? DEFAULT_OPENWORK_SERVER_TIMEOUT_MS,
+    async (response) => ({ response, text: await response.text() }),
   );
-  const text = await response.text();
   return { ok: response.ok, status: response.status, text };
 }
 
@@ -1690,7 +1692,7 @@ async function requestBinary(
 ): Promise<{ data: ArrayBuffer; contentType: string | null; filename: string | null }>{
   const url = `${baseUrl}${path}`;
   const fetchImpl = resolveFetch(url);
-  const response = await fetchWithTimeout(
+  const { response, data } = await fetchResponseWithTimeout(
     fetchImpl,
     url,
     {
@@ -1702,10 +1704,11 @@ async function requestBinary(
       credentials: "same-origin",
     },
     options.timeoutMs ?? DEFAULT_OPENWORK_SERVER_TIMEOUT_MS,
+    async (response) => ({ response, data: await response.arrayBuffer() }),
   );
 
   if (!response.ok) {
-    const text = await response.text();
+    const text = new TextDecoder().decode(data);
     let json: any = null;
     try {
       json = text ? JSON.parse(text) : null;
@@ -1722,7 +1725,6 @@ async function requestBinary(
   const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
   const filenameRaw = filenameMatch?.[1] ?? filenameMatch?.[2] ?? null;
   const filename = filenameRaw ? decodeURIComponent(filenameRaw) : null;
-  const data = await response.arrayBuffer();
   return { data, contentType, filename };
 }
 
@@ -2434,21 +2436,24 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.sessionRead,
       },
     ),
-    sendAgentMessage: (
+    sendAgentMessage: async (
       workspaceId: string,
       sessionId: string,
       input: MatterhornAgentMessageRequest,
-    ) => requestJson<MatterhornAgentMessageResponse>(
-      baseUrl,
-      `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages`,
-      {
-        token,
-        hostToken,
-        method: "POST",
-        body: input,
-        timeoutMs: timeouts.sessionRead,
-      },
-    ),
+    ) => {
+      validatePrivacyConsentToken(input.privacyConsentToken);
+      return requestJson<MatterhornAgentMessageResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: input,
+          timeoutMs: timeouts.sessionRead,
+        },
+      );
+    },
     preflightAgentMessage: (
       workspaceId: string,
       sessionId: string,

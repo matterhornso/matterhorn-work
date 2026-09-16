@@ -1496,7 +1496,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           path: ".opencode/package.json",
           data: encoder.encode(
             JSON.stringify(
-              { dependencies: { "@opencode-ai/plugin": "1.18.30" } },
+              { dependencies: { "@opencode-ai/plugin": "1.18.31" } },
               null,
               2,
             ),
@@ -2989,6 +2989,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "ai":
         return (
           <AiSettingsView
+            privateSetupRequested={new URLSearchParams(location.search).get("setup") === "private"}
             busy={busy}
             providerAuthBusy={providerAuthSnapshot.providerAuthBusy}
             matterhornServerClient={settingsCapabilityClient}

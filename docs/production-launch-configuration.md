@@ -93,6 +93,14 @@ user failure.
    Attach `AWS_SES_CONFIGURATION_SET` to an EventBridge API Destination that
    calls `/api/auth/email-events/ses` with the independent
    `MATTERHORN_SES_EVENT_SECRET`; verify delivery, bounce, and complaint events.
+   An SES message ID proves acceptance, not delivery; the outbox waits for
+   the delivery event. Missing or blank SES message IDs are treated as failed
+   acknowledgements and retain the queued message for the existing retry policy.
+   Only explicit local console transport can complete without a message ID.
+   Requesting a replacement challenge retires older pending/retrying messages
+   for that user and template as `challenge_superseded`, clearing their code/link.
+   This status is not a provider outage. Already claimed or accepted messages
+   cannot be recalled by this queue cleanup; old challenges remain invalid.
    Configure the Turnstile site key and secret, and set
    `TURNSTILE_HOSTNAMES` to the exact public app hostname without localhost.
    Set the approved Terms and Privacy versions and enable legal acceptance.
@@ -276,14 +284,41 @@ pnpm backup:matterhorn-host -- \
   --upload --json
 ```
 
-Run this daily from the backup-only job. A successful upload writes only a
-non-secret freshness marker under `backups/last-success.json`. Restore into a
+Run this daily from the backup-only job. After `PutObject`, the job uses
+`HeadObject` with checksum retrieval to verify the SHA-256 checksum, byte count,
+content type, SSE-KMS key, bucket-key setting, version/ETag and release metadata.
+It does not download the archive. Only a verified upload atomically writes a
+non-secret freshness marker under the **explicit `--data-root`** directory's
+`backups/last-success.json`. A failed verification preserves the prior marker
+without advancing its capture time. Restore into a
 clean, separate root with `--restore`, verify every SQLite `quick_check`, then
 start an isolated backend against the restored paths before declaring the
 backup usable. Set `MATTERHORN_HOST_BACKUP_REQUIRED=1` for launch readiness;
 the backend then fails `/health/ready` when the last verified upload is older
 than 36 hours. The backup job uses its dedicated credential names and never
 falls back to the SES AWS credentials.
+
+Set `AWS_REGION` (or `AWS_DEFAULT_REGION`) for the backup bucket/KMS region.
+The SES-only `AWS_SES_REGION` does not configure backup uploads; launch readiness
+now checks the same region requirement as the uploader.
+
+**Upgrade requirement:** legacy PutObject-only markers are no longer accepted
+as fresh. Run a new verified upload before enabling required-backup readiness
+on a candidate. Do not hand-edit a marker to pass this gate. The backup principal
+needs `s3:PutObject` and metadata-read authorization (`s3:GetObject`, plus
+`s3:GetObjectVersion` for versioned objects) scoped to the backup prefix.
+Checksum retrieval for KMS-encrypted objects requires the appropriate
+`kms:Decrypt` permission; retain the upload's `kms:GenerateDataKey` permission
+on the selected CMK. Both identity and key policies must permit the required
+operations. Prefer a full customer-managed key ARN. Key IDs and aliases are
+also supported; aliases are resolved by S3 and HEAD must confirm the same
+resolved key as PUT. No IAM permissions are changed by this tool.
+See [AWS HeadObject permissions and checksum behavior](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html).
+
+A verified upload is **not** a verified restore. Keep the independent restore
+drill, deletion/erasure reconciliation, private/versioned bucket configuration
+and operator access review as release requirements. These code-level checks
+do not provision S3/KMS or prove real cloud recovery.
 
 The erasure ledger is a separate rollback domain and is never embedded in the
 host archive. Retain its current SQLite file independently of each archive.

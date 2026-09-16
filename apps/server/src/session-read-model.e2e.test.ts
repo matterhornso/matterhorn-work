@@ -2672,6 +2672,35 @@ describe("workspace session read APIs", () => {
     )).toHaveLength(0);
   });
 
+  test("rejects oversized Memory selections rather than silently dropping selected records", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    for (const suffix of ["messages/preflight", "messages"]) {
+      for (const key of ["memoryIds", "selectedMemoryIds"]) {
+        const response = await fetch(`http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/${suffix}`, {
+          method: "POST",
+          headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            parts: [{ type: "text", text: "Use all selected preferences" }],
+            [key]: Array.from({ length: 33 }, (_, index) => `mem_limit_${index}`),
+            model: { providerID: "openai", modelID: "gpt-4.1" },
+          }),
+        });
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({
+          code: "invalid_payload",
+          message: "memoryIds must include no more than 32 records",
+        });
+      }
+    }
+    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/prompt_async")).toHaveLength(0);
+  });
+
   test("rejects client-authored system context before provider dispatch", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     const mock = startMockOpencode();
