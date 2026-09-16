@@ -3,7 +3,7 @@
 # Run: bash scripts/verify-crypto.sh
 # Exit 0 = all checks pass, Exit 1+ = something failed
 
-set -euo pipefail
+set -uo pipefail
 FAIL=0
 PASS=0
 CWD="$(cd "$(dirname "$0")/.." && pwd)"
@@ -52,8 +52,8 @@ echo "[F1] Wallet store"
 WALLET_STORE="apps/app/src/react-app/domains/wallet/state/wallet-store.ts"
 if test -f "$WALLET_STORE"; then
   check "  wallet-store.ts exists"  "true"
-  check "  store exports factory"   "node -e \"import('$PWD/$WALLET_STORE').then(m=>process.exit(typeof m.createWalletStore==='function'?0:1))\""
-  check "  store starts disconnected" "node -e \"import('$PWD/$WALLET_STORE').then(m=>{const s=m.createWalletStore();const snap=s.getSnapshot();process.exit(snap.isConnected===false&&snap.address===null?0:1)})\""
+  check "  store exports factory"   "bun -e \"import('$PWD/$WALLET_STORE').then(m=>process.exit(typeof m.createWalletStore==='function'?0:1))\""
+  check "  store starts disconnected" "bun -e \"import('$PWD/$WALLET_STORE').then(m=>{const s=m.createWalletStore();const snap=s.getSnapshot();process.exit(snap.isConnected===false&&snap.address===null?0:1)})\""
 else
   echo "  (skipped — wallet-store.ts not found yet)"
 fi
@@ -80,6 +80,7 @@ check "  server defillama.ts exists"       "test -f $SV/tools/defillama.ts"
 check "  server swap-builder.ts exists"    "test -f $SV/tools/swap-builder.ts"
 check "  server transaction-simulation.ts exists" "test -f $SV/tools/transaction-simulation.ts"
 check "  viem in server deps"              "node -e \"const p=require('./apps/server/package.json');process.exit(p.dependencies?.viem?0:1)\""
+test -d apps/server/dist || check "  server dist built"          "pnpm --filter matterhorn-work-server build 2>&1"
 check "  chain-client fetches real block"  "node -e \"import('./apps/server/dist/infra/chain-client.js').then(m=>m.baseClient.getBlockNumber().then(n=>process.exit(n>0n?0:1)))\""
 check "  token-registry resolves USDC"     "node -e \"import('./apps/server/dist/infra/token-registry.js').then(m=>process.exit(m.tokensForChain(8453)?.USDC?.decimals===6?0:1))\""
 check "  coingecko search works"           "node -e \"import('./apps/server/dist/tools/coingecko.js').then(async m=>{const r=await m.searchCoins('ethereum');process.exit(r.length>0?0:1)})\""
