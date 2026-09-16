@@ -52,4 +52,5 @@ install -d -m 0700 -o node -g node \
   "${XDG_DATA_HOME}" \
   "${XDG_STATE_HOME}"
 
+gosu node sh /app/packaging/docker/public-beta-backup-loop.sh &
 exec gosu node bun /app/apps/server/src/cli.ts
