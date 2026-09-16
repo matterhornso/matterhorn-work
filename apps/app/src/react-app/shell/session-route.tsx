@@ -25,6 +25,7 @@ import type { MatterhornWorkflowRunListItem } from "@matterhorn-work/types/workf
 
 import { createClient, unwrap } from "../../app/lib/opencode";
 import { validatePrivacyConsentToken } from "../../app/lib/agent-privacy-consent";
+import { createPromptRequestDiagnostics, diagnosticIdentifier } from "./prompt-request-diagnostics";
 import { forkSession, revertSession, shellInSession } from "../../app/lib/opencode-session";
 import {
   buildMatterhornWorkspaceBaseUrl,
@@ -675,8 +676,11 @@ export function SessionRoute() {
   const params = useParams<{ workspaceId?: string; sessionId?: string }>();
   const routeWorkspaceId = params.workspaceId?.trim() || "";
   const selectedSessionId = params.sessionId?.trim() || null;
+  const promptAttemptSequenceRef = useRef(0);
   const promptTimingRef = useRef(new Map<string, {
     startedAt: number;
+    attemptId: string;
+    workspaceId: string;
     executionMode: MatterhornExecutionMode;
     agentId: string;
   }>());
@@ -685,6 +689,10 @@ export function SessionRoute() {
     if (!timing) return;
     promptTimingRef.current.delete(update.sessionId);
     recordInspectorEvent("session.prompt.first_output", {
+      attemptId: timing.attemptId,
+      workspaceId: timing.workspaceId,
+      sessionId: diagnosticIdentifier(update.sessionId),
+      messageId: diagnosticIdentifier(update.messageId),
       timeToFirstOutputMs: Math.round(performance.now() - timing.startedAt),
       executionMode: timing.executionMode,
       agentId: timing.agentId,
@@ -2889,6 +2897,15 @@ export function SessionRoute() {
         }
 
         const prepareStartedAt = performance.now();
+        // Diagnostic correlation only, not an authorization token. Works on
+        // self-hosted HTTP origins where crypto.randomUUID is unavailable.
+        const attemptId = `prompt_${Date.now()}_${++promptAttemptSequenceRef.current}`;
+        const requestDiagnostics = createPromptRequestDiagnostics({
+          attemptId,
+          workspaceId: selectedWorkspaceId,
+          sessionId: selectedSessionId,
+          record: recordInspectorEvent,
+        });
         const [parts, systemContext] = await Promise.all([
           draftToParts(draft, selectedWorkspaceRoot),
           publicBetaWeb
@@ -2903,7 +2920,7 @@ export function SessionRoute() {
         });
 
         if (!draft.privacy?.consentToken) {
-          const privacyPreflight = await client.preflightAgentMessage(selectedWorkspaceId, selectedSessionId, {
+          const privacyPreflight = await requestDiagnostics.observe("preflight", () => client.preflightAgentMessage(selectedWorkspaceId, selectedSessionId, {
             parts,
             model: selectedPromptModel
               ? { providerId: selectedPromptModel.providerID, modelId: selectedPromptModel.modelID }
@@ -2918,7 +2935,7 @@ export function SessionRoute() {
               agentFileIds: draft.privacy.agentFileIds,
             } : {}),
             ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
-          });
+          }));
           if (privacyPreflight.decision !== "allow") {
             throw new Error(JSON.stringify({
               code: privacyPreflight.decision === "blocked" ? "agent_privacy_blocked" : "agent_privacy_consent_required",
@@ -2931,10 +2948,13 @@ export function SessionRoute() {
         const dispatchStartedAt = performance.now();
         promptTimingRef.current.set(selectedSessionId, {
           startedAt: dispatchStartedAt,
+          attemptId,
+          workspaceId: diagnosticIdentifier(selectedWorkspaceId) ?? "unknown",
           executionMode,
           agentId: selectedAgent ?? "matterhorn",
         });
         recordInspectorEvent("session.prompt.dispatch_started", {
+          attemptId,
           prepareDurationMs: Math.round(dispatchStartedAt - prepareStartedAt),
           promptChars: text.length,
           attachmentCount: draft.attachments.length,
@@ -2944,7 +2964,7 @@ export function SessionRoute() {
         });
         try {
           if (publicBetaWeb) {
-            await client.sendAgentMessage(selectedWorkspaceId, selectedSessionId, {
+            await requestDiagnostics.observe("dispatch", () => client.sendAgentMessage(selectedWorkspaceId, selectedSessionId, {
               parts,
               model: selectedPromptModel
                 ? { providerId: selectedPromptModel.providerID, modelId: selectedPromptModel.modelID }
@@ -2961,7 +2981,7 @@ export function SessionRoute() {
                 agentFileIds: draft.privacy.agentFileIds,
               } : {}),
               ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
-            });
+            }));
           } else {
             const result = await opencodeClient.session.promptAsync({
               sessionID: selectedSessionId,
@@ -2985,6 +3005,7 @@ export function SessionRoute() {
           throw error;
         }
         recordInspectorEvent("session.prompt.dispatch_accepted", {
+          attemptId,
           dispatchDurationMs: Math.round(performance.now() - dispatchStartedAt),
           executionMode,
           agentId: selectedAgent ?? "matterhorn",
