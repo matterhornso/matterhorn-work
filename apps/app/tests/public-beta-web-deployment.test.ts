@@ -165,7 +165,7 @@ describe("public Beta web deployment", () => {
     expect(serverClient).toContain("options?.privacyConsentToken ? { privacyConsentToken: options.privacyConsentToken }");
     expect(serverClient).toContain("sendAgentMessage:");
     expect(serverClient).toContain("/sessions/${encodeURIComponent(sessionId)}/messages");
-    expect(sessionRoute).toContain("await client.sendAgentMessage(selectedWorkspaceId, selectedSessionId");
+    expect(sessionRoute).toContain('await requestDiagnostics.observe("dispatch", () => client.sendAgentMessage(selectedWorkspaceId, selectedSessionId');
     expect(sessionRoute).toContain("await endpoint.client.sendAgentMessage(endpoint.workspaceId, session.id");
     expect(sessionRoute).toContain("!publicBetaWeb && options?.sendImmediately && selectedProviderPrivacyPolicy?.allowed === false");
     expect(sessionSurface).toContain("Public research can proceed; private context requires");
