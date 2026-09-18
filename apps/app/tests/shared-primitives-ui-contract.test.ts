@@ -140,7 +140,7 @@ describe("Shared primitives UI contract", () => {
     const source = readAppSource("domains/settings/shell/settings-shell.tsx");
     expect(source).not.toContain("rounded-2xl");
     expect(source).toContain(
-      'className="flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between px-4 pt-[env(safe-area-inset-top)] md:hidden mac:titlebar-drag"',
+      'className="flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between px-4 pt-[env(safe-area-inset-top)] lg:hidden mac:titlebar-drag"',
     );
     expect(source).not.toContain("<ChevronRight");
     expect(source).not.toContain(

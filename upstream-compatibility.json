@@ -1,11 +1,20 @@
 {
   "version": "matterhorn.upstream-compatibility.v1",
-  "reviewedAt": "2026-09-09",
+  "reviewedAt": "2026-09-17",
   "openwork": {
     "repository": "https://github.com/different-ai/openwork",
     "version": "v0.18.44",
     "commit": "cac94b079906b9ef45788dfaa07444524976a6a0",
     "integrationStrategy": "compatibility_port",
+    "additionalPorts": [
+      {
+        "reviewedAt": "2026-09-17",
+        "release": "v0.18.48",
+        "commit": "7d3693981fe276f9d90a0ea24b5fb05b02e22d7c",
+        "contract": "current_session_refresh_failure_keeps_composer_usable",
+        "test": "apps/app/tests/session-transition-controller.test.ts"
+      }
+    ],
     "adoptedContracts": [
       "untimed_web_opencode_event_streams",
       "one_way_managed_runtime_configuration",

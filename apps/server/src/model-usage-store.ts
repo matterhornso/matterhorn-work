@@ -52,6 +52,9 @@ export type ModelUsageReservation = {
 
 export type ModelUsageAssistantMessage = {
   id: string;
+  sessionId?: string;
+  parentId?: string;
+  terminal: boolean;
   createdAt: number;
   completedAt: number;
   providerId: string;
@@ -100,7 +103,6 @@ const DEFAULT_MONTHLY_LIMIT = 2_000_000;
 const DEFAULT_GLOBAL_DAILY_LIMIT = 5_000_000;
 const DEFAULT_GLOBAL_MONTHLY_LIMIT = 50_000_000;
 const DEFAULT_RESERVATION_TOKENS = 32_000;
-const MODEL_USAGE_PENDING_TTL_MS = 15 * 60 * 1000;
 
 function openSqliteDatabase(path: string): SqliteDatabase {
   if (process.versions.bun) {
@@ -235,6 +237,15 @@ export function modelUsageAssistantMessages(value: unknown): ModelUsageAssistant
     const reportedTotal = finiteInteger(tokens.total);
     messages.push({
       id,
+      sessionId: typeof info.sessionID === "string" ? info.sessionID : undefined,
+      parentId: typeof info.parentID === "string" ? info.parentID : undefined,
+      terminal: info.finish !== "tool-calls" && info.finish !== "unknown"
+        && !(Array.isArray(message?.parts) && message.parts.some((entry) => {
+          const part = recordValue(entry);
+          const state = recordValue(part?.state);
+          return part?.type === "tool" && !recordValue(part.metadata)?.providerExecuted
+            && !(state?.status === "error" && recordValue(state.metadata)?.interrupted === true);
+        })),
       createdAt,
       completedAt,
       providerId: typeof info.providerID === "string" ? info.providerID.trim() : "unknown",
@@ -249,6 +260,28 @@ export function modelUsageAssistantMessages(value: unknown): ModelUsageAssistant
     });
   }
   return messages.sort((left, right) => left.createdAt - right.createdAt);
+}
+
+function modelUsageRequestMessages(value: unknown, sessionId: string): ModelUsageAssistantMessage[] {
+  const groups = new Map<string, ModelUsageAssistantMessage[]>();
+  for (const message of modelUsageAssistantMessages(value)) {
+    if (message.sessionId && message.sessionId !== sessionId) continue;
+    const key = JSON.stringify([message.sessionId, message.parentId || message.id, message.providerId, message.modelId]);
+    const group = groups.get(key) ?? [];
+    if (!group.some((entry) => entry.id === message.id)) group.push(message);
+    groups.set(key, group);
+  }
+  const requests: ModelUsageAssistantMessage[] = [];
+  for (const group of groups.values()) {
+    const last = group.at(-1);
+    if (!last?.terminal) continue;
+    const total = { ...last, createdAt: group[0]!.createdAt };
+    for (const field of ["inputTokens", "outputTokens", "reasoningTokens", "cacheReadTokens", "cacheWriteTokens", "rawTokens", "providerCostUsd"] as const) {
+      total[field] = group.reduce((sum, message) => sum + message[field], 0);
+    }
+    requests.push(total);
+  }
+  return requests.sort((left, right) => left.createdAt - right.createdAt);
 }
 
 function periodSnapshot(
@@ -404,6 +437,15 @@ export class MatterhornModelUsageStore {
     sessionId: string;
     messages: unknown;
   }): number {
+    return this.withImmediateTransaction(() => this.reconcileUnlocked(input));
+  }
+
+  private reconcileUnlocked(input: {
+    subject: ModelUsageSubject;
+    workspaceId: string;
+    sessionId: string;
+    messages: unknown;
+  }): number {
     const pending = statement(this.db, `
       SELECT id, provider_id, model_id, weight_milli, created_at
       FROM model_usage_operations
@@ -422,7 +464,7 @@ export class MatterhornModelUsageStore {
         return typeof value === "string" ? value : "";
       }).filter(Boolean),
     );
-    const messages = modelUsageAssistantMessages(input.messages)
+    const messages = modelUsageRequestMessages(input.messages, input.sessionId)
       .filter((message) => !usedMessageIds.has(message.id));
     let reconciled = 0;
 
@@ -476,14 +518,8 @@ export class MatterhornModelUsageStore {
   }
 
   status(subject: ModelUsageSubject, now = new Date()): MatterhornModelUsageStatus {
-    // A process restart or disconnected event stream can prevent a reservation
-    // from ever reaching reconciliation. Do not let an abandoned request hold
-    // a user's or the platform's allowance forever.
-    statement(this.db, `
-      UPDATE model_usage_operations
-      SET status = 'cancelled', charged_tokens = 0, completed_at = ?
-      WHERE status = 'pending' AND created_at <= ?
-    `).run(now.getTime(), now.getTime() - MODEL_USAGE_PENDING_TTL_MS);
+    // Missing usage is not proof of a rejected request. Keep pending holds
+    // durable until authoritative reconciliation or explicit cancellation.
     const periods = utcPeriods(now);
     const subjectDaily = this.total(periods.dayStart, subject.id);
     const subjectMonthly = this.total(periods.monthStart, subject.id);
@@ -551,7 +587,7 @@ export class MatterhornModelUsageStore {
         SUM(CASE WHEN status IN ('pending', 'completed') THEN charged_tokens ELSE 0 END) AS charged_tokens,
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_requests
       FROM model_usage_operations
-      WHERE created_at >= ?${subjectId ? " AND subject_id = ?" : ""}
+      WHERE (created_at >= ? OR status = 'pending')${subjectId ? " AND subject_id = ?" : ""}
     `;
     const row = subjectId
       ? statement(this.db, sql).get(startAt, subjectId)

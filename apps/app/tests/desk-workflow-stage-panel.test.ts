@@ -8,6 +8,7 @@ import {
 } from "../src/react-app/domains/session/workflows/protocol-desk-ui";
 import {
   getMatterhornDeskAgent,
+  getMatterhornDeskAgentById,
 } from "@matterhorn-work/types/desk-agents";
 
 describe("desk workflow stage panel metadata", () => {
@@ -41,8 +42,17 @@ describe("desk workflow stage panel metadata", () => {
       "utf8",
     );
     expect(routeSource).toContain('saveSessionAgent(workspaceId, session.id, "matterhorn")');
-    expect(surfaceSource).toContain("privateAiActive ? null : shellConfig.starterCards");
+    expect(surfaceSource.includes("privateAiActive || activeWorkflowDeskAgent ? null : shellConfig.starterCards")).toBe(true);
     expect(surfaceSource).toContain('placeholder={privateAiActive ? "Message Private AI…" : undefined}');
+  });
+
+  test.each(["matterhorn-memory", "matterhorn-mcps"])("%s keeps its selected workflow instead of suggesting another desk", (agentId) => {
+    expect(getMatterhornDeskAgentById(agentId)).toBeDefined();
+    const surfaceSource = readFileSync(
+      "apps/app/src/react-app/domains/session/surface/session-surface.tsx",
+      "utf8",
+    );
+    expect(surfaceSource.includes("privateAiActive || activeWorkflowDeskAgent ? null : shellConfig.starterCards")).toBe(true);
   });
 
   test("Longevity exposes the full 7-stage workflow", () => {

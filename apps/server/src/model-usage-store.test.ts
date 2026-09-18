@@ -34,6 +34,96 @@ async function store(config: Partial<MatterhornModelUsageConfig> = {}) {
 }
 
 describe("MatterhornModelUsageStore", () => {
+  test("enforces a global monthly cap across distinct subjects", async () => {
+    const usage = await store({ globalDailyLimit: null, globalMonthlyLimit: 20_000 });
+    const request = { workspaceId: "ws_global", sessionId: "ses_global", providerId: "cudos", modelId: "asi1-mini" };
+    expect(usage.reserve({ ...request, subject: { id: "user_global_a" } }).allowed).toBe(true);
+    const second = usage.reserve({ ...request, subject: { id: "user_global_b" } });
+    expect(second.allowed).toBe(false);
+    expect(second.status.blockReason).toBe("global_monthly_limit");
+    expect(second.status.monthly.usedTokens).toBe(0);
+  });
+
+  test("a UTC day reset preserves the same month's reserved allowance", async () => {
+    const usage = await store({ monthlyLimit: 20_000 });
+    const createdAt = Date.UTC(2026, 8, 17, 23, 59);
+    const request = {
+      subject: { id: "user_midnight" }, workspaceId: "ws_midnight", sessionId: "ses_midnight",
+      providerId: "cudos", modelId: "asi1-mini",
+    };
+    expect(usage.reserve({ ...request, now: new Date(createdAt) }).allowed).toBe(true);
+    const afterMidnight = new Date(createdAt + 2 * 60_000);
+    const status = usage.status(request.subject, afterMidnight);
+    expect(status.daily.chargedTokens).toBe(20_000);
+    expect(status.monthly.chargedTokens).toBe(20_000);
+    expect(usage.reserve({ ...request, now: afterMidnight }).allowed).toBe(false);
+  });
+
+  test("keeps tool-loop reservations pending and charges every step exactly once", async () => {
+    const usage = await store();
+    const createdAt = Date.now();
+    const scope = { subject: { id: "user_steps" }, workspaceId: "ws_steps", sessionId: "ses_steps" };
+    usage.reserve({ ...scope, providerId: "cudos", modelId: "asi1-mini", now: new Date(createdAt) });
+    const step = (id: string, offset: number, total: number, finish: string) => ({
+      info: {
+        id, parentID: "msg_user_steps", sessionID: scope.sessionId, role: "assistant",
+        providerID: "cudos", modelID: "asi1-mini", finish,
+        time: { created: createdAt + offset, completed: createdAt + offset + 1 },
+        tokens: { total, input: total - 100, output: 100 }, cost: total / 1_000_000,
+      }, parts: [],
+    });
+    const tool = step("msg_steps_tool", 10, 1000, "tool-calls");
+    const final = step("msg_steps_final", 30, 1500, "stop");
+    expect(usage.reconcile({ ...scope, messages: [tool] })).toBe(0);
+    expect(usage.status(scope.subject).pendingRequests).toBe(1);
+    expect(usage.status(scope.subject).monthly.chargedTokens).toBe(20_000);
+    expect(usage.reconcile({ ...scope, messages: [tool, final] })).toBe(1);
+    expect(usage.status(scope.subject).monthly.usedTokens).toBe(2500);
+    expect(usage.status(scope.subject).models[0]?.providerCostUsd).toBe(0.0025);
+    expect(usage.reconcile({ ...scope, messages: [tool, final] })).toBe(0);
+    expect(usage.status(scope.subject).monthly.usedTokens).toBe(2500);
+  });
+
+  test("does not close usage on a provider stop that still contains a tool call", async () => {
+    const usage = await store();
+    const createdAt = Date.now();
+    const scope = { subject: { id: "user_tool_stop" }, workspaceId: "ws_tool_stop", sessionId: "ses_tool_stop" };
+    usage.reserve({ ...scope, providerId: "cudos", modelId: "asi1-mini", now: new Date(createdAt) });
+    const info = {
+      id: "msg_tool_stop", parentID: "msg_user_tool_stop", sessionID: scope.sessionId, role: "assistant",
+      providerID: "cudos", modelID: "asi1-mini", finish: "stop",
+      time: { created: createdAt + 10, completed: createdAt + 20 },
+      tokens: { total: 1000 }, cost: 0,
+    };
+    const tool = { info, parts: [{ type: "tool", state: { status: "completed" } }] };
+    expect(usage.reconcile({ ...scope, messages: [tool] })).toBe(0);
+    expect(usage.status(scope.subject).pendingRequests).toBe(1);
+    const final = { info: { ...info, id: "msg_tool_stop_final", time: { created: createdAt + 30, completed: createdAt + 40 } }, parts: [] };
+    expect(usage.reconcile({ ...scope, messages: [tool, final] })).toBe(1);
+    expect(usage.status(scope.subject).monthly.usedTokens).toBe(2000);
+  });
+
+  test("rejects cross-session usage and deduplicates repeated step records", async () => {
+    const usage = await store();
+    const createdAt = Date.now();
+    const scope = { subject: { id: "user_usage_scope" }, workspaceId: "ws_usage_scope", sessionId: "ses_usage_scope" };
+    usage.reserve({ ...scope, providerId: "cudos", modelId: "asi1-mini", now: new Date(createdAt) });
+    const message = {
+      info: {
+        id: "msg_usage_scope", parentID: "msg_user_usage_scope", sessionID: scope.sessionId, role: "assistant",
+        providerID: "cudos", modelID: "asi1-mini", finish: "stop",
+        time: { created: createdAt + 10, completed: createdAt + 20 }, tokens: { total: 1500 }, cost: 0,
+      }, parts: [],
+    };
+    expect(usage.reconcile({ ...scope, messages: [{ ...message, info: { ...message.info, sessionID: "other_session" } }] })).toBe(0);
+    expect(usage.reconcile({ ...scope, subject: { id: "other_subject" }, messages: [message] })).toBe(0);
+    expect(usage.reconcile({ ...scope, messages: [message, message] })).toBe(1);
+    expect(usage.status(scope.subject).monthly.usedTokens).toBe(1500);
+    usage.reserve({ ...scope, providerId: "cudos", modelId: "asi1-mini" });
+    expect(usage.reconcile({ ...scope, messages: [message] })).toBe(0);
+    expect(usage.status(scope.subject).pendingRequests).toBe(1);
+  });
+
   test("defaults to off unless deployment explicitly enables enforcement", () => {
     expect(resolveMatterhornModelUsageConfig({}).enforcement).toBe("off");
     expect(resolveMatterhornModelUsageConfig({
@@ -196,7 +286,7 @@ describe("MatterhornModelUsageStore", () => {
     expect(usage.status(subject).monthly.chargedTokens).toBe(0);
   });
 
-  test("releases abandoned reservations after the bounded inference window", async () => {
+  test("retains unresolved reservations after the inference window and reconciles late usage once", async () => {
     const usage = await store({ dailyLimit: 20_000 });
     const subject = { id: "user_stale_reservation" };
     const createdAt = Date.UTC(2026, 7, 10, 12, 0, 0);
@@ -210,9 +300,9 @@ describe("MatterhornModelUsageStore", () => {
     }).allowed).toBe(true);
 
     expect(usage.status(subject, new Date(createdAt + 14 * 60 * 1000)).pendingRequests).toBe(1);
-    const released = usage.status(subject, new Date(createdAt + 15 * 60 * 1000));
-    expect(released.pendingRequests).toBe(0);
-    expect(released.daily.chargedTokens).toBe(0);
+    const retained = usage.status(subject, new Date(createdAt + 15 * 60 * 1000));
+    expect(retained.pendingRequests).toBe(1);
+    expect(retained.daily.chargedTokens).toBe(20_000);
     expect(usage.reserve({
       subject,
       workspaceId: "ws_stale",
@@ -220,7 +310,58 @@ describe("MatterhornModelUsageStore", () => {
       providerId: "cudos",
       modelId: "asi1-mini",
       now: new Date(createdAt + 15 * 60 * 1000),
-    }).allowed).toBe(true);
+    }).allowed).toBe(false);
+    const input = { subject, workspaceId: "ws_stale", sessionId: "ses_stale", messages: [{ info: {
+      id: "msg_late", parentID: "msg_request", sessionID: "ses_stale", role: "assistant",
+      providerID: "cudos", modelID: "asi1-mini", finish: "stop",
+      time: { created: createdAt + 1, completed: createdAt + 20 * 60_000 }, tokens: { total: 2500 },
+    }, parts: [] }] };
+    expect(usage.reconcile(input)).toBe(1);
+    expect(usage.reconcile(input)).toBe(0);
+    const reconciled = usage.status(subject, new Date(createdAt + 21 * 60_000));
+    expect(reconciled.pendingRequests).toBe(0);
+    expect(reconciled.monthly.usedTokens).toBe(2500);
+    expect(reconciled.monthly.chargedTokens).toBe(2500);
+    usage.close();
+  });
+
+  test("pending holds survive restart and month rollover without leaking across subjects", async () => {
+    const root = await mkdtemp(join(tmpdir(), "matterhorn-model-usage-restart-"));
+    roots.push(root);
+    const path = join(root, "usage.db");
+    const config = resolveMatterhornModelUsageConfig({ MATTERHORN_MODEL_USAGE_ENFORCEMENT: "hard" });
+    const createdAt = Date.UTC(2026, 7, 31, 23, 59);
+    const scope = { subject: { id: "restart_owner" }, workspaceId: "ws_restart", sessionId: "ses_restart" };
+    const first = new MatterhornModelUsageStore({ path, config });
+    const reservation = first.reserve({ ...scope, providerId: "cudos", modelId: "asi1-mini", now: new Date(createdAt) });
+    first.close();
+    const restored = new MatterhornModelUsageStore({ path, config });
+    try {
+      const later = new Date(createdAt + 24 * 60 * 60_000);
+      const status = restored.status(scope.subject, later);
+      expect(status.daily.reservedTokens).toBe(config.reservationTokens);
+      expect(status.monthly.chargedTokens).toBe(config.reservationTokens);
+      expect(status.monthly.usedTokens).toBe(0);
+      expect(restored.pendingSessions(scope.subject)).toEqual([{ workspaceId: scope.workspaceId, sessionId: scope.sessionId }]);
+      expect(restored.status({ id: "other_owner" }, later).monthly.chargedTokens).toBe(0);
+      expect(restored.pendingSessions({ id: "other_owner" })).toEqual([]);
+      const late = { ...scope, messages: [{ info: {
+        id: "msg_restart_late", role: "assistant", sessionID: scope.sessionId, parentID: "msg_restart_user",
+        providerID: "cudos", modelID: "asi1-mini", finish: "stop",
+        time: { created: createdAt + 1, completed: later.getTime() }, tokens: { total: 2500 },
+      }, parts: [] }] };
+      expect(restored.reconcile({ ...late, subject: { id: "other_owner" } })).toBe(0);
+      expect(restored.reconcile(late)).toBe(1);
+      expect(restored.reconcile(late)).toBe(0);
+      // Final usage belongs to the request's original accounting period.
+      expect(restored.status(scope.subject, new Date(createdAt)).monthly.usedTokens).toBe(2500);
+      expect(restored.status(scope.subject, later).monthly.chargedTokens).toBe(0);
+      restored.cancel(reservation.reservationId);
+      restored.cancel(reservation.reservationId);
+      expect(restored.status(scope.subject, new Date(createdAt)).monthly.usedTokens).toBe(2500);
+      expect(restored.status(scope.subject, later).monthly.chargedTokens).toBe(0);
+      expect(restored.pendingSessions(scope.subject)).toEqual([]);
+    } finally { restored.close(); }
   });
 
   test("normalizes only completed assistant usage records", () => {

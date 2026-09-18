@@ -1,11 +1,44 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WorkflowRunEngine } from "./workflow-runs.js";
 import { redactWorkflowRunEventPayload } from "./workflow-run-redaction.js";
 
 describe("WorkflowRunEngine", () => {
+  test("sanitizes intent and failure logs before persistence and on reload", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "matterhorn-workflow-redaction-"));
+    try {
+      const engine = new WorkflowRunEngine({ persistenceRoot: dir });
+      const run = await engine.stageRun({
+        workspaceId: "ws_qa", sessionId: "sess_qa", deskId: "bittensor",
+        agentId: "matterhorn-bittensor", workflowId: "bittensor_operator_workflow",
+        visibleUserIntent: "Authorization: Bearer synthetic-qa-intent",
+      });
+      expect(run.visibleUserIntent).toBe("[REDACTED]");
+      expect(run.events[0]?.redacted).toBe(true);
+      await engine.startRun(run.workflowRunId);
+      await engine.recordToolCall(run.workflowRunId, { note: "Public market lookup" });
+      expect(run.events.at(-1)?.redacted).toBe(false);
+      await engine.failRun(run.workflowRunId, "Authorization: Bearer synthetic-qa-failure");
+      expect(run.events.at(-1)?.redacted).toBe(true);
+      const path = join(dir, ".matterhorn-work", "task-logs", "ws_qa", `${run.workflowRunId}.jsonl`);
+      const persisted = readFileSync(path, "utf8");
+      expect(persisted.includes("synthetic-qa-")).toBe(false);
+      expect(persisted).toContain("Public market lookup");
+
+      // Simulate a legacy file without printing its synthetic credential-shaped data.
+      writeFileSync(path, persisted.replaceAll("[REDACTED]", "Bearer synthetic-qa-legacy"));
+      const reloaded = new WorkflowRunEngine({ persistenceRoot: dir });
+      await reloaded.loadFromDisk("ws_qa");
+      expect(reloaded.getRun(run.workflowRunId)?.visibleUserIntent).toBe("[REDACTED]");
+      expect(JSON.stringify(reloaded.getRun(run.workflowRunId)).includes("synthetic-qa-")).toBe(false);
+      expect(reloaded.listEvents(run.workflowRunId).at(-1)?.redacted).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("stages a run with the required contract fields", async () => {
     const engine = new WorkflowRunEngine();
     const run = await engine.stageRun({
@@ -136,6 +169,40 @@ describe("WorkflowRunEngine", () => {
 });
 
 describe("redactWorkflowRunEventPayload", () => {
+  test("rejects excessive nesting, oversized node counts and cycles with a bounded error", () => {
+    let deep: unknown = "public context";
+    for (let index = 0; index < 200; index += 1) deep = { nested: deep };
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    for (const payload of [deep, Array.from({ length: 5000 }, () => "public"), cyclic]) {
+      expect(() => redactWorkflowRunEventPayload(payload)).toThrow("workflow_run_event_rejected");
+    }
+  });
+
+  test("redacts credential-shaped text in ordinary fields and arrays", () => {
+    const result = redactWorkflowRunEventPayload({
+      error: "Upstream rejected Authorization: Bearer synthetic-qa-credential",
+      messages: ["password=synthetic-qa-password", `sk-${"q".repeat(24)}`],
+      safe: "Market data unavailable",
+      transactionHash: `0x${"a".repeat(64)}`,
+    });
+    expect(result.redacted).toBe(true);
+    expect(result.value).toEqual({
+      error: "[REDACTED]",
+      messages: ["[REDACTED]", "[REDACTED]"],
+      safe: "Market data unavailable",
+      transactionHash: `0x${"a".repeat(64)}`,
+    });
+  });
+
+  test("redacts authorization and access-token fields", () => {
+    expect(redactWorkflowRunEventPayload({
+      authorization: "synthetic-qa-credential",
+      accessToken: "synthetic-qa-credential",
+      cookie: "synthetic-qa-cookie",
+    }).value).toEqual({ authorization: "[REDACTED]", accessToken: "[REDACTED]", cookie: "[REDACTED]" });
+  });
+
   test("redacts secret-shaped fields", () => {
     const result = redactWorkflowRunEventPayload({
       tool: "swap",

@@ -51,7 +51,14 @@ user failure.
 - Keep model usage enforcement `hard`. Every request reserves allowance before
   provider dispatch; completed assistant usage reconciles from the server-side
   engine record. An unreconciled reservation stays charged so a provider or
-  callback failure cannot create an unlimited inference path.
+  callback failure cannot create an unlimited inference path. Pending holds do
+  not expire after 15 minutes: they survive restart and count against the
+  current daily/monthly allowance until reconciled or explicitly cancelled.
+  Authoritative completed usage replaces the hold once and belongs to the
+  request's creation period. These are allowance reservations, not monetary
+  charges. Missing usage is not proof of rejection; investigate stuck holds
+  rather than releasing them on a timer. Existing cancelled historical records
+  are not retroactively repaired by this behavior change.
 - Production persists HTTP and account-attempt budgets in
   `<MATTERHORN_WORK_DATA_DIR>/auth/rate-limits.db`. This keeps throttles intact
   across restarts and makes increments atomic across processes sharing the

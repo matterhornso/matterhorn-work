@@ -130,9 +130,9 @@ export function SettingsShell(props: SettingsShellProps) {
         />
         <SidebarInset className="min-h-0 overflow-hidden bg-background mac:bg-background/80 mac:[&_header]:transition-[padding-left] mac:[&_header]:duration-200 mac:[&_header]:ease-linear mac:peer-data-[state=collapsed]:[&_header]:pl-16 [&_header]:pl-16 md:[&_header]:pl-6">
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            <header className="flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between px-4 pt-[env(safe-area-inset-top)] md:hidden mac:titlebar-drag">
+            <header className="flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between px-4 pt-[env(safe-area-inset-top)] lg:hidden mac:titlebar-drag">
               <div className="flex min-w-0 items-center gap-2">
-                <SidebarTrigger className="size-11 mac:titlebar-no-drag md:hidden" />
+                <SidebarTrigger className="size-11 mac:titlebar-no-drag lg:hidden" />
                 {props.headerLeadingSlot}
                 <h1 className="truncate text-xs font-medium text-dls-secondary">{title}</h1>
                 {props.developerMode && props.headerStatus ? (
@@ -146,7 +146,7 @@ export function SettingsShell(props: SettingsShellProps) {
                   </span>
                 ) : null}
               </div>
-              <div className="flex items-center text-gray-10 mac:titlebar-no-drag md:hidden">
+              <div className="flex items-center text-gray-10 mac:titlebar-no-drag lg:hidden">
                 <Button
                   variant="ghost"
                   type="button"

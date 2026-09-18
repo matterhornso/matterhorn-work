@@ -628,7 +628,7 @@ export function SettingsPage(props: SettingsPageProps) {
       {showHeading || showToolbar ? (
         <SettingsPanel>
           {showHeading ? (
-            <SettingsPanelHeading className="hidden md:flex">
+            <SettingsPanelHeading className="hidden lg:flex">
               <SettingsPanelTitle>{getSettingsTabLabel(props.activeTab)}</SettingsPanelTitle>
               <SettingsPanelDescription>{getSettingsTabDescription(props.activeTab)}</SettingsPanelDescription>
             </SettingsPanelHeading>

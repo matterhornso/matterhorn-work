@@ -228,6 +228,7 @@ export function useNotesStore(
         setNotes((current) => upsertNote(current, response.note));
         setError(null);
         dispatchNotesUpdated(id);
+        dispatchMemorySuggestionsChanged(id);
         return response.note;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

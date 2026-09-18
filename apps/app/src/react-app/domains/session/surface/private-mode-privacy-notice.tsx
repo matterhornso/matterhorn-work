@@ -4,6 +4,7 @@ import { ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 
 export type PrivateModePrivacyNoticeProps = {
+  modelUnavailable?: boolean;
   providerPrivacyPolicy?: MatterhornProviderPrivacyPolicy | null;
   privateModeAvailable?: boolean;
   privateModeEnabled?: boolean;
@@ -18,7 +19,9 @@ export function PrivateModePrivacyNotice(props: PrivateModePrivacyNoticeProps) {
     Boolean(props.onPrivateModeChange) && !props.privateModeAvailable;
 
   let message: ReactNode;
-  if (props.privateModeEnabled) {
+  if (props.modelUnavailable) {
+    message = <>No model connected · Connect a model to chat.</>;
+  } else if (props.privateModeEnabled) {
     message = (
       <>
         Private is on · Matterhorn does not train on your chats, and Venice
