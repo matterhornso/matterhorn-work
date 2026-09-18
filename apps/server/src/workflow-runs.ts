@@ -16,7 +16,7 @@ import {
   normalizeSessionSlug,
   canTransitionTo,
 } from "./workflow-run-types.js";
-import { sanitizeWorkflowRunEventPayload } from "./workflow-run-redaction.js";
+import { redactWorkflowRunEventPayload, redactWorkflowRunText } from "./workflow-run-redaction.js";
 import { ensureDir, exists } from "./utils.js";
 
 export type WorkflowRunEngineOptions = {
@@ -136,7 +136,7 @@ export class WorkflowRunEngine {
       workflowId: input.workflowId,
       actionId: input.actionId,
       stageId: input.stageId,
-      visibleUserIntent: input.visibleUserIntent,
+      visibleUserIntent: redactWorkflowRunText(input.visibleUserIntent),
       hiddenAgentInstructions: input.hiddenAgentInstructions,
       workflowManifestRef: input.workflowManifestRef,
       status: "staged",
@@ -156,7 +156,7 @@ export class WorkflowRunEngine {
     await this.writeRunHeader(run);
     await this.addEvent(runId, {
       type: "workflow.staged",
-      payload: { visibleUserIntent: run.visibleUserIntent },
+      payload: { visibleUserIntent: input.visibleUserIntent },
     });
 
     return run;
@@ -282,9 +282,9 @@ export class WorkflowRunEngine {
     };
 
     if (partial.payload !== undefined) {
-      const sanitized = sanitizeWorkflowRunEventPayload(partial.payload);
-      event.payload = sanitized;
-      event.redacted = sanitized !== partial.payload;
+      const sanitized = redactWorkflowRunEventPayload(partial.payload);
+      event.payload = sanitized.value;
+      event.redacted = sanitized.redacted;
     }
 
     run.events.push(event);
@@ -370,7 +370,7 @@ export class WorkflowRunEngine {
         const deskId = typeof header.deskId === "string" ? header.deskId : "";
         const agentId = typeof header.agentId === "string" ? header.agentId : "";
         const workflowId = typeof header.workflowId === "string" ? header.workflowId : "";
-        const visibleUserIntent = typeof header.visibleUserIntent === "string" ? header.visibleUserIntent : "";
+        const visibleUserIntent = typeof header.visibleUserIntent === "string" ? redactWorkflowRunText(header.visibleUserIntent) : "";
         const outputBasePath = typeof header.outputBasePath === "string" ? header.outputBasePath : "";
         const createdAt = Number(header.createdAt);
         if (
@@ -393,6 +393,9 @@ export class WorkflowRunEngine {
             || !Number.isFinite(Number(candidate.timestamp))
           ) continue;
 
+          const sanitized = candidate.payload !== undefined
+            ? redactWorkflowRunEventPayload(candidate.payload)
+            : undefined;
           const event: MatterhornWorkflowRunEvent = {
             eventId: candidate.eventId,
             workflowRunId,
@@ -400,10 +403,8 @@ export class WorkflowRunEngine {
             timestamp: Number(candidate.timestamp),
             ...(typeof candidate.stageId === "string" ? { stageId: candidate.stageId } : {}),
             ...(typeof candidate.actionId === "string" ? { actionId: candidate.actionId } : {}),
-            ...(candidate.payload !== undefined
-              ? { payload: sanitizeWorkflowRunEventPayload(candidate.payload) }
-              : {}),
-            ...(candidate.redacted === true ? { redacted: true } : {}),
+            ...(sanitized ? { payload: sanitized.value } : {}),
+            ...(candidate.redacted === true || sanitized?.redacted ? { redacted: true } : {}),
           };
           events.push(event);
           updatedAt = Math.max(updatedAt, event.timestamp);

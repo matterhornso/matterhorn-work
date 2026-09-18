@@ -174,7 +174,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
   }, []);
 
   const closeEditor = useCallback(async () => {
-    await saveDraft();
+    if (!(await saveDraft())) return;
     setSelectedNoteId(null);
   }, [saveDraft]);
 

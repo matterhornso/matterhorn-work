@@ -36,6 +36,21 @@ function renderNotice(
 }
 
 describe("Private mode privacy notice rendered behavior", () => {
+  test("does not name a processor or promise private processing without a connected model", () => {
+    for (const privateModeEnabled of [false, true]) {
+      const html = renderNotice({
+        modelUnavailable: true,
+        providerPrivacyPolicy: allowedPolicy,
+        privateModeEnabled,
+      });
+
+      expect(html).toContain("No model connected");
+      expect(html).not.toContain("processes this chat");
+      expect(html).not.toContain("Private is on");
+      expect(html).toContain(">Privacy details</button>");
+    }
+  });
+
   test("gives an unconfigured user a plain-language setup path", () => {
     const html = renderNotice();
 

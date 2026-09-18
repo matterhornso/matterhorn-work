@@ -124,6 +124,43 @@ describe("workflow run routes", () => {
     expect(run?.hiddenAgentInstructions).toBeUndefined();
   });
 
+  test("workflow HTTP responses redact free-text credentials in intents and failures", async () => {
+    const { base } = await boot();
+    const staged = await jsonFetch(base, "/api/workflows/runs/stage", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: "ws_longevity", sessionId: "sess_redaction", deskId: "hyperliquid",
+        visibleUserIntent: "Bearer synthetic-qa-intent",
+      }),
+    });
+    expect(staged.response.status).toBe(201);
+    expect(staged.payload).toHaveProperty("run.visibleUserIntent", "[REDACTED]");
+    const runId = staged.payload && typeof staged.payload === "object"
+      && "run" in staged.payload && staged.payload.run && typeof staged.payload.run === "object"
+      && "workflowRunId" in staged.payload.run ? staged.payload.run.workflowRunId : null;
+    if (typeof runId !== "string") throw new Error("Missing staged workflow run ID");
+    await jsonFetch(base, `/api/workflows/runs/${runId}/start`, { method: "POST" });
+    const failed = await jsonFetch(base, `/api/workflows/runs/${runId}/fail`, {
+      method: "POST", body: JSON.stringify({ error: "Authorization: Bearer synthetic-qa-failure" }),
+    });
+    expect(failed.response.status).toBe(200);
+    const events = await jsonFetch(base, `/api/workflows/runs/${runId}/events`);
+    expect(events.response.status).toBe(200);
+    expect(JSON.stringify(events.payload).includes("synthetic-qa-")).toBe(false);
+    expect(JSON.stringify(failed.payload).includes("synthetic-qa-")).toBe(false);
+    expect(JSON.stringify(events.payload)).toContain("[REDACTED]");
+    const before = JSON.stringify(events.payload);
+    let nested: unknown = "public";
+    for (let index = 0; index < 200; index += 1) nested = { nested };
+    const rejected = await jsonFetch(base, `/api/workflows/runs/${runId}/tool-call`, {
+      method: "POST", body: JSON.stringify({ payload: nested }),
+    });
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.payload).toHaveProperty("code", "workflow_run_event_rejected");
+    const after = await jsonFetch(base, `/api/workflows/runs/${runId}/events`);
+    expect(JSON.stringify(after.payload)).toBe(before);
+  });
+
   test("POST /api/workflows/runs/stage creates a dedicated Hyperliquid run", async () => {
     const { base } = await boot();
     const { response, payload } = await jsonFetch(base, "/api/workflows/runs/stage", {

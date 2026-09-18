@@ -3356,7 +3356,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     }}
                   />
                 </div>
-              ) : privateAiActive ? null : shellConfig.starterCards ? (
+              ) : privateAiActive || activeWorkflowDeskAgent ? null : shellConfig.starterCards ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-5 sm:px-6">
                   <div className="w-full max-w-[880px]">
                     <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -3484,6 +3484,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
       <div ref={composerShellRef} className="shrink-0 bg-dls-surface px-0 pb-3 pt-3">
         <PrivateModePrivacyNotice
+          modelUnavailable={props.modelUnavailable}
           providerPrivacyPolicy={props.providerPrivacyPolicy}
           privateModeAvailable={props.privateModeAvailable}
           privateModeEnabled={props.privateModeEnabled}

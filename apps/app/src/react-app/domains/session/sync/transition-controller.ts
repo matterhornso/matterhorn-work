@@ -25,6 +25,17 @@ export function deriveSessionRenderModel(input: {
     };
   }
 
+  if (input.isError && input.hasSnapshot && input.renderedSessionId === input.intendedSessionId) {
+    // A refresh failure is not a failed navigation when this chat is already rendered.
+    // Keep its composer usable; a different or unloaded chat must remain blocked.
+    return {
+      intendedSessionId: input.intendedSessionId,
+      renderedSessionId: input.renderedSessionId,
+      transitionState: "idle",
+      renderSource: "error",
+    };
+  }
+
   if (input.isError) {
     return {
       intendedSessionId: input.intendedSessionId,
