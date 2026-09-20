@@ -1,4 +1,5 @@
 import { getPortfolio } from "./tools/portfolio-tracker.js";
+import { resolveConfinedWorkspacePath } from "./workspace-path-boundary.js";
 import { hostBackupFresh } from "./host-backup-readiness.js";
 import { getCowQuote } from "./tools/cow-swap.js";
 import {
@@ -9002,11 +9003,11 @@ function resolveBrowserProvider(): Capabilities["toolProviders"]["browser"] {
 }
 
 function resolveInboxDir(workspaceRoot: string): string {
-  return join(workspaceRoot, ".opencode", "openwork", "inbox");
+  return resolveSafeChildPath(workspaceRoot, ".opencode/openwork/inbox");
 }
 
 function resolveOutboxDir(workspaceRoot: string): string {
-  return join(workspaceRoot, ".opencode", "openwork", "outbox");
+  return resolveSafeChildPath(workspaceRoot, ".opencode/openwork/outbox");
 }
 
 export function normalizeWorkspaceRelativePath(input: string, options: { allowSubdirs: boolean }): string {
@@ -9075,9 +9076,19 @@ export function isSupportedWorkspaceTextFilePath(relativePath: string): boolean 
   );
 }
 
-export function resolveSafeChildPath(root: string, child: string): string {
-  const rootResolved = realpathSync(resolve(root));
-  const candidate = resolve(rootResolved, child);
+export function resolveSafeChildPath(root: string, child: string, workspaceRoot = root): string {
+  let rootResolved: string;
+  let candidate: string;
+  try {
+    rootResolved = resolveConfinedWorkspacePath(workspaceRoot, root);
+    const requested = resolve(rootResolved, child);
+    if (requested !== rootResolved && !requested.startsWith(rootResolved + sep)) {
+      throw new Error("Path traversal is not allowed");
+    }
+    candidate = resolveConfinedWorkspacePath(workspaceRoot, requested);
+  } catch {
+    throw new ApiError(400, "invalid_path", "Path traversal through a symbolic link is not allowed");
+  }
   if (candidate === rootResolved) {
     throw new ApiError(400, "invalid_path", "Path must point to a file");
   }
@@ -9085,16 +9096,6 @@ export function resolveSafeChildPath(root: string, child: string): string {
     throw new ApiError(400, "invalid_path", "Path traversal is not allowed");
   }
 
-  let existingAncestor = candidate;
-  while (!existsSync(existingAncestor)) {
-    const parent = dirname(existingAncestor);
-    if (parent === existingAncestor) break;
-    existingAncestor = parent;
-  }
-  const resolvedAncestor = realpathSync(existingAncestor);
-  if (resolvedAncestor !== rootResolved && !resolvedAncestor.startsWith(rootResolved + sep)) {
-    throw new ApiError(400, "invalid_path", "Path traversal through a symbolic link is not allowed");
-  }
   return candidate;
 }
 
@@ -15522,6 +15523,32 @@ function createRoutes(
       "Agent message",
     );
     const rawParts = parseSessionPromptParts(body);
+    // Client IDs deduplicate requests, but never become runtime message IDs.
+    // Scope them to the authenticated subject and workspace; persist only hashes.
+    const requestId = typeof body.messageID === "string" ? body.messageID : randomUUID();
+    if (!/^[A-Za-z0-9_-]{8,160}$/.test(requestId)) {
+      throw new ApiError(400, "invalid_payload", "Invalid message request ID");
+    }
+    const subjectId = modelUsageSubject(clientAccessFromRequestContext(ctx, workspace)).id;
+    const requestHash = sha256Bytes(JSON.stringify(body));
+    const unknownDispatch = () => new ApiError(409, "message_outcome_unknown",
+      "The previous send may still be running. Check chat history, then retry to check its status. No second run will be started.");
+    const existing = modelUsageStore.messageDispatch(subjectId, workspace.id, sessionId, requestId);
+    const unresolved = existing ?? modelUsageStore.messageDispatch(subjectId, workspace.id, sessionId);
+    if (existing && existing.requestHash !== requestHash) {
+      throw new ApiError(409, "message_request_conflict", "This message request ID was already used for different content.");
+    }
+    if (unresolved) {
+      let accepted = unresolved.accepted;
+      if (!accepted && unresolved.response) {
+        const history = await readWorkspaceSessionMessages(config, workspace, sessionId, {}).catch(() => []);
+        accepted = history.some((message) => message.info.id === unresolved.messageId
+          || ("parentID" in message.info && message.info.parentID === unresolved.messageId));
+        if (accepted) modelUsageStore.updateMessageDispatch(subjectId, workspace.id, sessionId, unresolved.requestId, unresolved.response, true);
+      }
+      if (!accepted || !unresolved.response) throw unknownDispatch();
+      if (existing) return jsonResponse(unresolved.response, 202);
+    }
     const headerExecutionMode = requestExecutionMode(ctx.request);
     const executionMode = body.executionMode == null
       ? headerExecutionMode
@@ -15664,135 +15691,159 @@ function createRoutes(
       summary: `Submit prompt to session ${sessionId}`,
       paths: [workspace.path],
     });
-    const usage = await reserveModelUsage({
-      config,
-      workspace,
-      store: modelUsageStore,
-      access: clientAccessFromRequestContext(ctx, workspace),
-      sessionId,
-      providerId: modelResolution.model.providerID,
-      modelId: modelResolution.model.modelID,
-    });
-
-    try {
-      // A follow-up is a replacement run. Abort any in-flight response before
-      // consuming consent or starting the newly authorized guarded run; abort
-      // is idempotent when the session is already idle.
-      await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
-    } catch (error) {
-      modelUsageStore.cancel(usage.reservation.reservationId);
-      throw error;
-    }
-
-    let guardedAcceptance: GuardedPromptAcceptance;
-    try {
-      const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
-        config,
-        workspace,
-        sessionId,
-        guardedRuntime,
-      });
-      guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
-        {
-          ...guardedInput,
-          parts: [...currentHistoryPrivacyParts, ...requestPrivacyParts],
-        },
-        guardedAuthorization,
-        providerSystem,
-      );
-    } catch (error) {
-      modelUsageStore.cancel(usage.reservation.reservationId);
-      throw guardedRuntimeApiError(error);
-    }
     const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
-    const promptBody = {
-      sessionID: sessionId,
-      ...(directory ? { directory } : {}),
-      messageID: userMessageId,
-      ...(modelResolution.model ? { model: modelResolution.model } : {}),
-      ...(agent ? { agent } : {}),
-      ...(effectiveVariant ? { variant: effectiveVariant } : {}),
-      ...(typeof body.noReply === "boolean" ? { noReply: body.noReply } : {}),
-      system: resolved.system,
-      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
-      parts: resolved.upstreamParts,
-    };
-    try {
-      guardedRuntime.bindUserMessage({
-        runId: guardedAcceptance.runId,
-        sessionId,
-        messageId: userMessageId,
-      });
-      await ensureMatterhornSessionPermissionProfile({
-        config,
-        workspace,
-        sessionId,
-        agentId: agent,
-        expectedAgentId: agentContext.agentId,
-        expectedAgentPromptHash: agentContext.promptHash,
-        ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
-      });
-      if (reasoningEffort) {
-        const { sessionID: _sessionID, directory: _directory, ...upstreamBody } = promptBody;
-        await postWorkspaceOpencodePromptWithReasoning({
-          config,
-          workspace,
-          sessionId,
-          body: upstreamBody,
-        });
-      } else {
-        unwrapOpencodeResult(
-          await sessionApi.promptAsync(promptBody),
-          `/session/${encodeURIComponent(sessionId)}/prompt_async`,
-        );
-      }
-    } catch (error) {
-      modelUsageStore.cancel(usage.reservation.reservationId);
-      await guardedRuntime.failRun(guardedAcceptance.runId);
-      throw error;
+    if (!modelUsageStore.claimMessageDispatch({ subjectId, workspaceId: workspace.id, sessionId, requestId, requestHash, messageId: userMessageId })) {
+      throw unknownDispatch();
     }
-
-    await recordAudit(workspace.path, {
-      id: shortId(),
-      workspaceId: workspace.id,
-      actor: ctx.actor ?? { type: "remote" },
-      action: "session.prompt",
-      target: sessionId,
-      summary: "Submitted prompt to chat session",
-      timestamp: Date.now(),
-      metadata: auditMetadata,
-    });
-
-    if (usage.reservation.reservationId) {
-      scheduleModelUsageReconciliation({
+    let dispatchStarted = false;
+    const dispatchNewMessage = async () => {
+      const usage = await reserveModelUsage({
         config,
         workspace,
         store: modelUsageStore,
-        subject: usage.subject,
+        access: clientAccessFromRequestContext(ctx, workspace),
         sessionId,
+        providerId: modelResolution.model.providerID,
+        modelId: modelResolution.model.modelID,
       });
-    }
 
-    return jsonResponse({
-      ok: true,
-      accepted: true,
-      sessionId,
-      runId: guardedAcceptance.runId,
-      messageId: userMessageId,
-      privacy: {
-        requestHash: guardedAcceptance.preflight.requestHash,
-        decision: guardedAcceptance.preflight.decision,
-        consentUsed: guardedAcceptance.consentUsed,
-      },
-      ...(coworker ? {
-        coworker: {
-          id: coworker.profile.id,
-          name: coworker.profile.name,
-          revision: coworker.profile.revision,
-          policyVersion: coworker.profile.policyVersion,
+      try {
+        // A follow-up is a replacement run. Abort any in-flight response before
+        // consuming consent or starting the newly authorized guarded run; abort
+        // is idempotent when the session is already idle.
+        await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
+      } catch (error) {
+        modelUsageStore.cancel(usage.reservation.reservationId);
+        throw error;
+      }
+
+      let guardedAcceptance: GuardedPromptAcceptance;
+      try {
+        const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
+          config,
+          workspace,
+          sessionId,
+          guardedRuntime,
+        });
+        guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
+          {
+            ...guardedInput,
+            parts: [...currentHistoryPrivacyParts, ...requestPrivacyParts],
+          },
+          guardedAuthorization,
+          providerSystem,
+        );
+      } catch (error) {
+        modelUsageStore.cancel(usage.reservation.reservationId);
+        throw guardedRuntimeApiError(error);
+      }
+      modelUsageStore.bindUserMessage(usage.reservation.reservationId, userMessageId);
+      const acceptedResponse = {
+        ok: true, accepted: true, sessionId, runId: guardedAcceptance.runId, messageId: userMessageId,
+        privacy: {
+          requestHash: guardedAcceptance.preflight.requestHash,
+          decision: guardedAcceptance.preflight.decision,
+          consentUsed: guardedAcceptance.consentUsed,
         },
-      } : {}),
-    }, 202);
+        ...(coworker ? { coworker: { id: coworker.profile.id, name: coworker.profile.name,
+          revision: coworker.profile.revision, policyVersion: coworker.profile.policyVersion } } : {}),
+      };
+      modelUsageStore.updateMessageDispatch(subjectId, workspace.id, sessionId, requestId, acceptedResponse, false);
+      const promptBody = {
+        sessionID: sessionId,
+        ...(directory ? { directory } : {}),
+        messageID: userMessageId,
+        ...(modelResolution.model ? { model: modelResolution.model } : {}),
+        ...(agent ? { agent } : {}),
+        ...(effectiveVariant ? { variant: effectiveVariant } : {}),
+        ...(typeof body.noReply === "boolean" ? { noReply: body.noReply } : {}),
+        system: resolved.system,
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+        // OpenCode may retry transport internally. Stable part IDs prevent it
+        // appending duplicate text/file parts to the same user message.
+        parts: resolved.upstreamParts.map((part) => isRecord(part) ? { ...part, id: `prt_${randomUUID().replaceAll("-", "")}` } : part),
+      };
+      try {
+        guardedRuntime.bindUserMessage({
+          runId: guardedAcceptance.runId,
+          sessionId,
+          messageId: userMessageId,
+        });
+        await ensureMatterhornSessionPermissionProfile({
+          config,
+          workspace,
+          sessionId,
+          agentId: agent,
+          expectedAgentId: agentContext.agentId,
+          expectedAgentPromptHash: agentContext.promptHash,
+          ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
+        });
+        dispatchStarted = true;
+        if (reasoningEffort) {
+          const { sessionID: _sessionID, directory: _directory, ...upstreamBody } = promptBody;
+          await postWorkspaceOpencodePromptWithReasoning({
+            config,
+            workspace,
+            sessionId,
+            body: upstreamBody,
+          });
+        } else {
+          unwrapOpencodeResult(
+            await sessionApi.promptAsync(promptBody),
+            `/session/${encodeURIComponent(sessionId)}/prompt_async`,
+          );
+        }
+      } catch (error) {
+        const rejectedStatus = error instanceof ApiError && isRecord(error.details) ? error.details.status : undefined;
+        if (dispatchStarted && typeof rejectedStatus === "number" && rejectedStatus >= 400 && rejectedStatus < 500) {
+          // An explicit runtime rejection (not a transport/proxy 5xx) is final.
+          dispatchStarted = false;
+        }
+        if (!dispatchStarted) {
+          modelUsageStore.cancel(usage.reservation.reservationId);
+          await guardedRuntime.failRun(guardedAcceptance.runId);
+          throw error;
+        }
+        // A transport error is not proof of rejection. Keep authority and the
+        // usage hold while inspecting the exact parent, never a time heuristic.
+        scheduleModelUsageReconciliation({ config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
+        const history = await readWorkspaceSessionMessages(config, workspace, sessionId, {}).catch(() => []);
+        const accepted = history.some((message) => message.info.id === userMessageId
+          || ("parentID" in message.info && message.info.parentID === userMessageId));
+        if (!accepted) throw unknownDispatch();
+      }
+
+      modelUsageStore.updateMessageDispatch(subjectId, workspace.id, sessionId, requestId, acceptedResponse, true);
+
+      await recordAudit(workspace.path, {
+        id: shortId(),
+        workspaceId: workspace.id,
+        actor: ctx.actor ?? { type: "remote" },
+        action: "session.prompt",
+        target: sessionId,
+        summary: "Submitted prompt to chat session",
+        timestamp: Date.now(),
+        metadata: auditMetadata,
+      });
+
+      if (usage.reservation.reservationId) {
+        scheduleModelUsageReconciliation({
+          config,
+          workspace,
+          store: modelUsageStore,
+          subject: usage.subject,
+          sessionId,
+        });
+      }
+
+      return jsonResponse(acceptedResponse, 202);
+    };
+    try {
+      return await dispatchNewMessage();
+    } catch (error) {
+      if (!dispatchStarted) modelUsageStore.discardUnsentMessageDispatch(subjectId, workspace.id, sessionId, requestId);
+      throw error;
+    }
   });
 
   addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/execution-mode", "client", async (ctx) => {
@@ -16030,7 +16081,7 @@ function createRoutes(
     }
     const inboxRoot = resolveInboxDir(workspace.path);
     const relativePath = decodeInboxId(ctx.params.inboxId);
-    const absPath = resolveSafeChildPath(inboxRoot, relativePath);
+    const absPath = resolveSafeChildPath(inboxRoot, relativePath, workspace.path);
     if (!(await exists(absPath))) {
       throw new ApiError(404, "inbox_item_not_found", "Inbox item not found");
     }
@@ -16059,7 +16110,12 @@ function createRoutes(
     if (!contentType.toLowerCase().includes("multipart/form-data")) {
       throw new ApiError(400, "invalid_payload", "Expected multipart/form-data");
     }
-    const form = await ctx.request.formData();
+    let form: FormData;
+    try {
+      form = await ctx.request.formData();
+    } catch {
+      throw new ApiError(400, "invalid_payload", "Invalid multipart upload");
+    }
     const file = form.get("file");
     if (!(file instanceof File)) {
       throw new ApiError(400, "file_required", "Form field 'file' is required");
@@ -16071,7 +16127,7 @@ function createRoutes(
 
     const relativePath = normalizeWorkspaceRelativePath(requestedPath, { allowSubdirs: true });
     const inboxRoot = resolveInboxDir(workspace.path);
-    const dest = resolveSafeChildPath(inboxRoot, relativePath);
+    const dest = resolveSafeChildPath(inboxRoot, relativePath, workspace.path);
     const maxBytes = resolveInboxMaxBytes();
     if (file.size > maxBytes) {
       throw new ApiError(413, "file_too_large", "File exceeds upload limit", { maxBytes, size: file.size });
@@ -16085,6 +16141,9 @@ function createRoutes(
     });
 
     await ensureDir(dirname(dest));
+    if (resolveSafeChildPath(inboxRoot, relativePath, workspace.path) !== dest) {
+      throw new ApiError(409, "file_changed", "Upload destination changed");
+    }
     const bytes = Buffer.from(await file.arrayBuffer());
     const tmp = `${dest}.tmp-${shortId()}`;
     await writeFile(tmp, bytes);
@@ -16120,7 +16179,7 @@ function createRoutes(
     }
     const outboxRoot = resolveOutboxDir(workspace.path);
     const relativePath = decodeArtifactId(ctx.params.artifactId);
-    const absPath = resolveSafeChildPath(outboxRoot, relativePath);
+    const absPath = resolveSafeChildPath(outboxRoot, relativePath, workspace.path);
     if (!(await exists(absPath))) {
       throw new ApiError(404, "artifact_not_found", "Artifact not found");
     }

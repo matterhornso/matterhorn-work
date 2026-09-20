@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
+import { createServer as createHttpServer } from "node:http";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
@@ -2619,6 +2620,17 @@ describe("workspace session read APIs", () => {
     expect(mock.requests.filter(
       (request) => request.pathname === "/session/ses_1/prompt_async",
     )).toHaveLength(1);
+    configureVenicePrivateModelRegistry([{ id: "private-tools", name: "Private Tools" }], { ttlMs: 60_000 });
+    const forgotten = await fetch(`${base}/workspace/ws_1/memory/entities/mem_agent_gateway_private`, {
+      method: "DELETE", headers: auth(openwork.token),
+    });
+    expect(forgotten.status).toBe(200);
+    const staleSelection = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+    expect(staleSelection.status).toBeGreaterThanOrEqual(400);
+    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/prompt_async")).toHaveLength(1);
   });
 
   test("rescans legacy Memory before preflight or provider dispatch", async () => {
@@ -2766,6 +2778,103 @@ describe("workspace session read APIs", () => {
       },
     });
     expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/prompt_async")).toHaveLength(1);
+  });
+
+  test.each([["default", true], ["reasoning", true], ["default", false]] as const)("retains accounting after a lost acknowledgement (%s, history immediately visible: %s)", async (dispatchPath, initiallyVisible) => {
+    const workspaceRoot = await createWorkspaceRoot();
+    let acceptedAt = 0;
+    let parentId = "";
+    let historyVisible = initiallyVisible;
+    const mock = startMockOpencode({ sessionMessages: () => acceptedAt && historyVisible ? [{
+      info: {
+        id: "msg_lost_ack_assistant", parentID: parentId, sessionID: "ses_1", role: "assistant",
+        providerID: "openai", modelID: "gpt-4.1", finish: "stop",
+        time: { created: acceptedAt, completed: acceptedAt + 1 }, tokens: { total: 2500 },
+      }, parts: [],
+    }] : [] });
+    // Real transport failure after the stub accepted the request. The runtime
+    // remains reachable for authoritative history/reconciliation afterwards.
+    const proxy = createHttpServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        void (async () => {
+          const body = Buffer.concat(chunks);
+          const target = await fetch(`http://127.0.0.1:${mock.server.port}${request.url}`, {
+            method: request.method,
+            headers: { "content-type": "application/json" },
+            ...(body.length ? { body } : {}),
+          });
+          const bytes = await target.arrayBuffer();
+          if (request.method === "POST" && request.url?.startsWith("/session/ses_1/prompt_async")) {
+            const prompt = JSON.parse(body.toString("utf8"));
+            if (typeof prompt.messageID !== "string") throw new Error("Missing fixture message id");
+            parentId = prompt.messageID;
+            acceptedAt = Date.now();
+            request.socket.destroy();
+            response.destroy();
+            return;
+          }
+          response.writeHead(target.status, { "content-type": target.headers.get("content-type") ?? "application/json" });
+          response.end(Buffer.from(bytes));
+        })().catch(() => response.destroy());
+      });
+    });
+    stops.push(() => new Promise<void>((resolve) => {
+      proxy.close(() => resolve());
+      proxy.closeAllConnections();
+    }));
+    await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+    const address = proxy.address();
+    if (!address || typeof address === "string") throw new Error("Missing QA proxy port");
+    const openwork = await startOpenworkServer({
+      workspaceRoot, opencodeBaseUrl: `http://127.0.0.1:${address.port}`,
+      readOnly: false, hardModelUsageLimit: 32_000,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const dispatched = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ messageID: "req_lost_ack_test", message: "Synthetic transport QA", model: { providerID: "openai", modelID: "gpt-4.1" }, ...(dispatchPath === "reasoning" ? { reasoningEffort: "high" } : {}) }),
+    });
+    const upstreamPrompts = mock.requests.filter((entry) => entry.pathname === "/session/ses_1/prompt_async");
+    expect(upstreamPrompts.length).toBeGreaterThan(0);
+    expect(acceptedAt).toBeGreaterThan(0);
+    expect(dispatched.status).toBe(initiallyVisible ? 202 : 409);
+    if (!initiallyVisible) {
+      const holdResponse = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(openwork.token) });
+      const hold = (await holdResponse.json()).status;
+      expect(hold.pendingRequests).toBe(1);
+      expect(hold.monthly.chargedTokens).toBe(32_000);
+      const another = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+        method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({ messageID: "req_different_while_unknown", message: "Do not run twice" }),
+      });
+      expect(another.status).toBe(409);
+      expect((await another.json()).code).toBe("message_outcome_unknown");
+      expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/prompt_async")).toHaveLength(upstreamPrompts.length);
+      historyVisible = true;
+    }
+    const repeated = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ messageID: "req_lost_ack_test", message: "Synthetic transport QA", model: { providerID: "openai", modelID: "gpt-4.1" }, ...(dispatchPath === "reasoning" ? { reasoningEffort: "high" } : {}) }),
+    });
+    expect(repeated.status).toBe(202);
+    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/prompt_async")).toHaveLength(upstreamPrompts.length);
+    const conflict = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ messageID: "req_lost_ack_test", message: "Different content" }),
+    });
+    expect(conflict.status).toBe(409);
+    const history = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, { headers: auth(openwork.token) });
+    expect(history.status).toBe(200);
+    expect((await history.json()).items[0].info.tokens.total).toBe(2500);
+    const statusResponse = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(openwork.token) });
+    expect(statusResponse.status).toBe(200);
+    const { status } = await statusResponse.json();
+    console.log(JSON.stringify({ probe: "accepted-prompt-lost-ack", dispatchPath, responseStatus: dispatched.status, runtimeAccepted: true, upstreamPosts: upstreamPrompts.length, authoritativeTokens: 2500, chargedTokens: status.monthly.chargedTokens, usedTokens: status.monthly.usedTokens, pendingRequests: status.pendingRequests, liveProvider: false }));
+    expect(status.monthly.chargedTokens).toBe(2500);
+    expect(status.monthly.usedTokens).toBe(2500);
+    expect(status.pendingRequests).toBe(0);
   });
 
   test("submits stable route prompts with the server default model when no selection exists", async () => {

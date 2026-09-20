@@ -48,6 +48,15 @@ const record: MatterhornMemoryRecord = {
 };
 
 describe("session Memory context persistence", () => {
+  test("forget removes a record from every selected chat without removing other records", () => {
+    const store = useMatterhornSessionMemoryContextStore.getState();
+    store.setContext("ses_forget_a", { id: "ctx_a", records: [record], updatedAt: record.updatedAt });
+    store.setContext("ses_forget_b", { id: "ctx_b", records: [record, { ...record, id: "mem_keep" }], updatedAt: record.updatedAt });
+    store.forgetRecord(record.id);
+    expect(useMatterhornSessionMemoryContextStore.getState().contexts.ses_forget_a).toBeUndefined();
+    expect(useMatterhornSessionMemoryContextStore.getState().contexts.ses_forget_b?.records.map((item) => item.id)).toEqual(["mem_keep"]);
+    store.clearContext("ses_forget_b");
+  });
   test("restores only valid, explicitly usable records from tab-scoped storage", () => {
     const storage = new TestStorage();
     storage.setItem("matterhorn.session-memory-context.v1", JSON.stringify({
