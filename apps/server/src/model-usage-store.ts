@@ -77,6 +77,7 @@ type UsageTotalRow = {
 
 type PendingOperationRow = {
   id: string;
+  user_message_id: string | null;
   provider_id: string;
   model_id: string;
   weight_milli: number;
@@ -349,7 +350,22 @@ export class MatterhornModelUsageStore {
         ON model_usage_operations(subject_id, workspace_id, session_id, status, created_at);
       CREATE INDEX IF NOT EXISTS model_usage_global_created_idx
         ON model_usage_operations(created_at);
+      CREATE TABLE IF NOT EXISTS model_message_dispatches (
+        subject_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        request_hash TEXT NOT NULL,
+        user_message_id TEXT NOT NULL,
+        response_json TEXT,
+        accepted INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(subject_id, workspace_id, session_id, request_id)
+      );
     `);
+    const columns = statement(this.db, "PRAGMA table_info(model_usage_operations)").all();
+    if (!columns.some((row) => recordValue(row)?.name === "user_message_id")) {
+      this.db.exec("ALTER TABLE model_usage_operations ADD COLUMN user_message_id TEXT");
+    }
   }
 
   close(): void {
@@ -431,6 +447,48 @@ export class MatterhornModelUsageStore {
     `).run(Date.now(), reservationId);
   }
 
+  bindUserMessage(reservationId: string | null, messageId: string): void {
+    if (!reservationId) return;
+    statement(this.db, "UPDATE model_usage_operations SET user_message_id = ? WHERE id = ? AND status = 'pending' AND user_message_id IS NULL")
+      .run(messageId, reservationId);
+  }
+
+  messageDispatch(subjectId: string, workspaceId: string, sessionId: string, requestId?: string) {
+    const row = recordValue(statement(this.db, `SELECT * FROM model_message_dispatches
+      WHERE subject_id = ? AND workspace_id = ? AND session_id = ?
+      AND ${requestId ? "request_id = ?" : "accepted = 0"} LIMIT 1`)
+      .get(...[subjectId, workspaceId, sessionId, ...(requestId ? [requestId] : [])]));
+    if (!row) return null;
+    return {
+      requestId: String(row.request_id), requestHash: String(row.request_hash),
+      messageId: String(row.user_message_id), accepted: row.accepted === 1,
+      response: typeof row.response_json === "string" ? JSON.parse(row.response_json) : null,
+    };
+  }
+
+  claimMessageDispatch(input: { subjectId: string; workspaceId: string; sessionId: string; requestId: string; requestHash: string; messageId: string }): boolean {
+    return this.withImmediateTransaction(() => {
+      if (this.messageDispatch(input.subjectId, input.workspaceId, input.sessionId)
+        || this.messageDispatch(input.subjectId, input.workspaceId, input.sessionId, input.requestId)) return false;
+      statement(this.db, `INSERT INTO model_message_dispatches
+        (subject_id, workspace_id, session_id, request_id, request_hash, user_message_id) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(input.subjectId, input.workspaceId, input.sessionId, input.requestId, input.requestHash, input.messageId);
+      return true;
+    });
+  }
+
+  updateMessageDispatch(subjectId: string, workspaceId: string, sessionId: string, requestId: string, response: unknown, accepted: boolean): void {
+    statement(this.db, `UPDATE model_message_dispatches SET response_json = ?, accepted = ?
+      WHERE subject_id = ? AND workspace_id = ? AND session_id = ? AND request_id = ?`)
+      .run(JSON.stringify(response), accepted ? 1 : 0, subjectId, workspaceId, sessionId, requestId);
+  }
+
+  discardUnsentMessageDispatch(subjectId: string, workspaceId: string, sessionId: string, requestId: string): void {
+    statement(this.db, `DELETE FROM model_message_dispatches
+      WHERE subject_id = ? AND workspace_id = ? AND session_id = ? AND request_id = ? AND accepted = 0`)
+      .run(subjectId, workspaceId, sessionId, requestId);
+  }
+
   reconcile(input: {
     subject: ModelUsageSubject;
     workspaceId: string;
@@ -447,7 +505,7 @@ export class MatterhornModelUsageStore {
     messages: unknown;
   }): number {
     const pending = statement(this.db, `
-      SELECT id, provider_id, model_id, weight_milli, created_at
+      SELECT id, provider_id, model_id, weight_milli, created_at, user_message_id
       FROM model_usage_operations
       WHERE subject_id = ? AND workspace_id = ? AND session_id = ? AND status = 'pending'
       ORDER BY created_at ASC
@@ -470,7 +528,7 @@ export class MatterhornModelUsageStore {
 
     for (const operation of pending) {
       const messageIndex = messages.findIndex((message) => (
-        message.createdAt >= operation.created_at - 5_000 &&
+        (operation.user_message_id ? message.parentId === operation.user_message_id : message.createdAt >= operation.created_at - 5_000) &&
         (operation.provider_id === "unknown" || message.providerId === operation.provider_id) &&
         (operation.model_id === "unknown" || message.modelId === operation.model_id)
       ));

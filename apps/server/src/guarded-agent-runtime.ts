@@ -1686,7 +1686,7 @@ export class MatterhornGuardedAgentRuntime {
     );
     const bound = this.stateStore.transaction(() => {
       const candidate = assertGuardedMessageBindingState(
-        userBindingState.takeRecord<unknown>(input.userMessageId, nowMs),
+        userBindingState.getRecord<unknown>(input.userMessageId, nowMs),
         "user_message_binding",
         input.userMessageId,
         nowMs,
@@ -1704,6 +1704,19 @@ export class MatterhornGuardedAgentRuntime {
       }
       if (scope.workspaceId !== candidate.workspaceId) {
         throw new Error("guarded_message_binding_state_invalid");
+      }
+      // One accepted user turn can produce several assistant/tool steps.
+      // Keep its authority scoped to the same active run and canonical user
+      // binding; repeated observations of an already-bound step are idempotent.
+      const existing = assertGuardedMessageBindingState(
+        assistantBindingState.getRecord<unknown>(input.assistantMessageId, nowMs),
+        "assistant_message_binding", input.assistantMessageId, nowMs,
+      );
+      if (existing) {
+        if (existing.runId !== candidate.runId || existing.workspaceId !== candidate.workspaceId || existing.sessionId !== candidate.sessionId) {
+          throw new GuardedRuntimeError(409, "agent_run_message_already_bound", "The assistant message is already bound to another Matterhorn run.");
+        }
+        return candidate;
       }
       const stored = assistantBindingState.putIfAbsent({
         key: input.assistantMessageId,

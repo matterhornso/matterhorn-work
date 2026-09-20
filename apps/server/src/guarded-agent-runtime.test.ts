@@ -1030,12 +1030,18 @@ describe("guarded agent runtime transport", () => {
       userMessageId: "msg_binding_user",
       assistantMessageId: "msg_binding_assistant_retry",
     })).toEqual({ runId: accepted.runId });
-    expect(() => second.bindRuntimeMessage({
+    expect(second.bindRuntimeMessage({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       sessionId: "ses_binding_rollback",
       userMessageId: "msg_binding_user",
       assistantMessageId: "msg_binding_assistant_replay",
-    })).toThrow("assistant message is not bound");
+    })).toEqual({ runId: accepted.runId });
+    expect(second.bindRuntimeMessage({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      sessionId: "ses_binding_rollback",
+      userMessageId: "msg_binding_user",
+      assistantMessageId: "msg_binding_assistant_replay",
+    })).toEqual({ runId: accepted.runId });
     const other = await second.acceptPrompt({
       workspaceId: "ws_binding_other",
       sessionId: "ses_binding_other",

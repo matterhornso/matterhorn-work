@@ -1763,6 +1763,113 @@ describe("public account authentication", () => {
     expect(restored.payload.items[0].path).toBe(workspaceA.path);
   });
 
+  test("isolates note mutations and colliding memory ids across account cookies and restart", async () => {
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+    process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "false";
+    process.env.MATTERHORN_SIGNUPS_ENABLED = "true";
+    const app = await boot();
+    const a = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "notes-isolation-a@example.test", password: PASSWORD },
+    });
+    const b = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "notes-isolation-b@example.test", password: PASSWORD },
+    });
+    expect(a.response.status).toBe(200);
+    expect(b.response.status).toBe(200);
+    const cookieA = sessionCookie(a.response);
+    const cookieB = sessionCookie(b.response);
+    const listA = await jsonRequest(app.base, "/workspaces", { cookie: cookieA });
+    const listB = await jsonRequest(app.base, "/workspaces", { cookie: cookieB });
+    const workspaceA = listA.payload.items[0].id;
+    const workspaceB = listB.payload.items[0].id;
+    expect(workspaceA).not.toBe(workspaceB);
+
+    const note = await jsonRequest(app.base, `/workspace/${workspaceA}/notes`, {
+      cookie: cookieA,
+      body: { title: "Account A synthetic note", body: "ACCOUNT_A_NOTE_SENTINEL", tags: ["qa-isolation"] },
+    });
+    expect(note.response.status).toBe(201);
+    const noteId = note.payload.note.id;
+    const now = new Date().toISOString();
+    const memoryId = "mem_same_id_two_accounts";
+    for (const [cookie, workspaceId, marker] of [
+      [cookieA, workspaceA, "ACCOUNT_A_MEMORY_SENTINEL"],
+      [cookieB, workspaceB, "ACCOUNT_B_MEMORY_SENTINEL"],
+    ]) {
+      const captured = await jsonRequest(app.base, `/workspace/${workspaceId}/memory/capture`, {
+        cookie,
+        body: { record: {
+          id: memoryId, kind: "user_preference", scope: "workspace",
+          title: "Synthetic isolation memory", summary: marker, body: { preference: marker },
+          tags: ["qa-isolation"], links: [], sensitivity: "private",
+          provenance: { source: "user_confirmed", capturedAt: now, capturedBy: "user", confidence: 1, reasonRemembered: "Explicit synthetic QA fixture" },
+          createdAt: now, updatedAt: now, canUseInChat: true, canExport: false, canDelete: true,
+        } },
+      });
+      expect(captured.response.status).toBe(201);
+    }
+
+    // A valid B cookie must not gain A's scope through a path, query, or body.
+    const deniedRequests: Array<{ path: string; method?: "GET" | "POST" | "PATCH" | "DELETE"; body?: Record<string, unknown> }> = [
+      { path: `/workspace/${workspaceA}/notes` },
+      { path: `/workspace/${workspaceA}/notes/${noteId}` },
+      { path: `/workspace/${workspaceA}/notes/${noteId}`, method: "PATCH", body: { body: "UNAUTHORIZED_MUTATION" } },
+      { path: `/workspace/${workspaceA}/notes/${noteId}`, method: "DELETE" },
+      { path: `/workspace/${workspaceA}/notes/${noteId}/memory-suggestion`, method: "POST", body: {} },
+      { path: `/workspace/${workspaceA}/memory/entities/${memoryId}` },
+      { path: `/workspace/${workspaceA}/memory/entities/${memoryId}`, method: "DELETE" },
+      { path: `/workspace/${workspaceA}/memory/export`, method: "POST", body: {} },
+      { path: `/workspace/${workspaceA}/sessions` },
+      { path: `/workspace/${workspaceA}/sessions/ses_guessed/messages` },
+      { path: `/workspace/${workspaceA}/sessions/ses_guessed/snapshot` },
+      { path: `/workspace/${workspaceA}/model-usage/status` },
+    ];
+    for (const request of deniedRequests) {
+      const denied = await jsonRequest(app.base, request.path, { ...request, cookie: cookieB });
+      expect(denied.response.status).toBe(404);
+      expect(JSON.stringify(denied.payload)).not.toContain("ACCOUNT_A_");
+    }
+    const guessedNote = await jsonRequest(app.base, `/workspace/${workspaceB}/notes/${noteId}?workspaceId=${workspaceA}`, { cookie: cookieB });
+    expect(guessedNote.response.status).toBe(404);
+    const guessedNoteUpdate = await jsonRequest(app.base, `/workspace/${workspaceB}/notes/${noteId}`, {
+      cookie: cookieB, method: "PATCH", body: { workspaceId: workspaceA, body: "UNAUTHORIZED_MUTATION" },
+    });
+    expect(guessedNoteUpdate.response.status).toBe(404);
+
+    const verifyOwnData = async (base: string) => {
+      const intactNote = await jsonRequest(base, `/workspace/${workspaceA}/notes/${noteId}`, { cookie: cookieA });
+      expect(intactNote.response.status).toBe(200);
+      expect(intactNote.payload.note.body).toBe("ACCOUNT_A_NOTE_SENTINEL");
+      const bNotes = await jsonRequest(base, `/workspace/${workspaceB}/notes`, { cookie: cookieB });
+      expect(bNotes.response.status).toBe(200);
+      expect(bNotes.payload.count).toBe(0);
+      for (const [cookie, workspaceId, marker, otherMarker] of [
+        [cookieA, workspaceA, "ACCOUNT_A_MEMORY_SENTINEL", "ACCOUNT_B_MEMORY_SENTINEL"],
+        [cookieB, workspaceB, "ACCOUNT_B_MEMORY_SENTINEL", "ACCOUNT_A_MEMORY_SENTINEL"],
+      ]) {
+        for (const path of [`/workspace/${workspaceId}/memory/entities/${memoryId}`, `/api/memory/entities/${memoryId}`]) {
+          const own = await jsonRequest(base, path, { cookie });
+          expect(own.response.status).toBe(200);
+          expect(own.payload.record.summary).toBe(marker);
+          expect(JSON.stringify(own.payload)).not.toContain(otherMarker);
+        }
+      }
+    };
+    await verifyOwnData(app.base);
+    await app.stop();
+    const restarted = await boot(app.root);
+    await verifyOwnData(restarted.base);
+    const crossAfterRestart = await jsonRequest(restarted.base, `/workspace/${workspaceA}/notes/${noteId}`, { cookie: cookieB });
+    expect(crossAfterRestart.response.status).toBe(404);
+
+    const signedOut = await jsonRequest(restarted.base, "/api/auth/sign-out", { cookie: cookieA, method: "POST" });
+    expect(signedOut.response.status).toBe(200);
+    const revoked = await jsonRequest(restarted.base, `/workspace/${workspaceA}/notes/${noteId}`, { cookie: cookieA });
+    expect(revoked.response.status).toBe(401);
+    const bStillSignedIn = await jsonRequest(restarted.base, `/workspace/${workspaceB}/notes`, { cookie: cookieB });
+    expect(bStillSignedIn.response.status).toBe(200);
+  });
+
   test("stores password derivatives and token hashes instead of raw secrets", async () => {
     const app = await boot();
     const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {

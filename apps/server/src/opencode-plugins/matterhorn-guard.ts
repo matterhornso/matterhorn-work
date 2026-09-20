@@ -1,4 +1,5 @@
 import { MATTERHORN_CRYPTO_COMPACTION_CONTEXT } from "../opencode-compaction-policy.js";
+import { resolveConfinedWorkspacePath } from "../workspace-path-boundary.js";
 
 type PluginContext = {
   directory?: string;
@@ -47,7 +48,7 @@ type AssistantUsage = {
 };
 
 const CAPABILITY_CALL_ARGUMENT = "_matterhornCallId";
-const pendingUsage = new Map<string, AssistantUsage>();
+const pendingUsage = new Map<string, Map<string, AssistantUsage>>();
 const runIdByAssistantMessage = new Map<string, string>();
 const runIdByCall = new Map<string, string>();
 const pendingCompactionSessions = new Set<string>();
@@ -157,7 +158,9 @@ function assistantUsage(value: unknown): {
     sessionId,
     assistantMessageId,
     userMessageId,
-    completed: Boolean(time && typeof time === "object" && typeof Reflect.get(time, "completed") === "number"),
+    completed: Boolean(time && typeof time === "object" && typeof Reflect.get(time, "completed") === "number"
+      && typeof Reflect.get(info, "finish") === "string"
+      && !["tool-calls", "unknown"].includes(String(Reflect.get(info, "finish")))),
     failed: Boolean(Reflect.get(info, "error")),
     usage: {
       inputTokens: numeric(Reflect.get(tokens, "input")),
@@ -171,13 +174,24 @@ function assistantUsage(value: unknown): {
 }
 
 async function completeRun(runId: string, status: "success" | "cancelled" | "error"): Promise<void> {
-  const usage = pendingUsage.get(runId);
+  const steps = pendingUsage.get(runId);
+  const usage = steps ? [...steps.values()].reduce((total, step) => ({
+    inputTokens: total.inputTokens + step.inputTokens,
+    outputTokens: total.outputTokens + step.outputTokens,
+    reasoningTokens: total.reasoningTokens + step.reasoningTokens,
+    cacheReadTokens: total.cacheReadTokens + step.cacheReadTokens,
+    cacheWriteTokens: total.cacheWriteTokens + step.cacheWriteTokens,
+    estimatedCostUsd: total.estimatedCostUsd + step.estimatedCostUsd,
+  }), { inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, estimatedCostUsd: 0 }) : undefined;
   pendingUsage.delete(runId);
   try {
     await postInternal("/internal/agent-runs/complete", { runId, status, ...(usage ? { usage } : {}) });
   } catch (error) {
     if (guardedMode() === "enforce") throw error;
   } finally {
+    for (const [messageId, boundRunId] of runIdByAssistantMessage) {
+      if (boundRunId === runId) runIdByAssistantMessage.delete(messageId);
+    }
     for (const [callId, boundRunId] of runIdByCall) {
       if (boundRunId === runId) runIdByCall.delete(callId);
     }
@@ -279,6 +293,15 @@ export const MatterhornGuard = async (context: PluginContext) => ({
     output.system.splice(0, output.system.length, system[0]);
   },
   "tool.execute.before": async (input: ToolHookInput, output: ToolHookOutput) => {
+    if (authoritativeMessageGatewayRequired() && ["read", "write", "edit", "glob", "grep", "list"].includes(input.tool)) {
+      if (!context.directory) throw new Error("Matterhorn could not establish the authorized workspace.");
+      const field = ["read", "write", "edit"].includes(input.tool) ? "filePath" : "path";
+      const requested = output.args[field];
+      if (requested !== undefined && typeof requested !== "string") throw new Error("Invalid workspace tool path");
+      // Pass the canonical path to the tool as well as checking it. A link's
+      // lexical in-workspace spelling must not bypass external_directory.
+      output.args[field] = resolveConfinedWorkspacePath(context.directory, requested ?? ".");
+    }
     if (guardedMode() === "off" || !input.tool.startsWith("matterhorn-work_")) return;
     try {
       const runId = runIdByCall.get(input.callID)
@@ -309,7 +332,9 @@ export const MatterhornGuard = async (context: PluginContext) => ({
       if (!observed) return;
       const runId = await bindAssistantMessage(observed);
       if (!runId) return;
-      pendingUsage.set(runId, observed.usage);
+      const steps = pendingUsage.get(runId) ?? new Map<string, AssistantUsage>();
+      steps.set(observed.assistantMessageId, observed.usage);
+      pendingUsage.set(runId, steps);
       if (observed.completed || observed.failed) {
         await completeRun(runId, observed.failed ? "error" : "success");
         runIdByAssistantMessage.delete(observed.assistantMessageId);

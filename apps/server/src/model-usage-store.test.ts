@@ -34,6 +34,45 @@ async function store(config: Partial<MatterhornModelUsageConfig> = {}) {
 }
 
 describe("MatterhornModelUsageStore", () => {
+  test("binds usage to its exact user message, not a nearby request with the same model", async () => {
+    const usage = await store();
+    const scope = { subject: { id: "user_bound" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
+    const first = usage.reserve(scope);
+    const second = usage.reserve(scope);
+    usage.bindUserMessage(first.reservationId, "msg_first");
+    usage.bindUserMessage(second.reservationId, "msg_second");
+    const message = { info: { id: "assistant_second", parentID: "msg_second", sessionID: "ses", role: "assistant", providerID: "fixture", modelID: "fixture", finish: "stop", time: { created: Date.now(), completed: Date.now() + 1 }, tokens: { total: 123 } }, parts: [] };
+    expect(usage.reconcile({ ...scope, messages: [message] })).toBe(1);
+    usage.cancel(second.reservationId);
+    expect(usage.status(scope.subject).pendingRequests).toBe(1);
+    expect(usage.reconcile({ ...scope, messages: [message] })).toBe(0);
+    expect(usage.status(scope.subject).monthly.usedTokens).toBe(123);
+    usage.cancel(first.reservationId);
+    expect(usage.status(scope.subject).pendingRequests).toBe(0);
+    usage.close();
+  });
+
+  test("dispatch identity survives restart and isolates subjects, sessions and workspaces", async () => {
+    const root = await mkdtemp(join(tmpdir(), "matterhorn-dispatch-"));
+    roots.push(root);
+    const path = join(root, "usage.db");
+    const first = new MatterhornModelUsageStore({ path });
+    const scope = { subjectId: "alice", workspaceId: "ws", sessionId: "ses", requestId: "req_one", requestHash: "hash", messageId: "msg_server" };
+    expect(first.claimMessageDispatch(scope)).toBe(true);
+    expect(first.claimMessageDispatch(scope)).toBe(false);
+    expect(first.claimMessageDispatch({ ...scope, requestId: "req_other" })).toBe(false);
+    first.updateMessageDispatch("alice", "ws", "ses", "req_one", { accepted: true }, false);
+    first.close();
+    const restarted = new MatterhornModelUsageStore({ path });
+    expect(restarted.messageDispatch("alice", "ws", "ses", "req_one")?.messageId).toBe("msg_server");
+    expect(restarted.messageDispatch("bob", "ws", "ses", "req_one")).toBeNull();
+    expect(restarted.messageDispatch("alice", "other", "ses", "req_one")).toBeNull();
+    expect(restarted.messageDispatch("alice", "ws", "other", "req_one")).toBeNull();
+    restarted.updateMessageDispatch("alice", "ws", "ses", "req_one", { accepted: true }, true);
+    expect(restarted.claimMessageDispatch({ ...scope, requestId: "req_other" })).toBe(true);
+    expect(restarted.claimMessageDispatch(scope)).toBe(false);
+    restarted.close();
+  });
   test("enforces a global monthly cap across distinct subjects", async () => {
     const usage = await store({ globalDailyLimit: null, globalMonthlyLimit: 20_000 });
     const request = { workspaceId: "ws_global", sessionId: "ses_global", providerId: "cudos", modelId: "asi1-mini" };

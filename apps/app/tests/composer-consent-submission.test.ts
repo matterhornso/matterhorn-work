@@ -52,7 +52,11 @@ describe("composer consent request boundary", () => {
     await client.sendAgentMessage("ws_fixture", "ses_fixture", request);
     await client.sendAgentMessage("ws_fixture", "ses_fixture", { ...request, privacyConsentToken: "fixture-consent-token" });
     await client.sendAgentMessage("ws_fixture", "ses_fixture", request);
-    expect(bodies).toEqual([request, { ...request, privacyConsentToken: "fixture-consent-token" }, request]);
+    expect(bodies).toEqual([
+      { ...request, messageID: expect.any(String) },
+      { ...request, privacyConsentToken: "fixture-consent-token", messageID: expect.any(String) },
+      { ...request, messageID: expect.any(String) },
+    ]);
   });
 
   test("surface wires ordinary/retry and confirmed consent to distinct entry points", () => {

@@ -40,6 +40,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ConfirmModal } from "../../design-system/modals/confirm-modal";
 import { ErrorState } from "../shell/error-state";
+import { forgetMatterhornSessionMemory } from "../session/surface/memory-context-store";
 import {
   applyMatterhornMemoryDeskPolicyDefaults,
   getMatterhornMemoryPolicyDecision,
@@ -566,6 +567,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
       } else {
         await props.client.forgetMemory(record.id, "User forgot this memory from the Matterhorn Memory panel.");
       }
+      forgetMatterhornSessionMemory(record.id);
       setRecords((current) => current.filter((item) => item.id !== record.id));
       setSelectedRecords((current) => current.filter((item) => item.id !== record.id));
       setRecordPendingForget(null);

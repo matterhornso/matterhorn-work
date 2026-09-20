@@ -2963,7 +2963,9 @@ export function SessionRoute() {
           agentId: selectedAgent ?? "matterhorn",
         });
         try {
-          if (publicBetaWeb) {
+          // Memory always uses authoritative records, including on desktop.
+          // Preserve local-only system overlays when no Memory is selected.
+          if (publicBetaWeb || draft.privacy?.memoryIds?.length) {
             await requestDiagnostics.observe("dispatch", () => client.sendAgentMessage(selectedWorkspaceId, selectedSessionId, {
               parts,
               model: selectedPromptModel

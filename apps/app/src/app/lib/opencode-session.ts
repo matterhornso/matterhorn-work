@@ -19,7 +19,9 @@ import { unwrap } from "./opencode";
  * Abort an active session. Silently succeeds if the session is already idle.
  */
 export async function abortSession(client: Client, sessionID: string): Promise<void> {
-  unwrap(await client.session.abort({ sessionID }));
+  if (unwrap(await client.session.abort({ sessionID })) !== true) {
+    throw new Error("The run has not stopped. Try Stop again.");
+  }
 }
 
 /**

@@ -65,6 +65,28 @@ afterAll(() => {
 });
 
 describe("matterhorn-guard OpenCode plugin", () => {
+  test("keeps a run active after a tool-call step until the final assistant response", async () => {
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    const eventForStep = (id: string, finish: string) => ({
+      event: {
+        type: "message.updated",
+        properties: { info: {
+          role: "assistant", id, parentID: "msg_user_tool_loop_regression", sessionID: "ses_tool_loop_regression",
+          finish, tokens: { input: 900, output: 100, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1000, completed: 2000 },
+        } },
+      },
+    });
+    await plugin.event(eventForStep("msg_assistant_tool_step_regression", "tool-calls"));
+    // OpenCode completes each model step before it executes tools. That is
+    // not completion of the user's whole request or its run authority.
+    expect(requests.filter(request => request.url.endsWith("/internal/agent-runs/complete"))).toHaveLength(0);
+    await plugin.event(eventForStep("msg_assistant_final_step_regression", "stop"));
+    const completions = requests.filter(request => request.url.endsWith("/internal/agent-runs/complete"));
+    expect(completions).toHaveLength(1);
+    expect(JSON.parse(String(completions[0]?.init?.body))).toMatchObject({ status: "success", usage: { inputTokens: 1800, outputTokens: 200 } });
+  });
+
   test("adds only the reserved call id after model argument generation", async () => {
     const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
     await plugin.event({

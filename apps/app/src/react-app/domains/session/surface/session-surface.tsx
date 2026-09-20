@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 
 import { createClient, unwrap } from "../../../../app/lib/opencode";
-import { abortSessionSafe, revertSession, unrevertSession } from "../../../../app/lib/opencode-session";
+import { abortSession, revertSession, unrevertSession } from "../../../../app/lib/opencode-session";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import {
@@ -141,7 +141,6 @@ import {
   type BittensorSessionContext,
 } from "./bittensor-context-store";
 import {
-  addMatterhornMemoryContextToResolvedText,
   describeMatterhornMemoryContext,
   getMatterhornSessionMemoryContext,
   readMatterhornMemoryContextFromEventDetail,
@@ -1077,6 +1076,14 @@ export function parseSessionError(thrown: unknown): SessionError {
     };
   }
   const diagnostic = `${raw}\n${parsed ? JSON.stringify(parsed) : ""}`;
+  if (/message_outcome_unknown/i.test(diagnostic)) {
+    return {
+      message: "Checking whether your message was received.",
+      detail: "The run may still be active. Check chat history, or retry to check its status without starting another run.",
+      kind: "generic",
+      retryable: true,
+    };
+  }
   if (/provider_privacy_unverified/i.test(diagnostic)) {
     return {
       message: "ASI:Cloud is not ready to receive prompts.",
@@ -1128,7 +1135,7 @@ export function parseSessionError(thrown: unknown): SessionError {
   if (/TimeoutError|timed out|timeout|response deadline|stalled stream|AbortSignal\.timeout/i.test(diagnostic)) {
     return {
       message: "The model took too long to respond.",
-      detail: "Matterhorn stopped the stalled request. Your prompt is preserved—retry once, or choose another model if it happens again.",
+      detail: "The connection timed out, but the run may still be active. Check chat history before retrying. Your prompt is preserved.",
       kind: "generic",
       retryable: true,
     };
@@ -2246,7 +2253,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
     });
     try {
       let resolvedText = addBittensorContextToResolvedText(text, bittensorContext);
-      resolvedText = addMatterhornMemoryContextToResolvedText(resolvedText, memoryContext);
       const nextDraft = buildDraft(text, attachments, { resolvedText, privacyConsentToken });
       if (resolvedText !== text) {
         recordInspectorEvent("session.context.resolved_text_attached", {
@@ -2329,7 +2335,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     suppressNextAbortFailureRef.current = true;
     setError(null);
     try {
-      await abortSessionSafe(opencodeClient, props.sessionId);
+      await abortSession(opencodeClient, props.sessionId);
       const operation = pendingModelOperation(props.sessionId);
       if (operation) recordModelOperationCancelled(operation);
       await snapshotQuery.refetch();
@@ -2386,9 +2392,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
     try {
       let resolvedText = addBittensorContextToResolvedText(prompt, bittensorContext);
-      resolvedText = addMatterhornMemoryContextToResolvedText(resolvedText, memoryContext);
       await runAssistantResponseRetry({
-        abort: () => abortSessionSafe(opencodeClient, props.sessionId),
+        abort: () => abortSession(opencodeClient, props.sessionId),
         revert: () => revertSession(opencodeClient, props.sessionId, retryTurn.promptMessageId),
         dispatch: () => props.onSendDraft(buildDraft(prompt, [], { resolvedText })),
         restore: () => unrevertSession(opencodeClient, props.sessionId),
@@ -2689,9 +2694,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
         typeof record.message === "string" ? record.message :
         "";
       if (!text.trim()) return;
-      const resolvedText = addMatterhornMemoryContextToResolvedText(text, incomingContext ?? memoryContext);
       void typeComposerText(text);
-      props.onDraftChange(buildDraft(text, attachments, { resolvedText }));
+      // Send selected IDs, never a browser-cached copy of a memory's contents.
+      // The gateway resolves current, authorized records immediately before use.
+      props.onDraftChange(buildDraft(text, attachments));
       setNotice({
         title: "Memory task ready",
         description: "Review it, then send it to the Memory Agent.",

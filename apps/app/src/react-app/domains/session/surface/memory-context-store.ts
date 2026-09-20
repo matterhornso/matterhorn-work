@@ -17,6 +17,7 @@ export type MatterhornSessionMemoryContextStore = {
   contexts: Record<string, MatterhornSessionMemoryContext | undefined>;
   setContext: (sessionId: string, context: MatterhornSessionMemoryContext) => void;
   clearContext: (sessionId: string) => void;
+  forgetRecord: (recordId: string) => void;
 };
 
 type MemoryContextStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -145,7 +146,37 @@ export const useMatterhornSessionMemoryContextStore = create<MatterhornSessionMe
     writeStoredMatterhornMemoryContexts(next);
     return { contexts: next };
   }),
+  forgetRecord: (recordId) => set((state) => {
+    const next = { ...state.contexts };
+    for (const [sessionId, context] of Object.entries(next)) {
+      if (!context) continue;
+      const records = context.records.filter((record) => record.id !== recordId);
+      if (records.length) next[sessionId] = { ...context, records };
+      else delete next[sessionId];
+    }
+    writeStoredMatterhornMemoryContexts(next);
+    return { contexts: next };
+  }),
 }));
+
+// Only the opaque ID crosses tabs. Missing an event cannot leak deleted memory:
+// sends use authoritative IDs, not serialized browser snapshots.
+export function forgetMatterhornSessionMemory(recordId: string) {
+  useMatterhornSessionMemoryContextStore.getState().forgetRecord(recordId);
+  if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") return;
+  const channel = new BroadcastChannel("matterhorn-memory-forgotten");
+  channel.postMessage(recordId);
+  channel.close();
+}
+
+if (typeof window !== "undefined" && typeof BroadcastChannel !== "undefined") {
+  const channel = new BroadcastChannel("matterhorn-memory-forgotten");
+  channel.onmessage = (event: MessageEvent<unknown>) => {
+    if (typeof event.data === "string") {
+      useMatterhornSessionMemoryContextStore.getState().forgetRecord(event.data);
+    }
+  };
+}
 
 export function readMatterhornMemoryContextFromEventDetail(detail: unknown): MatterhornSessionMemoryContext | null {
   if (!isRecord(detail)) return null;
