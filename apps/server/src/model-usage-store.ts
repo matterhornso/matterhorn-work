@@ -508,10 +508,22 @@ export class MatterhornModelUsageStore {
       SELECT id, provider_id, model_id, weight_milli, created_at, user_message_id
       FROM model_usage_operations
       WHERE subject_id = ? AND workspace_id = ? AND session_id = ? AND status = 'pending'
-      ORDER BY created_at ASC
+      ORDER BY (user_message_id IS NULL) ASC, created_at ASC
     `).all(input.subject.id, input.workspaceId, input.sessionId) as PendingOperationRow[];
     if (!pending.length) return 0;
 
+    // Explicit ownership survives settlement/cancellation. Legacy timestamp matching
+    // must never consume a result belonging to another reservation's user message.
+    const boundUserMessageIds = new Set(
+      statement(this.db, `
+        SELECT user_message_id FROM model_usage_operations
+        WHERE subject_id = ? AND workspace_id = ? AND session_id = ?
+          AND user_message_id IS NOT NULL
+      `).all(input.subject.id, input.workspaceId, input.sessionId).flatMap((row) => {
+        const id = recordValue(row)?.user_message_id;
+        return typeof id === "string" ? [id] : [];
+      }),
+    );
     const usedMessageIds = new Set(
       statement(this.db, `
         SELECT assistant_message_id
@@ -528,7 +540,10 @@ export class MatterhornModelUsageStore {
 
     for (const operation of pending) {
       const messageIndex = messages.findIndex((message) => (
-        (operation.user_message_id ? message.parentId === operation.user_message_id : message.createdAt >= operation.created_at - 5_000) &&
+        (operation.user_message_id
+          ? message.parentId === operation.user_message_id
+          : !(message.parentId && boundUserMessageIds.has(message.parentId)) &&
+            message.createdAt >= operation.created_at - 5_000) &&
         (operation.provider_id === "unknown" || message.providerId === operation.provider_id) &&
         (operation.model_id === "unknown" || message.modelId === operation.model_id)
       ));

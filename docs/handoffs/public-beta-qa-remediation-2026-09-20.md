@@ -9,7 +9,27 @@ Implements the approved four-part repair, followed by regression testing and a r
 3. **Stop, retry and accounting:** explicit Stop requires a true runtime acknowledgement. A failed Stop does not mark the run idle or cancelled. Stable message sends use persistent subject/workspace/session-scoped request identities and server-owned runtime message/part IDs. Unknown dispatch outcomes retain authority and quota, reconcile against the exact message, and prevent a second dispatch. Usage matches the exact parent message and settles once. Browser retries retain an opaque identity without storing prompt text in the retry ledger.
 4. **Memory and files:** successful forget removes selected records from all current-tab chat contexts and broadcasts the forgotten ID to other tabs. Composer sends no cached memory body; the gateway resolves current authorized records. A stale/deleted selection fails before inference. Desktop selections containing Memory also use this gateway; existing local-only overlays remain unchanged for other desktop requests. First-upload and file boundary cases are covered under item 1.
 
-## Verification
+## PR #1021 accounting review correction
+
+Final review of head `9993db44ae55291d96915748d860892bcc9c9854` found that an older unbound reservation could consume a newer explicitly bound request's completion. Two completed requests totaling 473 tokens left 123 used, 20,123 charged and one pending hold in the local reproduction.
+
+The follow-up fixes reconciliation to process explicit bindings first and exclude their parent messages from legacy matching. Ownership is scoped to subject/workspace/session and remains protected for pending, completed and cancelled reservations, including when the result's model does not match its owner. Existing timestamp fallback remains for genuinely unbound legacy results; this change does not invent identities for ambiguous legacy records or repair historical misassignments.
+
+Added 11 regressions covering both completion orders, restart, repeat reconciliation, completed/cancelled/mismatched-model ownership, batched weighted settlement and scope isolation. Five new assertions failed against the original code before the correction; all now pass. The original case ends at **473 used, 473 charged, zero pending** with 1× weighting.
+
+Local follow-up checks (isolated test environment, disposable data, no live inference):
+
+| Command | Result |
+|---|---|
+| `env -i PATH="$PATH" NODE_ENV=test bun --no-env-file test apps/server/src/model-usage-store.test.ts` | 27 passed, 0 failed |
+| `env -i PATH="$PATH" NODE_ENV=test bun --no-env-file test apps/server/src --timeout 30000` | 1,708 passed, 0 failed |
+| `pnpm --filter matterhorn-work-server typecheck` | Passed |
+| `env -i PATH="$PATH" NODE_ENV=test pnpm test:matterhorn-platform-safety` | All 10 stages passed |
+| `git diff --check` | Passed |
+
+The first sandboxed backend run failed because local HTTP listeners were blocked; the full passing run and safety gate used localhost access with no production credentials. No UI behavior changed, so no new screenshot/video was captured. No database migration, balance reset, production repair, push, merge or deployment was performed. Push this correction and require fresh GitHub CI before merging; the previous head's green checks do not cover it. If live accounts are found affected, back up the ledger and reconcile against authoritative request history separately—do not simply cancel unresolved holds.
+
+## Original implementation verification
 
 All following checks passed locally, using disposable data where applicable:
 

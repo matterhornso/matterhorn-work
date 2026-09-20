@@ -34,6 +34,142 @@ async function store(config: Partial<MatterhornModelUsageConfig> = {}) {
 }
 
 describe("MatterhornModelUsageStore", () => {
+  for (const restart of [false, true]) {
+    for (const boundFinishesFirst of [false, true]) {
+      test(`settles mixed legacy/bound requests exactly once (restart=${restart}, bound first=${boundFinishesFirst})`, async () => {
+        const root = await mkdtemp(join(tmpdir(), "matterhorn-mixed-usage-"));
+        roots.push(root);
+        const options = {
+          path: join(root, "usage.db"),
+          config: resolveMatterhornModelUsageConfig({
+            MATTERHORN_MODEL_USAGE_ENFORCEMENT: "hard",
+            MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS: "20000",
+          }),
+        };
+        let usage = new MatterhornModelUsageStore(options);
+        try {
+          const createdAt = Date.now();
+          const scope = { subject: { id: "mixed" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
+          expect(usage.reserve({ ...scope, now: new Date(createdAt - 1000) }).allowed).toBe(true);
+          const bound = usage.reserve({ ...scope, now: new Date(createdAt) });
+          expect(bound.allowed).toBe(true);
+          usage.bindUserMessage(bound.reservationId, "current_user");
+          const response = (parentID: string, total: number, offset: number) => ({
+            info: {
+              id: `assistant_${parentID}`, parentID, sessionID: scope.sessionId, role: "assistant",
+              providerID: scope.providerId, modelID: scope.modelId, finish: "stop",
+              time: { created: createdAt + offset, completed: createdAt + 10 }, tokens: { total },
+            }, parts: [],
+          });
+          const legacy = response("legacy_user", 350, -900);
+          const current = response("current_user", 123, 0);
+          const first = boundFinishesFirst ? current : legacy;
+          expect(usage.reconcile({ ...scope, messages: [first] })).toBe(1);
+          expect(usage.status(scope.subject).monthly.usedTokens).toBe(first.info.tokens.total);
+          expect(usage.status(scope.subject).pendingRequests).toBe(1);
+          if (restart) {
+            usage.close();
+            usage = new MatterhornModelUsageStore(options);
+          }
+          const completed = { ...scope, messages: [current, legacy] };
+          expect(usage.reconcile(completed)).toBe(1);
+          expect(usage.reconcile(completed)).toBe(0);
+          expect(usage.status(scope.subject)).toMatchObject({
+            pendingRequests: 0,
+            monthly: { usedTokens: 473, chargedTokens: 473 },
+          });
+        } finally {
+          usage.close();
+        }
+      });
+    }
+  }
+
+  for (const ownerState of ["completed", "cancelled", "model-mismatch"]) {
+    test(`legacy matching cannot take results owned by a ${ownerState} bound request`, async () => {
+      const usage = await store();
+      try {
+        const createdAt = Date.now();
+        const scope = { subject: { id: "protected" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
+        const bound = usage.reserve({
+          ...scope, modelId: ownerState === "model-mismatch" ? "other" : scope.modelId,
+          now: new Date(createdAt - 1000),
+        });
+        usage.bindUserMessage(bound.reservationId, "bound_user");
+        const response = {
+          info: {
+            id: "bound_assistant", parentID: "bound_user", sessionID: scope.sessionId, role: "assistant",
+            providerID: scope.providerId, modelID: scope.modelId, finish: "stop",
+            time: { created: createdAt, completed: createdAt + 1 }, tokens: { total: 123 },
+          }, parts: [],
+        };
+        if (ownerState === "completed") expect(usage.reconcile({ ...scope, messages: [response] })).toBe(1);
+        if (ownerState === "cancelled") usage.cancel(bound.reservationId);
+        expect(usage.reserve({ ...scope, now: new Date(createdAt) }).allowed).toBe(true);
+        // A different terminal message ID must not bypass ownership of the parent request.
+        const later = { ...response, info: { ...response.info, id: "later_bound_assistant" } };
+        expect(usage.reconcile({ ...scope, messages: [later] })).toBe(0);
+        expect(usage.reconcile({ ...scope, messages: [later] })).toBe(0);
+        expect(usage.status(scope.subject).pendingRequests).toBe(ownerState === "model-mismatch" ? 2 : 1);
+        expect(usage.status(scope.subject).monthly.usedTokens).toBe(ownerState === "completed" ? 123 : 0);
+      } finally {
+        usage.close();
+      }
+    });
+  }
+
+  test("settles a mixed completion batch with model weights without consuming either result twice", async () => {
+    const usage = await store({ modelWeights: { "fixture/fixture": 2 } });
+    try {
+      const createdAt = Date.now();
+      const scope = { subject: { id: "batch" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
+      usage.reserve({ ...scope, now: new Date(createdAt - 1000) });
+      const bound = usage.reserve({ ...scope, now: new Date(createdAt) });
+      usage.bindUserMessage(bound.reservationId, "current_user");
+      const messages = [123, 350].map((total, index) => ({
+        info: {
+          id: `assistant_${index}`, parentID: index === 0 ? "current_user" : "legacy_user",
+          sessionID: scope.sessionId, role: "assistant", providerID: scope.providerId, modelID: scope.modelId,
+          finish: "stop", time: { created: createdAt, completed: createdAt + 1 }, tokens: { total },
+        }, parts: [],
+      }));
+      expect(usage.reconcile({ ...scope, messages })).toBe(2);
+      expect(usage.reconcile({ ...scope, messages })).toBe(0);
+      expect(usage.status(scope.subject)).toMatchObject({
+        pendingRequests: 0, monthly: { usedTokens: 473, chargedTokens: 946 },
+      });
+    } finally {
+      usage.close();
+    }
+  });
+
+  for (const otherScope of [
+    { subject: { id: "other" }, workspaceId: "ws", sessionId: "ses" },
+    { subject: { id: "local" }, workspaceId: "other", sessionId: "ses" },
+    { subject: { id: "local" }, workspaceId: "ws", sessionId: "other" },
+  ]) {
+    test(`bounds ownership to subject/workspace/session: ${JSON.stringify(otherScope)}`, async () => {
+      const usage = await store();
+      try {
+        const scope = { subject: { id: "local" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
+        const elsewhere = usage.reserve({ ...scope, ...otherScope });
+        usage.bindUserMessage(elsewhere.reservationId, "reused_parent");
+        usage.reserve(scope);
+        const now = Date.now();
+        const message = { info: {
+          id: "local_assistant", parentID: "reused_parent", sessionID: scope.sessionId, role: "assistant",
+          providerID: scope.providerId, modelID: scope.modelId, finish: "stop",
+          time: { created: now, completed: now + 1 }, tokens: { total: 123 },
+        }, parts: [] };
+        expect(usage.reconcile({ ...scope, messages: [message] })).toBe(1);
+        expect(usage.pendingSessions(otherScope.subject)).toContainEqual({ workspaceId: otherScope.workspaceId, sessionId: otherScope.sessionId });
+        expect(usage.status(scope.subject).monthly.usedTokens).toBe(123);
+      } finally {
+        usage.close();
+      }
+    });
+  }
+
   test("binds usage to its exact user message, not a nearby request with the same model", async () => {
     const usage = await store();
     const scope = { subject: { id: "user_bound" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
