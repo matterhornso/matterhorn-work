@@ -144,6 +144,15 @@ describe("public trust routes", () => {
     expect(trustRouteSource).not.toMatch(/\bOpenWork\b|\bOpenCode\b/);
   });
 
+  test("leaves the standalone trust bootstrap through document navigation", () => {
+    const appLinks = [...trustRouteSource.matchAll(/<Link\b[^>]*\bto="\/session"[^>]*>/g)];
+    // Brand, Open app and Back to app must all re-enter the authenticated bootstrap.
+    expect(appLinks).toHaveLength(3);
+    for (const [link] of appLinks) {
+      expect(link).toMatch(/\breloadDocument\b/);
+    }
+  });
+
   test("keeps public trust navigation usable at the 320px launch floor", () => {
     expect(trustRouteSource).toContain("grid-cols-[minmax(0,1fr)]");
     expect(trustRouteSource).toContain('<aside className="min-w-0">');

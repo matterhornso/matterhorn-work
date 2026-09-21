@@ -1,0 +1,12 @@
+{"probe":"gateway-runtime-guard-desk","agentId":"matterhorn","preflight":"allow","status":202,"modelCalls":1,"finish":"stop","runtimeTokens":1000,"promptTextCopies":1}
+{"probe":"gateway-runtime-guard-desk","agentId":"matterhorn-bittensor","preflight":"allow","status":202,"modelCalls":1,"finish":"stop","runtimeTokens":1000,"promptTextCopies":1}
+{"probe":"gateway-runtime-guard-desk","agentId":"matterhorn-hyperliquid","preflight":"allow","status":202,"modelCalls":1,"finish":"stop","runtimeTokens":1000,"promptTextCopies":1}
+{"probe":"gateway-runtime-guard-desk","agentId":"matterhorn-polymarket","preflight":"allow","status":202,"modelCalls":1,"finish":"stop","runtimeTokens":1000,"promptTextCopies":1}
+{"probe":"gateway-runtime-guard-desk","agentId":"matterhorn-sui","preflight":"allow","status":202,"modelCalls":1,"finish":"stop","runtimeTokens":1000,"promptTextCopies":1}
+{"probe":"followup-after-transport-result","lostAck":false,"status":200,"decision":"allow","effectiveMode":"public_research","detectedLabels":["public"]}
+{"probe":"rejected-stop-via-production-client-helper","safeHelperResolved":false,"strictHelperRejected":true,"runtimeStatus":"busy","providerDisconnects":0,"pendingReservations":1,"failedStopReportedSuccess":false}
+{"probe":"gateway-stop-and-recover","acceptedStatus":202,"partialTextPersisted":false,"pendingBeforeStop":1,"stopStatus":200,"stopResult":true,"abortError":"MessageAbortedError","providerDisconnects":1,"pendingAfterStop":0,"usedTokensAfterStop":5000,"recoveryStatus":202,"recoveryFinish":"stop","modelCalls":2,"usedTokensAfterRecovery":6000,"pendingAfterRecovery":0,"cancellationPassed":true}
+{"probe":"gateway-secret-negative-control","status":422,"code":"agent_privacy_blocked","secretBlocked":true,"extraModelCalls":0}
+{"probe":"raw-runtime-without-gateway-run","status":500,"errorName":"UnknownError","errorMessage":"Unexpected server error. Check server logs for details.","guardResults":[{"path":"/internal/agent-runs/bind-message","status":409,"code":"agent_run_message_not_bound"},{"path":"/internal/agent-runs/provider-messages","status":409,"code":"agent_provider_messages_not_bound"}],"blockedBeforeInference":true,"extraModelCalls":0}
+{"scope":"real local Matterhorn gateway + pinned OpenCode + real guard plugin; synthetic inference, no external tools, NOT hosted or full desk acceptance","lostAck":false,"modelCalls":7,"promptPostAttempts":0,"completedBeforeDrop":0,"usedTokens":6000,"chargedTokens":6000,"pendingRequests":0}
+{"probe":"fixture-cleanup","forcedRuntimeStop":false,"generatedDataRemoved":true}

@@ -1,0 +1,11 @@
+{"probe":"gateway-runtime-guard-desk","agentId":"matterhorn","preflight":"allow","status":202,"modelCalls":1,"promptPostAttempts":3,"finish":"stop","runtimeTokens":1000,"promptTextCopies":1}
+{"probe":"gateway-runtime-guard-desk","agentId":"matterhorn-bittensor","preflight":"allow","status":202,"modelCalls":1,"promptPostAttempts":3,"finish":"stop","runtimeTokens":1000,"promptTextCopies":1}
+{"probe":"gateway-runtime-guard-desk","agentId":"matterhorn-hyperliquid","preflight":"allow","status":202,"modelCalls":1,"promptPostAttempts":3,"finish":"stop","runtimeTokens":1000,"promptTextCopies":1}
+{"probe":"gateway-runtime-guard-desk","agentId":"matterhorn-polymarket","preflight":"allow","status":202,"modelCalls":1,"promptPostAttempts":3,"finish":"stop","runtimeTokens":1000,"promptTextCopies":1}
+{"probe":"gateway-runtime-guard-desk","agentId":"matterhorn-sui","preflight":"allow","status":202,"modelCalls":1,"promptPostAttempts":3,"finish":"stop","runtimeTokens":1000,"promptTextCopies":1}
+{"probe":"followup-after-transport-result","lostAck":true,"status":200,"decision":"allow","effectiveMode":"public_research","detectedLabels":["public"]}
+{"probe":"fresh-send-after-ambiguous-failure","status":202,"extraModelCalls":0,"retryCausedAdditionalInference":false,"userMessagesBefore":1,"userMessagesAfter":1,"assistantMessagesBefore":1,"assistantMessagesAfter":1}
+{"probe":"gateway-secret-negative-control","status":422,"code":"agent_privacy_blocked","secretBlocked":true,"extraModelCalls":0}
+{"probe":"raw-runtime-without-gateway-run","status":500,"errorName":"UnknownError","errorMessage":"Unexpected server error. Check server logs for details.","guardResults":[{"path":"/internal/agent-runs/bind-message","status":409,"code":"agent_run_message_not_bound"},{"path":"/internal/agent-runs/provider-messages","status":409,"code":"agent_provider_messages_not_bound"}],"blockedBeforeInference":true,"extraModelCalls":0}
+{"scope":"real local Matterhorn gateway + pinned OpenCode + real guard plugin; synthetic inference, no external tools, NOT hosted or full desk acceptance","lostAck":true,"modelCalls":5,"promptPostAttempts":15,"completedBeforeDrop":15,"usedTokens":5000,"chargedTokens":5000,"pendingRequests":0}
+{"probe":"fixture-cleanup","forcedRuntimeStop":false,"generatedDataRemoved":true}
