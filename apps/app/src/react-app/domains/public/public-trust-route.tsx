@@ -586,11 +586,12 @@ function PublicHeader() {
   return (
     <header className="border-b border-border/70 bg-background">
       <div className="mx-auto flex min-h-14 max-w-6xl items-center justify-between gap-4 pl-[calc(1.25rem+env(safe-area-inset-left))] pr-[calc(1.25rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] sm:pl-[calc(2rem+env(safe-area-inset-left))] sm:pr-[calc(2rem+env(safe-area-inset-right))]">
-        <Link to="/session" className="inline-flex items-center gap-2 font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+        <Link reloadDocument to="/session" className="inline-flex items-center gap-2 font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
           <img src="/matterhorn-logo-square.svg" alt="" className="size-6 rounded-md" />
           Matterhorn Desks
         </Link>
         <Link
+          reloadDocument
           to="/session"
           className="inline-flex min-h-11 items-center gap-2 rounded-md bg-dls-surface-muted px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none sm:min-h-8"
         >
@@ -641,6 +642,7 @@ export function PublicTrustRoute() {
       <main className="mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] flex-1 gap-10 py-8 pl-[calc(1.25rem+env(safe-area-inset-left))] pr-[calc(1.25rem+env(safe-area-inset-right))] sm:py-12 sm:pl-[calc(2rem+env(safe-area-inset-left))] sm:pr-[calc(2rem+env(safe-area-inset-right))] md:grid-cols-[180px_minmax(0,1fr)]">
         <aside className="min-w-0">
           <Link
+            reloadDocument
             to="/session"
             className="-ml-2 mb-4 inline-flex min-h-11 items-center gap-2 rounded-sm px-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:mb-6 md:min-h-0"
           >
