@@ -247,7 +247,7 @@ describe("chat-operated coworker UI", () => {
     expect(panel).toContain('props.compactHeader && !guidedSetup && "sr-only"');
     expect(panel).toContain('props.compactHeader ? "py-3" : "py-4"');
     expect(panel).toContain('props.compactHeader && "size-11"');
-    expect(session).toContain('className="size-11 rounded-md text-dls-secondary');
+    expect(session).toContain('className="min-h-11 rounded-md text-dls-secondary');
     expect(panel).toContain("Pause");
     expect(panel).toContain("Resume coworker");
     expect(panel).toContain("Disable permanently");

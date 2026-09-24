@@ -2,6 +2,7 @@
 import type { MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
 import { ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
+import { MINIMAL_UI } from "../../../../app/lib/minimal-ui";
 
 export type PrivateModePrivacyNoticeProps = {
   modelUnavailable?: boolean;
@@ -58,6 +59,12 @@ export function PrivateModePrivacyNotice(props: PrivateModePrivacyNoticeProps) {
     );
   } else {
     message = <>Checking model privacy.</>;
+  }
+
+  if (MINIMAL_UI && providerPolicy?.allowed && !props.modelUnavailable && !props.privateModeUnavailableReason) {
+    message = props.privateModeEnabled
+      ? <>Private is on · No request retention.</>
+      : <>Private is off · {providerPolicy.providerName} processes this chat.</>;
   }
 
   return (

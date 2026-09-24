@@ -129,7 +129,7 @@ describe("session panel route state", () => {
     expect(source).toContain("const homeSurfaceTitle = activeWorkflowDeskId");
     expect(source).toContain("getCustomerProtocolDeskVisual(activeWorkflowDeskId)?.displayName");
     expect(source).toContain("getCustomerProtocolDeskVisual(focusedProtocolPanel)?.displayName");
-    expect(source).toContain("? homeSurfaceTitle");
+    expect(source).toContain('? MINIMAL_UI ? "Choose a desk" : homeSurfaceTitle');
   });
 
   test("the shell exposes one canonical workspace and surface location", () => {

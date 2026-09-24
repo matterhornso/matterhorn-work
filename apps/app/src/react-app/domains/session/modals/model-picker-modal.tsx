@@ -23,6 +23,7 @@ import type { ModelOption, ModelRef } from "../../../../app/types";
 import { isDefaultVisibleModel, isRecommendedModel } from "../../../../app/defaults";
 import { ProviderIcon } from "../../../design-system/provider-icon";
 import { t } from "../../../../i18n";
+import { MINIMAL_UI, isChatModelId } from "@/app/lib/minimal-ui";
 
 const HIDDEN_MODELS_KEY = "openwork.hiddenModels";
 const HIDDEN_MODELS_SEEDED_KEY = "openwork.hiddenModelsSeeded";
@@ -133,8 +134,9 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
   // Filter by search
   const filteredOptions = useMemo(() => {
     const q = props.query.trim().toLowerCase();
-    if (!q) return props.options;
-    return props.options.filter(
+    const options = props.options.filter((option) => !MINIMAL_UI || isChatModelId(option.modelID));
+    if (!q) return options;
+    return options.filter(
       (o) =>
         o.title.toLowerCase().includes(q) ||
         o.providerID.toLowerCase().includes(q) ||

@@ -47,6 +47,7 @@ import type { MatterhornProjectDataLedgerEntry } from "@matterhorn-work/types/pr
 import type { MatterhornWalletSafetyPolicy } from "@matterhorn-work/types/wallet-safety-policy";
 
 import { cn } from "@/lib/utils";
+import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmModal } from "@/react-app/design-system/modals/confirm-modal";
@@ -363,7 +364,9 @@ function WalletProtocolSupportMap(props: {
             status: backendSuiRuntimeCopy.status
               ? backendSuiRuntimeCopy.label
               : backendCapabilityLabel(backendSui.status),
-            detail: backendSuiRuntimeCopy.status
+            detail: !MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions
+              ? "Connect a wallet for public account reads. Transaction preparation and submission are not enabled in this beta."
+              : backendSuiRuntimeCopy.status
               ? backendSuiRuntimeCopy.detail
               : backendSui.status === "preview"
                 ? "Connect a supported Sui wallet here. You still review and sign every transaction in that wallet. Wallet compatibility is still expanding."
@@ -391,6 +394,9 @@ function WalletProtocolSupportMap(props: {
       .filter(([protocol]) => protocol !== "sui")
       .map(([protocol, cap]) => {
         const effectiveCap = (() => {
+          if (!MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions) {
+            return { ...cap, canPreview: false, canSubmit: false };
+          }
           if (protocol === "hyperliquid" && cap.canSubmit) {
             return {
               ...cap,
@@ -434,10 +440,12 @@ function WalletProtocolSupportMap(props: {
         </summary>
         <div className="mt-3 grid gap-3 rounded-md bg-dls-surface-muted/[0.055] px-3 py-3">
           <p className="text-xs leading-5 text-dls-secondary">
-            Only the action named in each row can be reviewed and submitted
+            {!MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions
+              ? "This beta is read-only. Transaction preparation and wallet submission are not enabled."
+              : <>Only the action named in each row can be reviewed and submitted
             here, and it always needs your wallet approval. Prepare only makes
             a draft for another compatible client. Limited release means
-            compatibility is still expanding.
+            compatibility is still expanding.</>}
           </p>
           {rows.map((row) => (
             <div key={row.label} className="grid gap-1 text-xs leading-5">

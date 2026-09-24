@@ -603,7 +603,7 @@ describe("Shared primitives UI contract", () => {
     const sidebar = readAppSource("domains/session/sidebar/app-sidebar.tsx");
     expect(composer).toContain("props.showModelPicker !== false");
     expect(sessionSurface).toContain(
-      "showModelPicker={shellConfig.modelPicker && !props.modelUnavailable}",
+      "showModelPicker={!MINIMAL_UI && shellConfig.modelPicker && !props.modelUnavailable}",
     );
     expect(sidebar).toContain("shellConfig.addWorkspace ?");
   });

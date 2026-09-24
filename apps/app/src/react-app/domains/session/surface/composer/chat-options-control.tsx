@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import type { ReactNode } from "react";
 import {
   Check,
   ChevronDown,
@@ -19,6 +20,7 @@ import {
 } from "../../perspectives/response-perspective";
 
 export type ChatOptionsControlProps = {
+  extraOptions?: ReactNode;
   busy: boolean;
   executionMode: MatterhornExecutionMode;
   executionModesEnabled: boolean;
@@ -65,6 +67,7 @@ export function ChatOptionsControl(props: ChatOptionsControlProps) {
           aria-label="Chat options"
           className="absolute bottom-full left-0 z-40 mb-2 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-dls-border bg-dls-surface p-2 shadow-[var(--dls-shell-shadow)]"
         >
+          {props.extraOptions ? <div className="mb-2 flex flex-wrap gap-2 border-b border-dls-border pb-2">{props.extraOptions}</div> : null}
           {props.executionModesEnabled ? (
             <div>
               <p className="px-2 pb-1 pt-0.5 text-[11px] font-semibold text-dls-text">

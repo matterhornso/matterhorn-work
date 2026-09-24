@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "title": "Design System: Matterhorn",
+  "extensions": {
+    "breakpoints": [
+      { "name": "navigation-docked", "value": "768px" },
+      { "name": "context-sheet", "value": "1024px" },
+      { "name": "context-docked", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Desk row",
+      "kind": "nav",
+      "description": "An open row with the protocol mark, short purpose, and navigation action; no readiness claim.",
+      "html": "<button class=\"ds-desk\"><span>Private AI</span><small>Chat, write, and explore ideas.</small></button>",
+      "css": ".ds-desk{display:flex;flex-direction:column;justify-content:center;gap:4px;width:100%;min-height:80px;padding:12px 8px;border:0;border-bottom:1px solid var(--dls-border);background:transparent;color:var(--dls-text-primary);font:inherit;text-align:left}.ds-desk:hover{background:var(--dls-hover)}.ds-desk:focus-visible{outline:2px solid currentColor;outline-offset:-2px}.ds-desk small{font-size:14px;color:var(--dls-text-secondary)}"
+    }
+  ],
+  "narrative": {
+    "overview": "One left navigation column, a focused conversation and contextual tools on demand. Preserve Matterhorn branding and shared semantic theme tokens.",
+    "dos": ["Keep required consent and transaction terms explicit.", "Use server capability data rather than visual readiness assumptions."],
+    "donts": ["Do not enable the minimal layout before live runtime acceptance.", "Do not introduce decorative dashboards or duplicate navigation rails."]
+  }
+}

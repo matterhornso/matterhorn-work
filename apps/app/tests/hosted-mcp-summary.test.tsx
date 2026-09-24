@@ -7,9 +7,16 @@ import { MCPS_PROTOCOL_DESK_MANIFEST } from "@matterhorn-work/types";
 import {
   HostedMcpSummary,
   resolveHostedMcpAccessView,
+  managedToolGroups,
 } from "../src/react-app/domains/settings/pages/hosted-mcp-summary";
 
 describe("hosted MCP summary", () => {
+  test("does not advertise wallet actions in a read-only beta", () => {
+    expect(managedToolGroups(false).map((group) => group.title)).toEqual([
+      "Desk research", "Saved workspace records",
+    ]);
+    expect(managedToolGroups(true).some((group) => group.title === "Reviewed wallet actions")).toBe(true);
+  });
   test("shows the exact guarded MCP inventory shipped to external clients", () => {
     const source = readFileSync(
       new URL(

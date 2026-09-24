@@ -6,6 +6,12 @@ function readAppSource(path: string) {
 }
 
 describe("workspace mission overview", () => {
+  test("uses a decorative flag for the project goal", () => {
+    const mission = readAppSource("domains/session/chat/workspace-mission-overview.tsx");
+    expect(mission).toContain('<Flag className="size-4" strokeWidth={1.7} aria-hidden="true" />');
+    expect(mission).not.toContain("<Target");
+  });
+
   test("keeps the mission, attention inbox, and evidence history connected on Home", () => {
     const mission = readAppSource("domains/session/chat/workspace-mission-overview.tsx");
     const session = readAppSource("domains/session/chat/session-page.tsx");

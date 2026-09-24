@@ -34,6 +34,8 @@ import {
 } from "../settings-layout";
 import { notifyWorkspaceModelSelectionChanged } from "../model-selection-events";
 import { PrivateModelSetup } from "./private-model-setup";
+import { MinimalModels } from "./minimal-models";
+import { MINIMAL_UI } from "@/app/lib/minimal-ui";
 import {
   buildModelReadinessSummary,
   countConnectedCatalogModels,
@@ -48,6 +50,7 @@ type ConnectedProvider = {
 };
 
 export type AiSettingsViewProps = {
+  onModelSelected?: (firstSelection: boolean, model: { providerId: string; modelId: string }) => void | Promise<void>;
   privateSetupRequested?: boolean;
   busy: boolean;
   providerAuthBusy: boolean;
@@ -413,6 +416,14 @@ export function AiSettingsView(props: AiSettingsViewProps) {
           : clearWorkspaceDefaultMutation.isSuccess
             ? "Workspace default reset."
             : null);
+
+  if (MINIMAL_UI) return <MinimalModels client={props.matterhornServerClient} workspaceId={runtimeWorkspaceId} catalog={catalog} selection={workspaceSelection} policies={providerPrivacyPolicies} loading={providerStateLoading} failed={catalogQueryFailed} managed={props.providerCredentialsManaged} onConnect={props.onOpenProviderAuth} onRefresh={() => { void (runtimeWorkspaceId ? workspaceBackendModelsQuery.refetch() : backendModelsQuery.refetch()); }} onSelected={async (first, model) => {
+    await props.onUseWorkspaceDefault?.();
+    await props.onModelSelected?.(first, model);
+  }}>
+    {props.privateSetupRequested ? <PrivateModelSetup catalog={catalog} policy={providerPrivacyPolicies.find((policy) => policy.providerId === "venice")} loading={providerStateLoading} failed={catalogQueryFailed} onChooseModel={props.onOpenModelPicker} /> : null}
+    {workspaceModelUsageQuery.data?.status ? <details className="text-sm"><summary className="cursor-pointer">Usage & allowance</summary><div className="space-y-2 py-3">{[{ label: "Today", period: workspaceModelUsageQuery.data.status.daily }, { label: "This month", period: workspaceModelUsageQuery.data.status.monthly }].map(({ label, period }) => <p key={label}>{label}: {compactTokenCount(period.chargedTokens)} used{period.limit === null ? "" : ` of ${compactTokenCount(period.limit)} weighted tokens`}. Resets {usageResetLabel(period.resetsAt)}.</p>)}{!workspaceModelUsageQuery.data.status.enabled ? <p>Usage protection is not active in this deployment.</p> : null}</div></details> : null}
+  </MinimalModels>;
 
   return (
     <LayoutStack className="gap-y-8">
@@ -890,11 +901,11 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                     ? providerStateLoading
                       ? "Checking availability..."
                       : cudosConnected
-                      ? "7 models available through Matterhorn"
+                      ? `${cudosProvider?.modelCount ?? 0} models available through Matterhorn`
                       : "Unavailable in this deployment"
                     : cudosConnected
-                      ? "7 models available"
-                      : "Connect your CUDOS API key to use seven models"}
+                      ? `${cudosProvider?.modelCount ?? 0} models available`
+                      : "Connect your CUDOS API key to see available models"}
                 </div>
               </div>
             </div>

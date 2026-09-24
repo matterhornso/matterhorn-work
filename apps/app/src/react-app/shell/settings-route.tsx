@@ -17,6 +17,8 @@ import {
 import { useQuery } from "@tanstack/react-query";
 
 import { SUGGESTED_PLUGINS } from "../../app/constants";
+import { MINIMAL_UI } from "../../app/lib/minimal-ui";
+import { readStoredSessionChoiceOverrides, withSessionChoiceOverride, writeStoredSessionChoiceOverrides } from "../kernel/model-config";
 import type { EnablementContext } from "../../app/enablement";
 import { createClient } from "../../app/lib/opencode";
 import {
@@ -2989,6 +2991,13 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "ai":
         return (
           <AiSettingsView
+            onModelSelected={(firstSelection, model) => {
+              const state = location.state;
+              const sessionId = !firstSelection && state && typeof state === "object" && state.workspaceId === selectedWorkspaceId && typeof state.sessionId === "string" ? state.sessionId : null;
+              if (sessionId) writeStoredSessionChoiceOverrides(selectedWorkspaceId, withSessionChoiceOverride(readStoredSessionChoiceOverrides(selectedWorkspaceId), sessionId, { model: { providerID: model.providerId, modelID: model.modelId }, variant: null }));
+              if (props.onClose && !firstSelection) props.onClose();
+              else navigate(workspaceSessionRoute(selectedWorkspaceId, sessionId));
+            }}
             privateSetupRequested={new URLSearchParams(location.search).get("setup") === "private"}
             busy={busy}
             providerAuthBusy={providerAuthSnapshot.providerAuthBusy}
@@ -3569,7 +3578,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           (() =>
             navigate(
               selectedWorkspaceId
-                ? workspaceSessionRoute(selectedWorkspaceId)
+                ? workspaceSessionRoute(selectedWorkspaceId, MINIMAL_UI && location.state?.workspaceId === selectedWorkspaceId && typeof location.state?.sessionId === "string" ? location.state.sessionId : null)
                 : "/session",
             ))
         }

@@ -31,7 +31,7 @@ describe("responsive accessibility regressions", () => {
   test("active settings sidebar entries expose current-page semantics", () => {
     const settings = readAppSource("domains/settings/shell/settings-page.tsx");
 
-    expect(settings.match(/aria-current=\{props\.activeTab === (?:tab|\"general\") \? \"page\" : undefined\}/g)?.length).toBe(4);
+    expect(settings.match(/aria-current=\{props\.activeTab === (?:tab|\"general\") \? \"page\" : undefined\}/g)?.length).toBe(5);
   });
 
   test("mobile shell actions provide 44px hit areas without enlarging their icons", () => {
@@ -49,7 +49,7 @@ describe("responsive accessibility regressions", () => {
   test("mobile sessions expose the workspace tools and every crypto desk hidden by the desktop rail", () => {
     const sessionPage = readAppSource("domains/session/chat/session-page.tsx");
 
-    expect(sessionPage).toContain('title="Open workspace menu"');
+    expect(sessionPage).toContain('title={MINIMAL_UI ? "Workspace tools" : "Open workspace menu"}');
     expect(sessionPage).toContain('className="size-11 text-dls-secondary');
     expect(sessionPage).toContain("lg:hidden");
     expect(sessionPage).toContain('<nav aria-label="Workspace menu"');
