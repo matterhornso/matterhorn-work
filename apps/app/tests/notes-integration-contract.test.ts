@@ -72,7 +72,7 @@ describe("Notes integration contracts", () => {
     expect(source).toContain("useParams<{ workspaceId?: string }>");
     expect(source).toContain("const workspaceId = explicitWorkspaceId?.trim() || routeWorkspaceId || activeWorkspaceId");
     expect(source).toContain("ACTIVE_WORKSPACE_CHANGED_EVENT");
-    expect(source).toContain("<WorkspaceNotesPage key={workspaceId} workspaceId={workspaceId} notesClient={notesClient} />");
+    expect(source).toContain("<WorkspaceNotesPage key={notesScopeKey(workspaceId, notesClient)} workspaceId={workspaceId} notesClient={notesClient} />");
     const scopedPage = source.slice(source.indexOf("function WorkspaceNotesPage("));
     expect(scopedPage).toContain("useNotesStore(workspaceId, notesClient)");
     expect(scopedPage).toContain("const [selectedNoteId, setSelectedNoteId]");

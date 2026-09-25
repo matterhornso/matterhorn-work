@@ -269,8 +269,10 @@ Prepare tested corrections and a precise operator handoff, not unsupported
 
 ## Next continuation
 
-Check same-workspace notes client replacement. Move on to remaining integration
-failure paths and filesystem backup coverage. File attachments/structured
+Check remaining integration failure paths and filesystem backup coverage.
+The tenant recovery wrapper appears to assert complete coverage and tenant
+verification without validating its input archive; reproduce and harden this.
+File attachments/structured
 mentions are not guaranteed on reload.
 Re-read applicable skill references as necessary. Do not repeat
 unchanged hosted probes. Manual hosted approval journey, SES/reset, filesystem
@@ -293,3 +295,15 @@ merge or deployment.
   primary findings / four advisories. Impeccable hardening, no redesign.
 - Evidence/reproduction in `UI-RECOVERY.md`. Same-workspace client replacement
   and cross-tab concurrency are not claimed covered. No production changes.
+
+### 22:27 UTC continuation — notes connection scope
+
+- Prior save-ordering commit: `869d4020713685f643dcc75075813a8952cf61ef`.
+- Browser reproduced a delayed response from connection 1 replacing connection
+  2's list for the same workspace ID. Added opaque client identity to the notes
+  component scope key, without including URLs or credentials.
+- Repeated browser sequence now retains connection 2's notes. No live provider
+  or chain calls. This is client-state isolation, not hosted auth acceptance.
+- Frontend **1,219 pass / 7,677 assertions**, typecheck/build pass. Secret scan
+  zero findings; design detector zero primary findings / four advisories.
+- Impeccable hardening, no visual redesign. No production changes.

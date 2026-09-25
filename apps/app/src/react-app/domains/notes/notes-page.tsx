@@ -16,6 +16,7 @@ import { useStatusToasts } from "../shell-feedback/status-toasts";
 import { NoteAttachmentChip } from "./note-attachment-chip";
 import { NotesEmptyState } from "./notes-empty-state";
 import { useNotesServerClient } from "./notes-server-client";
+import { notesScopeKey } from "./notes-scope-key";
 import { filterNotes, useNotesStore } from "./notes-store";
 import type { MatterhornNote, NoteAttachment, NoteFilterId } from "./notes-types";
 import { NOTE_FILTERS, noteSuggestedToMemory, noteTimestampMs, noteToAttachment } from "./notes-types";
@@ -79,10 +80,10 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
     };
   }, []);
 
-  // A workspace transition must replace the whole async/editor state owner.
+  // A workspace/connection transition replaces the whole async/editor owner.
   // Merely clearing selection leaves late list/save responses able to populate
   // the next workspace with the previous workspace's notes.
-  return <WorkspaceNotesPage key={workspaceId} workspaceId={workspaceId} notesClient={notesClient} />;
+  return <WorkspaceNotesPage key={notesScopeKey(workspaceId, notesClient)} workspaceId={workspaceId} notesClient={notesClient} />;
 }
 
 function WorkspaceNotesPage({ workspaceId, notesClient }: {

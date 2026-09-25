@@ -229,3 +229,23 @@ kept this to truthful states and draft preservation; no visual redesign.
 No hosted acceptance or real-provider/chain request is claimed. Same-workspace
 client replacement, cross-tab editing, and hosted browser isolation still need
 coverage. No deployment/configuration changes.
+
+## 22:27 continuation — connection identity boundary
+
+Reproduced the remaining same-workspace connection race in the NotesPage browser
+fixture: start connection 1's delayed list, replace the client while retaining
+workspace A, display connection 2's notes, then complete connection 1. The old
+list replaced the current one. Workspace ID alone was not a sufficient UI key.
+
+The component key now combines workspace ID with an opaque, weakly-held client
+identity. Tokens and URLs are never placed in the key. Ordinary rerenders retain
+state; replacing the connection replaces its list/editor state owner. Old saves
+remain bound to their original client. This is not cross-tab conflict resolution
+or proof of backend authorization; hosted account isolation is still unverified.
+
+Browser confirmation of the same sequence leaves `Connection 2 workspace A`
+visible after completing the old response. Two scope-key unit tests and the
+component wiring contract cover identity stability, separation and credential
+exclusion. Frontend **1,219 pass / 7,677 assertions**, typecheck/build pass, secret
+scan zero findings, design detector zero primary findings / four advisories.
+Impeccable hardening preserved the existing layout; no visual changes.

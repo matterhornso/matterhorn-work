@@ -19,6 +19,7 @@ function response(workspaceId: string): MatterhornNoteListResponse {
 
 function Fixture() {
   const [workspaceId, setWorkspaceId] = useState("A");
+  const [connection, setConnection] = useState(1);
   const release = useRef<() => void>(() => {});
   const pendingSaves = useRef<Array<() => void>>([]);
   const stored = useRef(response("B").items[0]);
@@ -26,8 +27,13 @@ function Fixture() {
   const [savedBody, setSavedBody] = useState(stored.current.body);
   const client = useMemo(() => Object.assign(createMatterhornServerClient({ baseUrl: "http://127.0.0.1:1" }), {
     listNotes: async (id: string): Promise<MatterhornNoteListResponse> => {
-      if (id === "A") await new Promise<void>((resolve) => { release.current = resolve; });
+      if (id === "A" && connection === 1) await new Promise<void>((resolve) => { release.current = resolve; });
       if (id === "C") throw new Error("Fixture workspace unavailable");
+      if (connection === 2) {
+        const next = response(id);
+        next.items[0].title = `Connection 2 workspace ${id}`;
+        return next;
+      }
       return id === "B" ? { success: true, count: 1, items: [stored.current] } : response(id);
     },
     updateNote: async (_workspaceId: string, _noteId: string, patch: MatterhornNoteUpdateRequest) => {
@@ -40,9 +46,10 @@ function Fixture() {
       setSavedBody(stored.current.body);
       return { success: true, note: stored.current };
     },
-  }), []);
+  }), [connection]);
   return <MemoryRouter><StatusToastsProvider>
-    <p>Current workspace: {workspaceId}</p>
+    <p>Current workspace: {workspaceId} · Connection: {connection}</p>
+    <button onClick={() => setConnection(2)}>Replace connection</button>
     <button onClick={() => setWorkspaceId("B")}>Switch to B</button>
     <button onClick={() => setWorkspaceId("C")}>Switch to unavailable C</button>
     <button onClick={() => release.current()}>Complete old A request</button>
