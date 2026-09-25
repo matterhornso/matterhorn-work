@@ -1266,7 +1266,7 @@ export interface BittensorSubtensorSidecarStatus {
 
 export interface BittensorSubtensorSidecarHealth extends BittensorSubtensorSidecarStatus {
   reachable: boolean;
-  status: "healthy" | "unreachable" | "unconfigured";
+  status: "healthy" | "degraded" | "unreachable" | "unconfigured";
   latencyMs: number | null;
   checkedAt: string;
 }
@@ -2210,20 +2210,30 @@ export async function checkSubtensorSidecarHealth(): Promise<BittensorSubtensorS
   }
 
   const started = Date.now();
-  const payload = await probeSidecarPath(baseUrl, "/liveness") || await probeSidecarPath(baseUrl, "/health") || await probeSidecarPath(baseUrl, "/status");
+  // A reachable process does not prove that its SDK can read the chain.
+  const payload = await probeSidecarPath(baseUrl, "/health") || await probeSidecarPath(baseUrl, "/status");
   const reachable = Boolean(payload);
+  const ready = payload?.["status"] === "healthy"
+    && payload?.["mode"] === "python"
+    && payload?.["sdkAvailable"] === true
+    && payload?.["canRead"] === true
+    && typeof payload?.["block"] === "number"
+    && Number.isSafeInteger(payload["block"])
+    && payload["block"] > 0;
   const latencyMs = Date.now() - started;
   return {
     ...baseStatus,
     reachable,
-    status: reachable ? "healthy" : "unreachable",
+    status: ready ? "healthy" : reachable ? "degraded" : "unreachable",
     latencyMs,
     checkedAt,
-    canRead: reachable && payload?.["canRead"] !== false,
-    canPrepare: reachable && payload?.["canPrepare"] !== false,
-    canSubmit: reachable && payload?.["canSubmit"] === true,
-    message: reachable
+    canRead: ready && payload?.["canRead"] === true,
+    canPrepare: ready && payload?.["canPrepare"] === true,
+    canSubmit: false,
+    message: ready
       ? "Subtensor sidecar is configured and reachable. Matterhorn can use it for live chain reads and unsigned payload preparation; signing and submission stay in the connected wallet."
+      : reachable
+        ? "Subtensor is reachable but live-chain readiness is not verified. Check the SDK configuration and retry."
       : "Subtensor sidecar is configured but not reachable. Matterhorn will fall back to TAO.app analytics and local safe behavior.",
   };
 }
@@ -5999,7 +6009,7 @@ export function planBittensorChat(input: { message: string; ss58Address?: string
     steps: stepsForIntent(intent),
     suggestedToolNames: toolsForIntent(intent),
     safetyNotes: [
-      "Matterhorn never asks for seed phrases, private keys, or mnemonics.",
+      "Never share wallet credentials with Matterhorn. They are not requested or accepted.",
       "Bittensor actions require review, signing, and submission in the connected wallet.",
       "Subnet staking is Dynamic TAO exposure; alpha price and slippage can change the final TAO outcome.",
     ],
@@ -6259,7 +6269,7 @@ function buildBittensorLearningCard(message: string): BittensorChatCard {
     tone: "default",
     items,
     warnings: [
-      "Matterhorn never asks for seed phrases, private keys, or mnemonics.",
+      "Never share wallet credentials with Matterhorn. They are not requested or accepted.",
       "Using a subnet service is different from staking TAO into a subnet.",
     ],
     data: { topic: message, terms: items.map((item) => item.label) },
@@ -6789,7 +6799,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
         items: [
           cardItem("Rejected field", forbidden, "warning"),
           cardItem("Allowed input", "Public SS58 addresses, netuids, validator hotkeys, amounts, and watch parameters"),
-          cardItem("Matterhorn will not", "Ask for seeds/private keys, custody wallets, sign, broadcast, or store wallet exports.", "warning"),
+          cardItem("Matterhorn will not", "Request wallet credentials, hold wallet funds, sign, broadcast, or store wallet credentials.", "warning"),
         ],
         warnings: ["Rejected credential-shaped field: " + forbidden],
       }],
@@ -11061,9 +11071,11 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
       label: "Subtensor sidecar status",
       status: sidecar.status === "healthy" ? "pass" : "warning",
       summary: sidecar.status === "healthy"
-        ? "Subtensor sidecar is configured and reachable for live chain reads and signed-payload submission."
+        ? "Subtensor sidecar has verified live-chain reads. It does not sign or submit transactions."
         : sidecar.status === "unreachable"
           ? "Subtensor sidecar is configured but unreachable; Matterhorn will rely on provider data and safe fallbacks."
+          : sidecar.status === "degraded"
+            ? "Subtensor sidecar is reachable but its live-chain readiness is not verified."
           : "Subtensor sidecar is not configured; Matterhorn will rely on provider data and safe fallbacks.",
       details: { signerMode: signer.mode, canSubmit: signer.canSubmit, network: sidecar.network, reachable: sidecar.reachable },
     });
@@ -11304,7 +11316,7 @@ function buildBittensorCustomerGuidanceCard(result: BittensorChatExecutionResult
     items: [
       cardItem("First safe step", firstStep),
       cardItem("Matterhorn can", "Explain, compare, monitor, prepare unsigned previews, and hand off to the connected wallet."),
-      cardItem("Matterhorn will not", "Ask for seeds/private keys, custody wallets, sign, broadcast, or provide financial advice.", "warning"),
+      cardItem("Matterhorn will not", "Request wallet credentials, hold wallet funds, sign, broadcast, or provide financial advice.", "warning"),
     ],
     actions: [{
       label: "Send follow-up",

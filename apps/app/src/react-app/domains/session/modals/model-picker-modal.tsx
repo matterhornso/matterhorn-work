@@ -23,7 +23,7 @@ import type { ModelOption, ModelRef } from "../../../../app/types";
 import { isDefaultVisibleModel, isRecommendedModel } from "../../../../app/defaults";
 import { ProviderIcon } from "../../../design-system/provider-icon";
 import { t } from "../../../../i18n";
-import { MINIMAL_UI, isChatModelId } from "@/app/lib/minimal-ui";
+import { isChatModelId } from "@/app/lib/minimal-ui";
 
 const HIDDEN_MODELS_KEY = "openwork.hiddenModels";
 const HIDDEN_MODELS_SEEDED_KEY = "openwork.hiddenModelsSeeded";
@@ -134,7 +134,7 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
   // Filter by search
   const filteredOptions = useMemo(() => {
     const q = props.query.trim().toLowerCase();
-    const options = props.options.filter((option) => !MINIMAL_UI || isChatModelId(option.modelID));
+    const options = props.options.filter((option) => isChatModelId(option.modelID));
     if (!q) return options;
     return options.filter(
       (o) =>
@@ -268,6 +268,7 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
               type="text"
               className="h-10 w-full rounded-lg border border-dls-border bg-dls-surface pl-9 pr-3 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dls-accent-rgb)/0.2)]"
               placeholder="Search providers and models..."
+              aria-label="Search providers and models"
               value={props.query}
               onChange={(e) => props.setQuery(e.target.value)}
             />

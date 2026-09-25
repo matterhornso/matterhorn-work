@@ -17,11 +17,76 @@ import {
 } from "./managed-opencode-runtime-config.js";
 import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
 import { MatterhornCryptoTransactionError } from "./crypto-transaction-service.js";
-import { ensureWorkspaceFiles } from "./workspace-init.js";
+import { ensureWorkspaceFiles, resolveMatterhornManagedAgentPrompt } from "./workspace-init.js";
+import { MATTERHORN_DESK_AGENT_MANIFESTS, buildMatterhornDeskRuntimeTools } from "@matterhorn-work/types/desk-agents";
+import { containsForbiddenMemorySecretMaterial } from "@matterhorn-work/types/memory";
+import { planBittensorChat } from "./tools/bittensor.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("managed OpenCode Matterhorn MCP", () => {
+  test("Bittensor's generated safety notice can cross the guarded result boundary", async () => {
+    const plan = planBittensorChat({ message: "List current Finney subnets" });
+    expect(containsForbiddenMemorySecretMaterial(plan)).toBe(false);
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0", id: "bittensor-read", method: "tools/call",
+        params: { name: "matterhorn_bittensor_chat", arguments: { message: "List current Finney subnets" } },
+      },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async () => Response.json({ success: true, plan, warnings: plan.safetyNotes }), { preconnect() {} }),
+    });
+    expect(result.body).toMatchObject({ id: "bittensor-read", result: {} });
+    expect(JSON.stringify(result.body)).toContain("Never share wallet credentials");
+  });
+  test("preserves three live subnet records instead of replacing discovery with a context-limit error", async () => {
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0", id: "bounded-discovery", method: "tools/call",
+        params: { name: "matterhorn_bittensor_chat", arguments: { message: "List subnets", limit: 3 } },
+      },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async () => Response.json({
+        success: true, execution: "answered", responseText: "Three subnet results.",
+        plan: { explanation: "A long workflow explanation. ".repeat(300) },
+        data: { discovery: { matches: [1, 2, 3].map(netuid => ({
+          subnet: { netuid, name: `Subnet ${netuid}`, source: "bittensor-python-sdk", block: 9136713,
+            updatedAt: "2026-09-24T09:45:06Z", freshness: "live", priceTao: 0.01,
+            benefitSummary: "Extra display description. ".repeat(100) },
+        })), cards: [{ repeated: "UI guidance. ".repeat(500) }], warnings: [] } }, warnings: [],
+      }), { preconnect() {} }),
+    });
+    const serialized = JSON.stringify(result.body);
+    for (const value of ["Subnet 1", "Subnet 2", "Subnet 3", "9136713", "2026-09-24T09:45:06Z", "bittensor-python-sdk"]) {
+      expect(serialized).toContain(value);
+    }
+    expect(serialized).not.toContain("Result exceeded");
+    expect(serialized).not.toContain("Extra display description");
+  });
+  test("allows public Sui coin-type identifiers without allowing concealed key material", async () => {
+    const address = `0x${"5".padStart(64, "0")}`;
+    const coinType = `0x${"2".padStart(64, "0")}::sui::SUI`;
+    expect(containsForbiddenMemorySecretMaterial({ coinType })).toBe(false);
+    for (const value of [address, `${coinType} ${address}`, `suiprivkey1${"q".repeat(60)}`]) {
+      expect(containsForbiddenMemorySecretMaterial({ coinType: value })).toBe(true);
+    }
+    expect(containsForbiddenMemorySecretMaterial({ arbitrary: coinType })).toBe(true);
+    expect(containsForbiddenMemorySecretMaterial({ coinType, privateKey: address })).toBe(true);
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0", id: "sui-native-balance", method: "tools/call",
+        params: { name: "matterhorn_sui_get_balance", arguments: { address, network: "mainnet" } },
+      },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async () => Response.json({
+        success: true,
+        balance: { address, coinType, balanceMist: "31018584912", balanceSui: "31.018584912",
+          source: { source: "sui.grpc", network: "mainnet", fetchedAt: "2026-09-24T09:45:54.690Z" } },
+      }), { preconnect() {} }),
+    });
+    expect(result.body).toMatchObject({ jsonrpc: "2.0", id: "sui-native-balance", result: {} });
+    expect(JSON.stringify(result.body)).toContain("31.018584912");
+  });
   test("injects an authenticated runtime-only remote MCP config", () => {
     const content = buildManagedOpencodeRuntimeConfig({
       serverUrl: "http://127.0.0.1:4130/",
@@ -39,7 +104,18 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(config.permission["*"]).toBe("deny");
     expect(config.permission["matterhorn-work_*"]).toBe("allow");
     expect(config.permission.edit).toBe("ask");
-    expect(config.agent).toEqual({ title: { disable: true } });
+    expect(config.agent.title).toEqual({ disable: true });
+    for (const agent of Object.values(MATTERHORN_DESK_AGENT_MANIFESTS)) {
+      expect(config.agent[agent.agentId]).toMatchObject({
+        mode: "primary",
+        prompt: resolveMatterhornManagedAgentPrompt(agent.agentId),
+        permission: agent.toolPolicy.permissions,
+      });
+      if (agent.toolPolicy.runtimeKind === "managed_desk") {
+        expect(config.agent[agent.agentId].tools).toEqual(buildMatterhornDeskRuntimeTools(agent));
+        expect(config.agent[agent.agentId].tools["*"]).toBe(false);
+      }
+    }
     expect(config.compaction).toEqual({ auto: false, prune: true });
     for (const denied of ["bash", "task", "webfetch", "websearch", "external_directory"]) {
       expect(config.permission[denied]).toBe("deny");

@@ -116,16 +116,21 @@ describe("WorkflowStageCard — render contract", () => {
     expect(source).toContain('hasHints && status !== "idle"');
   });
 
-  test("in-session desk starters launch real tasks when the shell supports it", () => {
+  test("in-session desk starters fill a draft without sending or replacing existing input", () => {
     const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
     const pageSrc = readAppSource("domains/session/chat/session-page.tsx");
 
     expect(surfaceSrc).toContain("onCreateDeskTask?");
-    expect(surfaceSrc).toContain("const startDeskTask = useCallback");
+    expect(surfaceSrc).toContain("const fillDeskDraft = useCallback");
+    const fillDraft = surfaceSrc.split("const fillDeskDraft = useCallback")[1].split("const startStarterTask")[0];
+    expect(fillDraft).toContain("if (draft.trim()) return");
+    expect(fillDraft).toContain("typeComposerText(prompt)");
+    expect(fillDraft).not.toContain("onCreateDeskTask");
+    expect(fillDraft).not.toContain("sendImmediately");
     expect(surfaceSrc).toContain("const startStarterTask = useCallback");
     expect(surfaceSrc).toContain("sendImmediately: true");
-    expect(surfaceSrc).toContain("props.onCreateDeskTask(prompt");
-    expect(surfaceSrc).toContain("startDeskTask(activeDeskMode, prompt)");
+    expect(surfaceSrc).toContain("fillDeskDraft(prompt)");
+    expect(surfaceSrc).toContain("stageActionDisabled={activeDeskStartBlocked || Boolean(draft.trim())}");
     expect(surfaceSrc).toContain("startStarterTask(item)");
     expect(pageSrc).toContain("onCreateDeskTask={(prompt, options)");
     expect(pageSrc).toContain("props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, options)");
@@ -535,8 +540,8 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(pageSrc).toContain("stageActionDisabled={startTaskBlocked}");
     expect(pageSrc).toContain("stageActionTitle={startTaskBlocker ?? undefined}");
     expect(surfaceSrc).toContain("session-desk-readiness");
-    expect(surfaceSrc).toContain("stageActionDisabled={activeDeskStartBlocked}");
-    expect(surfaceSrc).toContain("stageActionTitle={activeDeskStartBlocker ?? undefined}");
+    expect(surfaceSrc).toContain("stageActionDisabled={activeDeskStartBlocked || Boolean(draft.trim())}");
+    expect(surfaceSrc).toContain('stageActionTitle={activeDeskStartBlocker ?? (draft.trim() ? "Clear your draft to choose a starting point." : undefined)}');
   });
 
   test("task launcher route can send the prompt immediately", () => {

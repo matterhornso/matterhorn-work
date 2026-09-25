@@ -62,6 +62,12 @@ try {
   ]);
   assert.doesNotMatch(JSON.stringify(blockedReport), new RegExp(fakeProviderToken));
 
+  write("src/bridge.py", `credential = "${fakeProviderToken}"\n`);
+  const pythonBlocked = run(["--json"]);
+  assert.equal(pythonBlocked.status, 1);
+  assert.ok(JSON.parse(pythonBlocked.stdout).findings.some(finding => finding.path === "src/bridge.py"));
+  assert.ok(!pythonBlocked.stdout.includes(fakeProviderToken));
+
   console.log("Release secret scan contract passed.");
 } finally {
   rmSync(temp, { recursive: true, force: true });

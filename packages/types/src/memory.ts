@@ -183,6 +183,11 @@ function isPublicCryptoEvidenceField(fieldName: string | null): boolean {
 
 function containsUnlabelledCryptoKey(value: string, fieldName: string | null): boolean {
   if (/^sha256:[a-f0-9]{64}$/i.test(value.trim())) return false;
+  // A fully qualified Move coin type contains a public package address, not
+  // key material. Keep this exception field- and shape-specific: a bare key,
+  // appended text, or a credential placed in coinType must still be rejected.
+  if (fieldName?.replace(/_/g, "").toLowerCase() === "cointype"
+    && /^0x[a-f0-9]{1,64}::[a-z_][a-z0-9_]*::[a-z_][a-z0-9_]*$/i.test(value)) return false;
   if (isPublicCryptoEvidenceField(fieldName)) return false;
   for (const match of value.matchAll(CRYPTO_32_BYTE_TOKEN)) {
     const start = match.index ?? 0;

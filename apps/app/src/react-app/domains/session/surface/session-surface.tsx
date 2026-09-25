@@ -2625,18 +2625,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
     await waitForControl(40);
   }, [props.sessionId, setComposerDraft]);
 
-  const startDeskTask = useCallback((deskId: MatterhornDeskMode, prompt: string) => {
-    if (props.onCreateDeskTask) {
-      const visual = getCustomerProtocolDeskVisual(deskId);
-      props.onCreateDeskTask(prompt, {
-        title: visual?.agentName ?? "Desk task",
-        agent: matterhornDeskAgentIdForDesk(deskId),
-        sendImmediately: true,
-      });
-      return;
-    }
+  const fillDeskDraft = useCallback((prompt: string) => {
+    if (draft.trim()) return;
     void typeComposerText(prompt);
-  }, [props.onCreateDeskTask, typeComposerText]);
+    props.onDraftChange(buildDraft(prompt, attachments));
+  }, [draft, typeComposerText, props.onDraftChange, attachments]);
 
   const startStarterTask = useCallback((item: CustomerWorkflowStarterCard) => {
     if (props.onCreateDeskTask) {
@@ -3371,10 +3364,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     presentation="chat-first"
                     showAgentHeader={false}
                     taskStatus={effectiveActivityStatus === "idle" ? "idle" : effectiveActivityStatus === "waiting" ? "waiting" : "running"}
-                    stageActionDisabled={activeDeskStartBlocked}
-                    stageActionLabel="Platform setup"
-                    stageActionTitle={activeDeskStartBlocker ?? undefined}
-                    onStartStage={(_, prompt) => startDeskTask(activeDeskMode, prompt)}
+                    stageActionDisabled={activeDeskStartBlocked || Boolean(draft.trim())}
+                    stageActionLabel={activeDeskStartBlocked ? "Platform setup" : "Draft in progress"}
+                    stageActionTitle={activeDeskStartBlocker ?? (draft.trim() ? "Clear your draft to choose a starting point." : undefined)}
+                    onStartStage={(_, prompt) => fillDeskDraft(prompt)}
                     onJotNote={() => {
                       const visual = getCustomerProtocolDeskVisual(activeDeskMode);
                       openQuickJot({

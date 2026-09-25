@@ -40,6 +40,18 @@ function renderReadySettings(overrides: Record<string, unknown> = {}) {
 }
 
 describe("AI settings rendered hierarchy", () => {
+  test("managed-provider settings hide unrelated subscription and cloud-import promotions", () => {
+    const html = renderReadySettings({
+      showOpenWorkModelsSubscribe: true,
+      onSubscribeOpenWorkModels: () => undefined,
+      cloudProvidersView: React.createElement("div", null, "Import cloud providers"),
+    });
+    expect(html).not.toContain("Subscribe");
+    expect(html).not.toContain("Shared model catalog");
+    expect(html).not.toContain("Import cloud providers");
+    expect(html).toContain("Choose model");
+  });
+
   test("leads with one model choice and hides expert settings by default", () => {
     const html = renderReadySettings();
 

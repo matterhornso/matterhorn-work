@@ -76,6 +76,21 @@ describe("Shared primitives UI contract", () => {
     expect(source).toContain("<NotebookPen size={17} />");
   });
 
+  test("both chat model pickers exclude embedding models regardless of layout", () => {
+    const compact = readAppPackageSource("components/model-select.tsx");
+    const full = readAppSource("domains/session/modals/model-picker-modal.tsx");
+    expect(compact).toContain("filter(([id]) => isChatModelId(id))");
+    expect(full).toContain("filter((option) => isChatModelId(option.modelID))");
+    for (const source of [compact, full]) expect(source).not.toContain("!MINIMAL_UI || isChatModelId");
+    expect(full).toContain('aria-label="Search providers and models"');
+  });
+
+  test("closing settings restores its originating chat in both layouts", () => {
+    const source = readAppSource("shell/settings-route.tsx");
+    expect(source).toContain('workspaceSessionRoute(selectedWorkspaceId, location.state?.workspaceId === selectedWorkspaceId && typeof location.state?.sessionId === "string" ? location.state.sessionId : null)');
+    expect(source).not.toContain("MINIMAL_UI && location.state");
+  });
+
   test("tabs avoid oversized radius and heavy rings", () => {
     const source = readUiSource("tabs.tsx");
     expect(source).not.toContain("rounded-2xl");

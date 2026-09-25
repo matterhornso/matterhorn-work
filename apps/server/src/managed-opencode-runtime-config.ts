@@ -5,6 +5,8 @@ import {
   type CudosModel,
 } from "./cudos-provider.js";
 import { matterhornGuardPluginPath } from "./matterhorn-guard-plugin-path.js";
+import { MATTERHORN_DESK_AGENT_MANIFESTS, buildMatterhornDeskRuntimeTools } from "@matterhorn-work/types/desk-agents";
+import { resolveMatterhornManagedAgentPrompt } from "./workspace-init.js";
 import {
   buildManagedVeniceProviderConfig,
   VENICE_PROVIDER_ID,
@@ -75,6 +77,20 @@ export function buildManagedOpencodeRuntimeConfig(input: {
     // user-editable instead of creating an unreviewed side-channel or racing
     // the one-shot final-message proof used by the real response.
     agent: {
+      // Trusted, release-owned definitions must not depend on user project
+      // config being enabled. Use the same canonical prompts as preflight.
+      ...Object.fromEntries(Object.values(MATTERHORN_DESK_AGENT_MANIFESTS).map((agent) => {
+        const prompt = resolveMatterhornManagedAgentPrompt(agent.agentId);
+        if (!prompt) throw new Error(`Missing canonical managed agent: ${agent.agentId}`);
+        return [agent.agentId, {
+          description: agent.description,
+          mode: "primary",
+          temperature: agent.modelPolicy.temperature,
+          prompt,
+          permission: agent.toolPolicy.permissions,
+          ...(agent.toolPolicy.runtimeKind === "managed_desk" ? { tools: buildMatterhornDeskRuntimeTools(agent) } : {}),
+        }];
+      })),
       title: { disable: true },
     },
     // Automatic OpenCode compaction can contact the provider without the

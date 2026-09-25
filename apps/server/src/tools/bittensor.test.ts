@@ -665,7 +665,7 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.cards[0]?.kind).toBe("wallet_snapshot");
       const guidance = result.cards.find((card) => card.kind === "customer_guidance");
       expect(guidance?.title).toBe("Wallet copilot next steps");
-      expect(guidance?.items.some((item) => item.label === "Matterhorn will not" && item.value.includes("seed"))).toBe(true);
+      expect(guidance?.items.some((item) => item.label === "Matterhorn will not" && item.value.includes("Request wallet credentials"))).toBe(true);
       expect(result.data.customerGuidance).toMatchObject({ intent: "wallet", execution: "answered" });
       expect(result.responseText).toContain("3");
       expect(result.context?.ss58Address).toBe(VALID_SS58);
@@ -1000,7 +1000,7 @@ describe("executeBittensorChatWorkflow", () => {
         const guidance = result.cards.find((card) => card.kind === "customer_guidance");
         expect(guidance?.title).toBe("Subnet service next steps");
         expect(guidance?.tone).toBe("warning");
-        expect(guidance?.items.some((item) => item.label === "Matterhorn will not" && item.value.includes("seed"))).toBe(true);
+        expect(guidance?.items.some((item) => item.label === "Matterhorn will not" && item.value.includes("Request wallet credentials"))).toBe(true);
       } finally {
         if (previousAdapters === undefined) {
           delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
@@ -3822,7 +3822,8 @@ describe("planBittensorChat", () => {
   test("classifies beginner education requests", () => {
     const plan = planBittensorChat({ message: "I'm new to Bittensor, explain coldkeys and hotkeys" });
     expect(plan.intent).toBe("learn");
-    expect(plan.safetyNotes.join(" ")).toContain("never asks");
+    expect(plan.safetyNotes.join(" ")).toContain("Never share wallet credentials");
+    expect(plan.safetyNotes.join(" ")).toContain("not requested or accepted");
   });
 
   test("classifies subnet discovery requests and extracts netuids", () => {
@@ -4484,6 +4485,44 @@ describe("signer and watch helpers", () => {
     expect(card.kind).toBe("signer_status");
     if (previous !== undefined) {
       process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previous;
+    }
+  });
+
+  test("requires verified live SDK health rather than process liveness", async () => {
+    const previousUrl = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    const previousFetch = globalThis.fetch;
+    process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = "http://sidecar-health.test";
+    try {
+      for (const payload of [
+        { ok: true },
+        { ok: true, mode: "python", status: "degraded", canRead: false, block: null },
+        { ok: true, mode: "mock", status: "healthy", sdkAvailable: true, canRead: true, block: 123456 },
+        { ok: true, mode: "python", status: "healthy", sdkAvailable: true, canRead: true, block: null },
+        { ok: true, mode: "python", status: "healthy", sdkAvailable: true, canRead: false, block: 9136713 },
+      ]) {
+        globalThis.fetch = Object.assign(async (url: string | URL | Request) => {
+          expect(String(url)).toEndWith("/health");
+          return Response.json(payload);
+        }, { preconnect() {} });
+        const health = await checkSubtensorSidecarHealth();
+        expect(health.reachable).toBe(true);
+        expect(health.status).toBe("degraded");
+        expect(health.canRead).toBe(false);
+        expect(health.canPrepare).toBe(false);
+        expect(health.canSubmit).toBe(false);
+      }
+      globalThis.fetch = Object.assign(async () => Response.json({
+        status: "healthy", mode: "python", sdkAvailable: true, block: 9136713,
+        canRead: true, canPrepare: true, canSubmit: true,
+      }), { preconnect() {} });
+      const health = await checkSubtensorSidecarHealth();
+      expect(health.status).toBe("healthy");
+      expect(health.canRead).toBe(true);
+      expect(health.canSubmit).toBe(false);
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousUrl === undefined) delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+      else process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previousUrl;
     }
   });
 });

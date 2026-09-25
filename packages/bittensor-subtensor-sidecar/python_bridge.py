@@ -13,6 +13,7 @@ normalization. Submission is not implemented or configurable.
 from __future__ import annotations
 
 import json
+from contextlib import redirect_stdout
 import os
 import sys
 from datetime import datetime, timezone
@@ -217,6 +218,9 @@ def sdk_meta(source: str, subtensor: Any | None = None) -> dict[str, Any]:
 
 def health(_: dict[str, Any]) -> dict[str, Any]:
     subtensor = get_subtensor()
+    block = current_block(subtensor)
+    if block is None:
+        raise RuntimeError("The SDK could not read the live Subtensor chain head.")
     return {
         "ok": True,
         "status": "healthy",
@@ -226,7 +230,7 @@ def health(_: dict[str, Any]) -> dict[str, Any]:
         "canRead": True,
         "canPrepare": True,
         "canSubmit": False,
-        "block": current_block(subtensor),
+        "block": block,
         "message": "Official Bittensor SDK is available for public Finney reads. Submission remains disabled.",
     }
 
@@ -275,10 +279,14 @@ def serialize_dynamic_info(info: Any, netuid: int, subtensor: Any | None = None)
 def subnets(payload: dict[str, Any]) -> dict[str, Any]:
     subtensor = get_subtensor()
     limit = bounded_limit(payload)
+    # One chain-head read per listing, not one additional RPC per subnet.
+    meta = sdk_meta("bittensor-python-sdk", subtensor)
+    if meta["block"] is None:
+        raise RuntimeError("Cannot list live subnets without a chain block.")
     rows: list[Any] = []
     for attempt in (
-        lambda: subtensor.all_subnets(),
-        lambda: subtensor.get_all_subnets_info(),
+        lambda: subtensor.all_subnets(block=meta["block"]),
+        lambda: subtensor.get_all_subnets_info(block=meta["block"]),
     ):
         try:
             value = attempt()
@@ -294,11 +302,13 @@ def subnets(payload: dict[str, Any]) -> dict[str, Any]:
             netuid = int(raw_netuid if raw_netuid is not None else index)
         except Exception:
             netuid = index
-        normalized.append(serialize_dynamic_info(row, netuid, subtensor))
+        normalized.append({**serialize_dynamic_info(row, netuid), **meta})
+    if not normalized:
+        raise RuntimeError("The SDK did not return live subnet data for this network.")
     return {
-        **sdk_meta("bittensor-python-sdk", subtensor),
+        **meta,
         "subnets": normalized,
-        "warnings": [] if normalized else ["The SDK did not return subnet dynamic info for this network."],
+        "warnings": [],
     }
 
 
@@ -671,7 +681,10 @@ def main() -> int:
     }
     if action not in handlers:
         raise RuntimeError(f"Unknown bridge action: {action}")
-    write(handlers[action](payload))
+    # SDK diagnostics must never corrupt the bridge's single JSON stdout frame.
+    with redirect_stdout(sys.stderr):
+        result = handlers[action](payload)
+    write(result)
     return 0
 
 
