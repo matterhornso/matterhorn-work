@@ -247,11 +247,32 @@ Prepare tested corrections and a precise operator handoff, not unsupported
 - File attachment/structured mention restoration after reload remains outside
   text persistence coverage. See `UI-RECOVERY.md` for exact scope and evidence.
 
+### 21:27 UTC continuation — navigation and notes boundary
+
+- Prior draft reload commit: `8874baabf47ccc35f6cfc7e82dd67239ed133e4e`.
+- Fixed legacy compact sidebar leaving its drawer open after chat selection.
+  Existing browser preview confirmed dismissal and preserved Bittensor draft on
+  Back. No model or chain request was made.
+- Reproduced stale notes from workspace A replacing workspace B's list, both by
+  executing the production refresh callback with delayed results and through a
+  real NotesPage fixture. Added a keyed workspace component boundary for list,
+  editor and async operation state. This fixes client state, not server auth.
+- Fixed fixture: completing A leaves B's notes; failing C shows no prior notes.
+  Existing “No notes yet” copy also renders during C's error: recorded for next
+  pass. Same-workspace client replacement/autosave races remain unverified.
+- Local notes/memory/hosted-MCP API suites: **20 pass / 296 assertions**. Final
+  frontend: **1,211 pass / 7,655 assertions**. Typecheck/build pass. Secret scan
+  zero findings. Design detector zero primary findings / ten advisories.
+- Applied Impeccable hardening and Uncodixfy without redesign. Added a repeatable
+  synthetic NotesPage browser fixture; its servers/tab were stopped/closed.
+  Exact evidence and limits are in `UI-RECOVERY.md`. No production changes.
+
 ## Next continuation
 
-Investigate the compact navigation drawer staying open after selecting a chat,
-then move to untested memory/notes/integration failure paths and filesystem backup
-coverage. File attachments/structured mentions are not guaranteed on reload.
+Check notes loading/error versus empty state, then overlapping save/close while
+typing and same-workspace client replacement. Move on to remaining integration
+failure paths and filesystem backup coverage. File attachments/structured
+mentions are not guaranteed on reload.
 Re-read applicable skill references as necessary. Do not repeat
 unchanged hosted probes. Manual hosted approval journey, SES/reset, filesystem
 recovery, revision drift and hosted acceptance still block launch. No push,

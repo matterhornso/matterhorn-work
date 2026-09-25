@@ -138,3 +138,53 @@ notes. No new layout or styling; Impeccable hardening and Uncodixfy applied.
 
 Scope remains local browser/component/state coverage. No hosted, real-agent,
 mobile viewport, Safari/Firefox, or screen-reader acceptance was added here.
+
+## 21:27 continuation — compact navigation and notes workspace isolation
+
+The legacy compact sidebar opened a selected chat but left its modal navigation
+drawer covering the destination. Session selection now closes only the mobile
+drawer, leaving desktop sidebar preferences unchanged. Browser confirmation at
+the existing 650px preview width: choose Sui chat, drawer dismisses without Escape;
+browser Back restores Bittensor with the original unsent draft. No send occurred.
+
+Notes had a more serious UI-state race. Both a controlled execution of the actual
+refresh callback and the real NotesPage browser fixture reproduced this sequence:
+start slow workspace-A list request, switch to B, display B's notes, then finish A.
+The UI displayed `Current workspace: B` alongside `Only workspace A`. This was
+stale client state, not proof of a backend authorization bypass.
+
+NotesPage now resolves workspace identity outside a keyed WorkspaceNotesPage.
+The list, editor, pending operations and local filters belong to that workspace's
+component instance. A workspace transition unmounts the previous instance, so
+its late responses cannot populate the new instance. Existing unmount-save logic
+remains bound to the original workspace; server authorization was not changed.
+
+Browser confirmation using the actual NotesPage with synthetic responses:
+
+- After B loaded, completing A kept `Only workspace B` visible.
+- Switching to failing C showed the error/retry state without A or B's notes.
+- The error view also says “No notes yet”; this is a remaining copy/state defect,
+  not accepted as a truthful empty result. No broad visual polishing performed.
+
+Reproduce with `pnpm --dir apps/app exec bun scripts/composer-fixture-preview.ts
+--notes`, open its printed loopback URL, then Switch to B → Complete old A request
+→ Switch to unavailable C. The fixture uses the real component, a synthetic
+client and `connect-src 'none'`. It is unstyled functional evidence, not visual
+or hosted acceptance. Both disposable fixture processes and the tab were closed.
+
+Validation:
+
+- Focused UI/data helpers: 33 pass / 166 assertions before the notes boundary;
+  boundary/close-editor/navigation tests afterward: 24 pass / 196 assertions.
+- Notes, memory and hosted-MCP API suites: **20 pass / 296 assertions**, using
+  disposable local data. Covers review-only suggestions, forbidden-secret and
+  policy rejection, workspace namespaces, corrupt vault errors, concurrent note
+  patches and write permissions. No AWS/live integrations claimed.
+- Final frontend: **1,211 pass / 7,655 assertions**. Typecheck and build pass;
+  existing chunk warnings remain. Secret scan: 1,203 files / zero findings.
+- Impeccable detector: zero primary findings, ten advisory notes. Impeccable
+  hardening and Uncodixfy preserved the existing design; changes are behavioral.
+
+Still unverified: same-workspace endpoint/client replacement during a pending
+request, overlapping autosaves while typing, and full hosted two-account browser
+acceptance. These are follow-up coverage, not claims of complete isolation.

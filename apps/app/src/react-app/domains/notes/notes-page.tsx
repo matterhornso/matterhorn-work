@@ -63,25 +63,11 @@ function NoteListAttachment({ note }: { note: MatterhornNote }) {
 }
 
 export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPageProps) {
-  const { showToast } = useStatusToasts();
   const notesClient = useNotesServerClient(client);
   const params = useParams<{ workspaceId?: string }>();
   const routeWorkspaceId = params.workspaceId?.trim() ?? "";
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => readActiveWorkspaceId() ?? "");
   const workspaceId = explicitWorkspaceId?.trim() || routeWorkspaceId || activeWorkspaceId;
-  const { notes, loading, error, create, update, remove, suggestMemory, refresh } = useNotesStore(workspaceId, notesClient);
-  const [query, setQuery] = useState("");
-  const [filterId, setFilterId] = useState<NoteFilterId>("all");
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<NoteDraft>({ title: "", body: "", tags: "" });
-  const [saving, setSaving] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-
-  useEffect(() => {
-    setSelectedNoteId(null);
-    setDraft({ title: "", body: "", tags: "" });
-  }, [workspaceId]);
-
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
     const refreshActiveWorkspace = () => setActiveWorkspaceId(readActiveWorkspaceId() ?? "");
@@ -92,6 +78,25 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
       window.removeEventListener(ACTIVE_WORKSPACE_CHANGED_EVENT, refreshActiveWorkspace);
     };
   }, []);
+
+  // A workspace transition must replace the whole async/editor state owner.
+  // Merely clearing selection leaves late list/save responses able to populate
+  // the next workspace with the previous workspace's notes.
+  return <WorkspaceNotesPage key={workspaceId} workspaceId={workspaceId} notesClient={notesClient} />;
+}
+
+function WorkspaceNotesPage({ workspaceId, notesClient }: {
+  workspaceId: string;
+  notesClient: MatterhornServerClient | null;
+}) {
+  const { showToast } = useStatusToasts();
+  const { notes, loading, error, create, update, remove, suggestMemory, refresh } = useNotesStore(workspaceId, notesClient);
+  const [query, setQuery] = useState("");
+  const [filterId, setFilterId] = useState<NoteFilterId>("all");
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<NoteDraft>({ title: "", body: "", tags: "" });
+  const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const filteredNotes = useMemo(
     () => filterNotes(notes, { query, filterId }),

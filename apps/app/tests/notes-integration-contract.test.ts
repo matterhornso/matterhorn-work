@@ -72,6 +72,11 @@ describe("Notes integration contracts", () => {
     expect(source).toContain("useParams<{ workspaceId?: string }>");
     expect(source).toContain("const workspaceId = explicitWorkspaceId?.trim() || routeWorkspaceId || activeWorkspaceId");
     expect(source).toContain("ACTIVE_WORKSPACE_CHANGED_EVENT");
+    expect(source).toContain("<WorkspaceNotesPage key={workspaceId} workspaceId={workspaceId} notesClient={notesClient} />");
+    const scopedPage = source.slice(source.indexOf("function WorkspaceNotesPage("));
+    expect(scopedPage).toContain("useNotesStore(workspaceId, notesClient)");
+    expect(scopedPage).toContain("const [selectedNoteId, setSelectedNoteId]");
+    expect(scopedPage).toContain("const [draft, setDraft]");
     expect(source).toContain('aria-label="Filter notes"');
     expect(source).toContain("grid-cols-[minmax(0,1fr)_9rem]");
     expect(source).toContain('placeholder={t("notes.search_placeholder")}');

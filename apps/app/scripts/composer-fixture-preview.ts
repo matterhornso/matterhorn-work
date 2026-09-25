@@ -1,6 +1,7 @@
 // Disposable UI fixture server. No accounts, provider calls, or protocol traffic.
 // Start: bun apps/app/scripts/composer-fixture-preview.ts
 import { build } from "vite";
+const fixtureEntry = process.argv.includes("--notes") ? "notes-workspace-race" : "composer-submit";
 
 const bundle = await build({
   configFile: false,
@@ -10,7 +11,7 @@ const bundle = await build({
   define: { "import.meta.env": "{}", "process.env.NODE_ENV": '"development"' },
   build: {
     target: "esnext", write: false, minify: false,
-    lib: { entry: new URL("./fixtures/composer-submit.tsx", import.meta.url).pathname, formats: ["es"] },
+    lib: { entry: new URL(`./fixtures/${fixtureEntry}.tsx`, import.meta.url).pathname, formats: ["es"] },
     rollupOptions: { output: { inlineDynamicImports: true } },
   },
   plugins: [{
@@ -35,4 +36,4 @@ const server = Bun.serve({
     });
   },
 });
-console.log(`${server.url}?managed&draftRace`);
+console.log(process.argv.includes("--notes") ? String(server.url) : `${server.url}?managed&draftRace`);
