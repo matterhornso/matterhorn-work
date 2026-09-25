@@ -7,9 +7,16 @@ interface ApprovalResult {
   reason?: string;
 }
 
+export interface ApprovalCancellationScope {
+  workspaceId: string;
+  sessionId: string;
+  subjectId: string;
+}
+
 interface PendingApproval {
   request: ApprovalRequest;
   resolve: (result: ApprovalResult) => void;
+  cancellationScope?: ApprovalCancellationScope;
 }
 
 export class ApprovalService {
@@ -27,6 +34,7 @@ export class ApprovalService {
   async requestApproval(
     input: Omit<ApprovalRequest, "id" | "createdAt">,
     signal?: AbortSignal,
+    cancellationScope?: ApprovalCancellationScope,
   ): Promise<ApprovalResult> {
     if (signal?.aborted) {
       return { id: "cancelled", allowed: false, reason: "cancelled" };
@@ -53,7 +61,7 @@ export class ApprovalService {
         settle({ id, allowed: false, reason: "timeout" });
       }, this.config.timeoutMs);
 
-      this.pending.set(id, { request, resolve: settle });
+      this.pending.set(id, { request, resolve: settle, cancellationScope });
       signal?.addEventListener("abort", cancel, { once: true });
     });
 
@@ -70,5 +78,16 @@ export class ApprovalService {
     };
     pending.resolve(result);
     return result;
+  }
+
+  cancelSession(scope: ApprovalCancellationScope): void {
+    for (const [id, pending] of this.pending) {
+      const candidate = pending.cancellationScope;
+      if (candidate?.workspaceId === scope.workspaceId
+        && candidate.sessionId === scope.sessionId
+        && candidate.subjectId === scope.subjectId) {
+        pending.resolve({ id, allowed: false, reason: "cancelled" });
+      }
+    }
   }
 }

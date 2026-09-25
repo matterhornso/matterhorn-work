@@ -1,6 +1,46 @@
 # Pending approval cancellation — 25 September 2026
 
-## Result: partial correction, not launch acceptance
+## 19:27 UTC follow-up: corrected locally in Bun and Node
+
+The remaining compatibility defect is now corrected on the local branch:
+`serve()` selects Bun's native HTTP server under Bun, preserving native request
+cancellation. Node/Electron keep the existing Node HTTP adapter. Both return the
+trusted socket peer and await shutdown; native error responses are generic and
+development error rendering is disabled. The implementation uses the documented
+[Bun server API](https://bun.sh/reference/bun/serve).
+
+The app's existing session-abort endpoint now also cancels pending chat approvals
+for the authenticated subject, workspace and session. This cancellation occurs
+before forwarding Stop to the runtime; it does not require host approval and
+cannot grant any operation. Approval scope is internal and is not included in
+the approval-list response.
+
+Verified locally:
+
+- The same standalone physical-disconnect probe now passes **Bun 1.3.11 and
+  Node 26.7.0**: empty queue, late approval refused, zero dispatches.
+- Full HTTP tests pass allow, deny, timeout, Stop and disconnect. Before the fix,
+  Stop returned success but late approval still returned 200. It now returns 404.
+- Retry with the same message ID requires a fresh approval and dispatches once.
+  Final targeted approval HTTP run: five tests / 67 assertions passed.
+- Unauthenticated Stop cannot clear the queue. Another session's Stop leaves it
+  pending. Unit coverage isolates subject/workspace/session and unscoped requests.
+  Cookie-based two-account tests reject both foreign-workspace Stop URL forms.
+- Full backend suite: **1,734 tests / 11,491 assertions passed** before adding
+  the final retry assertions. Complete ten-stage platform safety gate passed.
+  Final server typecheck and strict secret scan also pass (zero findings).
+- Pinned OpenCode 1.18.31 + real guard plugin + synthetic local provider:
+  all five agent responses complete in enforcement mode; in-flight Stop releases
+  the hold, disconnects the provider, and permits a successful next request.
+  Exact fixture usage/charge 6,000 tokens; zero pending holds. Secret and unbound
+  raw-runtime negative controls cause no extra inference.
+
+These are local checks, not hosted acceptance or live-chain/model proof. Runtime
+fixture cleanup still needs forced termination and partial-output retention is
+not proved. No production configuration, signup, auth policy or deployment was
+changed. Re-run the production-container and hosted flow before launch.
+
+## Historical 18:57 UTC result: partial correction
 
 `ApprovalService` did not observe request cancellation. A queued manual approval
 could remain usable after its requester disconnected. The service now accepts
@@ -47,7 +87,7 @@ The public-beta Docker entrypoint runs `bun apps/server/src/cli.ts`, so the Node
 pass does **not** clear the deployment blocker. Node 22 (the container's installed
 Node version) was not tested here, and the container runtime was not changed.
 
-## Next work
+## Follow-up identified at 18:57 UTC (completed locally above)
 
 1. Reproduce explicit **Stop** while a gateway prompt is awaiting manual approval.
    The UI currently calls the runtime session-abort endpoint; it does not cancel

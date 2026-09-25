@@ -912,7 +912,7 @@ describe("workspace session read APIs", () => {
     expect(JSON.stringify(ledgerBody)).not.toContain("Summarize this workspace");
   });
 
-  for (const reply of ["allow", "deny", "timeout"] as const) {
+  for (const reply of ["allow", "deny", "timeout", "stop", "disconnect"] as const) {
     test(`manual chat approval requires the host and handles ${reply} without early dispatch`, async () => {
       const workspaceRoot = await createWorkspaceRoot();
       const mock = startMockOpencode();
@@ -923,10 +923,16 @@ describe("workspace session read APIs", () => {
         approval: { mode: "manual", timeoutMs: reply === "timeout" ? 500 : 3_000 },
       });
       const base = `http://127.0.0.1:${openwork.server.port}`;
+      const controller = new AbortController();
+      const messageBody = JSON.stringify({ messageID: "msg_approval_retry", message: "Synthetic approval acceptance", model: { providerID: "openai", modelID: "gpt-4.1" } });
       const pendingResponse = fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
         method: "POST",
+        signal: controller.signal,
         headers: { ...auth(openwork.token), "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "Synthetic approval acceptance", model: { providerID: "openai", modelID: "gpt-4.1" } }),
+        body: messageBody,
+      }).catch((error: unknown) => {
+        if (reply === "disconnect" && error instanceof Error && error.name === "AbortError") return null;
+        throw error;
       });
       let approvalId: string | undefined;
       for (let attempt = 0; attempt < 100; attempt++) {
@@ -946,7 +952,30 @@ describe("workspace session read APIs", () => {
         body: JSON.stringify({ reply: "allow" }),
       });
       expect(clientApproval.status).toBe(401);
-      if (reply !== "timeout") {
+      if (reply === "stop" || reply === "disconnect") {
+        if (reply === "stop") {
+          const unauthenticated = await fetch(`${base}/w/ws_1/opencode/session/ses_1/abort`, { method: "POST" });
+          expect(unauthenticated.status).toBe(401);
+          await fetch(`${base}/w/ws_1/opencode/session/ses_other/abort`, {
+            method: "POST", headers: auth(openwork.token),
+          });
+          const stillPending = await fetch(`${base}/approvals`, { headers: { "x-matterhorn-host-token": openwork.hostToken } });
+          expect((await stillPending.json()).items).toHaveLength(1);
+          const stopped = await fetch(`${base}/w/ws_1/opencode/session/ses_1/abort`, {
+            method: "POST", headers: auth(openwork.token),
+          });
+          expect(stopped.status).toBe(200);
+        } else {
+          controller.abort();
+          expect(await pendingResponse).toBeNull();
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        const lateApproval = await fetch(`${base}/approvals/${approvalId}`, {
+          method: "POST", headers: { "x-matterhorn-host-token": openwork.hostToken, "Content-Type": "application/json" },
+          body: JSON.stringify({ reply: "allow" }),
+        });
+        expect(lateApproval.status).toBe(404);
+      } else if (reply !== "timeout") {
         const approved = await fetch(`${base}/approvals/${approvalId}`, {
           method: "POST", headers: { "x-matterhorn-host-token": openwork.hostToken, "Content-Type": "application/json" },
           body: JSON.stringify({ reply }),
@@ -954,13 +983,35 @@ describe("workspace session read APIs", () => {
         expect(approved.status).toBe(200);
       }
       const result = await pendingResponse;
-      expect(result.status).toBe(reply === "allow" ? 202 : 403);
-      if (reply !== "allow") {
+      expect(result?.status ?? null).toBe(reply === "disconnect" ? null : reply === "allow" ? 202 : 403);
+      if (result && reply !== "allow") {
         expect(await result.json()).toMatchObject({ code: "write_denied" });
       }
       expect(mock.requests.filter((request) => request.pathname.endsWith("/prompt_async"))).toHaveLength(reply === "allow" ? 1 : 0);
       const after = await fetch(`${base}/approvals`, { headers: { "x-matterhorn-host-token": openwork.hostToken } });
       expect((await after.json()).items).toEqual([]);
+      if (reply === "stop" || reply === "disconnect") {
+        const retried = fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+          method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" }, body: messageBody,
+        });
+        let retryApprovalId: string | undefined;
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const response = await fetch(`${base}/approvals`, { headers: { "x-matterhorn-host-token": openwork.hostToken } });
+          const body = await response.json();
+          retryApprovalId = body.items[0]?.id;
+          if (retryApprovalId) break;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        expect(retryApprovalId).toBeDefined();
+        expect(retryApprovalId).not.toBe(approvalId);
+        const approved = await fetch(`${base}/approvals/${retryApprovalId}`, {
+          method: "POST", headers: { "x-matterhorn-host-token": openwork.hostToken, "Content-Type": "application/json" },
+          body: JSON.stringify({ reply: "allow" }),
+        });
+        expect(approved.status).toBe(200);
+        expect((await retried).status).toBe(202);
+        expect(mock.requests.filter((request) => request.pathname.endsWith("/prompt_async"))).toHaveLength(1);
+      }
     });
   }
 

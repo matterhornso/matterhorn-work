@@ -71,4 +71,22 @@ describe("pending host approvals", () => {
     });
     expect(approvals.list()).toEqual([]);
   });
+
+  test("Stop only cancels approvals for the same account, workspace and session", async () => {
+    const approvals = new ApprovalService({ mode: "manual", timeoutMs: 1_000 });
+    const scope = { workspaceId: "workspace-a", sessionId: "session-a", subjectId: "user:a" };
+    const cancelled = approvals.requestApproval(input, undefined, scope);
+    const unrelated = [
+      { ...scope, subjectId: "user:b" },
+      { ...scope, workspaceId: "workspace-b" },
+      { ...scope, sessionId: "session-b" },
+      undefined,
+    ].map((otherScope) => approvals.requestApproval(input, undefined, otherScope));
+    approvals.cancelSession(scope);
+    expect(await cancelled).toMatchObject({ allowed: false, reason: "cancelled" });
+    expect(approvals.list()).toHaveLength(4);
+    for (const request of approvals.list()) approvals.respond(request.id, "allow");
+    expect((await Promise.all(unrelated)).every((result) => result.allowed)).toBe(true);
+    expect(approvals.list()).toEqual([]);
+  });
 });

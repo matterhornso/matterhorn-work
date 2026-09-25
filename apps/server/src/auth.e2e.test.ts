@@ -1835,6 +1835,8 @@ describe("public account authentication", () => {
       { path: `/workspace/${workspaceA}/mcp` },
       { path: `/workspace/${workspaceA}/export?sensitive=exclude` },
       { path: `/workspace/${workspaceA}/data-ledger/export` },
+      { path: `/w/${workspaceA}/opencode/session/ses_isolation/abort`, method: "POST" },
+      { path: `/workspace/${workspaceA}/opencode/session/ses_isolation/abort`, method: "POST" },
     ];
     for (const request of deniedRequests) {
       const denied = await jsonRequest(app.base, request.path, { ...request, cookie: cookieB });

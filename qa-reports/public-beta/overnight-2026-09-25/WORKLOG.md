@@ -168,10 +168,35 @@ Prepare tested corrections and a precise operator handoff, not unsupported
   the pending gateway request. Reproduce this separately next, then implement
   scoped cancellation without weakening session/account authorization.
 
+### 19:27 UTC continuation — Stop and Bun disconnect corrections
+
+- Prior approval signal commit: `1504ae112257730760707835708488bc5ace8e94`.
+- Reproduced explicit Stop returning success while a later host approval could
+  still dispatch the stopped request. Added pending approval cancellation keyed
+  by authenticated subject + workspace + session. Negative tests protect other
+  accounts/workspaces/sessions, unauthenticated callers and unscoped approvals.
+- Corrected Bun POST disconnect propagation by selecting its native HTTP server
+  under Bun, retaining the Node adapter for Node/Electron. Existing peer-address,
+  streaming-failure and shutdown tests pass; error responses remain generic.
+- Previously failing physical-disconnect probe now passes both Bun 1.3.11 and
+  Node 26.7.0. Full gateway tests verify late approval 404, zero cancelled dispatch,
+  and same-ID retry with fresh approval and exactly one dispatch.
+- Full backend suite: **1,734 pass / 11,491 assertions** before final retry test
+  extension. Full ten-stage safety gate passes. Server build/typecheck passes.
+- Final same-ID retry/approval HTTP tests: five pass / 67 assertions. Final strict
+  secret scan: 1,202 files, zero findings; diff check clean.
+- Re-ran five-agent enforced runtime + in-flight abort because transport changed:
+  all synthetic responses pass, cancellation/recovery passes, used=charged=6,000,
+  zero holds, and secret/raw-runtime controls stop extra inference. Not live model
+  or hosted acceptance. Forced cleanup and partial-output limitations remain.
+- See `APPROVAL-CANCELLATION.md` for reproduction, historical failure, correction
+  and scope. No deployment or production policy/config changes.
+
 ## Next continuation
 
-Finish pending-approval Stop/disconnect correctness under the actual Bun runtime.
-Use the saved reproducible probe; do not label its known failure as passing.
-Then UI recovery/accessibility coverage. No repeated unchanged hosted probes.
-Preserve the manual approval journey, SES/reset, full filesystem recovery and
-revision drift blockers. No push, merge or deployment.
+UI recovery/accessibility coverage next: inspect Stop/failed-send presentation,
+draft retention and model/desk navigation using disposable local data. Read
+applicable design skills before UI work. Do not repeat unchanged hosted probes.
+Manual hosted approval journey, SES/reset, full filesystem recovery and revision
+drift still block launch. Pending-approval Stop/disconnect now pass locally but
+still require production-container/hosted acceptance. No push, merge or deployment.
