@@ -114,6 +114,13 @@ describe("Notes integration contracts", () => {
     expect(source).toContain("hover:bg-dls-surface-muted/[0.20]");
   });
 
+  test("failed initial notes loading does not claim the workspace has no notes", () => {
+    const source = readAppSource("domains/notes/notes-page.tsx");
+    expect(source).toContain('title="Could not load notes"');
+    expect(source).toContain("onRetry={() => void refresh()}");
+    expect(source).toContain("error && notes.length === 0 ? null : filteredNotes.length === 0");
+  });
+
   test("artifact outputs can create linked notes from the session panel", () => {
     const sessionSource = readAppSource("domains/session/chat/session-page.tsx");
     const artifactSource = readAppSource("domains/session/artifacts/artifact-panel.tsx");

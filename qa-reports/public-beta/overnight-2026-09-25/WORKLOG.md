@@ -269,11 +269,27 @@ Prepare tested corrections and a precise operator handoff, not unsupported
 
 ## Next continuation
 
-Check notes loading/error versus empty state, then overlapping save/close while
-typing and same-workspace client replacement. Move on to remaining integration
+Check same-workspace notes client replacement. Move on to remaining integration
 failure paths and filesystem backup coverage. File attachments/structured
 mentions are not guaranteed on reload.
 Re-read applicable skill references as necessary. Do not repeat
 unchanged hosted probes. Manual hosted approval journey, SES/reset, filesystem
 recovery, revision drift and hosted acceptance still block launch. No push,
 merge or deployment.
+
+### 21:57 UTC continuation — note save races and load failures
+
+- Prior notes/navigation commit: `da2399b4c0a27575a991e052f0c062a3f5f1ac0e`.
+- Four regression cases failed before correction: newer-draft dismissal,
+  overlapping writes, skipped revert and stale selected-note save success.
+- Notes saves now serialize; save/close succeeds only for the current snapshot.
+  Queued work keeps Saving visible, and failed writes permit subsequent retries.
+- Browser fixture verified newer text survives Back's pending save, eventually
+  persists in order, and closes only after safe completion. No network/provider
+  or chain activity. Test fixture and tab stopped/closed.
+- Initial notes load errors no longer also claim an empty workspace.
+- Final frontend: **1,217 pass / 7,670 assertions**. Typecheck/build pass; existing
+  chunk warnings remain. Secret scan zero findings. Source design detector zero
+  primary findings / four advisories. Impeccable hardening, no redesign.
+- Evidence/reproduction in `UI-RECOVERY.md`. Same-workspace client replacement
+  and cross-tab concurrency are not claimed covered. No production changes.

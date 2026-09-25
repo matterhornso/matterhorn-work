@@ -188,3 +188,44 @@ Validation:
 Still unverified: same-workspace endpoint/client replacement during a pending
 request, overlapping autosaves while typing, and full hosted two-account browser
 acceptance. These are follow-up coverage, not claims of complete isolation.
+
+## 21:57 continuation — notes save ordering and truthful failure state
+
+Four regression cases failed against the previous production callback: an old
+successful save permitted closing a newer draft, overlapping saves reached the
+API concurrently, a revert matching the stale server value skipped persistence,
+and a save could count as successful for a different selected note.
+
+The editor now serializes its saves and considers a saved snapshot current only
+if both the selected note and draft identity still match. Back/Memory actions
+keep the editor open when newer edits remain. Saving stays visible until queued
+writes finish. A failed save does not block subsequent queued work. The existing
+workspace-bound unmount save remains intact. This is per-editor ordering, not a
+claim of cross-tab/multi-user conflict resolution.
+
+Initial load failure now shows the existing error and Retry without also
+claiming “No notes yet” or offering “Create first note.” Stale same-workspace
+notes remain available alongside an error when previously loaded.
+
+Browser fixture confirmation (real NotesPage, synthetic client, no network):
+
+1. Open B's note, type `First saved draft`, click Back while save is pending.
+2. Type `Newer edit must survive`, complete the first save: editor stays open
+   with the newer text while fixture storage reports the older saved text.
+3. Complete queued saves: storage reaches the latest text, pending count is
+   zero and Saving disappears. Back then closes to a list with the latest text.
+4. Switch to failing C: only load error/Retry; no false empty state or prior list.
+
+Repeat using the `--notes` fixture and its new Complete next note save button.
+The loopback fixture server and temporary tab were stopped/closed. Original
+authenticated preview data and unsent draft were not touched in this pass.
+
+Validation: five callback regression tests plus one error-state contract;
+**1,217 frontend tests pass / 7,670 assertions**. Typecheck/build pass; existing
+chunk warnings persist. Secret scan: 1,203 files / zero findings. Impeccable
+source detector: zero primary findings / four advisories. Hardening guidance
+kept this to truthful states and draft preservation; no visual redesign.
+
+No hosted acceptance or real-provider/chain request is claimed. Same-workspace
+client replacement, cross-tab editing, and hosted browser isolation still need
+coverage. No deployment/configuration changes.
