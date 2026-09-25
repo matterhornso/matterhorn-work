@@ -364,6 +364,13 @@ type HomeCapabilityStatusItem = {
 };
 
 function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
+  const summaries: Partial<Record<CustomerProtocolDeskId, string>> = {
+    private_ai: "Chat, write, and work on anything.",
+    bittensor: "Research subnets and compare validators.",
+    hyperliquid: "Explore markets, funding, and exposure.",
+    polymarket: "Find markets and compare outcomes.",
+    sui: "Explore accounts and transactions.",
+  };
   return CUSTOMER_LAUNCHER_DESK_VISUALS.map((visual) =>
     getCustomerProtocolDeskVisualForLaunch(
       visual.id,
@@ -373,7 +380,7 @@ function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
       id: visual.id as CustomerWorkflowIconHint,
       title: visual.displayName,
       statusLabel: visual.statusLabel,
-      summary: visual.shortDescription,
+      summary: summaries[visual.id] ?? visual.shortDescription,
       proof: visual.safetySummary,
     }));
 }
@@ -562,16 +569,9 @@ function HomeCapabilityOverview({
   onOpenCapability?: (id: CustomerWorkflowIconHint) => void;
 }) {
   return (
-    <details
-      className="matterhorn-capability-overview group border-y border-dls-border/55 py-3"
-      style={{ contentVisibility: "auto", containIntrinsicSize: "360px" } as CSSProperties}
-    >
-      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1 text-left marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/35">
-        <span className="text-sm font-semibold text-dls-text">Desks</span>
-        <ChevronRight className="size-4 shrink-0 text-dls-secondary" aria-hidden="true" />
-      </summary>
-      <section className="mt-2" aria-label="Desk capability overview">
-        <div className="overflow-hidden rounded-lg bg-dls-canvas/35 ring-1 ring-inset ring-dls-border/45">
+    <section className="matterhorn-capability-overview space-y-3 py-3" aria-label="Desks">
+      <h3 className="text-base font-semibold text-dls-text">Choose a desk</h3>
+      <div className="overflow-hidden rounded-lg bg-dls-canvas/35 ring-1 ring-inset ring-dls-border/45">
         {homeCapabilityStatusItems().map((item) => {
           return (
             <article
@@ -593,7 +593,7 @@ function HomeCapabilityOverview({
                   <p className="mt-0.5 line-clamp-1 text-[12px] leading-5 text-dls-secondary sm:line-clamp-none">{item.summary}</p>
                 </div>
                 <span className="hidden items-center gap-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:inline-flex">
-                  {item.id === "private_ai" ? "Start task" : item.id === "wellness" ? "Start workflow" : "Open desk"}
+                  {item.id === "private_ai" ? "Start chat" : item.id === "wellness" ? "Start workflow" : "Open desk"}
                   <ChevronRight className="size-3.5" aria-hidden="true" />
                 </span>
               </button>
@@ -621,9 +621,8 @@ function HomeCapabilityOverview({
             </article>
           );
         })}
-        </div>
-      </section>
-    </details>
+      </div>
+    </section>
   );
 }
 
@@ -3337,14 +3336,41 @@ export function SessionPage(props: SessionPageProps) {
                             </h2>
                           </div>
 
-                          {homePrimaryAction ? <WorkspaceHomePrimaryAction {...homePrimaryAction} /> : (
+                          {props.modelUnavailable && homePrimaryAction ? <WorkspaceHomePrimaryAction {...homePrimaryAction} /> : null}
+
+                          <HomeCapabilityOverview
+                            onOpenCapability={(id) => {
+                              if (id === "private_ai") {
+                                props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
+                                return;
+                              }
+                              if (id === "bittensor" || id === "hyperliquid" || id === "polymarket" || id === "sui") {
+                                openVenueRailPane(id);
+                                return;
+                              }
+                              if (id === "wellness" && wellnessRailLauncher) {
+                                openWorkflowDesk("wellness", wellnessRailLauncher.prompt, {
+                                  title: wellnessRailLauncher.title,
+                                  sourceId: "home-capability",
+                                });
+                              }
+                            }}
+                          />
+
+                          {!props.modelUnavailable && homePrimaryAction ? <WorkspaceHomePrimaryAction {...homePrimaryAction} /> : null}
+
+                          <details className="group border-y border-dls-border/55 py-2">
+                            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1 text-sm font-medium text-dls-secondary marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/35">
+                              Custom workflow
+                              <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
+                            </summary>
                             <Suspense fallback={<div className="h-48 border-y border-dls-border/55" aria-hidden="true" />}>
                               <WorkspaceCoworkerStart
                                 disabled={props.sidebar.newTaskDisabled || !props.matterhornServerClient || !props.runtimeWorkspaceId}
                                 onChoose={startCoworkerFromHome}
                               />
                             </Suspense>
-                          )}
+                          </details>
 
                           <div
                             className="flex flex-wrap items-center gap-1"
@@ -3493,24 +3519,6 @@ export function SessionPage(props: SessionPageProps) {
                             onOpenHistory={openRunHistory}
                           />
                         ) : null}
-                        <HomeCapabilityOverview
-                          onOpenCapability={(id) => {
-                            if (id === "private_ai") {
-                              props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
-                              return;
-                            }
-                            if (id === "bittensor" || id === "hyperliquid" || id === "polymarket" || id === "sui") {
-                              openVenueRailPane(id);
-                              return;
-                            }
-                            if (id === "wellness" && wellnessRailLauncher) {
-                              openWorkflowDesk("wellness", wellnessRailLauncher.prompt, {
-                                title: wellnessRailLauncher.title,
-                                sourceId: "home-capability",
-                              });
-                            }
-                          }}
-                        />
                         <HomeWalletRuntimeStatus
                           capabilities={homeWalletCapabilitiesQuery.data ?? null}
                           loading={homeWalletCapabilitiesQuery.isLoading}

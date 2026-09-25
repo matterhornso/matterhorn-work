@@ -153,7 +153,7 @@ describe("Project Activity contract tests", () => {
   });
 
   describe("Home wiring", () => {
-    test("workspace home names the current location and leads with coworkers", () => {
+    test("workspace home names the current location and leads with desks", () => {
       const source = readAppSource("domains/session/chat/session-page.tsx");
       const coworkerStart = readAppSource("domains/session/chat/workspace-coworker-start.tsx");
 
@@ -183,7 +183,7 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("{canExposeLocalPaths ? (");
     });
 
-    test("Home chooses one adaptive setup, resume, or coworker action", () => {
+    test("Home preserves model setup and resume without replacing the desk chooser", () => {
       const source = readAppSource("domains/session/chat/session-page.tsx");
 
       expect(source).toContain("const homePrimaryAction = props.modelUnavailable");
@@ -195,6 +195,24 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("<WorkspaceCoworkerStart");
       expect(source).toContain('import("./workspace-coworker-start")');
       expect(source).not.toContain('eyebrow: "Recommended safe start"');
+    });
+
+    test("Home shows desks above secondary workflows and project activity without an accordion", () => {
+      const source = readAppSource("domains/session/chat/session-page.tsx");
+      const chooser = source.slice(source.indexOf("function HomeCapabilityOverview("), source.indexOf("function WorkspaceHomePrimaryAction("));
+      const home = source.slice(source.indexOf('aria-label="Workspace home"'));
+
+      expect(chooser).toContain('aria-label="Desks"');
+      expect(chooser).toContain("Choose a desk");
+      expect(chooser).not.toContain("<details");
+      expect(chooser).not.toContain("contentVisibility");
+      expect(chooser).toContain('"Start chat"');
+      expect(home.indexOf("<HomeCapabilityOverview")).toBeLessThan(home.indexOf("<WorkspaceCoworkerStart"));
+      expect(home.indexOf("<HomeCapabilityOverview")).toBeLessThan(home.indexOf("<WorkspaceMissionOverview"));
+      expect(home.indexOf("<HomeCapabilityOverview")).toBeLessThan(home.indexOf("<RecentActivitySection"));
+      expect(home).toContain("Custom workflow");
+      expect(home).toContain("!props.modelUnavailable && homePrimaryAction");
+      expect(home).toContain('if (id === "private_ai") {\n                                props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);');
     });
 
     test("Home keeps protocol desks available without auto-sending", () => {
