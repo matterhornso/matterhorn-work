@@ -2250,7 +2250,7 @@ function operationalReadiness(
   const hostedMcpAccessMode = matterhornHostedMcpAccessMode();
   const hostedMcpAccessIntegrityReady = hostedMcpAccessMode === "off"
     || authStore.hostedMcpAccessIntegrityReady();
-  const hostBackupRequired = process.env.MATTERHORN_HOST_BACKUP_REQUIRED === "1";
+  const hostBackupRequired = enabledEnvironmentFlag("MATTERHORN_HOST_BACKUP_REQUIRED");
   const hostBackupFreshCheck = !hostBackupRequired || hostBackupFresh();
   const cryptoEvidenceSuiAnchorPackageReady = !cryptoEvidenceSuiAnchorPackageState.configured
     || cryptoEvidenceSuiAnchorPackageState.verified;

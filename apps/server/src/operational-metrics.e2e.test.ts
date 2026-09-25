@@ -207,29 +207,31 @@ describe("operational probes and metrics", () => {
     }
   });
 
-  test("required host backups fail readiness until a recent verified upload marker exists", async () => {
-    const previous = {
-      required: process.env.MATTERHORN_HOST_BACKUP_REQUIRED,
-      dataRoot: process.env.MATTERHORN_WORK_DATA_DIR,
-    };
-    const root = mkdtempSync(join(tmpdir(), "matterhorn-backup-readiness-"));
-    dirs.push(root);
-    process.env.MATTERHORN_HOST_BACKUP_REQUIRED = "1";
-    process.env.MATTERHORN_WORK_DATA_DIR = root;
-    try {
-      const base = await boot();
-      const response = await fetch(`${base}/health/ready`);
-      const body = await response.json();
-      expect(response.status).toBe(503);
-      expect(body).toMatchObject({ checks: { hostBackupRequired: true, hostBackupFresh: false } });
-      expect(JSON.stringify(body)).not.toContain(root);
-    } finally {
-      if (previous.required === undefined) delete process.env.MATTERHORN_HOST_BACKUP_REQUIRED;
-      else process.env.MATTERHORN_HOST_BACKUP_REQUIRED = previous.required;
-      if (previous.dataRoot === undefined) delete process.env.MATTERHORN_WORK_DATA_DIR;
-      else process.env.MATTERHORN_WORK_DATA_DIR = previous.dataRoot;
-    }
-  });
+  for (const required of ["1", "true", "YES", " on "]) {
+    test(`required host backups (${required}) fail readiness without a verified upload`, async () => {
+      const previous = {
+        required: process.env.MATTERHORN_HOST_BACKUP_REQUIRED,
+        dataRoot: process.env.MATTERHORN_WORK_DATA_DIR,
+      };
+      const root = mkdtempSync(join(tmpdir(), "matterhorn-backup-readiness-"));
+      dirs.push(root);
+      process.env.MATTERHORN_HOST_BACKUP_REQUIRED = required;
+      process.env.MATTERHORN_WORK_DATA_DIR = root;
+      try {
+        const base = await boot();
+        const response = await fetch(`${base}/health/ready`);
+        const body = await response.json();
+        expect(response.status).toBe(503);
+        expect(body).toMatchObject({ checks: { hostBackupRequired: true, hostBackupFresh: false } });
+        expect(JSON.stringify(body)).not.toContain(root);
+      } finally {
+        if (previous.required === undefined) delete process.env.MATTERHORN_HOST_BACKUP_REQUIRED;
+        else process.env.MATTERHORN_HOST_BACKUP_REQUIRED = previous.required;
+        if (previous.dataRoot === undefined) delete process.env.MATTERHORN_WORK_DATA_DIR;
+        else process.env.MATTERHORN_WORK_DATA_DIR = previous.dataRoot;
+      }
+    });
+  }
 
   test("metrics require owner authentication and expose bounded labels only", async () => {
     const base = await boot();

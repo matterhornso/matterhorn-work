@@ -16,6 +16,7 @@ import { abortSession } from "../apps/app/src/app/lib/opencode-session";
 const binary = process.env.MATTERHORN_QA_OPENCODE_BIN;
 if (!binary) throw new Error("Set MATTERHORN_QA_OPENCODE_BIN to the pinned OpenCode 1.18.31 executable");
 const lostAck = process.argv.includes("--lost-ack");
+const guardedMode = process.argv.includes("--guarded-enforce") ? "enforce" : "off";
 const retryAfterLostAck = process.argv.includes("--retry-after-lost-ack");
 const abortRejected = process.argv.includes("--abort-rejected");
 const abortInFlight = process.argv.includes("--abort-in-flight") || abortRejected;
@@ -48,7 +49,7 @@ const testEnv = {
   OPENWORK_ENV_STORE: join(root, "env.json"), OPENWORK_TOKEN_STORE: join(root, "tokens.json"),
   MATTERHORN_MODEL_USAGE_DB: join(root, "usage.db"), MATTERHORN_MODEL_USAGE_ENFORCEMENT: "hard",
   MATTERHORN_MODEL_USAGE_DAILY_LIMIT: "1000000", MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT: "1000000",
-  MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS: "10000", MATTERHORN_GUARDED_RUNTIME_MODE: "off",
+  MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS: "10000", MATTERHORN_GUARDED_RUNTIME_MODE: guardedMode,
   MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED: "1", MATTERHORN_AGENT_RUNTIME_SECRET: runtimeSecret,
   MATTERHORN_CAPABILITY_SIGNING_SECRET: randomBytes(32).toString("hex"),
 };
@@ -405,7 +406,7 @@ try {
   const rawBlocked = (raw.status >= 400 || Boolean(raw.data?.info?.error)) && rawGuardResults.some(result => result.path === "/internal/agent-runs/provider-messages" && result.status >= 400 && result.status < 500) && modelCalls === beforeBlocked;
   console.log(JSON.stringify({ probe: "raw-runtime-without-gateway-run", status: raw.status, errorName: rawError?.name, errorMessage: rawMessage.slice(0, 220), guardResults: rawGuardResults, blockedBeforeInference: rawBlocked, extraModelCalls: modelCalls - beforeBlocked }));
   const usage = await api("/workspace/ws_guard_qa/model-usage/status");
-  console.log(JSON.stringify({ scope: "real local Matterhorn gateway + pinned OpenCode + real guard plugin; synthetic inference, no external tools, NOT hosted or full desk acceptance", lostAck, modelCalls, promptPostAttempts, completedBeforeDrop, usedTokens: usage.data?.status?.monthly?.usedTokens, chargedTokens: usage.data?.status?.monthly?.chargedTokens, pendingRequests: usage.data?.status?.pendingRequests }));
+  console.log(JSON.stringify({ scope: "real local Matterhorn gateway + pinned OpenCode + real guard plugin; synthetic inference, no external tools, NOT hosted or full desk acceptance", guardedMode, lostAck, modelCalls, promptPostAttempts, completedBeforeDrop, usedTokens: usage.data?.status?.monthly?.usedTokens, chargedTokens: usage.data?.status?.monthly?.chargedTokens, pendingRequests: usage.data?.status?.pendingRequests }));
   process.exitCode = results.every(result => result.status === 202 && result.finish === "stop" && result.modelCalls === 1) && usage.data?.status?.monthly?.usedTokens === (toolProbe ? 7000 : abortInFlight ? 6000 : 5000) && secretBlocked && rawBlocked && !retryCausedAdditionalInference && cancellationPassed && !failedStopReportedSuccess && toolProbePassed ? 0 : 1;
 } catch (error) {
   console.log(JSON.stringify({ probe: "gateway-runtime-guard", error: error instanceof Error ? error.message : "QA failed", modelCalls }));

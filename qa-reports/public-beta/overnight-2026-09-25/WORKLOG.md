@@ -125,9 +125,35 @@ Prepare tested corrections and a precise operator handoff, not unsupported
 
 ## Next action
 
-Local reviewable prior commit: `546821f251` (not pushed). Recovery fixes/evidence
-are the next local commit. Next inspect the filesystem recovery coverage gap
-and normal-user guarded-runtime acceptance; use disposable data, not existing
-preview/account data. Do not repeat unchanged hosted probes. Do not count
-operator-assisted five-desk responses as normal hosted acceptance. Carry manual
-approval, SES/reset, full backup coverage and revision drift into the handoff.
+### 18:27 UTC continuation — backup flag parity and enforced runtime
+
+- Prior recovery commit is `f98828d06a`; all work remains local/unpushed.
+- Reproduced a backup flag mismatch: launch checks accept `true/yes/on`, while
+  `/health/ready` and the container backup loop only accepted `1`. Three local
+  readiness tests returned 200 instead of 503 without a backup; the worker test
+  showed `true` exiting without an upload attempt.
+- Fixed server readiness using its existing boolean helper and aligned the
+  worker's trimmed/case-insensitive parser. Added a local shell-worker fixture
+  (stub uploader, no AWS), with seven enabled spellings and seven disabled/invalid
+  spellings. Wired it into the container contract command already run by CI.
+- Readiness/metrics/launch tests: 17 pass / 83 assertions; container tests pass;
+  server typecheck passes. Full backend suite: **1,723 pass / 11,425 assertions**.
+- Extended the pinned runtime probe with `--guarded-enforce`. All five agents
+  complete synthetic responses in enforce mode. Baseline, lost-ack/retry,
+  cancellation/recovery and denied-write runs pass; usage settles to exact fixture
+  totals and zero holds. Secret and unbound-runtime negative controls block
+  inference. See `RUNTIME-ENFORCEMENT.md` for scope and limits. This is not hosted
+  normal-user or live-model acceptance.
+- Runtime cleanup needed bounded forced termination; partial streaming output
+  retention was not established. Do not report either as accepted.
+- Filesystem recovery gap remains an operator/implementation blocker. Did not
+  add an unreviewed broad archival format or mutate actual volume configuration.
+
+## Resume here
+
+Commit the backup flag correction and runtime evidence. Next investigate manual
+approval cancellation: does stopping/disconnecting a prompt while host approval
+is pending prevent a later approval from dispatching it? Reproduce locally before
+changing behavior; preserve approval/security checks. Then UI recovery/accessibility
+coverage. No repeated unchanged hosted probes. Preserve the unresolved manual
+approval journey, SES/reset, full filesystem recovery and revision drift blockers.
