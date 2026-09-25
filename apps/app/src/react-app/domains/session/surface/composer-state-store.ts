@@ -19,6 +19,7 @@ export type ComposerSessionState = {
 export type ComposerStateStore = {
   sessions: Record<string, ComposerSessionState>;
   setDraft: (sessionId: string, draft: string) => void;
+  hydrateDraft: (sessionId: string, draft: string) => boolean;
   setAttachments: (sessionId: string, attachments: ComposerAttachment[]) => void;
   setMentions: (sessionId: string, mentions: Record<string, "agent" | "file">) => void;
   setPasteParts: (sessionId: string, pasteParts: ComposerPastePart[]) => void;
@@ -45,6 +46,17 @@ function getWritableSession(state: ComposerStateStore, sessionId: string): Compo
 
 export const useComposerStateStore = create<ComposerStateStore>((set) => ({
   sessions: {},
+  hydrateDraft: (sessionId, draft) => {
+    let restored = false;
+    set((state) => {
+      // Existing state, including an intentionally cleared draft, wins over
+      // a persistence snapshot from an earlier render.
+      if (state.sessions[sessionId] || !draft) return state;
+      restored = true;
+      return { sessions: { ...state.sessions, [sessionId]: { ...createEmptyComposerSession(), draft } } };
+    });
+    return restored;
+  },
   setDraft: (sessionId, draft) => set((state) => {
     const current = getWritableSession(state, sessionId);
     if (current.draft === draft) return state;

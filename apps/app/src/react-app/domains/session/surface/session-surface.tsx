@@ -1572,7 +1572,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const [verifiedOpenTargets, setVerifiedOpenTargets] = useState<OpenTarget[]>([]);
   const composerShellRef = useRef<HTMLDivElement>(null);
   const hydratedKeyRef = useRef<string | null>(null);
-  const hydratedSavedDraftKeyRef = useRef<string | null>(null);
   const autoOpenedTargetRef = useRef<string | null>(null);
   const initializedAutoOpenSessionRef = useRef<string | null>(null);
   const handledTerminalFailureRef = useRef<string | null>(null);
@@ -1675,7 +1674,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   useEffect(() => {
     hydratedKeyRef.current = null;
-    hydratedSavedDraftKeyRef.current = null;
     setError(null);
     setSending(false);
     setConfirmingPrivacy(false);
@@ -2197,13 +2195,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
   ]);
 
   useEffect(() => {
-    const text = savedSessionDraft?.text?.trim();
+    const text = savedSessionDraft?.text;
     if (!text) return;
-    if (draft.trim()) return;
-    const key = `${props.workspaceId}:${props.sessionId}:${text}`;
-    if (hydratedSavedDraftKeyRef.current === key) return;
-    hydratedSavedDraftKeyRef.current = key;
-    setComposerDraft(props.sessionId, text);
+    if (!useComposerStateStore.getState().hydrateDraft(props.sessionId, text)) return;
     props.onDraftChange(buildDraft(text, attachments));
     window.setTimeout(() => window.dispatchEvent(new Event("openwork:focusPrompt")), 0);
   }, [

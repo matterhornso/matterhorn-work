@@ -55,8 +55,9 @@ the stronger current-state contract rather than the old destructive assignment.
    state/telemetry regressions (see the 20:27 continuation below). Full browser
    Stop-to-gateway acceptance remains separate from these local checks.
 2. Test session/model/desk transitions with pending sends and unsent drafts.
-   Draft durability across an app reload remains unverified/not guaranteed by
-   the in-memory composer store; do not claim it from this fix.
+   Plain text, collapsed paste and model/conversation switching are now covered
+   in the local browser (20:57 continuation). File attachments and structured
+   mention/context restoration across a full reload remain unverified.
 3. Repeat responsive, keyboard, screen-reader and real hosted acceptance in an
    available environment. No launch signoff follows from this bounded pass.
 
@@ -92,3 +93,48 @@ Validation:
   dismissal; no error alert or Retry response button. No CSS/layout change.
 - Impeccable detector: zero primary findings, 33 advisory notes.
 - No new live-provider, hosted, mobile or assistive-technology acceptance claimed.
+
+## 20:57 continuation — draft reload and navigation
+
+Used the existing authenticated disposable local preview; no requests were sent
+to a model or chain, no accounts or wallet actions were created. Before editing:
+
+- Existing Bittensor draft survived an ordinary reload, selection of ASI1 MINI,
+  restoring ASI1, opening the existing Sui conversation and browser Back.
+- The compact navigation drawer stayed open after choosing the Sui conversation;
+  Escape dismissed it. This is a remaining navigation friction to investigate,
+  not evidence that the Sui agent executed.
+- Reproduced leading/trailing whitespace being stripped on reload.
+- Reproduced clearing edited text allowing an older saved draft to reappear.
+- Reproduced collapsed pasted content becoming only `[pasted text <label>]`
+  after reload. Its text existed only in the in-memory paste-parts store.
+
+Corrections:
+
+- Restore exact text only into an absent composer state. Existing text, including
+  an intentional empty/whitespace edit or attachment-only state, wins over a
+  stale persisted snapshot. Removed text-keyed rehydration and trimming.
+- Persist known pasted blocks as their plain text. Reload therefore restores an
+  editable expanded draft, not a dangling chip. The conversion uses only typed
+  text and paste parts, never resolved provider context, memory, or consent.
+- Pasted text already lost before this fix cannot be recovered by the fix.
+  Binary File attachments still are not persisted by this text-draft mechanism.
+
+Browser confirmation after hot reload:
+
+- Cleared a draft; it stayed empty, including after a full reload.
+- Pasted five lines with leading indentation and trailing blank lines; reload
+  restored the actual content. DOM paragraphs were exactly `  Paste QA one`,
+  `    Paste QA two`, `Paste QA three`, empty, empty.
+- Restored the original unsent `Subnet discovery on Bittensor` draft and ASI1.
+
+Validation: six new runtime regressions cover exact formatting, stale snapshots,
+intentional clearing, separate sessions, pasted content and privacy exclusions.
+Focused suite: 19 pass / 86 assertions. Full frontend: **1,210 pass / 7,647
+assertions**. Typecheck/build pass; pre-existing chunk-size warnings remain.
+Updated the source-wiring assertion from storing raw paste placeholders to the
+tested snapshot conversion. Design detector: zero primary findings, 33 advisory
+notes. No new layout or styling; Impeccable hardening and Uncodixfy applied.
+
+Scope remains local browser/component/state coverage. No hosted, real-agent,
+mobile viewport, Safari/Firefox, or screen-reader acceptance was added here.

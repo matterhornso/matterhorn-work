@@ -1,12 +1,23 @@
 /** @jsxImportSource react */
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
-import type { PromptMode } from "../../../../app/types";
+import type { ComposerDraft, PromptMode } from "../../../../app/types";
 
 export type SessionDraftSnapshot = {
   text: string;
   mode: PromptMode;
 };
+
+export function sessionDraftForStorage(draft: ComposerDraft): SessionDraftSnapshot {
+  // Persist only what the user typed/pasted. Resolved model context and consent
+  // metadata must never be substituted into the local draft.
+  const pastes = new Map<string, string>();
+  for (const part of draft.parts) {
+    if (part.type === "paste") pastes.set(part.label, part.text);
+  }
+  const text = draft.text.replace(/\[pasted text ([^\]]+)\]/g, (placeholder, label: string) => pastes.get(label) ?? placeholder);
+  return { text, mode: draft.mode };
+}
 
 const STORAGE_KEY = "openwork.session-drafts.v1";
 const MAX_DRAFT_COUNT = 100;

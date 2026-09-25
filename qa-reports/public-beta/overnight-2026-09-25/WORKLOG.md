@@ -226,12 +226,33 @@ Prepare tested corrections and a precise operator handoff, not unsupported
 - Full ten-stage platform safety gate passes. This is local regression coverage,
   not hosted acceptance. No production changes or push/merge/deployment.
 
+### 20:57 UTC continuation — reload-safe text and pasted drafts
+
+- Prior cancelled-approval commit: `a459076ebd9cff593708e14e8916ce0aa8ff657e`.
+- Local browser confirmed ordinary draft retention through reload, model change
+  (ASI1 → ASI1 MINI → ASI1), another conversation and browser Back.
+- Reproduced three defects: whitespace trimmed on reload, clearing edited text
+  could resurrect old text, and collapsed paste content disappeared on reload.
+- Restore now hydrates only an absent composer state and preserves exact text.
+  Persistence expands known paste parts to editable plain text, excluding
+  resolved context, memory and consent. No database or server changes.
+- Browser confirmation: five-line pasted content restored with indentation and
+  trailing empty lines; cleared draft stayed empty after reload. Restored the
+  original Bittensor draft and ASI1; no model request or chain action sent.
+- Six new regressions. Focused: 19 pass / 86 assertions. Full frontend: **1,210
+  pass / 7,647 assertions**. Typecheck/build pass; existing chunk warnings remain.
+  Updated the old raw-placeholder source assertion to the tested converter.
+- Secret scan 1,203 files / zero findings; design detector zero primary findings,
+  33 advisories. Impeccable hardening and Uncodixfy, with no layout redesign.
+- File attachment/structured mention restoration after reload remains outside
+  text persistence coverage. See `UI-RECOVERY.md` for exact scope and evidence.
+
 ## Next continuation
 
-Test session/model/desk navigation and draft retention, including the persisted
-draft store versus the in-memory composer store on remount. Then address remaining
-untested memory/notes/integration failure paths. Re-read applicable skill
-references as necessary. Do not repeat
+Investigate the compact navigation drawer staying open after selecting a chat,
+then move to untested memory/notes/integration failure paths and filesystem backup
+coverage. File attachments/structured mentions are not guaranteed on reload.
+Re-read applicable skill references as necessary. Do not repeat
 unchanged hosted probes. Manual hosted approval journey, SES/reset, filesystem
 recovery, revision drift and hosted acceptance still block launch. No push,
 merge or deployment.
