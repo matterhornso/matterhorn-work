@@ -4,20 +4,23 @@
 **Audience:** Codex, Kimi, Minimax, Claude Code, Stitch, and implementation reviewers  
 **Source:** Matterhorn Desks production app, Minimax desk specs, memory specs, and customer beta screenshots
 
-Matterhorn Desks is not a generic chat app and it is not a raw crypto dashboard. It is a desk-first workspace where a customer can use Bittensor, Hyperliquid, Polymarket, Longevity workflows, Memory, and Matterhorn MCPs through plain chat with visible safety boundaries.
+Matterhorn Desks is a desk-first workspace for chat with visible safety boundaries. The primary desks are Private AI, Bittensor, Hyperliquid, Polymarket, and Sui. Memory, notes, wallet and integrations are workspace tools. Capability descriptions below are not deployment-readiness evidence.
 
 ## 1. Navigation Model
 
 The primary customer model is **desks**:
 
-1. **Home:** start a session, open a desk, or choose a workflow.
+1. **Private AI:** start a blank conversation without protocol setup.
 2. **Bittensor:** TAO wallet, subnets, validators, unsigned previews, watches, receipts.
 3. **Hyperliquid:** account/orderbook reads, funding, open orders, preview handoffs, watches, receipts.
 4. **Polymarket:** market discovery, outcomes, liquidity, compliance, preview handoffs, watches, receipts.
-5. **Longevity:** trainer, yoga, dietician, and service-creator workflows. Standalone and non-medical.
-6. **Memory:** suggestion inbox, memories, provenance, privacy, watchlists, receipts.
-7. **MCPs:** Matterhorn MCP setup and tools for Codex, Claude Code, Claude Desktop, Cursor, and compatible clients.
-8. **Settings:** account, profile, appearance, privacy, connectors, developer/advanced surfaces.
+5. **Sui:** public account reads and separately reviewed wallet transfers.
+
+Home is the launcher, not a sixth desk. Suggestions fill an editable draft and never auto-send. Settings remains a navigation destination. Memory, notes, wallet and integrations open on demand through Workspace tools in the minimal layout; MCP setup belongs under integrations.
+
+Longevity is standalone and outside the primary crypto experience. Its trainer, yoga, dietician, and service-creator workflows remain non-medical.
+
+The one-sidebar minimal layout remains behind the default-off `VITE_MATTERHORN_MINIMAL_UI=1` flag during validation, as specified in `DESIGN.md`. Both layouts share routes, persisted chats, model selections and drafts.
 
 Customer-facing navigation must not expose **Services** as a primary destination. Future decentralized service hooks can live in developer/advanced planning or workflow docs until live provider execution exists.
 

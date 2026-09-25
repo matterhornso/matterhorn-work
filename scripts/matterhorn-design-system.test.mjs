@@ -16,9 +16,28 @@ const uiDesign = read("docs/ui/matterhorn-design-system.md");
 const css = read("apps/app/src/app/index.css");
 const all = `${design}\n${uiDesign}\n${css}`;
 
+// Both documents must agree; concatenating them can hide a stale navigation contract.
+for (const [path, source] of [
+  ["DESIGN.md", design],
+  ["docs/ui/matterhorn-design-system.md", uiDesign],
+]) {
+  for (const phrase of [
+    "The primary desks are Private AI, Bittensor, Hyperliquid, Polymarket, and Sui.",
+    "Memory, notes, wallet and integrations are workspace tools.",
+    "Longevity is standalone and outside the primary crypto experience.",
+    "Capability descriptions below are not deployment-readiness evidence.",
+  ]) {
+    assert.ok(source.includes(phrase), `${path} should include the current navigation contract: ${phrase}`);
+  }
+  assert.equal(
+    source.includes("Home, Bittensor, Hyperliquid, Polymarket, Longevity, Memory, MCPs, and Settings"),
+    false,
+    `${path} must not restore the retired primary navigation list`,
+  );
+}
+
 for (const phrase of [
   "desk-first",
-  "Home, Bittensor, Hyperliquid, Polymarket, Longevity, Memory, MCPs, and Settings",
   "#0C0C0C",
   "#D1F2FF",
   "Matterhorn logo",

@@ -23,6 +23,8 @@ spacing:
 
 Matterhorn is a desk-first app for doing useful work through chat. The primary desks are Private AI, Bittensor, Hyperliquid, Polymarket, and Sui. Memory, notes, wallet and integrations are workspace tools. Capability descriptions below are not deployment-readiness evidence.
 
+Longevity is standalone and outside the primary crypto experience.
+
 This file mirrors the durable product rules in [docs/ui/matterhorn-design-system.md](docs/ui/matterhorn-design-system.md). Keep both files aligned when changing the shell or protocol desks.
 
 ## Product Shape
