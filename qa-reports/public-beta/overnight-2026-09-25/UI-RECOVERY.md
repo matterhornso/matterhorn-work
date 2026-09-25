@@ -51,10 +51,9 @@ the stronger current-state contract rather than the old destructive assignment.
 
 ## Follow-ups
 
-1. Verify cancelled gateway approval (`write_denied`, reason `cancelled`) is
-   presented as stopped, not a generic failure. Current streamed
-   `MessageAbortedError` has a stopped presentation; the gateway rejection path
-   requires a separate regression.
+1. Cancelled gateway approval is now covered by parser, rendered-component and
+   state/telemetry regressions (see the 20:27 continuation below). Full browser
+   Stop-to-gateway acceptance remains separate from these local checks.
 2. Test session/model/desk transitions with pending sends and unsent drafts.
    Draft durability across an app reload remains unverified/not guaranteed by
    the in-memory composer store; do not claim it from this fix.
@@ -64,3 +63,32 @@ the stronger current-state contract rather than the old destructive assignment.
 Fixture reproduction: `bun apps/app/scripts/composer-fixture-preview.ts`; use its
 printed loopback URL with `?managed&draftRace` or `?managed&draftRace&failFirst`.
 The disposable fixture server and tab used for this pass were closed afterward.
+
+## 20:27 continuation — cancelled approval presentation
+
+Reproduced the gateway's exact `write_denied` / `details.reason: cancelled`
+response rendering as a red generic failure with a Retry response button. Two
+new tests failed before the correction. The parser now recognizes that exact
+code/reason pair in direct API errors, SDK-serialized errors, and plain objects.
+It reports “Request stopped” with the preserved draft; no automatic retry CTA.
+Denial, timeout, unknown dispatch and privacy failure are not classified as Stop.
+
+Both ordinary send and response-retry catches share the corrected settlement:
+cancelled requests return to idle, clear stale error activity, and record a
+cancellation rather than a provider failure. Tests exercise both orders of Stop
+acknowledgement and send rejection, with exactly one cancellation metric and
+newer drafts intact. Real failures retain the error state. This is frontend
+telemetry, not a change to billing or server accounting.
+
+Validation:
+
+- Focused parser/component/state/recovery tests: **31 pass / 182 assertions**.
+- Full frontend: **1,204 pass / 7,629 assertions**. Initial sandboxed run could
+  not bind two HTTP fixture servers; the complete loopback-enabled rerun passed.
+- Frontend typecheck and build pass; existing chunk-size warnings remain.
+- Full ten-stage platform safety gate passes (local/offline regressions and
+  acceptance-verifier tests, not evidence of hosted launch readiness).
+- Neutral status markup has `role=status`, atomic announcement and labelled
+  dismissal; no error alert or Retry response button. No CSS/layout change.
+- Impeccable detector: zero primary findings, 33 advisory notes.
+- No new live-provider, hosted, mobile or assistive-technology acceptance claimed.

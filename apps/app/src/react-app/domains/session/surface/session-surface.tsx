@@ -40,6 +40,7 @@ import {
   recordModelOperationCancelled,
   recordModelOperationCompleted,
   recordModelOperationProviderError,
+  type ModelOperationContext,
 } from "../../../../app/lib/model-operation-metrics";
 import { t } from "../../../../i18n";
 import { readWorkspaceCloudImports, type CloudImportedPlugin } from "../../../../app/cloud/import-state";
@@ -1078,6 +1079,20 @@ export function parseSessionError(thrown: unknown): SessionError {
     };
   }
   const diagnostic = `${raw}\n${parsed ? JSON.stringify(parsed) : ""}`;
+  const approvalError = parsed ?? thrown;
+  if (
+    approvalError && typeof approvalError === "object" &&
+    "code" in approvalError && approvalError.code === "write_denied" &&
+    "details" in approvalError && approvalError.details && typeof approvalError.details === "object" &&
+    "reason" in approvalError.details && approvalError.details.reason === "cancelled"
+  ) {
+    return {
+      message: "Request stopped.",
+      detail: "Stopped before it was sent. Your draft is still available to edit or send again.",
+      kind: "cancelled",
+      retryable: false,
+    };
+  }
   if (/agent_unavailable|Agent [\w-]+ is not available in this workspace/i.test(diagnostic)) {
     return {
       message: "This desk needs setup.",
@@ -1179,6 +1194,23 @@ export function parseSessionError(thrown: unknown): SessionError {
     kind: "generic",
     retryable: true,
   };
+}
+
+export function recordSessionSubmissionFailure(operation: ModelOperationContext, error: unknown): SessionError {
+  const parsed = parseSessionError(error);
+  const activity = useSessionActivityStore.getState();
+  if (parsed.kind === "cancelled") {
+    // Stop's response and the cancelled send can arrive in either order.
+    if (pendingModelOperation(operation.sessionId)?.id === operation.id) {
+      recordModelOperationCancelled(operation);
+    }
+    activity.setRunStatus(operation.workspaceId, operation.sessionId, { type: "idle" });
+    activity.clearError(operation.workspaceId, operation.sessionId);
+  } else {
+    recordModelOperationProviderError(operation, error);
+    activity.setError(operation.workspaceId, operation.sessionId);
+  }
+  return parsed;
 }
 
 export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot | null) {
@@ -2305,10 +2337,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
       props.onDraftChange(buildDraft(getComposerDraft(currentComposer, props.sessionId), getComposerAttachments(currentComposer, props.sessionId)));
       setSending(false);
     } catch (nextError) {
-      recordModelOperationProviderError(operation, nextError);
-      const parsed = parseSessionError(nextError);
+      const parsed = recordSessionSubmissionFailure(operation, nextError);
       setError(parsed);
-      useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId);
       // Sending never removed the draft. Preserve its current contents rather
       // than overwriting newer edits with the older, rejected submission.
       const currentComposer = useComposerStateStore.getState();
@@ -2419,10 +2449,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
         tone: "info",
       });
     } catch (nextError) {
-      recordModelOperationProviderError(operation, nextError);
-      const parsed = parseSessionError(nextError);
+      const parsed = recordSessionSubmissionFailure(operation, nextError);
       setError(parsed);
-      useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId);
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);

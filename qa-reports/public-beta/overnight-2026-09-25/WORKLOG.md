@@ -208,12 +208,30 @@ Prepare tested corrections and a precise operator handoff, not unsupported
   unavailable. Restored existing preview draft after remount; did not send it.
 - Details, fixture reproduction, limitations: `UI-RECOVERY.md`.
 
+### 20:27 UTC continuation — cancelled approval recovery
+
+- Prior draft-preservation commit: `090ddfd817c27dcc7dcc5c577562512db1693186`.
+- Reproduced cancelled gateway approval appearing as a generic failure. Added
+  exact structured code/reason handling, retaining denial/timeout/privacy errors.
+- Ordinary send and response-retry now settle cancellation as idle, not error.
+  Both Stop/send-response orderings record one cancellation and preserve drafts.
+- Two new tests failed before the change. Focused tests: **31 pass / 182
+  assertions**. Full frontend: **1,204 pass / 7,629 assertions** with loopback
+  permission (initial sandbox binding failures were environmental).
+- Typecheck/build pass; existing bundle-size warnings remain. Secret scan:
+  1,203 files, zero findings. Design detector: zero primary findings, 33 advisory
+  notes. No layout redesign; used Impeccable's hardening guidance.
+- Rendered component/state tests only for this new fix; no full hosted/browser
+  cancellation acceptance claimed. See `UI-RECOVERY.md`.
+- Full ten-stage platform safety gate passes. This is local regression coverage,
+  not hosted acceptance. No production changes or push/merge/deployment.
+
 ## Next continuation
 
-Add a regression for cancelled manual-approval HTTP responses in the UI: streamed
-MessageAbortedError has a stopped status, but the direct send catch may show
-write_denied as a generic failure. Then session/model/desk navigation and draft
-retention. Re-read applicable skill references as necessary. Do not repeat
+Test session/model/desk navigation and draft retention, including the persisted
+draft store versus the in-memory composer store on remount. Then address remaining
+untested memory/notes/integration failure paths. Re-read applicable skill
+references as necessary. Do not repeat
 unchanged hosted probes. Manual hosted approval journey, SES/reset, filesystem
 recovery, revision drift and hosted acceptance still block launch. No push,
 merge or deployment.
