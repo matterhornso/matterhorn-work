@@ -2196,6 +2196,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const sendDraft = useCallback(async (privacyConsentToken?: string) => {
     const text = draft.trim();
     if (!text && attachments.length === 0) return;
+    const submittedComposer = useComposerStateStore.getState().sessions[props.sessionId];
     const reviewedActionHandoff = attachments.length === 0
       ? reviewedActionHandoffFromComposer(text, activeWorkflowDeskAgent?.deskId)
       : null;
@@ -2297,20 +2298,21 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
       await props.onSendDraft(nextDraft);
       recordModelOperationAccepted(operation);
-      attachments.forEach(revokeAttachmentPreview);
-      clearComposerSession(props.sessionId);
-      props.onDraftChange(buildDraft("", []));
+      if (useComposerStateStore.getState().clearSubmittedSession(props.sessionId, submittedComposer)) {
+        attachments.forEach(revokeAttachmentPreview);
+      }
+      const currentComposer = useComposerStateStore.getState();
+      props.onDraftChange(buildDraft(getComposerDraft(currentComposer, props.sessionId), getComposerAttachments(currentComposer, props.sessionId)));
       setSending(false);
     } catch (nextError) {
       recordModelOperationProviderError(operation, nextError);
       const parsed = parseSessionError(nextError);
       setError(parsed);
       useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId);
-      // A rejected send must leave the person's work intact. This includes
-      // provider setup failures, where the next useful action is to connect a
-      // model and then resend the exact draft.
-      setComposerDraft(props.sessionId, text);
-      props.onDraftChange(buildDraft(text, attachments));
+      // Sending never removed the draft. Preserve its current contents rather
+      // than overwriting newer edits with the older, rejected submission.
+      const currentComposer = useComposerStateStore.getState();
+      props.onDraftChange(buildDraft(getComposerDraft(currentComposer, props.sessionId), getComposerAttachments(currentComposer, props.sessionId)));
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);

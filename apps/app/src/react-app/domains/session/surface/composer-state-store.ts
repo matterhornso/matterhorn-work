@@ -23,6 +23,7 @@ export type ComposerStateStore = {
   setMentions: (sessionId: string, mentions: Record<string, "agent" | "file">) => void;
   setPasteParts: (sessionId: string, pasteParts: ComposerPastePart[]) => void;
   clearSession: (sessionId: string) => void;
+  clearSubmittedSession: (sessionId: string, submitted: ComposerSessionState | undefined) => boolean;
 };
 
 const EMPTY_ATTACHMENTS: ComposerAttachment[] = [];
@@ -70,6 +71,19 @@ export const useComposerStateStore = create<ComposerStateStore>((set) => ({
     delete sessions[sessionId];
     return { sessions };
   }),
+  clearSubmittedSession: (sessionId, submitted) => {
+    let cleared = false;
+    set((state) => {
+      // The user may type, attach, or navigate while dispatch is pending.
+      // Only consume the exact immutable composer snapshot that was sent.
+      if (!submitted || state.sessions[sessionId] !== submitted) return state;
+      const sessions = { ...state.sessions };
+      delete sessions[sessionId];
+      cleared = true;
+      return { sessions };
+    });
+    return cleared;
+  },
 }));
 
 export function getComposerDraft(state: ComposerStateStore, sessionId: string): string {

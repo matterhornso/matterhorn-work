@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { ReactSessionComposer } from "../../src/react-app/domains/session/surface/composer/composer";
 import { useComposerSubmission } from "../../src/react-app/domains/session/surface/composer/use-composer-submission";
 import { SigninBoundary } from "../../src/react-app/shell/signin-boundary";
+import { useComposerStateStore } from "../../src/react-app/domains/session/surface/composer-state-store";
 import type { DenAuthStatus } from "../../src/react-app/domains/cloud/den-auth-provider";
 
 const noop = () => {};
@@ -37,12 +38,15 @@ function Fixture() {
     }
   };
   const submission = useComposerSubmission(async (privacyConsentToken) => {
+    if (params.has("draftRace")) useComposerStateStore.getState().setDraft("fixture", draft);
+    const submitted = useComposerStateStore.getState().sessions.fixture;
     attempt.current += 1;
     setCalls((current) => [...current, { text: draft, privacyConsentToken }]);
     setPending(true);
     await new Promise<void>((resolve) => { release.current = resolve; });
     setPending(false);
     if (params.has("failFirst") && attempt.current === 1) throw new Error("Fixture failure");
+    if (params.has("draftRace") && useComposerStateStore.getState().clearSubmittedSession("fixture", submitted)) setDraft("");
     setResult("accepted");
   });
   const managedSend = () => submission.send().catch(() => setResult("retry_available"));
@@ -51,11 +55,14 @@ function Fixture() {
       draft={params.has("empty") ? "" : draft}
       placeholder="Test prompt"
       mentions={{}}
-      onDraftChange={setDraft}
+      onDraftChange={(text) => {
+        setDraft(text);
+        if (params.has("draftRace")) useComposerStateStore.getState().setDraft("fixture", text);
+      }}
       onSend={params.has("managed") ? managedSend : send}
       onStop={() => setResult("stopped")}
       busy={params.has("busy")}
-      disabled={params.has("disabled") || pending}
+      disabled={params.has("disabled") || (pending && !params.has("draftRace"))}
       statusLabel=""
       showModelPicker={false}
       modelPickerOpen={false}

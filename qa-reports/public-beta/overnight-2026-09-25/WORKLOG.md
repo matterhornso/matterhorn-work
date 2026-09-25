@@ -192,11 +192,28 @@ Prepare tested corrections and a precise operator handoff, not unsupported
 - See `APPROVAL-CANCELLATION.md` for reproduction, historical failure, correction
   and scope. No deployment or production policy/config changes.
 
+### 19:57 UTC continuation — UI draft recovery
+
+- Prior Stop/Bun transport commit: `939cc17878c01248d405cf15832237e69b042331`.
+- Reproduced late-success clearing newer typing and late-failure restoring older
+  typing. Added immutable submission-snapshot consumption; failures retain the
+  current draft. Attachments, mentions and pasted-content edits are preserved.
+- Eight new state regressions pass. Browser component fixture verifies newer
+  typing survives both success and failure; no provider/account traffic.
+- Full frontend: **1,198 pass / 7,588 assertions**; typecheck/build pass. Existing
+  large-chunk warnings remain. Design detector: zero primary findings, 33 advisory
+  notes. Used Impeccable hardening and Uncodixfy without redesigning the layout.
+- Existing preview inspected at actual 650×735. Requested 390px viewport did not
+  apply, so mobile is unverified. Mac locked: native browser/screen-reader checks
+  unavailable. Restored existing preview draft after remount; did not send it.
+- Details, fixture reproduction, limitations: `UI-RECOVERY.md`.
+
 ## Next continuation
 
-UI recovery/accessibility coverage next: inspect Stop/failed-send presentation,
-draft retention and model/desk navigation using disposable local data. Read
-applicable design skills before UI work. Do not repeat unchanged hosted probes.
-Manual hosted approval journey, SES/reset, full filesystem recovery and revision
-drift still block launch. Pending-approval Stop/disconnect now pass locally but
-still require production-container/hosted acceptance. No push, merge or deployment.
+Add a regression for cancelled manual-approval HTTP responses in the UI: streamed
+MessageAbortedError has a stopped status, but the direct send catch may show
+write_denied as a generic failure. Then session/model/desk navigation and draft
+retention. Re-read applicable skill references as necessary. Do not repeat
+unchanged hosted probes. Manual hosted approval journey, SES/reset, filesystem
+recovery, revision drift and hosted acceptance still block launch. No push,
+merge or deployment.
