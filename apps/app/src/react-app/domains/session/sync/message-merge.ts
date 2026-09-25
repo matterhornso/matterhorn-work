@@ -38,8 +38,23 @@ function mergeMessageParts(snapshotMessage: UIMessage, cachedMessage: UIMessage)
   return parts;
 }
 
+function messageCompleted(message: UIMessage) {
+  const metadata = message.metadata;
+  if (!metadata || typeof metadata !== "object" || !("opencode" in metadata)) return null;
+  const opencode = metadata.opencode;
+  if (!opencode || typeof opencode !== "object" || !("completed" in opencode)) return null;
+  const completed = opencode.completed;
+  return typeof completed === "number" && Number.isFinite(completed) && completed >= 0 ? completed : null;
+}
+
 function mergeSnapshotMessageWithCached(snapshotMessage: UIMessage, cachedMessage: UIMessage): UIMessage {
-  const metadata = snapshotMessage.metadata ?? cachedMessage.metadata;
+  const snapshotCompleted = messageCompleted(snapshotMessage);
+  const cachedCompleted = messageCompleted(cachedMessage);
+  // An in-flight snapshot must not erase completion metadata received over SSE.
+  // On equal completion times the server remains authoritative, including corrections.
+  const metadata = cachedCompleted !== null && (snapshotCompleted === null || cachedCompleted > snapshotCompleted)
+    ? cachedMessage.metadata
+    : snapshotMessage.metadata ?? cachedMessage.metadata;
 
   return {
     ...snapshotMessage,

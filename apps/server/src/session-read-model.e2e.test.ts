@@ -421,6 +421,7 @@ async function startOpenworkServer(input: {
   readOnly?: boolean;
   hardModelUsageLimit?: number;
   trustedProxySecret?: string;
+  approval?: ServerConfig["approval"];
 }) {
   // Keep every test's durable guarded-runtime state isolated from both the
   // developer machine and other tests that reuse the same workspace/session IDs.
@@ -439,7 +440,7 @@ async function startOpenworkServer(input: {
     port: 0,
     token: "owt_test_token",
     hostToken: "owt_host_token",
-    approval: { mode: "auto", timeoutMs: 1000 },
+    approval: input.approval ?? { mode: "auto", timeoutMs: 1000 },
     corsOrigins: ["*"],
     workspaces: [
       {
@@ -463,7 +464,7 @@ async function startOpenworkServer(input: {
   };
   const server = await startServer(config) as Served;
   stops.push(() => server.stop(true));
-  return { server, token: config.token };
+  return { server, token: config.token, hostToken: config.hostToken };
 }
 
 function deferred() {
@@ -910,6 +911,58 @@ describe("workspace session read APIs", () => {
     });
     expect(JSON.stringify(ledgerBody)).not.toContain("Summarize this workspace");
   });
+
+  for (const reply of ["allow", "deny", "timeout"] as const) {
+    test(`manual chat approval requires the host and handles ${reply} without early dispatch`, async () => {
+      const workspaceRoot = await createWorkspaceRoot();
+      const mock = startMockOpencode();
+      const openwork = await startOpenworkServer({
+        workspaceRoot,
+        opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+        readOnly: false,
+        approval: { mode: "manual", timeoutMs: reply === "timeout" ? 500 : 3_000 },
+      });
+      const base = `http://127.0.0.1:${openwork.server.port}`;
+      const pendingResponse = fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Synthetic approval acceptance", model: { providerID: "openai", modelID: "gpt-4.1" } }),
+      });
+      let approvalId: string | undefined;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const response = await fetch(`${base}/approvals`, { headers: { "x-matterhorn-host-token": openwork.hostToken } });
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        approvalId = body.items.find((item: { action: string }) => item.action === "session.prompt")?.id;
+        if (approvalId) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(approvalId).toBeDefined();
+      expect(mock.requests.filter((request) => request.pathname.endsWith("/prompt_async"))).toHaveLength(0);
+      const clientList = await fetch(`${base}/approvals`, { headers: auth(openwork.token) });
+      expect(clientList.status).toBe(401);
+      const clientApproval = await fetch(`${base}/approvals/${approvalId}`, {
+        method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({ reply: "allow" }),
+      });
+      expect(clientApproval.status).toBe(401);
+      if (reply !== "timeout") {
+        const approved = await fetch(`${base}/approvals/${approvalId}`, {
+          method: "POST", headers: { "x-matterhorn-host-token": openwork.hostToken, "Content-Type": "application/json" },
+          body: JSON.stringify({ reply }),
+        });
+        expect(approved.status).toBe(200);
+      }
+      const result = await pendingResponse;
+      expect(result.status).toBe(reply === "allow" ? 202 : 403);
+      if (reply !== "allow") {
+        expect(await result.json()).toMatchObject({ code: "write_denied" });
+      }
+      expect(mock.requests.filter((request) => request.pathname.endsWith("/prompt_async"))).toHaveLength(reply === "allow" ? 1 : 0);
+      const after = await fetch(`${base}/approvals`, { headers: { "x-matterhorn-host-token": openwork.hostToken } });
+      expect((await after.json()).items).toEqual([]);
+    });
+  }
 
   test("compacts through the Matterhorn privacy and usage gateway", async () => {
     const workspaceRoot = await createWorkspaceRoot();
