@@ -103,11 +103,31 @@ Prepare tested corrections and a precise operator handoff, not unsupported
 - Full session gateway regression file: 67 pass / 529 assertions. Server
   typecheck passed. No deployment or production settings changed.
 
+### 17:57 UTC continuation — recovery and isolation
+
+- Fixed two reproduced restore defects: failed validation left partial databases
+  at the target; plain-file copying of an active erasure ledger omitted committed
+  WAL deletion records. Restores now validate/reconcile in private staging and
+  atomically publish; ledger uses a consistent SQLite snapshot. Regression tests
+  fail before and pass after these corrections. See `RECOVERY-AND-ISOLATION.md`.
+- Added 12 cross-account route denials for models/selection, files, integrations
+  and exports, asserting the actual workspace authorization error. Full auth HTTP
+  suite: 30 pass / 590 assertions. Auth store/outbox/freshness batch: 47 pass / 640
+  assertions before the extension. Host restore contract and eight Node backup
+  fixture tests pass. No AWS or hosted account acceptance is claimed.
+- **New recovery coverage blocker:** the host archive includes five databases,
+  not filesystem notes, memory, workspace outputs/config. Configuration export
+  is not a substitute. The Dockerfile also leaves memory's persistent path to
+  operator configuration. Need a verified filesystem/volume recovery path (or a
+  carefully bounded archive extension) before full-platform backup signoff.
+- Complete ten-stage safety gate passed. Strict secret scan: 1,201 files,
+  zero findings. Diff check clean. No live config changed.
+
 ## Next action
 
-Record the local commit, then continue data/auth isolation and recovery/restore
-coverage not already evidenced. Inspect remaining
-normal-user agent failures under guarded enforcement using disposable local
-data. Do not rerun unchanged hosted probes or count operator-assisted five-desk
-responses as normal hosted acceptance. Expand release/operator handoff with the
-manual approval constraint, alongside SES, reset, backup and revision blockers.
+Local reviewable prior commit: `546821f251` (not pushed). Recovery fixes/evidence
+are the next local commit. Next inspect the filesystem recovery coverage gap
+and normal-user guarded-runtime acceptance; use disposable data, not existing
+preview/account data. Do not repeat unchanged hosted probes. Do not count
+operator-assisted five-desk responses as normal hosted acceptance. Carry manual
+approval, SES/reset, full backup coverage and revision drift into the handoff.

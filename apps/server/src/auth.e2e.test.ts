@@ -1823,10 +1823,23 @@ describe("public account authentication", () => {
       { path: `/workspace/${workspaceA}/sessions/ses_guessed/messages` },
       { path: `/workspace/${workspaceA}/sessions/ses_guessed/snapshot` },
       { path: `/workspace/${workspaceA}/model-usage/status` },
+      { path: `/workspace/${workspaceA}/backend/models` },
+      { path: `/workspace/${workspaceA}/backend/model-selection` },
+      { path: `/workspace/${workspaceA}/backend/model-selection`, method: "PATCH", body: { providerID: "cudos", modelID: "asi1-mini" } },
+      { path: `/workspace/${workspaceA}/backend/model-selection`, method: "DELETE" },
+      { path: `/workspace/${workspaceA}/agent-files` },
+      { path: `/workspace/${workspaceA}/agent-files`, method: "POST", body: { text: "UNAUTHORIZED_MUTATION" } },
+      { path: `/workspace/${workspaceA}/files/content?path=outputs/private.txt` },
+      { path: `/workspace/${workspaceA}/files/raw?path=outputs/private.txt` },
+      { path: `/workspace/${workspaceA}/files/content`, method: "POST", body: { path: "outputs/private.txt", content: "UNAUTHORIZED_MUTATION" } },
+      { path: `/workspace/${workspaceA}/mcp` },
+      { path: `/workspace/${workspaceA}/export?sensitive=exclude` },
+      { path: `/workspace/${workspaceA}/data-ledger/export` },
     ];
     for (const request of deniedRequests) {
       const denied = await jsonRequest(app.base, request.path, { ...request, cookie: cookieB });
       expect(denied.response.status).toBe(404);
+      expect(denied.payload.code).toBe("workspace_not_found");
       expect(JSON.stringify(denied.payload)).not.toContain("ACCOUNT_A_");
     }
     const guessedNote = await jsonRequest(app.base, `/workspace/${workspaceB}/notes/${noteId}?workspaceId=${workspaceA}`, { cookie: cookieB });
