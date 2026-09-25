@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import { MINIMAL_UI } from "@/app/lib/minimal-ui";
 import type * as React from "react";
 import {
   ArrowLeft,
@@ -454,6 +455,13 @@ type SettingsSidebarProps = Pick<SettingsPageProps, "activeTab" | "onSelectTab" 
   backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
 };
 
+export const MINIMAL_SETTINGS_GROUPS: { label: string; tabs: SettingsTab[] }[] = [
+  { label: "Account", tabs: ["cloud-account"] },
+  { label: "Models", tabs: ["ai"] },
+  { label: "Workspace", tabs: ["preferences", "extensions", "permissions"] },
+  { label: "Privacy & appearance", tabs: ["privacy", "appearance"] },
+];
+
 export function SettingsSidebar(props: SettingsSidebarProps) {
   const workspaceTabs = getWorkspaceSettingsTabs(props.developerMode);
   const globalTabs = getGlobalSettingsTabs(props.developerMode);
@@ -515,6 +523,13 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        {MINIMAL_UI ? MINIMAL_SETTINGS_GROUPS.map((group) => <SidebarGroup key={group.label}>
+          <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+          <SidebarGroupContent><SidebarMenu>{group.tabs.map((tab) => {
+            const Icon = getSettingsTabIcon(tab);
+            return <SidebarMenuItem key={tab}><SidebarMenuButton isActive={props.activeTab === tab} aria-current={props.activeTab === tab ? "page" : undefined} onClick={() => props.onSelectTab(tab)}><Icon /><span>{tab === "cloud-account" ? "Account" : getSettingsTabLabel(tab)}</span></SidebarMenuButton></SidebarMenuItem>;
+          })}</SidebarMenu></SidebarGroupContent>
+        </SidebarGroup>) : <>
         {/* Top-level hub entry */}
         <SidebarGroup>
           <SidebarGroupContent>
@@ -614,6 +629,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
             </SidebarGroupContent>
           </SidebarGroup>
         ) : null}
+        </>}
       </SidebarContent>
     </Sidebar>
   );

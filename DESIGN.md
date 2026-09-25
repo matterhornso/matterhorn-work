@@ -1,6 +1,29 @@
+---
+name: Matterhorn
+description: A focused, desk-first workspace for chat and reviewed tools.
+colors:
+  brand-ice: "#D1F2FF"
+  brand-ink: "#0C0C0C"
+  light-canvas: "#f6f9ff"
+  dark-canvas: "#05070b"
+typography:
+  body:
+    fontFamily: "Aeonik, Geist Variable, sans-serif"
+    fontSize: "14px"
+    lineHeight: "20px"
+rounded:
+  control: "8px"
+spacing:
+  compact: "8px"
+  control: "12px"
+  section: "24px"
+---
+
 # Matterhorn Desks Design Contract
 
-Matterhorn Desks is a desk-first app for doing useful work through chat. The customer sees desks, not internal categories: Home, Bittensor, Hyperliquid, Polymarket, Longevity, Memory, MCPs, and Settings.
+Matterhorn is a desk-first app for doing useful work through chat. The primary desks are Private AI, Bittensor, Hyperliquid, Polymarket, and Sui. Memory, notes, wallet and integrations are workspace tools. Capability descriptions below are not deployment-readiness evidence.
+
+Longevity is standalone and outside the primary crypto experience.
 
 This file mirrors the durable product rules in [docs/ui/matterhorn-design-system.md](docs/ui/matterhorn-design-system.md). Keep both files aligned when changing the shell or protocol desks.
 
@@ -28,10 +51,21 @@ This file mirrors the durable product rules in [docs/ui/matterhorn-design-system
 - Page sections are not nested cards. Use cards only for repeatable items, previews, receipts, memory suggestions, and focused tool panels.
 - Keep typography compact in operational surfaces. Large type belongs on first-run welcome only.
 
+## Layout
+
+The staged minimal layout is enabled only by `VITE_MATTERHORN_MINIMAL_UI=1`. The default remains the existing layout during validation. Both use the same routes, persisted chats, model selections and draft stores.
+
+- One left navigation column with workspace, New chat, five desks, recent chats and Settings.
+- Header: conversation or launcher title, model, Workspace tools. No permanent right rail in the minimal layout.
+- Below 768px, navigation is a labelled drawer. Contextual tools are full-screen below 1024px, a sheet up to 1279px, and a docked pane from 1280px. Only one contextual tool opens at a time.
+- Launcher uses open, divided rows. Secondary project information is collapsed. Chat suggestions fill drafts, never send.
+- Models use a searchable list with a provider filter, pending/error feedback and server-persisted selection.
+- Existing semantic `dls` tokens and theme preferences remain authoritative. No new palette or decorative motion was introduced.
+
 ## Interaction Rules
 
 - The composer is always visible but never overlaps card content.
-- The right rail is optional. On narrower layouts it collapses before it traps the main desk.
+- The legacy right rail remains in the default-off layout; the minimal layout replaces it with Workspace tools.
 - Back to chat, Home, Profile, and Settings must be discoverable.
 - Every serious action uses agent draft -> separate exact review -> connected-wallet approval -> public receipt. Matterhorn never hides signing or signs on behalf of users. The current reviewed wallet paths are Hyperliquid place/cancel/modify/close actions, compliance-allowed Polymarket buy/sell/cancel actions, Bittensor TAO transfer/stake/unstake actions, and Sui coin/object/batch transfers. Advanced protocol calls stay unavailable until they receive their own audited adapter and review contract.
 - Empty, loading, degraded-provider, and no-wallet states must explain what still works and what to try next.

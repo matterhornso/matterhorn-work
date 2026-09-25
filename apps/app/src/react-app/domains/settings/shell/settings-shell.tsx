@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import type * as React from "react";
+import { MINIMAL_UI } from "@/app/lib/minimal-ui";
 import { ChevronDown, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import type { SettingsTab } from "../../../../app/types";
 import type { MatterhornSettingsSectionCapability } from "@matterhorn-work/types/backend-capabilities";
 import {
   SettingsPage,
+  MINIMAL_SETTINGS_GROUPS,
   SettingsSidebar,
   getCloudSettingsTabs,
   getGlobalSettingsTabs,
@@ -195,7 +197,7 @@ function SettingsSectionMenu(
     { label: t("settings.group_global"), tabs: getGlobalSettingsTabs(props.developerMode) },
     { label: t("settings.group_cloud"), tabs: getCloudSettingsTabs(props.developerMode) },
   ];
-  const sections = allSections.filter((section) => section.tabs.length > 0);
+  const sections = (MINIMAL_UI ? MINIMAL_SETTINGS_GROUPS : allSections).filter((section) => section.tabs.length > 0);
   const ActiveIcon = getSettingsTabIcon(props.activeTab);
 
   return (

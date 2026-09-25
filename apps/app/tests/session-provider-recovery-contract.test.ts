@@ -20,7 +20,7 @@ describe("session provider recovery", () => {
     const composer = readReactSource("domains/session/surface/composer/composer.tsx");
 
     expect(surface).toContain("onOpenAiProviders={props.onOpenAiProviders}");
-    expect(surface).toContain("showModelPicker={shellConfig.modelPicker && !props.modelUnavailable}");
+    expect(surface).toContain("showModelPicker={!MINIMAL_UI && shellConfig.modelPicker && !props.modelUnavailable}");
     expect(composer).toContain("onOpenAiProviders?: () => void;");
     expect(composer).toContain("Connect a model");
     expect(composer).toContain("props.onOpenAiProviders");

@@ -44,7 +44,9 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
+import { MINIMAL_UI } from "@/app/lib/minimal-ui";
 import {
   Collapsible,
   CollapsibleContent,
@@ -372,6 +374,8 @@ function RemoteConnectionIssueCard(props: {
 }
 
 export type AppSidebarProps = {
+  deskNavigation?: React.ReactNode;
+  onOpenSettings?: () => void;
   workspaceSessionGroups: WorkspaceSessionGroup[];
   showInitialLoading?: boolean;
   selectedWorkspaceId: string;
@@ -555,6 +559,7 @@ export function AppSidebar(props: AppSidebarProps) {
 
   return (
     <SidebarContext.Provider value={contextValue}>
+      {MINIMAL_UI ? <MinimalWorkspaceSidebar {...props} /> : <>
       <Sidebar
         collapsible="offcanvas"
         className="mac:**:data-[sidebar=sidebar]:bg-transparent"
@@ -609,7 +614,53 @@ export function AppSidebar(props: AppSidebarProps) {
           onPointerDown={props.onStartResize}
         />
       </Sidebar>
+      </>}
     </SidebarContext.Provider>
+  );
+}
+
+function MinimalWorkspaceSidebar(props: AppSidebarProps) {
+  const { setOpenMobile } = useSidebar();
+  const current = props.workspaceSessionGroups.find((group) => group.workspace.id === props.selectedWorkspaceId);
+  const close = () => setOpenMobile(false);
+  return (
+    <Sidebar collapsible="offcanvas" aria-label="Workspace navigation">
+      <div className="flex min-h-0 flex-1 flex-col p-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="ghost" className="w-full justify-start overflow-hidden" aria-label="Switch workspace">
+            <WorkspaceIcon seed={props.selectedWorkspaceId} />
+            <span className="truncate">{current ? workspaceLabel(current.workspace) : "Workspace"}</span>
+            <ChevronRight className="ml-auto size-4 shrink-0" />
+          </Button>} />
+          <DropdownMenuContent align="start">
+            {props.workspaceSessionGroups.map(({ workspace }) => <DropdownMenuItem key={workspace.id} onClick={() => { void props.onSelectWorkspace(workspace.id); close(); }}>
+              {workspaceLabel(workspace)}
+            </DropdownMenuItem>)}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => { props.onOpenCreateWorkspace(); close(); }}>Workspace setup</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button variant="outline" className="my-3 justify-start" disabled={props.newTaskDisabled} onClick={() => { props.onCreateTaskInWorkspace(props.selectedWorkspaceId); close(); }}>
+          <Plus className="size-4" /> New chat
+        </Button>
+        <div onClick={close}>{props.deskNavigation}</div>
+        <div className="mt-5 min-h-0 flex-1 overflow-y-auto">
+          <h2 className="mb-2 px-2 text-xs font-medium text-dls-secondary">Recent chats</h2>
+          <SidebarMenu>
+            {(current?.sessions ?? []).filter((session) => !session.parentID).map((session) => <SidebarMenuItem key={session.id} className="group/session flex items-center">
+              <SidebarMenuButton isActive={session.id === props.selectedSessionId} onClick={() => { props.onOpenSession(props.selectedWorkspaceId, session.id); close(); }}>
+                <span className="truncate">{getDisplaySessionTitle(session.title)}</span>
+              </SidebarMenuButton>
+              <SessionActions sessionId={session.id} className="shrink-0" />
+            </SidebarMenuItem>)}
+          </SidebarMenu>
+          {!current?.sessions.length ? <p className="px-2 text-xs text-dls-secondary">Your conversations will appear here.</p> : null}
+        </div>
+        <Button variant="ghost" className="mt-3 justify-start" onClick={() => { props.onOpenSettings?.(); close(); }}>
+          <Settings className="size-4" /> Settings
+        </Button>
+      </div>
+    </Sidebar>
   );
 }
 

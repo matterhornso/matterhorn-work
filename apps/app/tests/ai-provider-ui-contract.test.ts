@@ -54,6 +54,14 @@ describe("AI provider UI contract", () => {
     expect(summarySource).toContain("Connect a provider before chats and desk tasks can start.");
   });
 
+  test("reports CUDOS availability from the catalog instead of a fixed model count", () => {
+    const viewSource = readReactSource("domains/settings/pages/ai-view.tsx");
+
+    expect(viewSource).toContain("cudosProvider?.modelCount ?? 0");
+    expect(viewSource).not.toContain("7 models available");
+    expect(viewSource).not.toContain("use seven models");
+  });
+
   test("shows provider privacy at model setup and beside the composer", () => {
     const viewSource = readReactSource("domains/settings/pages/ai-view.tsx");
     const routeSource = readReactSource("shell/session-route.tsx");

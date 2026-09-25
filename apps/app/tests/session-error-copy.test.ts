@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test";
 
 import { parseSessionError } from "../src/react-app/domains/session/surface/session-surface";
 
+test("missing desk agents explain setup instead of offering an ineffective retry", () => {
+  const result = parseSessionError(new Error("Agent matterhorn-bittensor is not available in this workspace"));
+  expect(result.message).toBe("This desk needs setup.");
+  expect(result.detail).toContain("Your draft is preserved");
+  expect(result.retryable).toBe(false);
+});
+
 describe("session error copy", () => {
   test("keeps internal engine names out of customer-facing recovery", () => {
     const errors = [

@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import { MINIMAL_UI } from "@/app/lib/minimal-ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -448,6 +449,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
   const [suggestionEditDraft, setSuggestionEditDraft] = useState<SuggestionEditDraft | null>(null);
   const [suggestionStatusFilter, setSuggestionStatusFilter] = useState<SuggestionInboxFilter>("needs_review");
   const [manualCaptureOpen, setManualCaptureOpen] = useState(false);
+  const [memoryView, setMemoryView] = useState<"saved" | "review">("saved");
   const [recordPendingForget, setRecordPendingForget] = useState<MatterhornMemoryRecord | null>(null);
 
   useEffect(() => {
@@ -785,6 +787,11 @@ export function MemoryPanel(props: MemoryPanelProps) {
       </header>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-6 pt-2 sm:px-5">
+        {MINIMAL_UI ? <div className="flex gap-2" aria-label="Memory views">
+          <Button variant={memoryView === "saved" ? "secondary" : "ghost"} aria-pressed={memoryView === "saved"} onClick={() => setMemoryView("saved")}>Saved</Button>
+          <Button variant={memoryView === "review" ? "secondary" : "ghost"} aria-pressed={memoryView === "review"} onClick={() => setMemoryView("review")}>Review</Button>
+          <Button variant="outline" className="ml-auto" onClick={() => setManualCaptureOpen(true)}>Add memory</Button>
+        </div> : null}
         <section className="space-y-2">
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <label className="relative min-w-0 flex-1">
@@ -841,7 +848,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </section>
         ) : null}
 
-        <section className="space-y-3">
+        <section className="space-y-3" hidden={MINIMAL_UI && memoryView !== "review"}>
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3">
               <span className="flex size-7 shrink-0 items-center justify-center rounded-md text-dls-secondary">
@@ -1081,7 +1088,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
           )}
         </section>
 
-        <section className="space-y-2">
+        <section className="space-y-2" hidden={MINIMAL_UI && memoryView !== "saved"}>
           <div className="text-sm font-semibold">Saved memories</div>
           {records.length === 0 && !loading ? (
             <div className="rounded-lg bg-dls-surface-muted/15 px-4 py-8 text-center">

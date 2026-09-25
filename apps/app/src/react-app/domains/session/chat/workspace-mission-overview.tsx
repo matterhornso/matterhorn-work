@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronRight,
   Clock3,
+  Flag,
   PencilLine,
-  Target,
   Trash2,
 } from "lucide-react";
 
@@ -153,7 +153,7 @@ export function WorkspaceMissionOverview({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgb(var(--matterhorn-blue-rgb)/0.10)] text-[var(--dls-accent)]">
-            <Target className="size-4" strokeWidth={1.7} aria-hidden="true" />
+            <Flag className="size-4" strokeWidth={1.7} aria-hidden="true" />
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

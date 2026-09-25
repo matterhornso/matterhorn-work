@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState, type ElementType } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import {
   createHostedMcpAccess,
   readHostedMcpAccess,
@@ -49,20 +50,27 @@ const MANAGED_TOOL_GROUPS = [
     description:
       "Bittensor, prediction markets, Hyperliquid, and Sui research tools are supplied by each desk.",
     icon: SearchCheck,
+    requiresReviewedActions: false,
   },
   {
     title: "Saved workspace records",
     description:
       "Notes, memory, saved outputs, and receipts stay attached to the current workspace.",
     icon: FileCheck2,
+    requiresReviewedActions: false,
   },
   {
     title: "Reviewed wallet actions",
     description:
       "Supported transactions move to a separate wallet review before anything is signed or submitted.",
     icon: WalletCards,
+    requiresReviewedActions: true,
   },
 ] as const;
+
+export function managedToolGroups(reviewedActions: boolean) {
+  return MANAGED_TOOL_GROUPS.filter((group) => !group.requiresReviewedActions || reviewedActions);
+}
 
 const GUARDED_MCP_CLIENTS = [
   "Codex",
@@ -440,7 +448,7 @@ function HostedMcpCompactSummary({
       </div>
 
       <div className="border-y border-dls-border/70 py-1">
-        {MANAGED_TOOL_GROUPS.map((group) => {
+        {managedToolGroups(MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions).map((group) => {
           const Icon = group.icon;
           return (
             <div
@@ -532,7 +540,7 @@ export function HostedMcpSummary(props: HostedMcpSummaryProps) {
         </div>
 
         <div className="mt-4 border-y border-dls-border/70">
-          {MANAGED_TOOL_GROUPS.map((group) => {
+          {managedToolGroups(MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions).map((group) => {
             const Icon = group.icon;
             return (
               <div

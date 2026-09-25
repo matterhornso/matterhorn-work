@@ -30,6 +30,8 @@ import {
 import { createClient, unwrap } from "../../../../app/lib/opencode";
 import { abortSession, revertSession, unrevertSession } from "../../../../app/lib/opencode-session";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
+import { MINIMAL_UI } from "../../../../app/lib/minimal-ui";
+import { Button } from "@/components/ui/button";
 import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import {
   beginModelOperation,
@@ -1076,6 +1078,14 @@ export function parseSessionError(thrown: unknown): SessionError {
     };
   }
   const diagnostic = `${raw}\n${parsed ? JSON.stringify(parsed) : ""}`;
+  if (/agent_unavailable|Agent [\w-]+ is not available in this workspace/i.test(diagnostic)) {
+    return {
+      message: "This desk needs setup.",
+      detail: "The workspace's desk agent is unavailable. Ask the workspace owner to repair agent provisioning, then send again. Your draft is preserved.",
+      kind: "generic",
+      retryable: false,
+    };
+  }
   if (/message_outcome_unknown/i.test(diagnostic)) {
     return {
       message: "Checking whether your message was received.",
@@ -3233,7 +3243,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       props.activeQuestion ||
       hasTodoContent ||
       props.activePermission ||
-      activeDeskMode ||
+      (activeDeskMode && !MINIMAL_UI) ||
       bittensorContext ||
       agentFileContext ||
       coworkerContext ||
@@ -3335,6 +3345,19 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onConfirmPrivacy={handleConfirmPrivacy}
                   confirmingPrivacy={confirmingPrivacy}
                 />
+              ) : MINIMAL_UI ? (
+                <section className="mx-auto w-full max-w-3xl px-4 py-8" aria-label="Conversation starters">
+                  {activeDeskStartBlocker ? <p role="status" className="mb-4 text-sm text-dls-secondary">{activeDeskStartBlocker}</p> : null}
+                  {activeDeskMode ? <>
+                    <h2 className="mb-3 text-base font-semibold">What would you like to explore?</h2>
+                    <div className="flex flex-wrap gap-2">
+                      {groupMatterhornDeskTaskStarters(MATTERHORN_DESK_TASK_STARTERS[activeDeskMode], { reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions }).flatMap((group) => group.starters).slice(0, 3).map((starter) => <Button key={starter.id} variant="outline" disabled={Boolean(draft.trim())} onClick={() => {
+                        setComposerDraft(props.sessionId, starter.prompt);
+                        props.onDraftChange(buildDraft(starter.prompt, attachments));
+                      }}>{starter.title}</Button>)}
+                    </div>
+                  </> : <h2 className="text-base font-semibold">What would you like to work on?</h2>}
+                </section>
               ) : activeDeskMode ? (
                 <div className="space-y-2">
                   {activeDeskStartBlocker ? (
@@ -3516,7 +3539,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         modelUnavailable={Boolean(props.modelUnavailable)}
         onOpenAiProviders={props.onOpenAiProviders}
         statusLabel={statusLabel(snapshot ?? undefined, chatStreaming)}
-        showModelPicker={shellConfig.modelPicker && !props.modelUnavailable}
+        showModelPicker={!MINIMAL_UI && shellConfig.modelPicker && !props.modelUnavailable}
         modelPickerOpen={props.modelPickerOpen}
         selectedModel={props.selectedModel}
         privateModeAvailable={Boolean(props.privateModeAvailable)}
@@ -3607,7 +3630,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     />
                   </Suspense>
                 ) : null}
-                {activeDeskMode ? (
+                {activeDeskMode && !MINIMAL_UI ? (
                   <MatterhornDeskSessionStrip mode={activeDeskMode} />
                 ) : null}
                 {bittensorContext ? (
