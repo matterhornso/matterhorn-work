@@ -125,15 +125,25 @@ async function startProviderCatalogServer(payload: unknown): Promise<string> {
   return `http://127.0.0.1:${port}`;
 }
 
-async function startBittensorSidecarServer(): Promise<string> {
+async function startBittensorSidecarServer(health: Record<string, unknown> | null = {
+  status: "healthy",
+  mode: "python",
+  sdkAvailable: true,
+  canRead: true,
+  canPrepare: true,
+  canSubmit: false,
+  block: 123456,
+}): Promise<string> {
   const server = createHttpServer((request, response) => {
-    if (request.url !== "/liveness") {
+    if (request.url !== "/liveness" && !(request.url === "/health" && health)) {
       response.writeHead(404, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ error: "not_found" }));
       return;
     }
     response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ canRead: true, canPrepare: true, canSubmit: false }));
+    response.end(JSON.stringify(request.url === "/health"
+      ? health
+      : { canRead: true, canPrepare: true, canSubmit: false }));
   });
   const port = await new Promise<number>((resolve, reject) => {
     server.once("error", reject);
@@ -454,7 +464,7 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("Sui is not implemented yet");
   });
 
-  test("reports Bittensor as working when the production live provider is configured", async () => {
+  test("reports Bittensor as working only with verified live-chain health", async () => {
     process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = await startBittensorSidecarServer();
     const { base } = await boot();
 
@@ -475,6 +485,24 @@ describe("backend control plane routes", () => {
     });
     expect(result.payload.wallets.families.bittensor.runtimeSupport.web.status).toBe("working");
   });
+
+  for (const [label, health] of Object.entries({
+    "liveness only": null,
+    "missing SDK": { status: "healthy", mode: "python", canRead: true, canPrepare: true, block: 123456 },
+    "missing block": { status: "healthy", mode: "python", sdkAvailable: true, canRead: true, canPrepare: true },
+    "mock mode": { status: "healthy", mode: "mock", sdkAvailable: true, canRead: true, canPrepare: true, block: 123456 },
+  })) {
+    test(`keeps Bittensor setup required with ${label}`, async () => {
+      process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = await startBittensorSidecarServer(health);
+      const { base } = await boot();
+      const result = await jsonFetch(base, "/api/backend/capabilities");
+
+      expect(result.response.status).toBe(200);
+      expect(result.payload.wallets.families.bittensor.status).toBe("needs_setup");
+      expect(result.payload.wallets.families.bittensor.details.liveProviderHealthy).toBe(false);
+      expect(result.payload.wallets.families.bittensor.runtimeSupport.web.status).toBe("needs_setup");
+    });
+  }
 
   test("GET /api/backend/capabilities reports outputs as read-only preview when writes are disabled", async () => {
     const { base } = await boot({ readOnly: true });

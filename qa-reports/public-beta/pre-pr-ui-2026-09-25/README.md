@@ -113,6 +113,23 @@ diagnostics are deliberately excluded from the PR.
 - The design contract now checks the approved five-desk navigation independently
   in both design documents, without removing the other safety checks.
 
+## Ordered-merge CI follow-up
+
+After #1023 and #1024 merged, this PR was retargeted to `dev`, enabling the
+full CI workflow (the stacked base had only run security CI). That workflow
+includes a complete backend suite in addition to the ten-stage safety script.
+It found one stale fixture in `backend-control-plane.e2e.test.ts`: the fixture
+served only `/liveness`, but expected healthy Bittensor capability status.
+The updated runtime intentionally requires verified `/health` evidence.
+
+Reproduced the failure locally, updated the positive fixture to include Python
+mode, SDK availability, read/preparation capability and a positive chain block,
+and added four negative cases: liveness alone, missing SDK, missing block and
+mock mode must all retain `needs_setup`. Production code was not weakened.
+The full control-plane test file passes: **40 tests, 618 assertions**.
+The earlier counts describe their named test scopes, not the complete backend
+suite. A fresh full CI run is required before merging the correction.
+
 ## Unverified or remaining release work
 
 - This is not a review of every rendered state or a WCAG certification. Safari,
