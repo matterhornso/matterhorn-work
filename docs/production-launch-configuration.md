@@ -265,8 +265,19 @@ pnpm backup:workspace-user-data -- \
 
 Store the passphrase outside the application host and outside the report
 packet. The archive includes private user content and must never be attached to
-the public launch evidence. The tenant tool rejects `--opencode-db` so an
-archive can never accidentally contain another account's chat database.
+the public launch evidence. The tenant tool rejects `--opencode-db`; never add
+the shared chat database to a tenant export.
+
+These commands validate, encrypt, decrypt and extract the tenant export; they
+do **not** restore it into the running application. Reports use
+`status: archive_verified`, `ready: false`, and
+`applicationRestoreVerified: false`. The tool checks the export's schema,
+counts, content digest and file entries, but cannot authenticate the origin of
+a local file or prove that it contains every live tenant record. Do not turn
+`tenantBoundaryVerified: false` into a pass based on this packaging operation.
+Public-beta recovery acceptance still requires an isolated application restore
+with account/chat/notes/memory/output sentinels and tenant-access checks. Until
+that is demonstrated, the recovery gate remains blocked.
 
 Host recovery is a separate operator-only snapshot. It contains authentication
 and legal acceptance state, model usage, durable rate limits, guarded-runtime

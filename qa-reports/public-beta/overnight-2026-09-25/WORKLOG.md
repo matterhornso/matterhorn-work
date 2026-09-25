@@ -270,8 +270,9 @@ Prepare tested corrections and a precise operator handoff, not unsupported
 ## Next continuation
 
 Check remaining integration failure paths and filesystem backup coverage.
-The tenant recovery wrapper appears to assert complete coverage and tenant
-verification without validating its input archive; reproduce and harden this.
+Tenant archive packaging is now validated but deliberately not labelled full
+application recovery. Isolated application/volume restore remains an operator
+blocker. Prioritize untested integration and account/UI failure paths next.
 File attachments/structured
 mentions are not guaranteed on reload.
 Re-read applicable skill references as necessary. Do not repeat
@@ -307,3 +308,20 @@ merge or deployment.
 - Frontend **1,219 pass / 7,677 assertions**, typecheck/build pass. Secret scan
   zero findings; design detector zero primary findings / four advisories.
 - Impeccable hardening, no visual redesign. No production changes.
+
+### 22:27 UTC continuation — recovery evidence correction
+
+- Notes connection-boundary commit: `5eb3d380b68224f16a8accf59cc644cbf5a25f09`.
+- Reproduced tenant packaging accepting non-gzip garbage as ready/verified.
+  Added bounded inner-export validation and a validated byte snapshot; restore
+  checks the inner archive before publishing its target.
+- Packaging now reports `archive_verified` and `ready: false`, not full
+  application recovery or authenticated tenant provenance. Documentation
+  distinguishes the missing live restore proof and removes an obsolete shared
+  OpenCode-database command from the old launch-room guide.
+- Recovery regression contract passes, including real server-exporter
+  compatibility, invalid/tampered/incomplete exports, decompression limits and
+  invalid authenticated legacy containers. Five server archive tests pass.
+- Full ten-stage local safety gate passes. This is not hosted acceptance.
+- Remaining filesystem/volume restoration and tenant sentinel verification are
+  explicit blockers; no infrastructure changes, push, merge or deployment.

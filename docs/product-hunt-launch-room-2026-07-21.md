@@ -89,7 +89,7 @@ export MATTERHORN_BACKUP_PASSPHRASE="<from the approved secret manager>"
 
 pnpm backup:workspace-user-data -- \
   --workspace-root "$MATTERHORN_WORKSPACE_ROOT" \
-  --opencode-db "$OPENCODE_DB" \
+  --tenant-archive "$MATTERHORN_TENANT_ARCHIVE" \
   --output "$MATTERHORN_ENCRYPTED_BACKUP_PATH" \
   --json-output qa-reports/product-hunt-2026-07-21/user-data-backup.json
 
@@ -111,6 +111,15 @@ pnpm drill:product-hunt-rollback -- \
   --json-output qa-reports/product-hunt-2026-07-21/rollback.json \
   --strict
 ```
+
+Obtain `MATTERHORN_TENANT_ARCHIVE` from the authenticated
+`/workspace/:id/data-archive` endpoint for that tenant. The tenant archive tool
+rejects the shared OpenCode database. Its backup/restore commands verify an
+encrypted export package only, reporting `archive_verified` and `ready: false`.
+They do not import user data into a running application or prove tenant access
+boundaries. Do not mark recovery complete until an isolated application restore
+has verified chats, Notes, Memory, outputs and access controls. See the current
+[production configuration guide](production-launch-configuration.md).
 
 Redeploy the release commit after the rollback drill and rerun the deployed
 probe. Do not mutate an existing release artifact or tag.

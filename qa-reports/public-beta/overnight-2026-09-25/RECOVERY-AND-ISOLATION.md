@@ -103,3 +103,43 @@ configuration was inspected sufficiently to claim this gap is covered elsewhere.
 Hosted account creation, inbox verification, password reset and two-account
 browser acceptance remain separate release gates. A local fixture pass cannot
 replace them.
+
+## 22:27 continuation — tenant archive validation and truthful evidence
+
+Confirmed a separate false-positive in `workspace-user-data-recovery.mjs`:
+passing a regular file containing `not even gzip` produced exit 0, a successful
+backup report, `ready: true`, every coverage bit true, and tenant verification
+true. The tool encrypted arbitrary bytes without inspecting the supplied export.
+Likewise, restore verified the envelope/file hash but only extracted the gzip
+file; it did not import user data into the application. This must not count as
+full application recovery.
+
+Bounded correction:
+
+- Validate gzip/JSON under a 256 MiB compressed/uncompressed ceiling, supported
+  version, workspace identity, required data collections/context, manifest counts,
+  data digest, and file path/encoding/size integrity. No input content is logged.
+- Encrypt a private snapshot of the exact bytes validated, not a subsequently
+  reread source. Restore revalidates the inner export before publishing staging.
+- Reports now say `status: archive_verified`, `ready: false`,
+  `applicationRestoreVerified: false`, and `tenantBoundaryVerified: false`.
+  Structure and an embedded digest are not authentication/provenance proofs.
+- Updated current operations documentation and corrected the old launch-room
+  command which still suggested the now-prohibited shared OpenCode database.
+
+Evidence: the malformed-input assertion failed before the fix. Recovery tests
+now cover malformed gzip, missing collections, count/digest mismatch, unsafe
+paths, invalid binary encoding, decompression limits and an authenticated legacy
+container with invalid inner content (no restore target published). A generated
+export from the real server builder passes the validator. Text/binary fixture
+outputs survive the encryption/extraction round trip. Existing wrong-key,
+existing-target, overlap/symlink and command-line secret protections pass.
+
+The five server archive tests pass (20 assertions), the recovery contract passes,
+and the full ten-stage local safety gate passes. These tests are fixture/local
+evidence, not a live storage recovery or hosted readiness result.
+
+Still required: supported filesystem/volume recovery, deletion reconciliation,
+an actual isolated application import/restore, and owner-authenticated tenant
+sentinel verification. Neither this packaging tool nor a green database marker
+can supply that acceptance. No production secrets/configuration were changed.

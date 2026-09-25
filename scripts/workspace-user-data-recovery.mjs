@@ -27,6 +27,7 @@ import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } fr
 import process from "node:process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { MAX_TENANT_ARCHIVE_BYTES, validateTenantArchive } from "./lib/validate-tenant-archive.mjs";
 
 const ARCHIVE_VERSION = "matterhorn.tenant-data-backup.v2";
 const REPORT_VERSION = "matterhorn.user-data-recovery-report.v1";
@@ -93,7 +94,8 @@ function help() {
   return [
     "Matterhorn encrypted user-data backup and recovery",
     "",
-    "Encrypts one authenticated Matterhorn workspace archive containing only that tenant's chats, files, Memory, outputs, receipts, and activity.",
+    "Validates and encrypts one Matterhorn workspace export. Obtain it through the authenticated data-archive endpoint.",
+    "Restore extracts and verifies the export only; it does not import data into a running application or prove tenant authorization.",
     "The passphrase is read only from MATTERHORN_BACKUP_PASSPHRASE (or --passphrase-env) and is never written to the archive or report.",
     "",
     "Backup:",
@@ -222,12 +224,18 @@ async function archiveEntries(config, tempDir) {
   if (!archiveStat.isFile() || archiveStat.isSymbolicLink()) {
     throw new Error("--tenant-archive must point to the regular gzip file downloaded from /workspace/:id/data-archive.");
   }
+  if (archiveStat.size > MAX_TENANT_ARCHIVE_BYTES) throw new Error("Tenant archive exceeds the size limit.");
+  const bytes = await readFile(tenantArchive);
+  validateTenantArchive(bytes);
+  // Encrypt the exact bytes validated, even if the caller replaces the source.
+  const snapshot = join(tempDir, "validated-tenant-archive.gz");
+  await writeFile(snapshot, bytes, { mode: 0o600 });
   return [{
-    sourcePath: tenantArchive,
+    sourcePath: snapshot,
     path: "tenant/workspace-data-archive.json.gz",
     kind: "tenant_workspace_archive",
-    size: archiveStat.size,
-    sha256: await sha256File(tenantArchive),
+    size: bytes.length,
+    sha256: await sha256File(snapshot),
   }];
 }
 
@@ -340,7 +348,7 @@ async function readManifest(bundlePath) {
       if (file.path !== "tenant/workspace-data-archive.json.gz") {
         throw new Error(`Unsupported archive destination: ${file.path}`);
       }
-      if (!Number.isSafeInteger(file.size) || file.size < 0) throw new Error(`Invalid size for ${file.path}`);
+      if (!Number.isSafeInteger(file.size) || file.size < 0 || file.size > MAX_TENANT_ARCHIVE_BYTES) throw new Error(`Invalid size for ${file.path}`);
       if (!/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error(`Invalid SHA-256 for ${file.path}`);
       if (file.kind !== "tenant_workspace_archive") {
         throw new Error(`Invalid data kind for ${file.path}`);
@@ -383,6 +391,7 @@ async function restoreBundle(bundlePath, targetPath) {
       await chmod(destination, 0o600);
       const digest = await sha256File(destination);
       if (digest !== file.sha256) throw new Error(`Restored file failed verification: ${file.path}`);
+      validateTenantArchive(await readFile(destination));
       offset += file.size;
     }
     await rename(temporary, target);
@@ -434,8 +443,10 @@ async function backup(config) {
     const report = {
       version: REPORT_VERSION,
       operation: "backup",
-      status: "pass",
-      ready: true,
+      status: "archive_verified",
+      ready: false,
+      scope: "tenant_archive_packaging",
+      applicationRestoreVerified: false,
       capturedAt: new Date().toISOString(),
       archive: {
         file: basename(archivePath),
@@ -450,7 +461,7 @@ async function backup(config) {
       coverage: included,
       fileCount: files.length,
       payloadBytes: files.reduce((sum, file) => sum + file.size, 0),
-      tenantBoundaryVerified: true,
+      tenantBoundaryVerified: false,
       durationMs: Date.now() - startedAt,
     };
     const reportPath = await writeReport(config, report, `${archivePath}.report.json`);
@@ -489,8 +500,10 @@ async function restore(config) {
     const report = {
       version: REPORT_VERSION,
       operation: "restore",
-      status: "pass",
-      ready: true,
+      status: "archive_verified",
+      ready: false,
+      scope: "tenant_archive_packaging",
+      applicationRestoreVerified: false,
       capturedAt: new Date().toISOString(),
       archive: {
         file: basename(config.archive),
@@ -501,7 +514,8 @@ async function restore(config) {
         publishedAtomically: true,
         existingTargetOverwritten: false,
         fileDigestsVerified: true,
-        tenantBoundaryVerified: true,
+        tenantBoundaryVerified: false,
+        payloadStructureAndDigestVerified: true,
       },
       coverage: included,
       fileCount: result.manifest.files.length,
@@ -522,7 +536,7 @@ async function main() {
   }
   const result = config.mode === "restore" ? await restore(config) : await backup(config);
   if (config.json) process.stdout.write(`${JSON.stringify(result.report, null, 2)}\n`);
-  else process.stdout.write(`Workspace user-data ${result.report.operation}: PASS\nReport: ${result.reportPath}\n`);
+  else process.stdout.write(`Workspace archive ${result.report.operation}: VERIFIED (application recovery not tested)\nReport: ${result.reportPath}\n`);
 }
 
 main().catch((error) => {
