@@ -54,6 +54,23 @@ export BITTENSOR_SIDECAR_MODE=python
 
 This mode calls `python_bridge.py`, which expects the official `bittensor` Python package to be installed in the selected Python environment.
 
+Use a clean Python 3.11 virtualenv and the pinned compatible SDK (10.5.0).
+Do not reuse an older SDK environment: `scalecodec` and `cyscale` conflict.
+
+```bash
+python3.11 -m venv .venv-bittensor
+.venv-bittensor/bin/pip install -r packages/bittensor-subtensor-sidecar/requirements.txt
+export BITTENSOR_PYTHON="$PWD/.venv-bittensor/bin/python"
+export BITTENSOR_SIDECAR_MODE=python
+export BITTENSOR_NETWORK=finney # public mainnet reads; certified actions remain testnet-only
+pnpm --dir packages/bittensor-subtensor-sidecar start
+```
+
+Version 11 changes the SDK read API and is not yet supported by this bridge.
+Process liveness is not proof of chain readiness. Check `/health` and a nonempty
+`/subnets` response with a real block and timestamp. Warming/error responses
+must not be presented as live data. No wallet keys are required for these reads.
+
 The bridge supports public read paths defensively:
 
 - sidecar health and SDK availability
@@ -66,13 +83,23 @@ The bridge supports public read paths defensively:
 Signed-payload submission is not part of the bridge. The connected wallet owns
 signing and broadcast after Matterhorn's reviewed-action handoff.
 
+## Service boundary
+
+Keep this service on loopback or a private, access-controlled network. It has no
+public authentication layer and must not be exposed directly to the internet.
+Requests are limited to 64 KiB JSON objects and 64 levels of nesting. Secret
+fields are rejected consistently for quotes, preparation, and disabled submission.
+At most four Python reads run concurrently, each limited to 20 seconds and 4 MiB
+of output. Excess requests receive 503; failed SDK diagnostics are not returned
+to callers. These limits supplement—not replace—the main API's authentication
+and rate limits.
+
 ## Endpoints
 
 ### `GET /liveness`
 
-Returns a fast process-level readiness response without doing a live Subtensor RPC.
-The Matterhorn server uses this first so Finney RPC latency does not make a
-running sidecar appear unreachable.
+Returns a fast process-level response without doing a live Subtensor RPC.
+It is not proof of chain readiness; the Matterhorn server checks `/health`.
 
 ### `GET /health`
 

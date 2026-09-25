@@ -48,7 +48,7 @@ const ignoredSuffixes = [
 
 const sourceExtensions = new Set([
   ".cjs", ".css", ".env", ".html", ".js", ".json", ".jsx", ".mjs", ".sh",
-  ".swift", ".toml", ".ts", ".tsx", ".yaml", ".yml",
+  ".swift", ".toml", ".ts", ".tsx", ".yaml", ".yml", ".py",
 ]);
 
 const rules = [

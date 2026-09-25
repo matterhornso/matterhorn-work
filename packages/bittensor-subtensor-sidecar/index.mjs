@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
-import { spawn } from "node:child_process";
+import { createPythonBridge } from "./python-process.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -15,6 +15,7 @@ const PYTHON_HEALTH_CACHE_MS = Number(process.env.BITTENSOR_HEALTH_CACHE_MS || "
 const PYTHON_SUBNET_CACHE_MS = Number(process.env.BITTENSOR_SUBNET_CACHE_MS || "60000");
 
 const here = dirname(fileURLToPath(import.meta.url));
+const pythonBridge = createPythonBridge({ script: join(here, "python_bridge.py"), network: NETWORK });
 let pythonHealthCache = null;
 let pythonHealthRefresh = null;
 let pythonSubnetCache = null;
@@ -26,17 +27,40 @@ function json(res, status, body) {
 }
 
 async function readBody(req) {
+  const maxBytes = 64 * 1024;
+  const tooLarge = () => Object.assign(new Error("Request body exceeds 64 KiB."), { status: 413 });
+  if (Number(req.headers["content-length"]) > maxBytes) {
+    req.resume();
+    throw tooLarge();
+  }
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let bytes = 0;
+  // Keep the socket alive long enough to deliver a useful 413 on chunked input.
+  for await (const chunk of req.iterator({ destroyOnReturn: false })) {
+    bytes += chunk.length;
+    if (bytes > maxBytes) {
+      req.resume();
+      throw tooLarge();
+    }
+    chunks.push(chunk);
+  }
   const raw = Buffer.concat(chunks).toString("utf8");
   if (!raw.trim()) return {};
+  let body;
   try {
-    return JSON.parse(raw);
+    body = JSON.parse(raw);
   } catch {
     const err = new Error("Request body must be valid JSON.");
     err.status = 400;
     throw err;
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw Object.assign(new Error("Request body must be a JSON object."), { status: 400 });
+  }
+  if (forbiddenKeyPath(body)) {
+    throw Object.assign(new Error("Request contains forbidden key material."), { status: 400, code: "forbidden_key_material" });
+  }
+  return body;
 }
 
 function validSs58(address) {
@@ -44,6 +68,7 @@ function validSs58(address) {
 }
 
 function numberOrNull(value) {
+  if (value == null || value === "") return null;
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -65,6 +90,9 @@ function limitFromUrl(url, fallback = 128, max = 512) {
 }
 
 function forbiddenKeyPath(value, path = []) {
+  if (path.length > 64) {
+    throw Object.assign(new Error("Request nesting exceeds the supported limit."), { status: 400 });
+  }
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
       const nested = forbiddenKeyPath(value[index], [...path, String(index)]);
@@ -86,23 +114,23 @@ function liveMeta(source = MODE === "mock" ? "matterhorn-sidecar-mock" : "bitten
     network: NETWORK,
     source,
     fetchedAt: new Date().toISOString(),
-    block: 123456,
-    freshness: MODE === "mock" ? "mock" : "live",
+    block: MODE === "mock" ? 123456 : null,
+    freshness: MODE === "mock" ? "mock" : "unavailable",
   };
 }
 
 function livenessPayload(bridgeHealth = null) {
-  const sdkAvailable = MODE === "mock" || bridgeHealth?.ok !== false;
+  const sdkAvailable = MODE === "mock" || bridgeHealth?.ok === true;
   return {
     ok: true,
     status: sdkAvailable ? "healthy" : "degraded",
     mode: MODE,
     network: NETWORK,
     sdkAvailable,
-    canRead: sdkAvailable,
-    canPrepare: sdkAvailable,
+    canRead: MODE === "mock" || (sdkAvailable && bridgeHealth?.canRead === true),
+    canPrepare: MODE === "mock" || (sdkAvailable && bridgeHealth?.canPrepare === true),
     canSubmit: false,
-    block: firstNumberForHealth(bridgeHealth, "block") ?? 123456,
+    block: firstNumberForHealth(bridgeHealth, "block") ?? (MODE === "mock" ? 123456 : null),
     fetchedAt: new Date().toISOString(),
     message: MODE === "mock"
       ? "Matterhorn mock Subtensor sidecar is running. Broadcast submission is disabled."
@@ -329,36 +357,6 @@ function prepareExtrinsic(input) {
   };
 }
 
-function pythonBridge(action, payload) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.env.BITTENSOR_PYTHON || "python3", [join(here, "python_bridge.py"), action], {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, BITTENSOR_NETWORK: NETWORK },
-    });
-    let stdout = "";
-    let stderr = "";
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      reject(new Error("Python Bittensor bridge timed out."));
-    }, 20_000);
-    child.stdout.on("data", (data) => { stdout += data.toString("utf8"); });
-    child.stderr.on("data", (data) => { stderr += data.toString("utf8"); });
-    child.on("exit", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || `Python Bittensor bridge exited with code ${code}`));
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout));
-      } catch {
-        reject(new Error("Python Bittensor bridge returned invalid JSON."));
-      }
-    });
-    child.stdin.end(JSON.stringify(payload));
-  });
-}
-
 function startPythonHealthRefresh() {
   if (pythonHealthRefresh) return;
   pythonHealthRefresh = pythonBridge("health", {})
@@ -450,10 +448,13 @@ function cachedPythonSubnets(limit) {
   }
   startPythonSubnetRefresh(limit);
   if (cached) {
-    const subnets = Array.isArray(cached.payload.subnets) ? cached.payload.subnets.slice(0, limit) : [];
+    const subnets = Array.isArray(cached.payload.subnets)
+      ? cached.payload.subnets.slice(0, limit).map(subnet => ({ ...subnet, freshness: "stale" }))
+      : [];
     return {
       ...cached.payload,
       subnets,
+      freshness: "stale",
       warnings: [
         ...(Array.isArray(cached.payload.warnings) ? cached.payload.warnings : []),
         "Returning cached subnet list while a live Python SDK refresh runs in the background.",
@@ -514,16 +515,12 @@ async function dispatch(req, res) {
 
   if (req.method === "POST" && url.pathname === "/extrinsics/prepare") {
     const body = await readBody(req);
-    const forbidden = forbiddenKeyPath(body);
-    if (forbidden) return json(res, 400, { ok: false, error: "forbidden_key_material", message: `Request contains forbidden key material field: ${forbidden}` });
     const data = MODE === "python" ? await pythonBridge("prepare", body) : prepareExtrinsic(body);
     return json(res, 200, data);
   }
 
   if (req.method === "POST" && url.pathname === "/submit") {
-    const body = await readBody(req);
-    const forbidden = forbiddenKeyPath(body);
-    if (forbidden) return json(res, 400, { ok: false, error: "forbidden_key_material", message: `Request contains forbidden key material field: ${forbidden}` });
+    await readBody(req);
     return json(res, 501, {
       ok: false,
       status: "wallet_airlock_required",
@@ -535,12 +532,14 @@ async function dispatch(req, res) {
 }
 
 export function createBittensorSidecarServer() {
-  return createServer((req, res) => {
+  return createServer({ requestTimeout: 30_000, headersTimeout: 10_000 }, (req, res) => {
     dispatch(req, res).catch((err) => {
+      if (res.destroyed || res.writableEnded) return;
+      if (err.status === 413) res.setHeader("Connection", "close");
       json(res, err.status || 500, {
         ok: false,
-        error: err.code || "sidecar_error",
-        message: err instanceof Error ? err.message : "Bittensor sidecar error.",
+        error: err.code === "forbidden_key_material" ? err.code : "sidecar_error",
+        message: err.status && err instanceof Error ? err.message : "Bittensor sidecar request failed.",
       });
     });
   });

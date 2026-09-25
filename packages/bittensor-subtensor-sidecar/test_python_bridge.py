@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import sys
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -112,5 +115,60 @@ assert bridge.network_fee_tao(fallback_subtensor, unstake, 0.1) == 0.0001
 modern = SimpleNamespace(Subtensor=lambda network: {"network": network})
 bridge.import_bittensor = lambda: modern
 assert bridge.get_subtensor() == {"network": "finney"}
+
+
+class LiveSubtensor:
+    def __init__(self):
+        self.head_reads = 0
+
+    def get_current_block(self):
+        self.head_reads += 1
+        return 9136713
+
+    def all_subnets(self, block=None):
+        assert block == 9136713
+        return [SimpleNamespace(netuid=n, subnet_name=f"Subnet {n}") for n in range(128)]
+
+
+live = LiveSubtensor()
+bridge.get_subtensor = lambda: live
+listing = bridge.subnets({"limit": 128})
+assert len(listing["subnets"]) == 128
+assert live.head_reads == 1
+assert all(row["block"] == 9136713 for row in listing["subnets"])
+assert listing["freshness"] == "live"
+
+bridge.get_subtensor = lambda: SimpleNamespace()
+for action in (bridge.health, bridge.subnets):
+    try:
+        action({})
+        raise AssertionError("Unavailable chain must not be labelled live/healthy")
+    except RuntimeError:
+        pass
+
+bridge.get_subtensor = lambda: SimpleNamespace(get_current_block=lambda: 9136713, all_subnets=lambda **_: [])
+try:
+    bridge.subnets({})
+    raise AssertionError("An empty failed read must not be labelled live")
+except RuntimeError:
+    pass
+
+def noisy_health(_payload):
+    print("SDK diagnostic output")
+    return {"ok": True, "block": 9136713}
+
+
+original_argv, original_stdin, original_health = sys.argv, sys.stdin, bridge.health
+out, err = io.StringIO(), io.StringIO()
+try:
+    sys.argv = [str(BRIDGE_PATH), "health"]
+    sys.stdin = io.StringIO("{}")
+    bridge.health = noisy_health
+    with redirect_stdout(out), redirect_stderr(err):
+        assert bridge.main() == 0
+    assert json.loads(out.getvalue()) == {"ok": True, "block": 9136713}
+    assert "SDK diagnostic output" in err.getvalue()
+finally:
+    sys.argv, sys.stdin, bridge.health = original_argv, original_stdin, original_health
 
 print("Bittensor Python bridge compatibility tests passed.")

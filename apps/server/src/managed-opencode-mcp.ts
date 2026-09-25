@@ -562,6 +562,34 @@ function containsForbiddenToolResultSecret(value: unknown): boolean {
     || (isJsonObject(value) && findForbiddenMemorySecretFields(value).length > 0);
 }
 
+function projectBittensorDiscovery(result: JsonObject): JsonObject {
+  const data = result.data;
+  if (!isJsonObject(data) || !isJsonObject(data.discovery)) return result;
+  const discovery = data.discovery;
+  const matches = discovery.matches;
+  if (!Array.isArray(matches)) return result;
+  const subnetKeys = ["netuid", "name", "source", "block", "updatedAt", "freshness", "warnings", "priceTao", "emission", "tempo"];
+  // Discovery also carries duplicate UI cards, capability catalog entries and
+  // suggested workflows. Spend model context on the requested chain evidence.
+  const { plan: _plan, data: _data, ...answer } = result;
+  return {
+    ...answer,
+    data: {
+      discovery: {
+        matches: matches.filter(isJsonObject).map((match) => {
+          const subnet = match.subnet;
+          if (!isJsonObject(subnet)) return {};
+          return { subnet: Object.fromEntries(subnetKeys
+            .filter(key => subnet[key] !== undefined)
+            .map(key => [key, subnet[key]])) };
+        }),
+        source: discovery.source,
+        warnings: discovery.warnings,
+      },
+    },
+  };
+}
+
 function stripPrivateModelResultFields(value: unknown, depth = 0): unknown {
   if (value == null || typeof value !== "object") return value;
   if (depth >= 10) return "[Matterhorn omitted over-nested external content]";
@@ -668,6 +696,7 @@ function projectManagedMcpResult(input: {
     closed = Object.fromEntries(keys
       .filter((key) => rawResult[key] !== undefined)
       .map((key) => [key, rawResult[key]]));
+    if (input.tool.name === "matterhorn_bittensor_chat") closed = projectBittensorDiscovery(closed);
   }
   if (Object.keys(closed).length === 0) {
     throw new Error("matterhorn_tool_result_rejected");

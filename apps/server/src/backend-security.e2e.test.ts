@@ -1093,6 +1093,17 @@ describe("Security capability classification", () => {
     expect(caps.wallets.families.sui.signing).toBe("client_wallet");
   });
 
+  test("control-plane mutations reject non-object JSON before field access", async () => {
+    const { base, collaboratorToken } = await boot();
+    for (const body of ["null", "[]", "true", "42", '"text"']) {
+      const result = await jsonFetch(base, "/workspace/ws_security/mcp", collaboratorToken, {
+        method: "POST", body,
+      });
+      expect(result.response.status).toBe(400);
+      expect(result.payload.code).toBe("invalid_json");
+    }
+  });
+
   test("control-plane mutations reject overlarge JSON bodies", async () => {
     const { base, collaboratorToken } = await boot();
 

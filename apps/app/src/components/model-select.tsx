@@ -1,5 +1,5 @@
 "use client";
-import { MINIMAL_UI, isChatModelId } from "@/app/lib/minimal-ui";
+import { isChatModelId } from "@/app/lib/minimal-ui";
 
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
@@ -89,7 +89,7 @@ function useModelOptions(open: boolean) {
     });
 
     const options = getConnectedPromptProviderItems(data).flatMap((provider) =>
-      Object.entries(provider.models).filter(([id]) => !MINIMAL_UI || isChatModelId(id)).map(([id, model]) => {
+      Object.entries(provider.models).filter(([id]) => isChatModelId(id)).map(([id, model]) => {
         const behavior = getModelBehaviorSummary(
           provider.id,
           model,

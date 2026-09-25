@@ -8930,34 +8930,7 @@ const DEV_LOG_BEARER_PATTERN = /\b(bearer\s+)[a-z0-9._~+/=-]+/gi;
 const DEV_LOG_PRIVATE_KEY_CONTEXT_PATTERN = /\b(private\s+key|mnemonic|seed\s+phrase|wallet\s+export)\b[\s:=]+[a-z0-9\s._~+/=-]{16,}/gi;
 
 async function readDevLogPayloadText(request: Request): Promise<string> {
-  const contentLength = Number(request.headers.get("content-length") ?? "");
-  if (Number.isFinite(contentLength) && contentLength > DEV_LOG_MAX_PAYLOAD_BYTES) {
-    throw new ApiError(413, "payload_too_large", "Dev log payload is too large");
-  }
-
-  const body = request.body;
-  if (!body) return "";
-
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let bytes = 0;
-  let text = "";
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-      bytes += value.byteLength;
-      if (bytes > DEV_LOG_MAX_PAYLOAD_BYTES) {
-        await reader.cancel();
-        throw new ApiError(413, "payload_too_large", "Dev log payload is too large");
-      }
-      text += decoder.decode(value, { stream: true });
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  return text + decoder.decode();
+  return readBodyTextLimited(request, DEV_LOG_MAX_PAYLOAD_BYTES, "Dev log");
 }
 
 function redactDevLogText(value: string): string {
@@ -22875,8 +22848,9 @@ async function readJsonBody(
   label = "Request",
 ): Promise<Record<string, unknown>> {
   try {
-    const json = JSON.parse(await readBodyTextLimited(request, maxBytes, label));
-    return json as Record<string, unknown>;
+    const json: unknown = JSON.parse(await readBodyTextLimited(request, maxBytes, label));
+    if (!isRecord(json)) throw new ApiError(400, "invalid_json", "Request body must be a JSON object");
+    return json;
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(400, "invalid_json", "Invalid JSON body");

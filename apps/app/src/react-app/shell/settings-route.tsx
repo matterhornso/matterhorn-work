@@ -17,7 +17,6 @@ import {
 import { useQuery } from "@tanstack/react-query";
 
 import { SUGGESTED_PLUGINS } from "../../app/constants";
-import { MINIMAL_UI } from "../../app/lib/minimal-ui";
 import { readStoredSessionChoiceOverrides, withSessionChoiceOverride, writeStoredSessionChoiceOverrides } from "../kernel/model-config";
 import type { EnablementContext } from "../../app/enablement";
 import { createClient } from "../../app/lib/opencode";
@@ -3578,7 +3577,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           (() =>
             navigate(
               selectedWorkspaceId
-                ? workspaceSessionRoute(selectedWorkspaceId, MINIMAL_UI && location.state?.workspaceId === selectedWorkspaceId && typeof location.state?.sessionId === "string" ? location.state.sessionId : null)
+                ? workspaceSessionRoute(selectedWorkspaceId, location.state?.workspaceId === selectedWorkspaceId && typeof location.state?.sessionId === "string" ? location.state.sessionId : null)
                 : "/session",
             ))
         }

@@ -759,7 +759,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         </LayoutSectionItem>
       </LayoutSection>
 
-      {props.showOpenWorkModelsSubscribe ? (
+      {props.showOpenWorkModelsSubscribe && !props.providerCredentialsManaged ? (
         <LayoutSection>
           <LayoutSectionHeader>
             <LayoutSectionTitle>More models</LayoutSectionTitle>
@@ -1049,7 +1049,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         </Collapsible>
       </LayoutSection>
 
-      {props.cloudProvidersView}
+      {!props.providerCredentialsManaged ? props.cloudProvidersView : null}
     </LayoutStack>
   );
 }
