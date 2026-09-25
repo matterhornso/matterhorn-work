@@ -10,7 +10,6 @@ interface ApprovalResult {
 interface PendingApproval {
   request: ApprovalRequest;
   resolve: (result: ApprovalResult) => void;
-  timeout?: NodeJS.Timeout;
 }
 
 export class ApprovalService {
@@ -27,7 +26,11 @@ export class ApprovalService {
 
   async requestApproval(
     input: Omit<ApprovalRequest, "id" | "createdAt">,
+    signal?: AbortSignal,
   ): Promise<ApprovalResult> {
+    if (signal?.aborted) {
+      return { id: "cancelled", allowed: false, reason: "cancelled" };
+    }
     if (this.config.mode === "auto") {
       return { id: "auto", allowed: true };
     }
@@ -39,12 +42,19 @@ export class ApprovalService {
     };
 
     const result = await new Promise<ApprovalResult>((resolve) => {
+      const settle = (result: ApprovalResult) => {
+        if (!this.pending.delete(id)) return;
+        clearTimeout(timeout);
+        signal?.removeEventListener("abort", cancel);
+        resolve(result);
+      };
+      const cancel = () => settle({ id, allowed: false, reason: "cancelled" });
       const timeout = setTimeout(() => {
-        this.pending.delete(id);
-        resolve({ id, allowed: false, reason: "timeout" });
+        settle({ id, allowed: false, reason: "timeout" });
       }, this.config.timeoutMs);
 
-      this.pending.set(id, { request, resolve, timeout });
+      this.pending.set(id, { request, resolve: settle });
+      signal?.addEventListener("abort", cancel, { once: true });
     });
 
     return result;
@@ -53,8 +63,6 @@ export class ApprovalService {
   respond(id: string, reply: "allow" | "deny"): ApprovalResult | null {
     const pending = this.pending.get(id);
     if (!pending) return null;
-    if (pending.timeout) clearTimeout(pending.timeout);
-    this.pending.delete(id);
     const result: ApprovalResult = {
       id,
       allowed: reply === "allow",

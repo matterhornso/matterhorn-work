@@ -151,9 +151,27 @@ Prepare tested corrections and a precise operator handoff, not unsupported
 
 ## Resume here
 
-Commit the backup flag correction and runtime evidence. Next investigate manual
-approval cancellation: does stopping/disconnecting a prompt while host approval
-is pending prevent a later approval from dispatching it? Reproduce locally before
-changing behavior; preserve approval/security checks. Then UI recovery/accessibility
-coverage. No repeated unchanged hosted probes. Preserve the unresolved manual
-approval journey, SES/reset, full filesystem recovery and revision drift blockers.
+### 18:57 UTC continuation — pending approval cancellation
+
+- Backup parity/runtime evidence commit: `69a35790cdd56e7f4db725d909f5fe2644f42617`.
+- Reproduced a late host approval being accepted after client disconnect. Added
+  AbortSignal handling and deterministic cleanup to ApprovalService, passing the
+  request signal from the API. Eight unit regressions and the 79-test/567-assertion
+  approval/adapter/gateway batch pass; server build/typecheck passes.
+- Full backend suite: **1,731 pass / 11,456 assertions**. The standalone Bun
+  socket probe remains a known failing acceptance check outside that suite.
+- **Not fully fixed:** identical socket probe passes Node 26.7.0 and fails Bun
+  1.3.11 after POST body consumption. Public-beta entrypoint uses Bun, so this is
+  still a release blocker. No speculative adapter switch shipped. See
+  `APPROVAL-CANCELLATION.md` and the new repeatable diagnostic script.
+- Traced explicit UI Stop to runtime session abort, rather than cancellation of
+  the pending gateway request. Reproduce this separately next, then implement
+  scoped cancellation without weakening session/account authorization.
+
+## Next continuation
+
+Finish pending-approval Stop/disconnect correctness under the actual Bun runtime.
+Use the saved reproducible probe; do not label its known failure as passing.
+Then UI recovery/accessibility coverage. No repeated unchanged hosted probes.
+Preserve the manual approval journey, SES/reset, full filesystem recovery and
+revision drift blockers. No push, merge or deployment.

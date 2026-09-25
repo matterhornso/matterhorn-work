@@ -23102,7 +23102,7 @@ async function requireApproval(
   input: Omit<ApprovalRequest, "id" | "createdAt" | "actor">,
 ): Promise<void> {
   const actor = ctx.actor ?? { type: "remote" };
-  const result = await ctx.approvals.requestApproval({ ...input, actor });
+  const result = await ctx.approvals.requestApproval({ ...input, actor }, ctx.request.signal);
   if (!result.allowed) {
     throw new ApiError(403, "write_denied", "Write request denied", {
       requestId: result.id,
