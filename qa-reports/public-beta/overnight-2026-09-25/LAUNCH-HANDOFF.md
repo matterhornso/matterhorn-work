@@ -1,5 +1,14 @@
 # Matterhorn public-beta launch handoff — 26 September 2026
 
+> Production correction (26 September, 01:45 UTC): this overnight report tested
+> the canary, not the user-confirmed production origin `https://desks.matterhorn.so`.
+> Production reports launch ready, signup open and email/reset/backup checks
+> passing. Its web/API report `787d85bb830ff859a185d3bcd1a20c493dd008d4`;
+> actual artifact identity and end-to-end acceptance remain to be verified.
+> Use `docs/handoffs/production-go-live-team-handoff-2026-09-26.md` for the
+> corrected current handoff. Preserve the report below as historical canary and
+> local-test evidence; do not apply its production configuration assumptions.
+
 ## Decision: NO-GO for public beta
 
 The local candidate passes the final regression suites, but is **not deployed or
