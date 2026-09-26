@@ -273,9 +273,10 @@ Check remaining integration failure paths and filesystem backup coverage.
 Tenant archive packaging is now validated but deliberately not labelled full
 application recovery. Isolated application/volume restore remains an operator
 blocker. Integration and account-security failure paths received more coverage.
-Next: consolidate release evidence and exact commits, inspect remaining
-launch-gate/operator handoff gaps, and run final candidate regressions before
-the deadline. Do not repeat unchanged hosted probes.
+Final candidate regressions and the operator handoff are complete; see
+`LAUNCH-HANDOFF.md`. No queued local test remains running. Remaining hosted
+acceptance, deployment, infrastructure and release-policy actions need operator
+access/approval; do not repeat unchanged hosted probes or weaken gates.
 File attachments/structured
 mentions are not guaranteed on reload.
 Re-read applicable skill references as necessary. Do not repeat
@@ -346,3 +347,26 @@ merge or deployment.
   tampering, missing secrets, restart persistence and restricted tool routing.
 - Local synthetic data only; not hosted or live OAuth acceptance. No deployment,
   auth bypass, production configuration, wallet signing or paid resource changes.
+
+### 00:27 UTC continuation — final validation and launch handoff
+
+- Tested implementation tip: `6a34543d6d0cffb2facd835183b7cc35b409cbf5`.
+- Final full backend: **1,734 pass / 11,501 assertions / 179 files**. Full
+  ten-stage safety gate and server typecheck pass. Final source secret scan:
+  **1,206 files / zero findings**; scanner exclusions are stated in the handoff.
+- Reused the final frontend result: **1,225 pass / 7,698 assertions / 178 files**,
+  frontend typecheck/build pass. No source edits since those checks.
+- Reviewed approval/native-server changes and exact configuration/acceptance
+  contracts for the handoff. Confirmed another schedule constraint: the strict
+  owner gate requires **48 hours of release-bound guarded shadow evidence**.
+  No such hosted evidence was generated here; local gate tests are not a waiver.
+- `LAUNCH-HANDOFF.md` records all thirteen exact implementation commits, scope
+  limits, local-versus-hosted results, and ordered operator actions for release,
+  ordinary-user approvals, SES/reset, full filesystem recovery and final QA.
+- Decision remains **NO-GO**. The bounded local regression queue is complete;
+  remaining launch work requires deployment/configuration approval, operator
+  access, real inbox/backup and ordinary-account evidence, wallet owners, or
+  unavailable browser/device coverage. No new speculative feature work started.
+- Finish early under the heartbeat's explicit exhaustion clause, preserving the
+  user's no-deployment/no-production-change limits. Pause the heartbeat after
+  committing the handoff; report truthful partial completion, not 100% readiness.
