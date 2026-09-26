@@ -8,6 +8,13 @@
 > Use `docs/handoffs/production-go-live-team-handoff-2026-09-26.md` for the
 > corrected current handoff. Preserve the report below as historical canary and
 > local-test evidence; do not apply its production configuration assumptions.
+>
+> Fresh follow-up QA (26 September, approximately 16:38 UTC) is recorded in
+> `qa-reports/public-beta/codex-local-2026-09-26/QA-REVIEW.md`. Production public
+> checks remain green, but Security → Back to app still shows Support until
+> reload. The local build passes that navigation. See the current production
+> handoff for updated source identities, test counts and team action items;
+> the historical NO-GO below is not a fresh probe of production configuration.
 
 ## Decision: NO-GO for public beta
 

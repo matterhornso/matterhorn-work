@@ -101,10 +101,40 @@ Code/test commit: `314ccd6620e3022ad7e8cd00d51404a1871476fb`
 - Full logs: `/private/tmp/matterhorn-20260926-local-{backend,frontend}.log`.
   These logs are temporary; this record preserves outcomes and scope.
 
+## Fresh pre-handoff QA — 26 September, approximately 16:30–16:38 UTC
+
+User requested thorough QA before updating handoffs. Reviewed clean tracked
+source at `2709d06022fd04ad960ed8611cbbdf131b87dd26`; no application-code edits.
+Detailed outcomes and limits: [QA-REVIEW.md](./QA-REVIEW.md).
+
+- Backend 1,751 / frontend 1,228 tests pass; full ten-stage safety gate passes.
+  App/server typechecks/builds, desktop typecheck/50-method bridge, host and
+  tenant recovery, verified-upload and restore/container fixtures pass.
+- Five pinned-runtime scenarios pass: lost-ack retry, Stop/recovery, denied
+  writes, direct outside-root reads, symlink-outside reads. Every run exercises
+  all five agents with synthetic inference; settled charges match usage and
+  final holds are zero. Not live-provider/hosted evidence.
+- Node/Bun socket probes both cancelled pending approval without dispatch.
+  Source scan 1,206 files/zero findings; diff check clean.
+- Browser notes/draft failure and race recovery pass with disposable synthetic
+  state. Mobile override was ineffective (actual viewport still 1280px), so
+  mobile acceptance remains outstanding. Only in-app browser is available.
+- Production rechecked read-only at 16:32:15 UTC: 29 checks pass; signup open,
+  launch ready; web/API still report `787d85bb830ff859a185d3bcd1a20c493dd008d4`.
+  Strict comparison used this previously reported SHA, not the candidate.
+- **Live P1 reproduced:** Security → Back to app shows Support at `/session`;
+  reload restores sign-in. Local fix `36c935283a01454df90f2f960e3d5ff4a4a688b8`
+  is present and its freshly built navigation reaches normal app onboarding.
+  Team must reconcile/release assets and verify all three app exits.
+- Reviewed handoff after QA: updated stale test counts, implementation identity,
+  current production timestamp, self-contained team prompt and remaining gates.
+  Historical overnight report remains historical; only its superseding pointer
+  is updated. No push/merge/deployment or production changes.
+
 ## Next local milestone
 
 Final checks and the code commit are complete; the handoff delta is recorded
-locally. Next expand ordinary-account gateway tests (current new matrix
+locally and fresh QA is recorded above. Next expand ordinary-account gateway tests (current new matrix
 uses a client bearer, not a hosted user), and run actual-provider tests only
 with approved test access/allowance. Production approval-policy redesign remains
 a decision dependency, not permission to bypass the current host queue.

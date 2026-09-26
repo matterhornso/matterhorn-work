@@ -1,7 +1,39 @@
 # Matterhorn public beta: Codex / tech-team handoff
 
-Prepared 26 September 2026. Production: **https://desks.matterhorn.so**.
+Updated after fresh QA on 26 September 2026, approximately 16:38 UTC.
+Production: **https://desks.matterhorn.so**.
 Repository: **https://github.com/matterhornso/matterhorn-work**.
+
+## Latest QA delta — read before acting
+
+Full results: [QA review](../../qa-reports/public-beta/codex-local-2026-09-26/QA-REVIEW.md).
+Tested source: `2709d06022fd04ad960ed8611cbbdf131b87dd26` (application code tip
+`314ccd6620e3022ad7e8cd00d51404a1871476fb`). No application changes during this QA.
+
+- Fresh backend **1,751/1,751** and frontend **1,228/1,228** pass, full safety
+  gate passes, app/server typecheck/build and desktop typecheck/bridge pass.
+- Real pinned runtime with **synthetic inference** passed all-five-agent answers,
+  lost-ack retry deduplication, Stop/recovery, denied writes and direct/symlink
+  outside-workspace read rejection. All scenarios settled with zero pending
+  requests and used tokens equal charged tokens. This is not hosted acceptance.
+- Local recovery/upload/archive fixtures pass; Node/Bun socket disconnects cancel
+  pending approval with zero dispatch. Source secret scan: 1,206 files, no findings.
+- Production public probe at **16:32:15 UTC**: 29 checks pass, signup open and
+  launch readiness green. It compared against the previously observed reported
+  SHA, **not** against the local candidate or a verified deployment artifact.
+- **P1 live defect reproduced:** Security → Back to app changes URL to `/session`
+  but shows Support; reload restores sign-in. The local build passes this flow
+  and already contains fix `36c935283a01454df90f2f960e3d5ff4a4a688b8`. Reconcile
+  actual deployed frontend assets before writing another fix. Retest brand,
+  Open app and Back to app exits after the approved release.
+- Notes/draft browser recovery fixtures pass. Safari/Firefox, authenticated
+  mobile/tablet, 200% zoom and screen-reader acceptance remain unverified. The
+  attempted 390px override still measured 1280px, so it is not mobile evidence.
+
+**Release sign-off remains incomplete.** The still-needed team evidence is
+deployment identity, ordinary-user approval and five live desk outcomes,
+two-account/inbox acceptance, complete restore, monitoring/rollback and the
+required exact-release shadow evidence. Green health does not close these gaps.
 
 Rolling Codex progress and team dependencies are recorded in
 `qa-reports/public-beta/codex-local-2026-09-26/WORKLOG.md`. The first local
@@ -23,7 +55,8 @@ handoff. That earlier assessment tested `matterhorn-desks-canary.vercel.app`,
 which is a separate deployment. Do not apply its paused-signup or failing-email
 findings to production. Do not redirect working production settings to canary.
 
-Read-only checks at approximately **2026-09-26 01:45 UTC / 07:15 IST** found:
+Initial read-only checks at **2026-09-26 01:45 UTC / 07:15 IST**, reconfirmed by
+the public probe at **16:32:15 UTC / 22:02 IST**, found:
 
 | Production observation | Result |
 | --- | --- |
@@ -76,12 +109,13 @@ The overnight changes were prepared on this local checkout:
 /Users/abhinavramesh/Documents/Matterhorn-work/matterhorn-post1011-mcp-runtime
 branch: codex/beta-launch-readiness-2026-09-25
 base: 084880d7aad8321bd8b3a09104b5ac7cf9dff037
-tested implementation: 6a34543d6d0cffb2facd835183b7cc35b409cbf5
-documentation tip: 8f22f324b4b8d5b93f9163d96fb70ac8dbee0c4f
+overnight implementation: 6a34543d6d0cffb2facd835183b7cc35b409cbf5
+latest implementation: 314ccd6620e3022ad7e8cd00d51404a1871476fb
+QA-tested source including documentation: 2709d06022fd04ad960ed8611cbbdf131b87dd26
 ```
 
-At preparation time these commits are **local, not pushed**. This handoff itself
-is a new local file. Forward the file directly; it is not yet available through
+At this update these commits are **local, not pushed**. This handoff is tracked
+locally. Forward the file directly; it is not yet available through
 a GitHub link. Do not tell another engineer to pull a nonexistent remote branch
 or assume “latest PR” includes the work.
 
@@ -112,10 +146,12 @@ da2399b4c0a27575a991e052f0c062a3f5f1ac0e
 5eb3d380b68224f16a8accf59cc644cbf5a25f09
 9b06a26541356bd721e563c05319c7e34ac2ded9
 6a34543d6d0cffb2facd835183b7cc35b409cbf5
+314ccd6620e3022ad7e8cd00d51404a1871476fb
 ```
 
-Local evidence: 1,734 backend tests and 1,225 frontend tests pass; frontend/server
-typechecks, frontend build and the ten-stage safety gate pass. Source secret scan
+Fresh local evidence: 1,751 backend tests and 1,228 frontend tests pass;
+frontend/server typechecks and builds, desktop typecheck/bridge, recovery fixtures
+and the ten-stage safety gate pass. Source secret scan
 had zero findings across 1,206 source files; tests, fixtures, Markdown and QA
 reports are excluded by that scanner. Large frontend chunk warnings remain.
 The five-agent enforce-mode probe uses a synthetic provider, not production.
@@ -138,6 +174,10 @@ user acceptance. Do not promote either to live acceptance evidence.
 4. Verify whether the overnight corrections are already present in another
    branch or deployment before merging duplicate/conflicting changes.
 5. Return the exact intended release SHA and rollback artifact IDs to Codex.
+6. Reproduce and close the observed production Security → Back to app bug.
+   Local source already has `reloadDocument` on the three app-exit links and
+   passed fresh built-browser navigation. Verify the actual deployed assets and
+   all three exits, not merely an updated commit header or HTTP 200.
 
 After an approved release, web `VITE_MATTERHORN_BUILD_COMMIT` and backend
 `MATTERHORN_BUILD_COMMIT` must describe the actual built source. Keep all proxy,
@@ -305,16 +345,25 @@ Return one sanitized status report with each item marked **PASS / FAIL / BLOCKED
 > Please own production verification and operational acceptance for Matterhorn's
 > public beta at https://desks.matterhorn.so, repository
 > https://github.com/matterhornso/matterhorn-work. Do not use the canary URL as
-> production. Checks on 26 September 2026 at about 01:45 UTC show signup open and
+> production. Fresh checks on 26 September 2026 at 16:32 UTC show signup open and
 > launch/email/reset/backup readiness green; do not rebuild working setup.
 >
 > First reconcile actual Vercel/Railway deployment records and artifact identity:
 > both surfaces report 787d85bb830ff859a185d3bcd1a20c493dd008d4 (locally PR #1018).
 > Establish whether this is deployed code or stale metadata. Do not merely change
-> the reported SHA. Codex has thirteen tested local fixes on
-> codex/beta-launch-readiness-2026-09-25, implementation tip
-> 6a34543d6d0cffb2facd835183b7cc35b409cbf5, documentation tip
-> 8f22f324b4b8d5b93f9163d96fb70ac8dbee0c4f. They are not yet pushed; pulling GitHub
+> the reported SHA. A fresh production browser reproduction still shows Support
+> after Security → Back to app changes the URL to /session; reloading fixes it.
+> Local source already has navigation fix 36c935283a01454df90f2f960e3d5ff4a4a688b8
+> and the local built flow passes. Reconcile assets and retest before sign-off.
+>
+> Codex has fourteen tested local implementation commits on
+> codex/beta-launch-readiness-2026-09-25: thirteen overnight fixes through
+> 6a34543d6d0cffb2facd835183b7cc35b409cbf5, then the missing-agent-policy correction
+> 314ccd6620e3022ad7e8cd00d51404a1871476fb. Fresh QA tested source
+> 2709d06022fd04ad960ed8611cbbdf131b87dd26, including documentation. Backend 1,751
+> and frontend 1,228 tests, full safety gate, builds/typechecks, runtime boundary
+> probes and recovery fixtures pass. Runtime inference was synthetic, not hosted.
+> They are not yet pushed; pulling GitHub
 > latest will not supply them. Arrange an approved PR/source handoff, review and
 > reconcile before any approved release.
 >
