@@ -272,7 +272,10 @@ Prepare tested corrections and a precise operator handoff, not unsupported
 Check remaining integration failure paths and filesystem backup coverage.
 Tenant archive packaging is now validated but deliberately not labelled full
 application recovery. Isolated application/volume restore remains an operator
-blocker. Prioritize untested integration and account/UI failure paths next.
+blocker. Integration and account-security failure paths received more coverage.
+Next: consolidate release evidence and exact commits, inspect remaining
+launch-gate/operator handoff gaps, and run final candidate regressions before
+the deadline. Do not repeat unchanged hosted probes.
 File attachments/structured
 mentions are not guaranteed on reload.
 Re-read applicable skill references as necessary. Do not repeat
@@ -325,3 +328,21 @@ merge or deployment.
 - Full ten-stage local safety gate passes. This is not hosted acceptance.
 - Remaining filesystem/volume restoration and tenant sentinel verification are
   explicit blockers; no infrastructure changes, push, merge or deployment.
+
+### 22:57–23:57 UTC continuation — account security and integration failures
+
+- Prior recovery commit: `9b06a26541356bd721e563c05319c7e34ac2ded9`.
+- Three initial rendered-component assertions failed: another account's cached
+  session count appeared in the current view, failed checks implied a single
+  active session, and scoped data was ignored by the global query key.
+- Scoped security cache and form state by account/connection; added accurate
+  unknown/error states and retry, with sensitive actions disabled until status
+  is verified. Six regressions pass. No real passwords or mutations exercised.
+- Frontend **1,225 pass / 7,698 assertions**. Typecheck/build pass; existing chunk
+  warnings remain. Impeccable hardening retained the current UI design.
+- Integration batch: **34 pass / 255 assertions** across catalog routes,
+  workspace connections, OAuth connections, hosted MCP credentials and guarded
+  MCP dispatch. Covers expiry/revocation, cross-workspace denial, authority
+  tampering, missing secrets, restart persistence and restricted tool routing.
+- Local synthetic data only; not hosted or live OAuth acceptance. No deployment,
+  auth bypass, production configuration, wallet signing or paid resource changes.

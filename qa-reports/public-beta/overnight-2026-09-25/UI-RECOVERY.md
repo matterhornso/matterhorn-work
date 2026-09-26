@@ -249,3 +249,24 @@ component wiring contract cover identity stability, separation and credential
 exclusion. Frontend **1,219 pass / 7,677 assertions**, typecheck/build pass, secret
 scan zero findings, design detector zero primary findings / four advisories.
 Impeccable hardening preserved the existing layout; no visual changes.
+
+## 23:57 continuation — account security truth and cache scope
+
+Rendered-component tests reproduced an unscoped account-security cache showing
+the previous account's session count. Another failing test showed a failed
+lookup displaying “Only this session is active.” These are frontend state and
+truthfulness defects, not evidence of backend cross-account authorization.
+
+Security query keys now include account ID and opaque connection identity; no
+credentials or email addresses appear in the key. The form/mutation-state owner
+is also keyed to that scope. Unknown, failed, stale-after-failure or malformed
+session counts are not reported as a single active session. A Retry security
+check action is available, and session revocation/account deletion remain
+disabled until status is verified. Server authorization is unchanged.
+
+Six regressions cover cross-account cached counts, lookup failures, confirmed
+counts, connection/key identity, stale failed refresh and malformed counts.
+Full frontend: **1,225 pass / 7,698 assertions**. Typecheck/build pass (existing
+large-chunk warnings). Impeccable hardening preserved the established layout.
+This pass used actual component server rendering and controlled query state,
+not browser interaction, real passwords or account mutations.
