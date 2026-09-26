@@ -4,6 +4,21 @@ Updated after fresh QA on 26 September 2026, approximately 16:38 UTC.
 Production: **https://desks.matterhorn.so**.
 Repository: **https://github.com/matterhornso/matterhorn-work**.
 
+**Publication update — 27 September IST:** now available in
+[PR #1026](https://github.com/matterhornso/matterhorn-work/pull/1026), targeting
+`dev`. Initial published/tested candidate is
+`28c6a7909da8b9f5c022281dcbbc41fed4b617ae`; the publication-status follow-up changes
+documentation only. CI was running at publication; no merge or deployment.
+This supersedes historical “local only/not pushed” statements in the QA records.
+
+```sh
+git fetch origin
+git switch --track origin/codex/beta-launch-readiness-2026-09-25
+```
+
+Use a clean checkout; if the branch already exists, inspect it instead of
+overwriting local changes. Review the current PR head and its checks before merge.
+
 ## Latest QA delta — read before acting
 
 Full results: [QA review](../../qa-reports/public-beta/codex-local-2026-09-26/QA-REVIEW.md).
@@ -42,7 +57,7 @@ behind host-approval timeouts; the log distinguishes this fix from the still
 unverified production approval journey. It also records exact regression counts
 and source changes to reconcile with the team's parallel branch.
 
-Follow-up implementation commit (local only):
+Follow-up implementation commit (now included in PR #1026):
 `314ccd6620e3022ad7e8cd00d51404a1871476fb`. Final local validation: 1,751 backend
 tests, 1,228 frontend tests, both typechecks, frontend build and full safety gate
 pass. This is not hosted acceptance. No new configuration or migration is needed;
@@ -101,7 +116,7 @@ is the division of work. Publishing the local branch, merging or changing
 production requires the appropriate approval. Credentials must stay in approved
 secret storage or a signed-in test browser, never in chat or this document.
 
-## 3. Source handoff: GitHub latest alone is not enough yet
+## 3. Source handoff: fetch PR #1026, not just the default branch
 
 The overnight changes were prepared on this local checkout:
 
@@ -114,14 +129,11 @@ latest implementation: 314ccd6620e3022ad7e8cd00d51404a1871476fb
 QA-tested source including documentation: 2709d06022fd04ad960ed8611cbbdf131b87dd26
 ```
 
-At this update these commits are **local, not pushed**. This handoff is tracked
-locally. Forward the file directly; it is not yet available through
-a GitHub link. Do not tell another engineer to pull a nonexistent remote branch
-or assume “latest PR” includes the work.
+These commits are **published in PR #1026, not merged or deployed**. Fetch the
+exact branch above; pulling `dev` alone does not include the changes yet.
 
-Next source-control step: obtain approval for Codex to push/open a PR, or arrange
-an approved source transfer. Once published, fetch the exact branch, compare it
-with current target-branch changes, review, rerun CI, merge and record the final
+Next source-control step: compare the PR with current target-branch changes,
+review, require successful CI, obtain merge approval and record the final
 full SHA. Never deploy the local dirty workspace or blindly cherry-pick all
 commits onto a different implementation. Preserve unrelated untracked files.
 
@@ -363,9 +375,12 @@ Return one sanitized status report with each item marked **PASS / FAIL / BLOCKED
 > 2709d06022fd04ad960ed8611cbbdf131b87dd26, including documentation. Backend 1,751
 > and frontend 1,228 tests, full safety gate, builds/typechecks, runtime boundary
 > probes and recovery fixtures pass. Runtime inference was synthetic, not hosted.
-> They are not yet pushed; pulling GitHub
-> latest will not supply them. Arrange an approved PR/source handoff, review and
-> reconcile before any approved release.
+> These changes are now published in PR #1026:
+> https://github.com/matterhornso/matterhorn-work/pull/1026. Fetch branch
+> codex/beta-launch-readiness-2026-09-25; pulling dev alone does not supply them
+> until merge. Initial published candidate is 28c6a7909da8b9f5c022281dcbbc41fed4b617ae;
+> the publication-record follow-up changes documentation only. Review the current
+> PR head, require CI, reconcile parallel changes and obtain merge/release approval.
 >
 > Supply two ordinary verified test accounts with controlled inboxes and safe
 > browser access, not credentials in chat. Confirm the effective chat approval

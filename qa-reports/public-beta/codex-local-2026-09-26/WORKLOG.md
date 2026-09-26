@@ -1,5 +1,24 @@
 # Codex local delivery and rolling tech-team handoff
 
+## Publication update — 27 September IST
+
+User explicitly authorized publishing the tested candidate. Pushed branch
+`codex/beta-launch-readiness-2026-09-25` and opened
+[PR #1026](https://github.com/matterhornso/matterhorn-work/pull/1026) against `dev`.
+Initial PR head: `28c6a7909da8b9f5c022281dcbbc41fed4b617ae`; fresh base remained
+`084880d7aad8321bd8b3a09104b5ac7cf9dff037` (17 commits ahead, zero behind).
+This follow-up changes publication records only. No merge or deployment.
+
+Publication-time reruns: backend 1,751 pass / 11,658 assertions; frontend 1,228
+pass / 7,732 assertions; source scan 1,206 files / zero findings; diff check pass.
+Initial restricted-sandbox frontend run had two loopback-bind failures in
+`prompt-request-diagnostics-client.test.ts`; rerunning the unchanged full suite
+with loopback permission passed. No application fix or test suppression.
+PR includes commands, QA scope, fixture reproduction and live acceptance gaps.
+CI was in progress when the PR was verified; do not infer a green result.
+Unrelated untracked files remain excluded. Historical no-push statements below
+describe earlier work blocks, not the current publication state.
+
 ## Scope
 
 User asked Codex to execute the local delivery plan while the tech team handles
