@@ -39,6 +39,19 @@ test("missing desk agents explain setup instead of offering an ineffective retry
   expect(result.retryable).toBe(false);
 });
 
+test("missing desk permission policy explains setup without suggesting blind retries", () => {
+  const body = { code: "agent_permission_unavailable", message: "Agent matterhorn-bittensor has no runtime permission policy" };
+  for (const error of [body, new Error(JSON.stringify(body)), new Error(body.message),
+    new MatterhornServerError(503, body.code, body.message)]) {
+    const result = parseSessionError(error);
+    expect(result.message).toBe("This desk's permissions need setup.");
+    expect(result.detail).toContain("workspace owner");
+    expect(result.detail).toContain("Your draft is preserved");
+    expect(result.retryable).toBe(false);
+    expect(`${result.message} ${result.detail}`).not.toMatch(/agent_permission_unavailable|runtime permission|matterhorn-bittensor/);
+  }
+});
+
 describe("session error copy", () => {
   test("keeps internal engine names out of customer-facing recovery", () => {
     const errors = [

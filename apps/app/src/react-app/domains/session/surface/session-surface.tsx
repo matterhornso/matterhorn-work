@@ -1093,6 +1093,18 @@ export function parseSessionError(thrown: unknown): SessionError {
       retryable: false,
     };
   }
+  if (
+    (approvalError && typeof approvalError === "object" &&
+      "code" in approvalError && approvalError.code === "agent_permission_unavailable") ||
+    /agent_permission_unavailable|Agent [\w-]+ has no runtime permission policy/i.test(diagnostic)
+  ) {
+    return {
+      message: "This desk's permissions need setup.",
+      detail: "Ask the workspace owner to repair this desk's tool permissions, then send again. Your draft is preserved.",
+      kind: "generic",
+      retryable: false,
+    };
+  }
   if (/agent_unavailable|Agent [\w-]+ is not available in this workspace/i.test(diagnostic)) {
     return {
       message: "This desk needs setup.",

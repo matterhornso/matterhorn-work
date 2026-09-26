@@ -2410,6 +2410,11 @@ async function resolveMatterhornSessionAgentContext(input: {
   if (!agent) {
     throw new ApiError(400, "agent_unavailable", `Agent ${agentId} is not available in this workspace`);
   }
+  // Fail before privacy/host approval or usage reservation when the runtime
+  // cannot enforce this agent's policy. Context is checked again at dispatch.
+  if (normalizeMatterhornPermissionRules(agent.permission).length === 0) {
+    throw new ApiError(503, "agent_permission_unavailable", `Agent ${agentId} has no runtime permission policy`);
+  }
   const prompt = typeof agent.prompt === "string" ? agent.prompt : "";
   if (prompt.length > MATTERHORN_AGENT_PROMPT_MAX_CHARS) {
     throw new ApiError(
@@ -2517,9 +2522,6 @@ async function ensureMatterhornSessionPermissionProfile(input: {
     : await resolveMatterhornSessionAgentContext(input);
   const { opencode, directory, session } = context;
   const agentPermission = normalizeMatterhornPermissionRules(context.agent.permission);
-  if (agentPermission.length === 0) {
-    throw new ApiError(503, "agent_permission_unavailable", `Agent ${context.agentId} has no runtime permission policy`);
-  }
   const profile = buildMatterhornSessionPermissionProfile({
     agentPermission,
     ...(input.requestToolProfiles ? { requestToolProfiles: input.requestToolProfiles } : {}),
