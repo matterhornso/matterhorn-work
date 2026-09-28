@@ -1,3 +1,7 @@
+import { applyRetroUi } from "./app/lib/retro-ui";
+
+applyRetroUi(document.documentElement);
+
 const publicBetaWeb =
   import.meta.env.VITE_MATTERHORN_DEPLOYMENT?.trim().toLowerCase() === "web"
   && /^(1|true|yes|on)$/i.test(

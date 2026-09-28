@@ -1,8 +1,11 @@
-/** One build-time switch; never changes persisted workspace or conversation data. */
+import { resolveRetroUi } from "./retro-ui";
+
+/** Retro uses the same desk-first layout and persisted data, not a second shell. */
 export function resolveMinimalUi(
   env: Record<string, unknown> | undefined,
 ): boolean {
   return (
+    resolveRetroUi(env) ||
     env?.VITE_MATTERHORN_MINIMAL_UI === "1" ||
     env?.VITE_MATTERHORN_MINIMAL_UI === "true"
   );

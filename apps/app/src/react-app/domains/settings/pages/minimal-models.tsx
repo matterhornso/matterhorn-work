@@ -81,7 +81,7 @@ export function MinimalModels(props: {
     },
   });
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6">
+    <div className="matterhorn-model-list mx-auto w-full max-w-3xl space-y-6">
       {props.children}
       <h2 className="text-lg font-semibold">Choose a model</h2>
       {props.loading ? (
@@ -113,6 +113,7 @@ export function MinimalModels(props: {
             <label className="min-w-0 flex-1 text-sm">
               Search models
               <input
+                data-slot="input"
                 type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -122,6 +123,7 @@ export function MinimalModels(props: {
             <label className="text-sm">
               Provider
               <select
+                data-slot="select-trigger"
                 value={provider}
                 onChange={(event) => setProvider(event.target.value)}
                 className="mt-1 block min-h-11 max-w-full rounded-md border border-dls-border bg-dls-background px-3 focus-visible:outline focus-visible:outline-2"

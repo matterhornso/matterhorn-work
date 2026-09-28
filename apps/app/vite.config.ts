@@ -131,6 +131,8 @@ const migrationReleaseEnv = loadMigrationReleaseEnv();
 // must be relative. Tauri serves via its own protocol so absolute paths
 // work there. Gate on an env var the electron build script sets.
 const isElectronPackagedBuild = process.env.OPENWORK_ELECTRON_BUILD === "1";
+let retroUiBuild = false;
+const retroCriticalCss = readFileSync(resolve(appRoot, "src/styles/retro.css"), "utf8");
 
 export default defineConfig({
   base: isElectronPackagedBuild ? "./" : "/",
@@ -154,12 +156,19 @@ export default defineConfig({
   plugins: [
     {
       name: "matterhorn-public-auth-critical-render",
+      configResolved(config) {
+        retroUiBuild = config.env.VITE_MATTERHORN_RETRO_UI === "1"
+          || config.env.VITE_MATTERHORN_RETRO_UI === "true";
+      },
       transformIndexHtml: {
         order: "pre",
         handler(html) {
-          const withStyles = html.replace(
+          const themedHtml = retroUiBuild
+            ? html.replace('<html lang="en">', '<html lang="en" data-matterhorn-ui="retro">')
+            : html;
+          const withStyles = themedHtml.replace(
             "</head>",
-            `<style data-matterhorn-public-auth-critical>${publicAuthCriticalCss}</style>\n  </head>`,
+            `<style data-matterhorn-public-auth-critical>${publicAuthCriticalCss}</style>${retroUiBuild ? `<style data-matterhorn-retro-critical>${retroCriticalCss}</style>` : ""}\n  </head>`,
           );
           return publicBetaWebBuild
             ? withStyles.replace('<div id="root"></div>', `<div id="root">${publicAuthStaticShell}</div>`)

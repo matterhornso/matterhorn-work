@@ -2,6 +2,7 @@
 @config "../../tailwind.config.ts";
 
 @import "../styles/colors.css";
+@import "../styles/retro.css";
 
 @import "tw-animate-css";
 

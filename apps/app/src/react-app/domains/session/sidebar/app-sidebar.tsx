@@ -624,7 +624,7 @@ function MinimalWorkspaceSidebar(props: AppSidebarProps) {
   const current = props.workspaceSessionGroups.find((group) => group.workspace.id === props.selectedWorkspaceId);
   const close = () => setOpenMobile(false);
   return (
-    <Sidebar collapsible="offcanvas" aria-label="Workspace navigation">
+    <Sidebar collapsible="offcanvas" aria-label="Workspace navigation" className="matterhorn-workspace-sidebar">
       <div className="flex min-h-0 flex-1 flex-col p-3">
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="ghost" className="w-full justify-start overflow-hidden" aria-label="Switch workspace">

@@ -571,7 +571,7 @@ function HomeCapabilityOverview({
 }: {
   onOpenCapability?: (id: CustomerWorkflowIconHint) => void;
 }) {
-  if (MINIMAL_UI) return <section aria-label="Desks" className="divide-y divide-dls-border">
+  if (MINIMAL_UI) return <section aria-label="Desks" className="matterhorn-desk-launcher divide-y divide-dls-border">
     {PRIMARY_DESKS.map((desk) => <button key={desk.id} type="button" data-testid={`open-${desk.id}-desk`} className="flex min-h-20 w-full items-center gap-4 px-2 py-3 text-left hover:bg-dls-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-dls-text" onClick={() => onOpenCapability?.(desk.id)}>
       <DeskBrandMark id={desk.id} size={28} /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{desk.name}</span><span className="block text-sm text-dls-secondary">{desk.purpose}</span></span><ChevronRight className="size-4 shrink-0" aria-hidden="true" />
     </button>)}
@@ -2885,7 +2885,7 @@ export function SessionPage(props: SessionPageProps) {
           >
             <ResizablePanel minSize="360px" className="min-w-0">
               <div className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
-          <header className="z-10 flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between bg-dls-surface/95 px-4 pt-[env(safe-area-inset-top)] shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] md:h-10 md:px-6 md:pt-0 mac:titlebar-drag @container/titlebar">
+          <header className="matterhorn-workspace-header z-10 flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between bg-dls-surface/95 px-4 pt-[env(safe-area-inset-top)] shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] md:h-10 md:px-6 md:pt-0 mac:titlebar-drag @container/titlebar">
             <div className="flex min-w-0 items-center gap-3">
               {shellConfig.sidebar ? <SidebarTrigger className="size-11 md:size-8 mac:hidden" /> : null}
               {!showWorkspaceSetupEmptyState && !MINIMAL_UI ? (
