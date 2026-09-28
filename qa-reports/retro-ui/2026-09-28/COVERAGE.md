@@ -14,12 +14,12 @@ All work is behind `VITE_MATTERHORN_RETRO_UI=1`. Production is unchanged.
 | Chat/composer | Composer outline, user message boundary, wrap long starters | Draft/starter regression contracts; full chat capture/streaming still pending |
 | Tool results | Bittensor result boundaries retain tone and metadata | Other tool presentations and long payloads pending |
 | Settings | Shared section rhythm and headings, controls inherited | Account/models/workspace/privacy route captures and navigation pending |
-| Public auth | Critical initial HTML and scoped auth styles | Flag-on/off production builds; form layout/recovery captures pending |
+| Public auth | Critical initial HTML/scoped styles; recovery now disabled during account outage/checking, outage fallback preserved | Real browser preview reproduced/fixed failure; synthetic recovery transition passes. Auth captures saved, visual review pending; real signup/email unverified |
 | Privacy/Terms/Security/Support/Status | Outlined page chrome and active navigation, copy untouched | Security → Privacy fixture interaction, app href and 390px overflow pass; actual app handoff/status health unverified |
-| Wallet + approvals | Shared controls/custom review overlays restyled, transaction logic untouched | Native wallet connection/signing NOT run; review-ticket visual checks pending |
+| Wallet + approvals | Shared controls/custom overlays and transaction batch outlined; theme-safe warning/error text; labelled close and failure announcements | Real component fixture: blockers prevent execution, explicit click fails locally, retry does not execute, dismissal works. 54 wallet safety tests pass. Native signing NOT run; captures saved, visual review pending |
 | Memory | Saved record outlines, responsive view actions, readable policy/error colors, native select/checkbox theme | Real component fixture: Saved/Review/Add, confirmation required before capture, failed save retains draft; delete/provenance/full visuals pending |
 | Notes | Labelled title/body/tags, outlined list/search, mobile filters stack, editor headers | Real component fixture: failed save retains draft, retry persists before list return, 390px no overflow; full visuals pending |
-| Integrations + crypto catalog | Shared controls and catalog row boundaries | Authoritative availability/connected/setup/error visual checks pending |
+| Integrations + crypto catalog | Shared controls, native select, responsive heading and catalog row boundaries | Real component fixture: Ready/Needs setup, server-gated external access, failed status/retry, failed key creation reveals no key. Synthetic captures saved; hosted integration unverified |
 | STM | Default-off unchanged, controls inherit if local feature enabled | Synthetic settings consent regression/captures pending; real vault prohibited |
 | Desktop overlay | Same opt-in root marker | Packaged/native validation pending |
 
@@ -38,3 +38,7 @@ All work is behind `VITE_MATTERHORN_RETRO_UI=1`. Production is unchanged.
   env-file loading. Whole-object env replacement previously left compact Memory
   off; the corrected fixture now exercises the real compact layout. No real
   workspace data or provider/chain requests are included.
+- 42 synthetic captures saved at `/private/tmp/matterhorn-retro-captures-2026-09-28`:
+  auth/models/notes/memory/transaction batch/integrations/Security × both themes
+  × 390/768/1440px. All no-horizontal-overflow assertions pass. These have NOT
+  been visually inspected; add core/shell evidence before bounded review round1.

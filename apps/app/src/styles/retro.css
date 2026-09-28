@@ -224,6 +224,53 @@ html[data-matterhorn-ui="retro"] :is([data-slot="card-title"], [data-slot="dialo
   letter-spacing: -0.02em;
 }
 
+html[data-matterhorn-ui="retro"] [data-slot="transaction-batch"] {
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+  box-shadow: var(--retro-panel-shadow);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-step"] {
+  border: 1px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-step"][data-state="active"] {
+  border-width: 2px;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-warning"] {
+  color: var(--warning);
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-error"],
+html[data-matterhorn-ui="retro"] [data-slot="transaction-error"] > div {
+  color: var(--destructive);
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-integrations select {
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+}
+
+@media (max-width: 639px) {
+  html[data-matterhorn-ui="retro"] [data-slot="transaction-batch"] {
+    padding: 16px;
+  }
+  html[data-matterhorn-ui="retro"] [data-slot="transaction-batch"] [data-slot="button"] {
+    white-space: normal;
+    height: auto;
+    min-height: 44px;
+  }
+  html[data-matterhorn-ui="retro"] .matterhorn-integrations [aria-labelledby="managed-tools-heading"] > div:first-child {
+    flex-wrap: wrap;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html[data-matterhorn-ui="retro"] [data-slot="button"]:not([data-variant="ghost"], [data-variant="link"], :disabled, [aria-disabled="true"]):active {
     translate: none;

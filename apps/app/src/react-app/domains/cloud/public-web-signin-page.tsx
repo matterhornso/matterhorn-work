@@ -536,8 +536,8 @@ export function PublicWebSigninPage({
               <button
                 type="button"
                 onClick={() => selectMode("request-reset")}
-                disabled={passwordResetUnavailable}
-                title={passwordResetUnavailable ? "Password recovery is temporarily unavailable." : undefined}
+                disabled={sessionBusy || accountUnavailable || passwordResetUnavailable}
+                title={accountUnavailable || passwordResetUnavailable ? "Password recovery is temporarily unavailable." : undefined}
               >
                 Forgot password?
               </button>
@@ -562,7 +562,9 @@ export function PublicWebSigninPage({
             <span>
               {authError ??
                 statusMessage ??
-                "Your workspace stays private to your account."}
+                (accountUnavailable
+                  ? "Account access is temporarily unavailable on this preview."
+                  : "Your workspace stays private to your account.")}
             </span>
             {accountUnavailable && !sessionBusy ? (
               <button type="button" onClick={() => void refreshSession()}>

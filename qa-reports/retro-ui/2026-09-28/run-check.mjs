@@ -11,12 +11,13 @@ const stages = {
   typecheck: ["--dir", "apps/app", "typecheck"],
   build: ["--dir", "apps/app", "build"],
   "build-web": ["--dir", "apps/app", "build"],
+  "safety-ui": ["test:matterhorn-platform-safety", "--only", "wallet.approval.behavior,observability.error_boundaries,design.contract"],
 };
 const [stage, flag = "1"] = process.argv.slice(2);
 const pnpm = process.env.RETRO_QA_PNPM;
 const bun = process.env.RETRO_QA_BUN;
 if (!stages[stage] || !["0", "1"].includes(flag) || !pnpm?.startsWith("/") || !bun?.startsWith("/")) {
-  throw new Error("Use tests|typecheck|build|build-web 0|1 with absolute RETRO_QA_PNPM and RETRO_QA_BUN");
+  throw new Error("Use tests|typecheck|build|build-web|safety-ui 0|1 with absolute RETRO_QA_PNPM and RETRO_QA_BUN");
 }
 const root = await mkdtemp("/private/tmp/matterhorn-retro-qa-");
 for (const part of ["home", "tmp", "bin", "data", "config", "cache", "state"]) await mkdir(join(root, part));

@@ -137,6 +137,44 @@ neobrutalism across the product; implementation local only. See detailed plan at
 - Public preview has not been visually inspected yet. Reserve the bounded first
   review round for a batch of public and core/secondary captures.
 
+## 19:31–19:44 UTC — transaction review, integrations and auth failure path
+
+- Previous checkpoint `fbc4135f8e`. Implementation solo; reused design direction.
+- Added scoped batch-review outlines/status colors and responsive actions;
+  close button now labelled and blockers/failures announced. Existing execution,
+  guards and retry semantics unchanged. Hosted integration select/heading hooks
+  use the same visual system; server access gating unchanged.
+- Real-component synthetic browser tests verify blocked execution, explicit
+  failed execution, retry without auto-submit, dismissal; managed connection
+  states, external access off/error/retry and failed key creation without exposure.
+- Actual read-only public preview exposed an existing UI defect: Forgot password
+  remained clickable while account service was unavailable and mode switching
+  cleared the outage. Recovery now disables while checking/unavailable and the
+  status fallback preserves the outage. Added browser regression for recovery
+  becoming usable only when synthetic service returns. No auth bypass/account.
+- **12 Chromium tests pass / 127 assertions**, including the capture test.
+  42 synthetic PNGs saved in `/private/tmp/matterhorn-retro-captures-2026-09-28`:
+  auth/models/Notes/Memory/wallet batch/integrations/Security × light/dark ×
+  390/768/1440. No horizontal overflow. Captures NOT inspected yet: rounds0/2.
+  Initial capture wait matched hidden policy text; changed readiness wait to
+  mounted root and network-idle. Re-run passed; product assertions unchanged.
+- Latest full frontend **1,233 pass / zero fail / 7,775 assertions**:
+  `/private/tmp/matterhorn-retro-qa-LyRbrY/tests-1.log`.
+  Initial sandbox run had two loopback-bind failures (not product failures);
+  approved loopback rerun passed. Browser fixture similarly needs listener access.
+- Typecheck passes: `/private/tmp/matterhorn-retro-qa-8BDHNA/typecheck-1.log`.
+- Public-web production build passes:
+  `/private/tmp/matterhorn-retro-qa-UXbyxm/build-web-1.log`; existing chunk warnings.
+- Focused `safety-ui` runner stage added and passes: 54 wallet approval tests,
+  102 observability/error-boundary tests, design gate. Log:
+  `/private/tmp/matterhorn-retro-qa-Fh4QDq/safety-ui-1.log`.
+  This is three safety stages, not a claim the entire gate ran.
+- Restarted read-only preview after rebuild to avoid stale HTML asset hashes:
+  **http://127.0.0.1:63773/**, exec session **25610**. Old session62341 stopped.
+  Actual Codex browser tab13 confirms disabled recovery, Security loads, Back to
+  app returns to signed-out auth gate. Marked tab for handoff. No screenshot
+  inspection yet, no signed-in shell or model/chain traffic.
+
 ## Coverage queue
 
 1. Foundation flag, semantic tokens and primitives with tests.
@@ -144,14 +182,15 @@ neobrutalism across the product; implementation local only. See detailed plan at
 3. Settings/account/public/workspace tools and transaction reviews.
 4. Batched screenshots, accessibility/functional regressions, review/docs.
 
-Next task: finish implementation gaps in COVERAGE.md, especially wallet review,
-integration states and public auth; add/test missing theme hooks only where
-needed. Prepare batched light/dark/mobile/tablet/desktop captures of actual public
-preview and the real-component fixtures; establish a safe authenticated local
-preview only through normal auth with disposable data, or record it unverified.
-Do not read operator secrets or bypass auth. Public preview session62341 is
-running on port62530. Current dist is retro PUBLIC WEB. The raw model-dialog,
-Notes and Memory hooks are done; do not repeat that implementation.
+Next task: core/shell capture and interaction gaps in COVERAGE.md. Reuse existing
+`scripts/fixtures/composer-submit.tsx` and browser suite for actual composer
+behavior/retro captures; do not clone the component. Inspect full launcher/sidebar
+coverage and establish safe authenticated local preview only through normal
+disposable auth, or explicitly keep full-shell unverified. Add core evidence to
+the saved secondary/auth capture batch, then perform bounded review round1 across
+themes and device sizes (currently0/2). Don't repeat tested wallet/integration
+implementation. Public preview session25610 on63773, Codex tab13. Current dist
+is retro PUBLIC WEB. Do not read operator secrets or bypass auth.
 Then run relevant safety/functional browser checks, capture evidence, and at the
 finish stage invoke the skill-required independent reviewer/documenter. Do not
 run the final detector yet; it is a once-at-finish batched check. No pushes.

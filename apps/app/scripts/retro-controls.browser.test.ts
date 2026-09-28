@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chromium, type Browser } from "playwright";
 import { build } from "vite";
 import tailwindcss from "@tailwindcss/vite";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 
 let browser: Browser;
 let server: ReturnType<typeof Bun.serve>;
@@ -12,6 +12,9 @@ let releaseModelSave: (() => void) | undefined;
 let modelSaveGate: Promise<void> | undefined;
 let noteSaveDenied = false;
 let memoryCaptures = 0;
+let accessMode: "off" | "ready" | "error" = "off";
+let accessWrites = 0;
+let authAvailable = false;
 const initialNote = () => ({
   version: "matterhorn.note.v1", id: "fixture-note", workspaceId: "fixture", title: "Beta checklist",
   body: "Disposable fixture note", tags: [], links: [], source: "manual", filePath: "notes/fixture.md",
@@ -36,6 +39,13 @@ beforeAll(async () => {
   const logo = await readFile(new URL("../public/matterhorn-logo-square.svg", import.meta.url));
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const path = new URL(request.url).pathname;
+    if (path === "/fixture-auth/v1/session") return authAvailable ? Response.json({ authenticated: false }) : Response.json({ message: "Fixture unavailable" }, { status: 503 });
+    if (path === "/api/auth/config") return Response.json({ signupsAvailable: false, signupStatus: "paused", emailVerificationRequired: true, passwordResetAvailable: true, legalAcceptanceRequired: true, minimumPasswordLength: 12, turnstileSiteKey: null });
+    if (path === "/api/auth/account/mcp-access") {
+      if (request.method !== "GET") { accessWrites++; return Response.json({ message: "Fixture creation unavailable" }, { status: 503 }); }
+      if (accessMode === "error") return Response.json({ message: "Fixture access unavailable" }, { status: 503 });
+      return Response.json({ mode: accessMode === "off" ? "off" : "invite", eligible: accessMode === "ready", maxExpiresInDays: 30, credentials: [] });
+    }
     if (path === "/matterhorn-logo-square.svg") return new Response(logo, { headers: { "content-type": "image/svg+xml" } });
     if (path === "/workspace/fixture/notes") return Response.json({ success: true, items: [note], count: 1 });
     if (path === "/workspace/fixture/notes/fixture-note" && request.method === "PATCH") {
@@ -225,6 +235,96 @@ test("notes keep labelled drafts on save error and persist before returning", as
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally { noteSaveDenied = false; await page.close(); }
 }, 15_000);
+
+test("wallet review preserves blockers, explicit execution, failure and dismissal", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(5000);
+  try {
+    await page.goto(`${server.url}?wallet&blocked`);
+    await page.getByRole("dialog", { name: "Transaction Batch" }).waitFor();
+    expect(await page.getByRole("button", { name: "Blocked", exact: true }).isDisabled()).toBe(true);
+    expect(await page.getByTestId("wallet-attempts").innerText()).toBe("0");
+    expect(await page.getByRole("alert").innerText()).toContain("Fixture policy blocks this action.");
+    await page.getByRole("button", { name: "Close transaction review" }).click();
+    await page.getByText("Review closed", { exact: true }).waitFor();
+    await page.goto(`${server.url}?wallet&theme=dark`);
+    expect(await page.getByTestId("wallet-attempts").innerText()).toBe("0");
+    await page.getByRole("button", { name: "Execute Step 1", exact: true }).click();
+    await page.getByRole("alert").waitFor();
+    expect(await page.getByTestId("wallet-attempts").innerText()).toBe("1");
+    await page.getByRole("button", { name: "Retry Failed", exact: true }).click();
+    expect(await page.getByTestId("wallet-attempts").innerText()).toBe("1");
+    expect(await page.getByRole("button", { name: "Execute Step 1", exact: true }).isEnabled()).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await page.close(); }
+}, 15_000);
+
+test("integrations preserve server access state and recover without exposing credentials", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(5000); accessMode = "off"; accessWrites = 0;
+  try {
+    await page.goto(`${server.url}?integrations`);
+    await page.getByRole("heading", { name: "External AI access is not open yet" }).waitFor();
+    expect(await page.getByRole("button", { name: "Create key", exact: true }).count()).toBe(0);
+    expect(accessWrites).toBe(0);
+    const connections = page.getByRole("list", { name: "Managed MCP connections" });
+    expect(await connections.innerText()).toContain("Needs setup");
+    accessMode = "error";
+    await page.reload();
+    await page.getByRole("alert").waitFor();
+    accessMode = "ready";
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await page.getByRole("combobox", { name: "AI app", exact: true }).selectOption("Claude Desktop");
+    await page.getByRole("button", { name: "Create key", exact: true }).click();
+    await page.getByRole("alert").filter({ hasText: "Fixture creation unavailable" }).waitFor();
+    expect(accessWrites).toBe(1);
+    expect(await page.getByRole("button", { name: "Show access key" }).count()).toBe(0);
+    await page.getByRole("button", { name: "Browse certified apps", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: "Browse requested" }).waitFor();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { accessMode = "off"; await page.close(); }
+}, 15_000);
+
+// Optional batched visual evidence. This does not label fixtures as live acceptance.
+test("public auth keeps an outage explicit and recovery unavailable until service returns", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(5000); authAvailable = false;
+  try {
+    await page.goto(`${server.url}?auth`);
+    await page.getByRole("alert").filter({ hasText: "Account access is temporarily unavailable" }).waitFor();
+    expect(await page.getByRole("button", { name: "Forgot password?", exact: true }).isDisabled()).toBe(true);
+    expect(await page.getByRole("textbox", { name: "Email", exact: true }).isDisabled()).toBe(true);
+    authAvailable = true;
+    await page.getByRole("button", { name: "Check again", exact: true }).click();
+    await page.getByRole("button", { name: "Forgot password?", exact: true }).click();
+    await page.getByRole("heading", { name: "Reset your password", exact: true }).waitFor();
+    expect(await page.getByRole("button", { name: "Send reset link", exact: true }).isEnabled()).toBe(true);
+    await page.getByRole("button", { name: "Back to sign in", exact: true }).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { authAvailable = false; await page.close(); }
+}, 15_000);
+
+test.skipIf(!process.env.RETRO_QA_CAPTURES)("capture component matrix for bounded visual review", async () => {
+  const directory = process.env.RETRO_QA_CAPTURES;
+  if (!directory) return;
+  await mkdir(directory, { recursive: true });
+  accessMode = "off";
+  for (const theme of ["light", "dark"]) {
+    for (const width of [390, 768, 1440]) {
+      const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
+      try {
+        for (const surface of ["auth", "models", "notes", "memory", "wallet&blocked", "integrations", "public=/security"]) {
+          await page.goto(`${server.url}?${surface}&theme=${theme}`);
+          await page.locator("#root > *").first().waitFor();
+          await page.waitForLoadState("networkidle");
+          await page.evaluate(() => document.fonts.ready);
+          await page.screenshot({ path: `${directory}/${surface.split(/[=&]/)[0]}-${theme}-${width}.png`, fullPage: true });
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+      } finally { await page.close(); }
+    }
+  }
+}, 90_000);
 
 test("memory requires explicit confirmation and keeps failed captures visible", async () => {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });

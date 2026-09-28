@@ -16,6 +16,10 @@ import { MemoryRouter } from "react-router";
 import { PublicTrustRoute } from "../../src/react-app/domains/public/public-trust-route";
 import { NotesPage } from "../../src/react-app/domains/notes/notes-page";
 import { MemoryPanel } from "../../src/react-app/domains/memory/memory-panel";
+import { TransactionBatch } from "../../src/react-app/domains/wallet/components/TransactionBatch";
+import { HostedMcpSummary } from "../../src/react-app/domains/settings/pages/hosted-mcp-summary";
+import { PublicWebSigninPage } from "../../src/react-app/domains/cloud/public-web-signin-page";
+import "../../src/react-app/domains/cloud/public-web-signin.css";
 import { StatusToastsProvider, StatusToastsViewport } from "../../src/react-app/domains/shell-feedback/status-toasts";
 import { createMatterhornServerClient } from "../../src/app/lib/matterhorn-server";
 import type { MatterhornBackendModelCatalogSnapshot, MatterhornBackendModelSelectionRecord, MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
@@ -27,6 +31,8 @@ document.documentElement.dataset.theme = params.get("theme") === "dark" ? "dark"
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const client = createMatterhornServerClient({ baseUrl: location.origin });
+const authConfig = { baseUrl: location.origin, apiBaseUrl: `${location.origin}/fixture-auth`, requireSignin: true };
+const onFixtureSignedIn = () => { throw new Error("This fixture must never authenticate"); };
 const catalog: MatterhornBackendModelCatalogSnapshot = {
   status: "ready", label: "Synthetic catalog", source: "matterhorn_backend_registry",
   serverFetched: true, providerCount: 3, connectedProviderCount: 2, modelCount: 4,
@@ -61,6 +67,29 @@ function ModelsFixture() {
   </main>;
 }
 
+function WalletFixture() {
+  const [attempts, setAttempts] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
+  return <main className="mx-auto max-w-3xl space-y-6 p-4">
+    <p>Synthetic transaction review. No wallet, RPC or signing. Execution always fails locally.</p>
+    <p data-testid="wallet-attempts">{attempts}</p>
+    {dismissed ? <p>Review closed</p> : <TransactionBatch
+      plan={{ chainId: 84532, from: "0x0000000000000000000000000000000000000001", totalEstimatedGas: "21000", totalEstimatedCostEth: "0.000021",
+        steps: [{ id: "fixture-step", type: "transfer", description: "Review disposable testnet transfer", to: "0x0000000000000000000000000000000000000002", value: "1000000000000000" }] }}
+      stepGuards={[{ stepId: "fixture-step", displayValue: "0.001 ETH", valueUSD: 0, chainName: "Base Sepolia", warnings: ["Synthetic estimate. No funds will move."], blockers: params.has("blocked") ? ["Fixture policy blocks this action."] : [] }]}
+      onExecute={async () => { setAttempts(value => value + 1); throw new Error("User rejected the request."); }}
+      onDismiss={() => setDismissed(true)} />}
+  </main>;
+}
+function IntegrationsFixture() {
+  const [action, setAction] = useState("");
+  return <main className="mx-auto max-w-3xl space-y-6 p-6">
+    <p>Synthetic integration state. No real external keys or services.</p>
+    <HostedMcpSummary connections={[{ name: "Fixture research tools", statusLabel: "Ready", ready: true }, { name: "Fixture chain service", statusLabel: "Needs setup", ready: false }]}
+      onBrowseCryptoApps={() => setAction("Browse requested")} />
+    <p role="status">{action}</p>
+  </main>;
+}
 function Fixture() {
   const [draft, setDraft] = useState("");
   const [saved, setSaved] = useState(false);
@@ -97,7 +126,7 @@ const root = document.getElementById("root");
 if (!root) throw new Error("Fixture root missing");
 createRoot(root).render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[params.get("public") ?? "/"]}>
   <StatusToastsProvider>
-    {params.has("public") ? <PublicTrustRoute /> : params.has("notes") ?
+    {params.has("auth") ? <PublicWebSigninPage config={authConfig} onSignedIn={onFixtureSignedIn} /> : params.has("wallet") ? <WalletFixture /> : params.has("integrations") ? <IntegrationsFixture /> : params.has("public") ? <PublicTrustRoute /> : params.has("notes") ?
       <div className="mx-auto h-dvh max-w-3xl"><NotesPage client={client} workspaceId="fixture" /></div> :
       params.has("memory") ? <div className="mx-auto h-dvh max-w-3xl"><MemoryPanel client={client} workspaceId="fixture" sessionId={null} onClose={() => undefined} /></div> :
       params.has("models") ? <ModelsFixture /> : <Fixture />}

@@ -145,6 +145,7 @@ export function TransactionBatch({
       role="dialog"
       aria-modal="true"
       aria-labelledby="matterhorn-batch-approval-title"
+      data-slot="transaction-batch"
       className="mx-auto w-full max-w-lg rounded-lg bg-dls-sidebar p-6 shadow-sm ring-1 ring-dls-border/35"
     >
       {/* Header */}
@@ -164,6 +165,7 @@ export function TransactionBatch({
         </div>
         <button
           type="button"
+          aria-label="Close transaction review"
           className="rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover hover:text-dls-text transition-colors"
           onClick={onDismiss}
         >
@@ -193,7 +195,7 @@ export function TransactionBatch({
       </div>
 
       {nextStepBlocked && nextStepGuard ? (
-        <div className="mb-5 rounded-md bg-red-500/10 px-3 py-2.5 text-xs leading-5 text-red-200">
+        <div role="alert" data-slot="transaction-error" className="mb-5 rounded-md bg-red-500/10 px-3 py-2.5 text-xs leading-5 text-red-200">
           <div className="font-medium text-red-200">Step blocked</div>
           <div>{nextStepGuard.blockers[0]}</div>
         </div>
@@ -301,6 +303,8 @@ function BatchStepCard({
 
   return (
     <div
+      data-slot="transaction-step"
+      data-state={isFailed ? "failed" : isSuccess ? "success" : isActive ? "active" : "pending"}
       className={cn(
         "rounded-md p-3 transition-colors",
         isActive
@@ -359,14 +363,14 @@ function BatchStepCard({
       </div>
 
       {guard?.warnings.map((warning) => (
-        <div key={warning} className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-200">
+        <div key={warning} data-slot="transaction-warning" className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-200">
           <AlertTriangle className="mt-0.5 size-3 shrink-0" />
           {warning}
         </div>
       ))}
 
       {guard?.blockers.map((blocker) => (
-        <div key={blocker} className="mt-2 flex items-start gap-1.5 rounded-md bg-red-500/10 px-2.5 py-1.5 text-xs text-red-200">
+        <div key={blocker} data-slot="transaction-error" className="mt-2 flex items-start gap-1.5 rounded-md bg-red-500/10 px-2.5 py-1.5 text-xs text-red-200">
           <AlertTriangle className="mt-0.5 size-3 shrink-0" />
           {blocker}
         </div>
@@ -374,7 +378,7 @@ function BatchStepCard({
 
       {/* Error detail */}
       {isFailed && "error" in result && result.error && (
-        <div className="mt-2 flex items-start gap-1.5 rounded-md bg-red-500/10 px-2.5 py-1.5 text-xs text-red-200">
+        <div role="alert" data-slot="transaction-error" className="mt-2 flex items-start gap-1.5 rounded-md bg-red-500/10 px-2.5 py-1.5 text-xs text-red-200">
           <AlertTriangle className="mt-0.5 size-3 shrink-0" />
           {result.error}
         </div>

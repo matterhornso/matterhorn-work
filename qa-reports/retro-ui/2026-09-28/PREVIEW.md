@@ -27,11 +27,24 @@ The random port avoids replacing existing user previews. Stop with Ctrl+C.
 pnpm exec bun test apps/app/scripts/retro-controls.browser.test.ts
 ```
 
-This bundles production controls, models, public trust pages, Notes and Memory,
+This bundles production controls, models, auth/public trust pages, Notes, Memory,
+transaction batch review and hosted integration status,
 using an isolated in-memory loopback fixture with fake catalog/note responses.
 It does not contact providers, chains, vaults or real accounts. Test model changes
 and memory failures are synthetic. It is separate from release acceptance.
 
-Run `tests`, `typecheck`, `build`, and `build-web` runner stages **sequentially**;
+Optional batched screenshots (temporary path, no credentials):
+
+```sh
+RETRO_QA_CAPTURES=/private/tmp/matterhorn-retro-captures-2026-09-28 pnpm exec bun test apps/app/scripts/retro-controls.browser.test.ts
+```
+
+This captures light/dark at 390/768/1440px and checks overflow. Capturing files
+does not mean their visual review or whole-product acceptance is complete.
+
+Run `tests`, `typecheck`, `build`, `build-web`, and `safety-ui` runner stages **sequentially**;
 prebuilds share generated package output. The `0|1` argument tests the rollout
 flag. Capture/inspection coverage and remaining gaps are in `COVERAGE.md`.
+`safety-ui` selects wallet approval, error boundaries/observability and design
+contracts; it is not the full platform safety gate. Local HTTP tests need
+loopback listener permission; sandbox bind failures are not product failures.
