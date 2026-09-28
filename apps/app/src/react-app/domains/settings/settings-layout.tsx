@@ -1,13 +1,13 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export interface LayoutStackProps {
+export interface LayoutStackProps extends React.ComponentProps<"div"> {
   children: React.ReactNode;
   className?: string;
 }
 
-export function LayoutStack({ children, className }: LayoutStackProps) {
-  return <div data-slot="settings-stack" className={cn("@container/settings flex w-full max-w-3xl flex-col gap-y-6", className)}>{children}</div>;
+export function LayoutStack({ children, className, ...props }: LayoutStackProps) {
+  return <div {...props} data-slot="settings-stack" className={cn("@container/settings flex w-full max-w-3xl flex-col gap-y-6", className)}>{children}</div>;
 }
 
 interface LayoutSectionProps {
@@ -93,7 +93,7 @@ interface LayoutSectionItemHeaderProps {
 
 export function LayoutSectionItemHeader({ children, className }: LayoutSectionItemHeaderProps) {
   return (
-    <div className={cn("grid auto-rows-min items-start gap-y-1 gap-x-3 has-data-[slot=item-header-actions]:grid-cols-[1fr_auto]", className)}>
+    <div data-slot="settings-item-header" className={cn("grid auto-rows-min items-start gap-y-1 gap-x-3 has-data-[slot=item-header-actions]:grid-cols-[1fr_auto]", className)}>
       {children}
     </div>
   );

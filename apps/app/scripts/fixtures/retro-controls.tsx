@@ -19,6 +19,10 @@ import { MemoryPanel } from "../../src/react-app/domains/memory/memory-panel";
 import { TransactionBatch } from "../../src/react-app/domains/wallet/components/TransactionBatch";
 import { HostedMcpSummary } from "../../src/react-app/domains/settings/pages/hosted-mcp-summary";
 import { PublicWebSigninPage } from "../../src/react-app/domains/cloud/public-web-signin-page";
+import { AppearanceView } from "../../src/react-app/domains/settings/pages/appearance-view";
+import { PrivacySettingsView } from "../../src/react-app/domains/settings/pages/privacy-view";
+import { setThemeMode } from "../../src/app/theme";
+import type { Language } from "../../src/i18n";
 import "../../src/react-app/domains/cloud/public-web-signin.css";
 import { StatusToastsProvider, StatusToastsViewport } from "../../src/react-app/domains/shell-feedback/status-toasts";
 import { createMatterhornServerClient } from "../../src/app/lib/matterhorn-server";
@@ -90,6 +94,20 @@ function IntegrationsFixture() {
     <p role="status">{action}</p>
   </main>;
 }
+function SettingsFixture() {
+  const [language, setLanguage] = useState<Language>("en");
+  const [action, setAction] = useState("");
+  return <main className="mx-auto max-w-3xl space-y-6 p-6">
+    <h1 className="text-xl font-semibold">Settings — isolated fixture</h1>
+    {params.has("privacy") ? <PrivacySettingsView matterhornServerClient={client}
+      runtimeWorkspaceId={params.has("disconnected") ? null : "fixture"}
+      onOpenModels={() => setAction("Models requested")} onOpenMemory={() => setAction("Memory requested")}
+      onOpenNotes={() => setAction("Notes requested")} onOpenOutputs={() => setAction("Outputs requested")} /> :
+      <AppearanceView busy={params.has("busy")} themeMode="system" setThemeMode={setThemeMode}
+        language={language} setLanguage={setLanguage} hideTitlebar={false} toggleHideTitlebar={() => undefined} />}
+    <p role="status">{action}</p>
+  </main>;
+}
 function Fixture() {
   const [draft, setDraft] = useState("");
   const [saved, setSaved] = useState(false);
@@ -126,7 +144,7 @@ const root = document.getElementById("root");
 if (!root) throw new Error("Fixture root missing");
 createRoot(root).render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[params.get("public") ?? "/"]}>
   <StatusToastsProvider>
-    {params.has("auth") ? <PublicWebSigninPage config={authConfig} onSignedIn={onFixtureSignedIn} /> : params.has("wallet") ? <WalletFixture /> : params.has("integrations") ? <IntegrationsFixture /> : params.has("public") ? <PublicTrustRoute /> : params.has("notes") ?
+    {params.has("settings") ? <SettingsFixture /> : params.has("auth") ? <PublicWebSigninPage config={authConfig} onSignedIn={onFixtureSignedIn} /> : params.has("wallet") ? <WalletFixture /> : params.has("integrations") ? <IntegrationsFixture /> : params.has("public") ? <PublicTrustRoute /> : params.has("notes") ?
       <div className="mx-auto h-dvh max-w-3xl"><NotesPage client={client} workspaceId="fixture" /></div> :
       params.has("memory") ? <div className="mx-auto h-dvh max-w-3xl"><MemoryPanel client={client} workspaceId="fixture" sessionId={null} onClose={() => undefined} /></div> :
       params.has("models") ? <ModelsFixture /> : <Fixture />}

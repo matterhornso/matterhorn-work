@@ -13,14 +13,14 @@ All work is behind `VITE_MATTERHORN_RETRO_UI=1`. Production is unchanged.
 | Chat model dialog | Outlined labelled search, explicit pressed state, shared dialog tokens | Full keyboard/visual pass pending |
 | Chat/composer | Composer outline, user message boundary, wrap long starters | Actual composer/browser: Enter/click/Stop, single-flight sends, explicit consent, token-free retry pass with flag on/off; fixture captures reviewed. Full live chat/streaming pending |
 | Tool results | Bittensor result boundaries retain tone and metadata | Other tool presentations and long payloads pending |
-| Settings | Shared section rhythm and headings, controls inherited | Account/models/workspace/privacy route captures and navigation pending |
+| Settings | Shared section rhythm/headings; responsive item actions; layout now forwards accessibility attributes | Appearance theme/language/disabled and Privacy disconnected/error/callback tests in Chromium, Firefox, WebKit. 200% text reflow passes; account/workspace full-route acceptance pending |
 | Public auth | Critical initial HTML/scoped styles; recovery now disabled during account outage/checking, outage fallback preserved | Real browser preview reproduced/fixed failure; synthetic recovery transition passes. Auth captures saved, visual review pending; real signup/email unverified |
 | Privacy/Terms/Security/Support/Status | Outlined page chrome and active navigation, copy untouched | Security → Privacy fixture interaction, app href and 390px overflow pass; actual app handoff/status health unverified |
 | Wallet + approvals | Shared controls/custom overlays and transaction batch outlined; theme-safe warning/error text; labelled close and failure announcements | Real component fixture: blockers prevent execution, explicit click fails locally, retry does not execute, dismissal works. 54 wallet safety tests pass. Native signing NOT run; captures saved, visual review pending |
 | Memory | Saved record outlines, responsive view actions, readable policy/error colors, native select/checkbox theme | Real component fixture: Saved/Review/Add, confirmation required before capture, failed save retains draft; delete/provenance/full visuals pending |
 | Notes | Labelled title/body/tags, outlined list/search, mobile filters stack, editor headers | Real component fixture: failed save retains draft, retry persists before list return, 390px no overflow; full visuals pending |
 | Integrations + crypto catalog | Shared controls, native select, responsive heading and catalog row boundaries | Real component fixture: Ready/Needs setup, server-gated external access, failed status/retry, failed key creation reveals no key. Synthetic captures saved; hosted integration unverified |
-| STM | Default-off unchanged, controls inherit if local feature enabled | Synthetic settings consent regression/captures pending; real vault prohibited |
+| STM | Default-off unchanged, controls inherit if local feature enabled | 6 Chromium synthetic regressions / 31 assertions with retro enabled: consent, clear transient input, separate removal confirmation, stale revisions, offline/default-off and responsive text checks. No real vault or migration |
 | Desktop overlay | Same opt-in root marker | Packaged/native validation pending |
 
 ## Environment limits
@@ -29,7 +29,13 @@ All work is behind `VITE_MATTERHORN_RETRO_UI=1`. Production is unchanged.
 - No hosted release, provider request, chain read or financial action has been
   exercised as part of this redesign. Prior acceptance does not substitute for
   new-layout acceptance.
-- Chromium is available. Safari/Firefox and signed desktop are unverified.
+- Chromium, Firefox and Playwright WebKit each pass the 14-test component suite
+  (100 assertions per engine, optional screenshot test skipped). WebKit engine
+  is not acceptance in the installed Safari application. Signed desktop remains
+  unverified. No new browser installation was required.
+- 200% root text-size reflow tested at 390px across appearance, disconnected
+  Privacy, models, memory, notes, wallet and integrations. This is NOT actual
+  browser chrome zoom; full browser zoom remains unverified.
 - Screenshot inspection rounds used: **1/2**. See `VISUAL-REVIEW.md` for the
   representative batch and single correction pass. Reserve confirmation until
   remaining settings/zoom coverage is ready; no repeated polish loops.

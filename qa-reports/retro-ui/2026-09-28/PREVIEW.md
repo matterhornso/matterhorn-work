@@ -25,13 +25,21 @@ The random port avoids replacing existing user previews. Stop with Ctrl+C.
 
 ```sh
 pnpm exec bun test apps/app/scripts/retro-controls.browser.test.ts
+RETRO_QA_BROWSER=firefox pnpm exec bun test apps/app/scripts/retro-controls.browser.test.ts
+RETRO_QA_BROWSER=webkit pnpm exec bun test apps/app/scripts/retro-controls.browser.test.ts
+RETRO_QA_FLAG=1 pnpm exec bun test apps/app/scripts/stm-settings.browser.test.ts
 ```
 
 This bundles production controls, models, auth/public trust pages, Notes, Memory,
-transaction batch review and hosted integration status,
+transaction batch review, appearance/privacy settings and hosted integration status,
 using an isolated in-memory loopback fixture with fake catalog/note responses.
 It does not contact providers, chains, vaults or real accounts. Test model changes
 and memory failures are synthetic. It is separate from release acceptance.
+STM tests use only disposable sentinel values and an in-memory server: no daemon,
+real vault, credentials or migration. Capture files are opt-in under
+`RETRO_QA_CAPTURES`; existing STM screenshots are never overwritten by default.
+The reflow assertion enlarges root text to200%; it does not emulate browser zoom.
+Playwright WebKit is not a claim of full Safari application coverage.
 
 Optional batched screenshots (temporary path, no credentials):
 

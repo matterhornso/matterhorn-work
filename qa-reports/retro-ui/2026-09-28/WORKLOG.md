@@ -205,6 +205,48 @@ neobrutalism across the product; implementation local only. See detailed plan at
 - These are local component/fixture results. Settings/zoom coverage and final
   visual confirmation remain pending; no whole-platform/live readiness claim.
 
+## 20:11–20:25 UTC — settings, text reflow and three browser engines
+
+- Previous checkpoint `b3f9863397`. Continued Impeccable/Uncodixfy within the
+  existing direction. No extra screenshot inspection: rounds remain1/2.
+- Added real Appearance and Privacy components to the isolated fixture. Tested
+  theme changes, language keyboard menu/focus return, busy controls, disconnected
+  and failed privacy requests, disabled feedback controls and Memory callback.
+  The initial focus assertion raced the menu close; waiting for dismissal and
+  focus return passes without changing the component.
+- Reproduced a real accessibility defect: LayoutStack dropped aria-busy/labels.
+  Added failing render regression, forwarded div attributes, reran green.
+- Installed Playwright Chromium/Firefox/WebKit engines were already available.
+  No installs or external traffic. Each now passes **14 tests / 100 assertions**,
+  with the optional capture test skipped. WebKit is not full Safari-app coverage.
+- 200% root text size at390px exposed settings action-column, wallet action-row
+  and integration browse-button overflow. Added scoped responsive stacking/wrap;
+  assertions now wait for layout and aggregate all seven surfaces before failing.
+  Final full suites pass in all three engines. This is text enlargement, NOT
+  browser chrome zoom; actual zoom remains unverified.
+- Reused the existing STM browser suite with an explicit retro flag/env-file
+  isolation. **6 pass / 31 assertions**: default-off legacy gate, connection
+  consent, input clearing, revision refresh, exact-target consent invalidation,
+  separate synthetic removal confirmation and responsive text. Sentinel-only
+  in-memory requests: no real daemon, vault, secret reads or migrations. Capture
+  output is opt-in, avoiding accidental overwrite of existing STM evidence.
+- Frontend enabled suite: **1,234 pass / zero fail / 7,782 assertions**:
+  `/private/tmp/matterhorn-retro-qa-22kryl/tests-1.log`.
+  Flag-off rollback: **1,234 pass / zero fail / 7,781 assertions**:
+  `/private/tmp/matterhorn-retro-qa-u1uq2U/tests-0.log`.
+  Typecheck passes: `/private/tmp/matterhorn-retro-qa-pFxwDc/typecheck-1.log`.
+  Public-web build passes: `/private/tmp/matterhorn-retro-qa-tyUJkf/build-web-1.log`.
+  Existing large-chunk warnings remain; no new dependencies.
+- Focused safety subset passes (54 wallet +102 error-boundary/operational tests
+  and design contract): `/private/tmp/matterhorn-retro-qa-8Ub1ei/safety-ui-1.log`.
+  Initial sandbox attempt failed10 loopback probes with EPERM; approved local
+  listener rerun passed. This is the selected3 stages, not the full platform gate.
+- Rebuilt and restarted read-only preview: **http://127.0.0.1:50424/**,
+  exec session **25959**, HTTP200 verified. Old84421 stopped. No auth/backend.
+  Browser tab13 remains on its older URL until explicitly navigated.
+- Added settings to the optional capture matrix for the upcoming final review;
+  no new images captured/inspected during this checkpoint.
+
 ## Coverage queue
 
 1. Foundation flag, semantic tokens and primitives with tests.
@@ -212,14 +254,15 @@ neobrutalism across the product; implementation local only. See detailed plan at
 3. Settings/account/public/workspace tools and transaction reviews.
 4. Batched screenshots, accessibility/functional regressions, review/docs.
 
-Next task: remaining settings/default-off STM, zoom and accessibility/failure-path
-evidence from COVERAGE.md. Use real components with isolated disposable fixtures;
-record unavailable browsers and authenticated whole-shell/runtime as unverified.
-Combine the remaining evidence and corrected captures in the single final visual
-confirmation round; do not start another polish loop. Don't repeat tested wallet/
-integration implementation. Public preview session84421 on65364; Codex tab13 still
-needs navigation from old63773. Current dist is retro PUBLIC WEB. Do not read
-operator secrets or bypass auth.
+Next task: capture the corrected component/core matrices plus settings and STM
+for the single final visual confirmation round. Include actual Codex width and
+browser zoom if safely available; clearly distinguish text enlargement from zoom.
+Then cover remaining model dialog/tool-result gaps or record exact limits. Don't
+repeat verified interactions or start another polish loop. Hosted/authenticated
+whole-shell, live provider/chain requests and installed Safari/native remain
+unverified. Public preview session25959 on50424; Codex tab13 still needs navigation
+from its old port. Current dist is retro PUBLIC WEB. Do not read operator secrets
+or bypass auth.
 Then run relevant safety/functional browser checks, capture evidence, and at the
 finish stage invoke the skill-required independent reviewer/documenter. Do not
 run the final detector yet; it is a once-at-finish batched check. No pushes.

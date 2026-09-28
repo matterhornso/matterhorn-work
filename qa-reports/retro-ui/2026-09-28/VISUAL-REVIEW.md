@@ -52,7 +52,14 @@ responsive/zoom coverage is ready. Do not start another open-ended polish loop.
 
 Authenticated whole-shell routing/model requests and provider/chain services;
 full settings/account/privacy routes; real content/streaming tool output;
-200% browser zoom; actual Codex-width captures; Firefox/Safari/native package.
+200% browser zoom; actual Codex-width captures; native package/installed Safari.
 Existing component callbacks and HTTP fixtures are not a substitute for these.
+
+Subsequent functional checks (not another screenshot inspection round) cover
+Appearance and disconnected/error Privacy, plus 200% root text size in Chromium,
+Firefox and WebKit. They reproduced overflow in settings action columns, wallet
+buttons and the integrations browse button. Scoped stack/wrap corrections pass
+the complete component suite in all three engines. The final visual confirmation
+must include those corrections; round2 has not been used yet.
 
 No production config, secrets, wallet actions or persisted user data changed.

@@ -286,7 +286,17 @@ html[data-matterhorn-ui="retro"] .matterhorn-integrations select {
   background: var(--retro-panel);
 }
 
+html[data-matterhorn-ui="retro"] .matterhorn-integrations [data-slot="button"] {
+  white-space: normal;
+  height: auto;
+  min-height: 44px;
+  max-width: 100%;
+}
+
 @media (max-width: 639px) {
+  html[data-matterhorn-ui="retro"] [data-slot="transaction-actions"] {
+    flex-direction: column;
+  }
   html[data-matterhorn-ui="retro"] [data-slot="transaction-batch"] {
     padding: 16px;
   }
@@ -552,6 +562,21 @@ html[data-matterhorn-ui="retro"] [data-slot="settings-stack"] > [data-section] +
 
 html[data-matterhorn-ui="retro"] [data-slot="settings-stack"] h2 {
   font-weight: 700;
+}
+
+@container settings (max-width: 40rem) {
+  html[data-matterhorn-ui="retro"] [data-slot="settings-item-header"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html[data-matterhorn-ui="retro"] [data-slot="settings-item-header"] > [data-slot="item-header-actions"] {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+    max-width: 100%;
+    min-width: 0;
+    margin-block-start: 8px;
+  }
 }
 
 html[data-matterhorn-ui="retro"] :is([data-slot="checkbox"], [data-slot="switch"]) {

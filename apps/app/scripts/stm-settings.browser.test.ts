@@ -17,9 +17,9 @@ const reset = () => {
   saved = removed = linked = rawReads = 0; failWrite = false; savedRevision = null;
 };
 beforeAll(async () => {
-  const bundle = await build({ configFile: false, root: new URL("../", import.meta.url).pathname, logLevel: "error",
+  const bundle = await build({ configFile: false, envDir: false, root: new URL("../", import.meta.url).pathname, logLevel: "error",
     resolve: { alias: { "@": new URL("../src", import.meta.url).pathname }, dedupe: ["react", "react-dom"] },
-    define: { "import.meta.env": "{}", "process.env.NODE_ENV": '"development"' }, plugins: [tailwindcss()],
+    define: { "import.meta.env.VITE_MATTERHORN_RETRO_UI": JSON.stringify(process.env.RETRO_QA_FLAG === "1" ? "1" : "0"), "process.env.NODE_ENV": '"development"' }, plugins: [tailwindcss()],
     build: { target: "esnext", write: false, minify: false, lib: { entry: new URL("./fixtures/stm-settings.tsx", import.meta.url).pathname, formats: ["es"] }, rollupOptions: { output: { inlineDynamicImports: true } } },
   });
   const built = Array.isArray(bundle) ? bundle[0] : bundle;
@@ -159,16 +159,16 @@ test("refresh closes stale replacement and next Replace uses the fresh persisted
   } finally { await p.close(); }
 });
 
-test("desktop/mobile/light/dark and 200 percent size remain contained; capture evidence", async () => {
+test("desktop/mobile/light/dark and 200 percent text size remain contained", async () => {
   const p = await page();
-  const output = new URL("../../../qa-reports/stm/2026-09-28/settings-captures/", import.meta.url).pathname;
-  await mkdir(output, { recursive: true });
+  const output = process.env.RETRO_QA_CAPTURES;
+  if (output) await mkdir(output, { recursive: true });
   try {
     for (const width of [390, 768, 1440]) for (const theme of ["light", "dark"]) {
       await p.setViewportSize({ width, height: 1000 }); await p.goto(`${server.url}?${theme === "dark" ? "dark" : "light"}`);
       await p.getByRole("button", { name: "Add secret", exact: true }).click();
       expect(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      if (width !== 768) await p.screenshot({ path: `${output}${width}-${theme}.png`, fullPage: true });
+      if (output) await p.screenshot({ path: `${output}/stm-${theme}-${width}.png`, fullPage: true });
     }
     await p.setViewportSize({ width: 390, height: 900 }); await p.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     expect(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { chromium, type Browser } from "playwright";
+import { chromium, firefox, webkit, type Browser } from "playwright";
 import { build } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { mkdir, readFile } from "node:fs/promises";
@@ -39,6 +39,7 @@ beforeAll(async () => {
   const logo = await readFile(new URL("../public/matterhorn-logo-square.svg", import.meta.url));
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const path = new URL(request.url).pathname;
+    if (path.startsWith("/workspace/fixture/backend/") && request.method === "GET") return Response.json({ message: "Fixture privacy service unavailable" }, { status: 503 });
     if (path === "/fixture-auth/v1/session") return authAvailable ? Response.json({ authenticated: false }) : Response.json({ message: "Fixture unavailable" }, { status: 503 });
     if (path === "/api/auth/config") return Response.json({ signupsAvailable: false, signupStatus: "paused", emailVerificationRequired: true, passwordResetAvailable: true, legalAcceptanceRequired: true, minimumPasswordLength: 12, turnstileSiteKey: null });
     if (path === "/api/auth/account/mcp-access") {
@@ -73,7 +74,9 @@ beforeAll(async () => {
     if (path === "/fixture.css") return new Response(css.map(item => item.type === "asset" ? item.source : "").join("\n"), { headers: { "content-type": "text/css" } });
     return new Response('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Retro component fixture</title><link rel="stylesheet" href="/fixture.css"><style>html,body,#root{height:auto;overflow:visible}</style><div id="root"></div><script type="module" src="/fixture.js"></script></html>', { headers: { "content-type": "text/html" } });
   } });
-  browser = await chromium.launch();
+  const engine = process.env.RETRO_QA_BROWSER ?? "chromium";
+  if (!["chromium", "firefox", "webkit"].includes(engine)) throw new Error("Unknown QA browser engine");
+  browser = await (engine === "firefox" ? firefox : engine === "webkit" ? webkit : chromium).launch();
 }, 60_000);
 afterAll(async () => { await browser?.close(); server?.stop(true); });
 
@@ -130,6 +133,66 @@ test("flag-off styles remain the incumbent controls", async () => {
     expect(await page.getByRole("button", { name: "Save note", exact: true }).evaluate(el => getComputedStyle(el).borderTopWidth)).toBe("1px");
   } finally { await page.close(); }
 });
+
+test("appearance preserves theme selection, language keyboard access and busy state", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(5000);
+  try {
+    await page.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    await page.goto(`${server.url}?settings`);
+    await page.getByRole("button", { name: "Dark", exact: true }).click();
+    expect(await page.locator("html").getAttribute("data-theme")).toBe("dark");
+    expect(await page.getByRole("button", { name: "Dark", exact: true }).getAttribute("aria-pressed")).toBe("true");
+    await page.getByRole("button", { name: "Light", exact: true }).click();
+    expect(await page.locator("html").getAttribute("data-theme")).toBe("light");
+    const language = page.getByRole("combobox", { name: "Language", exact: true });
+    await language.focus(); await page.keyboard.press("Space");
+    await page.getByRole("listbox").waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("listbox").waitFor({ state: "hidden" });
+    await page.waitForFunction(() => document.activeElement?.getAttribute("role") === "combobox");
+    expect(await language.evaluate(el => el === document.activeElement)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.goto(`${server.url}?settings&busy`);
+    expect(await page.getByRole("button", { name: "Dark", exact: true }).isDisabled()).toBe(true);
+    expect(await page.getByRole("combobox", { name: "Language", exact: true }).isDisabled()).toBe(true);
+  } finally { await page.close(); }
+}, 15_000);
+
+test("settings and core forms reflow at 200 percent text size without horizontal overflow", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+  const failures: string[] = [];
+  try {
+    await page.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    for (const surface of ["settings", "settings&privacy&disconnected", "models", "memory", "notes", "wallet&blocked", "integrations"]) {
+      await page.goto(`${server.url}?${surface}`);
+      await page.locator("#root > *").first().waitFor();
+      await page.waitForLoadState("networkidle");
+      await page.evaluate(async () => { document.documentElement.style.fontSize = "200%"; await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))); });
+      const overflow = await page.evaluate(() => [...document.querySelectorAll("main *")].filter(el => el.getBoundingClientRect().right > innerWidth + 1).map(el => ({ tag: el.tagName, slot: el.getAttribute("data-slot"), text: el.textContent?.slice(0, 80), width: el.getBoundingClientRect().width })).slice(0, 8));
+      if (!await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)) failures.push(`${surface}: ${JSON.stringify(overflow)}`);
+    }
+    expect(failures).toEqual([]);
+  } finally { await page.close(); }
+}, 30_000);
+
+test("privacy disconnected and failed states keep controls gated and navigation usable", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(5000);
+  try {
+    await page.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    await page.goto(`${server.url}?settings&privacy&disconnected`);
+    await page.getByText("Open a workspace to review its privacy controls.", { exact: true }).waitFor();
+    expect(await page.getByRole("button", { name: "Download archive", exact: true }).isDisabled()).toBe(true);
+    expect(await page.getByRole("switch", { name: "Collect explicit workspace feedback" }).isDisabled()).toBe(true);
+    await page.getByRole("button", { name: "Memory", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: "Memory requested" }).waitFor();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.goto(`${server.url}?settings&privacy`);
+    await page.getByText("Fixture privacy service unavailable", { exact: true }).waitFor();
+    expect(await page.getByRole("switch", { name: "Collect explicit workspace feedback" }).isDisabled()).toBe(true);
+  } finally { await page.close(); }
+}, 15_000);
 
 test("models filter and persist before first/later navigation; failed saves stay retryable", async () => {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
@@ -316,12 +379,13 @@ test.skipIf(!process.env.RETRO_QA_CAPTURES)("capture component matrix for bounde
     for (const width of [390, 768, 1440]) {
       const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
       try {
-        for (const surface of ["auth", "models", "notes", "memory", "wallet&blocked", "integrations", "public=/security"]) {
+        for (const surface of ["auth", "models", "notes", "memory", "wallet&blocked", "integrations", "public=/security", "settings", "settings&privacy&disconnected"]) {
           await page.goto(`${server.url}?${surface}&theme=${theme}`);
           await page.locator("#root > *").first().waitFor();
           await page.waitForLoadState("networkidle");
           await page.evaluate(() => document.fonts.ready);
-          await page.screenshot({ path: `${directory}/${surface.split(/[=&]/)[0]}-${theme}-${width}.png`, fullPage: true });
+          const name = surface.includes("privacy") ? "settings-privacy" : surface.split(/[=&]/)[0];
+          await page.screenshot({ path: `${directory}/${name}-${theme}-${width}.png`, fullPage: true });
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         }
       } finally { await page.close(); }
