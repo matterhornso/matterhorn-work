@@ -4,7 +4,9 @@ Dependency-free local adapter shared by Electron/server/orchestrator consumers.
 The common server entry point creates a disabled adapter by default. Local macOS
 operators can opt in with `MATTERHORN_WORK_STM_ENABLED=1`; no API can set that flag.
 Network listeners and unsupported platforms reject connection/resolution. Current
-active consumer wiring is realtime voice only, not OpenCode MCP children.
+consumer wiring covers realtime voice and explicitly approved project-local MCPs.
+MCP integration remains under validation: connection evidence is not a full
+model-driven permission/cancellation acceptance result.
 Do not use this development integration with real credentials yet.
 
 Protocol: STM `/api/integrations/v1/{capabilities,keys,resolve}`, version 1,
@@ -35,6 +37,20 @@ assumed to support this contract. Do not use `/api/inject/env` as a fallback.
   OpenCode's actual MCP child-launch path. Callers must preserve session/workspace
   permission checks; the callback is not itself a permission engine.
 - Unlink removes a Matterhorn reference; it never revokes/deletes a shared STM key.
+- `StmMcpLaunches` uses private metadata grants bound to canonical workspace,
+  reviewed executable/arguments and selected binding IDs. The host-only
+  `POST /workspace/:id/mcp/:name/stm` uses the existing configuration approval
+  path, then writes a trusted launcher command and opaque grant ID to project
+  configuration. It does not resolve values or automatically restart a tool.
+  Configuration changes, missing bindings, disabled flags and revoked grants
+  block future launches. Inline MCP environment overrides currently require
+  explicit cleanup before approval; they are not silently migrated.
+- The launcher checks current MCP configuration and preserves stdio. Child
+  stderr is not forwarded to application logs. OpenCode still owns tool-call
+  permissions. Active-launch records prevent concurrent/mid-task restarts.
+  Revocation blocks the next launch, not memory of a running child. A crash can
+  leave an active record: recovery must prove the old process has stopped, not
+  merely assume a stale PID means it is safe to start another consumer.
 - Feature rollback preserves references and blocks affected resolution. It never
   exports credentials back into plaintext.
 - Generic desktop, orchestrator (including container starts), and managed engine
@@ -51,8 +67,10 @@ or print it. This does not provide brokered-execution isolation.
 The v2 JSON registry contains consent state, exact names, storage backend,
 opaque credential revision, consumer identity and restart-required metadata only.
 MCP bindings mark restart required on link/replacement; voice resolves per call
-and does not require a child restart. Applied MCP revision acknowledgements and
-safe restart scheduling are not yet implemented.
+and does not require a child restart. Value/revision snapshots record exactly
+what a child received; an intervening replacement leaves restart pending. No
+automatic restart scheduling is implemented. External STM rotations need a
+metadata refresh before this persisted flag can be treated as current.
 Old v1 references are normalized in memory without resolving/exporting values.
 The server locates it next to the configured legacy environment store, which
 also makes isolated test/data-directory overrides explicit.
@@ -75,3 +93,10 @@ MATTERHORN_STM_ADAPTER_PATH=/absolute/path/to/matterhorn/packages/stm-credential
 
 Both fixture and loopback tests are distinct from packaged desktop/real Keychain
 acceptance. Do not enable this integration for ordinary users yet.
+
+`apps/server/src/stm-mcp-launch.e2e.test.ts` runs a harmless stdio MCP fixture with
+an isolated HOME, fake daemon and disposable key. Optional
+`STM_TEST_COMPILED_LAUNCHER` selects a locally compiled launcher;
+`STM_TEST_OPENCODE_BIN` additionally exercises actual OpenCode connection and
+disconnect before the direct fixture tool call. This is **not** a model-driven
+tool-call/permission test. Verify the binary version against `constants.json`.

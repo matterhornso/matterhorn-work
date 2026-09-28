@@ -1,9 +1,27 @@
 import { dirname, join } from "node:path";
-import { StmCredentials } from "@matterhorn-work/stm-credentials";
+import { StmCredentials, StmMcpLaunches } from "@matterhorn-work/stm-credentials";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { resolveDefaultEnvStorePath } from "./env-file.js";
 
 export const STM_RELEASE_FLAG = "MATTERHORN_WORK_STM_ENABLED";
 export const STM_VOICE_CONSUMER = "voice:realtime";
+
+export function createLocalStmMcpLaunches(credentials: StmCredentials) {
+  return new StmMcpLaunches({ credentials, registryPath: join(dirname(resolveDefaultEnvStorePath()), "stm-mcp-launches.json") });
+}
+
+export function localStmMcpLauncher(): string[] | null {
+  // Electron cannot assume system Node/Bun. A separately staged executable must
+  // be provided by its trusted runtime owner before packaged support is enabled.
+  if (process.versions.electron) return null;
+  const sibling = join(dirname(process.execPath), "matterhorn-stm-mcp");
+  if (process.versions.bun && existsSync(sibling)) return [sibling];
+  const extension = process.versions.bun ? "ts" : "js";
+  const entry = fileURLToPath(new URL(`./stm-mcp-entry.${extension}`, import.meta.url));
+  if (entry.includes("/$bunfs/") || entry.includes("/~BUN/")) return null;
+  return existsSync(entry) ? [process.execPath, entry] : null;
+}
 
 /** Used by the same startServer entry point in Electron, CLI and orchestrator.
  * There is no discovery/launch/network access in this factory. Keep the adapter

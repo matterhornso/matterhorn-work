@@ -540,7 +540,8 @@ import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
 import { StmCredentials, StmError } from "@matterhorn-work/stm-credentials";
 import { resolveVoiceCredential } from "./voice-credential.js";
-import { createLocalStmCredentials, STM_VOICE_CONSUMER } from "./stm-runtime.js";
+import { createLocalStmCredentials, createLocalStmMcpLaunches, localStmMcpLauncher, STM_VOICE_CONSUMER } from "./stm-runtime.js";
+import { approveStmMcp, parseStmMcpBindings } from "./stm-mcp.js";
 import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedgerText } from "./project-data-ledger.js";
@@ -1428,6 +1429,8 @@ export type MatterhornServerDependencies = {
   // hosted workspace configuration. Feature remains off unless explicitly wired.
   stmCredentials?: StmCredentials;
   stmConsumers?: readonly string[];
+  /** Trusted shell-owned command, never supplied by a workspace/request. */
+  stmMcpLauncher?: readonly string[];
   evidenceKeyManager?: MatterhornEvidenceKeyManager | null;
   cryptoEvidenceWalrusTransport?: MatterhornWalrusEvidenceTransport;
   cryptoEvidenceWalrusCertificationVerifier?: MatterhornWalrusCertificationVerifier;
@@ -10137,9 +10140,11 @@ function createRoutes(
   recoveryErasureLedger: MatterhornRecoveryErasureLedger | null,
   drainEmailOutbox: () => Promise<void>,
   reviewedActionProtocolRefresh: ReviewedActionRefreshAdapter,
-  dependencies: Pick<MatterhornServerDependencies, "stmCredentials" | "stmConsumers">,
+  dependencies: Pick<MatterhornServerDependencies, "stmCredentials" | "stmConsumers" | "stmMcpLauncher">,
 ): Route[] {
   const stm = dependencies.stmCredentials ?? createLocalStmCredentials({ host: config.host });
+  const stmMcpLaunches = createLocalStmMcpLaunches(stm);
+  const stmMcpLauncher = dependencies.stmMcpLauncher ?? localStmMcpLauncher();
   // MCP consumers are added only by runtime wiring that owns their approved
   // launch boundary. Do not accept arbitrary consumer names from a browser.
   const stmConsumers = dependencies.stmConsumers ?? [STM_VOICE_CONSUMER];
@@ -17078,6 +17083,34 @@ function createRoutes(
       path: result.path,
     });
     return jsonResponse({ ok: true, name, path: result.path });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/mcp/:name/stm", "host-token", async (ctx) => {
+    ensureWritable(config);
+    requireLocalStm();
+    if (!stmMcpLauncher) throw new ApiError(409, "stm_launcher_unavailable", "Secret-backed tools need a supported local runtime launcher.");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const name = ctx.params.name;
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Tool secret bindings");
+    let bindings: ReturnType<typeof parseStmMcpBindings>;
+    try { bindings = parseStmMcpBindings(body.bindings); }
+    catch { throw new ApiError(400, "invalid_binding", "Choose explicit credential names for this tool."); }
+    if (body.consent !== true) throw new ApiError(400, "consent_required", "Review and approve this tool's credential access first.");
+    await requireApproval(ctx, { workspaceId: workspace.id, action: "mcp.add",
+      summary: `Connect selected secrets to MCP ${name}`, paths: [opencodeConfigPath(workspace.path)] });
+    const legacy = await env.list().catch(rethrowEnvStoreReadError);
+    const grant = await approveStmMcp({ launches: stmMcpLaunches, workspace: workspace.path, name,
+      launcher: [...stmMcpLauncher], bindings, consent: true, legacyNames: legacy.map(entry => entry.key),
+    }).catch(rethrowStmError);
+    // No automatic reload/restart: current work must complete before applying.
+    return jsonResponse({ id: grant.id, consumer: `mcp:${grant.id}`, bindingIds: grant.bindingIds, restartRequired: true }, 201);
+  });
+
+  addRoute(routes, "DELETE", "/env/stm/mcp-grants/:id", "host-token", async (ctx) => {
+    ensureWritable(config);
+    requireLocalStm();
+    await stmMcpLaunches.revoke(ctx.params.id).catch(rethrowStmError);
+    return jsonResponse({ ok: true, runningProcessUnaffected: true });
   });
 
   addRoute(routes, "GET", "/workspace/:id/mcp", "client", async (ctx) => {

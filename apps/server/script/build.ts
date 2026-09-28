@@ -119,4 +119,5 @@ const targets = options.targets.length ? options.targets : [undefined];
 
 for (const target of targets) {
   await buildOnce(entrypoint, options.outdir, options.filename, target);
+  await buildOnce(resolve("src", "stm-mcp-entry.ts"), options.outdir, "matterhorn-stm-mcp", target);
 }

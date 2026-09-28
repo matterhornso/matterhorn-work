@@ -1069,6 +1069,11 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       throw new Error(`Cannot find Matterhorn embedded server bundle. Checked: ${candidates.join(", ")}`);
     }
     const { startEmbeddedServer } = await import(pathToFileURL(embeddedPath).href);
+    const stmLauncherName = `matterhorn-stm-mcp-${process.arch}`;
+    const stmLauncher = process.platform === "darwin" ? [
+      ...(process.resourcesPath ? [path.join(process.resourcesPath, "sidecars", stmLauncherName)] : []),
+      path.join(desktopRoot, "resources", "sidecars", stmLauncherName),
+    ].find(candidate => existsSync(candidate)) : undefined;
     const handle = await startEmbeddedServer({
       host,
       port,
@@ -1082,6 +1087,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       manageOpencode: options.manageOpencode === true,
       opencodeBin: managedOpencode?.path ?? undefined,
       opencodeCwd: managedOpencodeWorkdir(),
+      stmMcpLauncher: stmLauncher ? [stmLauncher] : undefined,
       onManagedOpencodeEvent: (event) => {
         if (event?.type === "health_failure" && event.consecutiveFailures < event.threshold) return;
         const detail = event?.type === "restarted"

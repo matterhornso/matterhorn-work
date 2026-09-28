@@ -140,6 +140,10 @@ test("secret replacement is host-only, explicitly consented and returns metadata
   expect((await update({})).status).toBe(401);
   const issued = await fetch(`${base}/tokens`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ scope: "owner", label: "write fixture owner" }) });
   const owner = await issued.json();
+  for (const [route, method] of [["/workspace/fixture/mcp/fixture/stm", "POST"], ["/env/stm/mcp-grants/fixture", "DELETE"]]) {
+    expect((await fetch(`${base}${route}`, { method })).status).toBe(401);
+    expect((await fetch(`${base}${route}`, { method, headers: { authorization: `Bearer ${owner.token}` } })).status).toBe(401);
+  }
   expect((await update({ authorization: `Bearer ${owner.token}` })).status).toBe(401);
   expect((await update(hostAuth(), { ...body, consent: false })).status).toBe(409);
   expect(stm.saves).toBe(0);
@@ -215,6 +219,8 @@ test("STM is disabled by default and read-only mode rejects changes", async () =
   const server = await startServer(config, { stmCredentials: new FixtureStm() });
   stops.push(() => server.stop());
   expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/bindings/fixture-id`, { method: "DELETE", headers: hostAuth() })).status).toBe(403);
+  expect((await fetch(`http://127.0.0.1:${server.port}/workspace/fixture/mcp/fixture/stm`, { method: "POST", headers: hostAuth(), body: "{}" })).status).toBe(403);
+  expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/mcp-grants/fixture`, { method: "DELETE", headers: hostAuth() })).status).toBe(403);
 });
 
 describe("env routes", () => {

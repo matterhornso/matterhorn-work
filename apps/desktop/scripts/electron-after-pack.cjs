@@ -301,6 +301,12 @@ async function afterPack(context) {
   const isWindows = context.electronPlatformName === "win32";
   const executableSuffix = isWindows ? ".exe" : "";
   const keep = new Set();
+  // Keep only the native-architecture optional STM launcher. Its absence must
+  // disable setup, not fall back to a system interpreter or another architecture.
+  if (context.electronPlatformName === "darwin") {
+    const stmLauncherName = `matterhorn-stm-mcp-${triple.startsWith("aarch64-") ? "arm64" : "x64"}`;
+    if (fs.existsSync(path.join(sidecarsDir, stmLauncherName))) keep.add(stmLauncherName);
+  }
 
   for (const base of sidecarBases) {
     const aliasName = `${base}${executableSuffix}`;

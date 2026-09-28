@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, readFile, rm, chmod, symlink } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm, chmod, symlink, mkdir } from "node:fs/promises";
+import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { StmCredentials, spawnStmConsumer, assertNoStmEnvironmentConflicts } from "../index.mjs";
+import { StmCredentials, StmMcpLaunches, spawnStmConsumer, assertNoStmEnvironmentConflicts } from "../index.mjs";
 
 async function fixture(t, overrides = {}) {
   const dir = await mkdtemp(join(tmpdir(), "matterhorn-stm-"));
@@ -33,12 +34,78 @@ async function fixture(t, overrides = {}) {
     const input = JSON.parse(options.body);
     const values = Object.fromEntries(input.bindings.map(b => [b.envName, state.secret]));
     if (state.extra) values.UNRELATED_KEY = "never-expose";
-    return Response.json({ version: 1, values });
+    return Response.json({ version: 1, values, ...(input.includeRevisions ? { revisions: Object.fromEntries(input.bindings.map(b => [b.envName, state.revision])) } : {}) });
   };
   const options = { enabled: true, localDesktop: true, platform: "darwin", descriptorPath, registryPath, fetch, ...overrides };
   return { adapter: new StmCredentials(options), options, state, calls, descriptorPath, registryPath, token };
 }
 const input = { envName: "EXAMPLE_API_KEY", tool: "example", label: "default", consumer: "mcp:example", consent: true };
+
+test("workspace-bound launch grants enforce consent, configuration authorization and binding identity", async t => {
+  const f = await fixture(t);
+  await f.adapter.connect({ consent: true });
+  const root = join(f.registryPath, "..");
+  const workspace = join(root, "workspace");
+  const elsewhere = join(root, "elsewhere");
+  await mkdir(workspace); await mkdir(elsewhere);
+  const launches = new StmMcpLaunches({ credentials: f.adapter, registryPath: join(root, "launches.json") });
+  const request = { workspace, name: "fixture", command: [process.execPath, "-e", "process.stdin.resume()"],
+    launcher: [process.execPath, "trusted-launcher.mjs"], bindings: [input], consent: false };
+  await assert.rejects(launches.approve(request), /consent_required/);
+  const grant = await launches.approve({ ...request, consent: true });
+  assert.equal(grant.bindingIds.length, 1);
+  assert.equal((await f.adapter.listBindings())[0].consumer, `mcp:${grant.id}`);
+  await assert.rejects(launches.start(grant.id, { cwd: elsewhere, authorize: () => true }), /workspace_mismatch/);
+  await assert.rejects(launches.start(grant.id, { cwd: workspace, authorize: () => false }), /permission_denied/);
+  assert.equal(f.calls.some(c => c.url.endsWith("resolve")), false);
+  const disabled = new StmMcpLaunches({ credentials: new StmCredentials({ ...f.options, enabled: false }), registryPath: join(root, "launches.json") });
+  await assert.rejects(disabled.start(grant.id, { cwd: workspace, authorize: () => true }), /disabled/);
+  await f.adapter.unlink(grant.bindingIds[0]);
+  await assert.rejects(launches.start(grant.id, { cwd: workspace, authorize: () => true }), /launch_binding_changed/);
+  assert.equal((await readFile(join(root, "launches.json"), "utf8")).includes(f.state.secret), false);
+  assert.equal((await readFile(join(root, "launches.json"), "utf8")).includes(f.token), false);
+});
+
+test("running consumer keeps its snapshot; only a new approved launch receives rotation", async t => {
+  const f = await fixture(t);
+  await f.adapter.connect({ consent: true });
+  const root = join(f.registryPath, "..");
+  const workspace = join(root, "workspace"); await mkdir(workspace);
+  const launches = new StmMcpLaunches({ credentials: f.adapter, registryPath: join(root, "launches.json") });
+  const grant = await launches.approve({ workspace, name: "fixture", launcher: [process.execPath, "trusted-launcher.mjs"],
+    command: [process.execPath, "-e", 'process.stdin.on("data", () => process.stdout.write(JSON.stringify({length: process.env.EXAMPLE_API_KEY.length, other: Boolean(process.env.OTHER_KEY)}) + "\\n"))'],
+    bindings: [input], consent: true });
+  await f.adapter.link({ ...input, envName: "OTHER_KEY", consumer: "mcp:unrelated" });
+  const children = [];
+  t.after(() => { for (const child of children) child.kill(); });
+  const start = async () => {
+    const child = await launches.start(grant.id, { cwd: workspace, authorize: () => true, inherited: { ...process.env, OTHER_KEY: "stale-other-fixture" } });
+    children.push(child); return child;
+  };
+  const query = async child => { const data = once(child.stdout, "data"); child.stdin.write("check\n"); return JSON.parse(String((await data)[0])); };
+  const first = await start();
+  assert.equal((await f.adapter.listBindings()).find(b => b.envName === "EXAMPLE_API_KEY").restartRequired, false);
+  const oldLength = f.state.secret.length;
+  assert.deepEqual(await query(first), { length: oldLength, other: false });
+  assert.deepEqual((await launches.list())[0].active.revisions, { EXAMPLE_API_KEY: "d".repeat(64) });
+  await f.adapter.saveCredential({ tool: "example", label: "default", value: "a-longer-rotated-fake-credential", expectedRevision: f.state.revision, consent: true });
+  assert.equal((await f.adapter.listBindings()).find(b => b.envName === "EXAMPLE_API_KEY").restartRequired, true);
+  assert.deepEqual(await query(first), { length: oldLength, other: false });
+  await assert.rejects(start(), /consumer_already_running/);
+  const exited = once(first, "exit"); first.kill(); await exited;
+  // Exit bookkeeping is serialized and async. Wait for its authoritative state.
+  for (let i = 0; i < 100 && (await launches.list())[0].active; i++) await new Promise(r => setTimeout(r, 10));
+  assert.equal((await launches.list())[0].active, null);
+  const second = await start();
+  assert.equal((await f.adapter.listBindings()).find(b => b.envName === "EXAMPLE_API_KEY").restartRequired, false);
+  assert.deepEqual(await query(second), { length: f.state.secret.length, other: false });
+  assert.deepEqual((await launches.list())[0].active.revisions, { EXAMPLE_API_KEY: "e".repeat(64) });
+  await launches.revoke(grant.id);
+  assert.deepEqual(await query(second), { length: f.state.secret.length, other: false });
+  await assert.rejects(start(), /launch_grant_unavailable/);
+  const done = once(second, "exit"); second.kill(); await done;
+  for (let i = 0; i < 100 && (await launches.list())[0].active; i++) await new Promise(r => setTimeout(r, 10));
+});
 
 test("generic child boundary rejects bound plaintext without discovery or global mutation", async t => {
   const f = await paired(t);

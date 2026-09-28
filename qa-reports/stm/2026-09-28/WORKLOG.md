@@ -225,3 +225,73 @@ transport wiring, with applied-revision/safe-restart proof. Do not mistake the
 generic inheritance guard or a fixture child test for that completion. Full
 regressions, packaging and authorized OS acceptance remain outstanding. Nothing
 pushed, merged, deployed or enabled for users. Goal remains **ACTIVE**.
+
+## Continuation: approved MCP launch path and revision snapshots
+
+Previous turn classified as **progress**: commits `e1db7edbcd` (Matterhorn) and
+`d0cdb943f3` (STM), working-tree/test evidence rechecked before new work.
+
+Implemented:
+
+- STM's opt-in resolution snapshots couple each value to the same inventory
+  row's revision. No value-derived hash or separate metadata/value race. Legacy
+  selected responses remain compatible; unsupported snapshot requests fail closed.
+- Private metadata-only MCP launch grants: canonical workspace, reviewed absolute
+  executable/arguments, launcher, exact binding IDs, revocation and active launch
+  revision/PID metadata. Same-name other workspace is denied. Grant creation
+  partially failing never yields an executable grant; only its new references
+  are cleaned up, not underlying keys.
+- Host-only local approval endpoint reuses MCP configuration approval, writes
+  only launcher command plus opaque ID, and never automatically reloads/restarts
+  an in-flight tool. Ordinary bearer tokens and read-only requests are rejected.
+- Actual stdio launcher checks current project MCP configuration before resolving
+  and before spawning. Altered/disabled/removed config, missing bindings, disabled
+  flag or revoked grant fails closed. Only the approved child receives secrets.
+  Child stderr is not piped into application/support logs. Existing OpenCode
+  model/tool permission enforcement remains in place; denial acceptance still
+  must be proven with a model-driven engine test.
+- One active launch per grant. Rotation marks restart pending; an existing child
+  retains its earlier snapshot. A later start receives current values/revisions;
+  acknowledgement cannot clear a concurrently newer revision's pending flag.
+  Exit bookkeeping clears only that launch's active ID. Crashes can leave a
+  fail-closed active record; safe operator recovery remains a required follow-up.
+- Source Node/Bun entry plus self-contained compiled Bun launcher. macOS Electron
+  build stages an architecture-named launcher; shell passes only a known packaged
+  resource path, never a renderer/PATH-selected runtime. Missing executable means
+  unavailable. Server binary build includes a sibling launcher. Signed packaging,
+  cross-architecture and orchestrator distribution still need verification.
+
+Observed verification:
+
+- Adapter tests: **23 passed**, including real disposable child snapshot rotation,
+  simultaneous-launch refusal, cross-workspace denial, binding removal and revoke.
+- STM selected/lifecycle + real-Store/fake-keystore HTTP interoperability:
+  **27 passed / 105 assertions**.
+- Server targeted run: **53 passed / 220 assertions**, seven test files including
+  MCP configuration and actual stdio fixture; source launcher completed initialize,
+  tool list and harmless tool call using fake credentials.
+- Server typecheck, Electron typecheck and orchestrator typecheck passed.
+- Electron packaging source gate passed, including retaining the architecture-
+  appropriate STM executable through after-pack pruning. This is source-level
+  packaging evidence, not a signed app install/launch result.
+- Native macOS launcher compiled (26 modules) and completed the same isolated
+  stdio test: **1 passed / 14 assertions**. Temporary build at
+  `/private/tmp/matterhorn-stm-launcher-TwCepA/matterhorn-stm-mcp`.
+- The repository's existing desktop sidecar reports **1.18.30**, not the pin.
+  Do not use it as 1.18.31 acceptance. A preexisting isolated cached binary at
+  `/private/tmp/matterhorn-overnight-runtime.ddJMOU/bin/opencode` reports **1.18.31**;
+  SHA256 `16c960ba77421da11b53e785f359b73f328a86118b48feb4af143db5d9afb198`.
+- With `STM_TEST_OPENCODE_BIN=<that binary>` and
+  `STM_TEST_COMPILED_LAUNCHER=<compiled path>`, the stdio E2E test passed:
+  **1 passed / 21 assertions**. Real OpenCode connected via the compiled launcher
+  and disconnected, then the direct fixture call succeeded. No provider was
+  contacted. This proves runtime connection, **not engine-driven tool execution**.
+- `git diff --check` passed. No real daemon, vault or keys were opened. Test HOME,
+  OpenCode data/config/cache, descriptors, credentials and children were disposable.
+
+Next (not optional release polish): model-driven tool call and denied-permission
+proof through pinned OpenCode, host-route happy-path acceptance, safe crashed-
+launcher recovery, status refresh for native STM rotation/revocation, stronger
+failure/cancellation tests, compiled CLI/orchestrator/Electron distribution parity,
+full regressions/security gates. Real Keychain and signed OS acceptance remain
+separately authorized/unverified. Goal remains **ACTIVE**; no push/deploy/migration.

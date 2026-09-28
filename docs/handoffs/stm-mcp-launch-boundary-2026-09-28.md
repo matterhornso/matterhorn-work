@@ -1,8 +1,10 @@
 # STM MCP launch boundary — next implementation contract
 
-Status: design for the remaining phase-3 implementation, not working runtime wiring.
-The tested `spawnStmConsumer()` primitive is insufficient by itself: OpenCode owns
-MCP subprocess startup and ordinary managed environment inheritance is too broad.
+Status: launch grants, host control route, stdio launcher and source/compiled
+fixture tests implemented. Pinned OpenCode 1.18.31 connection/disconnect verified.
+Actual engine model-driven tool execution/denial, crash recovery and signed
+packaged acceptance remain incomplete. The earlier `spawnStmConsumer()` primitive
+alone remains insufficient proof of runtime integration.
 
 ## Required integration
 

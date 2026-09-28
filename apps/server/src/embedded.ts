@@ -28,6 +28,8 @@ export type EmbeddedServerOptions = CliArgs & {
   opencodeBin?: string;
   /** Working directory for the managed OpenCode process. */
   opencodeCwd?: string;
+  /** Packaged local STM launcher chosen by the trusted desktop shell. */
+  stmMcpLauncher?: string[];
   /** Receives sanitized lifecycle events for desktop or host logging. */
   onManagedOpencodeEvent?: (event: ManagedOpencodeEvent) => void;
 };
@@ -106,7 +108,7 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
     }
   }
 
-  const server = await startServer(config);
+  const server = await startServer(config, { stmMcpLauncher: options.stmMcpLauncher });
 
   return {
     port: server.port,

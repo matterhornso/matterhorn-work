@@ -1,6 +1,6 @@
 import { constants, openSync, fstatSync, readSync, closeSync } from "node:fs";
-import { open, mkdir, rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { open, mkdir, rename, rm, realpath } from "node:fs/promises";
+import { dirname, join, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -274,6 +274,27 @@ export class StmCredentials {
     const selected = registry.bindings.filter(b => b.consumer === consumer);
     return this.#resolveSelected(registry, selected, inherited);
   }
+  async resolveSnapshotForConsumer(consumer, inherited = {}, bindingIds) {
+    const registry = await this.#registry();
+    const selected = registry.bindings.filter(b => b.consumer === consumer);
+    if (!selected.length) fail("consumer_not_authorized");
+    if (bindingIds && (selected.length !== bindingIds.length || selected.some(b => !bindingIds.includes(b.id)))) fail("launch_binding_changed");
+    return this.#resolveSelected(registry, selected, inherited, true);
+  }
+  async acknowledgeMcpStart(consumer, bindingIds, revisions) {
+    this.#supported();
+    if (typeof consumer !== "string" || !consumer.startsWith("mcp:") || !object(revisions)) fail("invalid_consumer");
+    return this.#mutate(async () => {
+      const registry = await this.#registry();
+      const selected = registry.bindings.filter(b => b.consumer === consumer);
+      if (!selected.length || selected.length !== bindingIds.length || selected.some(b => !bindingIds.includes(b.id) || !validRevision(revisions[b.envName]))) fail("launch_binding_changed");
+      for (const binding of selected) {
+        // A concurrent rotation after resolution must keep restart pending.
+        binding.restartRequired = binding.credentialRevision !== revisions[binding.envName];
+      }
+      await writePrivate(this.#options.registryPath, registry);
+    });
+  }
   async resolveKeyForConsumer(consumer, envName, inherited = {}) {
     if (!safeSecretEnvName(envName)) fail("invalid_binding");
     const registry = await this.#registry();
@@ -284,13 +305,14 @@ export class StmCredentials {
     if (binding.consumer !== consumer) fail("consumer_not_authorized");
     return (await this.#resolveSelected(registry, [binding], inherited))[envName];
   }
-  async #resolveSelected(registry, selected, inherited) {
+  async #resolveSelected(registry, selected, inherited, includeRevisions = false) {
     if (!selected.length) return {};
     this.#supported();
     if (!registry.paired) fail("not_connected");
-    for (const b of selected) if (Object.hasOwn(inherited, b.envName) || Object.hasOwn(process.env, b.envName)) fail("plaintext_conflict");
+    const selectedNames = new Set(selected.map(b => b.envName.toUpperCase()));
+    for (const env of [inherited, process.env]) if (Object.entries(env).some(([name, value]) => value !== undefined && selectedNames.has(name.toUpperCase()))) fail("plaintext_conflict");
     await this.#handshake();
-    const r = await this.#request("resolve", { version: 1, bindings: selected.map(({ envName, tool, label }) => ({ envName, tool, label })) });
+    const r = await this.#request("resolve", { version: 1, bindings: selected.map(({ envName, tool, label }) => ({ envName, tool, label })), ...(includeRevisions ? { includeRevisions: true } : {}) });
     if (!object(r) || r.version !== 1 || !object(r.values) || Object.keys(r.values).length !== selected.length) fail("invalid_response");
     const values = {};
     for (const b of selected) {
@@ -298,7 +320,9 @@ export class StmCredentials {
       if (!Object.hasOwn(r.values, b.envName) || typeof v !== "string" || !v || v.includes("\0") || Buffer.byteLength(v) > 16_384) fail("invalid_response");
       values[b.envName] = v;
     }
-    return values;
+    if (!includeRevisions) return values;
+    if (!object(r.revisions) || Object.keys(r.revisions).length !== selected.length || selected.some(b => !Object.hasOwn(r.revisions, b.envName) || !validRevision(r.revisions[b.envName]))) fail("invalid_response");
+    return { values, revisions: Object.fromEntries(selected.map(b => [b.envName, r.revisions[b.envName]])) };
   }
 }
 
@@ -314,4 +338,127 @@ export async function spawnStmConsumer({ credentials, consumer, command, args = 
   for (const binding of bindings) if (binding.consumer !== consumer) delete base[binding.envName];
   const selected = await credentials.resolveForConsumer(consumer, base);
   return spawn(command, launchArgs, { cwd, env: { ...base, ...selected }, shell: false, stdio });
+}
+
+const grantId = value => typeof value === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value);
+const commandVector = value => Array.isArray(value) && value.length > 0 && value.length <= 128 && value.every(arg => typeof arg === "string" && arg.length <= 4096 && !arg.includes("\0")) && isAbsolute(value[0]);
+function validGrant(g) {
+  return object(g) && grantId(g.id) && typeof g.workspace === "string" && isAbsolute(g.workspace)
+    && segment(g.name) && commandVector(g.command) && commandVector(g.launcher)
+    && Array.isArray(g.bindingIds) && g.bindingIds.length > 0 && g.bindingIds.length <= 32 && g.bindingIds.every(grantId)
+    && new Set(g.bindingIds).size === g.bindingIds.length && typeof g.revoked === "boolean"
+    && typeof g.createdAt === "string" && Number.isFinite(Date.parse(g.createdAt))
+    && (g.active === null || (object(g.active) && grantId(g.active.id) && Number.isInteger(g.active.pid) && g.active.pid > 0
+      && object(g.active.revisions) && Object.keys(g.active.revisions).length <= 32 && Object.entries(g.active.revisions).every(([key, revision]) => safeSecretEnvName(key) && validRevision(revision))
+      && Object.keys(g.active).every(key => ["id", "pid", "revisions"].includes(key))))
+    && Object.keys(g).every(key => ["id", "workspace", "name", "command", "launcher", "bindingIds", "revoked", "createdAt", "active"].includes(key));
+}
+
+/** Private launch grants are not execution permissions for model tool calls.
+ * The runtime must still apply its normal workspace/session/tool policy, and
+ * supply a launch authorization check against the current MCP configuration.
+ * A grant binds selected names to one canonical workspace and reviewed command.
+ */
+export class StmMcpLaunches {
+  #credentials; #path; #queue = Promise.resolve();
+  constructor({ credentials, registryPath }) {
+    this.#credentials = credentials;
+    this.#path = registryPath;
+  }
+  async #read() {
+    const r = await privateJson(this.#path, true);
+    if (r === null) return { version: 1, grants: [] };
+    if (!object(r) || r.version !== 1 || !Array.isArray(r.grants) || r.grants.length > 32 || !r.grants.every(validGrant)
+      || new Set(r.grants.map(g => g.id)).size !== r.grants.length || Object.keys(r).some(k => !["version", "grants"].includes(k))) fail("invalid_launch_registry");
+    return r;
+  }
+  #change(fn) {
+    const run = async () => {
+      await mkdir(dirname(this.#path), { recursive: true, mode: 0o700 });
+      let lock;
+      try { lock = await open(this.#path + ".lock", "wx", 0o600); } catch { fail("registry_busy"); }
+      try { return await fn(await this.#read()); }
+      finally { await lock.close(); await rm(this.#path + ".lock", { force: true }); }
+    };
+    const next = this.#queue.then(run, run);
+    this.#queue = next.then(() => {}, () => {});
+    return next;
+  }
+  async list() { return (await this.#read()).grants; }
+  async approve({ workspace, name, command, launcher, bindings, consent }, legacyNames = []) {
+    if (consent !== true) fail("consent_required");
+    if (!segment(name) || !commandVector(command) || !commandVector(launcher) || typeof workspace !== "string" || !isAbsolute(workspace)
+      || !Array.isArray(bindings) || bindings.length === 0 || bindings.length > 32
+      || bindings.some(b => !object(b) || !safeSecretEnvName(b.envName) || !segment(b.tool) || !segment(b.label))) fail("invalid_launch_grant");
+    const commandCopy = [...command];
+    const runner = [...launcher];
+    const selection = bindings.map(b => ({ envName: b.envName, tool: b.tool, label: b.label }));
+    const canonical = await realpath(workspace).catch(() => fail("invalid_launch_grant"));
+    const executable = await realpath(commandCopy[0]).catch(() => fail("invalid_launch_grant"));
+    const reviewed = [executable, ...commandCopy.slice(1)];
+    return this.#change(async registry => {
+      if (registry.grants.length >= 32 || registry.grants.some(g => !g.revoked && g.workspace === canonical && g.name === name)) fail("launch_grant_conflict");
+      const id = randomUUID();
+      const linked = [];
+      try {
+        for (const binding of selection) linked.push(await this.#credentials.link({ ...binding, consumer: `mcp:${id}`, consent: true }, legacyNames));
+        const grant = { id, workspace: canonical, name, command: reviewed, launcher: runner, bindingIds: linked.map(b => b.id), revoked: false, createdAt: new Date().toISOString(), active: null };
+        if (!validGrant(grant)) fail("invalid_launch_grant");
+        await writePrivate(this.#path, { ...registry, grants: [...registry.grants, grant] });
+        return grant;
+      } catch (error) {
+        // A partial grant is never launchable. Best-effort cleanup removes only
+        // references created by this operation, never the user's STM keys.
+        for (const binding of linked) await this.#credentials.unlink(binding.id).catch(() => {});
+        throw error;
+      }
+    });
+  }
+  async revoke(id) {
+    return this.#change(async registry => {
+      const grant = registry.grants.find(g => g.id === id);
+      if (!grant) fail("launch_grant_unavailable");
+      grant.revoked = true;
+      await writePrivate(this.#path, registry);
+      // Do not kill an in-flight tool or pretend to erase its existing memory.
+      // Bindings remain authoritative, blocking stale-plaintext downgrade.
+    });
+  }
+  async start(id, { cwd, authorize, inherited = process.env, stdio = "pipe" }) {
+    if (!grantId(id) || typeof authorize !== "function") fail("permission_denied");
+    const canonical = await realpath(cwd).catch(() => fail("workspace_mismatch"));
+    const base = { ...inherited };
+    return this.#change(async registry => {
+      const grant = registry.grants.find(g => g.id === id);
+      if (!grant || grant.revoked) fail("launch_grant_unavailable");
+      if (grant.workspace !== canonical) fail("workspace_mismatch");
+      if (grant.active) fail("consumer_already_running");
+      // Give the caller a detached metadata snapshot, not a mutable grant.
+      if (await authorize(structuredClone(grant)) !== true) fail("permission_denied");
+      const all = await this.#credentials.listBindings();
+      const selected = all.filter(b => b.consumer === `mcp:${id}`);
+      if (selected.length !== grant.bindingIds.length || selected.some(b => !grant.bindingIds.includes(b.id))) fail("launch_binding_changed");
+      const unrelated = new Set(all.filter(b => b.consumer !== `mcp:${id}`).map(b => b.envName.toUpperCase()));
+      for (const key of Object.keys(base)) if (unrelated.has(key.toUpperCase())) delete base[key];
+      const snapshot = await this.#credentials.resolveSnapshotForConsumer(`mcp:${id}`, base, grant.bindingIds);
+      // Recheck just before spawn; authorization must never be replaced by a
+      // credential binding or by a previous successful connection.
+      if (await authorize(structuredClone(grant)) !== true) fail("permission_denied");
+      const child = spawn(grant.command[0], grant.command.slice(1), { cwd: canonical, env: { ...base, ...snapshot.values }, shell: false, stdio });
+      try {
+        await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", () => reject(new StmError("consumer_start_failed"))); });
+        const launchId = randomUUID();
+        grant.active = { id: launchId, pid: child.pid, revisions: snapshot.revisions };
+        const clear = () => this.#change(async latest => {
+          const current = latest.grants.find(g => g.id === id);
+          if (current?.active?.id === launchId) { current.active = null; await writePrivate(this.#path, latest); }
+        }).catch(() => {}); // On failure remain fail-closed; operator recovery.
+        child.once("exit", clear);
+        await writePrivate(this.#path, registry);
+        await this.#credentials.acknowledgeMcpStart(`mcp:${id}`, grant.bindingIds, snapshot.revisions);
+        if (child.exitCode !== null || child.signalCode !== null) void clear();
+        return child;
+      } catch (error) { child.kill("SIGTERM"); throw error; }
+    });
+  }
 }
