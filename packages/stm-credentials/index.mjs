@@ -375,6 +375,22 @@ export async function spawnStmConsumer({ credentials, consumer, command, args = 
 }
 
 const grantId = value => typeof value === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value);
+async function stopFailedConsumer(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  // Startup bookkeeping failed after spawn: the caller will not own this child.
+  // Drain pipes, terminate, and escalate once rather than leak an inaccessible
+  // credential-bearing process that ignores SIGTERM. Keep its record if unsure.
+  child.stdout?.resume(); child.stderr?.resume();
+  child.stdin?.once("error", () => {}); child.stdin?.end();
+  await new Promise(resolve => {
+    const finish = () => { clearTimeout(escalation); clearTimeout(deadline); child.off("exit", finish); resolve(); };
+    const escalation = setTimeout(() => child.kill("SIGKILL"), 1500);
+    const deadline = setTimeout(finish, 3000);
+    child.once("exit", finish);
+    child.kill("SIGTERM");
+    if (child.exitCode !== null || child.signalCode !== null) finish();
+  });
+}
 const commandVector = value => Array.isArray(value) && value.length > 0 && value.length <= 128 && value.every(arg => typeof arg === "string" && arg.length <= 4096 && !arg.includes("\0")) && isAbsolute(value[0]);
 function validGrant(g) {
   return object(g) && grantId(g.id) && typeof g.workspace === "string" && isAbsolute(g.workspace)
@@ -532,7 +548,7 @@ export class StmMcpLaunches {
         return child;
       } catch (error) {
         if (child.pid === undefined) void clear(); // spawn error: no child exists
-        else child.kill("SIGTERM");
+        else await stopFailedConsumer(child);
         throw error;
       }
     });

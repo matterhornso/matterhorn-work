@@ -16,6 +16,12 @@ Observed and applied revisions are separate; offline refresh fails explicitly an
 keeps last-known metadata. This does not add automatic restart or current-process
 revocation. The host-only refresh endpoint reports its observation timestamp.
 
+Native server releases now embed `--stm-mcp` behind a dedicated entry point,
+avoiding the omitted-companion gap in single-file orchestrator distributions.
+Both server names have build/version evidence; the legacy-named native artifact
+completed the pinned-engine permission/disconnect/crash suite. Electron retains
+its separately staged native launcher; signed bundle acceptance is still pending.
+
 ## Required integration
 
 1. A host-token-only local control operation reviews a configured local MCP and

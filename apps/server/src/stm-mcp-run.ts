@@ -26,10 +26,14 @@ export async function runStmMcp(args: string[]) {
   };
   process.on("SIGTERM", stop); process.on("SIGINT", stop);
   process.stdin.on("end", stop);
+  process.stdin.on("error", stop); process.stdout.on("error", stop);
+  child.stdin?.on("error", stop); child.stdout?.on("error", stop);
   const code = child.exitCode !== null ? child.exitCode : child.signalCode !== null ? 1
     : await new Promise<number>(resolve => child.once("close", code => resolve(code ?? 1)));
   if (escalation) clearTimeout(escalation);
   process.off("SIGTERM", stop); process.off("SIGINT", stop); process.stdin.off("end", stop);
+  process.stdin.off("error", stop); process.stdout.off("error", stop);
+  child.stdin?.off("error", stop); child.stdout?.off("error", stop);
   process.stdin.unpipe(); process.stdin.pause();
   // Let the serialized exit acknowledgement finish before the wrapper exits.
   // On an unsafe registry or failed write, leave its active record fail-closed.

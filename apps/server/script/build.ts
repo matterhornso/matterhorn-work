@@ -114,10 +114,9 @@ async function buildOnce(entrypoint: string, outdir: string, filename: string, t
 }
 
 const options = readArgs(bun.argv.slice(2));
-const entrypoint = resolve("src", "cli.ts");
+const entrypoint = resolve("src", "server-entry.ts");
 const targets = options.targets.length ? options.targets : [undefined];
 
 for (const target of targets) {
   await buildOnce(entrypoint, options.outdir, options.filename, target);
-  await buildOnce(resolve("src", "stm-mcp-entry.ts"), options.outdir, "matterhorn-stm-mcp", target);
 }

@@ -446,3 +446,47 @@ parity; full regression/security gates and requirement-by-requirement phase audi
 Real Keychain/signed OS acceptance remains separately gated. Extreme crash windows
 without a published PID are explicitly manual, not silently auto-recovered. Goal
 remains **ACTIVE**. No push, deployment, production configuration or real migration.
+
+## Continuation: post-spawn failure cleanup and single-artifact distribution
+
+Previous turn classified as **progress**: revalidated `923b06ab8f` and no tracked
+drift before continuing. No unrelated files were staged.
+
+- Fixed failed-start cleanup after child spawn: drain pipes, send SIGTERM, escalate
+  once to SIGKILL after 1.5 seconds and bound waiting to 3 seconds. If process state
+  remains uncertain, its launch record stays authoritative. A test installs an
+  ignoring signal handler before forcing acknowledgement failure and proves the
+  test-owned credential-bearing process is absent when failure returns.
+- Added safe stop handling for stdio transport errors. Extended the MCP fixture
+  to leave a tool call pending and ignore SIGTERM. Client stdin EOF still triggers
+  escalation and clears the launch record. This proves disconnect cleanup, not
+  the separate application/session Stop-button journey or descendant erasure.
+- Found a distribution gap: orchestrator copies/downloads only the server binary,
+  not the prior sibling STM executable. Added `server-entry.ts` with a dedicated
+  `--stm-mcp` branch that never imports the HTTP server/CLI. Native server builds
+  now contain this mode in the same artifact; native launcher selection uses it.
+  No fourth managed sidecar, remote daemon download or new production setting.
+  Electron's embedded server keeps its staged architecture-specific launcher.
+
+Verification:
+
+- Adapter: **32 tests passed**, including deliberate post-spawn bookkeeping failure
+  with an ignoring tool; only disposable processes and fake credentials used.
+- Source disconnect/crash MCP E2E: **1 passed / 20 assertions**.
+- Native server built with `bun script/build.ts --outdir
+  /private/tmp/matterhorn-stm-server-mode-Rw5Uqs` (**1437 modules**); canonical and
+  legacy binaries both report **0.13.15** in an isolated HOME.
+- Canonical native server STM mode + pinned engine: **1 passed / 66 assertions**.
+- Final rebuilt legacy-named artifact (the orchestrator release naming path),
+  pinned OpenCode, synthetic inference, disconnect/crash fixture and seven server
+  suites: **54 passed / 327 assertions**. Command from `apps/server`:
+  `STM_TEST_OPENCODE_BIN=/private/tmp/matterhorn-overnight-runtime.ddJMOU/bin/opencode STM_TEST_COMPILED_SERVER=/private/tmp/matterhorn-stm-server-mode-Rw5Uqs/openwork-server bun test src/env-file.test.ts src/env-routes.e2e.test.ts src/stm-runtime.test.ts src/voice-credential.test.ts src/managed-opencode.test.ts src/stm-mcp.test.ts src/stm-mcp-launch.e2e.test.ts --timeout 15000`.
+- Server, Electron and orchestrator typechecks passed. Electron packaging source
+  gate passed; existing Electron runtime tests **3 passed**. These do not prove a
+  signed installed app or remote published-artifact acceptance.
+
+Next: exercise native HTTP approval's automatic launcher selection, then full
+regression/security gates and a requirement-by-requirement phase-1–3 audit. Include
+chat/session cancellation if required beyond MCP transport shutdown. Signed OS,
+real Keychain, cross-architecture execution and production rollout remain expressly
+unverified. All work stays local/default-off; goal remains **ACTIVE**.

@@ -111,12 +111,23 @@ MATTERHORN_STM_ADAPTER_PATH=/absolute/path/to/matterhorn/packages/stm-credential
 Both fixture and loopback tests are distinct from packaged desktop/real Keychain
 acceptance. Do not enable this integration for ordinary users yet.
 
+Native server builds use `apps/server/src/server-entry.ts`. The same verified
+server artifact provides `--stm-mcp <grant-id>` without importing/booting the HTTP
+server on that branch. Orchestrator can keep distributing its single server asset;
+no companion download or additional managed daemon is required. Build with the
+server's `build:bin` script, not by compiling `src/cli.ts` directly. Electron's
+embedded server still uses its architecture-specific dedicated launcher.
+
 `apps/server/src/stm-mcp-launch.e2e.test.ts` runs a harmless stdio MCP fixture with
 an isolated HOME, fake daemon and disposable key. Optional
 `STM_TEST_COMPILED_LAUNCHER` selects a locally compiled launcher;
+`STM_TEST_COMPILED_SERVER` selects a native server's dedicated STM mode instead.
 `STM_TEST_OPENCODE_BIN` additionally exercises actual OpenCode connection,
 model-driven execution through a local synthetic inference endpoint, denied
 execution and a rejected permission request, followed by disconnect. Only the
 allowed call reaches the fixture; captured model bodies/history/logs are checked
 for fake credential/token leakage. The inference is synthetic, not a real AI
 provider or hosted acceptance. Verify the binary version against `constants.json`.
+The fixture also leaves a call unfinished and ignores SIGTERM: closing the client
+stream must escalate and clean up the child. This is transport-disconnect evidence,
+not proof of the separate chat UI Stop/cancellation journey.

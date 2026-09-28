@@ -5,7 +5,7 @@ import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { StmCredentials, StmMcpLaunches, spawnStmConsumer, assertNoStmEnvironmentConflicts } from "../index.mjs";
+import { StmCredentials, StmMcpLaunches, StmError, spawnStmConsumer, assertNoStmEnvironmentConflicts } from "../index.mjs";
 
 async function fixture(t, overrides = {}) {
   const dir = await mkdtemp(join(tmpdir(), "matterhorn-stm-"));
@@ -131,6 +131,31 @@ test("confirmed spawn failure clears only its own unused launch intent", async t
   const f = await launchFixture(t, [executable]);
   await rm(executable);
   await assert.rejects(f.launches.start(f.grant.id, { cwd: f.workspace, authorize: () => true }), /consumer_start_failed/);
+  for (let i = 0; i < 100 && (await f.launches.list())[0].active; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal((await f.launches.list())[0].active, null);
+  assert.equal((await f.adapter.listBindings()).length, 1);
+});
+
+test("post-spawn acknowledgement failure reaps a tool that ignores SIGTERM", async t => {
+  const f = await launchFixture(t);
+  const ready = join(f.workspace, "ready.json");
+  const registry = JSON.parse(await readFile(f.launchPath, "utf8"));
+  registry.grants[0].command = [process.execPath, "-e", `process.on('SIGTERM',()=>{});require('node:fs').writeFileSync(${JSON.stringify(ready)},JSON.stringify({pid:process.pid}));setInterval(()=>{},1000)`];
+  await writeFile(f.launchPath, JSON.stringify(registry));
+  let pid;
+  t.after(() => { if (pid) { try { process.kill(pid, "SIGKILL"); } catch {} } });
+  f.adapter.acknowledgeMcpStart = async () => {
+    for (let i = 0; i < 100 && !pid; i++) {
+      const data = await readFile(ready, "utf8").catch(() => "");
+      if (data) pid = JSON.parse(data).pid;
+      else await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.ok(pid, "fixture installed its SIGTERM handler before failing acknowledgement");
+    throw new StmError("registry_write_failed");
+  };
+  await assert.rejects(f.launches.start(f.grant.id, { cwd: f.workspace, authorize: () => true }), /registry_write_failed/);
+  assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+  pid = undefined;
   for (let i = 0; i < 100 && (await f.launches.list())[0].active; i++) await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal((await f.launches.list())[0].active, null);
   assert.equal((await f.adapter.listBindings()).length, 1);

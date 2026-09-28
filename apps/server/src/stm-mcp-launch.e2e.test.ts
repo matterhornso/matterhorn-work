@@ -52,6 +52,10 @@ lines.on("line", line => {
   const r = JSON.parse(line);
   if (r.id === undefined) return;
   if (r.method === "tools/call") appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify({method:r.method,name:r.params.name})+"\\n");
+  if (r.method === "tools/call" && r.params.arguments?.hold) {
+    process.on("SIGTERM", () => appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify({signalIgnored:"SIGTERM"})+"\\n"));
+    return; // unfinished tool call; wrapper must still be able to stop it
+  }
   const result = r.method === "initialize"
     ? { protocolVersion: "2024-11-05", capabilities: {tools:{}}, serverInfo:{name:"disposable-fixture",version:"1"} }
     : r.method === "tools/list" ? {tools:[{name:"probe",description:"Check fixture only",inputSchema:{type:"object",properties:{}}}]}
@@ -59,7 +63,9 @@ lines.on("line", line => {
   process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:r.id,result})+"\\n");
 });
 `);
-    const launcher = process.env.STM_TEST_COMPILED_LAUNCHER
+    const launcher = process.env.STM_TEST_COMPILED_SERVER
+      ? [process.env.STM_TEST_COMPILED_SERVER, "--stm-mcp"]
+      : process.env.STM_TEST_COMPILED_LAUNCHER
       ? [process.env.STM_TEST_COMPILED_LAUNCHER]
       : [process.execPath, fileURLToPath(new URL("./stm-mcp-entry.ts", import.meta.url))];
     await writeFile(opencodeConfigPath(workspace), JSON.stringify({ mcp: { fixture: { type: "local", command: [process.execPath, fixture] } } }));
@@ -180,8 +186,13 @@ lines.on("line", line => {
     expect(JSON.parse((await request(3, "tools/call")).result.content[0].text)).toEqual({ credentialPresent: true, credentialLength: secret.length });
     expect(resolutions).toBe(process.env.STM_TEST_OPENCODE_BIN ? 2 : 1);
     expect((await launches.list())[0].active?.revisions).toEqual({ FIXTURE_KEY: "c".repeat(64) });
+    const beforeHold = (await readFile(callsPath, "utf8")).trim().split("\n").length;
+    child.stdin!.write(JSON.stringify({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "probe", arguments: { hold: true } } }) + "\n");
+    for (let i = 0; i < 100 && (await readFile(callsPath, "utf8")).trim().split("\n").length === beforeHold; i++) await Bun.sleep(10);
+    expect((await readFile(callsPath, "utf8")).trim().split("\n")).toHaveLength(beforeHold + 1);
     const closed = new Promise(resolve => child!.once("close", resolve));
     child.stdin!.end(); await closed;
+    expect(await readFile(callsPath, "utf8")).toContain('"signalIgnored":"SIGTERM"');
     expect((await launches.list())[0].active).toBeNull();
     expect(stderr).not.toContain(secret); expect(stderr).not.toContain(token);
     lines.close();

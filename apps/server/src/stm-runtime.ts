@@ -15,11 +15,11 @@ export function localStmMcpLauncher(): string[] | null {
   // Electron cannot assume system Node/Bun. A separately staged executable must
   // be provided by its trusted runtime owner before packaged support is enabled.
   if (process.versions.electron) return null;
-  const sibling = join(dirname(process.execPath), "matterhorn-stm-mcp");
-  if (process.versions.bun && existsSync(sibling)) return [sibling];
   const extension = process.versions.bun ? "ts" : "js";
   const entry = fileURLToPath(new URL(`./stm-mcp-entry.${extension}`, import.meta.url));
-  if (entry.includes("/$bunfs/") || entry.includes("/~BUN/")) return null;
+  // The native build entry embeds this dedicated mode. It stays in the same
+  // checksum-verified artifact when orchestrator renames/downloads the server.
+  if (process.versions.bun && (entry.includes("/$bunfs/") || entry.includes("/~BUN/"))) return [process.execPath, "--stm-mcp"];
   return existsSync(entry) ? [process.execPath, entry] : null;
 }
 
