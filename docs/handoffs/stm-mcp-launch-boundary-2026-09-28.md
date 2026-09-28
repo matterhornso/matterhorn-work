@@ -1,8 +1,11 @@
 # STM MCP launch boundary — next implementation contract
 
 Status: launch grants, host control route, stdio launcher and source/compiled
-fixture tests implemented. Pinned OpenCode 1.18.31 connection/disconnect verified.
-Actual engine model-driven tool execution/denial, crash recovery and signed
+fixture tests implemented. Pinned OpenCode 1.18.31 connection/disconnect and actual
+engine-driven tool execution/denial/rejected approval verified with a local
+synthetic provider and fake credentials through source and compiled launchers.
+Host-route manual approval/denial and command replacement while waiting are
+covered; changed configuration requires a new approval. Crash recovery and signed
 packaged acceptance remain incomplete. The earlier `spawnStmConsumer()` primitive
 alone remains insufficient proof of runtime integration.
 

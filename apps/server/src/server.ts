@@ -541,7 +541,7 @@ import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from
 import { StmCredentials, StmError } from "@matterhorn-work/stm-credentials";
 import { resolveVoiceCredential } from "./voice-credential.js";
 import { createLocalStmCredentials, createLocalStmMcpLaunches, localStmMcpLauncher, STM_VOICE_CONSUMER } from "./stm-runtime.js";
-import { approveStmMcp, parseStmMcpBindings } from "./stm-mcp.js";
+import { approveStmMcp, parseStmMcpBindings, reviewStmMcpConfiguration } from "./stm-mcp.js";
 import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedgerText } from "./project-data-ledger.js";
@@ -17096,11 +17096,15 @@ function createRoutes(
     try { bindings = parseStmMcpBindings(body.bindings); }
     catch { throw new ApiError(400, "invalid_binding", "Choose explicit credential names for this tool."); }
     if (body.consent !== true) throw new ApiError(400, "consent_required", "Review and approve this tool's credential access first.");
+    // Bind consent to the configuration present before the approval wait.
+    // A same-name replacement must require a new review, not inherit consent.
+    const expectedConfiguration = JSON.stringify(await reviewStmMcpConfiguration(workspace.path, name).catch(rethrowStmError));
     await requireApproval(ctx, { workspaceId: workspace.id, action: "mcp.add",
       summary: `Connect selected secrets to MCP ${name}`, paths: [opencodeConfigPath(workspace.path)] });
     const legacy = await env.list().catch(rethrowEnvStoreReadError);
     const grant = await approveStmMcp({ launches: stmMcpLaunches, workspace: workspace.path, name,
       launcher: [...stmMcpLauncher], bindings, consent: true, legacyNames: legacy.map(entry => entry.key),
+      expectedConfiguration,
     }).catch(rethrowStmError);
     // No automatic reload/restart: current work must complete before applying.
     return jsonResponse({ id: grant.id, consumer: `mcp:${grant.id}`, bindingIds: grant.bindingIds, restartRequired: true }, 201);

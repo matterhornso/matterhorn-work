@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
 import { StmCredentials, StmError, type Binding } from "@matterhorn-work/stm-credentials";
+import { opencodeConfigPath } from "./workspace-files.js";
+import { createLocalStmMcpLaunches } from "./stm-runtime.js";
 
 type Served = {
   port: number;
@@ -221,6 +223,69 @@ test("STM is disabled by default and read-only mode rejects changes", async () =
   expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/bindings/fixture-id`, { method: "DELETE", headers: hostAuth() })).status).toBe(403);
   expect((await fetch(`http://127.0.0.1:${server.port}/workspace/fixture/mcp/fixture/stm`, { method: "POST", headers: hostAuth(), body: "{}" })).status).toBe(403);
   expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/mcp-grants/fixture`, { method: "DELETE", headers: hostAuth() })).status).toBe(403);
+});
+
+test("STM MCP host route waits for approval, rejects changed commands, and persists only metadata", async () => {
+  const root = dirs[dirs.length - 1];
+  const descriptorPath = join(root, "daemon.json");
+  const daemonToken = "a".repeat(48);
+  writeFileSync(descriptorPath, JSON.stringify({ port: 3456, pid: process.pid, token: daemonToken }), { mode: 0o600 });
+  let resolutions = 0;
+  const stm = new StmCredentials({ enabled: true, localDesktop: true, platform: "darwin", descriptorPath, registryPath: join(root, "stm-bindings.json"), fetch: async url => {
+    if (String(url).endsWith("capabilities")) return Response.json({ version: 1, backend: "fake route fixture", selectedResolution: true });
+    if (String(url).endsWith("keys")) return Response.json({ version: 1, keys: [{ tool: "fixture", label: "default", revision: "c".repeat(64), status: "active", updatedAt: "2026-09-28" }] });
+    resolutions++; throw new Error("Configuration must never resolve credentials");
+  } });
+  await stm.connect({ consent: true });
+  const config = baseConfig();
+  config.approval = { mode: "manual", timeoutMs: 5000 };
+  config.workspaces = [{ id: "stm_fixture", name: "Fixture", path: root, preset: "starter", workspaceType: "local" }];
+  config.authorizedRoots = [root];
+  const original = JSON.stringify({ mcp: { fixture: { type: "local", command: [process.execPath, "-e", "process.stdin.resume()"] } } });
+  writeFileSync(opencodeConfigPath(root), original);
+  const server = await startServer(config, { stmCredentials: stm }); stops.push(() => server.stop());
+  const base = `http://127.0.0.1:${server.port}`;
+  const launches = createLocalStmMcpLaunches(stm);
+  const request = () => fetch(`${base}/workspace/stm_fixture/mcp/fixture/stm`, { method: "POST", headers: hostAuth(),
+    body: JSON.stringify({ consent: true, bindings: [{ envName: "FIXTURE_KEY", tool: "fixture", label: "default" }] }) });
+  for (const outcome of ["deny", "changed", "allow"]) {
+    const pending = request();
+    let approvalID: string | undefined;
+    for (let i = 0; i < 100 && !approvalID; i++) {
+      const response = await fetch(`${base}/approvals`, { headers: hostAuth() });
+      const approvals = await response.json();
+      approvalID = approvals.items[0]?.id;
+      if (!approvalID) await Bun.sleep(10);
+    }
+    expect(approvalID).toBeDefined();
+    expect(await launches.list()).toHaveLength(0);
+    expect(await stm.listBindings()).toHaveLength(0);
+    expect(readFileSync(opencodeConfigPath(root), "utf8")).toBe(original);
+    if (outcome === "changed") writeFileSync(opencodeConfigPath(root), original.replace("process.stdin.resume()", "process.exit(0)"));
+    const replied = await fetch(`${base}/approvals/${approvalID}`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ reply: outcome === "deny" ? "deny" : "allow" }) });
+    expect(replied.status).toBe(200);
+    const response = await pending;
+    expect(response.status).toBe(outcome === "allow" ? 201 : outcome === "deny" ? 403 : 409);
+    const body = await response.json();
+    if (outcome !== "allow") {
+      expect(body.code).toBe(outcome === "deny" ? "write_denied" : "mcp_configuration_changed");
+      expect(await launches.list()).toHaveLength(0);
+      expect(await stm.listBindings()).toHaveLength(0);
+      writeFileSync(opencodeConfigPath(root), original);
+    } else {
+      expect(body.restartRequired).toBe(true);
+      const grants = await launches.list();
+      expect(grants).toHaveLength(1);
+      expect(grants[0].active).toBeNull();
+      expect(readFileSync(opencodeConfigPath(root), "utf8")).toContain(body.id);
+      expect(JSON.stringify(body)).not.toContain(daemonToken);
+      const revoked = await fetch(`${base}/env/stm/mcp-grants/${body.id}`, { method: "DELETE", headers: hostAuth() });
+      expect(await revoked.json()).toEqual({ ok: true, runningProcessUnaffected: true });
+      expect((await launches.list())[0].revoked).toBe(true);
+      expect(await stm.listBindings()).toHaveLength(1);
+    }
+  }
+  expect(resolutions).toBe(0);
 });
 
 describe("env routes", () => {

@@ -295,3 +295,55 @@ launcher recovery, status refresh for native STM rotation/revocation, stronger
 failure/cancellation tests, compiled CLI/orchestrator/Electron distribution parity,
 full regressions/security gates. Real Keychain and signed OS acceptance remain
 separately authorized/unverified. Goal remains **ACTIVE**; no push/deploy/migration.
+
+## Continuation: engine tool execution and approval race
+
+Previous implementation turn classified as **progress**: current branch and
+`d8b13bac7d` revalidated before continuing. The intervening Serena setup changed
+only local Codex configuration, not these repositories. Serena tools are not yet
+available in this running session; this work used existing local tools.
+
+- Extended the actual pinned OpenCode test with a loopback synthetic inference
+  provider. An allowed `fixture_probe` executes exactly once through the STM
+  launcher; a denied call does not execute; a pending approval is visibly listed
+  and rejection stops the turn without another inference call. The fixture logs
+  only method/name so zero additional execution is independently observable.
+- Fake credential/token sentinels remain absent from captured model requests,
+  session history, engine/launcher output and direct MCP responses. The trusted
+  fixture only returns credential presence/length, never the value. This does
+  not prove arbitrary credential-holding tools cannot print their environment.
+- Added host-route acceptance using real metadata registries and fake STM
+  responses. Pending or denied approval creates no grant/binding or config change;
+  successful approval writes a nonsecret grant, leaves the child stopped, and
+  revocation preserves bindings while blocking future starts. No resolution
+  occurs during any configuration action.
+- Found and fixed a configuration-approval race: the route previously looked up
+  the command only after approval. Now it snapshots the validated configuration
+  before waiting and refuses changed commands before creating any grant. This
+  supplements the existing recheck before writing configuration. It is not an
+  OS sandbox or a filesystem-wide atomic transaction against same-user writers.
+
+Verification for this checkpoint:
+
+- Source launcher + pinned engine E2E: **1 passed / 60 assertions**.
+- Host-route/config regression: **25 passed / 150 assertions**.
+- Rebuilt native launcher at
+  `/private/tmp/matterhorn-stm-acceptance-NstkI7/matterhorn-stm-mcp` (26 modules).
+- Combined compiled-launcher/pinned-engine acceptance and seven targeted server
+  suites: **54 passed / 299 assertions**:
+  `STM_TEST_OPENCODE_BIN=/private/tmp/matterhorn-overnight-runtime.ddJMOU/bin/opencode STM_TEST_COMPILED_LAUNCHER=/private/tmp/matterhorn-stm-acceptance-NstkI7/matterhorn-stm-mcp bun test src/env-file.test.ts src/env-routes.e2e.test.ts src/stm-runtime.test.ts src/voice-credential.test.ts src/managed-opencode.test.ts src/stm-mcp.test.ts src/stm-mcp-launch.e2e.test.ts --timeout 15000`
+  (run from `apps/server`). Version rechecked **1.18.31** and SHA256 unchanged:
+  `16c960ba77421da11b53e785f359b73f328a86118b48feb4af143db5d9afb198`.
+- Adapter: `node --test test/*.test.mjs` from `packages/stm-credentials`:
+  **23 passed**. Server TypeScript check and `git diff --check`: **passed**.
+- An initial E2E assertion incorrectly expected inference to continue after an
+  explicit user rejection. Updated to assert the observed safe terminal rejection
+  and five total inference calls; rerun passed. A refactor type-narrowing error
+  was fixed without a type assertion and typecheck rerun successfully.
+
+Next: safe crashed-launcher recovery and transient exit-bookkeeping contention;
+external STM rotation/revocation metadata refresh; cancellation/failure tests;
+compiled CLI/orchestrator/Electron distribution parity; full regressions/security
+gates. Real Keychain and signed OS acceptance remain separately authorized and
+unverified. No production flags, real keys, hosted state or upstream releases
+changed. Goal remains **ACTIVE**, not release-ready.

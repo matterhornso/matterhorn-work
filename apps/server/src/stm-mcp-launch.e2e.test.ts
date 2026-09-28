@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -29,6 +29,7 @@ test("trusted stdio launcher completes an MCP request with selected fake credent
   } });
   let child: ReturnType<typeof spawn> | undefined;
   let engine: ReturnType<typeof spawn> | undefined;
+  let inference: ReturnType<typeof Bun.serve> | undefined;
   try {
     const descriptorPath = join(stmDir, "daemon.json");
     await writeFile(descriptorPath, JSON.stringify({ port: daemon.port, pid: process.pid, token }), { mode: 0o600 });
@@ -36,11 +37,15 @@ test("trusted stdio launcher completes an MCP request with selected fake credent
     await credentials.connect({ consent: true });
     const launches = new StmMcpLaunches({ credentials, registryPath: join(root, "stm-mcp-launches.json") });
     const fixture = join(root, "fixture.mjs");
+    const callsPath = join(root, "tool-calls.jsonl");
+    await writeFile(callsPath, "");
     await writeFile(fixture, `import { createInterface } from "node:readline";
+import { appendFileSync } from "node:fs";
 const lines = createInterface({input: process.stdin});
 lines.on("line", line => {
   const r = JSON.parse(line);
   if (r.id === undefined) return;
+  if (r.method === "tools/call") appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify({method:r.method,name:r.params.name})+"\\n");
   const result = r.method === "initialize"
     ? { protocolVersion: "2024-11-05", capabilities: {tools:{}}, serverInfo:{name:"disposable-fixture",version:"1"} }
     : r.method === "tools/list" ? {tools:[{name:"probe",description:"Check fixture only",inputSchema:{type:"object",properties:{}}}]}
@@ -55,12 +60,35 @@ lines.on("line", line => {
     const grant = await approveStmMcp({ launches, workspace, name: "fixture", launcher,
       bindings: [{ envName: "FIXTURE_KEY", tool: "fixture", label: "default" }], consent: true, legacyNames: [] });
     if (process.env.STM_TEST_OPENCODE_BIN) {
+      let modelCalls = 0;
+      const providerBodies: string[] = [];
+      inference = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+        if (new URL(request.url).pathname !== "/v1/chat/completions") return new Response(null, { status: 404 });
+        const body = await request.json();
+        providerBodies.push(JSON.stringify(body));
+        if (++modelCalls > 9) return new Response(null, { status: 429 });
+        const hasResult = body.messages.some((message: { role: string }) => message.role === "tool");
+        const common = { id: `fixture_${modelCalls}`, object: "chat.completion.chunk", created: 1, model: "fixture" };
+        const delta = hasResult ? { role: "assistant", content: "FIXTURE_COMPLETE" }
+          : { role: "assistant", tool_calls: [{ index: 0, id: `call_${modelCalls}`, type: "function", function: { name: "fixture_probe", arguments: "{}" } }] };
+        const chunks = [
+          { ...common, choices: [{ index: 0, delta, finish_reason: null }] },
+          { ...common, choices: [{ index: 0, delta: {}, finish_reason: hasResult ? "stop" : "tool_calls" }] },
+          { ...common, choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } },
+        ];
+        return new Response(chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } });
+      } });
       engine = spawn(process.env.STM_TEST_OPENCODE_BIN, ["serve", "--hostname", "127.0.0.1", "--port", "0"], {
         cwd: workspace, stdio: "pipe", env: { PATH: process.env.PATH, HOME: root,
           XDG_CONFIG_HOME: join(root, "config"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"),
           MATTERHORN_WORK_ENV_STORE: join(root, "env.json"), MATTERHORN_WORK_STM_ENABLED: "1",
           OPENCODE_DISABLE_AUTOUPDATE: "true", OPENCODE_DISABLE_MODELS_FETCH: "true",
-          OPENCODE_CONFIG_CONTENT: JSON.stringify({ plugin: [], agent: { title: { disable: true } } }),
+          OPENCODE_CONFIG_CONTENT: JSON.stringify({
+            plugin: [], model: "fixture/fixture", small_model: "fixture/fixture", enabled_providers: ["fixture"],
+            share: "disabled", compaction: { auto: false, prune: false }, permission: { "*": "deny", fixture_probe: "ask" },
+            agent: { title: { disable: true }, fixture: { mode: "primary", steps: 3, prompt: "Use only the fixture tool." } },
+            provider: { fixture: { npm: "@ai-sdk/openai-compatible", name: "Isolated fixture", options: { baseURL: `http://127.0.0.1:${inference.port}/v1`, apiKey: "fake-only" }, models: { fixture: { name: "Fixture", tool_call: true, limit: { context: 32768, output: 1024 } } } } },
+          }),
           OPENCODE_SERVER_USERNAME: "fixture", OPENCODE_SERVER_PASSWORD: "disposable-local-password",
         },
       });
@@ -82,6 +110,44 @@ lines.on("line", line => {
       const status = await response.json();
       expect(status.fixture.status).toBe("connected");
       expect(resolutions).toBe(1);
+      const jsonRequest = async (path: string, body?: unknown) => {
+        const result = await fetch(`${url}${path}${suffix}`, { headers: { ...headers, "content-type": "application/json" },
+          method: body === undefined ? "GET" : "POST", body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20000) });
+        expect(result.ok).toBe(true);
+        return result.json();
+      };
+      for (const action of ["allow", "deny", "ask"]) {
+        const session = await jsonRequest("/session", { title: `STM ${action} fixture`, permission: [{ permission: "fixture_probe", pattern: "*", action }] });
+        const pending = jsonRequest(`/session/${session.id}/message`, {
+          agent: "fixture", model: { providerID: "fixture", modelID: "fixture" }, parts: [{ type: "text", text: "Call fixture_probe once." }],
+        });
+        if (action === "ask") {
+          let permissionID: string | undefined;
+          for (let i = 0; i < 100 && !permissionID; i++) {
+            const requests = await jsonRequest("/permission");
+            permissionID = requests.find((entry: { sessionID: string }) => entry.sessionID === session.id)?.id;
+            if (!permissionID) await Bun.sleep(50);
+          }
+          expect(permissionID).toBeDefined();
+          if (!permissionID) throw new Error("Expected engine permission request");
+          expect((await readFile(callsPath, "utf8")).trim().split("\n")).toHaveLength(1);
+          await jsonRequest(`/permission/${permissionID}/reply`, { reply: "reject" });
+        }
+        const result = await pending;
+        // An explicit rejection stops the engine turn; it must not resume inference.
+        expect(JSON.stringify(result)).toContain(action === "ask" ? "The user rejected permission" : "FIXTURE_COMPLETE");
+        const history = JSON.stringify(await jsonRequest(`/session/${session.id}/message`));
+        expect(history).toContain('"tool":"fixture_probe"');
+        expect(history).toContain(action === "allow" ? '"status":"completed"' : '"status":"error"');
+        expect(history).not.toContain(secret); expect(history).not.toContain(token);
+        const calls = (await readFile(callsPath, "utf8")).trim().split("\n");
+        expect(calls).toHaveLength(1);
+        expect(JSON.parse(calls[0])).toEqual({ method: "tools/call", name: "probe" });
+      }
+      expect(modelCalls).toBe(5);
+      expect(providerBodies.some(body => body.includes('credentialPresent'))).toBe(true);
+      expect(providerBodies.join("\n")).not.toContain(secret);
+      expect(providerBodies.join("\n")).not.toContain(token);
       const disconnected = await fetch(`${url}/mcp/fixture/disconnect${suffix}`, { method: "POST", headers, signal: AbortSignal.timeout(5000) });
       expect(disconnected.ok).toBe(true);
       for (let i = 0; i < 100 && (await launches.list())[0].active; i++) await Bun.sleep(10);
@@ -112,5 +178,5 @@ lines.on("line", line => {
     expect((await launches.list())[0].active).toBeNull();
     expect(stderr).not.toContain(secret); expect(stderr).not.toContain(token);
     lines.close();
-  } finally { child?.kill("SIGKILL"); if (engine) await createManagedProcessClose(engine).close(); daemon.stop(true); await rm(root, { recursive: true, force: true }); }
-}, 30_000);
+  } finally { child?.kill("SIGKILL"); if (engine) await createManagedProcessClose(engine).close(); inference?.stop(true); daemon.stop(true); await rm(root, { recursive: true, force: true }); }
+}, 60_000);

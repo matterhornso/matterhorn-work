@@ -5,8 +5,9 @@ The common server entry point creates a disabled adapter by default. Local macOS
 operators can opt in with `MATTERHORN_WORK_STM_ENABLED=1`; no API can set that flag.
 Network listeners and unsupported platforms reject connection/resolution. Current
 consumer wiring covers realtime voice and explicitly approved project-local MCPs.
-MCP integration remains under validation: connection evidence is not a full
-model-driven permission/cancellation acceptance result.
+MCP integration remains under validation. Pinned OpenCode model-driven execution,
+denial and rejected approval have local fake-provider evidence; crash recovery,
+mid-call cancellation and packaged OS acceptance remain outstanding.
 Do not use this development integration with real credentials yet.
 
 Protocol: STM `/api/integrations/v1/{capabilities,keys,resolve}`, version 1,
@@ -42,6 +43,7 @@ assumed to support this contract. Do not use `/api/inject/env` as a fallback.
   `POST /workspace/:id/mcp/:name/stm` uses the existing configuration approval
   path, then writes a trusted launcher command and opaque grant ID to project
   configuration. It does not resolve values or automatically restart a tool.
+  A configuration change during the approval wait invalidates that approval.
   Configuration changes, missing bindings, disabled flags and revoked grants
   block future launches. Inline MCP environment overrides currently require
   explicit cleanup before approval; they are not silently migrated.
@@ -97,6 +99,9 @@ acceptance. Do not enable this integration for ordinary users yet.
 `apps/server/src/stm-mcp-launch.e2e.test.ts` runs a harmless stdio MCP fixture with
 an isolated HOME, fake daemon and disposable key. Optional
 `STM_TEST_COMPILED_LAUNCHER` selects a locally compiled launcher;
-`STM_TEST_OPENCODE_BIN` additionally exercises actual OpenCode connection and
-disconnect before the direct fixture tool call. This is **not** a model-driven
-tool-call/permission test. Verify the binary version against `constants.json`.
+`STM_TEST_OPENCODE_BIN` additionally exercises actual OpenCode connection,
+model-driven execution through a local synthetic inference endpoint, denied
+execution and a rejected permission request, followed by disconnect. Only the
+allowed call reaches the fixture; captured model bodies/history/logs are checked
+for fake credential/token leakage. The inference is synthetic, not a real AI
+provider or hosted acceptance. Verify the binary version against `constants.json`.
