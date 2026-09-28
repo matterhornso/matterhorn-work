@@ -47,6 +47,8 @@ mac:
         - opencode
         - opencode-aarch64-apple-darwin
         - opencode-x86_64-apple-darwin
+        - matterhorn-stm-mcp-arm64
+        - matterhorn-stm-mcp-x64
         - openwork-orchestrator
         - openwork-orchestrator-aarch64-apple-darwin
         - openwork-orchestrator-x86_64-apple-darwin

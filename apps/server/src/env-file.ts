@@ -1,6 +1,8 @@
 import { homedir, platform } from "node:os";
-import { chmod, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { chmod, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { isReservedLegacyEnvKey, assertNoStmEnvironmentConflicts, StmError, type MigrationSource } from "@matterhorn-work/stm-credentials";
 
 import { ensureDir, exists } from "./utils.js";
 
@@ -18,7 +20,6 @@ const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // We refuse writes to these and strip them when reading for injection, so a
 // tampered file cannot shadow auth credentials, token paths, or process
 // identity.
-const RESERVED_PREFIXES = ["MATTERHORN_WORK_", "OPENWORK_", "OPENCODE_"] as const;
 
 export type EnvRecord = {
   key: string;
@@ -37,7 +38,7 @@ export function isValidEnvKey(key: string): boolean {
 }
 
 export function isReservedEnvKey(key: string): boolean {
-  return RESERVED_PREFIXES.some((prefix) => key.startsWith(prefix));
+  return isReservedLegacyEnvKey(key);
 }
 
 // Deterministic, matches what the Rust/Node shells compute independently.
@@ -70,6 +71,31 @@ function parseRecord(raw: unknown): EnvRecord | null {
 
 function emptyStore(): EnvStoreFile {
   return { schemaVersion: 1, updatedAt: Date.now(), variables: [] };
+}
+
+// Migration has a stricter source contract than the legacy environment editor.
+// Read the opened regular, owner-only file; never follow a symlink to a vault,
+// auth database, or a different user's file.
+async function readMigrationVariables(path: string): Promise<EnvRecord[]> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    .catch(() => { throw new StmError("migration_source_unavailable"); });
+  try {
+    const before = await file.stat();
+    if (!before.isFile() || before.uid !== process.getuid?.() || (before.mode & 0o077) !== 0 || before.nlink !== 1 || before.size > 1_048_576) throw new StmError("migration_source_unsafe");
+    const text = await file.readFile("utf8");
+    const after = await file.stat();
+    if (before.size !== Buffer.byteLength(text) || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) throw new StmError("migration_source_changed");
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || !("variables" in parsed) || !Array.isArray(parsed.variables)) throw new StmError("migration_source_unsafe");
+    const variables = parsed.variables.map(parseRecord);
+    if (variables.some(v => v === null)) throw new StmError("migration_source_unsafe");
+    const valid = variables.filter((v): v is EnvRecord => v !== null);
+    if (new Set(valid.map(v => v.key.toUpperCase())).size !== valid.length) throw new StmError("migration_source_unsafe");
+    return valid;
+  } catch (error) {
+    if (error instanceof StmError) throw error;
+    throw new StmError("migration_source_unsafe");
+  } finally { await file.close(); }
 }
 
 async function readStore(
@@ -138,7 +164,13 @@ async function writeStore(path: string, variables: EnvRecord[]): Promise<void> {
     }
   }
   try {
+    const pending = await open(tempPath, "r");
+    try { await pending.sync(); } finally { await pending.close(); }
     await rename(tempPath, path);
+    if (platform() !== "win32") {
+      const directory = await open(dir, "r");
+      try { await directory.sync(); } finally { await directory.close(); }
+    }
   } catch (error) {
     await rm(tempPath, { force: true }).catch(() => {});
     throw error;
@@ -180,7 +212,19 @@ export class EnvService {
   }
 
   private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
-    const run = this.mutationQueue.catch(() => {}).then(operation);
+    const run = this.mutationQueue.catch(() => {}).then(async () => {
+      await ensureDir(dirname(this.path));
+      const lock = await open(this.path + ".lock", "wx", 0o600).catch(() => { throw new StmError("environment_busy"); });
+      try {
+        // All cooperating writers reload under the cross-instance lock.
+        this.variables = (await readStore(this.path)).variables;
+        this.loaded = true;
+        return await operation();
+      } finally {
+        await lock.close();
+        await rm(this.path + ".lock", { force: true });
+      }
+    });
     this.mutationQueue = run.then(
       () => {},
       () => {},
@@ -189,8 +233,42 @@ export class EnvService {
   }
 
   async list(): Promise<EnvRecord[]> {
+    await this.mutationQueue;
     await this.ensureLoaded();
     return this.variables.slice();
+  }
+
+  migrationSource(): MigrationSource {
+    let snapshot: EnvRecord[] | null = null;
+    let selected: string[] = [];
+    const assertUnchanged = async () => {
+      if (!snapshot || JSON.stringify(await readMigrationVariables(this.path)) !== JSON.stringify(snapshot)) {
+        throw new StmError("migration_source_changed");
+      }
+    };
+    return {
+      withEntries: (keys, operation) => this.enqueueMutation(async () => {
+        snapshot = await readMigrationVariables(this.path);
+        this.variables = snapshot.slice();
+        selected = keys;
+        try { return await operation(snapshot.filter(e => keys.includes(e.key))); }
+        finally { snapshot = null; selected = []; }
+      }),
+      assertUnchanged,
+      removeSelected: async () => {
+        await assertUnchanged();
+        const next = this.variables.filter(e => !selected.includes(e.key));
+        await writeStore(this.path, next);
+        this.variables = next;
+      },
+    };
+  }
+
+  // Privileged consumers should ask for exactly the value they need, not obtain
+  // every stored credential via list(). This does not migrate provider auth.
+  async get(key: string): Promise<string | undefined> {
+    await this.ensureLoaded();
+    return this.variables.find(entry => entry.key === key)?.value;
   }
 
   async upsertMany(entries: EnvEntry[]): Promise<void> {
@@ -225,9 +303,8 @@ export class EnvService {
     });
   }
 
-  // Used by the Electron + orchestrator shells at spawn time. The Tauri Rust
-  // shell has its own equivalent in src-tauri/src/env_file.rs — keep the two
-  // readers byte-for-byte in sync on path resolution and reserved-keys policy.
+  // Legacy injection helper. Electron and orchestrator have synchronous loaders
+  // using the same reserved-key policy; STM resolution is never performed here.
   static async readForInjection(overridePath?: string): Promise<Record<string, string>> {
     const path = overridePath?.trim() ? resolve(overridePath.trim()) : resolveDefaultEnvStorePath();
     const store = await readStore(path, { tolerateInvalid: true });
@@ -236,6 +313,7 @@ export class EnvService {
       if (isReservedEnvKey(entry.key)) continue;
       out[entry.key] = entry.value;
     }
+    assertNoStmEnvironmentConflicts(out, join(dirname(path), "stm-bindings.json"));
     return out;
   }
 }

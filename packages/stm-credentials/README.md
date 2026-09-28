@@ -1,0 +1,164 @@
+# STM credential adapter (development, default off)
+
+Dependency-free local adapter shared by Electron/server/orchestrator consumers.
+The common server entry point creates a disabled adapter by default. Local macOS
+operators can opt in with `MATTERHORN_WORK_STM_ENABLED=1`; no API can set that flag.
+Network listeners and unsupported platforms reject connection/resolution. Current
+consumer wiring covers realtime voice and explicitly approved project-local MCPs.
+MCP integration remains under validation. Pinned OpenCode model-driven execution,
+denial and rejected approval have local fake-provider evidence. Known-PID crash
+recovery and mid-call transport-disconnect cleanup are tested; chat UI cancellation
+and signed packaged OS acceptance remain outstanding.
+Do not use this development integration with real credentials yet.
+
+Protocol: STM `/api/integrations/v1/{capabilities,keys,resolve}`, version 1,
+`x-stm-token` header, literal loopback, no redirects. Requires the companion STM
+branch `codex/matterhorn-selected-secrets-2026-09-28`; released STM 1.9.0 is not
+assumed to support this contract. Do not use `/api/inject/env` as a fallback.
+
+Handshake requires the companion API's `backendId`, not just its display label.
+The macOS pilot permits `macos-keychain` and `encrypted-file`; missing/malformed
+IDs fail as `incompatible_daemon`, unknown/unsupported/other-platform IDs as
+`unsupported_keystore`. The authenticated label is still displayed accurately;
+an encrypted file is not called Keychain. This checks implementation compatibility,
+not unlock state or OS acceptance. A change is rechecked before bound operations;
+failure keeps metadata available and never enables plaintext fallback.
+
+## Current boundary
+
+- `connect({consent:true})` records pairing metadata after authentication.
+- `inventory()` and `listBindings()` return only explicit metadata.
+- `refreshBindings()` reconciles last-observed inventory with each MCP binding's
+  applied revision, returning `checkedAt` and available/revoked/missing status.
+  Host-token `POST /env/stm/refresh` respects read-only mode. It does not resolve
+  secrets or restart children. Failures preserve the last-known registry and
+  return an error, not a successful freshness claim. This is a point-in-time
+  observation, not a lease guaranteeing the key remains available afterwards.
+- `saveCredential()` requires explicit consent and an expected revision (null
+  for create-only). Writes are never retried automatically. On an uncertain
+  response, refresh inventory and review before any further write. The server
+  exposes this only through host-token `PUT /env/stm/credential`, respecting
+  read-only mode. Raw values are transient request data, never registry fields.
+- `link(...)` grants one named consumer (`mcp:name` or
+  `voice:realtime` consumer) access to a tool/label identity. The server additionally
+  restricts consumer names to its trusted allowlist. No real migration is provided.
+- `resolveForConsumer()` retrieves only that selection, with no value cache.
+- `resolveKeyForConsumer()` retrieves one explicitly bound name. Voice uses this
+  instead of reading all credentials and keeps the existing key priority.
+  Bound voice calls require a host token; owner bearer tokens retain legacy
+  voice behavior only when no voice key is bound. A disabled/offline binding
+  does not fall back. One descriptor rediscovery handles stale-token responses.
+- `spawnStmConsumer()` requires the caller's authorization callback and injects
+  only at spawn, never globally. This primitive alone is not runtime acceptance;
+  `StmMcpLaunches` and the trusted stdio launcher connect it to OpenCode's actual
+  MCP child-launch path. Callers must preserve session/workspace permission
+  checks; the callback is not itself a permission engine.
+- Unlink removes a Matterhorn reference; it never revokes/deletes a shared STM key.
+- `StmMcpLaunches` uses private metadata grants bound to canonical workspace,
+  reviewed executable/arguments and selected binding IDs. The host-only
+  `POST /workspace/:id/mcp/:name/stm` uses the existing configuration approval
+  path, then writes a trusted launcher command and opaque grant ID to project
+  configuration. It does not resolve values or automatically restart a tool.
+  A configuration change during the approval wait invalidates that approval.
+  Configuration changes, missing bindings, disabled flags and revoked grants
+  block future launches. Inline MCP environment overrides currently require
+  explicit cleanup before approval; they are not silently migrated.
+- The launcher checks current MCP configuration and preserves stdio. Child
+  stderr is not forwarded to application logs. OpenCode still owns tool-call
+  permissions. Active-launch records prevent concurrent/mid-task restarts.
+  Revocation blocks the next launch, not memory of a running child. A crash can
+  leave an active record. Explicit recovery requires the exact launch ID and
+  OS confirmation that its PID no longer exists; a live/reused PID is refused.
+  Unknown PID (crash before publication), permissions errors and stale locks
+  require manual operator inspection. No process is killed/restarted by recovery.
+  See [the recovery runbook](../../docs/handoffs/stm-launch-recovery.md).
+- Feature rollback preserves references and blocks affected resolution. It never
+  exports credentials back into plaintext.
+- Generic desktop, orchestrator (including container starts), and managed engine
+  launch boundaries reject stale plaintext for bound names, including case-fold
+  aliases. This metadata-only check remains active when the release flag is off;
+  an unsafe/unreadable registry is not treated as non-adoption. It never resolves
+  credentials or changes the parent process environment. Existing running
+  processes retain their snapshots; this cannot revoke their memory.
+
+This is a single-user trust boundary. A dashboard credential grants broad local
+vault authority. The selected consumer receives its raw credential and can read
+or print it. This does not provide brokered-execution isolation.
+
+The v3 JSON registry contains consent state, exact names, storage backend,
+opaque observed/applied revisions, consumer identity and restart-required metadata only.
+MCP bindings mark restart required on link/replacement; voice resolves per call
+and does not require a child restart. Value/revision snapshots record exactly
+what a child received; an intervening replacement leaves restart pending. No
+automatic restart scheduling is implemented. External STM rotations/revocations
+are observed by explicit metadata refresh. A matching newly applied revision can
+clear pending status; refresh never pretends to erase a running child's memory.
+Old v1/v2 references are normalized without resolving/exporting values; their
+unknown applied revision conservatively requires MCP restart. Earlier builds
+that cannot read v3 must fail closed, not restore plaintext credentials.
+The server locates it next to the configured legacy environment store, which
+also makes isolated test/data-directory overrides explicit.
+Writes use a private temporary file and rename, with an exclusive registry lock.
+A crash can leave `<registry>.lock`; stop all writers and inspect the registry
+before an operator removes that exact stale lock. Never automatically steal locks.
+Launch intent is durable before spawning a credential-bearing child. Exit cleanup
+retries lock contention for a bounded period; exhausted retries retain the record
+for explicit recovery instead of silently permitting another launch.
+No migration journal, downgrade/export operation, or cross-platform ACL support
+is implemented. macOS is the proposed initial platform, not yet OS-accepted.
+
+## Verification
+
+`pnpm --dir packages/stm-credentials test` uses disposable private files,
+in-memory HTTP responses and a real disposable child. It does not access a vault.
+The STM checkout has an opt-in cross-repository HTTP contract test:
+
+```sh
+MATTERHORN_STM_ADAPTER_PATH=/absolute/path/to/matterhorn/packages/stm-credentials/index.mjs \
+  bun test test/selected-secrets.test.ts test/matterhorn-contract.test.ts
+```
+
+Both fixture and loopback tests are distinct from packaged desktop/real Keychain
+acceptance. Do not enable this integration for ordinary users yet.
+
+Native server builds use `apps/server/src/server-entry.ts`. The same verified
+server artifact provides `--stm-mcp <grant-id>` without importing/booting the HTTP
+server on that branch. Orchestrator can keep distributing its single server asset;
+no companion download or additional managed daemon is required. Build with the
+server's `build:bin` script, not by compiling `src/cli.ts` directly. Electron's
+embedded server still uses its architecture-specific dedicated launcher.
+
+`apps/server/src/stm-mcp-launch.e2e.test.ts` runs a harmless stdio MCP fixture with
+an isolated HOME, fake daemon and disposable key. Optional
+`STM_TEST_COMPILED_LAUNCHER` selects a locally compiled launcher;
+`STM_TEST_COMPILED_SERVER` selects a native server's dedicated STM mode instead.
+`STM_TEST_OPENCODE_BIN` additionally exercises actual OpenCode connection,
+model-driven execution through a local synthetic inference endpoint, denied
+execution and a rejected permission request, followed by disconnect. Only the
+allowed call reaches the fixture; captured model bodies/history/logs are checked
+for fake credential/token leakage. The inference is synthetic, not a real AI
+provider or hosted acceptance. Verify the binary version against `constants.json`.
+The fixture also leaves a call unfinished and ignores SIGTERM: closing the client
+stream must escalate and clean up the child. This is transport-disconnect evidence,
+not proof of the separate chat UI Stop/cancellation journey.
+
+## Settings and selected migration
+
+Local Environment settings use `/env/stm/settings` for metadata only. Linking,
+revision-preconditioned replacement and connection require explicit consent;
+new API-secret input is transient. There is no vault Reveal/export operation.
+
+`migrateSelected` verifies selected source values in privileged memory, then
+publishes bindings and a private metadata-only `.migrations` journal. The separate
+`finishMigration` action rechecks vault/source revisions before removing only
+the selected plaintext names. Reuse the same migration ID after interruption.
+An unfinished migration cannot be unlinked to bypass cleanup. A MCP migration
+must also finish its exact workspace-bound reviewed launch configuration before
+source removal; migrating never launches or restarts a tool automatically.
+
+Source and registry locks fail closed after uncertain crashes. Stop and verify all
+writers before operator-led exact-lock recovery; never delete locks solely by age.
+Disabling the feature retains references and never restores plaintext fallback.
+Backups/snapshots may retain old values: recommend provider rotation, not secure
+SSD deletion claims. See `qa-reports/stm/2026-09-28/PHASE-4-5-REVIEW.md` for
+verification, recovery instructions and outstanding real-OS/security release gates.

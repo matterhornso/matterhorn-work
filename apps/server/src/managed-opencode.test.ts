@@ -25,6 +25,34 @@ async function waitFor(predicate: () => boolean, timeoutMs = 4_000) {
 }
 
 describe("managed OpenCode supervisor", () => {
+  test("rejects inherited and override plaintext for STM bindings before starting an engine", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "matterhorn-stm-supervisor-"));
+    const previousPath = process.env.MATTERHORN_WORK_ENV_STORE;
+    const previousValue = process.env.FIXTURE_LEGACY_KEY;
+    cleanups.push(async () => {
+      if (previousPath === undefined) delete process.env.MATTERHORN_WORK_ENV_STORE;
+      else process.env.MATTERHORN_WORK_ENV_STORE = previousPath;
+      if (previousValue === undefined) delete process.env.FIXTURE_LEGACY_KEY;
+      else process.env.FIXTURE_LEGACY_KEY = previousValue;
+      await rm(root, { recursive: true, force: true });
+    });
+    process.env.MATTERHORN_WORK_ENV_STORE = path.join(root, "env.json");
+    await writeFile(path.join(root, "stm-bindings.json"), JSON.stringify({ version: 1, paired: true, bindings: [{
+      id: "12345678-1234-1234-1234-123456789abc", envName: "FIXTURE_LEGACY_KEY", tool: "example",
+      label: "default", consumer: "mcp:example", updatedAt: "2026-09-28",
+    }] }), { mode: 0o600 });
+    // Fixed port avoids opening a listener; an invalid command proves the guard
+    // fails before attempting spawn, rather than relying on an engine response.
+    await expect(createManagedOpencodeServer({ cwd: root, bin: "/nonexistent/fixture", port: 3456,
+      env: { FIXTURE_LEGACY_KEY: "disposable-stale" },
+    })).rejects.toThrow("plaintext_conflict");
+    process.env.FIXTURE_LEGACY_KEY = "disposable-inherited";
+    await expect(createManagedOpencodeServer({ cwd: root, bin: "/nonexistent/fixture", port: 3456,
+    })).rejects.toThrow("plaintext_conflict");
+    await writeFile(path.join(root, "stm-bindings.json"), "malformed");
+    await expect(createManagedOpencodeServer({ cwd: root, bin: "/nonexistent/fixture", port: 3456,
+    })).rejects.toThrow("unavailable_or_invalid_file");
+  });
   test("restarts the managed engine after consecutive bounded health failures", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "matterhorn-managed-opencode-"));
     const executable = path.join(root, "fake-opencode.mjs");

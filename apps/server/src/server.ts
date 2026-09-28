@@ -538,6 +538,10 @@ import { MATTERHORN_CRYPTO_COMPACTION_CONTEXT } from "./opencode-compaction-poli
 import { sanitizeCommandName, validateMcpName } from "./validators.js";
 import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
+import { StmCredentials, StmError } from "@matterhorn-work/stm-credentials";
+import { resolveVoiceCredential } from "./voice-credential.js";
+import { createLocalStmCredentials, createLocalStmMcpLaunches, localStmMcpLauncher, STM_VOICE_CONSUMER } from "./stm-runtime.js";
+import { approveStmMcp, authorizeConfiguredStmMcp, eligibleStmToolSecret, migrateStmMcp, parseStmMcpBindings, reviewStmMcpConfiguration } from "./stm-mcp.js";
 import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedgerText } from "./project-data-ledger.js";
@@ -879,20 +883,6 @@ async function reconcileReviewedActionReceipt(input: {
   });
 }
 
-async function resolveOpenAiRealtimeApiKey(env: EnvService): Promise<string> {
-  const records = await env.list();
-  const storedKey =
-    records.find((entry) => entry.key === "OPENAI_REALTIME_API_KEY")?.value.trim() ||
-    records.find((entry) => entry.key === "OPENAI_API_KEY")?.value.trim() ||
-    "";
-  if (storedKey) return storedKey;
-
-  return process.env.OPENWORK_OPENAI_REALTIME_API_KEY?.trim() ||
-    process.env.OPENAI_REALTIME_API_KEY?.trim() ||
-    process.env.OPENAI_API_KEY?.trim() ||
-    "";
-}
-
 function openworkVoiceRealtimeInstructions() {
   return `# Role and Objective
 
@@ -929,8 +919,11 @@ function readOpenAiClientSecret(payload: unknown): { clientSecret: string; expir
   return { clientSecret: value, expiresAt: null };
 }
 
-async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown) {
-  const apiKey = await resolveOpenAiRealtimeApiKey(env);
+async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown, stm?: StmCredentials) {
+  const apiKey = await resolveVoiceCredential(env, stm).catch(error => {
+    if (error instanceof StmError) throw new ApiError(409, error.code, "Voice secret storage needs attention. Reconnect or check the selected binding.");
+    throw error;
+  });
   if (!apiKey) {
     throw new ApiError(
       400,
@@ -1432,6 +1425,12 @@ type MatterhornSuiEvidenceAnchorPackageState = {
 };
 
 export type MatterhornServerDependencies = {
+  // Trusted local-shell injection only; never populated from request bodies or
+  // hosted workspace configuration. Feature remains off unless explicitly wired.
+  stmCredentials?: StmCredentials;
+  stmConsumers?: readonly string[];
+  /** Trusted shell-owned command, never supplied by a workspace/request. */
+  stmMcpLauncher?: readonly string[];
   evidenceKeyManager?: MatterhornEvidenceKeyManager | null;
   cryptoEvidenceWalrusTransport?: MatterhornWalrusEvidenceTransport;
   cryptoEvidenceWalrusCertificationVerifier?: MatterhornWalrusCertificationVerifier;
@@ -1879,6 +1878,7 @@ export async function startServer(
     recoveryErasureLedger,
     drainEmailOutbox,
     dependencies.reviewedActionProtocolRefresh ?? refreshReviewedActionProtocolState,
+    dependencies,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
 
@@ -10140,7 +10140,14 @@ function createRoutes(
   recoveryErasureLedger: MatterhornRecoveryErasureLedger | null,
   drainEmailOutbox: () => Promise<void>,
   reviewedActionProtocolRefresh: ReviewedActionRefreshAdapter,
+  dependencies: Pick<MatterhornServerDependencies, "stmCredentials" | "stmConsumers" | "stmMcpLauncher">,
 ): Route[] {
+  const stm = dependencies.stmCredentials ?? createLocalStmCredentials({ host: config.host });
+  const stmMcpLaunches = createLocalStmMcpLaunches(stm);
+  const stmMcpLauncher = dependencies.stmMcpLauncher ?? localStmMcpLauncher();
+  // MCP consumers are added only by runtime wiring that owns their approved
+  // launch boundary. Do not accept arbitrary consumer names from a browser.
+  const stmConsumers = dependencies.stmConsumers ?? [STM_VOICE_CONSUMER];
   const routes: Route[] = [];
   const billingRouteContext = createBillingRouteContext(config);
   const fileSessions = new FileSessionStore();
@@ -13991,13 +13998,17 @@ function createRoutes(
   // are driven from the UI after a write; this surface is user-scoped, not
   // workspace-scoped, so no audit.
   addRoute(routes, "GET", "/env", "host-token", async () => {
+    if (stm && (await stm.listBindings()).length) {
+      throw new ApiError(409, "stm_metadata_only", "Linked secrets are available through secret-storage settings, not raw environment export.");
+    }
     const items = await env.list().catch(rethrowEnvStoreReadError);
     return jsonResponse({ items });
   });
 
   addRoute(routes, "GET", "/env/keys", "host-token", async () => {
     const items = await env.list().catch(rethrowEnvStoreReadError);
-    return jsonResponse({ keys: items.map((item) => item.key) });
+    const bindings = stm ? await stm.listBindings() : [];
+    return jsonResponse({ keys: [...new Set([...items.map(item => item.key), ...bindings.map(item => item.envName)])] });
   });
 
   addRoute(routes, "PUT", "/env", "host-token", async (ctx) => {
@@ -14022,6 +14033,9 @@ function createRoutes(
     if (entries.length === 0) {
       throw new ApiError(400, "no_entries", "No entries provided");
     }
+    if (stm && (await stm.listBindings()).some(binding => entries.some(entry => entry.key.toUpperCase() === binding.envName.toUpperCase()))) {
+      throw new ApiError(409, "stm_binding_conflict", "Unlink the secret explicitly before changing its storage.");
+    }
     try {
       await env.upsertMany(entries);
     } catch (error) {
@@ -14045,6 +14059,9 @@ function createRoutes(
   addRoute(routes, "DELETE", "/env/:key", "host-token", async (ctx) => {
     ensureWritable(config);
     const key = ctx.params.key;
+    if (stm && (await stm.listBindings()).some(binding => binding.envName === key)) {
+      throw new ApiError(409, "stm_metadata_only", "Use Unlink in secret-storage settings; this does not revoke the shared secret.");
+    }
     if (!isValidEnvKey(key)) {
       throw new ApiError(400, "invalid_env_key", "Invalid environment variable name");
     }
@@ -14055,9 +14072,115 @@ function createRoutes(
     return jsonResponse({ ok: true });
   });
 
+  function requireLocalStm(): StmCredentials {
+    if (!stm || !["127.0.0.1", "::1", "localhost"].includes(config.host)) {
+      throw new ApiError(409, "stm_not_enabled", "Secret storage is not enabled for this local runtime.");
+    }
+    return stm;
+  }
+
+  function rethrowStmError(error: unknown): never {
+    if (error instanceof StmError && error.code === "consumer_still_running") throw new ApiError(409, error.code, "The recorded tool process is still running. Stop it through its runtime before requesting recovery.");
+    if (error instanceof StmError && ["launch_recovery_uncertain", "process_state_unavailable"].includes(error.code)) throw new ApiError(409, error.code, "The old tool process cannot be verified as stopped. Operator inspection is required; no process was killed or restarted.");
+    if (error instanceof StmError && error.code === "launch_recovery_conflict") throw new ApiError(409, error.code, "This launch record changed. Refresh its status before requesting recovery.");
+    if (error instanceof StmError && error.code === "credential_update_uncertain") throw new ApiError(409, error.code, "The secret update may have completed. Refresh secret metadata before making another change; do not automatically retry.");
+    if (error instanceof StmError && error.code === "credential_revision_conflict") throw new ApiError(412, error.code, "This secret changed elsewhere. Refresh its metadata before replacing it.");
+    if (error instanceof StmError) throw new ApiError(409, error.code, "Secret storage needs attention. Reconnect or check the selected binding.");
+    throw new ApiError(503, "stm_unavailable", "Secret storage is unavailable.");
+  }
+
+  addRoute(routes, "GET", "/env/stm/status", "host-token", async () => {
+    return jsonResponse(await requireLocalStm().status());
+  });
+  addRoute(routes, "GET", "/env/stm/settings", "host-token", async () => {
+    const credentials = requireLocalStm();
+    const status = await credentials.status();
+    const bindings = await credentials.listBindings().catch(rethrowStmError);
+    const migrations = await credentials.listMigrations().catch(rethrowStmError);
+    // Names/timestamps only. In STM mode the renderer never loads /env values.
+    const legacy = (await env.list().catch(rethrowEnvStoreReadError)).map(({ key, updatedAt }) => ({ key, updatedAt, migrationEligible: eligibleStmToolSecret(key) }));
+    const inventory = status.state === "connected" ? await credentials.inventory().catch(rethrowStmError) : [];
+    return jsonResponse({ status, bindings, migrations, legacy, inventory, consumers: stmConsumers });
+  });
+  addRoute(routes, "POST", "/env/stm/migrations", "host-token", async (ctx) => {
+    ensureWritable(config);
+    const body = await readJsonBody(ctx.request, 16_384, "Selected secret migration");
+    if (typeof body.id !== "string" || typeof body.backend !== "string" || !Array.isArray(body.selections)
+      || Object.keys(body).some(k => !["id", "backend", "selections", "consent"].includes(k))) {
+      throw new ApiError(400, "invalid_migration", "Choose the source names, storage backend and approved consumer.");
+    }
+    const selections: Array<{ envName: string; consumer: string }> = [];
+    for (const selection of body.selections) {
+      if (!selection || typeof selection !== "object" || typeof selection.envName !== "string"
+        || typeof selection.consumer !== "string" || !stmConsumers.includes(selection.consumer)
+        || Object.keys(selection).some(k => !["envName", "consumer"].includes(k))
+        || (selection.consumer === STM_VOICE_CONSUMER && !["OPENAI_API_KEY", "OPENAI_REALTIME_API_KEY"].includes(selection.envName))) {
+        throw new ApiError(400, "invalid_migration", "Choose a secret supported by the approved local consumer.");
+      }
+      selections.push({ envName: selection.envName, consumer: selection.consumer });
+    }
+    return jsonResponse(await requireLocalStm().migrateSelected({ id: body.id, backend: body.backend, selections, consent: body.consent === true }, env.migrationSource()).catch(rethrowStmError));
+  });
+  addRoute(routes, "POST", "/env/stm/migrations/:id/finish", "host-token", async (ctx) => {
+    ensureWritable(config);
+    const body = await readJsonBody(ctx.request, 1024, "Confirm plaintext removal");
+    const migration = (await requireLocalStm().listMigrations().catch(rethrowStmError)).find(job => job.id === ctx.params.id);
+    if (migration?.mcpTarget) {
+      const grant = (await stmMcpLaunches.list().catch(rethrowStmError)).find(g => g.id === migration.id);
+      if (!grant || grant.revoked || !await authorizeConfiguredStmMcp(grant)) throw new ApiError(409, "migration_tool_setup_required", "Complete the reviewed tool setup before removing plaintext.");
+    }
+    return jsonResponse(await requireLocalStm().finishMigration(ctx.params.id, { consent: body.consent === true }, env.migrationSource()).catch(rethrowStmError));
+  });
+  addRoute(routes, "GET", "/env/stm/bindings", "host-token", async () => {
+    return jsonResponse({ items: await requireLocalStm().listBindings().catch(rethrowStmError) });
+  });
+  addRoute(routes, "GET", "/env/stm/inventory", "host-token", async () => {
+    return jsonResponse({ items: await requireLocalStm().inventory().catch(rethrowStmError) });
+  });
+  addRoute(routes, "POST", "/env/stm/refresh", "host-token", async () => {
+    ensureWritable(config);
+    return jsonResponse(await requireLocalStm().refreshBindings().catch(rethrowStmError));
+  });
+  addRoute(routes, "PUT", "/env/stm/credential", "host-token", async (ctx) => {
+    ensureWritable(config);
+    const body = await readJsonBody(ctx.request, 32_768, "Secret update");
+    if (typeof body.tool !== "string" || typeof body.label !== "string" || typeof body.value !== "string"
+      || !(body.expectedRevision === null || typeof body.expectedRevision === "string")
+      || Object.keys(body).some(key => !["tool", "label", "value", "expectedRevision", "consent"].includes(key))) {
+      throw new ApiError(400, "invalid_credential_update", "Choose a secret and its current revision before saving.");
+    }
+    return jsonResponse(await requireLocalStm().saveCredential({ tool: body.tool, label: body.label, value: body.value, expectedRevision: body.expectedRevision, consent: body.consent === true }).catch(rethrowStmError));
+  });
+  addRoute(routes, "POST", "/env/stm/connect", "host-token", async (ctx) => {
+    ensureWritable(config);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Secret storage connection");
+    return jsonResponse(await requireLocalStm().connect({ consent: body.consent === true }).catch(rethrowStmError));
+  });
+  addRoute(routes, "POST", "/env/stm/bindings", "host-token", async (ctx) => {
+    ensureWritable(config);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Secret binding");
+    if (typeof body.envName !== "string" || typeof body.tool !== "string" || typeof body.label !== "string" || typeof body.consumer !== "string" || !stmConsumers.includes(body.consumer)
+      || (body.consumer === STM_VOICE_CONSUMER && !["OPENAI_REALTIME_API_KEY", "OPENAI_API_KEY"].includes(body.envName))) {
+      throw new ApiError(400, "invalid_stm_binding", "Choose a supported local tool and secret.");
+    }
+    const legacy = await env.list().catch(rethrowEnvStoreReadError);
+    const binding = await requireLocalStm().link({ envName: body.envName, tool: body.tool, label: body.label, consumer: body.consumer, consent: body.consent === true }, legacy.map(entry => entry.key)).catch(rethrowStmError);
+    return jsonResponse({ binding, restartRequired: binding.restartRequired }, 201);
+  });
+  addRoute(routes, "DELETE", "/env/stm/bindings/:id", "host-token", async (ctx) => {
+    ensureWritable(config);
+    await requireLocalStm().unlink(ctx.params.id).catch(rethrowStmError);
+    return jsonResponse({ ok: true, restartRequired: true });
+  });
+
   addRoute(routes, "POST", "/voice/realtime/session", "host", async (ctx) => {
+    const bindings = await stm.listBindings().catch(rethrowStmError);
+    if (bindings.some(binding => ["OPENAI_REALTIME_API_KEY", "OPENAI_API_KEY"].includes(binding.envName))) {
+      requireLocalStm();
+      requireHostToken(ctx.request, config);
+    }
     const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Realtime voice session");
-    return jsonResponse(await createOpenAiRealtimeVoiceSession(env, body));
+    return jsonResponse(await createOpenAiRealtimeVoiceSession(env, body, stm));
   });
 
   addRoute(routes, "POST", "/workspaces/local", "host", async (ctx) => {
@@ -17006,6 +17129,72 @@ function createRoutes(
       path: result.path,
     });
     return jsonResponse({ ok: true, name, path: result.path });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/mcp/:name/stm/migrate", "host-token", async (ctx) => {
+    ensureWritable(config);
+    const credentials = requireLocalStm();
+    if (!stmMcpLauncher) throw new ApiError(409, "stm_launcher_unavailable", "This runtime has no supported secret launcher.");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const name = ctx.params.name;
+    const body = await readJsonBody(ctx.request, 16_384, "Tool secret migration");
+    if (typeof body.id !== "string" || typeof body.backend !== "string" || !Array.isArray(body.envNames)
+      || !body.envNames.every((key: unknown) => typeof key === "string" && eligibleStmToolSecret(key)) || body.consent !== true
+      || Object.keys(body).some(k => !["id", "backend", "envNames", "consent"].includes(k))) throw new ApiError(400, "invalid_migration", "Review the selected environment names and local tool before moving secrets.");
+    const expectedConfiguration = JSON.stringify(await reviewStmMcpConfiguration(workspace.path, name).catch(rethrowStmError));
+    await requireApproval(ctx, { workspaceId: workspace.id, action: "mcp.add", summary: `Move selected secrets for MCP ${name}`, paths: [opencodeConfigPath(workspace.path)] });
+    const grant = await migrateStmMcp({ credentials, launches: stmMcpLaunches, source: env.migrationSource(),
+      id: body.id, backend: body.backend, envNames: body.envNames, workspace: workspace.path, name,
+      launcher: [...stmMcpLauncher], expectedConfiguration }).catch(rethrowStmError);
+    return jsonResponse({ id: grant.id, consumer: `mcp:${grant.id}`, restartRequired: true });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/mcp/:name/stm", "host-token", async (ctx) => {
+    ensureWritable(config);
+    requireLocalStm();
+    if (!stmMcpLauncher) throw new ApiError(409, "stm_launcher_unavailable", "Secret-backed tools need a supported local runtime launcher.");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const name = ctx.params.name;
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Tool secret bindings");
+    let bindings: ReturnType<typeof parseStmMcpBindings>;
+    try { bindings = parseStmMcpBindings(body.bindings); }
+    catch { throw new ApiError(400, "invalid_binding", "Choose explicit credential names for this tool."); }
+    if (body.consent !== true) throw new ApiError(400, "consent_required", "Review and approve this tool's credential access first.");
+    // Bind consent to the configuration present before the approval wait.
+    // A same-name replacement must require a new review, not inherit consent.
+    const expectedConfiguration = JSON.stringify(await reviewStmMcpConfiguration(workspace.path, name).catch(rethrowStmError));
+    await requireApproval(ctx, { workspaceId: workspace.id, action: "mcp.add",
+      summary: `Connect selected secrets to MCP ${name}`, paths: [opencodeConfigPath(workspace.path)] });
+    const legacy = await env.list().catch(rethrowEnvStoreReadError);
+    const grant = await approveStmMcp({ launches: stmMcpLaunches, workspace: workspace.path, name,
+      launcher: [...stmMcpLauncher], bindings, consent: true, legacyNames: legacy.map(entry => entry.key),
+      expectedConfiguration,
+    }).catch(rethrowStmError);
+    // No automatic reload/restart: current work must complete before applying.
+    return jsonResponse({ id: grant.id, consumer: `mcp:${grant.id}`, bindingIds: grant.bindingIds, restartRequired: true }, 201);
+  });
+
+  addRoute(routes, "DELETE", "/env/stm/mcp-grants/:id", "host-token", async (ctx) => {
+    ensureWritable(config);
+    requireLocalStm();
+    await stmMcpLaunches.revoke(ctx.params.id).catch(rethrowStmError);
+    return jsonResponse({ ok: true, runningProcessUnaffected: true });
+  });
+  addRoute(routes, "GET", "/env/stm/mcp-grants", "host-token", async () => {
+    requireLocalStm();
+    const grants = await stmMcpLaunches.list().catch(rethrowStmError);
+    return jsonResponse({ items: grants.map(grant => ({ id: grant.id, name: grant.name, revoked: grant.revoked,
+      active: grant.active ? { id: grant.active.id, pid: grant.active.pid } : null })) });
+  });
+  addRoute(routes, "POST", "/env/stm/mcp-grants/:id/recover", "host-token", async (ctx) => {
+    ensureWritable(config);
+    requireLocalStm();
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Tool launch recovery");
+    if (typeof body.expectedLaunchId !== "string" || body.consent !== true) {
+      throw new ApiError(400, "recovery_consent_required", "Review the stopped tool launch before recovering it.");
+    }
+    await stmMcpLaunches.recoverExited(ctx.params.id, { expectedLaunchId: body.expectedLaunchId, consent: true }).catch(rethrowStmError);
+    return jsonResponse({ ok: true, started: false });
   });
 
   addRoute(routes, "GET", "/workspace/:id/mcp", "client", async (ctx) => {

@@ -267,6 +267,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@matterhorn-work/stm-credentials':
+        specifier: workspace:*
+        version: link:../../packages/stm-credentials
       '@opencode-ai/sdk':
         specifier: 1.18.31
         version: 1.18.31
@@ -347,6 +350,9 @@ importers:
 
   apps/orchestrator:
     dependencies:
+      '@matterhorn-work/stm-credentials':
+        specifier: workspace:*
+        version: link:../../packages/stm-credentials
       '@opencode-ai/sdk':
         specifier: 1.18.31
         version: 1.18.31
@@ -405,6 +411,9 @@ importers:
       '@matterhorn-work/memory-vault':
         specifier: workspace:*
         version: link:../../packages/matterhorn-memory-vault
+      '@matterhorn-work/stm-credentials':
+        specifier: workspace:*
+        version: link:../../packages/stm-credentials
       '@matterhorn-work/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -585,6 +594,8 @@ importers:
       viem:
         specifier: 2.52.2
         version: 2.52.2(typescript@5.9.3)(zod@4.3.6)
+
+  packages/stm-credentials: {}
 
   packages/types:
     dependencies:

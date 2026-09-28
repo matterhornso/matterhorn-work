@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isReservedLegacyEnvKey, assertNoStmEnvironmentConflicts } from "@matterhorn-work/stm-credentials";
 import {
   spawn,
   type ChildProcess,
@@ -1771,7 +1772,6 @@ function resolveUserEnvFilePath(): string {
   return join(homedir(), ".config", "openwork", "env.json");
 }
 
-const USER_ENV_RESERVED_PREFIXES = ["MATTERHORN_WORK_", "OPENWORK_", "OPENCODE_"] as const;
 
 // Synchronous, best-effort, never throws. Absent or malformed files return {}.
 // Reads on every spawn so UI edits are picked up on the next child start.
@@ -1786,7 +1786,7 @@ function loadUserEnvFile(): Record<string, string> {
       const { key, value } = entry as { key?: unknown; value?: unknown };
       if (typeof key !== "string" || typeof value !== "string") continue;
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
-      if (USER_ENV_RESERVED_PREFIXES.some((p) => key.startsWith(p))) continue;
+      if (isReservedLegacyEnvKey(key)) continue;
       out[key] = value;
     }
     return out;
@@ -1805,6 +1805,9 @@ function buildSpawnEnv(env?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   for (const [key, value] of Object.entries(base)) {
     if (value !== undefined) merged[key] = value;
   }
+  // Includes Docker/container launches through spawnProcess. Do not swallow an
+  // unreadable registry as though the user had never adopted STM.
+  assertNoStmEnvironmentConflicts(merged, join(dirname(resolveUserEnvFilePath()), "stm-bindings.json"));
   const pathKey =
     Object.prototype.hasOwnProperty.call(merged, "PATH") ||
     !Object.prototype.hasOwnProperty.call(merged, "Path")

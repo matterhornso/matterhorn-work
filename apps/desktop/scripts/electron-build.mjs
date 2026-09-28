@@ -38,6 +38,12 @@ run(nodeCmd, [resolve(__dirname, "prepare-sidecar.mjs"), "--force", "--outdir", 
 run(nodeCmd, [resolve(__dirname, "prepare-computer-use-helper.mjs"), "--outdir", electronHelperDir], desktopRoot);
 // Build the server TS → JS so Electron can import it in-process
 run(pnpmCmd, ["--filter", "matterhorn-work-server", "build"], repoRoot);
+// Local macOS pilot: self-contained Bun launcher, never system Node on a user's
+// desktop. An absent/wrong-architecture artifact leaves activation unavailable.
+if (process.platform === "darwin") {
+  run("bun", ["build", resolve(repoRoot, "apps/server/src/stm-mcp-entry.ts"), "--compile", "--outfile",
+    resolve(electronSidecarDir, `matterhorn-stm-mcp-${process.arch}`)], repoRoot);
+}
 // OPENWORK_ELECTRON_BUILD tells Vite to emit relative asset paths so
 // index.html resolves /assets/* correctly when loaded via file:// from
 // inside the packaged .app bundle.

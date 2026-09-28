@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
+import { isReservedLegacyEnvKey, assertNoStmEnvironmentConflicts } from "@matterhorn-work/stm-credentials";
 
 const __runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -268,6 +269,7 @@ function nvmVersionBinPaths(home) {
 function pathHelperEntries() {
   if (process.platform !== "darwin") return [];
   const result = spawnSync("/usr/libexec/path_helper", ["-s"], {
+    env: checkedRuntimeEnvironment(),
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   });
@@ -423,11 +425,15 @@ function resolveUserEnvFilePath() {
   return path.join(os.homedir(), ".config", "openwork", "env.json");
 }
 
+function checkedRuntimeEnvironment(env = process.env) {
+  assertNoStmEnvironmentConflicts(env, path.join(path.dirname(resolveUserEnvFilePath()), "stm-bindings.json"));
+  return env;
+}
+
 const USER_ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const USER_ENV_RESERVED_PREFIXES = ["OPENWORK_", "OPENCODE_"];
 
 // Synchronous, best-effort; absent or malformed returns {}. Reserved prefixes
-// are stripped so a tampered file can never shadow OPENWORK_* / OPENCODE_*.
+// are stripped so a tampered file cannot shadow internal runtime configuration.
 function loadUserEnvFile() {
   try {
     const raw = readFileSync(resolveUserEnvFilePath(), "utf8");
@@ -439,7 +445,7 @@ function loadUserEnvFile() {
       const { key, value } = entry;
       if (typeof key !== "string" || typeof value !== "string") continue;
       if (!USER_ENV_KEY_PATTERN.test(key)) continue;
-      if (USER_ENV_RESERVED_PREFIXES.some((p) => key.startsWith(p))) continue;
+      if (isReservedLegacyEnvKey(key)) continue;
       out[key] = value;
     }
     return out;
@@ -637,14 +643,15 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
   async function buildChildEnv(extra = {}) {
     /** @type {NodeJS.ProcessEnv} */
     // User env is layered first so process.env + any caller overrides always
-    // win. See apps/server/src/env-file.ts and src-tauri/src/env_file.rs —
-    // all three loaders must agree on path + reserved-keys policy.
+    // win. Server/Electron/orchestrator share the reserved-key policy. Never
+    // resolve STM credentials in this generic environment builder.
     const env = {
       ...loadUserEnvFile(),
       ...process.env,
       BUN_CONFIG_DNS_RESULT_ORDER: "verbatim",
       ...extra,
     };
+    checkedRuntimeEnvironment(env);
     const pathKey =
       Object.prototype.hasOwnProperty.call(env, "PATH") ||
       !Object.prototype.hasOwnProperty.call(env, "Path")
@@ -757,6 +764,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     for (const program of tried) {
       try {
         const result = spawnSync(program, args, {
+          env: checkedRuntimeEnvironment(),
           encoding: "utf8",
           timeout: timeoutMs,
           windowsHide: true,
@@ -816,7 +824,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     const result = spawnSync(program, args, {
       encoding: "utf8",
       cwd: options.cwd,
-      env: options.env,
+      env: checkedRuntimeEnvironment(options.env),
       shell: false,
       windowsHide: true,
       timeout: options.timeoutMs,
@@ -845,8 +853,8 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       };
     }
 
-    const versionResult = spawnSync(resolved.path, ["--version"], { encoding: "utf8" });
-    const helpResult = spawnSync(resolved.path, ["serve", "--help"], { encoding: "utf8" });
+    const versionResult = spawnSync(resolved.path, ["--version"], { encoding: "utf8", env: checkedRuntimeEnvironment() });
+    const helpResult = spawnSync(resolved.path, ["serve", "--help"], { encoding: "utf8", env: checkedRuntimeEnvironment() });
     const notes = [`Using ${resolved.source}: ${resolved.path}`];
     if (versionResult.status !== 0) {
       notes.push("Matterhorn engine version probe failed.");
@@ -882,7 +890,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
   function spawnManagedChild(state, program, args, options = {}) {
     const child = spawn(program, args, {
       cwd: options.cwd,
-      env: options.env,
+      env: checkedRuntimeEnvironment(options.env),
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -940,7 +948,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     // Safety net: an unclean Electron quit can orphan sidecars. Packaged builds
     // should always own a fresh runtime per app launch, so remove any leftover
     // sidecars from this app bundle before choosing ports for the new runtime.
-    const result = spawnSync("ps", ["-Ao", "pid=,command="], { encoding: "utf8" });
+    const result = spawnSync("ps", ["-Ao", "pid=,command="], { encoding: "utf8", env: checkedRuntimeEnvironment() });
     const rows = String(result.stdout ?? "").split(/\r?\n/);
     const pids = [];
     for (const row of rows) {
@@ -1061,6 +1069,11 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       throw new Error(`Cannot find Matterhorn embedded server bundle. Checked: ${candidates.join(", ")}`);
     }
     const { startEmbeddedServer } = await import(pathToFileURL(embeddedPath).href);
+    const stmLauncherName = `matterhorn-stm-mcp-${process.arch}`;
+    const stmLauncher = process.platform === "darwin" ? [
+      ...(process.resourcesPath ? [path.join(process.resourcesPath, "sidecars", stmLauncherName)] : []),
+      path.join(desktopRoot, "resources", "sidecars", stmLauncherName),
+    ].find(candidate => existsSync(candidate)) : undefined;
     const handle = await startEmbeddedServer({
       host,
       port,
@@ -1074,6 +1087,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       manageOpencode: options.manageOpencode === true,
       opencodeBin: managedOpencode?.path ?? undefined,
       opencodeCwd: managedOpencodeWorkdir(),
+      stmMcpLauncher: stmLauncher ? [stmLauncher] : undefined,
       onManagedOpencodeEvent: (event) => {
         if (event?.type === "health_failure" && event.consecutiveFailures < event.threshold) return;
         const detail = event?.type === "restarted"

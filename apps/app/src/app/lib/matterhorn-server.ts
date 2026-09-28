@@ -1515,6 +1515,12 @@ export function clearMatterhornServerSettings() {
   }
 }
 
+export type StmStatus = { state: string; code?: string; backend?: string };
+export type StmBinding = { id: string; envName: string; tool: string; label: string; consumer: string; storageBackend: string; credentialRevision: string | null; restartRequired: boolean };
+export type StmKey = { tool: string; label: string; status: string; revision: string };
+export type StmMigration = { id: string; state: "prepared" | "published" | "complete"; backend: string; mcpTarget?: { workspace: string; name: string }; entries: Array<{ binding: StmBinding; sourceUpdatedAt: number }> };
+export type StmSettings = { status: StmStatus; bindings: StmBinding[]; inventory: StmKey[]; migrations: StmMigration[]; legacy: Array<{ key: string; updatedAt: number; migrationEligible: boolean }>; consumers: string[] };
+
 export class MatterhornServerError extends Error {
   status: number;
   code: string;
@@ -3671,6 +3677,22 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         `/workspace/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}`,
         { token, hostToken, timeoutMs: timeouts.binary },
       ),
+
+    stmSettings: () => requestJson<StmSettings>(baseUrl, "/env/stm/settings", { token, hostToken, timeoutMs: timeouts.config }),
+    stmConnect: () => requestJson<StmStatus>(baseUrl, "/env/stm/connect", { token, hostToken, method: "POST", body: { consent: true } }),
+    stmRefresh: () => requestJson<unknown>(baseUrl, "/env/stm/refresh", { token, hostToken, method: "POST", body: {} }),
+    stmSave: (input: { tool: string; label: string; value: string; expectedRevision: string | null; consent: boolean }) =>
+      requestJson<{ oldValueCleanupPending: boolean; restartRequired: boolean }>(baseUrl, "/env/stm/credential", { token, hostToken, method: "PUT", body: input }),
+    stmLink: (input: { tool: string; label: string; envName: string; consumer: string; consent: boolean }) =>
+      requestJson<unknown>(baseUrl, "/env/stm/bindings", { token, hostToken, method: "POST", body: input }),
+    stmUnlink: (id: string) => requestJson<unknown>(baseUrl, `/env/stm/bindings/${encodeURIComponent(id)}`, { token, hostToken, method: "DELETE" }),
+    stmMigrate: (input: { id: string; backend: string; selections: Array<{ envName: string; consumer: string }>; consent: boolean }) =>
+      requestJson<StmMigration>(baseUrl, "/env/stm/migrations", { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.config }),
+    stmFinishMigration: (id: string) => requestJson<StmMigration>(baseUrl, `/env/stm/migrations/${encodeURIComponent(id)}/finish`, { token, hostToken, method: "POST", body: { consent: true }, timeoutMs: timeouts.config }),
+    stmLinkMcp: (workspaceId: string, name: string, bindings: Array<{ envName: string; tool: string; label: string }>) =>
+      requestJson<unknown>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/mcp/${encodeURIComponent(name)}/stm`, { token, hostToken, method: "POST", body: { bindings, consent: true }, timeoutMs: timeouts.config }),
+    stmMigrateMcp: (workspaceId: string, name: string, input: { id: string; backend: string; envNames: string[]; consent: boolean }) =>
+      requestJson<unknown>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/mcp/${encodeURIComponent(name)}/stm/migrate`, { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.config }),
 
     // User-level env vars (host-auth only — desktop shell is the sole caller).
     // See apps/server/src/env-file.ts and apps/app/pr/environment-variables.md.

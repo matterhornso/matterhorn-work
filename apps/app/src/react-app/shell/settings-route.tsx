@@ -3505,6 +3505,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "environment":
         return (
           <EnvironmentView
+            workspaceId={selectedWorkspaceId}
             client={matterhornServerSnapshot.matterhornServerClient}
             isRemoteWorkspace={isRemoteWorkspace}
             onApplyChanges={

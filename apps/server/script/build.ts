@@ -114,7 +114,7 @@ async function buildOnce(entrypoint: string, outdir: string, filename: string, t
 }
 
 const options = readArgs(bun.argv.slice(2));
-const entrypoint = resolve("src", "cli.ts");
+const entrypoint = resolve("src", "server-entry.ts");
 const targets = options.targets.length ? options.targets : [undefined];
 
 for (const target of targets) {
