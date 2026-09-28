@@ -1,7 +1,7 @@
 // Isolate QA from operator credentials and data. Never forward the ambient env.
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,12 +12,22 @@ const stages = {
   build: ["--dir", "apps/app", "build"],
   "build-web": ["--dir", "apps/app", "build"],
   "safety-ui": ["test:matterhorn-platform-safety", "--only", "wallet.approval.behavior,observability.error_boundaries,design.contract"],
+  "safety-full": ["test:matterhorn-platform-safety"],
 };
 const [stage, flag = "1"] = process.argv.slice(2);
 const pnpm = process.env.RETRO_QA_PNPM;
 const bun = process.env.RETRO_QA_BUN;
 if (!stages[stage] || !["0", "1"].includes(flag) || !pnpm?.startsWith("/") || !bun?.startsWith("/")) {
-  throw new Error("Use tests|typecheck|build|build-web|safety-ui 0|1 with absolute RETRO_QA_PNPM and RETRO_QA_BUN");
+  throw new Error("Use tests|typecheck|build|build-web|safety-ui|safety-full 0|1 with absolute RETRO_QA_PNPM and RETRO_QA_BUN");
+}
+// Vite/Bun can read project env files even when the process env and HOME are
+// isolated. Refuse their presence without opening or printing their contents.
+for (const directory of [repo, join(repo, "apps/app")]) {
+  for (const name of [".env", ".env.local", ".env.production", ".env.production.local", ".env.test", ".env.test.local"]) {
+    if (await access(join(directory, name)).then(() => true, () => false)) {
+      throw new Error("QA isolation requires a checkout without local env files; none were read.");
+    }
+  }
 }
 const root = await mkdtemp("/private/tmp/matterhorn-retro-qa-");
 for (const part of ["home", "tmp", "bin", "data", "config", "cache", "state"]) await mkdir(join(root, part));

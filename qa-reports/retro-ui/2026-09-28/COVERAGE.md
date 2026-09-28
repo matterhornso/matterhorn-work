@@ -63,6 +63,10 @@ All work is behind `VITE_MATTERHORN_RETRO_UI=1`. Production is unchanged.
   faces. Local dist/fixture typography and first-paint checks pass; see
   `font-proof.txt`. No production font family changed. Native/per-glyph font
   acceptance and actual browser zoom remain outside this evidence.
+- Final default/public-web build matrix passes with flag on/off; see
+  `BUILD-MATRIX.md`. Full repository safety gate passes all10 offline/fixture
+  stages; this supersedes the earlier subset-only note, not the live acceptance
+  limits. Exact log and handoff are recorded in WORKLOG.
 - Representative wallet, Memory, Notes, integrations, settings, auth/public and
   STM captures were included. This supersedes earlier visual-review-pending
   notes only for those selected images, not every state/full route.

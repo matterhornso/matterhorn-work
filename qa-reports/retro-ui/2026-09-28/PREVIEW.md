@@ -67,3 +67,8 @@ flag. Capture/inspection coverage and remaining gaps are in `COVERAGE.md`.
 `safety-ui` selects wallet approval, error boundaries/observability and design
 contracts; it is not the full platform safety gate. Local HTTP tests need
 loopback listener permission; sandbox bind failures are not product failures.
+
+`safety-full` runs the repository's complete offline/fixture safety gate. It is
+not a live acceptance run. The runner refuses project env files without reading
+them; use a clean QA checkout rather than deleting or renaming operator files.
+See `BUILD-MATRIX.md` for default/web flag-on/off build and artifact assertions.

@@ -315,6 +315,30 @@ neobrutalism across the product; implementation local only. See detailed plan at
   Final rollback suite1,234 pass /7,781 assertions:
   `/private/tmp/matterhorn-retro-qa-dPJcBx/tests-0.log`. `git diff --check` passes.
 
+## 21:01–21:11 UTC — build matrix, complete offline gate and release handoff
+
+- Reviewed application checkpoint:
+  `515c634319f71c0c698618f914744c00232da075`. No application code changed after it.
+- Default frontend builds flag0/1 and public-web builds flag0/1 all pass. Generated
+  HTML assertions confirm marker/critical-style rollback and first-paint auth
+  placement. `BUILD-MATRIX.md` records all4 logs. Default build is NOT a native
+  installer; no native packaging/signing acceptance claimed.
+- QA runner now refuses repository/app local env files by existence check only,
+  before spawning tools; no operator content is opened. Three generated-fixture
+  tests prove refusal, no output leakage and preservation. Node syntax and
+  `git diff --check` pass.
+- The **full repository safety gate passes all10 stages**, not just the earlier
+  subset. It covers wallet, money-path security, offline desk depth, billing,
+  router/runtime/Electron contracts, observability, design, browser smoke
+  contracts and product-readiness contracts. These remain offline/fixture tests,
+  not live agents, real emails, restored production backups or signed wallets.
+  Log: `/private/tmp/matterhorn-retro-qa-garMUt/safety-full-1.log`.
+- Exact-commit handoff with owner gates and copyable reviewer prompt:
+  `docs/handoffs/retro-ui-local-review-2026-09-28.md`.
+- Final rebuilt read-only public preview: **http://127.0.0.1:53933/**,
+  session28972. Old20635 stopped. No backend or remote connections; not a test
+  login. The old browser tab is not a current preview URL.
+
 ## Coverage queue
 
 1. Foundation flag, semantic tokens and primitives with tests.
@@ -322,12 +346,15 @@ neobrutalism across the product; implementation local only. See detailed plan at
 3. Settings/account/public/workspace tools and transaction reviews.
 4. Batched screenshots, accessibility/functional regressions, review/docs.
 
-Next task: checkpoint the reviewed changes; complete remaining build-mode/rollback
-packaging checks and the exact-commit handoff. No new self-directed visual
-hunt or detector rerun. Hosted/authenticated whole-shell, live provider/chain
-requests, installed Safari/native, full tool-result states and actual browser
-zoom remain unverified. Public preview session20635 at52722 is signed-out and
-read-only; tab13 is still on its previous port. Current dist includes fixes.
-No push/merge/deploy or real secrets/auth bypass.
+Local implementation, bounded visual review, documentation, frontend checks,
+build-mode matrix and full offline safety gate are complete. Finalize the delivery
+commit and pause the heartbeat with a truthful partial-release handoff. Remaining
+work needs an approved authenticated runtime/release environment and hands-on
+native/accessibility acceptance: full-shell/history and account routes, live
+provider/chain responses on all5 desks, real streaming/tool-result states,
+installed Safari/native, screen-reader behavior and actual browser zoom. Those
+are not supplied by synthetic fixtures or this read-only preview. Do not access
+operator secrets, bypass auth or deploy to fill the evidence gap. No new visual
+hunt or detector rerun; the bounded finish workflow is exhausted. No push/merge.
 Do not claim hosted acceptance from synthetic fixtures. Screenshot inspection rounds used: 2/2
 (reference/incumbent inspection is not inspection of the new build).
