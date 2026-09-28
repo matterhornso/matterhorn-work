@@ -267,6 +267,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@matterhorn-work/stm-credentials':
+        specifier: workspace:*
+        version: link:../../packages/stm-credentials
       '@opencode-ai/sdk':
         specifier: 1.18.31
         version: 1.18.31
@@ -347,6 +350,9 @@ importers:
 
   apps/orchestrator:
     dependencies:
+      '@matterhorn-work/stm-credentials':
+        specifier: workspace:*
+        version: link:../../packages/stm-credentials
       '@opencode-ai/sdk':
         specifier: 1.18.31
         version: 1.18.31
@@ -393,9 +399,6 @@ importers:
 
   apps/server:
     dependencies:
-      '@matterhorn-work/stm-credentials':
-        specifier: workspace:*
-        version: link:../../packages/stm-credentials
       '@aws-sdk/client-kms':
         specifier: ^3.894.0
         version: 3.1123.0
@@ -408,6 +411,9 @@ importers:
       '@matterhorn-work/memory-vault':
         specifier: workspace:*
         version: link:../../packages/matterhorn-memory-vault
+      '@matterhorn-work/stm-credentials':
+        specifier: workspace:*
+        version: link:../../packages/stm-credentials
       '@matterhorn-work/types':
         specifier: workspace:*
         version: link:../../packages/types

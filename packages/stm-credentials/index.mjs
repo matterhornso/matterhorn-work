@@ -9,6 +9,9 @@ const MAX_FILE = 32_768;
 const MAX_RESPONSE = 600_000;
 const forbidden = /^(MATTERHORN_WORK_|OPENWORK_|OPENCODE_|STM_|LD_|DYLD_|NODE_|BUN_|PYTHON|RUBY|PERL|GIT_|npm_)/i;
 const processNames = new Set(["PATH", "HOME", "SHELL", "ENV", "BASH_ENV", "ZDOTDIR", "IFS", "CDPATH", "COMSPEC", "PATHEXT", "SYSTEMROOT", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "__PROTO__", "CONSTRUCTOR", "PROTOTYPE"]);
+// Shared legacy-loader policy. The stricter STM policy below additionally blocks
+// process control variables; non-adopters retain their existing legacy behavior.
+export const isReservedLegacyEnvKey = key => ["MATTERHORN_WORK_", "OPENWORK_", "OPENCODE_"].some(prefix => key.startsWith(prefix));
 const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
 const segment = value => typeof value === "string" && /^[a-z0-9][a-z0-9_-]{0,127}$/.test(value);
 export const safeSecretEnvName = value => typeof value === "string" && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(value) && !forbidden.test(value) && !processNames.has(value.toUpperCase());
@@ -79,7 +82,7 @@ export class StmCredentials {
     if (new Set(r.bindings.map(b => b.envName.toUpperCase())).size !== r.bindings.length || new Set(r.bindings.map(b => b.id)).size !== r.bindings.length) fail("invalid_registry");
     return r;
   }
-  async #request(path, body) {
+  async #request(path, body, rediscover = true) {
     this.#supported();
     const info = await privateJson(this.#options.descriptorPath);
     if (!object(info) || !Number.isInteger(info.port) || info.port < 1 || info.port > 65535 || !Number.isInteger(info.pid) || info.pid < 1 || typeof info.token !== "string" || !/^[a-f0-9]{48}$/.test(info.token)) fail("invalid_descriptor");
@@ -90,7 +93,14 @@ export class StmCredentials {
         headers: { "x-stm-token": info.token, "content-type": "application/json" },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      if (!response.ok) { await response.body?.cancel(); fail(response.status === 401 ? "reconnect_required" : "request_failed"); }
+      if (!response.ok) {
+        await response.body?.cancel();
+        // A daemon restart rotates its token/port. Re-open the private descriptor
+        // once; never trust a response-provided URL and never retry indefinitely.
+        // All current operations here are read-only, including selected resolve.
+        if (response.status === 401 && rediscover) return this.#request(path, body, false);
+        fail(response.status === 401 ? "reconnect_required" : "request_failed");
+      }
       const reader = response.body?.getReader();
       if (!reader) fail("invalid_response");
       let size = 0; const chunks = [];
@@ -186,6 +196,19 @@ export class StmCredentials {
   async resolveForConsumer(consumer, inherited = {}) {
     const registry = await this.#registry();
     const selected = registry.bindings.filter(b => b.consumer === consumer);
+    return this.#resolveSelected(registry, selected, inherited);
+  }
+  async resolveKeyForConsumer(consumer, envName, inherited = {}) {
+    if (!safeSecretEnvName(envName)) fail("invalid_binding");
+    const registry = await this.#registry();
+    const binding = registry.bindings.find(b => b.envName === envName);
+    if (!binding) return undefined;
+    // An existing binding is authoritative even when the caller lacks its grant.
+    // Never treat permission failure as absence and fall back to a plaintext key.
+    if (binding.consumer !== consumer) fail("consumer_not_authorized");
+    return (await this.#resolveSelected(registry, [binding], inherited))[envName];
+  }
+  async #resolveSelected(registry, selected, inherited) {
     if (!selected.length) return {};
     this.#supported();
     if (!registry.paired) fail("not_connected");

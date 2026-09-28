@@ -159,3 +159,35 @@ test("unauthorized and oversized responses never expose body content", async t =
     assert.equal(JSON.stringify(state).includes("sensitive-fixture"), false);
   }
 });
+
+test("named resolution reads one key, refuses a different consumer, and distinguishes absence", async t => {
+  const f = await paired(t);
+  await f.adapter.link({ ...input, envName: "SECOND_API_KEY" });
+  assert.equal(await f.adapter.resolveKeyForConsumer("mcp:example", "EXAMPLE_API_KEY"), "disposable-value");
+  const call = f.calls.find(c => c.url.endsWith("resolve"));
+  assert.equal(JSON.parse(call.options.body).bindings.length, 1);
+  await assert.rejects(f.adapter.resolveKeyForConsumer("voice:realtime", "EXAMPLE_API_KEY"), /consumer_not_authorized/);
+  assert.equal(await f.adapter.resolveKeyForConsumer("voice:realtime", "MISSING_KEY"), undefined);
+});
+
+test("401 rediscovery reloads rotated descriptor once, with a strict retry bound", async t => {
+  const f = await paired(t);
+  let attempts = 0;
+  const rotatedToken = "c".repeat(48);
+  const a = new StmCredentials({ ...f.options, fetch: async (_url, options) => {
+    attempts++;
+    if (attempts === 1) {
+      assert.equal(options.headers["x-stm-token"], f.token);
+      await writeFile(f.descriptorPath, JSON.stringify({ port: 3456, pid: process.pid, token: rotatedToken }));
+      return new Response("ignored-secret-error", { status: 401 });
+    }
+    assert.equal(options.headers["x-stm-token"], rotatedToken);
+    return Response.json({ version: 1, selectedResolution: true, backend: "in-memory fixture" });
+  } });
+  assert.equal((await a.status()).state, "connected");
+  assert.equal(attempts, 2);
+  attempts = 0;
+  const b = new StmCredentials({ ...f.options, fetch: async () => { attempts++; return new Response(null, { status: 401 }); } });
+  assert.deepEqual(await b.status(), { state: "unavailable", code: "reconnect_required" });
+  assert.equal(attempts, 2);
+});

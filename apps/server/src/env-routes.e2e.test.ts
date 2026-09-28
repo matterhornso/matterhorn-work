@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
-import { StmCredentials, type Binding } from "@matterhorn-work/stm-credentials";
+import { StmCredentials, StmError, type Binding } from "@matterhorn-work/stm-credentials";
 
 type Served = {
   port: number;
@@ -21,7 +21,7 @@ const priorOpenAiApiKey = process.env.OPENAI_API_KEY;
 const priorOpenAiRealtimeApiKey = process.env.OPENAI_REALTIME_API_KEY;
 const priorOpenWorkOpenAiRealtimeApiKey = process.env.OPENWORK_OPENAI_REALTIME_API_KEY;
 const priorBuildCommit = process.env.MATTERHORN_BUILD_COMMIT;
-const isolatedEnvironment = ["MATTERHORN_WORK_DATA_DIR", "MATTERHORN_AUTH_DB", "MATTERHORN_WORK_RATE_LIMIT_DB"];
+const isolatedEnvironment = ["MATTERHORN_WORK_DATA_DIR", "MATTERHORN_AUTH_DB", "MATTERHORN_WORK_RATE_LIMIT_DB", "MATTERHORN_WORK_ENV_STORE", "MATTERHORN_WORK_STM_ENABLED"];
 const priorIsolatedEnvironment = new Map(isolatedEnvironment.map(key => [key, process.env[key]]));
 const nativeFetch = globalThis.fetch;
 
@@ -63,6 +63,8 @@ beforeEach(() => {
   // Redirect the shared env.json path into a throwaway dir so the test never
   // touches the developer's real ~/.config/openwork/env.json.
   process.env.OPENWORK_ENV_STORE = join(dir, "env.json");
+  process.env.MATTERHORN_WORK_ENV_STORE = join(dir, "env.json");
+  delete process.env.MATTERHORN_WORK_STM_ENABLED;
   process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
   process.env.MATTERHORN_WORK_DATA_DIR = dir;
   process.env.MATTERHORN_AUTH_DB = join(dir, "auth.db");
@@ -121,6 +123,33 @@ class FixtureStm extends StmCredentials {
   override async unlink(id: string) { this.bindings = this.bindings.filter(b => b.id !== id); }
 }
 
+class FixtureVoiceStm extends FixtureStm {
+  override bindings: Binding[] = [{ id: "voice-fixture", envName: "OPENAI_REALTIME_API_KEY", tool: "fixture", label: "default", consumer: "voice:realtime", updatedAt: "2026-09-28" }];
+  reads = 0;
+  override async resolveKeyForConsumer(): Promise<string> {
+    this.reads++;
+    throw new StmError("connection_failed");
+  }
+}
+
+test("bound voice requires host token and does not fall back when STM is offline", async () => {
+  const stm = new FixtureVoiceStm();
+  const server = await startServer(baseConfig(), { stmCredentials: stm });
+  stops.push(() => server.stop());
+  const base = `http://127.0.0.1:${server.port}`;
+  const issued = await fetch(`${base}/tokens`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ scope: "owner", label: "voice fixture owner" }) });
+  expect(issued.status).toBe(201);
+  const owner = await issued.json();
+  const denied = await fetch(`${base}/voice/realtime/session`, { method: "POST", headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" }, body: "{}" });
+  expect(denied.status).toBe(401);
+  expect(stm.reads).toBe(0);
+  process.env.OPENAI_API_KEY = "must-not-use-fallback-fixture";
+  const failed = await fetch(`${base}/voice/realtime/session`, { method: "POST", headers: hostAuth(), body: "{}" });
+  expect(failed.status).toBe(409);
+  expect(await failed.text()).not.toContain("must-not-use-fallback-fixture");
+  expect(stm.reads).toBe(1);
+});
+
 test("STM control routes are host-token-only, metadata-only, and preserve names contract", async () => {
   const server = await startServer(baseConfig(), { stmCredentials: new FixtureStm(), stmConsumers: ["mcp:example"] });
   stops.push(() => server.stop());
@@ -147,7 +176,7 @@ test("STM control routes are host-token-only, metadata-only, and preserve names 
 
 test("STM is disabled by default and read-only mode rejects changes", async () => {
   const { base } = await boot();
-  expect(await (await fetch(`${base}/env/stm/status`, { headers: hostAuth() })).json()).toEqual({ state: "disabled" });
+  expect(await (await fetch(`${base}/env/stm/status`, { headers: hostAuth() })).json()).toEqual({ state: "unavailable", code: "disabled" });
   expect((await fetch(`${base}/env/stm/connect`, { method: "POST", headers: hostAuth(), body: '{"consent":true}' })).status).toBe(409);
   const config = baseConfig(); config.readOnly = true;
   const server = await startServer(config, { stmCredentials: new FixtureStm() });

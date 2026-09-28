@@ -539,6 +539,8 @@ import { sanitizeCommandName, validateMcpName } from "./validators.js";
 import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
 import { StmCredentials, StmError } from "@matterhorn-work/stm-credentials";
+import { resolveVoiceCredential } from "./voice-credential.js";
+import { createLocalStmCredentials, STM_VOICE_CONSUMER } from "./stm-runtime.js";
 import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedgerText } from "./project-data-ledger.js";
@@ -880,20 +882,6 @@ async function reconcileReviewedActionReceipt(input: {
   });
 }
 
-async function resolveOpenAiRealtimeApiKey(env: EnvService): Promise<string> {
-  const records = await env.list();
-  const storedKey =
-    records.find((entry) => entry.key === "OPENAI_REALTIME_API_KEY")?.value.trim() ||
-    records.find((entry) => entry.key === "OPENAI_API_KEY")?.value.trim() ||
-    "";
-  if (storedKey) return storedKey;
-
-  return process.env.OPENWORK_OPENAI_REALTIME_API_KEY?.trim() ||
-    process.env.OPENAI_REALTIME_API_KEY?.trim() ||
-    process.env.OPENAI_API_KEY?.trim() ||
-    "";
-}
-
 function openworkVoiceRealtimeInstructions() {
   return `# Role and Objective
 
@@ -930,8 +918,11 @@ function readOpenAiClientSecret(payload: unknown): { clientSecret: string; expir
   return { clientSecret: value, expiresAt: null };
 }
 
-async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown) {
-  const apiKey = await resolveOpenAiRealtimeApiKey(env);
+async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown, stm?: StmCredentials) {
+  const apiKey = await resolveVoiceCredential(env, stm).catch(error => {
+    if (error instanceof StmError) throw new ApiError(409, error.code, "Voice secret storage needs attention. Reconnect or check the selected binding.");
+    throw error;
+  });
   if (!apiKey) {
     throw new ApiError(
       400,
@@ -10148,7 +10139,10 @@ function createRoutes(
   reviewedActionProtocolRefresh: ReviewedActionRefreshAdapter,
   dependencies: Pick<MatterhornServerDependencies, "stmCredentials" | "stmConsumers">,
 ): Route[] {
-  const stm = dependencies.stmCredentials;
+  const stm = dependencies.stmCredentials ?? createLocalStmCredentials({ host: config.host });
+  // MCP consumers are added only by runtime wiring that owns their approved
+  // launch boundary. Do not accept arbitrary consumer names from a browser.
+  const stmConsumers = dependencies.stmConsumers ?? [STM_VOICE_CONSUMER];
   const routes: Route[] = [];
   const billingRouteContext = createBillingRouteContext(config);
   const fileSessions = new FileSessionStore();
@@ -14086,7 +14080,7 @@ function createRoutes(
   }
 
   addRoute(routes, "GET", "/env/stm/status", "host-token", async () => {
-    return jsonResponse(stm ? await requireLocalStm().status() : { state: "disabled" });
+    return jsonResponse(await requireLocalStm().status());
   });
   addRoute(routes, "GET", "/env/stm/bindings", "host-token", async () => {
     return jsonResponse({ items: await requireLocalStm().listBindings().catch(rethrowStmError) });
@@ -14102,7 +14096,8 @@ function createRoutes(
   addRoute(routes, "POST", "/env/stm/bindings", "host-token", async (ctx) => {
     ensureWritable(config);
     const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Secret binding");
-    if (typeof body.envName !== "string" || typeof body.tool !== "string" || typeof body.label !== "string" || typeof body.consumer !== "string" || !dependencies.stmConsumers?.includes(body.consumer)) {
+    if (typeof body.envName !== "string" || typeof body.tool !== "string" || typeof body.label !== "string" || typeof body.consumer !== "string" || !stmConsumers.includes(body.consumer)
+      || (body.consumer === STM_VOICE_CONSUMER && !["OPENAI_REALTIME_API_KEY", "OPENAI_API_KEY"].includes(body.envName))) {
       throw new ApiError(400, "invalid_stm_binding", "Choose a supported local tool and secret.");
     }
     const legacy = await env.list().catch(rethrowEnvStoreReadError);
@@ -14116,8 +14111,13 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/voice/realtime/session", "host", async (ctx) => {
+    const bindings = await stm.listBindings().catch(rethrowStmError);
+    if (bindings.some(binding => ["OPENAI_REALTIME_API_KEY", "OPENAI_API_KEY"].includes(binding.envName))) {
+      requireLocalStm();
+      requireHostToken(ctx.request, config);
+    }
     const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Realtime voice session");
-    return jsonResponse(await createOpenAiRealtimeVoiceSession(env, body));
+    return jsonResponse(await createOpenAiRealtimeVoiceSession(env, body, stm));
   });
 
   addRoute(routes, "POST", "/workspaces/local", "host", async (ctx) => {

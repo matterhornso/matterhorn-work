@@ -79,3 +79,53 @@ tests then required escalation due sandbox port binding; isolated rerun passed.
    paired PRs. No production enablement before these gates.
 
 Status: foundation implemented and tested; goal remains ACTIVE, not release-ready.
+
+## Continuation: named voice and shared runtime safeguards
+
+Previous goal turn classified as **progress**: two local commits plus test evidence
+were revalidated from current files. This continuation made further code changes:
+
+- Voice resolves one named key at a time, preserving stored realtime/general
+  and inherited fallback order for unbound credentials. A bound unavailable,
+  denied or disabled key blocks instead of falling back. No provider auth DB work.
+- Bound voice requests require host-token authority before resolution; owner
+  bearer credentials cannot consume the local STM grant. Unbound legacy voice
+  behavior is retained. Error responses never include secret values.
+- One default-off `MATTERHORN_WORK_STM_ENABLED` gate is checked by the shared
+  `startServer` entry point used by embedded Electron and CLI/server startup.
+  macOS loopback-only; unsupported/network modes reject connection/resolution.
+  Disabled adapters retain metadata so existing bindings cannot silently become
+  legacy credentials. No real opt-in flag has been set.
+- Server, Electron and orchestrator now import one reserved legacy-key policy;
+  Electron's missing `MATTERHORN_WORK_` prefix is fixed. STM's stricter process-
+  control policy remains separate so unrelated legacy behavior is preserved.
+- Added exactly one authenticated-descriptor rediscovery after 401, with no
+  unbounded retry or response-provided URL. Still no secret-value cache.
+
+Verification for this continuation:
+
+- `pnpm --dir packages/stm-credentials test`: **16 passed**.
+- `pnpm --dir apps/server exec bun test src/env-routes.e2e.test.ts src/voice-credential.test.ts src/stm-runtime.test.ts src/env-file.test.ts --timeout 15000`:
+  **43 passed / 151 assertions**, isolated loopback fixtures only.
+- Server TypeScript check and build: **passed**.
+- Orchestrator typecheck and build: **passed**.
+- Electron typecheck: **passed**; bridge check: **50 methods covered**.
+- Found the cached pinned pnpm executable at
+  `/Users/abhinavramesh/.cache/node/corepack/v1/pnpm/10.27.0/bin/pnpm.cjs`.
+  `node <that-path> install --lockfile-only --offline --ignore-scripts --frozen-lockfile`
+  **passed** using 10.27.0. This validates the lockfile without a fresh full install.
+
+Remaining first-three-phase work is substantive, not a release formality:
+
+1. Actual OpenCode MCP launch wiring: approved command/workspace identity,
+   per-consumer injection, no persisted secret config, and existing permission
+   enforcement. The tested spawn primitive is not yet its production launch path.
+2. Guard against stale manually reintroduced bound names at generic legacy loader
+   boundaries; do not mistake shared reserved-prefix parity for full STM isolation.
+3. STM revisioned replacement/create semantics, metadata revisions/backend and
+   durable restart state required by the plan are not implemented yet.
+4. Prove rotation/restart safety against a pinned actual OpenCode runtime, then
+   complete adversarial tests and broader regressions. OS/packaged acceptance and
+   real-keychain tests remain separately gated. No release claim is made.
+
+Goal remains active; nothing pushed, deployed, migrated, or enabled for real users.

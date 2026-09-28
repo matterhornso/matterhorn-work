@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
+import { isReservedLegacyEnvKey } from "@matterhorn-work/stm-credentials";
 
 const __runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -424,10 +425,9 @@ function resolveUserEnvFilePath() {
 }
 
 const USER_ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const USER_ENV_RESERVED_PREFIXES = ["OPENWORK_", "OPENCODE_"];
 
 // Synchronous, best-effort; absent or malformed returns {}. Reserved prefixes
-// are stripped so a tampered file can never shadow OPENWORK_* / OPENCODE_*.
+// are stripped so a tampered file cannot shadow internal runtime configuration.
 function loadUserEnvFile() {
   try {
     const raw = readFileSync(resolveUserEnvFilePath(), "utf8");
@@ -439,7 +439,7 @@ function loadUserEnvFile() {
       const { key, value } = entry;
       if (typeof key !== "string" || typeof value !== "string") continue;
       if (!USER_ENV_KEY_PATTERN.test(key)) continue;
-      if (USER_ENV_RESERVED_PREFIXES.some((p) => key.startsWith(p))) continue;
+      if (isReservedLegacyEnvKey(key)) continue;
       out[key] = value;
     }
     return out;
@@ -637,8 +637,8 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
   async function buildChildEnv(extra = {}) {
     /** @type {NodeJS.ProcessEnv} */
     // User env is layered first so process.env + any caller overrides always
-    // win. See apps/server/src/env-file.ts and src-tauri/src/env_file.rs —
-    // all three loaders must agree on path + reserved-keys policy.
+    // win. Server/Electron/orchestrator share the reserved-key policy. Never
+    // resolve STM credentials in this generic environment builder.
     const env = {
       ...loadUserEnvFile(),
       ...process.env,

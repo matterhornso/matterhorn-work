@@ -1,6 +1,7 @@
 import { homedir, platform } from "node:os";
 import { chmod, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { isReservedLegacyEnvKey } from "@matterhorn-work/stm-credentials";
 
 import { ensureDir, exists } from "./utils.js";
 
@@ -18,7 +19,6 @@ const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // We refuse writes to these and strip them when reading for injection, so a
 // tampered file cannot shadow auth credentials, token paths, or process
 // identity.
-const RESERVED_PREFIXES = ["MATTERHORN_WORK_", "OPENWORK_", "OPENCODE_"] as const;
 
 export type EnvRecord = {
   key: string;
@@ -37,7 +37,7 @@ export function isValidEnvKey(key: string): boolean {
 }
 
 export function isReservedEnvKey(key: string): boolean {
-  return RESERVED_PREFIXES.some((prefix) => key.startsWith(prefix));
+  return isReservedLegacyEnvKey(key);
 }
 
 // Deterministic, matches what the Rust/Node shells compute independently.
@@ -193,6 +193,13 @@ export class EnvService {
     return this.variables.slice();
   }
 
+  // Privileged consumers should ask for exactly the value they need, not obtain
+  // every stored credential via list(). This does not migrate provider auth.
+  async get(key: string): Promise<string | undefined> {
+    await this.ensureLoaded();
+    return this.variables.find(entry => entry.key === key)?.value;
+  }
+
   async upsertMany(entries: EnvEntry[]): Promise<void> {
     return this.enqueueMutation(async () => {
       await this.ensureLoaded();
@@ -225,9 +232,8 @@ export class EnvService {
     });
   }
 
-  // Used by the Electron + orchestrator shells at spawn time. The Tauri Rust
-  // shell has its own equivalent in src-tauri/src/env_file.rs — keep the two
-  // readers byte-for-byte in sync on path resolution and reserved-keys policy.
+  // Legacy injection helper. Electron and orchestrator have synchronous loaders
+  // using the same reserved-key policy; STM resolution is never performed here.
   static async readForInjection(overridePath?: string): Promise<Record<string, string>> {
     const path = overridePath?.trim() ? resolve(overridePath.trim()) : resolveDefaultEnvStorePath();
     const store = await readStore(path, { tolerateInvalid: true });
