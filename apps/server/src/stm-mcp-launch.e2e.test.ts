@@ -29,6 +29,7 @@ test("trusted stdio launcher completes an MCP request with selected fake credent
   } });
   let child: ReturnType<typeof spawn> | undefined;
   let engine: ReturnType<typeof spawn> | undefined;
+  let nativeServer: ReturnType<typeof spawn> | undefined;
   let inference: ReturnType<typeof Bun.serve> | undefined;
   let orphanPid: number | undefined;
   let launchRegistry: StmMcpLaunches | undefined;
@@ -37,7 +38,7 @@ test("trusted stdio launcher completes an MCP request with selected fake credent
     const descriptorPath = join(stmDir, "daemon.json");
     await writeFile(descriptorPath, JSON.stringify({ port: daemon.port, pid: process.pid, token }), { mode: 0o600 });
     const credentials = new StmCredentials({ enabled: true, platform: "darwin", localDesktop: true, descriptorPath, registryPath: join(root, "stm-bindings.json") });
-    await credentials.connect({ consent: true });
+    if (!process.env.STM_TEST_COMPILED_SERVER) await credentials.connect({ consent: true });
     const launches = new StmMcpLaunches({ credentials, registryPath: join(root, "stm-mcp-launches.json") });
     launchRegistry = launches;
     const fixture = join(root, "fixture.mjs");
@@ -69,8 +70,46 @@ lines.on("line", line => {
       ? [process.env.STM_TEST_COMPILED_LAUNCHER]
       : [process.execPath, fileURLToPath(new URL("./stm-mcp-entry.ts", import.meta.url))];
     await writeFile(opencodeConfigPath(workspace), JSON.stringify({ mcp: { fixture: { type: "local", command: [process.execPath, fixture] } } }));
-    const grant = await approveStmMcp({ launches, workspace, name: "fixture", launcher,
-      bindings: [{ envName: "FIXTURE_KEY", tool: "fixture", label: "default" }], consent: true, legacyNames: [] });
+    let grant;
+    if (process.env.STM_TEST_COMPILED_SERVER) {
+      nativeServer = spawn(process.env.STM_TEST_COMPILED_SERVER, ["--host", "127.0.0.1", "--port", "0", "--workspace", workspace, "--approval", "auto"], {
+        cwd: root, stdio: "pipe", env: { PATH: process.env.PATH, HOME: root,
+          XDG_CONFIG_HOME: join(root, "config"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"),
+          MATTERHORN_WORK_ENV_STORE: join(root, "env.json"), MATTERHORN_WORK_STM_ENABLED: "1",
+          MATTERHORN_WORK_TOKEN: "fixture-client-token", MATTERHORN_WORK_HOST_TOKEN: "fixture-host-token",
+          MATTERHORN_WORK_DATA_DIR: join(root, "server-data"), MATTERHORN_AUTH_DB: join(root, "auth.db"),
+          MATTERHORN_WORK_RATE_LIMIT_DB: join(root, "rate.db"), OPENWORK_TOKEN_STORE: join(root, "tokens.json"),
+        },
+      });
+      let logs = "";
+      nativeServer.stderr!.on("data", data => { logs += String(data); });
+      const base = await new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Native fixture server startup timeout")), 10000);
+        nativeServer!.once("error", () => { clearTimeout(timer); reject(new Error("Native fixture server failed to start")); });
+        nativeServer!.stdout!.on("data", data => {
+          logs += String(data);
+          const match = logs.match(/server listening on (http:\/\/127\.0\.0\.1:\d+)/);
+          if (match) { clearTimeout(timer); resolve(match[1]); }
+        });
+      });
+      const headers = { "x-matterhorn-host-token": "fixture-host-token", "content-type": "application/json" };
+      const paired = await fetch(`${base}/env/stm/connect`, { method: "POST", headers, body: '{"consent":true}' });
+      expect(paired.status).toBe(200);
+      const workspaces = await (await fetch(`${base}/workspaces`, { headers: { authorization: "Bearer fixture-client-token" } })).json();
+      const approved = await fetch(`${base}/workspace/${workspaces.activeId}/mcp/fixture/stm`, { method: "POST", headers,
+        body: JSON.stringify({ consent: true, bindings: [{ envName: "FIXTURE_KEY", tool: "fixture", label: "default" }] }) });
+      expect(approved.status).toBe(201);
+      const body = await approved.json();
+      grant = (await launches.list()).find(entry => entry.id === body.id);
+      if (!grant) throw new Error("Native approval did not persist a grant");
+      expect(grant.launcher).toEqual(launcher);
+      expect(resolutions).toBe(0);
+      expect(logs).not.toContain(secret); expect(logs).not.toContain(token);
+      await createManagedProcessClose(nativeServer).close(); nativeServer = undefined;
+    } else {
+      grant = await approveStmMcp({ launches, workspace, name: "fixture", launcher,
+        bindings: [{ envName: "FIXTURE_KEY", tool: "fixture", label: "default" }], consent: true, legacyNames: [] });
+    }
     testGrantId = grant.id;
     if (process.env.STM_TEST_OPENCODE_BIN) {
       let modelCalls = 0;
@@ -225,6 +264,7 @@ lines.on("line", line => {
   } finally {
     child?.kill("SIGKILL");
     if (engine) await createManagedProcessClose(engine).close();
+    if (nativeServer) await createManagedProcessClose(nativeServer).close();
     // Also clean up if startup or an assertion failed before the PID was copied.
     const recordedPid = (await launchRegistry?.list())?.find(entry => entry.id === testGrantId)?.active?.pid;
     const cleanupPid = orphanPid ?? recordedPid;

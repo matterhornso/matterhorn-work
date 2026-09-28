@@ -1,5 +1,8 @@
 # STM integration worklog — 28 September 2026
 
+Current requirement audit: `PHASE-1-3-AUDIT.md` in this directory. Historical
+checkpoints below are chronological, not claims about today's remaining work.
+
 ## Goal and scope
 
 User requested a goal and implementation of slices 1, 2, 3 using the STM plan.
@@ -490,3 +493,58 @@ regression/security gates and a requirement-by-requirement phase-1–3 audit. In
 chat/session cancellation if required beyond MCP transport shutdown. Signed OS,
 real Keychain, cross-architecture execution and production rollout remain expressly
 unverified. All work stays local/default-off; goal remains **ACTIVE**.
+
+## Continuation: full regression gates, native HTTP approval and metadata races
+
+Previous goal work is classified as **progress** (`4b5fdc4c54`); the intervening
+Serena installation check was not STM implementation progress. Revalidated both
+worktrees and resumed the existing uncommitted native HTTP test and QA harness.
+
+- Native compiled-server E2E now pairs and approves through the actual host API,
+  checks automatic single-artifact launcher selection, and proves no resolution
+  during approval before running actual OpenCode permission/stdio/crash checks.
+- Added isolated regression runner: scrub operator environment, disposable HOME/
+  XDG/TMP, pinned pnpm shim. Its initial global application-store overrides caused
+  **39 backend failures** by defeating individual tests' selected paths. Source
+  inspection confirmed precedence; removing those overrides yielded **1,767/0**.
+  No production guard or test assertion was weakened to repair that harness.
+- First app run lacked sandbox loopback access (two bind failures); authorized
+  disposable-loopback rerun passed **1,228/0**. First safety run hit pnpm
+  ENAMETOOLONG in an offline tarball fixture under macOS's long temp directory;
+  rerun with `TMPDIR=/private/tmp` passed all ten stages.
+- Added real HTTP negative coverage for redirect refusal (target not contacted),
+  oversized body, stalled response-body timeout and no pairing/retry after failure.
+- This run exposed a real same-instance listing/write race: atomic replacement
+  changes the old inode's ctime while descriptor validation is reading it.
+  Separate concurrent grant and binding tests both failed with `unsafe_file`
+  before the fix. Their reads now use the instance's existing serialization queue;
+  permissions, nofollow, mutation checks and cross-process fail-closed behavior
+  remain intact. Reads do not acquire a write lock or steal one.
+
+Final verification after that production correction:
+
+- Adapter **35 passed**; STM selected/lifecycle/cross-repository **27 passed /
+  115 assertions**, fake keystores only.
+- Backend **1,767 passed / 11,833 assertions / 183 files**. Final log:
+  `/var/folders/96/vmhqgys5337f1g3f26phrhn80000gn/T/matterhorn-stm-server-f0wR6m/result.log`.
+- Full **10-stage platform safety gate passed** on the final runtime code. Log:
+  `/private/tmp/matterhorn-stm-safety-gyHbFy/result.log`.
+- App typecheck/build and server TypeScript build passed; Electron bridge covers
+  **50 renderer methods**, Electron and orchestrator typechecks passed. App build
+  has large-chunk warnings, not a new UI or release-ready claim.
+- Rebuilt native artifact at `/private/tmp/mh-stm-final-vdtBdQ/matterhorn-work-server`
+  (**1,437 modules**, SHA-256 recorded in audit). Actual pinned OpenCode 1.18.31
+  with native HTTP approval/launcher and synthetic inference: **1 pass /
+  72 assertions**. No paid/real provider requests or credentials.
+- Matterhorn source scanner **1,214 files / zero findings**. STM scan reports
+  three pre-existing UI fixture literals; verified all files byte-identical to
+  STM base and inspected redacted fake-test context. No values printed, no
+  scanner exclusions changed; STM scan is not claimed green.
+
+Completion audit is **not achieved**: adapter `#handshake()` accepts arbitrary
+nonempty backend descriptions, while STM can report `unsupported (...)`. The
+plan explicitly requires rejecting unsupported keystores before enabling.
+Next: implement a supported-backend compatibility contract and negative tests,
+reverify interoperation, then finish the requirement audit. This is actionable
+local work, not an external blocker. Preserve the broader goal and leave ACTIVE.
+No push, merge, deployment, real keystore access or migration occurred.

@@ -5,6 +5,7 @@ import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
 import { StmCredentials, StmMcpLaunches, StmError, spawnStmConsumer, assertNoStmEnvironmentConflicts } from "../index.mjs";
 
 async function fixture(t, overrides = {}) {
@@ -46,6 +47,35 @@ async function fixture(t, overrides = {}) {
 }
 const input = { envName: "EXAMPLE_API_KEY", tool: "example", label: "default", consumer: "mcp:example", consent: true };
 
+test("real HTTP transport refuses redirects and oversized or stalled bodies without pairing", { timeout: 15000 }, async t => {
+  const f = await fixture(t, { fetch: globalThis.fetch });
+  let mode = "redirect";
+  let requests = 0;
+  let redirected = 0;
+  const server = createServer((req, res) => {
+    requests++;
+    if (req.url === "/forbidden") { redirected++; res.end("must-not-be-contacted"); return; }
+    if (mode === "redirect") { res.writeHead(302, { location: "/forbidden" }); res.end(); }
+    else if (mode === "oversized") res.end("x".repeat(600_001));
+    else { res.writeHead(200, { "content-type": "application/json" }); res.write('{"version":'); }
+  });
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  await writeFile(f.descriptorPath, JSON.stringify({ port: server.address().port, pid: process.pid, token: f.token }), { mode: 0o600 });
+  await assert.rejects(f.adapter.connect({ consent: true }), /connection_failed/);
+  assert.equal(redirected, 0);
+  mode = "oversized";
+  await assert.rejects(f.adapter.connect({ consent: true }), /invalid_response/);
+  mode = "stalled";
+  const started = Date.now();
+  await assert.rejects(f.adapter.connect({ consent: true }), /connection_failed/);
+  assert.ok(Date.now() - started < 8000, "body reading must honor the request deadline");
+  assert.equal(requests, 3, "transport failures must not retry or follow redirects");
+  assert.deepEqual(await f.adapter.listBindings(), []);
+  assert.deepEqual(await f.adapter.status(), { state: "not_connected" });
+  await assert.rejects(readFile(f.registryPath), { code: "ENOENT" });
+});
+
 async function launchFixture(t, command) {
   const f = await fixture(t);
   await f.adapter.connect({ consent: true });
@@ -83,6 +113,33 @@ test("recovery refuses live or changed launches and only clears a proven exited 
   assert.equal(f.calls.length, before);
   assert.equal((await f.adapter.listBindings()).length, 1);
   await assert.rejects(f.launches.recoverExited(f.grant.id, request), /launch_recovery_conflict/);
+});
+
+test("same-instance grant listings are serialized with atomic metadata replacement", async t => {
+  const f = await launchFixture(t);
+  let writing = true;
+  const writer = (async () => {
+    try { for (let i = 0; i < 60; i++) await f.launches.revoke(f.grant.id); }
+    finally { writing = false; }
+  })();
+  try { while (writing) assert.equal((await f.launches.list()).length, 1); }
+  finally { await writer; }
+  assert.equal((await f.launches.list())[0].revoked, true);
+});
+
+test("same-instance binding listings are serialized with applied revision writes", async t => {
+  const f = await fixture(t);
+  await f.adapter.connect({ consent: true });
+  const binding = await f.adapter.link(input);
+  let writing = true;
+  const writer = (async () => {
+    try {
+      for (let i = 0; i < 60; i++) await f.adapter.acknowledgeMcpStart(input.consumer, [binding.id], { EXAMPLE_API_KEY: f.state.revision });
+    } finally { writing = false; }
+  })();
+  try { while (writing) assert.equal((await f.adapter.listBindings()).length, 1); }
+  finally { await writer; }
+  assert.equal((await f.adapter.listBindings())[0].appliedRevision, f.state.revision);
 });
 
 test("exit bookkeeping retries transient registry contention without stealing locks", async t => {

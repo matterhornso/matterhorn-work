@@ -6,8 +6,9 @@ operators can opt in with `MATTERHORN_WORK_STM_ENABLED=1`; no API can set that f
 Network listeners and unsupported platforms reject connection/resolution. Current
 consumer wiring covers realtime voice and explicitly approved project-local MCPs.
 MCP integration remains under validation. Pinned OpenCode model-driven execution,
-denial and rejected approval have local fake-provider evidence; crash recovery,
-mid-call cancellation and packaged OS acceptance remain outstanding.
+denial and rejected approval have local fake-provider evidence. Known-PID crash
+recovery and mid-call transport-disconnect cleanup are tested; chat UI cancellation
+and signed packaged OS acceptance remain outstanding.
 Do not use this development integration with real credentials yet.
 
 Protocol: STM `/api/integrations/v1/{capabilities,keys,resolve}`, version 1,
@@ -40,9 +41,10 @@ assumed to support this contract. Do not use `/api/inject/env` as a fallback.
   voice behavior only when no voice key is bound. A disabled/offline binding
   does not fall back. One descriptor rediscovery handles stale-token responses.
 - `spawnStmConsumer()` requires the caller's authorization callback and injects
-  only at spawn, never globally. It is a tested primitive, not yet connected to
-  OpenCode's actual MCP child-launch path. Callers must preserve session/workspace
-  permission checks; the callback is not itself a permission engine.
+  only at spawn, never globally. This primitive alone is not runtime acceptance;
+  `StmMcpLaunches` and the trusted stdio launcher connect it to OpenCode's actual
+  MCP child-launch path. Callers must preserve session/workspace permission
+  checks; the callback is not itself a permission engine.
 - Unlink removes a Matterhorn reference; it never revokes/deletes a shared STM key.
 - `StmMcpLaunches` uses private metadata grants bound to canonical workspace,
   reviewed executable/arguments and selected binding IDs. The host-only

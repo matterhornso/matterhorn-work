@@ -209,7 +209,11 @@ export class StmCredentials {
       return { state: "connected", version: capability.version, backend: capability.backend };
     });
   }
-  async listBindings() { return (await this.#registry()).bindings; }
+  async listBindings() {
+    const next = this.#queue.then(() => this.#registry());
+    this.#queue = next.then(() => {}, () => {});
+    return (await next).bindings;
+  }
   async inventory() {
     return (await this.#inventorySnapshot()).keys;
   }
@@ -434,7 +438,14 @@ export class StmMcpLaunches {
     this.#queue = next.then(() => {}, () => {});
     return next;
   }
-  async list() { return (await this.#read()).grants; }
+  async list() {
+    // An atomic replacement can change the old inode's ctime while a reader
+    // validates it. Serialize our own readers/writers without weakening the
+    // descriptor checks or acquiring a write lock for read-only listing.
+    const next = this.#queue.then(() => this.#read());
+    this.#queue = next.then(() => {}, () => {});
+    return (await next).grants;
+  }
   async approve({ workspace, name, command, launcher, bindings, consent }, legacyNames = []) {
     if (consent !== true) fail("consent_required");
     if (!segment(name) || !commandVector(command) || !commandVector(launcher) || typeof workspace !== "string" || !isAbsolute(workspace)
