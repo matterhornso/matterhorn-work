@@ -23,7 +23,7 @@ async function fixture(t, overrides = {}) {
     assert.equal(options.headers["x-stm-token"], token);
     assert.ok(url.startsWith("http://127.0.0.1:3456/api/integrations/v1/"));
     if (state.offline) throw new Error("sensitive-native-error");
-    if (url.endsWith("capabilities")) return Response.json({ version: state.badVersion ? 2 : 1, backend: "in-memory fixture", selectedResolution: true, revisionedWrites: true });
+    if (url.endsWith("capabilities")) return Response.json({ version: state.badVersion ? 2 : 1, backend: "in-memory fixture", backendId: "macos-keychain", selectedResolution: true, revisionedWrites: true });
     if (url.endsWith("keys") && options.method === "POST") {
       state.writeCount++;
       if (state.writeFailure) throw new Error("ambiguous secret-bearing failure");
@@ -74,6 +74,47 @@ test("real HTTP transport refuses redirects and oversized or stalled bodies with
   assert.deepEqual(await f.adapter.listBindings(), []);
   assert.deepEqual(await f.adapter.status(), { state: "not_connected" });
   await assert.rejects(readFile(f.registryPath), { code: "ENOENT" });
+});
+
+test("pairing requires an explicit supported backend ID, not a trusted-looking label", async t => {
+  for (const backendId of [undefined, null, 42, {}, "", "unknown", "unsupported", "linux-pass", "linux-secret-service", "windows-credential"]) {
+    const f = await fixture(t);
+    let calls = 0;
+    const adapter = new StmCredentials({ ...f.options, fetch: async url => {
+      assert.ok(url.endsWith("capabilities")); calls++;
+      return Response.json({ version: 1, selectedResolution: true, backend: "macOS Keychain", backendId });
+    } });
+    await assert.rejects(adapter.connect({ consent: true }), /incompatible_daemon|unsupported_keystore/);
+    assert.equal(calls, 1);
+    await assert.rejects(readFile(f.registryPath), { code: "ENOENT" });
+  }
+});
+
+test("backend changes block bound operations without losing metadata or resolving values", async t => {
+  const f = await fixture(t);
+  let backendId = "macos-keychain";
+  const adapter = new StmCredentials({ ...f.options, fetch: async (url, options) => {
+    const response = await f.options.fetch(url, options);
+    if (!url.endsWith("capabilities")) return response;
+    return Response.json({ ...await response.json(), backendId, backend: backendId === "encrypted-file" ? "EncryptedFile (0600, PBKDF2-SHA512)" : "in-memory fixture" });
+  } });
+  await adapter.connect({ consent: true });
+  await adapter.link(input);
+  backendId = "encrypted-file";
+  assert.equal((await adapter.status()).backend, "EncryptedFile (0600, PBKDF2-SHA512)");
+  assert.equal((await adapter.refreshBindings()).backend, "EncryptedFile (0600, PBKDF2-SHA512)");
+  const before = await adapter.listBindings();
+  backendId = "unsupported";
+  f.calls.length = 0;
+  assert.deepEqual(await adapter.status(), { state: "unavailable", code: "unsupported_keystore" });
+  await assert.rejects(adapter.inventory(), /unsupported_keystore/);
+  await assert.rejects(adapter.refreshBindings(), /unsupported_keystore/);
+  await assert.rejects(adapter.resolveForConsumer(input.consumer), /unsupported_keystore/);
+  await assert.rejects(adapter.resolveSnapshotForConsumer(input.consumer), /unsupported_keystore/);
+  await assert.rejects(adapter.resolveKeyForConsumer(input.consumer, input.envName), /unsupported_keystore/);
+  await assert.rejects(adapter.saveCredential({ tool: input.tool, label: input.label, value: "disposable-value", expectedRevision: f.state.revision, consent: true }), /unsupported_keystore/);
+  assert.deepEqual(await adapter.listBindings(), before);
+  assert.ok(f.calls.every(c => c.url.endsWith("capabilities")), "no key reads or writes after backend rejection");
 });
 
 async function launchFixture(t, command) {
@@ -429,6 +470,20 @@ test("case-fold aliases cannot collide", async t => {
   await assert.rejects(f.adapter.link({ ...input, envName: "example_api_key" }), /binding_conflict/);
 });
 
+test("link rejects case-fold plaintext conflicts before inventory or metadata writes", async t => {
+  const f = await fixture(t);
+  await f.adapter.connect({ consent: true });
+  const calls = f.calls.length;
+  await assert.rejects(f.adapter.link(input, [input.envName.toLowerCase()]), /plaintext_conflict/);
+  const envName = `CASE_FIXTURE_${randomUUID().replaceAll("-", "")}`;
+  const inheritedName = envName.toLowerCase();
+  process.env[inheritedName] = "disposable-case-conflict";
+  t.after(() => { delete process.env[inheritedName]; });
+  await assert.rejects(f.adapter.link({ ...input, envName }), /plaintext_conflict/);
+  assert.deepEqual(await f.adapter.listBindings(), []);
+  assert.equal(f.calls.length, calls);
+});
+
 test("unauthorized and oversized responses never expose body content", async t => {
   const f = await paired(t);
   for (const fetch of [async () => new Response("sensitive-fixture", { status: 401 }), async () => new Response("x".repeat(600_001))]) {
@@ -462,7 +517,7 @@ test("401 rediscovery reloads rotated descriptor once, with a strict retry bound
       return new Response("ignored-secret-error", { status: 401 });
     }
     assert.equal(options.headers["x-stm-token"], rotatedToken);
-    return Response.json({ version: 1, selectedResolution: true, backend: "in-memory fixture" });
+    return Response.json({ version: 1, selectedResolution: true, backend: "in-memory fixture", backendId: "macos-keychain" });
   } });
   assert.equal((await a.status()).state, "connected");
   assert.equal(attempts, 2);

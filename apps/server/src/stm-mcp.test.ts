@@ -16,7 +16,7 @@ test("MCP configuration keeps only an opaque grant and refuses altered or disabl
     await writeFile(descriptorPath, JSON.stringify({ port: 3456, pid: process.pid, token: "a".repeat(48) }), { mode: 0o600 });
     const credentials = new StmCredentials({ enabled: true, platform: "darwin", localDesktop: true, descriptorPath, registryPath,
       fetch: async url => {
-        if (String(url).endsWith("capabilities")) return Response.json({ version: 1, backend: "fixture", selectedResolution: true });
+        if (String(url).endsWith("capabilities")) return Response.json({ version: 1, backend: "fixture", backendId: "macos-keychain", selectedResolution: true });
         if (String(url).endsWith("keys")) return Response.json({ version: 1, keys: [{ tool: "fixture", label: "default", revision: "a".repeat(64), status: "active", updatedAt: "2026-09-28" }] });
         resolutions++; return Response.json({ values: { FIXTURE_KEY: secret } });
       },

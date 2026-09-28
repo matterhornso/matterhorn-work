@@ -16,6 +16,14 @@ Protocol: STM `/api/integrations/v1/{capabilities,keys,resolve}`, version 1,
 branch `codex/matterhorn-selected-secrets-2026-09-28`; released STM 1.9.0 is not
 assumed to support this contract. Do not use `/api/inject/env` as a fallback.
 
+Handshake requires the companion API's `backendId`, not just its display label.
+The macOS pilot permits `macos-keychain` and `encrypted-file`; missing/malformed
+IDs fail as `incompatible_daemon`, unknown/unsupported/other-platform IDs as
+`unsupported_keystore`. The authenticated label is still displayed accurately;
+an encrypted file is not called Keychain. This checks implementation compatibility,
+not unlock state or OS acceptance. A change is rechecked before bound operations;
+failure keeps metadata available and never enables plaintext fallback.
+
 ## Current boundary
 
 - `connect({consent:true})` records pairing metadata after authentication.

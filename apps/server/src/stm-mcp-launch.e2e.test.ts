@@ -18,9 +18,10 @@ test("trusted stdio launcher completes an MCP request with selected fake credent
   const secret = "disposable-stdio-fixture";
   const token = "b".repeat(48);
   let resolutions = 0;
+  let backendId = "macos-keychain"; // advertised identity only; daemon/storage are fake
   const daemon = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request => {
     if (request.headers.get("x-stm-token") !== token) return new Response(null, { status: 401 });
-    if (request.url.endsWith("capabilities")) return Response.json({ version: 1, selectedResolution: true, backend: "fake stdio test", revisionedResolution: true });
+    if (request.url.endsWith("capabilities")) return Response.json({ version: 1, selectedResolution: true, backend: "fake stdio test", backendId, revisionedResolution: true });
     if (request.url.endsWith("keys")) return Response.json({ version: 1, keys: [{ tool: "fixture", label: "default", status: "active", updatedAt: "2026-09-28", revision: "c".repeat(64) }] });
     const body = await request.json();
     if (!body.includeRevisions || body.bindings.length !== 1 || body.bindings[0].envName !== "FIXTURE_KEY") return new Response(null, { status: 400 });
@@ -93,6 +94,12 @@ lines.on("line", line => {
         });
       });
       const headers = { "x-matterhorn-host-token": "fixture-host-token", "content-type": "application/json" };
+      backendId = "unsupported";
+      const rejected = await fetch(`${base}/env/stm/connect`, { method: "POST", headers, body: '{"consent":true}' });
+      expect(rejected.status).toBe(409);
+      expect(await credentials.status()).toEqual({ state: "not_connected" });
+      expect(resolutions).toBe(0);
+      backendId = "macos-keychain";
       const paired = await fetch(`${base}/env/stm/connect`, { method: "POST", headers, body: '{"consent":true}' });
       expect(paired.status).toBe(200);
       const workspaces = await (await fetch(`${base}/workspaces`, { headers: { authorization: "Bearer fixture-client-token" } })).json();

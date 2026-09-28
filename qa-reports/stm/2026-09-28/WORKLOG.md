@@ -548,3 +548,62 @@ Next: implement a supported-backend compatibility contract and negative tests,
 reverify interoperation, then finish the requirement audit. This is actionable
 local work, not an external blocker. Preserve the broader goal and leave ACTIVE.
 No push, merge, deployment, real keystore access or migration occurred.
+
+## Continuation: backend compatibility and final phase audit
+
+Previous turn classified as **progress**: revalidated local Matterhorn commit
+`5175b42b138f` and STM commit `d548049cc61f` with no tracked drift before work.
+Closed the concrete handshake gap identified by the last audit:
+
+- STM capabilities now expose an explicit `backendId`, mapped from the actual
+  existing implementation descriptions. Unknown/custom/unsupported descriptions
+  become `unsupported` with a fixed safe label, not echoed native failure details.
+  This performs no vault read/probe/unlock and does not change legacy bulk APIs.
+- The macOS adapter accepts `macos-keychain` and `encrypted-file` explicitly.
+  Missing/malformed IDs are incompatible; unknown, unsupported and other-platform
+  IDs refuse pairing and bound operations before key reads/writes. Display labels
+  alone cannot authorize compatibility. Metadata remains usable after failure;
+  no stale plaintext fallback or real credential migration was added.
+- Tests cover all ID classes, encrypted-file naming, changes after pairing,
+  metadata preservation and no resolution/write after rejection. The cross-repo
+  test changes the fake daemon's backend after a successful real child call.
+  Native HTTP acceptance now also proves failed pairing did not persist consent.
+- Requirement review also found case-fold plaintext conflicts were deferred to
+  runtime instead of rejected while linking. A regression failed before correction;
+  legacy/inherited names now use the same normalized conflict policy before any
+  inventory or registry write. Non-adopters are unaffected.
+
+STM companion commit: **`ef24aa14e772cc2a3d546c2f73a41ae0957911eb`**.
+Matterhorn's exact final tree is the commit containing this section and audit.
+
+Final results after the normalized-name correction:
+
+- Adapter **38 passed**; STM selected/lifecycle/interoperation **28 passed /
+  141 assertions**. Fake stores only, no real daemon descriptor or vault.
+- Full backend **1,767 passed / 11,833 assertions / 183 files**, isolated HOME:
+  `/var/folders/96/vmhqgys5337f1g3f26phrhn80000gn/T/matterhorn-stm-server-4d9j2Y/result.log`.
+- Rebuilt native server **1,437 modules**; native HTTP + actual OpenCode 1.18.31
+  fixture **1 passed / 75 assertions**. Dedicated desktop launcher **26 modules**;
+  pinned-engine fixture **1 passed / 66 assertions**. Both final SHA-256 values
+  and exact commands are in `PHASE-1-3-AUDIT.md`. Only synthetic inference used.
+- Server typecheck passed. Prior app **1,228/0**, app typecheck/build, server build,
+  Electron/orchestrator typechecks and 50-method bridge evidence remain applicable
+  to unchanged frontend/shell sources. The adapter's current native builds exercise
+  the changed runtime code. Matterhorn source scan: **1,214 files / zero findings**.
+- Pinned pnpm10.27.0 offline/frozen/lockfile-only/ignore-scripts check passed for
+  all 20 workspaces and left no dependency diff. This closes the earlier local
+  lockfile-validation note, not clean-install/published-artifact acceptance.
+- Full **ten-stage safety gate passed** after both backend-ID enforcement and
+  normalized-name tightening. Final log:
+  `/private/tmp/matterhorn-stm-safety-nn419m/result.log`.
+
+No new product slice, production change, secret migration, push or deployment.
+Settings/migration, real keystore/unlock, signed OS acceptance and independent
+security/CI review remain release gates rather than being silently claimed done.
+
+Requirement-by-requirement completion audit: `PHASE-1-3-AUDIT.md` records the
+actual source and test evidence for all three engineering phases and separates
+unverified release work. The active local implementation goal is achieved; no
+remaining phase-1–3 coding/test requirement was left as an inferred success.
+This is not public-beta activation or an assertion that real/signed OS acceptance,
+settings/migration, brokered execution or AI-provider authentication is complete.

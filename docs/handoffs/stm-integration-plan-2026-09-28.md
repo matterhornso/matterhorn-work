@@ -1,9 +1,10 @@
 # STM integration into Matterhorn Desks
 
-Status: implementation authorized on 28 September; foundation work has started,
-not release-ready. Progress and remaining gates:
-`qa-reports/stm/2026-09-28/WORKLOG.md`. The source review below describes the
-pre-implementation baseline.
+Status: engineering phases 1–3 implemented and locally verified on 28 September;
+not release-ready. Requirement evidence and remaining OS/security/settings gates:
+`qa-reports/stm/2026-09-28/PHASE-1-3-AUDIT.md`; chronological progress:
+`qa-reports/stm/2026-09-28/WORKLOG.md`. This is not completion of three product
+slices. The source review below describes the pre-implementation baseline.
 Prepared 28 September 2026. No secret values, real keychain records or daemon
 descriptors were opened. No STM installation, pairing, migration or key writes
 were performed. PR #1026 remains a separate release concern; this feature must

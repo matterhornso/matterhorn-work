@@ -7,6 +7,9 @@ import { spawn } from "node:child_process";
 
 const MAX_FILE = 32_768;
 const MAX_RESPONSE = 600_000;
+// macOS-only pilot. Other STM backends are not implicitly supported just because
+// they provide a display label. This is not proof the selected store is unlocked.
+const supportedBackendIds = new Set(["macos-keychain", "encrypted-file"]);
 const forbidden = /^(MATTERHORN_WORK_|OPENWORK_|OPENCODE_|STM_|LD_|DYLD_|NODE_|BUN_|PYTHON|RUBY|PERL|GIT_|npm_)/i;
 const processNames = new Set(["PATH", "HOME", "SHELL", "ENV", "BASH_ENV", "ZDOTDIR", "IFS", "CDPATH", "COMSPEC", "PATHEXT", "SYSTEMROOT", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "__PROTO__", "CONSTRUCTOR", "PROTOTYPE"]);
 // Shared legacy-loader policy. The stricter STM policy below additionally blocks
@@ -172,6 +175,8 @@ export class StmCredentials {
   async #handshake() {
     const c = await this.#request("capabilities");
     if (!object(c) || c.version !== 1 || c.selectedResolution !== true || typeof c.backend !== "string" || c.backend.length > 128 || !c.backend.trim()) fail("incompatible_daemon");
+    if (typeof c.backendId !== "string") fail("incompatible_daemon");
+    if (!supportedBackendIds.has(c.backendId)) fail("unsupported_keystore");
     return { version: 1, backend: c.backend, revisionedWrites: c.revisionedWrites === true };
   }
   #mutate(fn) {
@@ -284,7 +289,8 @@ export class StmCredentials {
     if (consent !== true) fail("consent_required");
     const binding = { id: randomUUID(), envName, tool, label, consumer, updatedAt: new Date().toISOString(), storageBackend: "unknown", credentialRevision: null, appliedRevision: null, restartRequired: typeof consumer === "string" && consumer.startsWith("mcp:") };
     if (!validBinding(binding)) fail("invalid_binding");
-    if (legacyNames.includes(envName) || Object.hasOwn(process.env, envName)) fail("plaintext_conflict");
+    const occupiedNames = [...legacyNames, ...Object.keys(process.env)];
+    if (occupiedNames.some(name => name.toUpperCase() === envName.toUpperCase())) fail("plaintext_conflict");
     return this.#mutate(async () => {
       const inventory = await this.inventory();
       const key = inventory.find(k => k.tool === tool && k.label === label && k.status === "active");

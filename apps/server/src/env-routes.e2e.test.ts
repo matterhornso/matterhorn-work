@@ -236,7 +236,7 @@ test("STM MCP host route waits for approval, rejects changed commands, and persi
   writeFileSync(descriptorPath, JSON.stringify({ port: 3456, pid: process.pid, token: daemonToken }), { mode: 0o600 });
   let resolutions = 0;
   const stm = new StmCredentials({ enabled: true, localDesktop: true, platform: "darwin", descriptorPath, registryPath: join(root, "stm-bindings.json"), fetch: async url => {
-    if (String(url).endsWith("capabilities")) return Response.json({ version: 1, backend: "fake route fixture", selectedResolution: true });
+    if (String(url).endsWith("capabilities")) return Response.json({ version: 1, backend: "fake route fixture", backendId: "macos-keychain", selectedResolution: true });
     if (String(url).endsWith("keys")) return Response.json({ version: 1, keys: [{ tool: "fixture", label: "default", revision: "c".repeat(64), status: "active", updatedAt: "2026-09-28" }] });
     resolutions++; throw new Error("Configuration must never resolve credentials");
   } });
