@@ -672,3 +672,20 @@ from the new CI run, not inferred from the local pass.
 #1026 is still open and is #1027's base. Requested confirmation of whether to
 merge both in order into dev or merge #1027 only into that feature branch. No
 merge bypass, flag activation or deployment performed while this is unresolved.
+
+## Ordered merge into dev — 28 September 2026
+
+The user explicitly authorized reviewing/merging #1026 first, then #1027 into
+`dev`. #1026 review corrected two CodeQL archive file-race findings in commit
+`15dce9491cc4e3951df97aec7f1d00e64eed861f`. Recovery, backup-loop and direct-prompt
+tests passed locally; all 11 reported GitHub checks passed, including both CodeQL
+checks, the full platform safety gate and the production container build.
+#1026 merged at 18:19:33 UTC as `ebd904834880f704672fbc78bb7c38da63ab8164`.
+
+#1027 was retargeted to `dev` and that merge incorporated without conflicts in
+`6fbf32c4cf65a2f2b2806a9fc7d47fccfdcc4401`. Removed the now-obsolete temporary
+stack-base CI trigger; normal dev PR/push triggers and the STM Linux/macOS tests
+remain. The earlier STM head's CI passed on both operating systems. Fresh CI on
+the combined branch is required before its merge. The default-off feature,
+companion STM dependency and real Keychain/signed-desktop/security release gates
+remain unchanged. Merge authorization does not authorize enabling or deploying it.

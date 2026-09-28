@@ -4,8 +4,6 @@ on:
   pull_request:
     branches:
       - dev
-      # STM is reviewed as a stack while #1026 remains open.
-      - codex/beta-launch-readiness-2026-09-25
   push:
     branches:
       - dev
