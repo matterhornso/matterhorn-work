@@ -40,6 +40,7 @@ import {
   recordModelOperationCancelled,
   recordModelOperationCompleted,
   recordModelOperationProviderError,
+  type ModelOperationContext,
 } from "../../../../app/lib/model-operation-metrics";
 import { t } from "../../../../i18n";
 import { readWorkspaceCloudImports, type CloudImportedPlugin } from "../../../../app/cloud/import-state";
@@ -1078,6 +1079,32 @@ export function parseSessionError(thrown: unknown): SessionError {
     };
   }
   const diagnostic = `${raw}\n${parsed ? JSON.stringify(parsed) : ""}`;
+  const approvalError = parsed ?? thrown;
+  if (
+    approvalError && typeof approvalError === "object" &&
+    "code" in approvalError && approvalError.code === "write_denied" &&
+    "details" in approvalError && approvalError.details && typeof approvalError.details === "object" &&
+    "reason" in approvalError.details && approvalError.details.reason === "cancelled"
+  ) {
+    return {
+      message: "Request stopped.",
+      detail: "Stopped before it was sent. Your draft is still available to edit or send again.",
+      kind: "cancelled",
+      retryable: false,
+    };
+  }
+  if (
+    (approvalError && typeof approvalError === "object" &&
+      "code" in approvalError && approvalError.code === "agent_permission_unavailable") ||
+    /agent_permission_unavailable|Agent [\w-]+ has no runtime permission policy/i.test(diagnostic)
+  ) {
+    return {
+      message: "This desk's permissions need setup.",
+      detail: "Ask the workspace owner to repair this desk's tool permissions, then send again. Your draft is preserved.",
+      kind: "generic",
+      retryable: false,
+    };
+  }
   if (/agent_unavailable|Agent [\w-]+ is not available in this workspace/i.test(diagnostic)) {
     return {
       message: "This desk needs setup.",
@@ -1179,6 +1206,23 @@ export function parseSessionError(thrown: unknown): SessionError {
     kind: "generic",
     retryable: true,
   };
+}
+
+export function recordSessionSubmissionFailure(operation: ModelOperationContext, error: unknown): SessionError {
+  const parsed = parseSessionError(error);
+  const activity = useSessionActivityStore.getState();
+  if (parsed.kind === "cancelled") {
+    // Stop's response and the cancelled send can arrive in either order.
+    if (pendingModelOperation(operation.sessionId)?.id === operation.id) {
+      recordModelOperationCancelled(operation);
+    }
+    activity.setRunStatus(operation.workspaceId, operation.sessionId, { type: "idle" });
+    activity.clearError(operation.workspaceId, operation.sessionId);
+  } else {
+    recordModelOperationProviderError(operation, error);
+    activity.setError(operation.workspaceId, operation.sessionId);
+  }
+  return parsed;
 }
 
 export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot | null) {
@@ -1540,7 +1584,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const [verifiedOpenTargets, setVerifiedOpenTargets] = useState<OpenTarget[]>([]);
   const composerShellRef = useRef<HTMLDivElement>(null);
   const hydratedKeyRef = useRef<string | null>(null);
-  const hydratedSavedDraftKeyRef = useRef<string | null>(null);
   const autoOpenedTargetRef = useRef<string | null>(null);
   const initializedAutoOpenSessionRef = useRef<string | null>(null);
   const handledTerminalFailureRef = useRef<string | null>(null);
@@ -1643,7 +1686,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   useEffect(() => {
     hydratedKeyRef.current = null;
-    hydratedSavedDraftKeyRef.current = null;
     setError(null);
     setSending(false);
     setConfirmingPrivacy(false);
@@ -2165,13 +2207,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
   ]);
 
   useEffect(() => {
-    const text = savedSessionDraft?.text?.trim();
+    const text = savedSessionDraft?.text;
     if (!text) return;
-    if (draft.trim()) return;
-    const key = `${props.workspaceId}:${props.sessionId}:${text}`;
-    if (hydratedSavedDraftKeyRef.current === key) return;
-    hydratedSavedDraftKeyRef.current = key;
-    setComposerDraft(props.sessionId, text);
+    if (!useComposerStateStore.getState().hydrateDraft(props.sessionId, text)) return;
     props.onDraftChange(buildDraft(text, attachments));
     window.setTimeout(() => window.dispatchEvent(new Event("openwork:focusPrompt")), 0);
   }, [
@@ -2196,6 +2234,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const sendDraft = useCallback(async (privacyConsentToken?: string) => {
     const text = draft.trim();
     if (!text && attachments.length === 0) return;
+    const submittedComposer = useComposerStateStore.getState().sessions[props.sessionId];
     const reviewedActionHandoff = attachments.length === 0
       ? reviewedActionHandoffFromComposer(text, activeWorkflowDeskAgent?.deskId)
       : null;
@@ -2297,20 +2336,19 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
       await props.onSendDraft(nextDraft);
       recordModelOperationAccepted(operation);
-      attachments.forEach(revokeAttachmentPreview);
-      clearComposerSession(props.sessionId);
-      props.onDraftChange(buildDraft("", []));
+      if (useComposerStateStore.getState().clearSubmittedSession(props.sessionId, submittedComposer)) {
+        attachments.forEach(revokeAttachmentPreview);
+      }
+      const currentComposer = useComposerStateStore.getState();
+      props.onDraftChange(buildDraft(getComposerDraft(currentComposer, props.sessionId), getComposerAttachments(currentComposer, props.sessionId)));
       setSending(false);
     } catch (nextError) {
-      recordModelOperationProviderError(operation, nextError);
-      const parsed = parseSessionError(nextError);
+      const parsed = recordSessionSubmissionFailure(operation, nextError);
       setError(parsed);
-      useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId);
-      // A rejected send must leave the person's work intact. This includes
-      // provider setup failures, where the next useful action is to connect a
-      // model and then resend the exact draft.
-      setComposerDraft(props.sessionId, text);
-      props.onDraftChange(buildDraft(text, attachments));
+      // Sending never removed the draft. Preserve its current contents rather
+      // than overwriting newer edits with the older, rejected submission.
+      const currentComposer = useComposerStateStore.getState();
+      props.onDraftChange(buildDraft(getComposerDraft(currentComposer, props.sessionId), getComposerAttachments(currentComposer, props.sessionId)));
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
@@ -2417,10 +2455,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
         tone: "info",
       });
     } catch (nextError) {
-      recordModelOperationProviderError(operation, nextError);
-      const parsed = parseSessionError(nextError);
+      const parsed = recordSessionSubmissionFailure(operation, nextError);
       setError(parsed);
-      useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId);
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);

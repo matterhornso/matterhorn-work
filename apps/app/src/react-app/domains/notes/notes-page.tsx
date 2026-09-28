@@ -16,6 +16,7 @@ import { useStatusToasts } from "../shell-feedback/status-toasts";
 import { NoteAttachmentChip } from "./note-attachment-chip";
 import { NotesEmptyState } from "./notes-empty-state";
 import { useNotesServerClient } from "./notes-server-client";
+import { notesScopeKey } from "./notes-scope-key";
 import { filterNotes, useNotesStore } from "./notes-store";
 import type { MatterhornNote, NoteAttachment, NoteFilterId } from "./notes-types";
 import { NOTE_FILTERS, noteSuggestedToMemory, noteTimestampMs, noteToAttachment } from "./notes-types";
@@ -63,25 +64,11 @@ function NoteListAttachment({ note }: { note: MatterhornNote }) {
 }
 
 export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPageProps) {
-  const { showToast } = useStatusToasts();
   const notesClient = useNotesServerClient(client);
   const params = useParams<{ workspaceId?: string }>();
   const routeWorkspaceId = params.workspaceId?.trim() ?? "";
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => readActiveWorkspaceId() ?? "");
   const workspaceId = explicitWorkspaceId?.trim() || routeWorkspaceId || activeWorkspaceId;
-  const { notes, loading, error, create, update, remove, suggestMemory, refresh } = useNotesStore(workspaceId, notesClient);
-  const [query, setQuery] = useState("");
-  const [filterId, setFilterId] = useState<NoteFilterId>("all");
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<NoteDraft>({ title: "", body: "", tags: "" });
-  const [saving, setSaving] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-
-  useEffect(() => {
-    setSelectedNoteId(null);
-    setDraft({ title: "", body: "", tags: "" });
-  }, [workspaceId]);
-
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
     const refreshActiveWorkspace = () => setActiveWorkspaceId(readActiveWorkspaceId() ?? "");
@@ -92,6 +79,28 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
       window.removeEventListener(ACTIVE_WORKSPACE_CHANGED_EVENT, refreshActiveWorkspace);
     };
   }, []);
+
+  // A workspace/connection transition replaces the whole async/editor owner.
+  // Merely clearing selection leaves late list/save responses able to populate
+  // the next workspace with the previous workspace's notes.
+  return <WorkspaceNotesPage key={notesScopeKey(workspaceId, notesClient)} workspaceId={workspaceId} notesClient={notesClient} />;
+}
+
+function WorkspaceNotesPage({ workspaceId, notesClient }: {
+  workspaceId: string;
+  notesClient: MatterhornServerClient | null;
+}) {
+  const { showToast } = useStatusToasts();
+  const { notes, loading, error, create, update, remove, suggestMemory, refresh } = useNotesStore(workspaceId, notesClient);
+  const [query, setQuery] = useState("");
+  const [filterId, setFilterId] = useState<NoteFilterId>("all");
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<NoteDraft>({ title: "", body: "", tags: "" });
+  const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const saveQueueRef = useRef<Promise<MatterhornNote | null> | null>(null);
+  const editorStateRef = useRef({ noteId: selectedNoteId, draft });
+  editorStateRef.current = { noteId: selectedNoteId, draft };
 
   const filteredNotes = useMemo(
     () => filterNotes(notes, { query, filterId }),
@@ -113,14 +122,29 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
   ));
 
   const saveDraft = useCallback(async () => {
-    if (!selectedNote || !draftDirty) return true;
+    if (!selectedNote || (!draftDirty && !saveQueueRef.current)) return true;
     setSaving(true);
-    const saved = await update(selectedNote.id, {
-      title: draft.title,
-      body: draft.body,
-      tags: draftTags,
-    });
-    setSaving(false);
+    // Autosave and explicit save/close must not race writes to the same note.
+    // Also persist a revert that looks clean against a still-stale server value.
+    const previousSave = saveQueueRef.current;
+    const pendingSave = (async () => {
+      await previousSave?.catch(() => null);
+      return update(selectedNote.id, {
+        title: draft.title,
+        body: draft.body,
+        tags: draftTags,
+      });
+    })();
+    saveQueueRef.current = pendingSave;
+    let saved;
+    try {
+      saved = await pendingSave;
+    } finally {
+      if (saveQueueRef.current === pendingSave) {
+        saveQueueRef.current = null;
+        setSaving(false);
+      }
+    }
     if (!saved) {
       showToast({
         title: "Could not save note",
@@ -129,7 +153,9 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
       });
       return false;
     }
-    return true;
+    // A successful old snapshot is not permission to close a newer draft or
+    // send it to Memory. Leave the editor open for its next autosave/retry.
+    return editorStateRef.current.noteId === selectedNote.id && editorStateRef.current.draft === draft;
   }, [draft, draftDirty, draftTags, error, selectedNote, showToast, update]);
   const saveDraftRef = useRef(saveDraft);
   useEffect(() => {
@@ -392,7 +418,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
             <Loader2 className="size-3.5 animate-spin" />
             {t("notes.loading")}
           </div>
-        ) : filteredNotes.length === 0 ? (
+        ) : error && notes.length === 0 ? null : filteredNotes.length === 0 ? (
           <div className="flex min-h-full flex-col items-center justify-center gap-4 px-6 py-10 text-center">
             <NotesEmptyState
               title={notes.length === 0 ? t("notes.empty_no_notes_title") : t("notes.empty_no_matches_title")}

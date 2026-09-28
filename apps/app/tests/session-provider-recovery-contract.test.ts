@@ -33,8 +33,9 @@ describe("session provider recovery", () => {
     const surface = readReactSource("domains/session/surface/session-surface.tsx");
 
     expect(surface).toContain("Your message is still in the composer.");
-    expect(surface).toContain("setComposerDraft(props.sessionId, text);");
-    expect(surface).toContain("props.onDraftChange(buildDraft(text, attachments));");
+    expect(surface).toContain("clearSubmittedSession(props.sessionId, submittedComposer)");
+    expect(surface).toContain("getComposerDraft(currentComposer, props.sessionId)");
+    expect(surface).toContain("getComposerAttachments(currentComposer, props.sessionId)");
     expect(surface).not.toContain("setComposerDraft(props.sessionId, \"\");");
   });
 

@@ -1,12 +1,55 @@
 import { describe, expect, test } from "bun:test";
 
 import { parseSessionError } from "../src/react-app/domains/session/surface/session-surface";
+import { MatterhornServerError } from "../src/app/lib/matterhorn-server";
+
+describe("cancelled approval responses", () => {
+  const body = { code: "write_denied", message: "Write request denied", details: { reason: "cancelled" } };
+
+  test("recognizes both SDK serialization and direct API errors", () => {
+    for (const error of [new Error(JSON.stringify(body)), body,
+      new MatterhornServerError(403, body.code, body.message, body.details)]) {
+      const parsed = parseSessionError(error);
+      expect(parsed.kind).toBe("cancelled");
+      expect(parsed.message).toBe("Request stopped.");
+      expect(parsed.detail).toContain("before it was sent");
+      expect(parsed.retryable).toBe(false);
+    }
+  });
+
+  test("does not mistake denial, timeout, ambiguous dispatch or unrelated codes for Stop", () => {
+    for (const error of [
+      { ...body, details: { reason: "denied" } },
+      { ...body, details: { reason: "timeout" } },
+      { ...body, details: null },
+      { ...body, code: "message_outcome_unknown" },
+      { ...body, code: "agent_privacy_blocked" },
+      { ...body, details: { reason: "cancelled_by_provider" } },
+    ]) {
+      expect(parseSessionError(new Error(JSON.stringify(error))).kind).not.toBe("cancelled");
+    }
+    expect(parseSessionError(new Error("Provider cancelled the request")).kind).not.toBe("cancelled");
+  });
+});
 
 test("missing desk agents explain setup instead of offering an ineffective retry", () => {
   const result = parseSessionError(new Error("Agent matterhorn-bittensor is not available in this workspace"));
   expect(result.message).toBe("This desk needs setup.");
   expect(result.detail).toContain("Your draft is preserved");
   expect(result.retryable).toBe(false);
+});
+
+test("missing desk permission policy explains setup without suggesting blind retries", () => {
+  const body = { code: "agent_permission_unavailable", message: "Agent matterhorn-bittensor has no runtime permission policy" };
+  for (const error of [body, new Error(JSON.stringify(body)), new Error(body.message),
+    new MatterhornServerError(503, body.code, body.message)]) {
+    const result = parseSessionError(error);
+    expect(result.message).toBe("This desk's permissions need setup.");
+    expect(result.detail).toContain("workspace owner");
+    expect(result.detail).toContain("Your draft is preserved");
+    expect(result.retryable).toBe(false);
+    expect(`${result.message} ${result.detail}`).not.toMatch(/agent_permission_unavailable|runtime permission|matterhorn-bittensor/);
+  }
 });
 
 describe("session error copy", () => {

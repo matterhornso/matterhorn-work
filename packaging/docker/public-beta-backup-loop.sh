@@ -4,7 +4,12 @@
 # backup freshness gate (MATTERHORN_HOST_BACKUP_REQUIRED) can pass on a fresh
 # instance, then repeats on the configured interval.
 set -u
-[ "${MATTERHORN_HOST_BACKUP_REQUIRED:-0}" = "1" ] || exit 0
+# Match the server's enabledEnvironmentFlag/public launch checks.
+required="$(printf '%s' "${MATTERHORN_HOST_BACKUP_REQUIRED:-0}" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+case "$required" in
+  1|true|yes|on) ;;
+  *) exit 0 ;;
+esac
 interval="${MATTERHORN_HOST_BACKUP_INTERVAL_SECONDS:-86400}"
 retry="${MATTERHORN_HOST_BACKUP_RETRY_SECONDS:-300}"
 scratch="$(mktemp -d)/host-recovery.json.gz"

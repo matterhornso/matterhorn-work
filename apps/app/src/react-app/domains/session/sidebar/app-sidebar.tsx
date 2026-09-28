@@ -990,6 +990,7 @@ type SessionMenuItemProps = {
 
 function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpandedSessionIds, depth }: SessionMenuItemProps) {
   const ctx = useSidebarContext();
+  const { setOpenMobile } = useSidebar();
   const isSelected = ctx.selectedSessionId === session.id;
   const displayTitle = getDisplaySessionTitle(
     session.title,
@@ -1003,6 +1004,7 @@ function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpan
 
   const openSession = () => {
     ctx.onOpenSession(workspaceId, session.id);
+    setOpenMobile(false);
   };
 
   const prefetchSession = () => {

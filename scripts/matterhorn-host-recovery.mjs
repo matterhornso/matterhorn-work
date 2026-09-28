@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
@@ -415,11 +415,32 @@ async function restoreBundle(config) {
     throw new Error("Restore requires --archive, --restore-to, and an exact --confirm-restore-to.");
   }
   const targetRoot = resolve(config.restoreTo);
+  const targetStat = await lstat(targetRoot).catch((error) => {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  });
+  if (targetStat && (!targetStat.isDirectory() || targetStat.isSymbolicLink())) {
+    throw new Error("Host recovery requires a real, empty restore directory.");
+  }
   const existingEntries = await readdir(targetRoot).catch((error) => {
     if (error?.code === "ENOENT") return [];
     throw error;
   });
   if (existingEntries.length) throw new Error("Host recovery requires a clean, empty restore root.");
+  // Validate and reconcile privately; a failed restore must never expose a
+  // usable subset of databases (especially before erasure reconciliation).
+  await mkdir(dirname(targetRoot), { recursive: true, mode: 0o700 });
+  const staging = await mkdtemp(join(dirname(targetRoot), ".matterhorn-restore-"));
+  try {
+    const restored = await restoreArchive(config, staging);
+    await rename(staging, targetRoot);
+    return { targetRoot, ...restored };
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
+}
+
+async function restoreArchive(config, targetRoot) {
   const decoded = JSON.parse((await gunzipAsync(await readFile(config.archive))).toString("utf8"));
   if (decoded.version !== VERSION || !Array.isArray(decoded.files)) throw new Error("Host recovery archive version is invalid.");
   const expectedPaths = new Set([...REQUIRED_DATABASES.map(([path]) => path), "opencode/opencode.db"]);
@@ -452,7 +473,13 @@ async function restoreBundle(config) {
       throw new Error("Restore contains recovery material and requires --erasure-ledger from outside the host archive.");
     }
     const ledgerPath = resolve(config.erasureLedger);
-    const verified = verifyErasureLedger(ledgerPath);
+    // Snapshot through SQLite so committed WAL records are included. Reconcile
+    // against exactly the authenticated ledger that will be restored.
+    const restoredLedger = safeDestination(targetRoot, "erasure-ledger/ledger.db");
+    await mkdir(dirname(restoredLedger), { recursive: true, mode: 0o700 });
+    await snapshotDatabase(ledgerPath, restoredLedger);
+    await chmod(restoredLedger, 0o600);
+    const verified = verifyErasureLedger(restoredLedger);
     const archivedCheckpoint = decoded.erasureLedger.checkpoint;
     const expectedCheckpointSignature = signErasureCheckpoint(archivedCheckpoint);
     if (!Number.isSafeInteger(archivedCheckpoint.count)
@@ -466,13 +493,8 @@ async function restoreBundle(config) {
       required: true,
       ...reconcileGuardedState(guardedStatePath, verified),
     };
-    const restoredLedger = safeDestination(targetRoot, "erasure-ledger/ledger.db");
-    await mkdir(dirname(restoredLedger), { recursive: true, mode: 0o700 });
-    await copyFile(ledgerPath, restoredLedger);
-    await chmod(restoredLedger, 0o600);
-    verifyErasureLedger(restoredLedger);
   }
-  return { targetRoot, capturedAt: decoded.capturedAt, erasureReconciliation };
+  return { capturedAt: decoded.capturedAt, erasureReconciliation };
 }
 
 async function main() {

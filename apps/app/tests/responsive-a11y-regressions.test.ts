@@ -10,6 +10,14 @@ function readAppFile(path: string) {
 }
 
 describe("responsive accessibility regressions", () => {
+  test("opening a chat dismisses only the compact navigation drawer", () => {
+    const source = readAppSource("domains/session/sidebar/app-sidebar.tsx");
+    const item = source.slice(source.indexOf("function SessionMenuItem("));
+    expect(item).toContain("const { setOpenMobile } = useSidebar();");
+    expect(item).toContain("ctx.onOpenSession(workspaceId, session.id);\n    setOpenMobile(false);");
+    expect(item).not.toContain("setOpen(false)");
+    expect(item.match(/onClick=\{openSession\}/g)).toHaveLength(2);
+  });
   test("blank sessions start at the top while populated transcripts keep sticky-bottom behavior", () => {
     const surface = readAppSource("domains/session/surface/session-surface.tsx");
     const controller = readAppSource("domains/session/surface/scroll-controller.ts");

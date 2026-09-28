@@ -4,6 +4,19 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SessionErrorCard, parseSessionError } from "../src/react-app/domains/session/surface/session-surface";
 
 describe("ambiguous dispatch error recovery", () => {
+  test("announces cancelled approval as a stopped status without an automatic retry action", () => {
+    const error = parseSessionError(new Error(JSON.stringify({
+      code: "write_denied", details: { reason: "cancelled" },
+    })));
+    const html = renderToStaticMarkup(
+      <SessionErrorCard error={error} onDismiss={() => {}} onRetry={() => {}} />,
+    );
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-atomic="true"');
+    expect(html).toContain('aria-label="Dismiss stopped status"');
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain(">Retry response</button>");
+  });
   const transportError = () => parseSessionError(new Error(JSON.stringify({
     code: "message_outcome_unknown",
     message: "The request may still be running",

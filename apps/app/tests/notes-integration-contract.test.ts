@@ -72,6 +72,11 @@ describe("Notes integration contracts", () => {
     expect(source).toContain("useParams<{ workspaceId?: string }>");
     expect(source).toContain("const workspaceId = explicitWorkspaceId?.trim() || routeWorkspaceId || activeWorkspaceId");
     expect(source).toContain("ACTIVE_WORKSPACE_CHANGED_EVENT");
+    expect(source).toContain("<WorkspaceNotesPage key={notesScopeKey(workspaceId, notesClient)} workspaceId={workspaceId} notesClient={notesClient} />");
+    const scopedPage = source.slice(source.indexOf("function WorkspaceNotesPage("));
+    expect(scopedPage).toContain("useNotesStore(workspaceId, notesClient)");
+    expect(scopedPage).toContain("const [selectedNoteId, setSelectedNoteId]");
+    expect(scopedPage).toContain("const [draft, setDraft]");
     expect(source).toContain('aria-label="Filter notes"');
     expect(source).toContain("grid-cols-[minmax(0,1fr)_9rem]");
     expect(source).toContain('placeholder={t("notes.search_placeholder")}');
@@ -107,6 +112,13 @@ describe("Notes integration contracts", () => {
     expect(source).toContain("hover:bg-dls-surface-muted/[0.26]");
     expect(source).toContain("bg-dls-surface-muted/[0.12] px-3 py-2.5");
     expect(source).toContain("hover:bg-dls-surface-muted/[0.20]");
+  });
+
+  test("failed initial notes loading does not claim the workspace has no notes", () => {
+    const source = readAppSource("domains/notes/notes-page.tsx");
+    expect(source).toContain('title="Could not load notes"');
+    expect(source).toContain("onRetry={() => void refresh()}");
+    expect(source).toContain("error && notes.length === 0 ? null : filteredNotes.length === 0");
   });
 
   test("artifact outputs can create linked notes from the session panel", () => {

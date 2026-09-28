@@ -12,6 +12,7 @@ import {
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { DenClient, DenUser } from "../../../../app/lib/den";
+import { accountSecurityQueryKey } from "./account-security-scope";
 import {
   SettingsInset,
   SettingsNotice,
@@ -45,7 +46,11 @@ function downloadAccountRecord(filename: string, payload: unknown): void {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
 }
 
-export function AccountSecuritySection({
+export function AccountSecuritySection(props: AccountSecuritySectionProps) {
+  return <ScopedAccountSecuritySection key={JSON.stringify(accountSecurityQueryKey(props.user.id, props.client))} {...props} />;
+}
+
+function ScopedAccountSecuritySection({
   client,
   user,
   onSessionEnded,
@@ -58,16 +63,17 @@ export function AccountSecuritySection({
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [deletePassword, setDeletePassword] = React.useState("");
   const [confirmationEmail, setConfirmationEmail] = React.useState("");
+  const queryKey = React.useMemo(() => accountSecurityQueryKey(user.id, client), [user.id, client]);
 
   const securityQuery = useQuery({
-    queryKey: ["account-security"],
+    queryKey,
     queryFn: () => client.getAccountSecurity(),
     staleTime: 15_000,
   });
   const revokeMutation = useMutation({
     mutationFn: () => client.revokeOtherSessions(),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["account-security"] });
+      await queryClient.invalidateQueries({ queryKey });
     },
   });
   const exportMutation = useMutation({
@@ -94,8 +100,9 @@ export function AccountSecuritySection({
     },
   });
 
-  const sessions = securityQuery.data?.sessionCount ?? 1;
-  const otherSessions = Math.max(0, sessions - 1);
+  const sessions = securityQuery.data?.sessionCount;
+  const securityKnown = securityQuery.isSuccess && typeof sessions === "number" && Number.isSafeInteger(sessions) && sessions >= 1;
+  const otherSessions = securityKnown ? sessions - 1 : 0;
   const deletionBlockers = securityQuery.data?.sharedOrganizationsBlockingDeletion ?? [];
   const passwordReady =
     currentPassword.length > 0 &&
@@ -116,9 +123,12 @@ export function AccountSecuritySection({
         </SettingsSectionHeaderContent>
       </SettingsSectionHeader>
 
-      {securityQuery.isError ? (
+      {securityQuery.isError || (!securityQuery.isPending && !securityKnown) ? (
         <SettingsNotice tone="error">
           {mutationMessage(securityQuery.error, "Account security status is unavailable.")}
+          <Button variant="outline" disabled={securityQuery.isFetching} onClick={() => void securityQuery.refetch()}>
+            {securityQuery.isFetching ? "Checking…" : "Retry security check"}
+          </Button>
         </SettingsNotice>
       ) : null}
 
@@ -130,8 +140,10 @@ export function AccountSecuritySection({
               Signed-in devices
             </p>
             <p className="mt-1 text-xs leading-5 text-dls-secondary">
-              {securityQuery.isLoading
+              {securityQuery.isPending
                 ? "Checking active sessions…"
+                : !securityKnown
+                  ? "Active sessions could not be verified."
                 : otherSessions > 0
                   ? `${otherSessions} other ${otherSessions === 1 ? "session" : "sessions"} can access this account.`
                   : "Only this session is active."}
@@ -140,7 +152,7 @@ export function AccountSecuritySection({
           <Button
             variant="outline"
             className="min-h-11 self-start sm:min-h-9"
-            disabled={securityQuery.isLoading || otherSessions === 0 || revokeMutation.isPending}
+            disabled={!securityKnown || otherSessions === 0 || revokeMutation.isPending}
             onClick={() => revokeMutation.mutate()}
           >
             {revokeMutation.isPending ? "Signing out…" : "Sign out other devices"}
@@ -295,7 +307,7 @@ export function AccountSecuritySection({
             <Button
               variant="destructive"
               className="min-h-11 self-start sm:min-h-9"
-              disabled={!deletionReady || deletionBlockers.length > 0 || deleteMutation.isPending}
+              disabled={!securityKnown || !deletionReady || deletionBlockers.length > 0 || deleteMutation.isPending}
               onClick={() => deleteMutation.mutate()}
             >
               {deleteMutation.isPending ? "Deleting account…" : "Permanently delete account"}

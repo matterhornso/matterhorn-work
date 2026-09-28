@@ -1937,6 +1937,7 @@ export async function startServer(
           const response = await proxyOpencodeRequest({
             config,
             logger,
+            approvals,
             request,
             url,
             workspace,
@@ -2026,6 +2027,7 @@ export async function startServer(
           const response = await proxyOpencodeRequest({
             config,
             logger,
+            approvals,
             request,
             url,
             workspace,
@@ -2250,7 +2252,7 @@ function operationalReadiness(
   const hostedMcpAccessMode = matterhornHostedMcpAccessMode();
   const hostedMcpAccessIntegrityReady = hostedMcpAccessMode === "off"
     || authStore.hostedMcpAccessIntegrityReady();
-  const hostBackupRequired = process.env.MATTERHORN_HOST_BACKUP_REQUIRED === "1";
+  const hostBackupRequired = enabledEnvironmentFlag("MATTERHORN_HOST_BACKUP_REQUIRED");
   const hostBackupFreshCheck = !hostBackupRequired || hostBackupFresh();
   const cryptoEvidenceSuiAnchorPackageReady = !cryptoEvidenceSuiAnchorPackageState.configured
     || cryptoEvidenceSuiAnchorPackageState.verified;
@@ -2408,6 +2410,11 @@ async function resolveMatterhornSessionAgentContext(input: {
   if (!agent) {
     throw new ApiError(400, "agent_unavailable", `Agent ${agentId} is not available in this workspace`);
   }
+  // Fail before privacy/host approval or usage reservation when the runtime
+  // cannot enforce this agent's policy. Context is checked again at dispatch.
+  if (normalizeMatterhornPermissionRules(agent.permission).length === 0) {
+    throw new ApiError(503, "agent_permission_unavailable", `Agent ${agentId} has no runtime permission policy`);
+  }
   const prompt = typeof agent.prompt === "string" ? agent.prompt : "";
   if (prompt.length > MATTERHORN_AGENT_PROMPT_MAX_CHARS) {
     throw new ApiError(
@@ -2515,9 +2522,6 @@ async function ensureMatterhornSessionPermissionProfile(input: {
     : await resolveMatterhornSessionAgentContext(input);
   const { opencode, directory, session } = context;
   const agentPermission = normalizeMatterhornPermissionRules(context.agent.permission);
-  if (agentPermission.length === 0) {
-    throw new ApiError(503, "agent_permission_unavailable", `Agent ${context.agentId} has no runtime permission policy`);
-  }
   const profile = buildMatterhornSessionPermissionProfile({
     agentPermission,
     ...(input.requestToolProfiles ? { requestToolProfiles: input.requestToolProfiles } : {}),
@@ -2873,6 +2877,7 @@ async function reserveModelUsage(input: {
 async function proxyOpencodeRequest(input: {
   config: ServerConfig;
   logger: ServerLogger;
+  approvals: ApprovalService;
   request: Request;
   url: URL;
   workspace?: WorkspaceInfo;
@@ -2929,6 +2934,17 @@ async function proxyOpencodeRequest(input: {
   const rawBody = method === "GET" || method === "HEAD"
     ? undefined
     : await input.request.arrayBuffer().then((buf) => (buf.byteLength > 0 ? buf : undefined));
+  const stopSessionMatch = method === "POST"
+    ? normalizeOpencodeProxyPath(proxyPath).match(/^\/session\/([^/]+)\/abort$/)
+    : null;
+  const stopSessionId = stopSessionMatch ? decodePathSegment(stopSessionMatch[1]) : null;
+  if (stopSessionId && workspace && input.access) {
+    input.approvals.cancelSession({
+      workspaceId: workspace.id,
+      sessionId: stopSessionId,
+      subjectId: modelUsageSubject(input.access).id,
+    });
+  }
   let body: BodyInit | undefined = rawBody;
   let promptAudit: { executionMode: MatterhornExecutionMode; agent?: string; sessionId: string } | null = null;
   let promptPermissionRequest: {
@@ -15663,7 +15679,7 @@ function createRoutes(
       action: "session.prompt",
       summary: `Submit prompt to session ${sessionId}`,
       paths: [workspace.path],
-    });
+    }, { sessionId, subjectId });
     const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
     if (!modelUsageStore.claimMessageDispatch({ subjectId, workspaceId: workspace.id, sessionId, requestId, requestHash, messageId: userMessageId })) {
       throw unknownDispatch();
@@ -23100,9 +23116,13 @@ async function writeOpenworkConfig(workspaceRoot: string, payload: Record<string
 async function requireApproval(
   ctx: RequestContext,
   input: Omit<ApprovalRequest, "id" | "createdAt" | "actor">,
+  cancellation?: { sessionId: string; subjectId: string },
 ): Promise<void> {
   const actor = ctx.actor ?? { type: "remote" };
-  const result = await ctx.approvals.requestApproval({ ...input, actor });
+  const result = await ctx.approvals.requestApproval(
+    { ...input, actor }, ctx.request.signal,
+    cancellation ? { workspaceId: input.workspaceId, ...cancellation } : undefined,
+  );
   if (!result.allowed) {
     throw new ApiError(403, "write_denied", "Write request denied", {
       requestId: result.id,

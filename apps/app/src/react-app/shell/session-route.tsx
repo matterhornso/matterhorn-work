@@ -170,7 +170,7 @@ import {
   publishInspectorSlice,
   recordInspectorEvent,
 } from "./app-inspector";
-import { saveSessionDraft } from "../domains/session/sync/draft-store";
+import { saveSessionDraft, sessionDraftForStorage } from "../domains/session/sync/draft-store";
 import {
   saveSessionAgent,
   useSessionAgentState,
@@ -3014,10 +3014,7 @@ export function SessionRoute() {
         });
       },
       onDraftChange: (draft: ComposerDraft) => {
-        saveSessionDraft(selectedWorkspaceId, selectedSessionId, {
-          text: draft.text,
-          mode: draft.mode,
-        });
+        saveSessionDraft(selectedWorkspaceId, selectedSessionId, sessionDraftForStorage(draft));
       },
       onSessionMissing: recoverMissingSession,
       attachmentsEnabled: true,

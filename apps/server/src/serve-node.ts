@@ -1,9 +1,9 @@
 /**
- * Node.js HTTP adapter for the OpenWork server.
+ * Runtime-aware HTTP adapter for the OpenWork server.
  *
  * Provides a `serve()` function with the same interface as Bun.serve()
- * but backed by `node:http`. This allows the server to run in any Node.js
- * environment (including Electron's main process) without Bun.
+ * using Bun's native server when available and `node:http` otherwise. This
+ * preserves request cancellation in Bun and supports Node.js/Electron.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
@@ -160,6 +160,29 @@ async function writeWebResponse(webRes: Response, nodeRes: ServerResponse): Prom
  */
 export function serve(options: ServeOptions): Promise<ServeResult> {
   const { hostname, port, fetch: fetchHandler } = options;
+  // Bun's node:http bridge can lose disconnect events after a POST body is
+  // consumed. Keep its native request signal; Node/Electron retain the adapter.
+  if (typeof Bun !== "undefined") {
+    const server = Bun.serve({
+      hostname, port,
+      idleTimeout: options.idleTimeout ?? 120,
+      development: false,
+      fetch: (request, nativeServer) => fetchHandler(request, {
+        remoteAddress: nativeServer.requestIP(request)?.address ?? null,
+      }),
+      error: () => Response.json({ error: "internal_error" }, { status: 500 }),
+    });
+    const boundPort = server.port;
+    if (boundPort === undefined) {
+      void server.stop(true);
+      return Promise.reject(new Error("HTTP server did not bind a TCP port"));
+    }
+    let stopPromise: Promise<void> | null = null;
+    return Promise.resolve({
+      port: boundPort,
+      stop: () => stopPromise ??= server.stop(true),
+    });
+  }
   const activeRequestControllers = new Set<AbortController>();
 
   const server = createServer(async (nodeReq, nodeRes) => {

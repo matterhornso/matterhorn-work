@@ -105,7 +105,7 @@
     "test:dependency-bulk-audit": "node scripts/dependency-bulk-audit.test.mjs",
     "test:security-workflow-contract": "node scripts/security-workflow-contract.test.mjs",
     "test:matterhorn-vercel-proxy": "node scripts/matterhorn-vercel-proxy.test.mjs",
-    "test:public-beta-container-contract": "node scripts/public-beta-container-contract.test.mjs",
+    "test:public-beta-container-contract": "node scripts/public-beta-container-contract.test.mjs && node --test scripts/public-beta-backup-loop.test.mjs",
     "test:opencode-runtime-compatibility": "node scripts/opencode-runtime-compatibility.test.mjs",
     "test:matterhorn-platform-safety": "node scripts/matterhorn-platform-safety-gate.mjs",
     "test:email-transport": "bun test packages/email/src/send-email.test.ts",

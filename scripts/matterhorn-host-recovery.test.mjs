@@ -2,10 +2,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
-import { closeSync, fstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { gunzipSync, gzipSync } from "node:zlib";
 
 const requireFromServer = createRequire(new URL("../apps/server/package.json", import.meta.url));
 const Database = requireFromServer("better-sqlite3");
@@ -16,6 +17,7 @@ const archive = join(root, "host-recovery.json.gz");
 const restored = join(root, "restored");
 const scriptSource = readFileSync("scripts/matterhorn-host-recovery.mjs", "utf8");
 const erasureSecret = "host-recovery-erasure-ledger-test-secret-32-bytes";
+let liveLedger = null;
 
 function canonicalValue(value) {
   if (value === null || typeof value === "boolean" || typeof value === "string") return value;
@@ -222,13 +224,30 @@ try {
     "usage/model-usage.db",
   ]);
   const archiveFd = openSync(archive, "r");
+  let archiveBytes;
   try {
     assert.equal(fstatSync(archiveFd).mode & 0o777, 0o600);
-    assert.equal(readFileSync(archiveFd).includes(Buffer.from("identity")), false);
+    archiveBytes = readFileSync(archiveFd);
+    assert.equal(archiveBytes.includes(Buffer.from("identity")), false);
   } finally {
     closeSync(archiveFd);
   }
 
+  const damagedArchive = join(root, "damaged.json.gz");
+  const damaged = JSON.parse(gunzipSync(archiveBytes).toString("utf8"));
+  damaged.files[1].sha256 = "0".repeat(64);
+  writeFileSync(damagedArchive, gzipSync(JSON.stringify(damaged)));
+  const damagedRoot = join(root, "damaged-restore");
+  mkdirSync(damagedRoot);
+  const damagedRestore = run([
+    "--restore", "--archive", damagedArchive,
+    "--restore-to", damagedRoot, "--confirm-restore-to", damagedRoot,
+  ]);
+  assert.notEqual(damagedRestore.status, 0);
+  assert.match(damagedRestore.stderr, /digest failed/);
+  assert.deepEqual(readdirSync(damagedRoot), [], "a failed restore must not publish partial databases");
+
+  mkdirSync(restored);
   const restore = run([
     "--restore",
     "--archive", archive,
@@ -279,6 +298,11 @@ try {
   });
   assert.match(erasureBackupReport.erasureLedger.checkpointSignature, /^[a-f0-9]{64}$/);
 
+  liveLedger = new Database(erasureLedger);
+  liveLedger.pragma("journal_mode = WAL");
+  liveLedger.pragma("wal_autocheckpoint = 0");
+  liveLedger.exec("BEGIN");
+  assert.equal(liveLedger.prepare("SELECT COUNT(*) AS count FROM recovery_erasures").get().count, 0);
   const destroyedAt = new Date("2026-09-06T00:00:00.000Z");
   appendErasure(
     erasureLedger,
@@ -304,6 +328,7 @@ try {
   ]);
   assert.notEqual(missingLedger.status, 0);
   assert.match(missingLedger.stderr, /requires --erasure-ledger/);
+  assert.equal(existsSync(missingLedgerRoot), false, "failed erasure checks must leave no usable restore");
 
   const erasureRestored = join(root, "erasure-restored");
   const erasureRestore = run([
@@ -347,6 +372,8 @@ try {
   const copiedLedger = new Database(join(erasureRestored, "erasure-ledger", "ledger.db"), { readonly: true });
   assert.equal(copiedLedger.prepare("SELECT COUNT(*) AS count FROM recovery_erasures").get().count, 2);
   copiedLedger.close();
+  liveLedger.close();
+  liveLedger = null;
 
   const nonempty = join(root, "nonempty");
   mkdirSync(nonempty, { recursive: true });
@@ -359,7 +386,24 @@ try {
   ]);
   assert.notEqual(refused.status, 0);
   assert.match(refused.stderr, /clean, empty restore root/);
+  const existingDb = new Database(join(nonempty, "existing.db"), { readonly: true });
+  assert.equal(existingDb.prepare("SELECT value FROM state").get().value, "do-not-overwrite");
+  existingDb.close();
+
+  const linkedDestination = join(root, "linked-destination");
+  const link = join(root, "restore-symlink");
+  mkdirSync(linkedDestination);
+  symlinkSync(linkedDestination, link, "dir");
+  const linkedRestore = run([
+    "--restore", "--archive", archive,
+    "--restore-to", link, "--confirm-restore-to", link,
+  ]);
+  assert.notEqual(linkedRestore.status, 0);
+  assert.match(linkedRestore.stderr, /real, empty restore directory/);
+  assert.deepEqual(readdirSync(linkedDestination), []);
+  assert.equal(readdirSync(root).some((name) => name.startsWith(".matterhorn-restore-")), false);
 } finally {
+  liveLedger?.close();
   rmSync(root, { recursive: true, force: true });
 }
 
