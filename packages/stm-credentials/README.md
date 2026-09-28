@@ -57,8 +57,11 @@ assumed to support this contract. Do not use `/api/inject/env` as a fallback.
   stderr is not forwarded to application logs. OpenCode still owns tool-call
   permissions. Active-launch records prevent concurrent/mid-task restarts.
   Revocation blocks the next launch, not memory of a running child. A crash can
-  leave an active record: recovery must prove the old process has stopped, not
-  merely assume a stale PID means it is safe to start another consumer.
+  leave an active record. Explicit recovery requires the exact launch ID and
+  OS confirmation that its PID no longer exists; a live/reused PID is refused.
+  Unknown PID (crash before publication), permissions errors and stale locks
+  require manual operator inspection. No process is killed/restarted by recovery.
+  See [the recovery runbook](../../docs/handoffs/stm-launch-recovery.md).
 - Feature rollback preserves references and blocks affected resolution. It never
   exports credentials back into plaintext.
 - Generic desktop, orchestrator (including container starts), and managed engine
@@ -88,6 +91,9 @@ also makes isolated test/data-directory overrides explicit.
 Writes use a private temporary file and rename, with an exclusive registry lock.
 A crash can leave `<registry>.lock`; stop all writers and inspect the registry
 before an operator removes that exact stale lock. Never automatically steal locks.
+Launch intent is durable before spawning a credential-bearing child. Exit cleanup
+retries lock contention for a bounded period; exhausted retries retain the record
+for explicit recovery instead of silently permitting another launch.
 No migration journal, downgrade/export operation, or cross-platform ACL support
 is implemented. macOS is the proposed initial platform, not yet OS-accepted.
 

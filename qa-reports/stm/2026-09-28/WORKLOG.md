@@ -396,3 +396,53 @@ then mid-call cancellation/failure tests, compiled distribution parity and full
 regression/security gates. OS/real-Keychain acceptance remains separately gated.
 Refresh is explicit and point-in-time: no daemon event subscription or always-live
 readiness claim. Goal remains **ACTIVE**; no deployment or real-key migration.
+
+## Continuation: explicit exited-process recovery and durable launch intent
+
+Previous turn classified as **progress**: revalidated `2b14908c13` and tracked
+worktree state before implementing the next recorded task.
+
+- Publish metadata-only active launch intent **before** spawning the selected
+  credential-bearing child. Until the PID is known, the record explicitly has
+  `pid: null`, so a crash cannot make that grant appear unused. Confirmed spawn
+  failure clears only its own intent; uncertainty remains blocked.
+- Exit bookkeeping retries transient registry-lock contention at most ten times
+  with bounded 50 ms delays. It never steals a lock. Exhaustion leaves the active
+  record intact for operator recovery rather than permitting a second launch.
+- Added host-only `GET /env/stm/mcp-grants` (redacted status, no command arguments)
+  and consent-required `POST /env/stm/mcp-grants/:id/recover`. Recovery compares the
+  expected launch ID under lock and requires OS ESRCH for the recorded direct
+  process. Live/reused PID, permission/unknown errors, unknown PID and stale
+  request IDs are refused. It never kills/restarts a process, resolves a key,
+  removes bindings or un-revokes a grant. Read-only mode blocks mutation.
+- Actual crash fixture kills only its disposable source/compiled wrapper while
+  its test MCP deliberately survives stdin EOF. Recovery refuses the live orphan;
+  after the test explicitly stops that tool and verifies absence, recovery clears
+  the record. Cleanup also handles assertion/startup failures using test-owned
+  metadata. No developer process or real credential is involved.
+- Added `docs/handoffs/stm-launch-recovery.md`: known-PID recovery workflow and
+  precise operator limits. Unknown-PID crash windows and stale-lock repair remain
+  manual and must establish stopped writers/tools first. PID absence is not proof
+  of erased key copies or stopped descendants; no stronger isolation is claimed.
+
+Verification:
+
+- Adapter: **31 tests passed**, including stale/live IDs, revoked-grant preservation,
+  transient/exhausted lock contention, intent visibility before child execution,
+  unknown-PID refusal and confirmed missing-executable cleanup.
+- Source launcher crash E2E: **1 passed / 18 assertions**.
+- Native launcher rebuilt (26 modules) at
+  `/private/tmp/matterhorn-stm-recovery-SOSDkY/matterhorn-stm-mcp`.
+- Seven combined server suites with pinned real OpenCode, synthetic inference,
+  compiled launcher and crash/recovery fixture: **54 passed / 325 assertions**.
+  Command from `apps/server`:
+  `STM_TEST_OPENCODE_BIN=/private/tmp/matterhorn-overnight-runtime.ddJMOU/bin/opencode STM_TEST_COMPILED_LAUNCHER=/private/tmp/matterhorn-stm-recovery-SOSDkY/matterhorn-stm-mcp bun test src/env-file.test.ts src/env-routes.e2e.test.ts src/stm-runtime.test.ts src/voice-credential.test.ts src/managed-opencode.test.ts src/stm-mcp.test.ts src/stm-mcp-launch.e2e.test.ts --timeout 15000`.
+- STM selected/lifecycle/cross-repository tests: **27 passed / 115 assertions**,
+  real Store with fake keystore only. Server/Electron/orchestrator typechecks
+  passed. No frontend/full safety or signed-app acceptance claim.
+
+Next: mid-call cancellation and post-spawn failure cleanup; compiled distribution
+parity; full regression/security gates and requirement-by-requirement phase audit.
+Real Keychain/signed OS acceptance remains separately gated. Extreme crash windows
+without a published PID are explicitly manual, not silently auto-recovered. Goal
+remains **ACTIVE**. No push, deployment, production configuration or real migration.

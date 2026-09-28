@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
@@ -142,7 +143,7 @@ test("secret replacement is host-only, explicitly consented and returns metadata
   expect((await update({})).status).toBe(401);
   const issued = await fetch(`${base}/tokens`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ scope: "owner", label: "write fixture owner" }) });
   const owner = await issued.json();
-  for (const [route, method] of [["/workspace/fixture/mcp/fixture/stm", "POST"], ["/env/stm/mcp-grants/fixture", "DELETE"], ["/env/stm/refresh", "POST"]]) {
+  for (const [route, method] of [["/workspace/fixture/mcp/fixture/stm", "POST"], ["/env/stm/mcp-grants/fixture", "DELETE"], ["/env/stm/refresh", "POST"], ["/env/stm/mcp-grants", "GET"], ["/env/stm/mcp-grants/fixture/recover", "POST"]]) {
     expect((await fetch(`${base}${route}`, { method })).status).toBe(401);
     expect((await fetch(`${base}${route}`, { method, headers: { authorization: `Bearer ${owner.token}` } })).status).toBe(401);
   }
@@ -225,6 +226,7 @@ test("STM is disabled by default and read-only mode rejects changes", async () =
   expect((await fetch(`http://127.0.0.1:${server.port}/workspace/fixture/mcp/fixture/stm`, { method: "POST", headers: hostAuth(), body: "{}" })).status).toBe(403);
   expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/mcp-grants/fixture`, { method: "DELETE", headers: hostAuth() })).status).toBe(403);
   expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/refresh`, { method: "POST", headers: hostAuth() })).status).toBe(403);
+  expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/mcp-grants/fixture/recover`, { method: "POST", headers: hostAuth() })).status).toBe(403);
 });
 
 test("STM MCP host route waits for approval, rejects changed commands, and persists only metadata", async () => {
@@ -287,6 +289,27 @@ test("STM MCP host route waits for approval, rejects changed commands, and persi
       expect(refreshed.items[0].credentialState).toBe("available");
       expect(refreshed.items[0].restartRequired).toBe(true);
       expect(JSON.stringify(refreshed)).not.toContain(daemonToken);
+      const listed = await (await fetch(`${base}/env/stm/mcp-grants`, { headers: hostAuth() })).json();
+      expect(listed.items).toEqual([{ id: body.id, name: "fixture", revoked: false, active: null }]);
+      const launchPath = join(root, "stm-mcp-launches.json");
+      const registry = JSON.parse(readFileSync(launchPath, "utf8"));
+      const launchID = randomUUID();
+      registry.grants[0].active = { id: launchID, pid: process.pid, revisions: { FIXTURE_KEY: "c".repeat(64) } };
+      writeFileSync(launchPath, JSON.stringify(registry));
+      const recover = (payload: unknown) => fetch(`${base}/env/stm/mcp-grants/${body.id}/recover`, { method: "POST", headers: hostAuth(), body: JSON.stringify(payload) });
+      expect((await recover({ expectedLaunchId: launchID })).status).toBe(400);
+      const live = await recover({ expectedLaunchId: launchID, consent: true });
+      expect(live.status).toBe(409);
+      expect((await live.json()).code).toBe("consumer_still_running");
+      const exited = Bun.spawn([process.execPath, "-e", "process.exit(0)"], { cwd: root, env: {}, stdout: "ignore", stderr: "ignore" });
+      expect(await exited.exited).toBe(0);
+      registry.grants[0].active.pid = exited.pid;
+      writeFileSync(launchPath, JSON.stringify(registry));
+      expect((await recover({ expectedLaunchId: randomUUID(), consent: true })).status).toBe(409);
+      const recovered = await recover({ expectedLaunchId: launchID, consent: true });
+      expect(recovered.status).toBe(200);
+      expect(await recovered.json()).toEqual({ ok: true, started: false });
+      expect((await launches.list())[0].active).toBeNull();
       const revoked = await fetch(`${base}/env/stm/mcp-grants/${body.id}`, { method: "DELETE", headers: hostAuth() });
       expect(await revoked.json()).toEqual({ ok: true, runningProcessUnaffected: true });
       expect((await launches.list())[0].revoked).toBe(true);

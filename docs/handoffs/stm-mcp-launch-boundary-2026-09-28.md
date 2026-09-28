@@ -5,8 +5,10 @@ fixture tests implemented. Pinned OpenCode 1.18.31 connection/disconnect and act
 engine-driven tool execution/denial/rejected approval verified with a local
 synthetic provider and fake credentials through source and compiled launchers.
 Host-route manual approval/denial and command replacement while waiting are
-covered; changed configuration requires a new approval. Crash recovery and signed
-packaged acceptance remain incomplete. The earlier `spawnStmConsumer()` primitive
+covered; changed configuration requires a new approval. Explicit known-PID crash
+recovery now refuses live processes and clears only verified stopped launches.
+Unknown-PID crash windows require manual inspection; signed packaged acceptance
+remains incomplete. The earlier `spawnStmConsumer()` primitive
 alone remains insufficient proof of runtime integration.
 
 Metadata refresh now observes external STM rotation/revocation without key reads.

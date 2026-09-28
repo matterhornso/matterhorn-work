@@ -14080,6 +14080,9 @@ function createRoutes(
   }
 
   function rethrowStmError(error: unknown): never {
+    if (error instanceof StmError && error.code === "consumer_still_running") throw new ApiError(409, error.code, "The recorded tool process is still running. Stop it through its runtime before requesting recovery.");
+    if (error instanceof StmError && ["launch_recovery_uncertain", "process_state_unavailable"].includes(error.code)) throw new ApiError(409, error.code, "The old tool process cannot be verified as stopped. Operator inspection is required; no process was killed or restarted.");
+    if (error instanceof StmError && error.code === "launch_recovery_conflict") throw new ApiError(409, error.code, "This launch record changed. Refresh its status before requesting recovery.");
     if (error instanceof StmError && error.code === "credential_update_uncertain") throw new ApiError(409, error.code, "The secret update may have completed. Refresh secret metadata before making another change; do not automatically retry.");
     if (error instanceof StmError && error.code === "credential_revision_conflict") throw new ApiError(412, error.code, "This secret changed elsewhere. Refresh its metadata before replacing it.");
     if (error instanceof StmError) throw new ApiError(409, error.code, "Secret storage needs attention. Reconnect or check the selected binding.");
@@ -17119,6 +17122,22 @@ function createRoutes(
     requireLocalStm();
     await stmMcpLaunches.revoke(ctx.params.id).catch(rethrowStmError);
     return jsonResponse({ ok: true, runningProcessUnaffected: true });
+  });
+  addRoute(routes, "GET", "/env/stm/mcp-grants", "host-token", async () => {
+    requireLocalStm();
+    const grants = await stmMcpLaunches.list().catch(rethrowStmError);
+    return jsonResponse({ items: grants.map(grant => ({ id: grant.id, name: grant.name, revoked: grant.revoked,
+      active: grant.active ? { id: grant.active.id, pid: grant.active.pid } : null })) });
+  });
+  addRoute(routes, "POST", "/env/stm/mcp-grants/:id/recover", "host-token", async (ctx) => {
+    ensureWritable(config);
+    requireLocalStm();
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Tool launch recovery");
+    if (typeof body.expectedLaunchId !== "string" || body.consent !== true) {
+      throw new ApiError(400, "recovery_consent_required", "Review the stopped tool launch before recovering it.");
+    }
+    await stmMcpLaunches.recoverExited(ctx.params.id, { expectedLaunchId: body.expectedLaunchId, consent: true }).catch(rethrowStmError);
+    return jsonResponse({ ok: true, started: false });
   });
 
   addRoute(routes, "GET", "/workspace/:id/mcp", "client", async (ctx) => {

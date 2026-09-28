@@ -29,7 +29,7 @@ export function spawnStmConsumer(options: {
 export type McpLaunchGrant = {
   id: string; workspace: string; name: string; command: string[]; launcher: string[];
   bindingIds: string[]; revoked: boolean; createdAt: string;
-  active: null | { id: string; pid: number; revisions: Record<string, string> };
+  active: null | { id: string; pid: number | null; revisions: Record<string, string> };
 };
 export class StmMcpLaunches {
   constructor(options: { credentials: StmCredentials; registryPath: string });
@@ -38,6 +38,7 @@ export class StmMcpLaunches {
     bindings: Array<{ envName: string; tool: string; label: string }>; consent: boolean;
   }, legacyNames?: string[]): Promise<McpLaunchGrant>;
   revoke(id: string): Promise<void>;
+  recoverExited(id: string, input: { expectedLaunchId: string; consent: boolean }): Promise<void>;
   start(id: string, options: { cwd: string; inherited?: NodeJS.ProcessEnv; stdio?: "pipe" | "inherit" | "ignore";
     authorize: (grant: McpLaunchGrant) => boolean | Promise<boolean>;
   }): Promise<import("node:child_process").ChildProcess>;

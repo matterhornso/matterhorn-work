@@ -4,6 +4,7 @@ import { mkdtemp, writeFile, readFile, rm, chmod, symlink, mkdir } from "node:fs
 import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { StmCredentials, StmMcpLaunches, spawnStmConsumer, assertNoStmEnvironmentConflicts } from "../index.mjs";
 
 async function fixture(t, overrides = {}) {
@@ -44,6 +45,96 @@ async function fixture(t, overrides = {}) {
   return { adapter: new StmCredentials(options), options, state, calls, descriptorPath, registryPath, token };
 }
 const input = { envName: "EXAMPLE_API_KEY", tool: "example", label: "default", consumer: "mcp:example", consent: true };
+
+async function launchFixture(t, command) {
+  const f = await fixture(t);
+  await f.adapter.connect({ consent: true });
+  const workspace = join(f.registryPath, "..", "workspace"); await mkdir(workspace);
+  const launchPath = join(workspace, "launches.json");
+  const launches = new StmMcpLaunches({ credentials: f.adapter, registryPath: launchPath });
+  const grant = await launches.approve({ workspace, name: "fixture", launcher: [process.execPath, "trusted-launcher.mjs"],
+    command: command ?? [process.execPath, "-e", "process.stdin.resume()"], bindings: [input], consent: true });
+  return { ...f, workspace, launchPath, launches, grant };
+}
+
+test("recovery refuses live or changed launches and only clears a proven exited PID", async t => {
+  const f = await launchFixture(t);
+  const child = await f.launches.start(f.grant.id, { cwd: f.workspace, authorize: () => true });
+  t.after(() => child.kill());
+  const active = (await f.launches.list())[0].active;
+  const request = { expectedLaunchId: active.id, consent: true };
+  await assert.rejects(f.launches.recoverExited(f.grant.id, { ...request, consent: false }), /consent_required/);
+  await assert.rejects(f.launches.recoverExited(f.grant.id, { ...request, expectedLaunchId: randomUUID() }), /launch_recovery_conflict/);
+  await assert.rejects(f.launches.recoverExited(f.grant.id, request), /consumer_still_running/);
+  assert.equal(child.exitCode, null);
+  // Exhaust bounded cleanup retries to reproduce a stale record after exit.
+  const lock = f.launchPath + ".lock";
+  await writeFile(lock, "", { flag: "wx", mode: 0o600 });
+  const exited = once(child, "exit"); child.kill(); await exited;
+  await new Promise(resolve => setTimeout(resolve, 600));
+  await assert.rejects(f.launches.recoverExited(f.grant.id, request), /registry_busy/);
+  assert.equal((await f.launches.list())[0].active.id, active.id);
+  await rm(lock); // only this test's lock, after its writer has stopped
+  await f.launches.revoke(f.grant.id);
+  const before = f.calls.length;
+  await f.launches.recoverExited(f.grant.id, request);
+  assert.equal((await f.launches.list())[0].active, null);
+  assert.equal((await f.launches.list())[0].revoked, true);
+  assert.equal(f.calls.length, before);
+  assert.equal((await f.adapter.listBindings()).length, 1);
+  await assert.rejects(f.launches.recoverExited(f.grant.id, request), /launch_recovery_conflict/);
+});
+
+test("exit bookkeeping retries transient registry contention without stealing locks", async t => {
+  const f = await launchFixture(t);
+  const child = await f.launches.start(f.grant.id, { cwd: f.workspace, authorize: () => true });
+  t.after(() => child.kill());
+  const lock = f.launchPath + ".lock";
+  await writeFile(lock, "", { flag: "wx", mode: 0o600 });
+  const before = f.calls.length;
+  const exited = once(child, "exit"); child.kill(); await exited;
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(await readFile(lock, "utf8"), "");
+  assert.notEqual((await f.launches.list())[0].active, null);
+  await rm(lock);
+  for (let i = 0; i < 100 && (await f.launches.list())[0].active; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal((await f.launches.list())[0].active, null);
+  assert.equal(f.calls.length, before);
+});
+
+test("durable launch intent precedes child execution and unknown PID recovery fails closed", async t => {
+  const f = await launchFixture(t);
+  const registry = JSON.parse(await readFile(f.launchPath, "utf8"));
+  registry.grants[0].command = [process.execPath, "-e", `const fs=require('node:fs');const r=JSON.parse(fs.readFileSync(${JSON.stringify(f.launchPath)},'utf8'));process.stdout.write(JSON.stringify({recorded:Boolean(r.grants[0].active)}));process.stdin.resume()`];
+  await writeFile(f.launchPath, JSON.stringify(registry));
+  const child = await f.launches.start(f.grant.id, { cwd: f.workspace, authorize: () => true });
+  t.after(() => child.kill());
+  let output = "";
+  child.stdout.on("data", data => { output += String(data); });
+  for (let i = 0; i < 100 && !output; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(JSON.parse(output), { recorded: true });
+  const done = once(child, "exit"); child.kill(); await done;
+  for (let i = 0; i < 100 && (await f.launches.list())[0].active; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  registry.grants[0].active = { id: randomUUID(), pid: null, revisions: { EXAMPLE_API_KEY: f.state.revision } };
+  await writeFile(f.launchPath, JSON.stringify(registry));
+  const before = f.calls.length;
+  await assert.rejects(f.launches.recoverExited(f.grant.id, { expectedLaunchId: registry.grants[0].active.id, consent: true }), /launch_recovery_uncertain/);
+  await assert.rejects(f.launches.start(f.grant.id, { cwd: f.workspace, authorize: () => true }), /consumer_already_running/);
+  assert.equal(f.calls.length, before);
+});
+
+test("confirmed spawn failure clears only its own unused launch intent", async t => {
+  const dir = await mkdtemp(join(tmpdir(), "stm-removed-executable-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const executable = join(dir, "fixture");
+  await writeFile(executable, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+  const f = await launchFixture(t, [executable]);
+  await rm(executable);
+  await assert.rejects(f.launches.start(f.grant.id, { cwd: f.workspace, authorize: () => true }), /consumer_start_failed/);
+  for (let i = 0; i < 100 && (await f.launches.list())[0].active; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal((await f.launches.list())[0].active, null);
+  assert.equal((await f.adapter.listBindings()).length, 1);
+});
 
 test("workspace-bound launch grants enforce consent, configuration authorization and binding identity", async t => {
   const f = await fixture(t);

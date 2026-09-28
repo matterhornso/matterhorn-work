@@ -30,18 +30,24 @@ test("trusted stdio launcher completes an MCP request with selected fake credent
   let child: ReturnType<typeof spawn> | undefined;
   let engine: ReturnType<typeof spawn> | undefined;
   let inference: ReturnType<typeof Bun.serve> | undefined;
+  let orphanPid: number | undefined;
+  let launchRegistry: StmMcpLaunches | undefined;
+  let testGrantId: string | undefined;
   try {
     const descriptorPath = join(stmDir, "daemon.json");
     await writeFile(descriptorPath, JSON.stringify({ port: daemon.port, pid: process.pid, token }), { mode: 0o600 });
     const credentials = new StmCredentials({ enabled: true, platform: "darwin", localDesktop: true, descriptorPath, registryPath: join(root, "stm-bindings.json") });
     await credentials.connect({ consent: true });
     const launches = new StmMcpLaunches({ credentials, registryPath: join(root, "stm-mcp-launches.json") });
+    launchRegistry = launches;
     const fixture = join(root, "fixture.mjs");
     const callsPath = join(root, "tool-calls.jsonl");
     await writeFile(callsPath, "");
     await writeFile(fixture, `import { createInterface } from "node:readline";
 import { appendFileSync } from "node:fs";
 const lines = createInterface({input: process.stdin});
+// Deliberately survive stdin EOF to exercise an MCP outliving a crashed wrapper.
+setInterval(() => {}, 1000);
 lines.on("line", line => {
   const r = JSON.parse(line);
   if (r.id === undefined) return;
@@ -59,6 +65,7 @@ lines.on("line", line => {
     await writeFile(opencodeConfigPath(workspace), JSON.stringify({ mcp: { fixture: { type: "local", command: [process.execPath, fixture] } } }));
     const grant = await approveStmMcp({ launches, workspace, name: "fixture", launcher,
       bindings: [{ envName: "FIXTURE_KEY", tool: "fixture", label: "default" }], consent: true, legacyNames: [] });
+    testGrantId = grant.id;
     if (process.env.STM_TEST_OPENCODE_BIN) {
       let modelCalls = 0;
       const providerBodies: string[] = [];
@@ -178,5 +185,39 @@ lines.on("line", line => {
     expect((await launches.list())[0].active).toBeNull();
     expect(stderr).not.toContain(secret); expect(stderr).not.toContain(token);
     lines.close();
-  } finally { child?.kill("SIGKILL"); if (engine) await createManagedProcessClose(engine).close(); inference?.stop(true); daemon.stop(true); await rm(root, { recursive: true, force: true }); }
+    child = spawn(launcher[0], [...launcher.slice(1), grant.id], { cwd: workspace, stdio: "pipe",
+      env: { PATH: process.env.PATH, HOME: root, MATTERHORN_WORK_ENV_STORE: join(root, "env.json"), MATTERHORN_WORK_STM_ENABLED: "1" } });
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Crash fixture startup timeout")), 5000);
+      child!.stdout!.once("data", () => { clearTimeout(timer); resolve(); });
+      child!.once("error", () => { clearTimeout(timer); reject(new Error("Crash fixture failed to start")); });
+      child!.stdin!.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }) + "\n");
+    });
+    const active = (await launches.list())[0].active;
+    if (!active?.pid) throw new Error("Expected a published child PID");
+    orphanPid = active.pid;
+    const crashed = new Promise(resolve => child!.once("close", resolve));
+    child.kill("SIGKILL"); await crashed;
+    await expect(launches.recoverExited(grant.id, { expectedLaunchId: active.id, consent: true })).rejects.toThrow("consumer_still_running");
+    process.kill(orphanPid, "SIGTERM"); // only the test-owned orphan just observed
+    let absent = false;
+    for (let i = 0; i < 100 && !absent; i++) {
+      try { process.kill(orphanPid, 0); }
+      catch (error) { if (error instanceof Error && "code" in error && error.code === "ESRCH") absent = true; else throw error; }
+      if (!absent) await Bun.sleep(10);
+    }
+    expect(absent).toBe(true);
+    if (absent) orphanPid = undefined;
+    await launches.recoverExited(grant.id, { expectedLaunchId: active.id, consent: true });
+    expect((await launches.list())[0].active).toBeNull();
+    expect((await credentials.listBindings())).toHaveLength(1);
+  } finally {
+    child?.kill("SIGKILL");
+    if (engine) await createManagedProcessClose(engine).close();
+    // Also clean up if startup or an assertion failed before the PID was copied.
+    const recordedPid = (await launchRegistry?.list())?.find(entry => entry.id === testGrantId)?.active?.pid;
+    const cleanupPid = orphanPid ?? recordedPid;
+    if (cleanupPid) { try { process.kill(cleanupPid, "SIGKILL"); } catch {} }
+    inference?.stop(true); daemon.stop(true); await rm(root, { recursive: true, force: true });
+  }
 }, 60_000);

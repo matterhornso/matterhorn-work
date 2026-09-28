@@ -382,7 +382,7 @@ function validGrant(g) {
     && Array.isArray(g.bindingIds) && g.bindingIds.length > 0 && g.bindingIds.length <= 32 && g.bindingIds.every(grantId)
     && new Set(g.bindingIds).size === g.bindingIds.length && typeof g.revoked === "boolean"
     && typeof g.createdAt === "string" && Number.isFinite(Date.parse(g.createdAt))
-    && (g.active === null || (object(g.active) && grantId(g.active.id) && Number.isInteger(g.active.pid) && g.active.pid > 0
+    && (g.active === null || (object(g.active) && grantId(g.active.id) && (g.active.pid === null || (Number.isInteger(g.active.pid) && g.active.pid > 0))
       && object(g.active.revisions) && Object.keys(g.active.revisions).length <= 32 && Object.entries(g.active.revisions).every(([key, revision]) => safeSecretEnvName(key) && validRevision(revision))
       && Object.keys(g.active).every(key => ["id", "pid", "revisions"].includes(key))))
     && Object.keys(g).every(key => ["id", "workspace", "name", "command", "launcher", "bindingIds", "revoked", "createdAt", "active"].includes(key));
@@ -458,6 +458,43 @@ export class StmMcpLaunches {
       // Bindings remain authoritative, blocking stale-plaintext downgrade.
     });
   }
+  async recoverExited(id, { expectedLaunchId, consent }) {
+    if (consent !== true) fail("consent_required");
+    if (!grantId(id) || !grantId(expectedLaunchId)) fail("invalid_launch_grant");
+    return this.#change(async registry => {
+      const grant = registry.grants.find(g => g.id === id);
+      if (!grant?.active || grant.active.id !== expectedLaunchId) fail("launch_recovery_conflict");
+      // A crash between durable intent and PID publication has no reliable
+      // process identity. Do not guess that the child was never spawned.
+      if (grant.active.pid === null) fail("launch_recovery_uncertain");
+      try { process.kill(grant.active.pid, 0); }
+      catch (error) {
+        // ESRCH is the only accepted evidence of absence. EPERM, reused PIDs
+        // and all other uncertainty keep the record blocked. Never kill here.
+        if (error?.code !== "ESRCH") fail("process_state_unavailable");
+        grant.active = null;
+        await writePrivate(this.#path, registry);
+        return;
+      }
+      fail("consumer_still_running");
+    });
+  }
+  async #clearExited(id, launchId) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        await this.#change(async latest => {
+          const current = latest.grants.find(g => g.id === id);
+          if (current?.active?.id === launchId) { current.active = null; await writePrivate(this.#path, latest); }
+        });
+        return;
+      } catch (error) {
+        if (!(error instanceof StmError) || error.code !== "registry_busy" || attempt === 9) return;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
+    // Bounded contention retry only. Never steal stale locks or forget an
+    // uncertain record; explicit recovery must verify the recorded process.
+  }
   async start(id, { cwd, authorize, inherited = process.env, stdio = "pipe" }) {
     if (!grantId(id) || typeof authorize !== "function") fail("permission_denied");
     const canonical = await realpath(cwd).catch(() => fail("workspace_mismatch"));
@@ -478,21 +515,26 @@ export class StmMcpLaunches {
       // Recheck just before spawn; authorization must never be replaced by a
       // credential binding or by a previous successful connection.
       if (await authorize(structuredClone(grant)) !== true) fail("permission_denied");
+      const launchId = randomUUID();
+      // Publish launch intent before spawn. A crash must never leave an
+      // unrecorded child with credentials and an apparently unused grant.
+      grant.active = { id: launchId, pid: null, revisions: snapshot.revisions };
+      await writePrivate(this.#path, registry);
       const child = spawn(grant.command[0], grant.command.slice(1), { cwd: canonical, env: { ...base, ...snapshot.values }, shell: false, stdio });
+      const clear = () => this.#clearExited(id, launchId);
+      child.once("exit", clear);
       try {
         await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", () => reject(new StmError("consumer_start_failed"))); });
-        const launchId = randomUUID();
         grant.active = { id: launchId, pid: child.pid, revisions: snapshot.revisions };
-        const clear = () => this.#change(async latest => {
-          const current = latest.grants.find(g => g.id === id);
-          if (current?.active?.id === launchId) { current.active = null; await writePrivate(this.#path, latest); }
-        }).catch(() => {}); // On failure remain fail-closed; operator recovery.
-        child.once("exit", clear);
         await writePrivate(this.#path, registry);
         await this.#credentials.acknowledgeMcpStart(`mcp:${id}`, grant.bindingIds, snapshot.revisions);
         if (child.exitCode !== null || child.signalCode !== null) void clear();
         return child;
-      } catch (error) { child.kill("SIGTERM"); throw error; }
+      } catch (error) {
+        if (child.pid === undefined) void clear(); // spawn error: no child exists
+        else child.kill("SIGTERM");
+        throw error;
+      }
     });
   }
 }
