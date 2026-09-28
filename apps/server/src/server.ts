@@ -14095,6 +14095,10 @@ function createRoutes(
   addRoute(routes, "GET", "/env/stm/inventory", "host-token", async () => {
     return jsonResponse({ items: await requireLocalStm().inventory().catch(rethrowStmError) });
   });
+  addRoute(routes, "POST", "/env/stm/refresh", "host-token", async () => {
+    ensureWritable(config);
+    return jsonResponse(await requireLocalStm().refreshBindings().catch(rethrowStmError));
+  });
   addRoute(routes, "PUT", "/env/stm/credential", "host-token", async (ctx) => {
     ensureWritable(config);
     const body = await readJsonBody(ctx.request, 32_768, "Secret update");

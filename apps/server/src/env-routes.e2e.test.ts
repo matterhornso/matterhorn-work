@@ -120,7 +120,7 @@ afterEach(async () => {
 class FixtureStm extends StmCredentials {
   saves = 0;
   failSave = false;
-  bindings: Binding[] = [{ id: "fixture-id", envName: "EXAMPLE_API_KEY", tool: "example", label: "default", consumer: "mcp:example", updatedAt: "2026-09-28", storageBackend: "test fixture", credentialRevision: null, restartRequired: true }];
+  bindings: Binding[] = [{ id: "fixture-id", envName: "EXAMPLE_API_KEY", tool: "example", label: "default", consumer: "mcp:example", updatedAt: "2026-09-28", storageBackend: "test fixture", credentialRevision: null, appliedRevision: null, restartRequired: true }];
   override async listBindings() { return this.bindings; }
   override async status() { return { state: "connected", version: 1, backend: "test fixture" }; }
   override async inventory() { return [{ tool: "example", label: "default", status: "active", updatedAt: "2026-09-28", revision: "d".repeat(64) }]; }
@@ -142,7 +142,7 @@ test("secret replacement is host-only, explicitly consented and returns metadata
   expect((await update({})).status).toBe(401);
   const issued = await fetch(`${base}/tokens`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ scope: "owner", label: "write fixture owner" }) });
   const owner = await issued.json();
-  for (const [route, method] of [["/workspace/fixture/mcp/fixture/stm", "POST"], ["/env/stm/mcp-grants/fixture", "DELETE"]]) {
+  for (const [route, method] of [["/workspace/fixture/mcp/fixture/stm", "POST"], ["/env/stm/mcp-grants/fixture", "DELETE"], ["/env/stm/refresh", "POST"]]) {
     expect((await fetch(`${base}${route}`, { method })).status).toBe(401);
     expect((await fetch(`${base}${route}`, { method, headers: { authorization: `Bearer ${owner.token}` } })).status).toBe(401);
   }
@@ -163,7 +163,7 @@ test("secret replacement is host-only, explicitly consented and returns metadata
 });
 
 class FixtureVoiceStm extends FixtureStm {
-  override bindings: Binding[] = [{ id: "voice-fixture", envName: "OPENAI_REALTIME_API_KEY", tool: "fixture", label: "default", consumer: "voice:realtime", updatedAt: "2026-09-28", storageBackend: "test fixture", credentialRevision: null, restartRequired: true }];
+  override bindings: Binding[] = [{ id: "voice-fixture", envName: "OPENAI_REALTIME_API_KEY", tool: "fixture", label: "default", consumer: "voice:realtime", updatedAt: "2026-09-28", storageBackend: "test fixture", credentialRevision: null, appliedRevision: null, restartRequired: true }];
   reads = 0;
   override async resolveKeyForConsumer(): Promise<string> {
     this.reads++;
@@ -217,12 +217,14 @@ test("STM is disabled by default and read-only mode rejects changes", async () =
   const { base } = await boot();
   expect(await (await fetch(`${base}/env/stm/status`, { headers: hostAuth() })).json()).toEqual({ state: "unavailable", code: "disabled" });
   expect((await fetch(`${base}/env/stm/connect`, { method: "POST", headers: hostAuth(), body: '{"consent":true}' })).status).toBe(409);
+  expect((await fetch(`${base}/env/stm/refresh`, { method: "POST", headers: hostAuth() })).status).toBe(409);
   const config = baseConfig(); config.readOnly = true;
   const server = await startServer(config, { stmCredentials: new FixtureStm() });
   stops.push(() => server.stop());
   expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/bindings/fixture-id`, { method: "DELETE", headers: hostAuth() })).status).toBe(403);
   expect((await fetch(`http://127.0.0.1:${server.port}/workspace/fixture/mcp/fixture/stm`, { method: "POST", headers: hostAuth(), body: "{}" })).status).toBe(403);
   expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/mcp-grants/fixture`, { method: "DELETE", headers: hostAuth() })).status).toBe(403);
+  expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/refresh`, { method: "POST", headers: hostAuth() })).status).toBe(403);
 });
 
 test("STM MCP host route waits for approval, rejects changed commands, and persists only metadata", async () => {
@@ -279,6 +281,12 @@ test("STM MCP host route waits for approval, rejects changed commands, and persi
       expect(grants[0].active).toBeNull();
       expect(readFileSync(opencodeConfigPath(root), "utf8")).toContain(body.id);
       expect(JSON.stringify(body)).not.toContain(daemonToken);
+      const refresh = await fetch(`${base}/env/stm/refresh`, { method: "POST", headers: hostAuth() });
+      expect(refresh.status).toBe(200);
+      const refreshed = await refresh.json();
+      expect(refreshed.items[0].credentialState).toBe("available");
+      expect(refreshed.items[0].restartRequired).toBe(true);
+      expect(JSON.stringify(refreshed)).not.toContain(daemonToken);
       const revoked = await fetch(`${base}/env/stm/mcp-grants/${body.id}`, { method: "DELETE", headers: hostAuth() });
       expect(await revoked.json()).toEqual({ ok: true, runningProcessUnaffected: true });
       expect((await launches.list())[0].revoked).toBe(true);

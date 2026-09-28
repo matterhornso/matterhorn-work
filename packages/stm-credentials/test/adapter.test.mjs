@@ -14,7 +14,7 @@ async function fixture(t, overrides = {}) {
   const token = "a".repeat(48);
   await writeFile(descriptorPath, JSON.stringify({ port: 3456, pid: process.pid, token }), { mode: 0o600 });
   const calls = [];
-  const state = { offline: false, secret: "disposable-value", extra: false, badVersion: false, revision: "d".repeat(64), writeCount: 0, writeFailure: false, writeStatus: 0 };
+  const state = { offline: false, secret: "disposable-value", extra: false, badVersion: false, revision: "d".repeat(64), writeCount: 0, writeFailure: false, writeStatus: 0, keyStatus: "active", missing: false, duplicate: false };
   const fetch = async (url, options) => {
     calls.push({ url, options });
     assert.equal(options.redirect, "error");
@@ -30,7 +30,11 @@ async function fixture(t, overrides = {}) {
       state.revision = "e".repeat(64);
       return Response.json({ version: 1, key: { tool: "example", label: "default", status: "active", updatedAt: "2026-09-28", revision: state.revision }, oldValueCleanupPending: false });
     }
-    if (url.endsWith("keys")) return Response.json({ version: 1, keys: [{ tool: "example", label: "default", status: "active", updatedAt: "2026-09-28", revision: state.revision }] });
+    if (url.endsWith("keys")) {
+      const key = { tool: "example", label: "default", status: state.keyStatus, updatedAt: "2026-09-28", revision: state.revision };
+      return Response.json({ version: 1, keys: state.missing ? [] : state.duplicate ? [key, key] : [key] });
+    }
+    if (state.missing || state.keyStatus === "revoked") return new Response(null, { status: 404 });
     const input = JSON.parse(options.body);
     const values = Object.fromEntries(input.bindings.map(b => [b.envName, state.secret]));
     if (state.extra) values.UNRELATED_KEY = "never-expose";
@@ -335,4 +339,88 @@ test("voice uses credentials per call and does not claim a child restart is requ
   const result = await f.adapter.saveCredential({ tool: "example", label: "default", value: "voice-fixture-replacement", expectedRevision: f.state.revision, consent: true });
   assert.equal(result.restartRequired, false);
   assert.equal((await f.adapter.listBindings())[0].restartRequired, false);
+});
+
+test("refresh observes external rotation, revocation and removal without resolving secrets", async t => {
+  const f = await paired(t);
+  const [binding] = await f.adapter.listBindings();
+  await f.adapter.acknowledgeMcpStart(input.consumer, [binding.id], { EXAMPLE_API_KEY: f.state.revision });
+  assert.equal((await f.adapter.refreshBindings()).items[0].restartRequired, false);
+  f.state.revision = "e".repeat(64); f.state.secret = "externally-rotated-fixture";
+  const rotated = await f.adapter.refreshBindings();
+  assert.equal(rotated.items[0].credentialState, "available");
+  assert.equal(rotated.items[0].credentialRevision, f.state.revision);
+  assert.equal(rotated.items[0].appliedRevision, "d".repeat(64));
+  assert.equal(rotated.items[0].restartRequired, true);
+  // A launch of an older in-flight snapshot must not erase the newer revision.
+  await f.adapter.acknowledgeMcpStart(input.consumer, [binding.id], { EXAMPLE_API_KEY: "d".repeat(64) });
+  assert.equal((await f.adapter.listBindings())[0].restartRequired, true);
+  await f.adapter.acknowledgeMcpStart(input.consumer, [binding.id], { EXAMPLE_API_KEY: f.state.revision });
+  assert.equal((await f.adapter.refreshBindings()).items[0].restartRequired, false);
+  f.state.keyStatus = "revoked"; f.state.revision = "f".repeat(64);
+  const revoked = await f.adapter.refreshBindings();
+  assert.equal(revoked.items[0].credentialState, "revoked");
+  assert.equal(revoked.items[0].restartRequired, true);
+  f.state.missing = true;
+  const missing = await f.adapter.refreshBindings();
+  assert.equal(missing.items[0].credentialState, "missing");
+  assert.equal(missing.items[0].credentialRevision, null);
+  assert.equal((await f.adapter.listBindings()).length, 1);
+  assert.equal(f.calls.some(call => call.url.endsWith("resolve")), false);
+  assert.equal(JSON.stringify(missing).includes(f.state.secret), false);
+  assert.equal((await readFile(f.registryPath, "utf8")).includes(f.token), false);
+  await assert.rejects(f.adapter.resolveForConsumer(input.consumer), /request_failed/);
+});
+
+test("failed metadata refresh preserves last-known bindings and does not assume readiness", async t => {
+  const f = await paired(t);
+  const before = await readFile(f.registryPath, "utf8");
+  f.state.offline = true;
+  await assert.rejects(f.adapter.refreshBindings(), /^StmError: STM: connection_failed$/);
+  assert.equal(await readFile(f.registryPath, "utf8"), before);
+  f.state.offline = false; f.state.duplicate = true;
+  await assert.rejects(f.adapter.refreshBindings(), /invalid_response/);
+  assert.equal(await readFile(f.registryPath, "utf8"), before);
+  f.state.duplicate = false;
+  const disabled = new StmCredentials({ ...f.options, enabled: false });
+  const count = f.calls.length;
+  await assert.rejects(disabled.refreshBindings(), /disabled/);
+  assert.equal(f.calls.length, count);
+  assert.equal((await disabled.listBindings()).length, 1);
+});
+
+test("v2 bindings preserve authority but never infer an applied revision", async t => {
+  const f = await paired(t);
+  const registry = JSON.parse(await readFile(f.registryPath, "utf8"));
+  registry.version = 2;
+  delete registry.bindings[0].appliedRevision;
+  registry.bindings[0].restartRequired = false;
+  await writeFile(f.registryPath, JSON.stringify(registry));
+  const [binding] = await f.adapter.listBindings();
+  assert.equal(binding.appliedRevision, null);
+  assert.equal(binding.restartRequired, true);
+  assert.throws(() => assertNoStmEnvironmentConflicts({ EXAMPLE_API_KEY: "stale" }, f.registryPath), /plaintext_conflict/);
+  await f.adapter.refreshBindings();
+  const upgraded = JSON.parse(await readFile(f.registryPath, "utf8"));
+  assert.equal(upgraded.version, 3);
+  assert.equal(upgraded.bindings[0].appliedRevision, null);
+  assert.equal(upgraded.bindings[0].restartRequired, true);
+});
+
+test("refresh keeps voice per-call and reconciles a newly applied external revision", async t => {
+  const f = await fixture(t);
+  await f.adapter.connect({ consent: true });
+  const voice = await f.adapter.link({ ...input, envName: "OPENAI_REALTIME_API_KEY", consumer: "voice:realtime" });
+  const mcp = await f.adapter.link(input);
+  // External rotation may land between the metadata read and a selected resolve.
+  f.state.revision = "e".repeat(64);
+  await f.adapter.acknowledgeMcpStart(input.consumer, [mcp.id], { EXAMPLE_API_KEY: f.state.revision });
+  assert.equal((await f.adapter.listBindings()).find(b => b.id === mcp.id).restartRequired, true);
+  const refreshed = await f.adapter.refreshBindings();
+  assert.equal(refreshed.items.find(b => b.id === mcp.id).restartRequired, false);
+  f.state.keyStatus = "revoked";
+  const revoked = await f.adapter.refreshBindings();
+  assert.equal(revoked.items.find(b => b.id === voice.id).credentialState, "revoked");
+  assert.equal(revoked.items.find(b => b.id === voice.id).restartRequired, false);
+  await assert.rejects(f.adapter.resolveKeyForConsumer("voice:realtime", voice.envName), /request_failed/);
 });

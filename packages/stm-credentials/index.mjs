@@ -62,7 +62,8 @@ function validBinding(b) {
     && typeof b.updatedAt === "string" && Number.isFinite(Date.parse(b.updatedAt))
     && typeof b.storageBackend === "string" && b.storageBackend.length <= 128
     && (b.credentialRevision === null || validRevision(b.credentialRevision)) && typeof b.restartRequired === "boolean"
-    && Object.keys(b).every(k => ["id", "envName", "tool", "label", "consumer", "updatedAt", "storageBackend", "credentialRevision", "restartRequired"].includes(k));
+    && (b.appliedRevision === null || validRevision(b.appliedRevision))
+    && Object.keys(b).every(k => ["id", "envName", "tool", "label", "consumer", "updatedAt", "storageBackend", "credentialRevision", "appliedRevision", "restartRequired"].includes(k));
 }
 
 const validRevision = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
@@ -72,11 +73,17 @@ function credentialMetadata(k) {
 }
 
 function registryMetadata(r) {
-  if (r === null) return { version: 2, paired: false, bindings: [] };
-  if (!object(r) || ![1, 2].includes(r.version) || typeof r.paired !== "boolean" || !Array.isArray(r.bindings) || r.bindings.length > 32 || Object.keys(r).some(k => !["version", "paired", "bindings"].includes(k))) fail("invalid_registry");
-  const bindings = r.bindings.map(b => r.version === 1 && object(b) ? { storageBackend: "unknown", credentialRevision: null, restartRequired: true, ...b } : b);
+  if (r === null) return { version: 3, paired: false, bindings: [] };
+  if (!object(r) || ![1, 2, 3].includes(r.version) || typeof r.paired !== "boolean" || !Array.isArray(r.bindings) || r.bindings.length > 32 || Object.keys(r).some(k => !["version", "paired", "bindings"].includes(k))) fail("invalid_registry");
+  const bindings = r.bindings.map(b => {
+    if (!object(b) || r.version === 3) return b;
+    const legacy = r.version === 1 ? { storageBackend: "unknown", credentialRevision: null, restartRequired: true, ...b } : b;
+    // Older registries never recorded applied revisions. Keep that uncertainty
+    // explicit rather than assuming the currently running child is up to date.
+    return { ...legacy, appliedRevision: null, restartRequired: typeof legacy.consumer === "string" && legacy.consumer.startsWith("mcp:") ? true : legacy.restartRequired };
+  });
   if (!bindings.every(validBinding) || new Set(bindings.map(b => b.envName.toUpperCase())).size !== bindings.length || new Set(bindings.map(b => b.id)).size !== bindings.length) fail("invalid_registry");
-  return { version: 2, paired: r.paired, bindings };
+  return { version: 3, paired: r.paired, bindings };
 }
 
 // The synchronous CLI/desktop spawn boundaries only read private metadata.
@@ -204,12 +211,38 @@ export class StmCredentials {
   }
   async listBindings() { return (await this.#registry()).bindings; }
   async inventory() {
+    return (await this.#inventorySnapshot()).keys;
+  }
+  async #inventorySnapshot() {
     this.#supported();
     if (!(await this.#registry()).paired) fail("not_connected");
-    await this.#handshake();
+    const capability = await this.#handshake();
     const r = await this.#request("keys");
     if (!object(r) || r.version !== 1 || !Array.isArray(r.keys) || r.keys.length > 2048) fail("invalid_response");
-    return r.keys.map(credentialMetadata);
+    const keys = r.keys.map(credentialMetadata);
+    if (new Set(keys.map(k => `${k.tool}/${k.label}`)).size !== keys.length) fail("invalid_response");
+    return { keys, backend: capability.backend };
+  }
+  async refreshBindings() {
+    this.#supported();
+    // Serialize with local metadata writes/acknowledgements. STM's actual
+    // inventory can change after this request; checkedAt is not a live lease.
+    return this.#mutate(async () => {
+      const snapshot = await this.#inventorySnapshot();
+      const registry = await this.#registry();
+      const checkedAt = new Date().toISOString();
+      const items = registry.bindings.map(binding => {
+        const key = snapshot.keys.find(k => k.tool === binding.tool && k.label === binding.label);
+        const credentialState = key ? (key.status === "active" ? "available" : "revoked") : "missing";
+        binding.credentialRevision = key?.revision ?? null;
+        binding.storageBackend = snapshot.backend;
+        binding.restartRequired = binding.consumer.startsWith("mcp:") && (credentialState !== "available" || binding.appliedRevision !== key.revision);
+        binding.updatedAt = checkedAt;
+        return { ...binding, credentialState };
+      });
+      await writePrivate(this.#options.registryPath, registry);
+      return { checkedAt, backend: snapshot.backend, items };
+    });
   }
   async saveCredential({ tool, label, value, expectedRevision, consent }) {
     this.#supported();
@@ -245,7 +278,7 @@ export class StmCredentials {
   async link({ envName, tool, label, consumer, consent }, legacyNames = []) {
     this.#supported();
     if (consent !== true) fail("consent_required");
-    const binding = { id: randomUUID(), envName, tool, label, consumer, updatedAt: new Date().toISOString(), storageBackend: "unknown", credentialRevision: null, restartRequired: typeof consumer === "string" && consumer.startsWith("mcp:") };
+    const binding = { id: randomUUID(), envName, tool, label, consumer, updatedAt: new Date().toISOString(), storageBackend: "unknown", credentialRevision: null, appliedRevision: null, restartRequired: typeof consumer === "string" && consumer.startsWith("mcp:") };
     if (!validBinding(binding)) fail("invalid_binding");
     if (legacyNames.includes(envName) || Object.hasOwn(process.env, envName)) fail("plaintext_conflict");
     return this.#mutate(async () => {
@@ -290,6 +323,7 @@ export class StmCredentials {
       if (!selected.length || selected.length !== bindingIds.length || selected.some(b => !bindingIds.includes(b.id) || !validRevision(revisions[b.envName]))) fail("launch_binding_changed");
       for (const binding of selected) {
         // A concurrent rotation after resolution must keep restart pending.
+        binding.appliedRevision = revisions[binding.envName];
         binding.restartRequired = binding.credentialRevision !== revisions[binding.envName];
       }
       await writePrivate(this.#options.registryPath, registry);

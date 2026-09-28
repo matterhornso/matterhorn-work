@@ -19,6 +19,12 @@ assumed to support this contract. Do not use `/api/inject/env` as a fallback.
 
 - `connect({consent:true})` records pairing metadata after authentication.
 - `inventory()` and `listBindings()` return only explicit metadata.
+- `refreshBindings()` reconciles last-observed inventory with each MCP binding's
+  applied revision, returning `checkedAt` and available/revoked/missing status.
+  Host-token `POST /env/stm/refresh` respects read-only mode. It does not resolve
+  secrets or restart children. Failures preserve the last-known registry and
+  return an error, not a successful freshness claim. This is a point-in-time
+  observation, not a lease guaranteeing the key remains available afterwards.
 - `saveCredential()` requires explicit consent and an expected revision (null
   for create-only). Writes are never retried automatically. On an uncertain
   response, refresh inventory and review before any further write. The server
@@ -66,14 +72,17 @@ This is a single-user trust boundary. A dashboard credential grants broad local
 vault authority. The selected consumer receives its raw credential and can read
 or print it. This does not provide brokered-execution isolation.
 
-The v2 JSON registry contains consent state, exact names, storage backend,
-opaque credential revision, consumer identity and restart-required metadata only.
+The v3 JSON registry contains consent state, exact names, storage backend,
+opaque observed/applied revisions, consumer identity and restart-required metadata only.
 MCP bindings mark restart required on link/replacement; voice resolves per call
 and does not require a child restart. Value/revision snapshots record exactly
 what a child received; an intervening replacement leaves restart pending. No
-automatic restart scheduling is implemented. External STM rotations need a
-metadata refresh before this persisted flag can be treated as current.
-Old v1 references are normalized in memory without resolving/exporting values.
+automatic restart scheduling is implemented. External STM rotations/revocations
+are observed by explicit metadata refresh. A matching newly applied revision can
+clear pending status; refresh never pretends to erase a running child's memory.
+Old v1/v2 references are normalized without resolving/exporting values; their
+unknown applied revision conservatively requires MCP restart. Earlier builds
+that cannot read v3 must fail closed, not restore plaintext credentials.
 The server locates it next to the configured legacy environment store, which
 also makes isolated test/data-directory overrides explicit.
 Writes use a private temporary file and rename, with an exclusive registry lock.

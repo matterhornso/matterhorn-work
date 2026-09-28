@@ -347,3 +347,52 @@ compiled CLI/orchestrator/Electron distribution parity; full regressions/securit
 gates. Real Keychain and signed OS acceptance remain separately authorized and
 unverified. No production flags, real keys, hosted state or upstream releases
 changed. Goal remains **ACTIVE**, not release-ready.
+
+## Continuation: external rotation/revocation metadata refresh
+
+Previous turn classified as **progress**: revalidated `dd16e5fb32` and clean tracked
+state before this continuation. Unrelated untracked handoffs/reports preserved.
+
+Implemented an explicit host-token-only, writable-local `POST /env/stm/refresh`.
+It reads authenticated capabilities/inventory only, records observed revisions,
+and returns a timestamp plus available/revoked/missing state for existing bindings.
+It never resolves key values, creates bindings, starts/restarts children or
+deletes shared keys. Network/inventory failures preserve the last-known registry;
+the operation fails instead of falsely reporting refreshed readiness. Duplicate
+tool/label identities in inventory now fail validation.
+
+Registry v3 records each MCP binding's applied revision separately from the
+observed inventory revision. External rotation marks restart pending; matching
+applied/current revisions can be reconciled without unnecessary repeat restarts.
+An old in-flight launch acknowledgement cannot erase a newer observed revision.
+Revoked/missing bindings remain authoritative and block resolution, without
+plaintext fallback. Voice remains per-call and does not claim restart is needed.
+Legacy v1/v2 registries preserve references and normalize unknown applied revisions
+conservatively. Older code that cannot parse v3 must fail closed on rollback.
+
+Verification:
+
+- Adapter: **27 tests passed**, including external rotate/revoke/missing states,
+  failed/duplicate metadata preservation, legacy v2 authority, and reconciliation
+  of resolution occurring after external rotation. No secret fetch during refresh.
+- Cross-repository real STM SQLite Store + fake keystore + loopback handler:
+  **27 passed / 115 assertions**, selected/lifecycle/contract suites. Added native
+  `Store.rotateKey` and `Store.revokeKey` observations with unchanged keystore read
+  count. Companion test commit: **`d548049`** in the isolated STM branch.
+- Seven targeted server suites: **54 passed / 261 assertions** with the source
+  stdio launcher (no optional engine in this run). Host refresh success, missing
+  host auth, owner bearer rejection, read-only and default-off paths checked.
+- Native launcher rebuilt (26 modules) at
+  `/private/tmp/matterhorn-stm-refresh-snAgxP/matterhorn-stm-mcp`.
+  `STM_TEST_OPENCODE_BIN=/private/tmp/matterhorn-overnight-runtime.ddJMOU/bin/opencode STM_TEST_COMPILED_LAUNCHER=/private/tmp/matterhorn-stm-refresh-snAgxP/matterhorn-stm-mcp bun test src/stm-mcp-launch.e2e.test.ts`
+  from `apps/server`: **1 passed / 60 assertions**, allowed/denied/rejected calls
+  through pinned OpenCode with synthetic loopback inference and fake credentials.
+- Server, Electron and orchestrator typechecks passed. `git diff --check` passed
+  in both repositories. No frontend, full regression, signed app or real Keychain
+  acceptance is inferred from these targeted checks.
+
+Next task: safe crashed-launcher recovery and transient exit-bookkeeping contention,
+then mid-call cancellation/failure tests, compiled distribution parity and full
+regression/security gates. OS/real-Keychain acceptance remains separately gated.
+Refresh is explicit and point-in-time: no daemon event subscription or always-live
+readiness claim. Goal remains **ACTIVE**; no deployment or real-key migration.

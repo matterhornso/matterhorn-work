@@ -9,6 +9,11 @@ covered; changed configuration requires a new approval. Crash recovery and signe
 packaged acceptance remain incomplete. The earlier `spawnStmConsumer()` primitive
 alone remains insufficient proof of runtime integration.
 
+Metadata refresh now observes external STM rotation/revocation without key reads.
+Observed and applied revisions are separate; offline refresh fails explicitly and
+keeps last-known metadata. This does not add automatic restart or current-process
+revocation. The host-only refresh endpoint reports its observation timestamp.
+
 ## Required integration
 
 1. A host-token-only local control operation reviews a configured local MCP and

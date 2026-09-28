@@ -1,4 +1,4 @@
-export type Binding = { id: string; envName: string; tool: string; label: string; consumer: string; updatedAt: string; storageBackend: string; credentialRevision: string | null; restartRequired: boolean };
+export type Binding = { id: string; envName: string; tool: string; label: string; consumer: string; updatedAt: string; storageBackend: string; credentialRevision: string | null; appliedRevision: string | null; restartRequired: boolean };
 export type CredentialMetadata = { tool: string; label: string; status: string; updatedAt: string; revision: string };
 export type Status = { state: string; code?: string; version?: number; backend?: string };
 export class StmError extends Error { readonly code: string; constructor(code: string); }
@@ -11,6 +11,7 @@ export class StmCredentials {
   connect(input: { consent: boolean }): Promise<Status>;
   listBindings(): Promise<Binding[]>;
   inventory(): Promise<CredentialMetadata[]>;
+  refreshBindings(): Promise<{ checkedAt: string; backend: string; items: Array<Binding & { credentialState: "available" | "revoked" | "missing" }> }>;
   saveCredential(input: { tool: string; label: string; value: string; expectedRevision: string | null; consent: boolean }): Promise<{ key: CredentialMetadata; oldValueCleanupPending: boolean; restartRequired: boolean }>;
   link(input: { envName: string; tool: string; label: string; consumer: string; consent: boolean }, legacyNames?: string[]): Promise<Binding>;
   unlink(id: string): Promise<void>;
