@@ -7,8 +7,41 @@ import { useComposerSubmission } from "../../src/react-app/domains/session/surfa
 import { SigninBoundary } from "../../src/react-app/shell/signin-boundary";
 import { useComposerStateStore } from "../../src/react-app/domains/session/surface/composer-state-store";
 import type { DenAuthStatus } from "../../src/react-app/domains/cloud/den-auth-provider";
+import { applyRetroUi, RETRO_UI } from "../../src/app/lib/retro-ui";
+import { PrimaryDeskLauncher } from "../../src/react-app/domains/session/workflows/primary-desk-launcher";
+import { AppSidebar } from "../../src/react-app/domains/session/sidebar/app-sidebar";
+import { ShellConfigProvider } from "../../src/react-app/shell/shell-config";
+import { SidebarProvider, SidebarTrigger } from "../../src/components/ui/sidebar";
+import { Button } from "../../src/components/ui/button";
+import { PRIMARY_DESKS } from "../../src/app/lib/minimal-ui";
+import type { WorkspaceSessionGroup } from "../../src/app/types";
+import "../../src/app/index.css";
+
+applyRetroUi(document.documentElement, RETRO_UI);
+document.documentElement.dataset.theme = new URLSearchParams(location.search).get("theme") === "dark" ? "dark" : "light";
 
 const noop = () => {};
+const fixtureGroups: WorkspaceSessionGroup[] = [{
+  workspace: { id: "fixture", name: "Disposable workspace", path: "/fixture", preset: "starter", workspaceType: "local" },
+  sessions: [{ id: "fixture-chat", title: "Research draft", time: { created: 1 } }], status: "ready",
+}];
+
+function SidebarFixture() {
+  const [action, setAction] = useState("");
+  return <ShellConfigProvider><SidebarProvider>
+    <AppSidebar workspaceSessionGroups={fixtureGroups} selectedWorkspaceId="fixture" selectedSessionId="fixture-chat"
+      developerMode={false} connectingWorkspaceId={null} workspaceConnectionStateById={{}} newTaskDisabled={false}
+      onSelectWorkspace={() => setAction("Workspace selected")} onOpenSession={() => setAction("Conversation selected")}
+      onCreateTaskInWorkspace={() => setAction("New chat requested")} onOpenSettings={() => setAction("Settings requested")}
+      onOpenRenameWorkspace={noop} onShareWorkspace={noop} onRevealWorkspace={noop} onForgetWorkspace={noop} onOpenCreateWorkspace={() => setAction("Workspace setup requested")}
+      deskNavigation={<nav aria-label="Desks" className="grid gap-1">{PRIMARY_DESKS.map(desk => <Button key={desk.id} variant="ghost" className="justify-start" onClick={() => setAction(desk.name)}>{desk.name}</Button>)}</nav>} />
+    <div className="min-w-0 flex-1">
+      <header className="matterhorn-workspace-header flex items-center gap-3 p-4"><SidebarTrigger /><h1 className="text-base font-semibold">Isolated workspace navigation</h1></header>
+      <p role="status" className="px-6">{action}</p>
+      <Fixture />
+    </div>
+  </SidebarProvider></ShellConfigProvider>;
+}
 
 function AuthFixture() {
   const [status, setStatus] = useState<DenAuthStatus>("signed_in");
@@ -23,6 +56,7 @@ function AuthFixture() {
 }
 
 function Fixture() {
+  const [desk, setDesk] = useState("");
   const [draft, setDraft] = useState("Explain a blockchain in one sentence.");
   const [result, setResult] = useState("");
   const [calls, setCalls] = useState<unknown[]>([]);
@@ -50,7 +84,9 @@ function Fixture() {
     setResult("accepted");
   });
   const managedSend = () => submission.send().catch(() => setResult("retry_available"));
-  return <>
+  return <main className="mx-auto max-w-3xl space-y-6 p-6">
+    <p>Isolated desk/composer fixture. No account, provider or chain requests.</p>
+    {params.has("launcher") ? <><PrimaryDeskLauncher onOpenDesk={setDesk} /><output data-testid="selected-desk">{desk}</output></> : null}
     <ReactSessionComposer
       draft={params.has("empty") ? "" : draft}
       placeholder="Test prompt"
@@ -114,9 +150,10 @@ function Fixture() {
     }}>Two sends before render</button>
     <button onClick={() => void submission.sendWithConsent("fixture-consent-token")}>Confirm fixture consent</button>
     <button onClick={() => void submission.sendWithConsent(undefined).catch(() => setResult("invalid_consent"))}>Missing fixture consent</button>
-  </>;
+  </main>;
 }
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing fixture root");
-createRoot(root).render(new URLSearchParams(location.search).has("authBoundary") ? <AuthFixture /> : <Fixture />);
+const fixtureParams = new URLSearchParams(location.search);
+createRoot(root).render(fixtureParams.has("authBoundary") ? <AuthFixture /> : fixtureParams.has("sidebar") ? <SidebarFixture /> : <Fixture />);

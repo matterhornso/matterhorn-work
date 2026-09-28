@@ -464,6 +464,7 @@ function HostedMcpCompactSummary({
                 {group.title}
               </span>
               <Check
+                data-connection-ready="true"
                 className="ml-auto size-3.5 shrink-0 text-green-10"
                 aria-label="Available"
               />
@@ -560,7 +561,7 @@ export function HostedMcpSummary(props: HostedMcpSummaryProps) {
                     {group.description}
                   </p>
                 </div>
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-green-10">
+                <span data-connection-ready="true" className="inline-flex items-center gap-1.5 text-[11px] font-medium text-green-10">
                   <Check className="size-3.5" aria-hidden="true" />
                   Available
                 </span>
@@ -596,6 +597,7 @@ export function HostedMcpSummary(props: HostedMcpSummaryProps) {
                   {connection.name}
                 </span>
                 <span
+                  data-connection-ready={connection.ready}
                   className={cn(
                     "inline-flex shrink-0 items-center gap-1.5 text-xs",
                     connection.ready ? "text-green-10" : "text-amber-10",

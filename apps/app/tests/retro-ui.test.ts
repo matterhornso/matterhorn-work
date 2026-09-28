@@ -64,6 +64,7 @@ describe("retro visual rollout", () => {
         ["retro-action-text", "retro-action-hover"],
         ["retro-selection-text", "retro-selection"], ["destructive", "retro-panel"],
         ["warning", "retro-panel"],
+        ["retro-success", "retro-panel"], ["retro-success", "retro-paper"],
       ]) {
         const text = colors.get(fg), surface = colors.get(bg);
         if (!text || !surface) throw new Error(`Missing color pair ${fg}/${bg}`);

@@ -42,6 +42,17 @@ RETRO_QA_CAPTURES=/private/tmp/matterhorn-retro-captures-2026-09-28 pnpm exec bu
 This captures light/dark at 390/768/1440px and checks overflow. Capturing files
 does not mean their visual review or whole-product acceptance is complete.
 
+Composer, desk launcher and actual sidebar fixtures (no signed-in account):
+
+```sh
+RETRO_QA_FLAG=1 pnpm exec bun test apps/app/scripts/composer-submit.browser.test.ts
+RETRO_QA_FLAG=0 pnpm exec bun test apps/app/scripts/composer-submit.browser.test.ts
+```
+
+Set `RETRO_QA_CAPTURES` for the optional18-image matrix. The composer suite
+retains the incumbent flag-off assertions and stubs only desktop host policy.
+Desk selection records callbacks without starting an agent or sending a prompt.
+
 Run `tests`, `typecheck`, `build`, `build-web`, and `safety-ui` runner stages **sequentially**;
 prebuilds share generated package output. The `0|1` argument tests the rollout
 flag. Capture/inspection coverage and remaining gaps are in `COVERAGE.md`.

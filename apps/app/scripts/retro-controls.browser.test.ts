@@ -245,6 +245,7 @@ test("wallet review preserves blockers, explicit execution, failure and dismissa
     expect(await page.getByRole("button", { name: "Blocked", exact: true }).isDisabled()).toBe(true);
     expect(await page.getByTestId("wallet-attempts").innerText()).toBe("0");
     expect(await page.getByRole("alert").innerText()).toContain("Fixture policy blocks this action.");
+    expect(await page.getByRole("alert").evaluate(el => getComputedStyle(el).color)).toBe("rgb(185, 28, 28)");
     await page.getByRole("button", { name: "Close transaction review" }).click();
     await page.getByText("Review closed", { exact: true }).waitFor();
     await page.goto(`${server.url}?wallet&theme=dark`);
@@ -269,6 +270,8 @@ test("integrations preserve server access state and recover without exposing cre
     expect(accessWrites).toBe(0);
     const connections = page.getByRole("list", { name: "Managed MCP connections" });
     expect(await connections.innerText()).toContain("Needs setup");
+    expect(await connections.locator('[data-connection-ready="true"]').evaluate(el => getComputedStyle(el).color)).toBe("rgb(22, 101, 52)");
+    expect(await connections.locator('[data-connection-ready="false"]').evaluate(el => getComputedStyle(el).color)).toBe("rgb(138, 75, 8)");
     accessMode = "error";
     await page.reload();
     await page.getByRole("alert").waitFor();

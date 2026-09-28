@@ -165,6 +165,7 @@ import {
 } from "../workflows/protocol-desk-ui";
 import { PredictionMarketVenueCoverage } from "../workflows/prediction-market-venue-coverage";
 import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
+import { PrimaryDeskLauncher } from "../workflows/primary-desk-launcher";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
 import { WorkflowStageCard } from "../workflows/workflow-stage-card";
 import {
@@ -571,11 +572,7 @@ function HomeCapabilityOverview({
 }: {
   onOpenCapability?: (id: CustomerWorkflowIconHint) => void;
 }) {
-  if (MINIMAL_UI) return <section aria-label="Desks" className="matterhorn-desk-launcher divide-y divide-dls-border">
-    {PRIMARY_DESKS.map((desk) => <button key={desk.id} type="button" data-testid={`open-${desk.id}-desk`} className="flex min-h-20 w-full items-center gap-4 px-2 py-3 text-left hover:bg-dls-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-dls-text" onClick={() => onOpenCapability?.(desk.id)}>
-      <DeskBrandMark id={desk.id} size={28} /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{desk.name}</span><span className="block text-sm text-dls-secondary">{desk.purpose}</span></span><ChevronRight className="size-4 shrink-0" aria-hidden="true" />
-    </button>)}
-  </section>;
+  if (MINIMAL_UI) return <PrimaryDeskLauncher onOpenDesk={onOpenCapability} />;
   return (
     <section className="matterhorn-capability-overview space-y-3 py-3" aria-label="Desks">
       <h3 className="text-base font-semibold text-dls-text">Choose a desk</h3>

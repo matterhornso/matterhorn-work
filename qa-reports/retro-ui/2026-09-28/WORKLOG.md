@@ -175,6 +175,36 @@ neobrutalism across the product; implementation local only. See detailed plan at
   app returns to signed-out auth gate. Marked tab for handoff. No screenshot
   inspection yet, no signed-in shell or model/chain traffic.
 
+## 19:51–20:07 UTC — core interaction evidence and first visual review
+
+- Previous checkpoint `6f10bd7a8d`. Extracted the existing five-desk launcher
+  unchanged into a shared component so the fixture exercises production markup.
+  Extended the existing real composer fixture, not a parallel implementation.
+- Captured 18 additional launcher/composer/sidebar images across both themes and
+  390/768/1440px. Total 60 synthetic captures. Inspected 16 representative images
+  in one batch; see `VISUAL-REVIEW.md`. Inspection rounds now **1/2**.
+- One correction batch: visible 44px mobile drawer close action; theme-safe
+  integration Ready/Needs setup colors; readable transaction step numbers and
+  44px review close target. No readiness, approval or execution logic changed.
+- Composer browser regressions: flag on **8 pass / 1 optional capture skipped /
+  36 assertions**; flag off **7 pass / 2 skipped / 33 assertions**. All five desk
+  callbacks, unsent draft, mobile selection/Close/Escape and focus return covered.
+  Initial status locator ambiguity was a fixture issue; retained assertions and
+  reran successfully. Drawer close test is intentionally retro-only.
+- Secondary/control regressions after corrections: **11 pass / 1 capture skipped /
+  88 assertions**, including actual rendered light-theme status colors.
+- Full frontend: **1,233 pass / zero failures / 7,779 assertions**:
+  `/private/tmp/matterhorn-retro-qa-ghUevI/tests-1.log`.
+- Typecheck passes: `/private/tmp/matterhorn-retro-qa-senvrm/typecheck-1.log`.
+  Public-web build passes: `/private/tmp/matterhorn-retro-qa-DTRiqN/build-web-1.log`.
+  Existing large-chunk warnings only. `git diff --check` passes.
+- Restarted read-only preview after rebuild: **http://127.0.0.1:65364/**,
+  exec session **84421**; old session25610 stopped. HTTP200 verified. Codex tab13
+  still points to the old port until navigated. Preview remains signed-out with
+  remote traffic blocked; no real credentials, providers or chain calls used.
+- These are local component/fixture results. Settings/zoom coverage and final
+  visual confirmation remain pending; no whole-platform/live readiness claim.
+
 ## Coverage queue
 
 1. Foundation flag, semantic tokens and primitives with tests.
@@ -182,17 +212,16 @@ neobrutalism across the product; implementation local only. See detailed plan at
 3. Settings/account/public/workspace tools and transaction reviews.
 4. Batched screenshots, accessibility/functional regressions, review/docs.
 
-Next task: core/shell capture and interaction gaps in COVERAGE.md. Reuse existing
-`scripts/fixtures/composer-submit.tsx` and browser suite for actual composer
-behavior/retro captures; do not clone the component. Inspect full launcher/sidebar
-coverage and establish safe authenticated local preview only through normal
-disposable auth, or explicitly keep full-shell unverified. Add core evidence to
-the saved secondary/auth capture batch, then perform bounded review round1 across
-themes and device sizes (currently0/2). Don't repeat tested wallet/integration
-implementation. Public preview session25610 on63773, Codex tab13. Current dist
-is retro PUBLIC WEB. Do not read operator secrets or bypass auth.
+Next task: remaining settings/default-off STM, zoom and accessibility/failure-path
+evidence from COVERAGE.md. Use real components with isolated disposable fixtures;
+record unavailable browsers and authenticated whole-shell/runtime as unverified.
+Combine the remaining evidence and corrected captures in the single final visual
+confirmation round; do not start another polish loop. Don't repeat tested wallet/
+integration implementation. Public preview session84421 on65364; Codex tab13 still
+needs navigation from old63773. Current dist is retro PUBLIC WEB. Do not read
+operator secrets or bypass auth.
 Then run relevant safety/functional browser checks, capture evidence, and at the
 finish stage invoke the skill-required independent reviewer/documenter. Do not
 run the final detector yet; it is a once-at-finish batched check. No pushes.
-Do not claim hosted acceptance from synthetic fixtures. Screenshot inspection rounds used: 0/2
+Do not claim hosted acceptance from synthetic fixtures. Screenshot inspection rounds used: 1/2
 (reference/incumbent inspection is not inspection of the new build).

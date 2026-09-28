@@ -57,6 +57,7 @@ html[data-matterhorn-ui="retro"] {
   --accent-foreground: var(--retro-selection-text);
   --destructive: #b91c1c;
   --warning: #8a4b08;
+  --retro-success: #166534;
   --border: var(--retro-line);
   --input: var(--retro-line);
   --ring: var(--retro-focus);
@@ -90,6 +91,7 @@ html[data-matterhorn-ui="retro"]:is([data-theme="dark"], .dark) {
   --dls-active: #453657;
   --destructive: #ffb4ad;
   --warning: #ffd583;
+  --retro-success: #86efac;
 }
 
 html[data-matterhorn-ui="retro"] body {
@@ -238,6 +240,33 @@ html[data-matterhorn-ui="retro"] [data-slot="transaction-step"] {
 
 html[data-matterhorn-ui="retro"] [data-slot="transaction-step"][data-state="active"] {
   border-width: 2px;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-step"] > div:first-child > div:first-child {
+  color: var(--retro-ink);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-batch"] button[aria-label="Close transaction review"] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-integrations [data-connection-ready="true"] {
+  color: var(--retro-success);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-integrations [data-connection-ready="false"] {
+  color: var(--warning);
+}
+
+html[data-matterhorn-ui="retro"] [data-sidebar="sidebar"][data-mobile="true"] > [data-slot="sheet-close"] {
+  display: flex;
+  position: static;
+  order: -1;
+  align-self: flex-end;
+  margin: 8px 12px 0;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 html[data-matterhorn-ui="retro"] [data-slot="transaction-warning"] {
