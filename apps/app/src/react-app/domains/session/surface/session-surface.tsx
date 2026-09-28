@@ -3375,7 +3375,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   confirmingPrivacy={confirmingPrivacy}
                 />
               ) : MINIMAL_UI ? (
-                <section className="mx-auto w-full max-w-3xl px-4 py-8" aria-label="Conversation starters">
+                <section className="matterhorn-conversation-starters mx-auto w-full max-w-3xl px-4 py-8" aria-label="Conversation starters">
                   {activeDeskStartBlocker ? <p role="status" className="mb-4 text-sm text-dls-secondary">{activeDeskStartBlocker}</p> : null}
                   {activeDeskMode ? <>
                     <h2 className="mb-3 text-base font-semibold">What would you like to explore?</h2>

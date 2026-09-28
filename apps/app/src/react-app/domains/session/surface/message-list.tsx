@@ -1551,6 +1551,7 @@ function BittensorToolCards(props: {
         return (
           <div
             key={`${card.kind ?? "card"}:${title}:${index}`}
+            data-slot="protocol-result"
             className={cn("rounded-[8px] border px-3.5 py-3 shadow-sm", bittensorCardToneClass(card.tone))}
           >
             <div className="flex items-start gap-2.5">
@@ -1955,6 +1956,7 @@ function MessageBlockRow(props: {
         style={{ contain: "layout style paint", ...perfStyle }}
       >
         <div
+          data-slot="message-body"
           className={cn(
             block.isUser
               ? props.isNestedVariant
@@ -2026,6 +2028,7 @@ function MessageBlockRow(props: {
       style={{ contain: "layout style paint", ...perfStyle }}
     >
       <div
+        data-slot="message-body"
         className={cn(
           "relative text-sm text-foreground leading-relaxed",
           block.isUser && "bg-dls-surface-muted/[0.14] ring-1 ring-white/[0.08]",

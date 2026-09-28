@@ -7,7 +7,7 @@ export interface LayoutStackProps {
 }
 
 export function LayoutStack({ children, className }: LayoutStackProps) {
-  return <div className={cn("@container/settings flex w-full max-w-3xl flex-col gap-y-6", className)}>{children}</div>;
+  return <div data-slot="settings-stack" className={cn("@container/settings flex w-full max-w-3xl flex-col gap-y-6", className)}>{children}</div>;
 }
 
 interface LayoutSectionProps {

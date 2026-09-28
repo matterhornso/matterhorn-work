@@ -321,3 +321,79 @@ html[data-matterhorn-ui="retro"] .public-auth-title {
   font-weight: 750;
   letter-spacing: -0.03em;
 }
+
+/* Conversation chrome stays quiet; structure, not decorative status, carries identity. */
+html[data-matterhorn-ui="retro"] [data-message-role="user"] > [data-slot="message-body"] {
+  background: var(--retro-subtle);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="protocol-result"] {
+  border-width: 2px;
+  border-radius: var(--retro-radius);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-conversation-starters [data-slot="button"] {
+  white-space: normal;
+  height: auto;
+  min-height: 44px;
+  max-width: 100%;
+  padding-block: 10px;
+  text-align: start;
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="sheet-content"], [data-slot="command-dialog-popup"]) {
+  background: var(--retro-panel);
+  color: var(--retro-ink);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] [data-sidebar="sidebar"][data-mobile="true"] {
+  background: var(--retro-paper);
+  border-radius: 0;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="settings-stack"] > [data-section] + [data-section] {
+  padding-block-start: 24px;
+  border-block-start: 2px solid var(--retro-line);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="settings-stack"] h2 {
+  font-weight: 700;
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="checkbox"], [data-slot="switch"]) {
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="checkbox"], [data-slot="switch"])[aria-checked="true"] {
+  background: var(--retro-action);
+  color: var(--retro-action-text);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="checkbox"], [data-slot="switch"])[aria-invalid="true"] {
+  border-color: var(--destructive);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="switch-thumb"] {
+  border-radius: 1px;
+  background: var(--retro-ink);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="switch"][aria-checked="true"] [data-slot="switch-thumb"] {
+  background: var(--retro-action-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-matterhorn-ui="retro"] :is([data-slot="switch-thumb"], [data-slot="sidebar-container"], [data-slot="sidebar-gap"]) {
+    transition: none;
+  }
+}

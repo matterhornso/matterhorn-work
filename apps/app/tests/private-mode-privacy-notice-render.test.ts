@@ -3,6 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
 import { PrivateModePrivacyNotice } from "../src/react-app/domains/session/surface/private-mode-privacy-notice";
+import { MINIMAL_UI } from "../src/app/lib/minimal-ui";
 
 const allowedPolicy: MatterhornProviderPrivacyPolicy = {
   providerId: "cudos",
@@ -71,7 +72,7 @@ describe("Private mode privacy notice rendered behavior", () => {
 
     expect(html).toContain("Private is off");
     expect(html).toContain("ASI:Cloud processes this chat");
-    expect(html).toContain("No training");
+    expect(html).toContain(MINIMAL_UI ? ">Privacy details</button>" : "No training");
     expect(html).not.toContain("Set up Private");
   });
 
@@ -83,8 +84,13 @@ describe("Private mode privacy notice rendered behavior", () => {
     });
 
     expect(html).toContain("Private is on");
-    expect(html).toContain("Matterhorn does not train on your chats");
-    expect(html).toContain("Venice does not retain this request or response.");
+    if (MINIMAL_UI) {
+      expect(html).toContain("No request retention.");
+      expect(html).toContain(">Privacy details</button>");
+    } else {
+      expect(html).toContain("Matterhorn does not train on your chats");
+      expect(html).toContain("Venice does not retain this request or response.");
+    }
     expect(html).not.toContain("Set up Private");
   });
 

@@ -63,16 +63,57 @@ neobrutalism across the product; implementation local only. See detailed plan at
 
 ## Coverage queue
 
+## 18:51–19:04 UTC — model flow, core details and regression repair
+
+- Foundation checkpoint: `edbec86b67` (local only).
+- Re-read repository/skill instructions; reused existing direction/context rather
+  than rerunning concept selection. No screenshot inspection rounds used.
+- Corrected six enabled-suite failures with explicit legacy/compact expectations
+  and an authoritative catalog fixture (summary counts are not model IDs).
+  Existing legacy assertions remain. Embedding models excluded from picker.
+- Found and repaired a real compact-layout omission: pending desk setup now
+  retains its title, unsent status and Return to desk action when a callback is
+  provided. No automatic submit or new route/store introduced.
+- Added browser tests using real MinimalModels and the real HTTP client against
+  loopback synthetic responses: search/provider filters, embedding/disconnected
+  exclusion, pending save disables duplicate action, no navigation before save,
+  server mismatch, permission denial, retry, first/later selection callbacks,
+  privacy disclosure/callback, loading and managed/local recovery.
+- Extended styles to user messages, protocol result boundaries (tone preserved),
+  long starter labels, sheets/command panels, mobile sidebar, settings section
+  rhythm, checkboxes and switches. Changes are scoped to the retro marker.
+- Five browser regressions pass / 55 assertions; both themes and reduced motion.
+  Existing global reduced-motion rules set a tiny duration, so test asserts the
+  switch's transition-property is none, not a string-specific duration value.
+- Full frontend tests passed on and off, 1,233 each. Latest enabled run after
+  all core edits: `/private/tmp/matterhorn-retro-qa-ADUlRo/tests-1.log`, 7,773
+  assertions. Off run: `/private/tmp/matterhorn-retro-qa-SKQwON/tests-0.log`.
+- Latest typecheck passes:
+  `/private/tmp/matterhorn-retro-qa-8Eirdy/typecheck-1.log`.
+- Latest enabled production build passes:
+  `/private/tmp/matterhorn-retro-qa-UMUMas/build-1.log`.
+  Existing bundle size warnings remain. `apps/app/dist` is now FLAG ON.
+- One concurrent test/build run failed because package prebuild cleaned the
+  crypto-app-sdk artifact while tests imported it. Sequential rerun passed.
+  **Run package builds/typechecks/tests sequentially from now on**, since their
+  prebuild steps share generated package output.
+- Added `COVERAGE.md`: source/fixture coverage clearly separated from pending
+  actual full-shell visual, hosted/runtime and native evidence. All current
+  tests are local/synthetic, no provider or signing actions.
+
 1. Foundation flag, semantic tokens and primitives with tests.
 2. Core shell/model/desk/chat surfaces.
 3. Settings/account/public/workspace tools and transaction reviews.
 4. Batched screenshots, accessibility/functional regressions, review/docs.
 
-Next task: add both-layout rendered/browser coverage for the six enabled-suite
-failures above, preserving legacy tests and checking real minimal model catalog
-props and privacy details. Then continue core screen pass and build a surface
-coverage matrix. Foundation is a local checkpoint, NOT release acceptance.
-Current `apps/app/dist` is the
-FLAG-OFF build; rebuild with flag 1 or run Vite with the flag before previewing.
+Next task: continue full-product implementation using COVERAGE.md. Finish raw
+model-dialog controls and secondary public/auth/settings/memory/notes/integration/
+wallet review surfaces (not signing/execution). Prepare a reproducible isolated
+preview for full-shell inspection without reading operator secrets or bypassing
+auth. Batch all relevant themes/viewports before first visual inspection; do not
+spend the two-round budget on individual controls. Current dist is FLAG ON.
+Then run relevant safety/functional browser checks, capture evidence, and at the
+finish stage invoke the skill-required independent reviewer/documenter. Do not
+run the final detector yet; it is a once-at-finish batched check. No pushes.
 Do not claim hosted acceptance from synthetic fixtures. Screenshot inspection rounds used: 0/2
 (reference/incumbent inspection is not inspection of the new build).

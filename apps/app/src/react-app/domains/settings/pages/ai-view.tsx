@@ -421,6 +421,17 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     await props.onUseWorkspaceDefault?.();
     await props.onModelSelected?.(first, model);
   }}>
+    {props.pendingDeskTask ? (
+      <section className="flex flex-wrap items-center justify-between gap-3 border-b border-dls-border pb-4" data-testid="pending-desk-task-handoff" aria-label="Return to desk setup">
+        <div className="min-w-0 text-sm">
+          <p className="font-semibold">{props.pendingDeskTask.title}</p>
+          <p className="text-dls-secondary">Nothing has been sent.</p>
+        </div>
+        {props.onResumePendingDeskTask ? <Button variant="outline" onClick={() => void props.onResumePendingDeskTask?.()}>
+          <ArrowLeft data-icon="inline-start" />Return to desk
+        </Button> : null}
+      </section>
+    ) : null}
     {props.privateSetupRequested ? <PrivateModelSetup catalog={catalog} policy={providerPrivacyPolicies.find((policy) => policy.providerId === "venice")} loading={providerStateLoading} failed={catalogQueryFailed} onChooseModel={props.onOpenModelPicker} /> : null}
     {workspaceModelUsageQuery.data?.status ? <details className="text-sm"><summary className="cursor-pointer">Usage & allowance</summary><div className="space-y-2 py-3">{[{ label: "Today", period: workspaceModelUsageQuery.data.status.daily }, { label: "This month", period: workspaceModelUsageQuery.data.status.monthly }].map(({ label, period }) => <p key={label}>{label}: {compactTokenCount(period.chargedTokens)} used{period.limit === null ? "" : ` of ${compactTokenCount(period.limit)} weighted tokens`}. Resets {usageResetLabel(period.resetsAt)}.</p>)}{!workspaceModelUsageQuery.data.status.enabled ? <p>Usage protection is not active in this deployment.</p> : null}</div></details> : null}
   </MinimalModels>;
