@@ -9,8 +9,9 @@ import { StmCredentials, StmMcpLaunches } from "@matterhorn-work/stm-credentials
 import { approveStmMcp } from "./stm-mcp.js";
 import { opencodeConfigPath } from "./workspace-files.js";
 import { createManagedProcessClose } from "./managed-opencode.js";
+import { createLocalStmCredentials } from "./stm-runtime.js";
 
-test("trusted stdio launcher completes an MCP request with selected fake credentials", async () => {
+test("trusted stdio launcher enforces the OS boundary and resolves only selected fake credentials", async () => {
   const root = await mkdtemp(join(tmpdir(), "stm-mcp-stdio-"));
   const workspace = join(root, "workspace");
   const stmDir = join(root, ".subscribetome");
@@ -218,6 +219,26 @@ lines.on("line", line => {
       env: { PATH: process.env.PATH, HOME: root, MATTERHORN_WORK_ENV_STORE: join(root, "env.json"), MATTERHORN_WORK_STM_ENABLED: "1" } });
     let stderr = "";
     child.stderr!.on("data", data => { stderr += String(data); });
+    if (process.platform !== "darwin") {
+      // The parent adapter deliberately advertises darwin to create a fixture
+      // grant. The real child must still enforce its own OS, not trust that grant.
+      const local = createLocalStmCredentials({ host: "127.0.0.1", env: { MATTERHORN_WORK_STM_ENABLED: "1" }, envStorePath: join(root, "env.json") });
+      expect(await local.status()).toEqual({ state: "unavailable", code: "unsupported_environment" });
+      let stdout = "";
+      child.stdout!.on("data", data => { stdout += String(data); });
+      const exit = await new Promise<number | null>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Unsupported OS launcher did not exit")), 5000);
+        child!.once("close", code => { clearTimeout(timer); resolve(code); });
+        child!.once("error", () => { clearTimeout(timer); reject(new Error("Fixture launcher could not start")); });
+      });
+      expect(exit).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toBe("Matterhorn secret-backed tool could not start. Review its local setup.\n");
+      expect(resolutions).toBe(0);
+      expect((await launches.list())[0].active).toBeNull();
+      expect(await credentials.listBindings()).toHaveLength(1);
+      return;
+    }
     const lines = createInterface({ input: child.stdout! });
     const iterator = lines[Symbol.asyncIterator]();
     const request = async (id: number, method: string) => {

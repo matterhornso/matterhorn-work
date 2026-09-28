@@ -652,3 +652,23 @@ PR plan: publish the existing isolated STM companion branch and this feature
 branch as linked draft PRs; stack Matterhorn on the still-open #1026 head instead
 of duplicating its changes against dev. Keep unrelated untracked handoffs/QA
 artifacts and the original STM checkout untouched. No merge/deployment authorized.
+
+## PR #1027 merge review — Linux CI correction
+
+User subsequently requested merge plus a separate platform cleanup/architecture
+review. #1027 head `7837f50ddef2d85643b60c4b1c46a67554b4a820` passed all reported
+checks except `matterhorn-platform-safety`: its Linux backend suite expected the
+macOS-only STM child to resolve a fake secret. The parent fixture overrides its
+platform to darwin; the real child correctly uses Linux and refuses. This was a
+fixture expectation defect, not authorization to enable Linux secret injection.
+
+The fixture now checks the real unsupported-platform refusal: fixed error, empty
+stdout, no resolution, no active child and preserved binding. CI runs this
+boundary on both Linux and macOS, retaining the full supported-platform stdio,
+process cleanup and recovery assertions. Production platform policy is unchanged.
+Local macOS targeted tests: **3 passed, 34 assertions**. Linux evidence must come
+from the new CI run, not inferred from the local pass.
+
+#1026 is still open and is #1027's base. Requested confirmation of whether to
+merge both in order into dev or merge #1027 only into that feature branch. No
+merge bypass, flag activation or deployment performed while this is unresolved.
