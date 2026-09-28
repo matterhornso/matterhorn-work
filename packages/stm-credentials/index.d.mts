@@ -1,6 +1,12 @@
 export type Binding = { id: string; envName: string; tool: string; label: string; consumer: string; updatedAt: string; storageBackend: string; credentialRevision: string | null; appliedRevision: string | null; restartRequired: boolean };
 export type CredentialMetadata = { tool: string; label: string; status: string; updatedAt: string; revision: string };
 export type Status = { state: string; code?: string; version?: number; backend?: string };
+export type Migration = { id: string; state: "prepared" | "published" | "complete"; backend: string; mcpTarget?: { workspace: string; name: string }; entries: Array<{ binding: Binding; sourceUpdatedAt: number }> };
+export type MigrationSource = {
+  withEntries<T>(keys: string[], operation: (entries: Array<{ key: string; value: string; updatedAt: number }>) => Promise<T>): Promise<T>;
+  assertUnchanged(): Promise<void>;
+  removeSelected(): Promise<void>;
+};
 export class StmError extends Error { readonly code: string; constructor(code: string); }
 export function safeSecretEnvName(value: unknown): value is string;
 export function isReservedLegacyEnvKey(key: string): boolean;
@@ -15,6 +21,9 @@ export class StmCredentials {
   saveCredential(input: { tool: string; label: string; value: string; expectedRevision: string | null; consent: boolean }): Promise<{ key: CredentialMetadata; oldValueCleanupPending: boolean; restartRequired: boolean }>;
   link(input: { envName: string; tool: string; label: string; consumer: string; consent: boolean }, legacyNames?: string[]): Promise<Binding>;
   unlink(id: string): Promise<void>;
+  listMigrations(): Promise<Migration[]>;
+  migrateSelected(input: { id: string; selections: Array<{ envName: string; consumer: string }>; backend: string; consent: boolean; mcpTarget?: { workspace: string; name: string } }, source: MigrationSource): Promise<Migration>;
+  finishMigration(id: string, input: { consent: boolean }, source: MigrationSource): Promise<Migration>;
   resolveForConsumer(consumer: string, inherited?: Record<string, string | undefined>): Promise<Record<string, string>>;
   resolveSnapshotForConsumer(consumer: string, inherited?: Record<string, string | undefined>, bindingIds?: string[]): Promise<{ values: Record<string, string>; revisions: Record<string, string> }>;
   acknowledgeMcpStart(consumer: string, bindingIds: string[], revisions: Record<string, string>): Promise<void>;
@@ -38,6 +47,7 @@ export class StmMcpLaunches {
     bindings: Array<{ envName: string; tool: string; label: string }>; consent: boolean;
   }, legacyNames?: string[]): Promise<McpLaunchGrant>;
   revoke(id: string): Promise<void>;
+  approveMigrated(input: { id: string; workspace: string; name: string; command: string[]; launcher: string[]; consent: boolean }): Promise<McpLaunchGrant>;
   recoverExited(id: string, input: { expectedLaunchId: string; consent: boolean }): Promise<void>;
   start(id: string, options: { cwd: string; inherited?: NodeJS.ProcessEnv; stdio?: "pipe" | "inherit" | "ignore";
     authorize: (grant: McpLaunchGrant) => boolean | Promise<boolean>;

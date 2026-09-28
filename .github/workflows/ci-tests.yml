@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - dev
+      # STM is reviewed as a stack while #1026 remains open.
+      - codex/beta-launch-readiness-2026-09-25
   push:
     branches:
       - dev
@@ -249,6 +251,12 @@ jobs:
 
       - name: Test real composer interactions
         run: pnpm --filter @matterhorn-work/app test:composer-browser
+
+      - name: Test selected-secret adapter and migration
+        run: pnpm --dir packages/stm-credentials test
+
+      - name: Test isolated secret-settings interactions
+        run: bun test apps/app/scripts/stm-settings.browser.test.ts
 
       - name: Run full backend test suite
         run: pnpm --dir apps/server test

@@ -55,6 +55,8 @@ async function writePrivate(path, value) {
     await file.sync();
     await file.close(); file = undefined;
     await rename(temp, path);
+    const directory = await open(dirname(path), constants.O_RDONLY);
+    try { await directory.sync(); } finally { await directory.close(); }
   } catch { fail("registry_write_failed"); }
   finally { await file?.close(); await rm(temp, { force: true }).catch(() => {}); }
 }
@@ -307,9 +309,128 @@ export class StmCredentials {
   async unlink(id) {
     this.#supported();
     return this.#mutate(async () => {
+      if ((await this.#migrationJournal()).some(j => j.state !== "complete" && j.entries.some(e => e.binding.id === id))) fail("migration_cleanup_required");
       const r = await this.#registry();
       await writePrivate(this.#options.registryPath, { ...r, bindings: r.bindings.filter(b => b.id !== id) });
       // No STM revoke/delete: the key may be used by unrelated consumers.
+    });
+  }
+  // Migration is privileged and two-stage. The journal never contains values,
+  // hashes of values, daemon tokens, or filesystem copies of the source store.
+  async listMigrations() {
+    const next = this.#queue.then(() => this.#migrationJournal());
+    this.#queue = next.then(() => {}, () => {});
+    return next;
+  }
+  async #migrationJournal() {
+    const rows = await privateJson(this.#options.registryPath + ".migrations", true) ?? [];
+    if (!Array.isArray(rows) || rows.length > 32 || rows.some(row => !object(row)
+      || !/^[a-f0-9-]{36}$/.test(row.id) || !["prepared", "published", "complete"].includes(row.state)
+      || typeof row.backend !== "string" || row.backend.length > 128
+      || !Array.isArray(row.entries) || !row.entries.length || row.entries.length > 32
+      || row.entries.some(entry => !object(entry) || !validBinding(entry.binding) || !Number.isFinite(entry.sourceUpdatedAt)
+        || Object.keys(entry).some(k => !["binding", "sourceUpdatedAt"].includes(k)))
+      || (row.mcpTarget !== undefined && (!object(row.mcpTarget) || typeof row.mcpTarget.workspace !== "string" || !isAbsolute(row.mcpTarget.workspace) || !segment(row.mcpTarget.name) || Object.keys(row.mcpTarget).some(k => !["workspace", "name"].includes(k))))
+      || Object.keys(row).some(k => !["id", "state", "backend", "entries", "mcpTarget"].includes(k)))
+      || new Set(rows.map(row => row.id)).size !== rows.length) fail("invalid_migration_journal");
+    return rows;
+  }
+  async migrateSelected({ id, selections, backend, consent, mcpTarget }, source) {
+    this.#supported();
+    if (consent !== true) fail("consent_required");
+    if (typeof id !== "string" || !/^[a-f0-9-]{36}$/.test(id) || !Array.isArray(selections)
+      || !selections.length || selections.length > 32 || typeof backend !== "string"
+      || selections.some(s => !object(s) || !safeSecretEnvName(s.envName) || typeof s.consumer !== "string"
+        || !/^(voice:realtime|mcp:[a-z0-9_-]{1,128})$/.test(s.consumer))
+      || new Set(selections.map(s => s.envName.toUpperCase())).size !== selections.length) fail("invalid_migration");
+    if (mcpTarget !== undefined && (!object(mcpTarget) || typeof mcpTarget.workspace !== "string" || !isAbsolute(mcpTarget.workspace) || !segment(mcpTarget.name)
+      || Object.keys(mcpTarget).some(k => !["workspace", "name"].includes(k)) || selections.some(s => s.consumer !== `mcp:${id}`))) fail("invalid_migration");
+    return this.#mutate(async () => {
+      const capability = await this.#handshake();
+      if (capability.backend !== backend) fail("migration_backend_changed");
+      if (!capability.revisionedWrites) fail("incompatible_daemon");
+      const registry = await this.#registry();
+      if (!registry.paired) fail("not_connected");
+      const journal = await this.#migrationJournal();
+      let job = journal.find(row => row.id === id);
+      if (job && JSON.stringify(job.mcpTarget) !== JSON.stringify(mcpTarget)) fail("migration_conflict");
+      if (job && (job.backend !== backend || JSON.stringify(job.entries.map(e => ({ envName: e.binding.envName, consumer: e.binding.consumer }))) !== JSON.stringify(selections))) fail("migration_conflict");
+      if (job && job.state !== "prepared") return job;
+      return source.withEntries(selections.map(s => s.envName), async (entries) => {
+        if (entries.length !== selections.length || selections.some(s => !entries.some(e => e.key === s.envName))) fail("migration_source_changed");
+        if (!job) {
+          if (journal.length >= 32 || registry.bindings.length + selections.length > 32) fail("registry_capacity_exceeded");
+          if (selections.some(s => registry.bindings.some(b => b.envName.toUpperCase() === s.envName.toUpperCase())
+            || journal.some(j => j.state !== "complete" && j.entries.some(e => e.binding.envName.toUpperCase() === s.envName.toUpperCase())))) fail("binding_conflict");
+          job = { id, state: "prepared", backend, ...(mcpTarget ? { mcpTarget: { ...mcpTarget } } : {}), entries: selections.map((s, index) => ({
+            sourceUpdatedAt: entries.find(e => e.key === s.envName).updatedAt,
+            binding: { ...s, id: randomUUID(), tool: "matterhorn", label: `migration-${id}-${index}`,
+              storageBackend: backend, credentialRevision: null, appliedRevision: null,
+              updatedAt: new Date().toISOString(), restartRequired: s.consumer.startsWith("mcp:") },
+          })) };
+          journal.push(job);
+          await writePrivate(this.#options.registryPath + ".migrations", journal);
+        }
+        // Dedicated create-only targets give a retry the same identity. A 412
+        // after an interrupted write is verified, never overwritten or retried.
+        for (const entry of job.entries) {
+          const current = entries.find(e => e.key === entry.binding.envName);
+          if (current.updatedAt !== entry.sourceUpdatedAt) fail("migration_source_changed");
+          const { tool, label, envName } = entry.binding;
+          if (typeof current.value !== "string" || !current.value || current.value.includes("\0") || Buffer.byteLength(current.value) > 16_384) fail("invalid_credential_update");
+          try {
+            await this.#request("keys", { version: 1, tool, label, value: current.value, expectedRevision: null }, false, true);
+          } catch (error) {
+            if (!(error instanceof StmError) || error.code !== "credential_revision_conflict") throw error;
+          }
+          const resolved = await this.#request("resolve", { version: 1, bindings: [{ envName, tool, label }], includeRevisions: true });
+          if (!object(resolved) || resolved.version !== 1 || !object(resolved.values) || !object(resolved.revisions)
+            || Object.keys(resolved.values).length !== 1 || Object.keys(resolved.revisions).length !== 1
+            || resolved.values[envName] !== current.value || !validRevision(resolved.revisions[envName])) fail("migration_verification_failed");
+          entry.binding.credentialRevision = resolved.revisions[envName];
+        }
+        // Source verifies that its snapshot is still current before publication.
+        await source.assertUnchanged();
+        for (const entry of job.entries) {
+          const existing = registry.bindings.find(b => b.envName.toUpperCase() === entry.binding.envName.toUpperCase());
+          if (existing && existing.id !== entry.binding.id) fail("binding_conflict");
+        }
+        registry.bindings = [...registry.bindings.filter(b => !job.entries.some(e => e.binding.id === b.id)), ...job.entries.map(e => e.binding)];
+        await writePrivate(this.#options.registryPath, registry);
+        job.state = "published";
+        await writePrivate(this.#options.registryPath + ".migrations", journal);
+        return job;
+      });
+    });
+  }
+  async finishMigration(id, { consent }, source) {
+    this.#supported();
+    if (consent !== true) fail("consent_required");
+    return this.#mutate(async () => {
+      const journal = await this.#migrationJournal();
+      const job = journal.find(row => row.id === id);
+      if (!job || job.state === "prepared") fail("migration_not_published");
+      if (job.state === "complete") return job;
+      const registry = await this.#registry();
+      if (!registry.paired) fail("not_connected");
+      const capability = await this.#handshake();
+      if (capability.backend !== job.backend) fail("migration_backend_changed");
+      if (job.entries.some(e => !registry.bindings.some(b => b.id === e.binding.id && b.credentialRevision === e.binding.credentialRevision))) fail("migration_binding_changed");
+      return source.withEntries(job.entries.map(e => e.binding.envName), async entries => {
+        for (const entry of job.entries) {
+          const { envName, tool, label, credentialRevision } = entry.binding;
+          const current = entries.find(e => e.key === envName);
+          const resolved = await this.#request("resolve", { version: 1, bindings: [{ envName, tool, label }], includeRevisions: true });
+          if (!object(resolved) || resolved.version !== 1 || !object(resolved.values) || !object(resolved.revisions)
+            || Object.keys(resolved.values).length !== 1 || Object.keys(resolved.revisions).length !== 1
+            || resolved.revisions[envName] !== credentialRevision || typeof resolved.values[envName] !== "string"
+            || (current && (current.updatedAt !== entry.sourceUpdatedAt || resolved.values[envName] !== current.value))) fail("migration_source_changed");
+        }
+        await source.removeSelected();
+        job.state = "complete";
+        await writePrivate(this.#options.registryPath + ".migrations", journal);
+        return job;
+      });
     });
   }
   async resolveForConsumer(consumer, inherited = {}) {
@@ -489,6 +610,35 @@ export class StmMcpLaunches {
       await writePrivate(this.#path, registry);
       // Do not kill an in-flight tool or pretend to erase its existing memory.
       // Bindings remain authoritative, blocking stale-plaintext downgrade.
+    });
+  }
+  async approveMigrated({ id, workspace, name, command, launcher, consent }) {
+    if (consent !== true) fail("consent_required");
+    if (!grantId(id) || !segment(name) || !commandVector(command) || !commandVector(launcher) || typeof workspace !== "string" || !isAbsolute(workspace)) fail("invalid_launch_grant");
+    const canonical = await realpath(workspace).catch(() => fail("invalid_launch_grant"));
+    const executable = await realpath(command[0]).catch(() => fail("invalid_launch_grant"));
+    const reviewed = [executable, ...command.slice(1)];
+    return this.#change(async registry => {
+      const status = await this.#credentials.status();
+      if (status.state !== "connected") fail("not_connected");
+      const migration = (await this.#credentials.listMigrations()).find(job => job.id === id && job.state !== "prepared");
+      if (!migration || migration.entries.some(e => e.binding.consumer !== `mcp:${id}`)) fail("migration_not_published");
+      if (status.backend !== migration.backend) fail("migration_backend_changed");
+      if (!migration.mcpTarget || migration.mcpTarget.workspace !== canonical || migration.mcpTarget.name !== name) fail("migration_conflict");
+      const bindings = await this.#credentials.listBindings();
+      if (migration.entries.some(e => !bindings.some(b => b.id === e.binding.id && b.consumer === `mcp:${id}` && b.tool === e.binding.tool && b.label === e.binding.label && b.envName === e.binding.envName))) fail("migration_binding_changed");
+      const ids = migration.entries.map(e => e.binding.id);
+      const existing = registry.grants.find(g => g.id === id);
+      if (existing) {
+        if (existing.revoked || existing.workspace !== canonical || existing.name !== name || JSON.stringify(existing.command) !== JSON.stringify(reviewed)
+          || JSON.stringify(existing.launcher) !== JSON.stringify(launcher) || JSON.stringify(existing.bindingIds) !== JSON.stringify(ids)) fail("launch_grant_conflict");
+        return existing;
+      }
+      if (registry.grants.length >= 32 || registry.grants.some(g => !g.revoked && g.workspace === canonical && g.name === name)) fail("launch_grant_conflict");
+      const grant = { id, workspace: canonical, name, command: reviewed, launcher: [...launcher], bindingIds: ids, revoked: false, createdAt: new Date().toISOString(), active: null };
+      if (!validGrant(grant)) fail("invalid_launch_grant");
+      await writePrivate(this.#path, { ...registry, grants: [...registry.grants, grant] });
+      return grant;
     });
   }
   async recoverExited(id, { expectedLaunchId, consent }) {

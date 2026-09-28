@@ -53,6 +53,7 @@ import {
 } from "../settings-layout";
 import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import { ConfirmModal } from "@/react-app/design-system/modals/confirm-modal";
+import { StmEnvironmentGate } from "./stm-settings";
 
 type EnvItem = EnvironmentVariableItem;
 type EnvironmentEditorState = EnvironmentEditorDraft | null;
@@ -64,9 +65,14 @@ export type EnvironmentViewProps = {
   applyBlocked?: boolean;
   applyBlockedReason?: string | null;
   runtimeKey?: string | null;
+  workspaceId?: string | null;
 };
 
 export function EnvironmentView(props: EnvironmentViewProps) {
+  return <StmEnvironmentGate {...props} legacy={<LegacyEnvironmentView {...props} />} />;
+}
+
+function LegacyEnvironmentView(props: EnvironmentViewProps) {
   return (
     <EnvironmentVariableProvider
       client={props.client}

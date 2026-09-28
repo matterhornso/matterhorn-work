@@ -607,3 +607,48 @@ unverified release work. The active local implementation goal is achieved; no
 remaining phase-1–3 coding/test requirement was left as an inferred success.
 This is not public-beta activation or an assertion that real/signed OS acceptance,
 settings/migration, brokered execution or AI-provider authentication is complete.
+
+## Remaining phases — settings, migration and PR preparation (28 September)
+
+Implemented engineering phase 4 and the locally executable portion of phase 5.
+See `PHASE-4-5-REVIEW.md` for the requirement evidence, exact replay commands,
+compiled checksums, design verdict, screenshots, recovery and release-owner gates.
+
+- Added compact local Environment settings using existing components/tokens:
+  capability state, backend identity, connection consent, selected inventory,
+  transient API-secret add/replace, selected voice/MCP bindings, unlink and
+  guarded restart information. Hosted restrictions and default-off flag remain.
+- Added metadata-only settings/migration HTTP APIs, explicit host-only/read-only
+  enforcement and source eligibility checks. No raw STM values in responses.
+- Added two-stage selected migration with owner-only metadata journal,
+  create-only/idempotent imports, verification before reference publication,
+  separate plaintext-removal consent, exact source checks, cross-instance locks
+  and file/directory sync. No plaintext backups or automatic fallback.
+- Added reviewed project-local MCP migration into the existing launch boundary;
+  exact command/workspace/bindings and configuration are checked before the
+  wrapper is published. No automatic process launch/restart or approval bypass.
+- Added deterministic interrupted-write/restart recovery and backend/source/
+  revision failure tests. Real process-kill/power-loss qualification remains.
+- Independent finish review required consent reset after scope changes and
+  fresh revision selection after Refresh; corrected both and added browser
+  regressions. Explicit API-secret input exception documented in surface brief.
+  Follow-up and documenter verdicts ship for the scoped design, not security/OS.
+
+Final local results: adapter **47/0**; server **1,771/0, 11,891 assertions**;
+frontend **1,228/0, 7,732 assertions**; real Chromium component fixture **6/0,
+31 assertions**; companion STM fake-keystore contract **28/0, 141 assertions**;
+native server/OpenCode fixture **1/0, 75 assertions** and native launcher/OpenCode
+fixture **1/0, 66 assertions**. App/server builds and typechecks, Electron and
+orchestrator typechecks, 50-method bridge contract, strict source scan (1,215 files,
+zero findings) and the full ten-stage platform safety gate passed.
+
+All captures show synthetic data. No real Keychain permission was received;
+no existing secret or real OS test record was read/created. Real Keychain,
+signed installed Electron, independent security review and CI are unfulfilled
+release gates. This is not hosted enablement, real inference, deployment or an
+assertion that the complete release phase has been signed off.
+
+PR plan: publish the existing isolated STM companion branch and this feature
+branch as linked draft PRs; stack Matterhorn on the still-open #1026 head instead
+of duplicating its changes against dev. Keep unrelated untracked handoffs/QA
+artifacts and the original STM checkout untouched. No merge/deployment authorized.

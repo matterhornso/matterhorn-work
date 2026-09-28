@@ -1,10 +1,14 @@
-import { StmError, StmMcpLaunches, type McpLaunchGrant } from "@matterhorn-work/stm-credentials";
+import { StmError, StmMcpLaunches, StmCredentials, safeSecretEnvName, type MigrationSource, type McpLaunchGrant } from "@matterhorn-work/stm-credentials";
 import { addMcp, listMcp } from "./mcp.js";
 
 const sameCommand = (value: unknown, expected: string[]): boolean => Array.isArray(value)
   && value.length === expected.length && value.every((part, index) => part === expected[index]);
 const noEnvironment = (value: unknown): boolean => value === undefined
   || (value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0);
+
+export const eligibleStmToolSecret = (name: string): boolean => safeSecretEnvName(name)
+  && /(?:API_KEY|API_TOKEN|ACCESS_TOKEN|CLIENT_SECRET|AUTH_TOKEN)$/.test(name)
+  && !/(?:PRIVATE|MNEMONIC|SEED|WALLET|SIGNER|COLDKEY|HOTKEY)/i.test(name);
 
 export async function reviewStmMcpConfiguration(workspace: string, name: string) {
   const item = (await listMcp(workspace)).find(entry => entry.name === name && entry.source === "config.project");
@@ -56,4 +60,33 @@ export async function authorizeConfiguredStmMcp(grant: McpLaunchGrant): Promise<
   const item = (await listMcp(grant.workspace)).find(entry => entry.name === grant.name && entry.source === "config.project");
   return Boolean(item && !item.disabledByTools && item.config.type === "local" && item.config.enabled !== false
     && noEnvironment(item.config.environment) && sameCommand(item.config.command, [...grant.launcher, grant.id]));
+}
+
+/** Import only after the host has approved this exact project-local command.
+ * An interrupted configuration write leaves references and a non-launchable
+ * grant; retries reuse the same ID and still recheck the current configuration.
+ */
+export async function migrateStmMcp(input: {
+  credentials: StmCredentials; launches: StmMcpLaunches; source: MigrationSource;
+  id: string; workspace: string; name: string; launcher: string[];
+  envNames: string[]; backend: string; expectedConfiguration: string;
+}) {
+  const config = await reviewStmMcpConfiguration(input.workspace, input.name);
+  if (JSON.stringify(config) !== input.expectedConfiguration) throw new StmError("mcp_configuration_changed");
+  const prior = (await input.launches.list()).find(g => g.id === input.id);
+  if (prior && prior.workspace === input.workspace && prior.name === input.name && !prior.revoked && await authorizeConfiguredStmMcp(prior)) {
+    const migration = (await input.credentials.listMigrations()).find(j => j.id === input.id);
+    if (!migration || migration.backend !== input.backend || JSON.stringify(migration.entries.map(e => e.binding.envName)) !== JSON.stringify(input.envNames)) throw new StmError("migration_conflict");
+    return prior;
+  }
+  await input.credentials.migrateSelected({ id: input.id, backend: input.backend,
+    selections: input.envNames.map(envName => ({ envName, consumer: `mcp:${input.id}` })), consent: true,
+    mcpTarget: { workspace: input.workspace, name: input.name } }, input.source);
+  const current = await reviewStmMcpConfiguration(input.workspace, input.name);
+  if (JSON.stringify(current) !== input.expectedConfiguration) throw new StmError("mcp_configuration_changed");
+  const grant = await input.launches.approveMigrated({ id: input.id, workspace: input.workspace, name: input.name, command: config.command, launcher: input.launcher, consent: true });
+  const beforeWrite = await reviewStmMcpConfiguration(input.workspace, input.name);
+  if (JSON.stringify(beforeWrite) !== input.expectedConfiguration) throw new StmError("mcp_configuration_changed");
+  await addMcp(input.workspace, input.name, { ...config, command: [...grant.launcher, grant.id] });
+  return grant;
 }

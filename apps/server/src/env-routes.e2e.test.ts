@@ -123,6 +123,7 @@ class FixtureStm extends StmCredentials {
   failSave = false;
   bindings: Binding[] = [{ id: "fixture-id", envName: "EXAMPLE_API_KEY", tool: "example", label: "default", consumer: "mcp:example", updatedAt: "2026-09-28", storageBackend: "test fixture", credentialRevision: null, appliedRevision: null, restartRequired: true }];
   override async listBindings() { return this.bindings; }
+  override async listMigrations() { return []; }
   override async status() { return { state: "connected", version: 1, backend: "test fixture" }; }
   override async inventory() { return [{ tool: "example", label: "default", status: "active", updatedAt: "2026-09-28", revision: "d".repeat(64) }]; }
   override async unlink(id: string) { this.bindings = this.bindings.filter(b => b.id !== id); }
@@ -143,7 +144,7 @@ test("secret replacement is host-only, explicitly consented and returns metadata
   expect((await update({})).status).toBe(401);
   const issued = await fetch(`${base}/tokens`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ scope: "owner", label: "write fixture owner" }) });
   const owner = await issued.json();
-  for (const [route, method] of [["/workspace/fixture/mcp/fixture/stm", "POST"], ["/env/stm/mcp-grants/fixture", "DELETE"], ["/env/stm/refresh", "POST"], ["/env/stm/mcp-grants", "GET"], ["/env/stm/mcp-grants/fixture/recover", "POST"]]) {
+  for (const [route, method] of [["/workspace/fixture/mcp/fixture/stm", "POST"], ["/workspace/fixture/mcp/fixture/stm/migrate", "POST"], ["/env/stm/migrations", "POST"], ["/env/stm/migrations/fixture/finish", "POST"], ["/env/stm/mcp-grants/fixture", "DELETE"], ["/env/stm/refresh", "POST"], ["/env/stm/mcp-grants", "GET"], ["/env/stm/mcp-grants/fixture/recover", "POST"]]) {
     expect((await fetch(`${base}${route}`, { method })).status).toBe(401);
     expect((await fetch(`${base}${route}`, { method, headers: { authorization: `Bearer ${owner.token}` } })).status).toBe(401);
   }
@@ -197,7 +198,7 @@ test("STM control routes are host-token-only, metadata-only, and preserve names 
   const issued = await fetch(`${base}/tokens`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ scope: "owner", label: "stm fixture owner" }) });
   expect(issued.status).toBe(201);
   const owner = await issued.json();
-  for (const path of ["status", "bindings", "inventory"]) {
+  for (const path of ["status", "bindings", "inventory", "settings"]) {
     expect((await fetch(`${base}/env/stm/${path}`)).status).toBe(401);
     expect((await fetch(`${base}/env/stm/${path}`, { headers: { authorization: `Bearer ${owner.token}` } })).status).toBe(401);
     const response = await fetch(`${base}/env/stm/${path}`, { headers: hostAuth() });
@@ -208,6 +209,7 @@ test("STM control routes are host-token-only, metadata-only, and preserve names 
   const keys = await fetch(`${base}/env/keys`, { headers: hostAuth() });
   expect(await keys.json()).toEqual({ keys: ["EXAMPLE_API_KEY"] });
   expect((await fetch(`${base}/env`, { method: "PUT", headers: hostAuth(), body: JSON.stringify({ key: "EXAMPLE_API_KEY", value: "stale-fixture" }) })).status).toBe(409);
+  expect((await fetch(`${base}/env`, { method: "PUT", headers: hostAuth(), body: JSON.stringify({ key: "example_api_key", value: "stale-fixture" }) })).status).toBe(409);
   expect((await fetch(`${base}/env/EXAMPLE_API_KEY`, { method: "DELETE", headers: hostAuth() })).status).toBe(409);
   expect((await fetch(`${base}/env/stm/resolve`, { method: "POST", headers: hostAuth(), body: "{}" })).status).toBe(404);
   expect((await fetch(`${base}/env/stm/bindings/fixture-id`, { method: "DELETE", headers: hostAuth() })).status).toBe(200);
@@ -227,6 +229,40 @@ test("STM is disabled by default and read-only mode rejects changes", async () =
   expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/mcp-grants/fixture`, { method: "DELETE", headers: hostAuth() })).status).toBe(403);
   expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/refresh`, { method: "POST", headers: hostAuth() })).status).toBe(403);
   expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/mcp-grants/fixture/recover`, { method: "POST", headers: hostAuth() })).status).toBe(403);
+  for (const path of ["/env/stm/migrations", "/env/stm/migrations/fixture/finish", "/workspace/fixture/mcp/fixture/stm/migrate"]) {
+    expect((await fetch(`http://127.0.0.1:${server.port}${path}`, { method: "POST", headers: hostAuth(), body: "{}" })).status).toBe(403);
+  }
+});
+
+test("host migration HTTP flow exposes names only and requires separate removal consent", async () => {
+  const root = dirs[dirs.length - 1], descriptorPath = join(root, "daemon.json");
+  writeFileSync(descriptorPath, JSON.stringify({ port: 4321, pid: process.pid, token: "a".repeat(48) }), { mode: 0o600 });
+  const vault = new Map<string, string>();
+  const stm = new StmCredentials({ enabled: true, localDesktop: true, platform: "darwin", descriptorPath, registryPath: join(root, "stm-bindings.json"), fetch: async (url, init) => {
+    if (url.endsWith("capabilities")) return Response.json({ version: 1, selectedResolution: true, revisionedWrites: true, backendId: "macos-keychain", backend: "HTTP fixture" });
+    if (url.endsWith("keys") && init.method === "GET") return Response.json({ version: 1, keys: [] });
+    const input = JSON.parse(String(init.body));
+    if (url.endsWith("keys")) {
+      const name = `${input.tool}/${input.label}`;
+      if (vault.has(name)) return new Response(null, { status: 412 });
+      vault.set(name, input.value); return Response.json({ version: 1 });
+    }
+    const b = input.bindings[0]; return Response.json({ version: 1, values: { [b.envName]: vault.get(`${b.tool}/${b.label}`) }, revisions: { [b.envName]: "d".repeat(64) } });
+  } });
+  await stm.connect({ consent: true });
+  const server = await startServer(baseConfig(), { stmCredentials: stm }); stops.push(() => server.stop());
+  const base = `http://127.0.0.1:${server.port}`;
+  await fetch(`${base}/env`, { method: "PUT", headers: hostAuth(), body: JSON.stringify({ entries: [{ key: "OPENAI_REALTIME_API_KEY", value: "http-migration-sentinel" }, { key: "KEEP", value: "untouched" }] }) });
+  const id = randomUUID(), input = { id, backend: "HTTP fixture", selections: [{ envName: "OPENAI_REALTIME_API_KEY", consumer: "voice:realtime" }], consent: true };
+  const initial = await fetch(`${base}/env/stm/settings`, { headers: hostAuth() }); expect(initial.status).toBe(200); expect(await initial.text()).not.toContain("http-migration-sentinel");
+  const denied = await fetch(`${base}/env/stm/migrations`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ ...input, consent: false }) }); expect(denied.status).toBe(409); expect(vault.size).toBe(0);
+  const moved = await fetch(`${base}/env/stm/migrations`, { method: "POST", headers: hostAuth(), body: JSON.stringify(input) }); expect(moved.status).toBe(200); expect(await moved.text()).not.toContain("http-migration-sentinel");
+  expect(readFileSync(process.env.OPENWORK_ENV_STORE!, "utf8")).toContain("http-migration-sentinel");
+  expect((await fetch(`${base}/env`, { headers: hostAuth() })).status).toBe(409);
+  expect((await fetch(`${base}/env/stm/migrations/${id}/finish`, { method: "POST", headers: hostAuth(), body: "{}" })).status).toBe(409);
+  const removed = await fetch(`${base}/env/stm/migrations/${id}/finish`, { method: "POST", headers: hostAuth(), body: '{"consent":true}' }); expect(removed.status).toBe(200);
+  const persisted = readFileSync(process.env.OPENWORK_ENV_STORE!, "utf8"); expect(persisted).not.toContain("http-migration-sentinel"); expect(persisted).toContain("untouched");
+  const settings = await fetch(`${base}/env/stm/settings`, { headers: hostAuth() }); expect(await settings.text()).not.toContain("http-migration-sentinel");
 });
 
 test("STM MCP host route waits for approval, rejects changed commands, and persists only metadata", async () => {

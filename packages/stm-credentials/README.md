@@ -141,3 +141,24 @@ provider or hosted acceptance. Verify the binary version against `constants.json
 The fixture also leaves a call unfinished and ignores SIGTERM: closing the client
 stream must escalate and clean up the child. This is transport-disconnect evidence,
 not proof of the separate chat UI Stop/cancellation journey.
+
+## Settings and selected migration
+
+Local Environment settings use `/env/stm/settings` for metadata only. Linking,
+revision-preconditioned replacement and connection require explicit consent;
+new API-secret input is transient. There is no vault Reveal/export operation.
+
+`migrateSelected` verifies selected source values in privileged memory, then
+publishes bindings and a private metadata-only `.migrations` journal. The separate
+`finishMigration` action rechecks vault/source revisions before removing only
+the selected plaintext names. Reuse the same migration ID after interruption.
+An unfinished migration cannot be unlinked to bypass cleanup. A MCP migration
+must also finish its exact workspace-bound reviewed launch configuration before
+source removal; migrating never launches or restarts a tool automatically.
+
+Source and registry locks fail closed after uncertain crashes. Stop and verify all
+writers before operator-led exact-lock recovery; never delete locks solely by age.
+Disabling the feature retains references and never restores plaintext fallback.
+Backups/snapshots may retain old values: recommend provider rotation, not secure
+SSD deletion claims. See `qa-reports/stm/2026-09-28/PHASE-4-5-REVIEW.md` for
+verification, recovery instructions and outstanding real-OS/security release gates.

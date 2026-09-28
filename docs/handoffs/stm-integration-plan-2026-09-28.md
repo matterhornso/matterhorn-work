@@ -1,11 +1,14 @@
 # STM integration into Matterhorn Desks
 
-Status: engineering phases 1–3 implemented and locally verified on 28 September;
-not release-ready. Requirement evidence and remaining OS/security/settings gates:
+Status: engineering phases 1–4 implemented and locally verified on 28 September;
+phase 5 local regression/native-fixture verification completed, but real Keychain,
+signed-desktop acceptance, independent security review and CI remain release gates.
+Not release-ready. Latest settings/migration evidence and operator handoff:
+`qa-reports/stm/2026-09-28/PHASE-4-5-REVIEW.md`. Earlier phase evidence:
 `qa-reports/stm/2026-09-28/PHASE-1-3-AUDIT.md`; chronological progress:
 `qa-reports/stm/2026-09-28/WORKLOG.md`. This is not completion of three product
 slices. The source review below describes the pre-implementation baseline.
-Prepared 28 September 2026. No secret values, real keychain records or daemon
+Original planning baseline, prepared 28 September 2026: no secret values, real keychain records or daemon
 descriptors were opened. No STM installation, pairing, migration or key writes
 were performed. PR #1026 remains a separate release concern; this feature must
 not be mixed into that PR.
