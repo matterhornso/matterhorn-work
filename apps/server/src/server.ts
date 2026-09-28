@@ -14075,6 +14075,8 @@ function createRoutes(
   }
 
   function rethrowStmError(error: unknown): never {
+    if (error instanceof StmError && error.code === "credential_update_uncertain") throw new ApiError(409, error.code, "The secret update may have completed. Refresh secret metadata before making another change; do not automatically retry.");
+    if (error instanceof StmError && error.code === "credential_revision_conflict") throw new ApiError(412, error.code, "This secret changed elsewhere. Refresh its metadata before replacing it.");
     if (error instanceof StmError) throw new ApiError(409, error.code, "Secret storage needs attention. Reconnect or check the selected binding.");
     throw new ApiError(503, "stm_unavailable", "Secret storage is unavailable.");
   }
@@ -14087,6 +14089,16 @@ function createRoutes(
   });
   addRoute(routes, "GET", "/env/stm/inventory", "host-token", async () => {
     return jsonResponse({ items: await requireLocalStm().inventory().catch(rethrowStmError) });
+  });
+  addRoute(routes, "PUT", "/env/stm/credential", "host-token", async (ctx) => {
+    ensureWritable(config);
+    const body = await readJsonBody(ctx.request, 32_768, "Secret update");
+    if (typeof body.tool !== "string" || typeof body.label !== "string" || typeof body.value !== "string"
+      || !(body.expectedRevision === null || typeof body.expectedRevision === "string")
+      || Object.keys(body).some(key => !["tool", "label", "value", "expectedRevision", "consent"].includes(key))) {
+      throw new ApiError(400, "invalid_credential_update", "Choose a secret and its current revision before saving.");
+    }
+    return jsonResponse(await requireLocalStm().saveCredential({ tool: body.tool, label: body.label, value: body.value, expectedRevision: body.expectedRevision, consent: body.consent === true }).catch(rethrowStmError));
   });
   addRoute(routes, "POST", "/env/stm/connect", "host-token", async (ctx) => {
     ensureWritable(config);
@@ -14102,7 +14114,7 @@ function createRoutes(
     }
     const legacy = await env.list().catch(rethrowEnvStoreReadError);
     const binding = await requireLocalStm().link({ envName: body.envName, tool: body.tool, label: body.label, consumer: body.consumer, consent: body.consent === true }, legacy.map(entry => entry.key)).catch(rethrowStmError);
-    return jsonResponse({ binding, restartRequired: true }, 201);
+    return jsonResponse({ binding, restartRequired: binding.restartRequired }, 201);
   });
   addRoute(routes, "DELETE", "/env/stm/bindings/:id", "host-token", async (ctx) => {
     ensureWritable(config);

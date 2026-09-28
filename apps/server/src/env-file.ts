@@ -1,7 +1,7 @@
 import { homedir, platform } from "node:os";
 import { chmod, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { isReservedLegacyEnvKey } from "@matterhorn-work/stm-credentials";
+import { isReservedLegacyEnvKey, assertNoStmEnvironmentConflicts } from "@matterhorn-work/stm-credentials";
 
 import { ensureDir, exists } from "./utils.js";
 
@@ -242,6 +242,7 @@ export class EnvService {
       if (isReservedEnvKey(entry.key)) continue;
       out[entry.key] = entry.value;
     }
+    assertNoStmEnvironmentConflicts(out, join(dirname(path), "stm-bindings.json"));
     return out;
   }
 }

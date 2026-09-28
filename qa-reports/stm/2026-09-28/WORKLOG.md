@@ -129,3 +129,99 @@ Remaining first-three-phase work is substantive, not a release formality:
    real-keychain tests remain separately gated. No release claim is made.
 
 Goal remains active; nothing pushed, deployed, migrated, or enabled for real users.
+
+## Continuation: revision-safe credential lifecycle
+
+Previous turn classified as **progress**: inspected local commit `31ad10b007` and
+the recorded remaining gates before implementation. No external state was changed.
+
+Implemented in the isolated STM checkout:
+
+- Additive metadata revisions derived from random storage identity/status, not
+  secret bytes. No inventory schema migration or legacy response-shape change.
+- Explicit create-only and revision-conditional replace API. Rotation uses DB
+  compare-and-swap; competing create/replacement attempts cannot silently overwrite.
+  Native STM rotations/revocations invalidate old integration revisions as well.
+- Fixed, sanitized HTTP failure codes; cleanup failures are reported as metadata.
+- Injectable fake keystore for `Store`, and isolated stores no longer create or
+  chmod the real user's STM directory. Existing default keystore behavior remains.
+
+Implemented in Matterhorn:
+
+- Consent-required `saveCredential()` and host-token/read-only protected write
+  endpoint. Neither transport nor server automatically retries writes. Ambiguous
+  responses explicitly require metadata refresh before another write.
+- Registry v2 stores backend, opaque revision and restart-required metadata;
+  legacy v1 references remain protected and are normalized in memory. No secrets
+  or value-derived hashes in the registry. New links require revisioned inventory.
+- Registry payload size checked before writes. Successful replacement marks MCP
+  bindings restart-required; voice resolves per call and does not require restart.
+  This does not restart or erase a running process.
+
+Verification:
+
+- STM selected + lifecycle tests: **24 passed / 87 assertions**. Includes two real
+  SQLite connections with one in-memory keystore to exercise competing writers.
+- Cross-repository loopback run before the final additional create-race test:
+  **25 passed / 99 assertions**, including actual Store + fake keystore -> STM
+  HTTP handler -> Matterhorn create/link/resolve/replace/stale-write/revoke paths.
+- Matterhorn adapter tests: **18 passed**.
+- Server environment/voice/STM tests: **44 passed / 163 assertions**.
+- Server typecheck/build, Electron typecheck, orchestrator typecheck: **passed**.
+- STM CLI Bun JavaScript bundle: **passed**, 40 modules. This is a bundle check,
+  not a native compiled binary or real keystore acceptance result.
+- `git diff --check` passed in both repositories.
+
+No real daemon descriptor, developer keystore or real credential was opened.
+The tests' keystore operations were in-memory only; all database/descriptor files
+were disposable. Existing original STM working-tree changes remain untouched.
+
+Next: implement and verify the actual workspace-bound OpenCode MCP launch path,
+guided by `docs/handoffs/stm-mcp-launch-boundary-2026-09-28.md`. Remaining gates
+include safe restart/applied revision tracking, generic inheritance suppression,
+permission/identity adversarial tests, full regression/security gates and separately
+authorized OS acceptance. Goal remains ACTIVE; this is not a completed integration.
+
+## Continuation: generic inheritance boundary
+
+Verified the lifecycle checkpoint, then added a shared metadata-only, descriptor-
+validated synchronous guard for existing synchronous spawn paths. It rejects
+stale plaintext for STM-bound names (including case-fold aliases), malformed or
+unsafe registries, even when the feature flag is disabled. It does not open the
+daemon descriptor, contact STM, resolve values, or mutate the parent environment.
+Missing registry leaves non-adopter behavior unchanged.
+
+Wired the guard into Electron's generic environment builder, synchronous probes
+and managed child launches; orchestrator's common spawn builder (also used by
+Docker/container starts); server legacy injection helper and managed OpenCode
+launch/restart. This intentionally rejects a plaintext conflict for operator
+recovery; it does not silently choose a credential or remove saved data. Existing
+processes keep their earlier snapshots. Filesystem metadata alone is not a
+sandbox against malicious same-user code.
+
+Verification commands and results:
+
+- `pnpm --dir packages/stm-credentials test`: **21 passed**.
+- STM `MATTERHORN_STM_ADAPTER_PATH=<local adapter> bun test
+  test/selected-secrets.test.ts test/selected-secret-lifecycle.test.ts
+  test/matterhorn-contract.test.ts`: **26 passed / 102 assertions**. Disposable
+  loopback and in-memory keystore only; no real daemon or Keychain.
+- In `apps/server`, `bun test src/env-file.test.ts src/env-routes.e2e.test.ts
+  src/stm-runtime.test.ts src/voice-credential.test.ts
+  src/managed-opencode.test.ts`: **50 passed / 186 assertions**. Includes inherited
+  and explicit-override conflicts rejected before engine spawn, plus recovery and
+  supervisor regressions. Test children are fixtures, not actual OpenCode.
+- Server `tsc -p tsconfig.json --noEmit`, Electron `typecheck:electron`,
+  orchestrator `typecheck`: **passed**.
+- `node --test apps/desktop/electron/runtime.test.mjs`: **3 passed** (existing
+  bridge/runtime tests, not complete desktop execution acceptance).
+- `pnpm --dir apps/desktop check:electron`: **50 methods covered**.
+- `git diff --check`: **passed** in both repositories.
+
+Use pinned cached pnpm 10.27.0, not the machine-global pnpm 9, to reproduce.
+
+Next task remains actual workspace-bound OpenCode MCP launch authorization and
+transport wiring, with applied-revision/safe-restart proof. Do not mistake the
+generic inheritance guard or a fixture child test for that completion. Full
+regressions, packaging and authorized OS acceptance remain outstanding. Nothing
+pushed, merged, deployed or enabled for users. Goal remains **ACTIVE**.

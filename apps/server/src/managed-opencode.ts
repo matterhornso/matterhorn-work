@@ -1,6 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import net from "node:net";
 import { randomUUID } from "node:crypto";
+import { dirname, join } from "node:path";
+import { assertNoStmEnvironmentConflicts } from "@matterhorn-work/stm-credentials";
+import { resolveDefaultEnvStorePath } from "./env-file.js";
 
 export type ManagedOpencodeServer = {
   url: string;
@@ -166,6 +169,7 @@ export async function createManagedOpencodeServer(options: {
     // never inherit keys that decrypt Matterhorn/OpenWork-owned credentials.
     delete childEnv.MATTERHORN_ENCRYPTION_KEY;
     delete childEnv.OPENWORK_ENCRYPTION_KEY;
+    assertNoStmEnvironmentConflicts(childEnv, join(dirname(resolveDefaultEnvStorePath()), "stm-bindings.json"));
     const nextChild = spawn(options.bin?.trim() || "opencode", args, {
       cwd: options.cwd,
       env: childEnv,

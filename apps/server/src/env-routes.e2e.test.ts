@@ -116,15 +116,48 @@ afterEach(async () => {
 });
 
 class FixtureStm extends StmCredentials {
-  bindings: Binding[] = [{ id: "fixture-id", envName: "EXAMPLE_API_KEY", tool: "example", label: "default", consumer: "mcp:example", updatedAt: "2026-09-28" }];
+  saves = 0;
+  failSave = false;
+  bindings: Binding[] = [{ id: "fixture-id", envName: "EXAMPLE_API_KEY", tool: "example", label: "default", consumer: "mcp:example", updatedAt: "2026-09-28", storageBackend: "test fixture", credentialRevision: null, restartRequired: true }];
   override async listBindings() { return this.bindings; }
   override async status() { return { state: "connected", version: 1, backend: "test fixture" }; }
-  override async inventory() { return [{ tool: "example", label: "default", status: "active", updatedAt: "2026-09-28" }]; }
+  override async inventory() { return [{ tool: "example", label: "default", status: "active", updatedAt: "2026-09-28", revision: "d".repeat(64) }]; }
   override async unlink(id: string) { this.bindings = this.bindings.filter(b => b.id !== id); }
+  override async saveCredential(input: { tool: string; label: string; value: string; expectedRevision: string | null; consent: boolean }) {
+    if (!input.consent) throw new StmError("consent_required");
+    this.saves++;
+    if (this.failSave) throw new StmError("credential_update_uncertain");
+    return { key: { tool: input.tool, label: input.label, status: "active", updatedAt: "2026-09-28", revision: "e".repeat(64) }, oldValueCleanupPending: false, restartRequired: true };
+  }
 }
 
+test("secret replacement is host-only, explicitly consented and returns metadata only", async () => {
+  const stm = new FixtureStm();
+  const server = await startServer(baseConfig(), { stmCredentials: stm }); stops.push(() => server.stop());
+  const base = `http://127.0.0.1:${server.port}`;
+  const body = { tool: "example", label: "default", value: "do-not-return-this-fixture", expectedRevision: "d".repeat(64), consent: true };
+  const update = (headers: Record<string, string>, payload: unknown = body) => fetch(`${base}/env/stm/credential`, { method: "PUT", headers, body: JSON.stringify(payload) });
+  expect((await update({})).status).toBe(401);
+  const issued = await fetch(`${base}/tokens`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ scope: "owner", label: "write fixture owner" }) });
+  const owner = await issued.json();
+  expect((await update({ authorization: `Bearer ${owner.token}` })).status).toBe(401);
+  expect((await update(hostAuth(), { ...body, consent: false })).status).toBe(409);
+  expect(stm.saves).toBe(0);
+  const response = await update(hostAuth()); expect(response.status).toBe(200);
+  expect(await response.text()).not.toContain(body.value);
+  expect(stm.saves).toBe(1);
+  stm.failSave = true;
+  const uncertain = await update(hostAuth()); expect(uncertain.status).toBe(409);
+  expect(await uncertain.text()).toContain("do not automatically retry");
+  expect(stm.saves).toBe(2);
+  const config = baseConfig(); config.readOnly = true;
+  const readOnly = await startServer(config, { stmCredentials: stm }); stops.push(() => readOnly.stop());
+  expect((await fetch(`http://127.0.0.1:${readOnly.port}/env/stm/credential`, { method: "PUT", headers: hostAuth(), body: JSON.stringify(body) })).status).toBe(403);
+  expect(stm.saves).toBe(2);
+});
+
 class FixtureVoiceStm extends FixtureStm {
-  override bindings: Binding[] = [{ id: "voice-fixture", envName: "OPENAI_REALTIME_API_KEY", tool: "fixture", label: "default", consumer: "voice:realtime", updatedAt: "2026-09-28" }];
+  override bindings: Binding[] = [{ id: "voice-fixture", envName: "OPENAI_REALTIME_API_KEY", tool: "fixture", label: "default", consumer: "voice:realtime", updatedAt: "2026-09-28", storageBackend: "test fixture", credentialRevision: null, restartRequired: true }];
   reads = 0;
   override async resolveKeyForConsumer(): Promise<string> {
     this.reads++;

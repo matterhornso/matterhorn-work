@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
-import { isReservedLegacyEnvKey } from "@matterhorn-work/stm-credentials";
+import { isReservedLegacyEnvKey, assertNoStmEnvironmentConflicts } from "@matterhorn-work/stm-credentials";
 
 const __runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -269,6 +269,7 @@ function nvmVersionBinPaths(home) {
 function pathHelperEntries() {
   if (process.platform !== "darwin") return [];
   const result = spawnSync("/usr/libexec/path_helper", ["-s"], {
+    env: checkedRuntimeEnvironment(),
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   });
@@ -422,6 +423,11 @@ function resolveUserEnvFilePath() {
     return path.join(root, "openwork", "env.json");
   }
   return path.join(os.homedir(), ".config", "openwork", "env.json");
+}
+
+function checkedRuntimeEnvironment(env = process.env) {
+  assertNoStmEnvironmentConflicts(env, path.join(path.dirname(resolveUserEnvFilePath()), "stm-bindings.json"));
+  return env;
 }
 
 const USER_ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -645,6 +651,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       BUN_CONFIG_DNS_RESULT_ORDER: "verbatim",
       ...extra,
     };
+    checkedRuntimeEnvironment(env);
     const pathKey =
       Object.prototype.hasOwnProperty.call(env, "PATH") ||
       !Object.prototype.hasOwnProperty.call(env, "Path")
@@ -757,6 +764,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     for (const program of tried) {
       try {
         const result = spawnSync(program, args, {
+          env: checkedRuntimeEnvironment(),
           encoding: "utf8",
           timeout: timeoutMs,
           windowsHide: true,
@@ -816,7 +824,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     const result = spawnSync(program, args, {
       encoding: "utf8",
       cwd: options.cwd,
-      env: options.env,
+      env: checkedRuntimeEnvironment(options.env),
       shell: false,
       windowsHide: true,
       timeout: options.timeoutMs,
@@ -845,8 +853,8 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       };
     }
 
-    const versionResult = spawnSync(resolved.path, ["--version"], { encoding: "utf8" });
-    const helpResult = spawnSync(resolved.path, ["serve", "--help"], { encoding: "utf8" });
+    const versionResult = spawnSync(resolved.path, ["--version"], { encoding: "utf8", env: checkedRuntimeEnvironment() });
+    const helpResult = spawnSync(resolved.path, ["serve", "--help"], { encoding: "utf8", env: checkedRuntimeEnvironment() });
     const notes = [`Using ${resolved.source}: ${resolved.path}`];
     if (versionResult.status !== 0) {
       notes.push("Matterhorn engine version probe failed.");
@@ -882,7 +890,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
   function spawnManagedChild(state, program, args, options = {}) {
     const child = spawn(program, args, {
       cwd: options.cwd,
-      env: options.env,
+      env: checkedRuntimeEnvironment(options.env),
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -940,7 +948,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     // Safety net: an unclean Electron quit can orphan sidecars. Packaged builds
     // should always own a fresh runtime per app launch, so remove any leftover
     // sidecars from this app bundle before choosing ports for the new runtime.
-    const result = spawnSync("ps", ["-Ao", "pid=,command="], { encoding: "utf8" });
+    const result = spawnSync("ps", ["-Ao", "pid=,command="], { encoding: "utf8", env: checkedRuntimeEnvironment() });
     const rows = String(result.stdout ?? "").split(/\r?\n/);
     const pids = [];
     for (const row of rows) {

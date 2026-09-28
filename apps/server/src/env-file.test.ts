@@ -159,6 +159,21 @@ describe("env-file", () => {
     expect(injected).toEqual({});
   });
 
+  test("injection refuses stale bound plaintext on feature rollback and never ignores invalid registry", async () => {
+    writeFileSync(join(dir, "stm-bindings.json"), JSON.stringify({ version: 1, paired: true, bindings: [{
+      id: "12345678-1234-1234-1234-123456789abc", envName: "FIXTURE_KEY", tool: "example",
+      label: "default", consumer: "mcp:example", updatedAt: "2026-09-28",
+    }] }), { mode: 0o600 });
+    const svc = new EnvService({ path });
+    await svc.upsertMany([{ key: "FIXTURE_KEY", value: "stale-fixture" }]);
+    await expect(EnvService.readForInjection(path)).rejects.toThrow("plaintext_conflict");
+    await svc.delete("FIXTURE_KEY");
+    await svc.upsertMany([{ key: "UNRELATED", value: "retained" }]);
+    expect(await EnvService.readForInjection(path)).toEqual({ UNRELATED: "retained" });
+    writeFileSync(join(dir, "stm-bindings.json"), "invalid");
+    await expect(EnvService.readForInjection(path)).rejects.toThrow("unavailable_or_invalid_file");
+  });
+
   test("list rejects corrupted JSON instead of treating it as empty", async () => {
     writeFileSync(path, "{ this is not json");
     const svc = new EnvService({ path });

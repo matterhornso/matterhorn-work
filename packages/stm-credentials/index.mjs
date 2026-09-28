@@ -1,4 +1,4 @@
-import { constants } from "node:fs";
+import { constants, openSync, fstatSync, readSync, closeSync } from "node:fs";
 import { open, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
@@ -41,12 +41,14 @@ async function privateJson(path, missingAllowed = false) {
 }
 
 async function writePrivate(path, value) {
+  const payload = JSON.stringify(value) + "\n";
+  if (Buffer.byteLength(payload) > MAX_FILE) fail("registry_capacity_exceeded");
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const temp = join(dirname(path), `.stm-${randomUUID()}.tmp`);
   let file;
   try {
     file = await open(temp, "wx", 0o600);
-    await file.writeFile(JSON.stringify(value) + "\n");
+    await file.writeFile(payload);
     await file.sync();
     await file.close(); file = undefined;
     await rename(temp, path);
@@ -58,7 +60,48 @@ function validBinding(b) {
   return object(b) && typeof b.id === "string" && /^[a-f0-9-]{36}$/.test(b.id) && safeSecretEnvName(b.envName)
     && segment(b.tool) && segment(b.label) && typeof b.consumer === "string" && /^(mcp:[a-z0-9_-]{1,128}|voice:realtime)$/.test(b.consumer)
     && typeof b.updatedAt === "string" && Number.isFinite(Date.parse(b.updatedAt))
-    && Object.keys(b).every(k => ["id", "envName", "tool", "label", "consumer", "updatedAt"].includes(k));
+    && typeof b.storageBackend === "string" && b.storageBackend.length <= 128
+    && (b.credentialRevision === null || validRevision(b.credentialRevision)) && typeof b.restartRequired === "boolean"
+    && Object.keys(b).every(k => ["id", "envName", "tool", "label", "consumer", "updatedAt", "storageBackend", "credentialRevision", "restartRequired"].includes(k));
+}
+
+const validRevision = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+function credentialMetadata(k) {
+  if (!object(k) || !segment(k.tool) || !segment(k.label) || !["active", "revoked"].includes(k.status) || typeof k.updatedAt !== "string" || !Number.isFinite(Date.parse(k.updatedAt)) || !validRevision(k.revision)) fail("invalid_response");
+  return { tool: k.tool, label: k.label, status: k.status, updatedAt: k.updatedAt, revision: k.revision };
+}
+
+function registryMetadata(r) {
+  if (r === null) return { version: 2, paired: false, bindings: [] };
+  if (!object(r) || ![1, 2].includes(r.version) || typeof r.paired !== "boolean" || !Array.isArray(r.bindings) || r.bindings.length > 32 || Object.keys(r).some(k => !["version", "paired", "bindings"].includes(k))) fail("invalid_registry");
+  const bindings = r.bindings.map(b => r.version === 1 && object(b) ? { storageBackend: "unknown", credentialRevision: null, restartRequired: true, ...b } : b);
+  if (!bindings.every(validBinding) || new Set(bindings.map(b => b.envName.toUpperCase())).size !== bindings.length || new Set(bindings.map(b => b.id)).size !== bindings.length) fail("invalid_registry");
+  return { version: 2, paired: r.paired, bindings };
+}
+
+// The synchronous CLI/desktop spawn boundaries only read private metadata.
+// They never open the daemon descriptor, resolve keys, or change process.env.
+// Keep this check active on flag rollback: migrated names must not reappear as
+// ordinary inherited plaintext. Missing registry preserves non-adopter behavior.
+export function assertNoStmEnvironmentConflicts(environment, registryPath) {
+  let fd;
+  let raw;
+  try {
+    fd = openSync(registryPath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const before = fstatSync(fd);
+    if (!before.isFile() || before.size > MAX_FILE || before.uid !== process.getuid?.() || (before.mode & 0o077) !== 0) fail("unsafe_file");
+    const bytes = Buffer.alloc(MAX_FILE + 1);
+    const count = readSync(fd, bytes, 0, bytes.length, 0);
+    const after = fstatSync(fd);
+    if (count > MAX_FILE || before.size !== count || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) fail("unsafe_file");
+    raw = JSON.parse(bytes.subarray(0, count).toString("utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    if (error instanceof StmError) throw error;
+    fail("unavailable_or_invalid_file");
+  } finally { if (fd !== undefined) closeSync(fd); }
+  const bound = new Set(registryMetadata(raw).bindings.map(b => b.envName.toUpperCase()));
+  if (Object.entries(environment).some(([key, value]) => value !== undefined && bound.has(key.toUpperCase()))) fail("plaintext_conflict");
 }
 
 export class StmCredentials {
@@ -77,12 +120,9 @@ export class StmCredentials {
   }
   async #registry() {
     const r = await privateJson(this.#options.registryPath, true);
-    if (r === null) return { version: 1, paired: false, bindings: [] };
-    if (!object(r) || r.version !== 1 || typeof r.paired !== "boolean" || !Array.isArray(r.bindings) || r.bindings.length > 32 || !r.bindings.every(validBinding) || Object.keys(r).some(k => !["version", "paired", "bindings"].includes(k))) fail("invalid_registry");
-    if (new Set(r.bindings.map(b => b.envName.toUpperCase())).size !== r.bindings.length || new Set(r.bindings.map(b => b.id)).size !== r.bindings.length) fail("invalid_registry");
-    return r;
+    return registryMetadata(r);
   }
-  async #request(path, body, rediscover = true) {
+  async #request(path, body, rediscover = true, write = false) {
     this.#supported();
     const info = await privateJson(this.#options.descriptorPath);
     if (!object(info) || !Number.isInteger(info.port) || info.port < 1 || info.port > 65535 || !Number.isInteger(info.pid) || info.pid < 1 || typeof info.token !== "string" || !/^[a-f0-9]{48}$/.test(info.token)) fail("invalid_descriptor");
@@ -97,9 +137,12 @@ export class StmCredentials {
         await response.body?.cancel();
         // A daemon restart rotates its token/port. Re-open the private descriptor
         // once; never trust a response-provided URL and never retry indefinitely.
-        // All current operations here are read-only, including selected resolve.
-        if (response.status === 401 && rediscover) return this.#request(path, body, false);
-        fail(response.status === 401 ? "reconnect_required" : "request_failed");
+        // Mutations are never retried, even after authentication failure.
+        if (response.status === 401 && rediscover && !write) return this.#request(path, body, false);
+        if (response.status === 401) fail("reconnect_required");
+        if (response.status === 412) fail("credential_revision_conflict");
+        if (write && response.status === 400) fail("invalid_credential_update");
+        fail(write ? "credential_update_uncertain" : "request_failed");
       }
       const reader = response.body?.getReader();
       if (!reader) fail("invalid_response");
@@ -115,14 +158,14 @@ export class StmCredentials {
         return JSON.parse(Buffer.concat(chunks).toString("utf8"));
       } finally { await reader.cancel().catch(() => {}); }
     } catch (error) {
-      if (error instanceof StmError) throw error;
-      fail("connection_failed");
+      if (error instanceof StmError && (!write || error.code !== "invalid_response")) throw error;
+      fail(write ? "credential_update_uncertain" : "connection_failed");
     }
   }
   async #handshake() {
     const c = await this.#request("capabilities");
     if (!object(c) || c.version !== 1 || c.selectedResolution !== true || typeof c.backend !== "string" || c.backend.length > 128 || !c.backend.trim()) fail("incompatible_daemon");
-    return { version: 1, backend: c.backend };
+    return { version: 1, backend: c.backend, revisionedWrites: c.revisionedWrites === true };
   }
   #mutate(fn) {
     const locked = async () => {
@@ -145,7 +188,8 @@ export class StmCredentials {
       this.#supported();
       const r = await this.#registry();
       if (!r.paired) return { state: "not_connected" };
-      return { state: "connected", ...await this.#handshake() };
+      const { version, backend } = await this.#handshake();
+      return { state: "connected", version, backend };
     } catch (error) { return { state: "unavailable", code: error instanceof StmError ? error.code : "unavailable" }; }
   }
   async connect({ consent } = {}) {
@@ -155,7 +199,7 @@ export class StmCredentials {
       const capability = await this.#handshake();
       const r = await this.#registry();
       await writePrivate(this.#options.registryPath, { ...r, paired: true });
-      return { state: "connected", ...capability };
+      return { state: "connected", version: capability.version, backend: capability.backend };
     });
   }
   async listBindings() { return (await this.#registry()).bindings; }
@@ -165,20 +209,52 @@ export class StmCredentials {
     await this.#handshake();
     const r = await this.#request("keys");
     if (!object(r) || r.version !== 1 || !Array.isArray(r.keys) || r.keys.length > 2048) fail("invalid_response");
-    return r.keys.map(k => {
-      if (!object(k) || !segment(k.tool) || !segment(k.label) || !["active", "revoked"].includes(k.status) || typeof k.updatedAt !== "string") fail("invalid_response");
-      return { tool: k.tool, label: k.label, status: k.status, updatedAt: k.updatedAt };
-    });
+    return r.keys.map(credentialMetadata);
+  }
+  async saveCredential({ tool, label, value, expectedRevision, consent }) {
+    this.#supported();
+    if (consent !== true) fail("consent_required");
+    if (!segment(tool) || !segment(label) || typeof value !== "string" || !value || value.includes("\0") || Buffer.byteLength(value) > 16_384 || !(expectedRevision === null || validRevision(expectedRevision))) fail("invalid_credential_update");
+    if (!(await this.#registry()).paired) fail("not_connected");
+    const capability = await this.#handshake();
+    if (!capability.revisionedWrites) fail("incompatible_daemon");
+    const result = await this.#request("keys", { version: 1, tool, label, value, expectedRevision }, false, true);
+    let key;
+    try {
+      if (!object(result) || result.version !== 1 || typeof result.oldValueCleanupPending !== "boolean") fail("invalid_response");
+      key = credentialMetadata(result.key);
+      if (key.tool !== tool || key.label !== label || key.status !== "active") fail("invalid_response");
+    } catch { fail("credential_update_uncertain"); }
+    // Only metadata enters the registry. If bookkeeping fails after the remote
+    // write, signal uncertainty rather than retrying or exporting the value.
+    let restartRequired = false;
+    try {
+      await this.#mutate(async () => {
+        const r = await this.#registry();
+        const bindings = r.bindings.map(b => {
+          if (b.tool !== tool || b.label !== label) return b;
+          const needsRestart = b.consumer.startsWith("mcp:");
+          restartRequired ||= needsRestart;
+          return { ...b, storageBackend: capability.backend, credentialRevision: key.revision, restartRequired: needsRestart, updatedAt: new Date().toISOString() };
+        });
+        await writePrivate(this.#options.registryPath, { ...r, bindings });
+      });
+    } catch { fail("credential_update_uncertain"); }
+    return { key, oldValueCleanupPending: result.oldValueCleanupPending, restartRequired };
   }
   async link({ envName, tool, label, consumer, consent }, legacyNames = []) {
     this.#supported();
     if (consent !== true) fail("consent_required");
-    const binding = { id: randomUUID(), envName, tool, label, consumer, updatedAt: new Date().toISOString() };
+    const binding = { id: randomUUID(), envName, tool, label, consumer, updatedAt: new Date().toISOString(), storageBackend: "unknown", credentialRevision: null, restartRequired: typeof consumer === "string" && consumer.startsWith("mcp:") };
     if (!validBinding(binding)) fail("invalid_binding");
     if (legacyNames.includes(envName) || Object.hasOwn(process.env, envName)) fail("plaintext_conflict");
     return this.#mutate(async () => {
       const inventory = await this.inventory();
-      if (!inventory.some(k => k.tool === tool && k.label === label && k.status === "active")) fail("key_unavailable");
+      const key = inventory.find(k => k.tool === tool && k.label === label && k.status === "active");
+      if (!key) fail("key_unavailable");
+      const capability = await this.#handshake();
+      binding.storageBackend = capability.backend;
+      binding.credentialRevision = key.revision;
       const r = await this.#registry();
       if (r.bindings.length >= 32 || r.bindings.some(b => b.envName.toUpperCase() === envName.toUpperCase())) fail("binding_conflict");
       await writePrivate(this.#options.registryPath, { ...r, bindings: [...r.bindings, binding] });

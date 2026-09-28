@@ -16,6 +16,11 @@ assumed to support this contract. Do not use `/api/inject/env` as a fallback.
 
 - `connect({consent:true})` records pairing metadata after authentication.
 - `inventory()` and `listBindings()` return only explicit metadata.
+- `saveCredential()` requires explicit consent and an expected revision (null
+  for create-only). Writes are never retried automatically. On an uncertain
+  response, refresh inventory and review before any further write. The server
+  exposes this only through host-token `PUT /env/stm/credential`, respecting
+  read-only mode. Raw values are transient request data, never registry fields.
 - `link(...)` grants one named consumer (`mcp:name` or
   `voice:realtime` consumer) access to a tool/label identity. The server additionally
   restricts consumer names to its trusted allowlist. No real migration is provided.
@@ -32,12 +37,23 @@ assumed to support this contract. Do not use `/api/inject/env` as a fallback.
 - Unlink removes a Matterhorn reference; it never revokes/deletes a shared STM key.
 - Feature rollback preserves references and blocks affected resolution. It never
   exports credentials back into plaintext.
+- Generic desktop, orchestrator (including container starts), and managed engine
+  launch boundaries reject stale plaintext for bound names, including case-fold
+  aliases. This metadata-only check remains active when the release flag is off;
+  an unsafe/unreadable registry is not treated as non-adoption. It never resolves
+  credentials or changes the parent process environment. Existing running
+  processes retain their snapshots; this cannot revoke their memory.
 
 This is a single-user trust boundary. A dashboard credential grants broad local
 vault authority. The selected consumer receives its raw credential and can read
 or print it. This does not provide brokered-execution isolation.
 
-The JSON registry contains version, consent state, and binding metadata only.
+The v2 JSON registry contains consent state, exact names, storage backend,
+opaque credential revision, consumer identity and restart-required metadata only.
+MCP bindings mark restart required on link/replacement; voice resolves per call
+and does not require a child restart. Applied MCP revision acknowledgements and
+safe restart scheduling are not yet implemented.
+Old v1 references are normalized in memory without resolving/exporting values.
 The server locates it next to the configured legacy environment store, which
 also makes isolated test/data-directory overrides explicit.
 Writes use a private temporary file and rename, with an exclusive registry lock.

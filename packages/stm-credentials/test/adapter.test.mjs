@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, readFile, rm, chmod, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { StmCredentials, spawnStmConsumer } from "../index.mjs";
+import { StmCredentials, spawnStmConsumer, assertNoStmEnvironmentConflicts } from "../index.mjs";
 
 async function fixture(t, overrides = {}) {
   const dir = await mkdtemp(join(tmpdir(), "matterhorn-stm-"));
@@ -13,15 +13,23 @@ async function fixture(t, overrides = {}) {
   const token = "a".repeat(48);
   await writeFile(descriptorPath, JSON.stringify({ port: 3456, pid: process.pid, token }), { mode: 0o600 });
   const calls = [];
-  const state = { offline: false, secret: "disposable-value", extra: false, badVersion: false };
+  const state = { offline: false, secret: "disposable-value", extra: false, badVersion: false, revision: "d".repeat(64), writeCount: 0, writeFailure: false, writeStatus: 0 };
   const fetch = async (url, options) => {
     calls.push({ url, options });
     assert.equal(options.redirect, "error");
     assert.equal(options.headers["x-stm-token"], token);
     assert.ok(url.startsWith("http://127.0.0.1:3456/api/integrations/v1/"));
     if (state.offline) throw new Error("sensitive-native-error");
-    if (url.endsWith("capabilities")) return Response.json({ version: state.badVersion ? 2 : 1, backend: "in-memory fixture", selectedResolution: true });
-    if (url.endsWith("keys")) return Response.json({ version: 1, keys: [{ tool: "example", label: "default", status: "active", updatedAt: "2026-09-28" }] });
+    if (url.endsWith("capabilities")) return Response.json({ version: state.badVersion ? 2 : 1, backend: "in-memory fixture", selectedResolution: true, revisionedWrites: true });
+    if (url.endsWith("keys") && options.method === "POST") {
+      state.writeCount++;
+      if (state.writeFailure) throw new Error("ambiguous secret-bearing failure");
+      if (state.writeStatus) return new Response("ignored", { status: state.writeStatus });
+      state.secret = JSON.parse(options.body).value;
+      state.revision = "e".repeat(64);
+      return Response.json({ version: 1, key: { tool: "example", label: "default", status: "active", updatedAt: "2026-09-28", revision: state.revision }, oldValueCleanupPending: false });
+    }
+    if (url.endsWith("keys")) return Response.json({ version: 1, keys: [{ tool: "example", label: "default", status: "active", updatedAt: "2026-09-28", revision: state.revision }] });
     const input = JSON.parse(options.body);
     const values = Object.fromEntries(input.bindings.map(b => [b.envName, state.secret]));
     if (state.extra) values.UNRELATED_KEY = "never-expose";
@@ -31,6 +39,34 @@ async function fixture(t, overrides = {}) {
   return { adapter: new StmCredentials(options), options, state, calls, descriptorPath, registryPath, token };
 }
 const input = { envName: "EXAMPLE_API_KEY", tool: "example", label: "default", consumer: "mcp:example", consent: true };
+
+test("generic child boundary rejects bound plaintext without discovery or global mutation", async t => {
+  const f = await paired(t);
+  const calls = f.calls.length;
+  const inherited = { EXAMPLE_API_KEY: "stale-fixture", UNRELATED: "keep" };
+  const before = { ...process.env };
+  assert.throws(() => assertNoStmEnvironmentConflicts(inherited, f.registryPath), /^StmError: STM: plaintext_conflict$/);
+  assert.throws(() => assertNoStmEnvironmentConflicts({ example_api_key: "" }, f.registryPath), /plaintext_conflict/);
+  assertNoStmEnvironmentConflicts({ UNRELATED: "keep", EXAMPLE_API_KEY: undefined }, f.registryPath);
+  assertNoStmEnvironmentConflicts(inherited, join(f.registryPath, "..", "missing.json"));
+  assert.deepEqual(inherited, { EXAMPLE_API_KEY: "stale-fixture", UNRELATED: "keep" });
+  assert.deepEqual({ ...process.env }, before);
+  assert.equal(f.calls.length, calls);
+});
+
+test("generic boundary rejects unsafe and corrupt metadata even with no supplied variables", async t => {
+  const f = await paired(t);
+  await chmod(f.registryPath, 0o644);
+  assert.throws(() => assertNoStmEnvironmentConflicts({}, f.registryPath), /unsafe_file/);
+  await chmod(f.registryPath, 0o600);
+  const linked = f.registryPath + ".link";
+  await symlink(f.registryPath, linked);
+  assert.throws(() => assertNoStmEnvironmentConflicts({}, linked), /unavailable_or_invalid_file/);
+  await writeFile(f.registryPath, "{");
+  assert.throws(() => assertNoStmEnvironmentConflicts({}, f.registryPath), /unavailable_or_invalid_file/);
+  await writeFile(f.registryPath, JSON.stringify({ version: 2, paired: true, bindings: [{ envName: "ignored" }] }));
+  assert.throws(() => assertNoStmEnvironmentConflicts({}, f.registryPath), /invalid_registry/);
+});
 async function paired(t) {
   const f = await fixture(t);
   await f.adapter.connect({ consent: true });
@@ -190,4 +226,46 @@ test("401 rediscovery reloads rotated descriptor once, with a strict retry bound
   const b = new StmCredentials({ ...f.options, fetch: async () => { attempts++; return new Response(null, { status: 401 }); } });
   assert.deepEqual(await b.status(), { state: "unavailable", code: "reconnect_required" });
   assert.equal(attempts, 2);
+});
+
+test("revisioned writes require consent; only metadata and restart state persist", async t => {
+  const f = await paired(t);
+  const input = { tool: "example", label: "default", value: "replacement-disposable-value", expectedRevision: f.state.revision, consent: true };
+  await assert.rejects(f.adapter.saveCredential({ ...input, consent: false }), /consent_required/);
+  assert.equal(f.state.writeCount, 0);
+  const result = await f.adapter.saveCredential(input);
+  assert.equal(result.key.revision, f.state.revision);
+  assert.equal(result.restartRequired, true);
+  assert.equal(f.state.writeCount, 1);
+  const [binding] = await f.adapter.listBindings();
+  assert.equal(binding.credentialRevision, f.state.revision);
+  assert.equal(binding.storageBackend, "in-memory fixture");
+  assert.equal(binding.restartRequired, true);
+  assert.equal((await readFile(f.registryPath, "utf8")).includes(input.value), false);
+  assert.equal(JSON.stringify(result).includes(input.value), false);
+});
+
+test("ambiguous mutations and revision conflicts are never automatically retried", async t => {
+  const f = await paired(t);
+  const input = { tool: "example", label: "default", value: "disposable-write", expectedRevision: f.state.revision, consent: true };
+  f.state.writeFailure = true;
+  await assert.rejects(f.adapter.saveCredential(input), /credential_update_uncertain/);
+  assert.equal(f.state.writeCount, 1);
+  f.state.writeFailure = false;
+  for (const [status, code] of [[401, "reconnect_required"], [412, "credential_revision_conflict"], [503, "credential_update_uncertain"]]) {
+    f.state.writeStatus = status;
+    const before = f.state.writeCount;
+    await assert.rejects(f.adapter.saveCredential(input), new RegExp(code));
+    assert.equal(f.state.writeCount, before + 1);
+  }
+});
+
+test("voice uses credentials per call and does not claim a child restart is required", async t => {
+  const f = await fixture(t);
+  await f.adapter.connect({ consent: true });
+  const binding = await f.adapter.link({ ...input, envName: "OPENAI_REALTIME_API_KEY", consumer: "voice:realtime" });
+  assert.equal(binding.restartRequired, false);
+  const result = await f.adapter.saveCredential({ tool: "example", label: "default", value: "voice-fixture-replacement", expectedRevision: f.state.revision, consent: true });
+  assert.equal(result.restartRequired, false);
+  assert.equal((await f.adapter.listBindings())[0].restartRequired, false);
 });

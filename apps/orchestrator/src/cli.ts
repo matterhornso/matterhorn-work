@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { isReservedLegacyEnvKey } from "@matterhorn-work/stm-credentials";
+import { isReservedLegacyEnvKey, assertNoStmEnvironmentConflicts } from "@matterhorn-work/stm-credentials";
 import {
   spawn,
   type ChildProcess,
@@ -1805,6 +1805,9 @@ function buildSpawnEnv(env?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   for (const [key, value] of Object.entries(base)) {
     if (value !== undefined) merged[key] = value;
   }
+  // Includes Docker/container launches through spawnProcess. Do not swallow an
+  // unreadable registry as though the user had never adopted STM.
+  assertNoStmEnvironmentConflicts(merged, join(dirname(resolveUserEnvFilePath()), "stm-bindings.json"));
   const pathKey =
     Object.prototype.hasOwnProperty.call(merged, "PATH") ||
     !Object.prototype.hasOwnProperty.call(merged, "Path")
