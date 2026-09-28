@@ -6,7 +6,7 @@ import {
   randomBytes,
   scryptSync,
 } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
+import { constants, createReadStream, createWriteStream } from "node:fs";
 import {
   appendFile,
   chmod,
@@ -219,13 +219,28 @@ async function archiveEntries(config, tempDir) {
   if (!(await lstat(workspaceRoot)).isDirectory()) throw new Error("--workspace-root must point to a directory.");
 
   const tenantArchive = resolve(config.tenantArchive);
-  if (!(await pathExists(tenantArchive))) throw new Error(`Tenant workspace archive was not found: ${tenantArchive}`);
-  const archiveStat = await lstat(tenantArchive);
-  if (!archiveStat.isFile() || archiveStat.isSymbolicLink()) {
-    throw new Error("--tenant-archive must point to the regular gzip file downloaded from /workspace/:id/data-archive.");
-  }
-  if (archiveStat.size > MAX_TENANT_ARCHIVE_BYTES) throw new Error("Tenant archive exceeds the size limit.");
-  const bytes = await readFile(tenantArchive);
+  // Validate and read one opened inode; a pathname check followed by readFile
+  // could follow a replacement symlink or read different bytes after approval.
+  const source = await open(tenantArchive, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    .catch(() => { throw new Error("--tenant-archive must point to the regular gzip file downloaded from /workspace/:id/data-archive."); });
+  let bytes;
+  try {
+    const before = await source.stat();
+    if (!before.isFile()) throw new Error("--tenant-archive must point to a regular gzip file.");
+    if (before.size > MAX_TENANT_ARCHIVE_BYTES) throw new Error("Tenant archive exceeds the size limit.");
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of source.createReadStream({ autoClose: false })) {
+      size += chunk.length;
+      if (size > MAX_TENANT_ARCHIVE_BYTES) throw new Error("Tenant archive exceeds the size limit.");
+      chunks.push(chunk);
+    }
+    const after = await source.stat();
+    if (size !== before.size || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
+      throw new Error("Tenant archive changed during validation; export it again.");
+    }
+    bytes = Buffer.concat(chunks, size);
+  } finally { await source.close(); }
   validateTenantArchive(bytes);
   // Encrypt the exact bytes validated, even if the caller replaces the source.
   const snapshot = join(tempDir, "validated-tenant-archive.gz");
