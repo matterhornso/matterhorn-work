@@ -247,6 +247,74 @@ neobrutalism across the product; implementation local only. See detailed plan at
 - Added settings to the optional capture matrix for the upcoming final review;
   no new images captured/inspected during this checkpoint.
 
+## 20:31–20:43 UTC — final build-thread visual round and finish handoff
+
+- Previous checkpoint `c90355e298ac1aa4cde2f0292b78667268a8aece`.
+- Added the real chat ModelPickerModal to the isolated fixture. Reproduced that
+  an explicitly disabled model remained clickable; now forward `disabled` and
+  selected/expanded semantics. Embeddings remain excluded; Escape preserves the
+  draft. No provider or persisted selection behavior changed.
+- Current Chromium controls: 16 tests /184 assertions; composer9 /60; STM6 /33.
+  Captured112 synthetic images across390/768/1280/1440px and both themes.
+  Opened18 representative corrected images together: build-thread rounds **2/2**.
+  Required evidence is listed in `FINISH-REVIEW-PACKET.md` and copied into
+  `.impeccable/review/retro-2026-09-28/`. Fixtures are NOT full-app acceptance.
+- Actual read-only Codex preview at1280×720 has no horizontal overflow. Browser
+  zoom shortcut did not change measured viewport/DPR: actual200% zoom remains
+  unverified, distinct from passing automated root-text enlargement checks.
+- Dark selected chat-picker row appears low contrast; fixture font fidelity is
+  also uncertain relative to bundled dist. Both explicitly handed to the fresh
+  independent finish reviewer; no further self-directed visual edits permitted.
+- The once-only manual design detector completed exit0, no primary findings.
+  Legacy design-scale advisories were numerous; terminal output truncated, so
+  no exact count claimed. No second detector run.
+- Latest full frontend:1,234 pass /7,782 assertions, zero failures at
+  `/private/tmp/matterhorn-retro-qa-O45arp/tests-1.log`. Typecheck in progress.
+- Skill-required fresh finish reviewer started with no inherited transcript.
+  Only review-driven corrections and documentation remain, within the deadline.
+
+## 20:43–21:00 UTC — independent corrections and cross-browser confirmation
+
+- Independent review returned `fix`: selected model contrast, font fidelity,
+  beta disclosure placement and scoped design persistence. Applied one batch.
+- Removed contradictory selected-background rule; both themes assert ice/ink.
+  Auth beta disclosure now follows descriptive copy only under the retro flag,
+  in both React and JavaScript-disabled first paint; flag-off placement retained.
+- Font investigation corrected the QA fixture, not product families: signed-out
+  auth intentionally omits the main app CSS and uses critical entry typography.
+  Fixture now uses that exact entry style/auth CSS. Auth title metrics match the
+  hydrated local dist. Public Security proves both bundled Variable faces load,
+  and fixture/dist body-family declarations match. `font-proof.txt` records the
+  focused8-assertion run. Initial comparisons incorrectly assumed auth loaded
+  the app fonts, then waited on ongoing health polling; those checks failed and
+  were corrected to reflect actual entry architecture, not weakened acceptance.
+- Regenerated112 captures; validated the same18 files before verdict. All
+  non-auth captures explicitly require actual bundled faces, not fonts.ready
+  alone. Controls capture suite17 pass /264 assertions; composer+STM15 /125.
+- Corrected full controls suite passes in Chromium, Firefox and WebKit: each
+  **16 pass /1 optional capture skipped /116 assertions**, including actual
+  dist comparison and first-paint beta placement. WebKit is not installed Safari.
+- Fresh reviewer scored all4 fixes resolved (`FINISH-VERDICT.md`, `ship`). This
+  only clears the scored fixes, NOT whole-surface or hosted/runtime acceptance.
+- Skill documenter updated only DESIGN.md and .impeccable/design.json. Token
+  docs preserve default-off/incumbent distinction and existing type/safety rules.
+- Frontend ON1,234 pass /7,782 assertions:
+  `/private/tmp/matterhorn-retro-qa-c4zqPz/tests-1.log`.
+  Typecheck passes: `/private/tmp/matterhorn-retro-qa-glk6Xb/typecheck-1.log`.
+  Build passes: `/private/tmp/matterhorn-retro-qa-HzNvDy/build-web-1.log`.
+- Safety rerun passes54 wallet and102 operational tests, but design stage caught
+  one exact incumbent navigation sentence omitted from the documentation merge.
+  Documenter restoring the sentence; safety is pending that correction, not
+  reported green. `/private/tmp/matterhorn-retro-qa-TSv8dT/safety-ui-1.log`.
+- Read-only public preview restarted at **http://127.0.0.1:52722/**, session20635.
+  No backend, credentials or providers. Old25959 stopped; browser tab13 still
+  points to the old port until navigated. No push/merge/deployment.
+- Documentation restored the four exact existing navigation-contract sentences;
+  no test expectations changed. Final safety subset passes all3 stages at
+  `/private/tmp/matterhorn-retro-qa-bk6HaX/safety-ui-1.log` (not the full gate).
+  Final rollback suite1,234 pass /7,781 assertions:
+  `/private/tmp/matterhorn-retro-qa-dPJcBx/tests-0.log`. `git diff --check` passes.
+
 ## Coverage queue
 
 1. Foundation flag, semantic tokens and primitives with tests.
@@ -254,17 +322,12 @@ neobrutalism across the product; implementation local only. See detailed plan at
 3. Settings/account/public/workspace tools and transaction reviews.
 4. Batched screenshots, accessibility/functional regressions, review/docs.
 
-Next task: capture the corrected component/core matrices plus settings and STM
-for the single final visual confirmation round. Include actual Codex width and
-browser zoom if safely available; clearly distinguish text enlargement from zoom.
-Then cover remaining model dialog/tool-result gaps or record exact limits. Don't
-repeat verified interactions or start another polish loop. Hosted/authenticated
-whole-shell, live provider/chain requests and installed Safari/native remain
-unverified. Public preview session25959 on50424; Codex tab13 still needs navigation
-from its old port. Current dist is retro PUBLIC WEB. Do not read operator secrets
-or bypass auth.
-Then run relevant safety/functional browser checks, capture evidence, and at the
-finish stage invoke the skill-required independent reviewer/documenter. Do not
-run the final detector yet; it is a once-at-finish batched check. No pushes.
-Do not claim hosted acceptance from synthetic fixtures. Screenshot inspection rounds used: 1/2
+Next task: checkpoint the reviewed changes; complete remaining build-mode/rollback
+packaging checks and the exact-commit handoff. No new self-directed visual
+hunt or detector rerun. Hosted/authenticated whole-shell, live provider/chain
+requests, installed Safari/native, full tool-result states and actual browser
+zoom remain unverified. Public preview session20635 at52722 is signed-out and
+read-only; tab13 is still on its previous port. Current dist includes fixes.
+No push/merge/deploy or real secrets/auth bypass.
+Do not claim hosted acceptance from synthetic fixtures. Screenshot inspection rounds used: 2/2
 (reference/incumbent inspection is not inspection of the new build).

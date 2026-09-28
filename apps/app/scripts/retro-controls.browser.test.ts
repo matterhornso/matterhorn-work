@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chromium, firefox, webkit, type Browser } from "playwright";
+import { verifyBundledFonts } from "./fixtures/verify-bundled-fonts";
 import { build } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { mkdir, readFile } from "node:fs/promises";
@@ -37,6 +38,12 @@ beforeAll(async () => {
   if (!script || script.type !== "chunk") throw new Error("Missing fixture script");
   const css = result.output.filter(item => item.type === "asset" && item.fileName.endsWith(".css"));
   const logo = await readFile(new URL("../public/matterhorn-logo-square.svg", import.meta.url));
+  // Signed-out production entry deliberately does not import the app stylesheet.
+  const authCss = await readFile(new URL("../src/react-app/domains/cloud/public-web-signin.css", import.meta.url), "utf8");
+  const retroCss = await readFile(new URL("../src/styles/retro.css", import.meta.url), "utf8");
+  const entryHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const entryStyle = entryHtml.match(/<style>[\s\S]*?<\/style>/)?.[0];
+  if (!entryStyle) throw new Error("Missing incumbent first-paint typography");
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const path = new URL(request.url).pathname;
     if (path.startsWith("/workspace/fixture/backend/") && request.method === "GET") return Response.json({ message: "Fixture privacy service unavailable" }, { status: 503 });
@@ -71,14 +78,54 @@ beforeAll(async () => {
       } });
     }
     if (path === "/fixture.js") return new Response(script.code, { headers: { "content-type": "text/javascript" } });
-    if (path === "/fixture.css") return new Response(css.map(item => item.type === "asset" ? item.source : "").join("\n"), { headers: { "content-type": "text/css" } });
-    return new Response('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Retro component fixture</title><link rel="stylesheet" href="/fixture.css"><style>html,body,#root{height:auto;overflow:visible}</style><div id="root"></div><script type="module" src="/fixture.js"></script></html>', { headers: { "content-type": "text/html" } });
+    const auth = new URL(request.url).searchParams.has("auth");
+    if (path === "/fixture.css") return new Response(auth ? `${authCss}\n${retroCss}` : css.map(item => item.type === "asset" ? item.source : "").join("\n"), { headers: { "content-type": "text/css" } });
+    return new Response(`<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Retro component fixture</title>${auth ? entryStyle : ""}<link rel="stylesheet" href="/fixture.css${auth ? "?auth" : ""}"><style>html,body,#root{height:auto;overflow:visible}</style><div id="root"></div><script type="module" src="/fixture.js"></script></html>`, { headers: { "content-type": "text/html" } });
   } });
   const engine = process.env.RETRO_QA_BROWSER ?? "chromium";
   if (!["chromium", "firefox", "webkit"].includes(engine)) throw new Error("Unknown QA browser engine");
   browser = await (engine === "firefox" ? firefox : engine === "webkit" ? webkit : chromium).launch();
 }, 60_000);
 afterAll(async () => { await browser?.close(); server?.stop(true); });
+
+test("bundled fonts load and auth typography matches the local distribution when supplied", async () => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  try {
+    await page.goto(`${server.url}?auth&theme=dark`);
+    await page.locator(".public-auth-title").waitFor();
+    const typography = () => page.locator(".public-auth-title").evaluate(el => {
+      const style = getComputedStyle(el);
+      return { family: style.fontFamily, size: style.fontSize, weight: style.fontWeight, lineHeight: style.lineHeight };
+    });
+    const fixture = await typography();
+    const target = process.env.RETRO_QA_DIST_URL;
+    if (target) {
+      if (new URL(target).hostname !== "127.0.0.1") throw new Error("Distribution comparison must stay local");
+      await page.goto(target);
+      await page.getByRole("button", { name: "Sign in", exact: true }).first().waitFor();
+      expect(await typography()).toEqual(fixture);
+      console.log(JSON.stringify({ typographyComparison: "local distribution and fixture", ...fixture }));
+      expect(await page.locator(".public-auth-kicker").count()).toBe(0);
+      const staticPage = await browser.newPage({ javaScriptEnabled: false });
+      try {
+        await staticPage.goto(target);
+        expect(await staticPage.locator(".public-auth-kicker").count()).toBe(0);
+        expect(await staticPage.locator(".public-auth-beta-status").innerText()).toBe("Public beta");
+        expect(await staticPage.locator(".public-auth-beta-status").evaluate(el => el.previousElementSibling?.className)).toBe("public-auth-description");
+      } finally { await staticPage.close(); }
+    }
+    await page.goto(`${server.url}?public=/security`);
+    await page.getByRole("heading", { name: "Security", exact: true }).waitFor();
+    await verifyBundledFonts(page);
+    const body = await page.locator("body").evaluate(el => getComputedStyle(el).fontFamily);
+    if (target) {
+      await page.goto(new URL("/security", target).href);
+      await page.getByRole("heading", { name: "Security", exact: true }).waitFor();
+      await verifyBundledFonts(page);
+      expect(await page.locator("body").evaluate(el => getComputedStyle(el).fontFamily)).toBe(body);
+    }
+  } finally { await page.close(); }
+}, 20_000);
 
 for (const theme of ["light", "dark"]) {
   test(`${theme}: real controls retain draft, selection, focus and portal semantics`, async () => {
@@ -124,6 +171,32 @@ for (const theme of ["light", "dark"]) {
     } finally { await page.close(); }
   }, 30_000);
 }
+
+test("chat picker keeps disabled models unselectable, selection explicit and draft intact", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(5000);
+  try {
+    await page.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    await page.goto(`${server.url}?picker`);
+    const search = page.getByRole("textbox", { name: "Search providers and models", exact: true });
+    await search.fill("fixture");
+    expect(await page.getByRole("button", { name: /Embedding fixture/ }).count()).toBe(0);
+    expect(await page.getByRole("button", { name: /Unavailable fixture model/ }).isDisabled()).toBe(true);
+    await search.fill("ASI1");
+    const current = page.getByRole("button", { name: /ASI1 Mini Chat/ });
+    expect(await current.getAttribute("aria-pressed")).toBe("true");
+    for (const theme of ["light", "dark"]) {
+      await page.locator("html").evaluate((el, value) => { el.setAttribute("data-theme", value); }, theme);
+      expect(await current.evaluate(el => getComputedStyle(el).backgroundColor)).toBe("rgb(209, 242, 255)");
+      expect(await current.evaluate(el => getComputedStyle(el).color)).toBe("rgb(24, 23, 28)");
+    }
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    expect(await page.getByRole("textbox", { name: "Draft", exact: true }).inputValue()).toBe("Unsent fixture draft");
+    await page.goto(`${server.url}?picker&empty&loading`);
+    await page.getByRole("status").filter({ hasText: "Loading available models" }).waitFor();
+  } finally { await page.close(); }
+}, 15_000);
 
 test("flag-off styles remain the incumbent controls", async () => {
   const page = await browser.newPage();
@@ -376,14 +449,14 @@ test.skipIf(!process.env.RETRO_QA_CAPTURES)("capture component matrix for bounde
   await mkdir(directory, { recursive: true });
   accessMode = "off";
   for (const theme of ["light", "dark"]) {
-    for (const width of [390, 768, 1440]) {
+    for (const width of [390, 768, 1280, 1440]) {
       const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
       try {
-        for (const surface of ["auth", "models", "notes", "memory", "wallet&blocked", "integrations", "public=/security", "settings", "settings&privacy&disconnected"]) {
+        for (const surface of ["auth", "models", "picker", "notes", "memory", "wallet&blocked", "integrations", "public=/security", "settings", "settings&privacy&disconnected"]) {
           await page.goto(`${server.url}?${surface}&theme=${theme}`);
           await page.locator("#root > *").first().waitFor();
           await page.waitForLoadState("networkidle");
-          await page.evaluate(() => document.fonts.ready);
+          if (surface !== "auth") await verifyBundledFonts(page);
           const name = surface.includes("privacy") ? "settings-privacy" : surface.split(/[=&]/)[0];
           await page.screenshot({ path: `${directory}/${name}-${theme}-${width}.png`, fullPage: true });
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

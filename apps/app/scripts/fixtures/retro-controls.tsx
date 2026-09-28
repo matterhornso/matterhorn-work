@@ -21,6 +21,8 @@ import { HostedMcpSummary } from "../../src/react-app/domains/settings/pages/hos
 import { PublicWebSigninPage } from "../../src/react-app/domains/cloud/public-web-signin-page";
 import { AppearanceView } from "../../src/react-app/domains/settings/pages/appearance-view";
 import { PrivacySettingsView } from "../../src/react-app/domains/settings/pages/privacy-view";
+import { ModelPickerModal } from "../../src/react-app/domains/session/modals/model-picker-modal";
+import type { ModelOption, ModelRef } from "../../src/app/types";
 import { setThemeMode } from "../../src/app/theme";
 import type { Language } from "../../src/i18n";
 import "../../src/react-app/domains/cloud/public-web-signin.css";
@@ -108,6 +110,25 @@ function SettingsFixture() {
     <p role="status">{action}</p>
   </main>;
 }
+const pickerOptions: ModelOption[] = [
+  { providerID: "cudos", modelID: "asi1-mini", title: "ASI1 Mini", description: "ASI:Cloud", behaviorTitle: "Standard", behaviorLabel: "Standard", behaviorDescription: "Fixture", behaviorValue: null, behaviorCapability: "standard", behaviorCapabilityLabel: "Chat", isFree: false, isConnected: true },
+  { providerID: "cudos", modelID: "fixture-disabled", title: "Unavailable fixture model", description: "ASI:Cloud", behaviorTitle: "Standard", behaviorLabel: "Standard", behaviorDescription: "Fixture", behaviorValue: null, behaviorCapability: "standard", behaviorCapabilityLabel: "Unavailable", isFree: false, isConnected: true, disabled: true },
+  { providerID: "cudos", modelID: "text-embedding-3", title: "Embedding fixture", description: "ASI:Cloud", behaviorTitle: "Standard", behaviorLabel: "Standard", behaviorDescription: "Fixture", behaviorValue: null, behaviorCapability: "standard", behaviorCapabilityLabel: "Embedding", isFree: false, isConnected: true },
+];
+function PickerFixture() {
+  const [open, setOpen] = useState(true);
+  const [query, setQuery] = useState("");
+  const [current, setCurrent] = useState<ModelRef>({ providerID: "cudos", modelID: "asi1-mini" });
+  const [draft, setDraft] = useState("Unsent fixture draft");
+  return <main className="p-6">
+    <p>Isolated chat model picker; no model requests.</p>
+    <label>Draft<Textarea value={draft} onChange={event => setDraft(event.target.value)} /></label>
+    <Button onClick={() => setOpen(true)}>Choose model</Button>
+    <ModelPickerModal open={open} options={params.has("empty") ? [] : pickerOptions} loading={params.has("loading")}
+      target="session" current={current} query={query} setQuery={setQuery} onSelect={setCurrent}
+      onBehaviorChange={() => undefined} onOpenSettings={() => setOpen(false)} onClose={() => setOpen(false)} />
+  </main>;
+}
 function Fixture() {
   const [draft, setDraft] = useState("");
   const [saved, setSaved] = useState(false);
@@ -144,7 +165,7 @@ const root = document.getElementById("root");
 if (!root) throw new Error("Fixture root missing");
 createRoot(root).render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[params.get("public") ?? "/"]}>
   <StatusToastsProvider>
-    {params.has("settings") ? <SettingsFixture /> : params.has("auth") ? <PublicWebSigninPage config={authConfig} onSignedIn={onFixtureSignedIn} /> : params.has("wallet") ? <WalletFixture /> : params.has("integrations") ? <IntegrationsFixture /> : params.has("public") ? <PublicTrustRoute /> : params.has("notes") ?
+    {params.has("picker") ? <PickerFixture /> : params.has("settings") ? <SettingsFixture /> : params.has("auth") ? <PublicWebSigninPage config={authConfig} onSignedIn={onFixtureSignedIn} /> : params.has("wallet") ? <WalletFixture /> : params.has("integrations") ? <IntegrationsFixture /> : params.has("public") ? <PublicTrustRoute /> : params.has("notes") ?
       <div className="mx-auto h-dvh max-w-3xl"><NotesPage client={client} workspaceId="fixture" /></div> :
       params.has("memory") ? <div className="mx-auto h-dvh max-w-3xl"><MemoryPanel client={client} workspaceId="fixture" sessionId={null} onClose={() => undefined} /></div> :
       params.has("models") ? <ModelsFixture /> : <Fixture />}

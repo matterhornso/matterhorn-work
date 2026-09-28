@@ -64,13 +64,14 @@ const publicBetaWebBuild =
   process.env.VITE_MATTERHORN_DEPLOYMENT?.trim().toLowerCase() === "web"
   && /^(1|true|yes|on)$/i.test(process.env.VITE_MATTERHORN_PUBLIC_BETA?.trim() ?? "");
 
-const publicAuthStaticShell = `<main class="public-auth-shell" data-matterhorn-static-auth>
+const publicAuthStaticShell = (retro: boolean) => `<main class="public-auth-shell" data-matterhorn-static-auth>
   <div class="public-auth-layout">
     <section class="public-auth-primary" aria-labelledby="public-auth-title">
       <div class="public-auth-brand"><img src="/matterhorn-logo-square.svg" alt="" aria-hidden="true" /><span>Matterhorn Desks</span></div>
-      <p class="public-auth-kicker">Public beta</p>
+      ${retro ? "" : '<p class="public-auth-kicker">Public beta</p>'}
       <h1 id="public-auth-title" class="public-auth-title">Serious work deserves more than a chat.</h1>
       <p class="public-auth-description">Chat with focused AI, use crypto tools, and keep your files and transaction history in one private workspace.</p>
+      ${retro ? '<p class="public-auth-beta-status">Public beta</p>' : ""}
       <p class="public-auth-status" role="status" aria-live="polite">Opening secure account access…</p>
       <div aria-hidden="true" style="min-height: 300px"></div>
     </section>
@@ -171,7 +172,7 @@ export default defineConfig({
             `<style data-matterhorn-public-auth-critical>${publicAuthCriticalCss}</style>${retroUiBuild ? `<style data-matterhorn-retro-critical>${retroCriticalCss}</style>` : ""}\n  </head>`,
           );
           return publicBetaWebBuild
-            ? withStyles.replace('<div id="root"></div>', `<div id="root">${publicAuthStaticShell}</div>`)
+            ? withStyles.replace('<div id="root"></div>', `<div id="root">${publicAuthStaticShell(retroUiBuild)}</div>`)
             : withStyles;
         },
       },

@@ -1,7 +1,7 @@
 # Bounded visual review
 
-Build-thread inspection rounds used: **1/2**. Independent finish review still
-pending. No hosted or authenticated runtime acceptance is implied.
+Build-thread inspection rounds used: **2/2**. Independent finish review underway.
+No hosted or authenticated runtime acceptance is implied.
 
 ## Round 1 — 28 September, 19:57–20:00 UTC
 
@@ -63,3 +63,23 @@ the complete component suite in all three engines. The final visual confirmation
 must include those corrections; round2 has not been used yet.
 
 No production config, secrets, wallet actions or persisted user data changed.
+
+## Round 2 — 28 September, 20:31–20:41 UTC
+
+112 synthetic captures prepared under
+`/private/tmp/matterhorn-retro-final-captures-2026-09-28`. The18 images listed in
+`FINISH-REVIEW-PACKET.md` were opened together and copied to the review directory.
+They include both themes, mobile/tablet/desktop, actual Codex1280px width,
+settings/STM and the real chat model dialog. Not every matrix image was reviewed.
+The corrected drawer close, settings stacking, wallet actions and integration
+statuses are visible. Dark selected model text is low contrast; fixture font
+fidelity is uncertain. Both are passed explicitly to the independent reviewer.
+
+Actual signed-out dist preview was inspected at1280×720 without page overflow.
+A zoom shortcut did not alter measured viewport/DPR, so actual browser zoom is
+still unverified. No authenticated route or real response evidence was obtained.
+
+The build thread now stops visual defect hunts and self-directed corrections.
+Only independent review findings may trigger a bounded correction/recapture.
+The once-only detector exited0 without primary findings; legacy design-scale
+advisories were emitted (truncated output, no exact count claimed).

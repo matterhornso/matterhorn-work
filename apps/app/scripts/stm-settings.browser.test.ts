@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { verifyBundledFonts } from "./fixtures/verify-bundled-fonts";
 import { chromium, type Browser } from "playwright";
 import { build } from "vite";
 import tailwindcss from "@tailwindcss/vite";
@@ -164,11 +165,14 @@ test("desktop/mobile/light/dark and 200 percent text size remain contained", asy
   const output = process.env.RETRO_QA_CAPTURES;
   if (output) await mkdir(output, { recursive: true });
   try {
-    for (const width of [390, 768, 1440]) for (const theme of ["light", "dark"]) {
+    for (const width of [390, 768, 1280, 1440]) for (const theme of ["light", "dark"]) {
       await p.setViewportSize({ width, height: 1000 }); await p.goto(`${server.url}?${theme === "dark" ? "dark" : "light"}`);
       await p.getByRole("button", { name: "Add secret", exact: true }).click();
       expect(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      if (output) await p.screenshot({ path: `${output}/stm-${theme}-${width}.png`, fullPage: true });
+      if (output) {
+        await verifyBundledFonts(p);
+        await p.screenshot({ path: `${output}/stm-${theme}-${width}.png`, fullPage: true });
+      }
     }
     await p.setViewportSize({ width: 390, height: 900 }); await p.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     expect(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

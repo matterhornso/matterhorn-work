@@ -47,7 +47,7 @@ Optional batched screenshots (temporary path, no credentials):
 RETRO_QA_CAPTURES=/private/tmp/matterhorn-retro-captures-2026-09-28 pnpm exec bun test apps/app/scripts/retro-controls.browser.test.ts
 ```
 
-This captures light/dark at 390/768/1440px and checks overflow. Capturing files
+This captures light/dark at 390/768/1280/1440px and checks overflow. Capturing files
 does not mean their visual review or whole-product acceptance is complete.
 
 Composer, desk launcher and actual sidebar fixtures (no signed-in account):
@@ -57,7 +57,7 @@ RETRO_QA_FLAG=1 pnpm exec bun test apps/app/scripts/composer-submit.browser.test
 RETRO_QA_FLAG=0 pnpm exec bun test apps/app/scripts/composer-submit.browser.test.ts
 ```
 
-Set `RETRO_QA_CAPTURES` for the optional18-image matrix. The composer suite
+Set `RETRO_QA_CAPTURES` for the optional24-image matrix. The composer suite
 retains the incumbent flag-off assertions and stubs only desktop host policy.
 Desk selection records callbacks without starting an agent or sending a prompt.
 

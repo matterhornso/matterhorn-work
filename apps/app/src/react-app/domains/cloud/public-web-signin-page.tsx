@@ -18,6 +18,7 @@ import {
 } from "../../../app/lib/public-cloud-config";
 import { publicWebAuthErrorMessage } from "./public-web-auth-errors";
 import { PublicTurnstile } from "./public-turnstile";
+import { RETRO_UI } from "../../../app/lib/retro-ui";
 
 type PublicWebSigninPageProps = {
   config: PublicCloudConfig;
@@ -343,7 +344,7 @@ export function PublicWebSigninPage({
             <span>Matterhorn Desks</span>
           </div>
 
-          <p className="public-auth-kicker">Public beta</p>
+          {!RETRO_UI && <p className="public-auth-kicker">Public beta</p>}
           <h1 id="public-auth-title" className="public-auth-title">
             Serious work deserves more than a chat.
           </h1>
@@ -352,6 +353,7 @@ export function PublicWebSigninPage({
             transaction history in one private workspace.
           </p>
 
+          {RETRO_UI && <p className="public-auth-beta-status">Public beta</p>}
           <div className="public-auth-mode" aria-label="Account access">
             <button
               type="button"

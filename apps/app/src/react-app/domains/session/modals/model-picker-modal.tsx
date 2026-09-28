@@ -264,6 +264,7 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
           <div className="relative mb-4 shrink-0">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-dls-secondary" />
             <input
+              data-slot="input"
               ref={searchInputRef}
               type="text"
               className="h-10 w-full rounded-lg border border-dls-border bg-dls-surface pl-9 pr-3 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dls-accent-rgb)/0.2)]"
@@ -352,6 +353,7 @@ function ProviderAccordion({
       <div className="flex items-center gap-1">
         <button
           type="button"
+          aria-expanded={expanded}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-dls-hover"
           onClick={onToggleExpand}
         >
@@ -437,6 +439,9 @@ function DefaultModelRow({
   return (
     <button
       type="button"
+      data-slot="model-option"
+      aria-pressed={active}
+      disabled={opt.disabled}
       className={[
         "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors",
         active ? "bg-green-3/50" : "hover:bg-dls-hover",

@@ -3,6 +3,7 @@ import { chromium, type Browser } from "playwright";
 import { build } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { mkdir, readFile } from "node:fs/promises";
+import { verifyBundledFonts } from "./fixtures/verify-bundled-fonts";
 
 let browser: Browser;
 let server: ReturnType<typeof Bun.serve>;
@@ -215,7 +216,7 @@ test.skipIf(!process.env.RETRO_QA_CAPTURES)("capture real launcher and composer 
   if (!directory) return;
   await mkdir(directory, { recursive: true });
   for (const theme of ["light", "dark"]) {
-    for (const width of [390, 768, 1440]) {
+    for (const width of [390, 768, 1280, 1440]) {
       const page = await fixturePage();
       try {
         await page.setViewportSize({ width, height: 1100 });
@@ -223,17 +224,20 @@ test.skipIf(!process.env.RETRO_QA_CAPTURES)("capture real launcher and composer 
         await page.goto(`${server.url}?launcher&theme=${theme}`);
         await page.getByRole("textbox", { name: "Test prompt" }).waitFor();
         await page.waitForLoadState("networkidle");
+        await verifyBundledFonts(page);
         await page.screenshot({ path: `${directory}/launcher-composer-${theme}-${width}.png`, fullPage: true });
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         if (process.env.RETRO_QA_FLAG === "1") {
           await page.goto(`${server.url}?sidebar&launcher&theme=${theme}`);
           await page.getByRole("textbox", { name: "Test prompt" }).waitFor();
           if (width < 768) await page.getByRole("button", { name: "Toggle Sidebar", exact: true }).click();
+          await verifyBundledFonts(page);
           await page.screenshot({ path: `${directory}/sidebar-${theme}-${width}.png`, fullPage: true });
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         }
         await page.goto(`${server.url}?busy&empty&theme=${theme}`);
         await page.getByRole("button", { name: "Stop generating", exact: true }).waitFor();
+        await verifyBundledFonts(page);
         await page.screenshot({ path: `${directory}/composer-busy-${theme}-${width}.png`, fullPage: true });
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       } finally { await page.close(); }

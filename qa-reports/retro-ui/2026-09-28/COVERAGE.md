@@ -10,7 +10,7 @@ All work is behind `VITE_MATTERHORN_RETRO_UI=1`. Production is unchanged.
 | Sidebar/mobile navigation | Anchored outline, selected state, mobile panel, visible 44px close control | Real AppSidebar fixture: selection/Escape/close, focus return, preserved draft; representative light desktop/dark mobile reviewed. Authenticated whole shell unverified |
 | Five-desk launcher | Existing list extracted as PrimaryDeskLauncher; same callbacks and desk marks | All five buttons keyboard reachable, exact selection callback/no submit/draft retained; both themes/390px visually reviewed. Real agent navigation unverified |
 | Models settings | List/filter/selected state; restored pending-task return action | Browser fixture: persistence before navigation, mismatch/403/retry, empty/loading/setup; actual server unverified |
-| Chat model dialog | Outlined labelled search, explicit pressed state, shared dialog tokens | Full keyboard/visual pass pending |
+| Chat model dialog | Outlined labelled search, explicit pressed/expanded state, disabled models non-interactive | Embedding exclusion, disabled selection, Escape/draft, loading; selected ice/ink verified both themes and reviewer scored contrast fix resolved |
 | Chat/composer | Composer outline, user message boundary, wrap long starters | Actual composer/browser: Enter/click/Stop, single-flight sends, explicit consent, token-free retry pass with flag on/off; fixture captures reviewed. Full live chat/streaming pending |
 | Tool results | Bittensor result boundaries retain tone and metadata | Other tool presentations and long payloads pending |
 | Settings | Shared section rhythm/headings; responsive item actions; layout now forwards accessibility attributes | Appearance theme/language/disabled and Privacy disconnected/error/callback tests in Chromium, Firefox, WebKit. 200% text reflow passes; account/workspace full-route acceptance pending |
@@ -29,16 +29,17 @@ All work is behind `VITE_MATTERHORN_RETRO_UI=1`. Production is unchanged.
 - No hosted release, provider request, chain read or financial action has been
   exercised as part of this redesign. Prior acceptance does not substitute for
   new-layout acceptance.
-- Chromium, Firefox and Playwright WebKit each pass the 14-test component suite
-  (100 assertions per engine, optional screenshot test skipped). WebKit engine
+- Chromium, Firefox and Playwright WebKit each pass the corrected16-test component suite
+  (116 assertions per engine, optional screenshot test skipped). WebKit engine
   is not acceptance in the installed Safari application. Signed desktop remains
   unverified. No new browser installation was required.
 - 200% root text-size reflow tested at 390px across appearance, disconnected
   Privacy, models, memory, notes, wallet and integrations. This is NOT actual
   browser chrome zoom; full browser zoom remains unverified.
-- Screenshot inspection rounds used: **1/2**. See `VISUAL-REVIEW.md` for the
-  representative batch and single correction pass. Reserve confirmation until
-  remaining settings/zoom coverage is ready; no repeated polish loops.
+- Screenshot inspection rounds used: **2/2**. See `VISUAL-REVIEW.md` and the
+  finish-review packet for18 final representative images (112 captured total).
+  Independent review scored all4 corrections resolved (`ship` at that scope).
+  One review-driven correction/recapture round used; no new build-thread polish loops.
 - No image-generation comps approved. Code-first progress was assumed from the
   request to start while asleep; existing brand/font assets are retained.
 - The expanded browser fixture explicitly sets the Vite retro env key and disables
@@ -50,3 +51,18 @@ All work is behind `VITE_MATTERHORN_RETRO_UI=1`. Production is unchanged.
   × 390/768/1440px. Another18 cover the actual launcher/composer/sidebar fixtures.
   No-horizontal-overflow assertions pass. Sixteen representative captures across
   the combined batch were visually inspected in round1; not all60 individually.
+
+## Final review evidence
+
+- Latest112-capture matrix: ten controls surfaces80 images, composer/sidebar24,
+  STM8; themes light/dark at390/768/1280/1440. The18 packet images were inspected
+  in build round2 and reopened after the independent correction batch.
+- `FINISH-REVIEW.md` / `FINISH-VERDICT.md` document findings and scoped resolution.
+- Auth fixtures now match the intentionally lightweight production entry CSS;
+  non-auth captures require actual loaded Geist Variable / IBM Plex Sans Variable
+  faces. Local dist/fixture typography and first-paint checks pass; see
+  `font-proof.txt`. No production font family changed. Native/per-glyph font
+  acceptance and actual browser zoom remain outside this evidence.
+- Representative wallet, Memory, Notes, integrations, settings, auth/public and
+  STM captures were included. This supersedes earlier visual-review-pending
+  notes only for those selected images, not every state/full route.
