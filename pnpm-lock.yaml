@@ -393,6 +393,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@matterhorn-work/stm-credentials':
+        specifier: workspace:*
+        version: link:../../packages/stm-credentials
       '@aws-sdk/client-kms':
         specifier: ^3.894.0
         version: 3.1123.0
@@ -585,6 +588,8 @@ importers:
       viem:
         specifier: 2.52.2
         version: 2.52.2(typescript@5.9.3)(zod@4.3.6)
+
+  packages/stm-credentials: {}
 
   packages/types:
     dependencies:

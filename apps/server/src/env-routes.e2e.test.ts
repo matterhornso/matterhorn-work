@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
+import { StmCredentials, type Binding } from "@matterhorn-work/stm-credentials";
 
 type Served = {
   port: number;
@@ -20,6 +21,8 @@ const priorOpenAiApiKey = process.env.OPENAI_API_KEY;
 const priorOpenAiRealtimeApiKey = process.env.OPENAI_REALTIME_API_KEY;
 const priorOpenWorkOpenAiRealtimeApiKey = process.env.OPENWORK_OPENAI_REALTIME_API_KEY;
 const priorBuildCommit = process.env.MATTERHORN_BUILD_COMMIT;
+const isolatedEnvironment = ["MATTERHORN_WORK_DATA_DIR", "MATTERHORN_AUTH_DB", "MATTERHORN_WORK_RATE_LIMIT_DB"];
+const priorIsolatedEnvironment = new Map(isolatedEnvironment.map(key => [key, process.env[key]]));
 const nativeFetch = globalThis.fetch;
 
 function baseConfig(input: Partial<Pick<ServerConfig, "corsOrigins">> = {}): ServerConfig {
@@ -43,7 +46,7 @@ function baseConfig(input: Partial<Pick<ServerConfig, "corsOrigins">> = {}): Ser
 
 async function boot(input: Partial<Pick<ServerConfig, "corsOrigins">> = {}) {
   const server = await startServer(baseConfig(input)) as Served;
-  stops.push(() => server.stop(true));
+  stops.push(() => server.stop());
   return {
     server,
     base: `http://127.0.0.1:${server.port}`,
@@ -61,6 +64,9 @@ beforeEach(() => {
   // touches the developer's real ~/.config/openwork/env.json.
   process.env.OPENWORK_ENV_STORE = join(dir, "env.json");
   process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
+  process.env.MATTERHORN_WORK_DATA_DIR = dir;
+  process.env.MATTERHORN_AUTH_DB = join(dir, "auth.db");
+  process.env.MATTERHORN_WORK_RATE_LIMIT_DB = join(dir, "rate-limit.db");
 });
 
 afterEach(async () => {
@@ -101,6 +107,52 @@ afterEach(async () => {
     process.env.MATTERHORN_BUILD_COMMIT = priorBuildCommit;
   }
   globalThis.fetch = nativeFetch;
+  for (const key of isolatedEnvironment) {
+    const value = priorIsolatedEnvironment.get(key);
+    if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+});
+
+class FixtureStm extends StmCredentials {
+  bindings: Binding[] = [{ id: "fixture-id", envName: "EXAMPLE_API_KEY", tool: "example", label: "default", consumer: "mcp:example", updatedAt: "2026-09-28" }];
+  override async listBindings() { return this.bindings; }
+  override async status() { return { state: "connected", version: 1, backend: "test fixture" }; }
+  override async inventory() { return [{ tool: "example", label: "default", status: "active", updatedAt: "2026-09-28" }]; }
+  override async unlink(id: string) { this.bindings = this.bindings.filter(b => b.id !== id); }
+}
+
+test("STM control routes are host-token-only, metadata-only, and preserve names contract", async () => {
+  const server = await startServer(baseConfig(), { stmCredentials: new FixtureStm(), stmConsumers: ["mcp:example"] });
+  stops.push(() => server.stop());
+  const base = `http://127.0.0.1:${server.port}`;
+  const issued = await fetch(`${base}/tokens`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ scope: "owner", label: "stm fixture owner" }) });
+  expect(issued.status).toBe(201);
+  const owner = await issued.json();
+  for (const path of ["status", "bindings", "inventory"]) {
+    expect((await fetch(`${base}/env/stm/${path}`)).status).toBe(401);
+    expect((await fetch(`${base}/env/stm/${path}`, { headers: { authorization: `Bearer ${owner.token}` } })).status).toBe(401);
+    const response = await fetch(`${base}/env/stm/${path}`, { headers: hostAuth() });
+    expect(response.status).toBe(200);
+    expect(await response.text()).not.toContain('"value":');
+  }
+  expect((await fetch(`${base}/env`, { headers: hostAuth() })).status).toBe(409);
+  const keys = await fetch(`${base}/env/keys`, { headers: hostAuth() });
+  expect(await keys.json()).toEqual({ keys: ["EXAMPLE_API_KEY"] });
+  expect((await fetch(`${base}/env`, { method: "PUT", headers: hostAuth(), body: JSON.stringify({ key: "EXAMPLE_API_KEY", value: "stale-fixture" }) })).status).toBe(409);
+  expect((await fetch(`${base}/env/EXAMPLE_API_KEY`, { method: "DELETE", headers: hostAuth() })).status).toBe(409);
+  expect((await fetch(`${base}/env/stm/resolve`, { method: "POST", headers: hostAuth(), body: "{}" })).status).toBe(404);
+  expect((await fetch(`${base}/env/stm/bindings/fixture-id`, { method: "DELETE", headers: hostAuth() })).status).toBe(200);
+  expect(await (await fetch(`${base}/env/keys`, { headers: hostAuth() })).json()).toEqual({ keys: [] });
+});
+
+test("STM is disabled by default and read-only mode rejects changes", async () => {
+  const { base } = await boot();
+  expect(await (await fetch(`${base}/env/stm/status`, { headers: hostAuth() })).json()).toEqual({ state: "disabled" });
+  expect((await fetch(`${base}/env/stm/connect`, { method: "POST", headers: hostAuth(), body: '{"consent":true}' })).status).toBe(409);
+  const config = baseConfig(); config.readOnly = true;
+  const server = await startServer(config, { stmCredentials: new FixtureStm() });
+  stops.push(() => server.stop());
+  expect((await fetch(`http://127.0.0.1:${server.port}/env/stm/bindings/fixture-id`, { method: "DELETE", headers: hostAuth() })).status).toBe(403);
 });
 
 describe("env routes", () => {

@@ -49,6 +49,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@matterhorn-work/stm-credentials": "workspace:*",
     "@aws-sdk/client-kms": "^3.894.0",
     "@matterhorn-work/email": "workspace:*",
     "@matterhorn-work/crypto-app-sdk": "workspace:*",

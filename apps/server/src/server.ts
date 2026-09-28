@@ -538,6 +538,7 @@ import { MATTERHORN_CRYPTO_COMPACTION_CONTEXT } from "./opencode-compaction-poli
 import { sanitizeCommandName, validateMcpName } from "./validators.js";
 import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
+import { StmCredentials, StmError } from "@matterhorn-work/stm-credentials";
 import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedgerText } from "./project-data-ledger.js";
@@ -1432,6 +1433,10 @@ type MatterhornSuiEvidenceAnchorPackageState = {
 };
 
 export type MatterhornServerDependencies = {
+  // Trusted local-shell injection only; never populated from request bodies or
+  // hosted workspace configuration. Feature remains off unless explicitly wired.
+  stmCredentials?: StmCredentials;
+  stmConsumers?: readonly string[];
   evidenceKeyManager?: MatterhornEvidenceKeyManager | null;
   cryptoEvidenceWalrusTransport?: MatterhornWalrusEvidenceTransport;
   cryptoEvidenceWalrusCertificationVerifier?: MatterhornWalrusCertificationVerifier;
@@ -1879,6 +1884,7 @@ export async function startServer(
     recoveryErasureLedger,
     drainEmailOutbox,
     dependencies.reviewedActionProtocolRefresh ?? refreshReviewedActionProtocolState,
+    dependencies,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
 
@@ -10140,7 +10146,9 @@ function createRoutes(
   recoveryErasureLedger: MatterhornRecoveryErasureLedger | null,
   drainEmailOutbox: () => Promise<void>,
   reviewedActionProtocolRefresh: ReviewedActionRefreshAdapter,
+  dependencies: Pick<MatterhornServerDependencies, "stmCredentials" | "stmConsumers">,
 ): Route[] {
+  const stm = dependencies.stmCredentials;
   const routes: Route[] = [];
   const billingRouteContext = createBillingRouteContext(config);
   const fileSessions = new FileSessionStore();
@@ -13991,13 +13999,17 @@ function createRoutes(
   // are driven from the UI after a write; this surface is user-scoped, not
   // workspace-scoped, so no audit.
   addRoute(routes, "GET", "/env", "host-token", async () => {
+    if (stm && (await stm.listBindings()).length) {
+      throw new ApiError(409, "stm_metadata_only", "Linked secrets are available through secret-storage settings, not raw environment export.");
+    }
     const items = await env.list().catch(rethrowEnvStoreReadError);
     return jsonResponse({ items });
   });
 
   addRoute(routes, "GET", "/env/keys", "host-token", async () => {
     const items = await env.list().catch(rethrowEnvStoreReadError);
-    return jsonResponse({ keys: items.map((item) => item.key) });
+    const bindings = stm ? await stm.listBindings() : [];
+    return jsonResponse({ keys: [...new Set([...items.map(item => item.key), ...bindings.map(item => item.envName)])] });
   });
 
   addRoute(routes, "PUT", "/env", "host-token", async (ctx) => {
@@ -14022,6 +14034,9 @@ function createRoutes(
     if (entries.length === 0) {
       throw new ApiError(400, "no_entries", "No entries provided");
     }
+    if (stm && (await stm.listBindings()).some(binding => entries.some(entry => entry.key === binding.envName))) {
+      throw new ApiError(409, "stm_binding_conflict", "Unlink the secret explicitly before changing its storage.");
+    }
     try {
       await env.upsertMany(entries);
     } catch (error) {
@@ -14045,6 +14060,9 @@ function createRoutes(
   addRoute(routes, "DELETE", "/env/:key", "host-token", async (ctx) => {
     ensureWritable(config);
     const key = ctx.params.key;
+    if (stm && (await stm.listBindings()).some(binding => binding.envName === key)) {
+      throw new ApiError(409, "stm_metadata_only", "Use Unlink in secret-storage settings; this does not revoke the shared secret.");
+    }
     if (!isValidEnvKey(key)) {
       throw new ApiError(400, "invalid_env_key", "Invalid environment variable name");
     }
@@ -14053,6 +14071,48 @@ function createRoutes(
       throw new ApiError(404, "env_not_found", "Environment variable not found");
     }
     return jsonResponse({ ok: true });
+  });
+
+  function requireLocalStm(): StmCredentials {
+    if (!stm || !["127.0.0.1", "::1", "localhost"].includes(config.host)) {
+      throw new ApiError(409, "stm_not_enabled", "Secret storage is not enabled for this local runtime.");
+    }
+    return stm;
+  }
+
+  function rethrowStmError(error: unknown): never {
+    if (error instanceof StmError) throw new ApiError(409, error.code, "Secret storage needs attention. Reconnect or check the selected binding.");
+    throw new ApiError(503, "stm_unavailable", "Secret storage is unavailable.");
+  }
+
+  addRoute(routes, "GET", "/env/stm/status", "host-token", async () => {
+    return jsonResponse(stm ? await requireLocalStm().status() : { state: "disabled" });
+  });
+  addRoute(routes, "GET", "/env/stm/bindings", "host-token", async () => {
+    return jsonResponse({ items: await requireLocalStm().listBindings().catch(rethrowStmError) });
+  });
+  addRoute(routes, "GET", "/env/stm/inventory", "host-token", async () => {
+    return jsonResponse({ items: await requireLocalStm().inventory().catch(rethrowStmError) });
+  });
+  addRoute(routes, "POST", "/env/stm/connect", "host-token", async (ctx) => {
+    ensureWritable(config);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Secret storage connection");
+    return jsonResponse(await requireLocalStm().connect({ consent: body.consent === true }).catch(rethrowStmError));
+  });
+  addRoute(routes, "POST", "/env/stm/bindings", "host-token", async (ctx) => {
+    ensureWritable(config);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Secret binding");
+    if (typeof body.envName !== "string" || typeof body.tool !== "string" || typeof body.label !== "string" || typeof body.consumer !== "string" || !dependencies.stmConsumers?.includes(body.consumer)) {
+      throw new ApiError(400, "invalid_stm_binding", "Choose a supported local tool and secret.");
+    }
+    const legacy = await env.list().catch(rethrowEnvStoreReadError);
+    const binding = await requireLocalStm().link({ envName: body.envName, tool: body.tool, label: body.label, consumer: body.consumer, consent: body.consent === true }, legacy.map(entry => entry.key)).catch(rethrowStmError);
+    return jsonResponse({ binding, restartRequired: true }, 201);
+  });
+  addRoute(routes, "DELETE", "/env/stm/bindings/:id", "host-token", async (ctx) => {
+    ensureWritable(config);
+    await requireLocalStm().unlink(ctx.params.id).catch(rethrowStmError);
+    return jsonResponse({ ok: true, restartRequired: true });
   });
 
   addRoute(routes, "POST", "/voice/realtime/session", "host", async (ctx) => {
