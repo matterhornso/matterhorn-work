@@ -343,7 +343,7 @@ export function CryptoAppCatalogRoute() {
   ]);
 
   return (
-    <main className="min-h-dvh overflow-y-auto bg-background text-foreground">
+    <main className="matterhorn-crypto-catalog min-h-dvh overflow-y-auto bg-background text-foreground">
       <div className="mx-auto w-full max-w-5xl px-5 py-6 sm:px-8 sm:py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <Button

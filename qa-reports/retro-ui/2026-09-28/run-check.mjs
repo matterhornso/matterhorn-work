@@ -10,12 +10,13 @@ const stages = {
   tests: ["--dir", "apps/app", "test"],
   typecheck: ["--dir", "apps/app", "typecheck"],
   build: ["--dir", "apps/app", "build"],
+  "build-web": ["--dir", "apps/app", "build"],
 };
 const [stage, flag = "1"] = process.argv.slice(2);
 const pnpm = process.env.RETRO_QA_PNPM;
 const bun = process.env.RETRO_QA_BUN;
 if (!stages[stage] || !["0", "1"].includes(flag) || !pnpm?.startsWith("/") || !bun?.startsWith("/")) {
-  throw new Error("Use tests|typecheck|build 0|1 with absolute RETRO_QA_PNPM and RETRO_QA_BUN");
+  throw new Error("Use tests|typecheck|build|build-web 0|1 with absolute RETRO_QA_PNPM and RETRO_QA_BUN");
 }
 const root = await mkdtemp("/private/tmp/matterhorn-retro-qa-");
 for (const part of ["home", "tmp", "bin", "data", "config", "cache", "state"]) await mkdir(join(root, part));
@@ -31,6 +32,7 @@ const child = spawn(process.execPath, [pnpm, ...stages[stage]], {
     XDG_DATA_HOME: join(root, "data"), XDG_CONFIG_HOME: join(root, "config"),
     XDG_CACHE_HOME: join(root, "cache"), XDG_STATE_HOME: join(root, "state"),
     CI: "1", VITE_MATTERHORN_RETRO_UI: flag, MATTERHORN_WORK_STM_ENABLED: "0",
+    ...(stage === "build-web" ? { VITE_MATTERHORN_DEPLOYMENT: "web", VITE_MATTERHORN_PUBLIC_BETA: "true" } : {}),
   },
 });
 child.stdout.pipe(output, { end: false }); child.stderr.pipe(output, { end: false });

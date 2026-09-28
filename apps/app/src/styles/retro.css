@@ -185,6 +185,14 @@ html[data-matterhorn-ui="retro"] :is([data-slot="card"], .ow-soft-card, .ow-soft
   border-radius: var(--retro-radius);
 }
 
+html[data-matterhorn-ui="retro"] .matterhorn-overlay-surface {
+  background: var(--retro-panel);
+  color: var(--retro-ink);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: var(--retro-panel-shadow);
+}
+
 html[data-matterhorn-ui="retro"] :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"], [data-slot="context-menu-content"]) {
   background: var(--retro-panel);
   color: var(--retro-ink);
@@ -219,6 +227,109 @@ html[data-matterhorn-ui="retro"] :is([data-slot="card-title"], [data-slot="dialo
 @media (prefers-reduced-motion: reduce) {
   html[data-matterhorn-ui="retro"] [data-slot="button"]:not([data-variant="ghost"], [data-variant="link"], :disabled, [aria-disabled="true"]):active {
     translate: none;
+  }
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="model-option"] {
+  border-radius: var(--retro-radius);
+  color: var(--retro-ink);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="model-option"][aria-pressed="true"] {
+  background: var(--retro-subtle);
+  box-shadow: inset 0 0 0 2px var(--retro-line);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-public-trust > :is(header, footer) {
+  border-color: var(--retro-line);
+  border-width: 2px 0;
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-public-trust nav[aria-label="Trust pages"] a {
+  border-radius: var(--retro-radius);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-public-trust nav[aria-label="Trust pages"] a[aria-current="page"] {
+  background: var(--retro-selection);
+  color: var(--retro-selection-text);
+  box-shadow: inset 0 0 0 2px var(--retro-line);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-public-trust article h1 {
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-rail-content > header {
+  background: var(--retro-panel);
+  border-bottom: 2px solid var(--retro-line);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-notes :is(input, select) {
+  background: var(--retro-panel);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-notes :is(input, select)::placeholder {
+  color: var(--retro-muted);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="note-title"], [data-slot="note-body"]) {
+  border-radius: 0;
+  border-bottom: 2px solid var(--retro-line);
+  padding-block: 8px;
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="note-title"], [data-slot="note-body"])::placeholder {
+  color: var(--retro-muted);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-memory article {
+  background: var(--retro-panel);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-memory select {
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+  color: var(--retro-ink);
+}
+
+html[data-matterhorn-ui="retro"] input[type="checkbox"] {
+  accent-color: var(--retro-action);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="memory-policy-warning"] {
+  color: var(--warning);
+  border: 1px solid currentColor;
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="memory-capture-error"] {
+  color: var(--destructive);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-crypto-catalog > div > header,
+html[data-matterhorn-ui="retro"] .matterhorn-crypto-catalog [aria-label="Available apps"] > article {
+  border-bottom-width: 2px;
+}
+
+@media (max-width: 480px) {
+  html[data-matterhorn-ui="retro"] [data-slot="notes-filters"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  html[data-matterhorn-ui="retro"] .matterhorn-memory [aria-label="Memory views"] {
+    flex-wrap: wrap;
+    row-gap: 12px;
   }
 }
 

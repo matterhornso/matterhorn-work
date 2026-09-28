@@ -1,0 +1,37 @@
+# Local preview and QA
+
+Branch: `codex/retro-ui-2026-09-28`. Nothing is deployed. The release flag is
+`VITE_MATTERHORN_RETRO_UI=1`; unset/0 retains the incumbent UI and persisted data.
+
+## Public web — read-only visual preview
+
+From the repository root, use the installed pinned pnpm and Bun paths with the
+isolated runner (do not forward operator env files or credentials):
+
+```sh
+RETRO_QA_PNPM=/Users/abhinavramesh/.cache/node/corepack/v1/pnpm/10.27.0/bin/pnpm.cjs RETRO_QA_BUN=/Users/abhinavramesh/.bun/bin/bun node qa-reports/retro-ui/2026-09-28/run-check.mjs build-web 1
+pnpm exec bun apps/app/scripts/retro-public-preview.ts
+```
+
+Open the printed loopback URL. `/privacy`, `/terms`, `/security`, `/support` and
+`/status` use the production frontend. This preview deliberately has **no
+backend**: signup, sign-in, password reset, health checks and authenticated desks
+are unavailable. CSP blocks remote connections and the server does not proxy API
+calls. Do not treat it as a logged-in testing account or live readiness proof.
+
+The random port avoids replacing existing user previews. Stop with Ctrl+C.
+
+## Real-component browser regressions
+
+```sh
+pnpm exec bun test apps/app/scripts/retro-controls.browser.test.ts
+```
+
+This bundles production controls, models, public trust pages, Notes and Memory,
+using an isolated in-memory loopback fixture with fake catalog/note responses.
+It does not contact providers, chains, vaults or real accounts. Test model changes
+and memory failures are synthetic. It is separate from release acceptance.
+
+Run `tests`, `typecheck`, `build`, and `build-web` runner stages **sequentially**;
+prebuilds share generated package output. The `0|1` argument tests the rollout
+flag. Capture/inspection coverage and remaining gaps are in `COVERAGE.md`.

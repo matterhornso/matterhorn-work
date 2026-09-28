@@ -12,6 +12,11 @@ import { applyRetroUi } from "../../src/app/lib/retro-ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MinimalModels } from "../../src/react-app/domains/settings/pages/minimal-models";
 import { PrivateModePrivacyNotice } from "../../src/react-app/domains/session/surface/private-mode-privacy-notice";
+import { MemoryRouter } from "react-router";
+import { PublicTrustRoute } from "../../src/react-app/domains/public/public-trust-route";
+import { NotesPage } from "../../src/react-app/domains/notes/notes-page";
+import { MemoryPanel } from "../../src/react-app/domains/memory/memory-panel";
+import { StatusToastsProvider, StatusToastsViewport } from "../../src/react-app/domains/shell-feedback/status-toasts";
 import { createMatterhornServerClient } from "../../src/app/lib/matterhorn-server";
 import type { MatterhornBackendModelCatalogSnapshot, MatterhornBackendModelSelectionRecord, MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
 import "../../src/app/index.css";
@@ -90,4 +95,12 @@ function Fixture() {
 }
 const root = document.getElementById("root");
 if (!root) throw new Error("Fixture root missing");
-createRoot(root).render(<QueryClientProvider client={queryClient}>{params.has("models") ? <ModelsFixture /> : <Fixture />}</QueryClientProvider>);
+createRoot(root).render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[params.get("public") ?? "/"]}>
+  <StatusToastsProvider>
+    {params.has("public") ? <PublicTrustRoute /> : params.has("notes") ?
+      <div className="mx-auto h-dvh max-w-3xl"><NotesPage client={client} workspaceId="fixture" /></div> :
+      params.has("memory") ? <div className="mx-auto h-dvh max-w-3xl"><MemoryPanel client={client} workspaceId="fixture" sessionId={null} onClose={() => undefined} /></div> :
+      params.has("models") ? <ModelsFixture /> : <Fixture />}
+    <StatusToastsViewport />
+  </StatusToastsProvider>
+</MemoryRouter></QueryClientProvider>);

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chromium, type Browser } from "playwright";
 import { build } from "vite";
 import tailwindcss from "@tailwindcss/vite";
+import { readFile } from "node:fs/promises";
 
 let browser: Browser;
 let server: ReturnType<typeof Bun.serve>;
@@ -9,11 +10,19 @@ let savedModelRequests = 0;
 let modelSaveMode: "ok" | "mismatch" | "denied" = "ok";
 let releaseModelSave: (() => void) | undefined;
 let modelSaveGate: Promise<void> | undefined;
+let noteSaveDenied = false;
+let memoryCaptures = 0;
+const initialNote = () => ({
+  version: "matterhorn.note.v1", id: "fixture-note", workspaceId: "fixture", title: "Beta checklist",
+  body: "Disposable fixture note", tags: [], links: [], source: "manual", filePath: "notes/fixture.md",
+  createdAt: "2026-09-28T00:00:00Z", updatedAt: "2026-09-28T00:00:00Z",
+});
+let note = initialNote();
 beforeAll(async () => {
   const bundle = await build({
-    configFile: false, root: new URL("../", import.meta.url).pathname, logLevel: "error",
+    configFile: false, envDir: false, root: new URL("../", import.meta.url).pathname, logLevel: "error",
     resolve: { alias: { "@": new URL("../src", import.meta.url).pathname }, dedupe: ["react", "react-dom"] },
-    define: { "import.meta.env": '{"VITE_MATTERHORN_RETRO_UI":"1"}', "process.env.NODE_ENV": '"development"' },
+    define: { "import.meta.env.VITE_MATTERHORN_RETRO_UI": '"1"', "process.env.NODE_ENV": '"development"' },
     plugins: [tailwindcss()],
     build: { target: "esnext", write: false, minify: false,
       lib: { entry: new URL("./fixtures/retro-controls.tsx", import.meta.url).pathname, formats: ["es"] },
@@ -24,8 +33,22 @@ beforeAll(async () => {
   const script = result.output.find(item => item.type === "chunk" && item.isEntry);
   if (!script || script.type !== "chunk") throw new Error("Missing fixture script");
   const css = result.output.filter(item => item.type === "asset" && item.fileName.endsWith(".css"));
+  const logo = await readFile(new URL("../public/matterhorn-logo-square.svg", import.meta.url));
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const path = new URL(request.url).pathname;
+    if (path === "/matterhorn-logo-square.svg") return new Response(logo, { headers: { "content-type": "image/svg+xml" } });
+    if (path === "/workspace/fixture/notes") return Response.json({ success: true, items: [note], count: 1 });
+    if (path === "/workspace/fixture/notes/fixture-note" && request.method === "PATCH") {
+      if (noteSaveDenied) return Response.json({ message: "Fixture save unavailable" }, { status: 503 });
+      note = { ...note, ...await request.json() };
+      return Response.json({ success: true, note });
+    }
+    if (path === "/workspace/fixture/memory/entities") return Response.json({ success: true, records: [] });
+    if (path === "/workspace/fixture/memory/suggestions") return Response.json({ success: true, entries: [] });
+    if (path === "/workspace/fixture/memory/capture") {
+      memoryCaptures++;
+      return Response.json({ message: "Fixture save unavailable" }, { status: 503 });
+    }
     if (path === "/workspace/fixture/backend/model-selection" && request.method === "PATCH") {
       savedModelRequests++;
       const body = await request.json();
@@ -166,3 +189,63 @@ test("model loading, unavailable and managed/local recovery remain truthful", as
     expect(await page.getByTestId("model-action").innerText()).toBe("Connect requested");
   } finally { await page.close(); }
 });
+
+test("public trust navigation keeps active page, readable structure and app link", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(5000);
+  try {
+    await page.goto(`${server.url}?public=/security`);
+    await page.getByRole("heading", { name: "Security", exact: true }).waitFor();
+    const nav = page.getByRole("navigation", { name: "Trust pages", exact: true });
+    expect(await nav.getByRole("link", { name: "Security", exact: true }).getAttribute("aria-current")).toBe("page");
+    await nav.getByRole("link", { name: "Privacy", exact: true }).click();
+    await page.getByRole("heading", { name: "Privacy", exact: true }).waitFor();
+    expect(await nav.getByRole("link", { name: "Privacy", exact: true }).getAttribute("aria-current")).toBe("page");
+    expect(await page.getByRole("link", { name: "Back to app", exact: true }).getAttribute("href")).toBe("/session");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await page.close(); }
+});
+
+test("notes keep labelled drafts on save error and persist before returning", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(5000); note = initialNote(); noteSaveDenied = false;
+  try {
+    await page.goto(`${server.url}?notes`);
+    await page.getByRole("button", { name: /Beta checklist/ }).click();
+    noteSaveDenied = true;
+    await page.getByRole("textbox", { name: "Note body", exact: true }).fill("Edited disposable note");
+    await page.getByRole("button", { name: "Back to notes", exact: true }).click();
+    await page.getByText("Could not save note", { exact: true }).first().waitFor();
+    expect(await page.getByRole("textbox", { name: "Note body", exact: true }).inputValue()).toBe("Edited disposable note");
+    expect(note.body).toBe("Disposable fixture note");
+    noteSaveDenied = false;
+    await page.getByRole("button", { name: "Back to notes", exact: true }).click();
+    await page.getByRole("region", { name: "Notes panel", exact: true }).waitFor();
+    expect(note.body).toBe("Edited disposable note");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { noteSaveDenied = false; await page.close(); }
+}, 15_000);
+
+test("memory requires explicit confirmation and keeps failed captures visible", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(5000); memoryCaptures = 0;
+  try {
+    await page.goto(`${server.url}?memory`);
+    await page.getByRole("button", { name: "Review", exact: true }).click();
+    await page.getByText("No suggestions", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Saved", exact: true }).click();
+    await page.getByRole("button", { name: "Add memory", exact: true }).click();
+    await page.getByRole("textbox", { name: "Memory title" }).fill("Reading preference");
+    await page.getByRole("textbox", { name: "Memory summary" }).fill("Concise explanations");
+    await page.getByRole("textbox", { name: "Memory details" }).fill("Prefer concise explanations in this disposable fixture.");
+    await page.getByRole("button", { name: "Save memory", exact: true }).click();
+    await page.getByRole("alert").filter({ hasText: "Confirm that this contains no secrets" }).waitFor();
+    expect(memoryCaptures).toBe(0);
+    await page.getByRole("checkbox", { name: /I confirm this is safe/ }).check();
+    await page.getByRole("button", { name: "Save memory", exact: true }).click();
+    await page.getByRole("alert").filter({ hasText: "Fixture save unavailable" }).waitFor();
+    expect(memoryCaptures).toBe(1);
+    expect(await page.getByRole("textbox", { name: "Memory title" }).inputValue()).toBe("Reading preference");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await page.close(); }
+}, 15_000);

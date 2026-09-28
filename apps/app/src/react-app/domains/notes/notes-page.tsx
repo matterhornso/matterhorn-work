@@ -298,12 +298,16 @@ function WorkspaceNotesPage({ workspaceId, notesClient }: {
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           <input
+            data-slot="note-title"
+            aria-label="Note title"
             value={draft.title}
             onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
             placeholder={t("notes.note_title_placeholder")}
             className="w-full bg-transparent text-lg font-semibold leading-7 text-dls-text outline-none placeholder:text-dls-muted"
           />
           <textarea
+            data-slot="note-body"
+            aria-label="Note body"
             value={draft.body}
             onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))}
             placeholder={t("notes.write_placeholder")}
@@ -326,6 +330,8 @@ function WorkspaceNotesPage({ workspaceId, notesClient }: {
                 Tags{draftTags.length ? ` (${draftTags.length})` : ""}
               </summary>
               <input
+                data-slot="input"
+                aria-label="Note tags"
                 value={draft.tags}
                 onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value }))}
                 placeholder={t("notes.tags_placeholder")}
@@ -354,7 +360,7 @@ function WorkspaceNotesPage({ workspaceId, notesClient }: {
   }
 
   return (
-    <div aria-label="Notes panel" role="region" className="matterhorn-rail-content flex h-full min-h-0 flex-col bg-dls-background">
+    <div aria-label="Notes panel" role="region" className="matterhorn-notes matterhorn-rail-content flex h-full min-h-0 flex-col bg-dls-background">
       <header className="grid shrink-0 gap-3 px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -374,7 +380,7 @@ function WorkspaceNotesPage({ workspaceId, notesClient }: {
         </div>
 
         {notes.length > 0 ? (
-          <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-2">
+          <div data-slot="notes-filters" className="grid grid-cols-[minmax(0,1fr)_9rem] gap-2">
             <label className="relative min-w-0">
               <span className="sr-only">{t("notes.search_placeholder")}</span>
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-dls-muted" />

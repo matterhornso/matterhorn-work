@@ -637,7 +637,7 @@ export function PublicTrustRoute() {
   const activeLabel = useMemo(() => pageLabels[path], [path]);
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground">
+    <div className="matterhorn-public-trust flex min-h-dvh flex-col bg-background text-foreground">
       <PublicHeader />
       <main className="mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] flex-1 gap-10 py-8 pl-[calc(1.25rem+env(safe-area-inset-left))] pr-[calc(1.25rem+env(safe-area-inset-right))] sm:py-12 sm:pl-[calc(2rem+env(safe-area-inset-left))] sm:pr-[calc(2rem+env(safe-area-inset-right))] md:grid-cols-[180px_minmax(0,1fr)]">
         <aside className="min-w-0">

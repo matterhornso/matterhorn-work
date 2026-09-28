@@ -61,8 +61,6 @@ neobrutalism across the product; implementation local only. See detailed plan at
   call the enabled suite green: add explicit coverage for both layouts next,
   including real model choices, unavailable recovery and privacy disclosure.
 
-## Coverage queue
-
 ## 18:51–19:04 UTC — model flow, core details and regression repair
 
 - Foundation checkpoint: `edbec86b67` (local only).
@@ -101,17 +99,59 @@ neobrutalism across the product; implementation local only. See detailed plan at
   actual full-shell visual, hosted/runtime and native evidence. All current
   tests are local/synthetic, no provider or signing actions.
 
+## 19:11–19:23 UTC — secondary surfaces and local public preview
+
+- Previous core checkpoint: `9516afd67d` (local only).
+- Continued Impeccable/Uncodixfy on the established pinned direction. No context
+  rerun or visual polish loop. Screenshot rounds remain 0/2.
+- Added model-dialog search label/control styling and selected `aria-pressed`;
+  public trust page chrome and active links; Notes labels/title/body/tags,
+  responsive search/filter; Memory record boundaries, select/checkbox treatment,
+  wrapping view actions, and theme-safe policy/error text; catalog row boundaries;
+  custom approval overlays inherit the same border/panel system. No financial
+  logic, consent, routes, claims or remote configuration changed.
+- Expanded the existing synthetic browser fixture to real PublicTrustRoute,
+  NotesPage and MemoryPanel with the actual client and loopback responses.
+  **8 tests pass / 67 assertions**. New coverage: Security → Privacy active nav
+  and app href, Notes failed save retains draft then retry persists before return,
+  Memory Saved/Review/Add and explicit confirmation before any capture; failed
+  memory capture retains fields. 390px no-overflow checks included.
+- Initial Notes fixture omitted the real toast viewport; mounted it. Memory
+  exposed that Vite whole-object env replacement didn't enable compact layout.
+  Fixed fixture to define the exact retro env key and disable env-file loading.
+  All tests then passed against the actual compact layout. These were fixture
+  defects, not justification to remove assertions or weaken UI protections.
+- Extended palette contrast coverage to warning text in both themes.
+- Latest frontend: **1,233 pass / zero failures / 7,775 assertions**, log
+  `/private/tmp/matterhorn-retro-qa-gepkmB/tests-1.log`.
+- Typecheck passes: `/private/tmp/matterhorn-retro-qa-I4JudG/typecheck-1.log`.
+- Public-web production build passes:
+  `/private/tmp/matterhorn-retro-qa-yhuaGC/build-web-1.log`.
+  Dist now has retro + explicit web/public-beta flags. No deployment performed.
+- Added isolated `build-web` runner stage and `PREVIEW.md`. Read-only preview
+  running at **http://127.0.0.1:62530/**, exec session **62341**.
+  Server `apps/app/scripts/retro-public-preview.ts` serves only dist, no backend
+  proxy, rejects writes, uses CSP to block remote connections. HTTP checks: root
+  and Security 200 with retro marker; account POST returns503. Do not enter real
+  credentials. This is signed-out visual preview, not a functional account.
+- Public preview has not been visually inspected yet. Reserve the bounded first
+  review round for a batch of public and core/secondary captures.
+
+## Coverage queue
+
 1. Foundation flag, semantic tokens and primitives with tests.
 2. Core shell/model/desk/chat surfaces.
 3. Settings/account/public/workspace tools and transaction reviews.
 4. Batched screenshots, accessibility/functional regressions, review/docs.
 
-Next task: continue full-product implementation using COVERAGE.md. Finish raw
-model-dialog controls and secondary public/auth/settings/memory/notes/integration/
-wallet review surfaces (not signing/execution). Prepare a reproducible isolated
-preview for full-shell inspection without reading operator secrets or bypassing
-auth. Batch all relevant themes/viewports before first visual inspection; do not
-spend the two-round budget on individual controls. Current dist is FLAG ON.
+Next task: finish implementation gaps in COVERAGE.md, especially wallet review,
+integration states and public auth; add/test missing theme hooks only where
+needed. Prepare batched light/dark/mobile/tablet/desktop captures of actual public
+preview and the real-component fixtures; establish a safe authenticated local
+preview only through normal auth with disposable data, or record it unverified.
+Do not read operator secrets or bypass auth. Public preview session62341 is
+running on port62530. Current dist is retro PUBLIC WEB. The raw model-dialog,
+Notes and Memory hooks are done; do not repeat that implementation.
 Then run relevant safety/functional browser checks, capture evidence, and at the
 finish stage invoke the skill-required independent reviewer/documenter. Do not
 run the final detector yet; it is a once-at-finish batched check. No pushes.

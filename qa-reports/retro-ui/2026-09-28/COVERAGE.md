@@ -10,16 +10,16 @@ All work is behind `VITE_MATTERHORN_RETRO_UI=1`. Production is unchanged.
 | Sidebar/mobile navigation | Anchored outline, selected state, mobile panel | Actual full-shell interaction/capture pending |
 | Five-desk launcher | One outlined list, retained server readiness and existing desk entry | Existing routing/starter contract tests; actual capture pending |
 | Models settings | List/filter/selected state; restored pending-task return action | Browser fixture: persistence before navigation, mismatch/403/retry, empty/loading/setup; actual server unverified |
-| Chat model dialog | Shared dialog/button tokens inherited | Raw search/option controls and keyboard/visual pass pending |
+| Chat model dialog | Outlined labelled search, explicit pressed state, shared dialog tokens | Full keyboard/visual pass pending |
 | Chat/composer | Composer outline, user message boundary, wrap long starters | Draft/starter regression contracts; full chat capture/streaming still pending |
 | Tool results | Bittensor result boundaries retain tone and metadata | Other tool presentations and long payloads pending |
 | Settings | Shared section rhythm and headings, controls inherited | Account/models/workspace/privacy route captures and navigation pending |
 | Public auth | Critical initial HTML and scoped auth styles | Flag-on/off production builds; form layout/recovery captures pending |
-| Privacy/Terms/Security/Support/Status | Shared tokens inherited, copy untouched | Dedicated page styling/navigation/readability pending |
-| Wallet + approvals | Shared controls inherited, transaction logic untouched | Native wallet connection/signing NOT run; review-ticket visual checks pending |
-| Memory | Shared controls inherited | Saved/review/add/delete/consent visual checks pending |
-| Notes | Shared controls inherited | List/editor/save/error responsive checks pending |
-| Integrations + crypto catalog | Shared controls inherited | Authoritative availability/connected/setup/error visual checks pending |
+| Privacy/Terms/Security/Support/Status | Outlined page chrome and active navigation, copy untouched | Security → Privacy fixture interaction, app href and 390px overflow pass; actual app handoff/status health unverified |
+| Wallet + approvals | Shared controls/custom review overlays restyled, transaction logic untouched | Native wallet connection/signing NOT run; review-ticket visual checks pending |
+| Memory | Saved record outlines, responsive view actions, readable policy/error colors, native select/checkbox theme | Real component fixture: Saved/Review/Add, confirmation required before capture, failed save retains draft; delete/provenance/full visuals pending |
+| Notes | Labelled title/body/tags, outlined list/search, mobile filters stack, editor headers | Real component fixture: failed save retains draft, retry persists before list return, 390px no overflow; full visuals pending |
+| Integrations + crypto catalog | Shared controls and catalog row boundaries | Authoritative availability/connected/setup/error visual checks pending |
 | STM | Default-off unchanged, controls inherit if local feature enabled | Synthetic settings consent regression/captures pending; real vault prohibited |
 | Desktop overlay | Same opt-in root marker | Packaged/native validation pending |
 
@@ -32,5 +32,9 @@ All work is behind `VITE_MATTERHORN_RETRO_UI=1`. Production is unchanged.
 - Chromium is available. Safari/Firefox and signed desktop are unverified.
 - Screenshot inspection rounds used: **0/2**. Batch complete surfaces before
   taking the first visual-review round; avoid repeated piecemeal polish loops.
-- No image-generation comps approved. User requested code-first progress while
-  asleep; existing brand/font assets retained under the pinned retro reference.
+- No image-generation comps approved. Code-first progress was assumed from the
+  request to start while asleep; existing brand/font assets are retained.
+- The expanded browser fixture explicitly sets the Vite retro env key and disables
+  env-file loading. Whole-object env replacement previously left compact Memory
+  off; the corrected fixture now exercises the real compact layout. No real
+  workspace data or provider/chain requests are included.

@@ -778,7 +778,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
   };
 
   return (
-    <div className="matterhorn-rail-content flex h-full min-h-0 flex-col bg-dls-background text-dls-text">
+    <div className="matterhorn-memory matterhorn-rail-content flex h-full min-h-0 flex-col bg-dls-background text-dls-text">
       <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-4 pt-5">
         <div className="min-w-0 text-lg font-semibold">Memory</div>
         <Button className={MEMORY_ICON_ACTION_CLASS} variant="ghost" size="icon-sm" onClick={props.onClose} aria-label="Close Memory panel">
@@ -1128,7 +1128,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                   <Badge variant="outline" className={cn("text-[10px]", MEMORY_MUTED_BADGE_CLASS)}>Export {policyDecision.canExport ? "allowed" : "blocked"}</Badge>
                 </div>
                 {policyDecision.blockedReasons.length || policyDecision.warnings.length ? (
-                  <div className="mt-3 rounded-md bg-amber-500/[0.08] px-3 py-2 text-xs leading-5 text-amber-100">
+                  <div data-slot="memory-policy-warning" className="mt-3 rounded-md bg-amber-500/[0.08] px-3 py-2 text-xs leading-5 text-amber-100">
                     <div className="font-semibold">Desk policy</div>
                     {[...policyDecision.blockedReasons, ...policyDecision.warnings].slice(0, 4).join(" ")}
                   </div>
@@ -1248,7 +1248,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
               </span>
             </label>
             {captureError ? (
-              <div className="rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-100">{captureError}</div>
+              <div role="alert" data-slot="memory-capture-error" className="rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-100">{captureError}</div>
             ) : null}
             <Button className="rounded-md" onClick={() => void handleCapture()} disabled={captureBusy || !props.client}>
               {captureBusy ? "Saving..." : "Save memory"}
