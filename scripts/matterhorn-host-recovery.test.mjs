@@ -224,15 +224,17 @@ try {
     "usage/model-usage.db",
   ]);
   const archiveFd = openSync(archive, "r");
+  let archiveBytes;
   try {
     assert.equal(fstatSync(archiveFd).mode & 0o777, 0o600);
-    assert.equal(readFileSync(archiveFd).includes(Buffer.from("identity")), false);
+    archiveBytes = readFileSync(archiveFd);
+    assert.equal(archiveBytes.includes(Buffer.from("identity")), false);
   } finally {
     closeSync(archiveFd);
   }
 
   const damagedArchive = join(root, "damaged.json.gz");
-  const damaged = JSON.parse(gunzipSync(readFileSync(archive)).toString("utf8"));
+  const damaged = JSON.parse(gunzipSync(archiveBytes).toString("utf8"));
   damaged.files[1].sha256 = "0".repeat(64);
   writeFileSync(damagedArchive, gzipSync(JSON.stringify(damaged)));
   const damagedRoot = join(root, "damaged-restore");

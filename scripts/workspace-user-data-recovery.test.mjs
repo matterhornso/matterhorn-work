@@ -2,11 +2,11 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createCipheriv, scryptSync } from "node:crypto";
-import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync, mkdtempSync, symlinkSync, truncateSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { validateTenantArchive } from "./lib/validate-tenant-archive.mjs";
+import { MAX_TENANT_ARCHIVE_BYTES, validateTenantArchive } from "./lib/validate-tenant-archive.mjs";
 
 const script = "scripts/workspace-user-data-recovery.mjs";
 const root = mkdtempSync(join(tmpdir(), "matterhorn-user-data-recovery-test-"));
@@ -251,6 +251,20 @@ try {
   ]);
   assert.equal(unsafeBackup.code, 1);
   assert.match(unsafeBackup.stderr, /regular gzip file/i);
+
+  const oversizedSource = join(root, "oversized-source.gz");
+  writeFileSync(oversizedSource, "");
+  truncateSync(oversizedSource, MAX_TENANT_ARCHIVE_BYTES + 1); // sparse disposable file
+  const oversizedOutput = join(root, "oversized.mhdb");
+  const oversizedBackup = await run(["--workspace-root", workspace,
+    "--tenant-archive", oversizedSource, "--output", oversizedOutput]);
+  assert.equal(oversizedBackup.code, 1);
+  assert.match(oversizedBackup.stderr, /size limit/);
+  assert.equal(existsSync(oversizedOutput), false);
+  const directoryBackup = await run(["--workspace-root", workspace,
+    "--tenant-archive", workspace, "--output", join(root, "directory.mhdb")]);
+  assert.equal(directoryBackup.code, 1);
+  assert.match(directoryBackup.stderr, /regular gzip file/i);
 
   const unsafeGlobalDatabase = await run([
     "--workspace-root", workspace,
