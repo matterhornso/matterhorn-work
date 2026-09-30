@@ -1,5 +1,6 @@
 import type { Part, Session } from "@opencode-ai/sdk/v2/client";
 import { t } from "../../i18n";
+import { deskToolDisplayName } from "../lib/tool-display-name";
 import type {
   ArtifactItem,
   MessageGroup,
@@ -883,6 +884,8 @@ function pickInputText(input: Record<string, unknown>, keys: string[]): string {
 }
 
 function buildToolTitle(state: any, toolName: string): string {
+  const deskLabel = deskToolDisplayName(toolName);
+  if (deskLabel) return deskLabel;
   const lower = toolName.toLowerCase();
   const input = getToolInput(state);
   const pick = (...keys: string[]) => pickInputText(input, keys);

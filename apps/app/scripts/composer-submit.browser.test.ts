@@ -76,6 +76,49 @@ async function fixturePage() {
   return page;
 }
 
+test("header picker labels search and selection while retaining the unsent draft", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?compactModels`);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.getByRole("button", { name: "Change model", exact: true }).click();
+    const search = page.getByRole("combobox", { name: "Search models", exact: true });
+    await search.fill("asi1");
+    expect(await page.getByRole("option").count()).toBe(1);
+    await search.press("Enter");
+    expect(await page.getByTestId("model-selected").innerText()).toBe("asi1-mini");
+    expect(await page.getByRole("textbox", { name: "Draft", exact: true }).inputValue()).toBe("Unsent compact-picker draft");
+    await page.getByRole("button", { name: "Change model", exact: true }).click();
+    await page.getByRole("img", { name: "Selected model", exact: true }).waitFor();
+    expect(await page.getByText("Embedding only", { exact: true }).count()).toBe(0);
+    if (process.env.RETRO_QA_FLAG === "1") {
+      expect(await page.getByRole("option").evaluate(el => getComputedStyle(el).minHeight)).toBe("44px");
+    }
+    const directory = process.env.RETRO_QA_CORE_CAPTURES;
+    if (process.env.RETRO_QA_FLAG === "1") {
+      for (const theme of ["light", "dark"]) {
+        await page.locator("html").evaluate((el, value) => { el.setAttribute("data-theme", value); }, theme);
+        await page.waitForFunction(expected => getComputedStyle(document.querySelector('[data-slot="popover-content"]')!).backgroundColor === expected,
+          theme === "light" ? "rgb(255, 255, 255)" : "rgb(35, 33, 40)");
+      }
+    }
+    if (directory) {
+      await page.addStyleTag({ content: "*, *::before, *::after { animation: none !important; transition: none !important; }" });
+      await mkdir(directory, { recursive: true });
+      for (const theme of ["light", "dark"]) {
+        await page.locator("html").evaluate((el, value) => { el.setAttribute("data-theme", value); }, theme);
+        for (const width of [390, 650, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: `${directory}/header-picker-${theme}-${width}.png`, fullPage: true });
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+      }
+    }
+    await page.keyboard.press("Escape");
+    expect(await page.getByRole("textbox", { name: "Draft", exact: true }).inputValue()).toBe("Unsent compact-picker draft");
+  } finally { await page.close(); }
+});
+
 test("auth rechecks never flash sign-in or expose the desk before confirmation", async () => {
   const page = await fixturePage();
   try {

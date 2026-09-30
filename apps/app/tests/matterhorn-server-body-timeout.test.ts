@@ -84,3 +84,24 @@ test("explicitly disabled deadlines still consume the response", async () => {
   expect(await fetchResponseWithTimeout(async () => new Response("body"),
     "http://fixture.invalid", {}, 0, (response) => response.text())).toBe("body");
 });
+
+test("prompt dispatch allows bounded approval latency without extending read deadlines", async () => {
+  const deadlines: number[] = [];
+  const original = globalThis.setTimeout;
+  spies.push(spyOn(globalThis, "setTimeout").mockImplementation((handler, timeout, ...args) => {
+    deadlines.push(Number(timeout));
+    return original(handler, timeout, ...args);
+  }));
+  spies.push(spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({
+    ok: true, accepted: true, sessionId: "session-dispatch-deadline",
+  })));
+  const client = createMatterhornServerClient({ baseUrl: "http://127.0.0.1:4096" });
+  await client.sendAgentMessage("workspace", "session-dispatch-deadline", {
+    parts: [{ type: "text", text: "Public fixture prompt" }],
+    model: { providerId: "fixture", modelId: "chat" },
+  });
+  expect(deadlines).toEqual([120_000]);
+  deadlines.length = 0;
+  await client.health();
+  expect(deadlines).toEqual([3_000]);
+});

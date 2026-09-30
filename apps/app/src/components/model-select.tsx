@@ -2,7 +2,7 @@
 import { isChatModelId } from "@/app/lib/minimal-ui";
 
 import * as React from "react";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 
 import type { ModelOption, ModelRef } from "@/app/types";
 import { ProviderIcon } from "@/react-app/design-system/provider-icon";
@@ -57,7 +57,7 @@ function useModelOptions(open: boolean) {
   const { client, opencodeBaseUrl, selectedWorkspaceRoot } = useWorkspace();
   const checkDesktopRestriction = useCheckDesktopRestriction();
 
-  const { data, refetch } = useProviderListQuery({
+  const { data, refetch, isLoading, isError } = useProviderListQuery({
     client,
     baseUrl: opencodeBaseUrl,
     directory: selectedWorkspaceRoot,
@@ -83,7 +83,7 @@ function useModelOptions(open: boolean) {
   //   - `allowZenModel` hides the built-in OpenCode provider entries when false
   //   - `allowCustomProviders` hides providers that OpenCode does not report
   //     as connected through the provider list endpoint.
-  return React.useMemo(() => {
+  const options = React.useMemo(() => {
     const restrictToCloud = checkDesktopRestriction({
       restriction: "allowCustomProviders",
     });
@@ -131,6 +131,7 @@ function useModelOptions(open: boolean) {
       return true;
     });
   }, [checkDesktopRestriction, data]);
+  return { options, isLoading, isError, refetch };
 }
 
 function groupByProvider(modelOptions: ModelOption[]) {
@@ -178,7 +179,7 @@ export function ModelSelect({
 }: ModelSelectProps) {
   const [search, setSearch] = React.useState("");
   const searchInputRef = React.useRef<HTMLInputElement>(null);
-  const modelOptions = useModelOptions(open);
+  const { options: modelOptions, isLoading, isError, refetch } = useModelOptions(open);
 
   const focusSearchInput = React.useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -208,7 +209,7 @@ export function ModelSelect({
     }),
   );
   const selectedModelLabel =
-    selectedOption?.title ?? value.modelID ?? "Select model";
+    selectedOption?.title || value.modelID || "Select model";
   const triggerLabel = displayLabel ?? selectedModelLabel;
   const tooltipLabel = displayLabel
     ? `Change model (${selectedModelLabel})`
@@ -231,6 +232,7 @@ export function ModelSelect({
   );
 
   const handleSelect = (option: ModelOption) => {
+    if (option.disabled) return;
     onChange({ providerID: option.providerID, modelID: option.modelID });
     setSearch("");
     onOpenChange(false);
@@ -273,6 +275,7 @@ export function ModelSelect({
           <CommandHeader>
             <CommandInput
               ref={searchInputRef}
+              aria-label="Search models"
               placeholder="Search models..."
               onKeyDown={(event) => {
                 if (event.key !== "Escape") {
@@ -286,7 +289,12 @@ export function ModelSelect({
               }}
             />
           </CommandHeader>
-          <CommandEmpty>No models found.</CommandEmpty>
+          {isLoading ? <p role="status" className="p-3 text-sm text-muted-foreground">Loading models…</p> : null}
+          {isError ? <div role="alert" className="p-3 text-sm">
+            <p>Models could not be refreshed.</p>
+            <button type="button" className="mt-2 min-h-11 underline underline-offset-4" onClick={() => void refetch()}>Retry loading models</button>
+          </div> : null}
+          {!isLoading && !isError ? <CommandEmpty>{search ? "No models match your search." : "No chat models available. Open All models for setup."}</CommandEmpty> : null}
           <CommandList>
             {(group) => (
               <CommandGroup key={group.value} items={group.items}>
@@ -297,6 +305,7 @@ export function ModelSelect({
                       className="gap-2"
                       key={`${option.providerID}:${option.modelID}`}
                       value={`${option.providerID}:${option.modelID}`}
+                      disabled={option.disabled}
                       onClick={() => handleSelect(option)}
                       data-checked={isSameModel(value, option)}
                     >
@@ -315,6 +324,7 @@ export function ModelSelect({
                             getProviderDisplayName(option.providerID)}
                         </span>
                       </span>
+                      {isSameModel(value, option) ? <Check className="size-4 shrink-0" aria-label="Selected model" /> : null}
                     </CommandItem>
                   )}
                 </CommandCollection>

@@ -1706,6 +1706,7 @@ function StepRow(props: {
     <div className="font-sans text-sm leading-[1.65] antialiased">
       <button
         type="button"
+        data-matterhorn-tool-disclosure=""
         className="w-full text-left transition-colors hover:text-foreground disabled:cursor-default text-muted-foreground"
         aria-expanded={expandable ? props.expanded : undefined}
         disabled={!expandable}

@@ -38,6 +38,15 @@ const SECRET_ATTACHMENT_NAME = /(?:^|[/\\])(?:\.env(?:\.[^/\\]+)?|id_(?:rsa|ed25
 
 const WALLET_ADDRESS_PATTERN = /\b(?:0x[a-fA-F0-9]{40,64}|[1-9A-HJ-NP-Za-km-z]{47,64})\b/;
 const TRANSACTION_PATTERN = /\b(?:send|transfer|stake|unstake|buy|sell|swap|bridge|place|modify|cancel|close)\b[\s\S]{0,80}\b(?:tao|sui|usdc|position|order|market|wallet|address|recipient|amount)\b/i;
+// Ignore only complete, unambiguous read-only disclaimers. Mixed clauses ("but",
+// "except", amounts or destinations) still go through conservative detection.
+const READ_ONLY_DISCLAIMER = /^(?:no|do not|don't|never)\s+(?:transfers?|transactions?|wallet actions?|sign transactions?)(?:\s+(?:or|and)\s+(?:transfers?|transactions?|wallet actions?|sign transactions?))*$/i;
+
+function hasTransactionIntent(text: string): boolean {
+  return TRANSACTION_PATTERN.test(text.split(/[.!?;\n]/)
+    .filter((clause) => !READ_ONLY_DISCLAIMER.test(clause.trim()))
+    .join("\n"));
+}
 
 export type PrivacyInput = {
   workspaceId: string;
@@ -268,6 +277,7 @@ function classify(input: PrivacyInput): {
     .filter((part) => part.source !== "system" && part.source !== "tool")
     .map((part) => `${part.name ?? ""}\n${part.text ?? ""}`)
     .join("\n");
+  const transactionIntent = hasTransactionIntent(intentText);
 
   for (const part of input.parts) {
     if (!part.label || part.label === "public") continue;
@@ -316,13 +326,13 @@ function classify(input: PrivacyInput): {
     effectiveMode = maxMode(effectiveMode, "private_workspace");
   }
 
-  if (input.parts.some((part) => part.source === "wallet") || (WALLET_ADDRESS_PATTERN.test(intentText) && TRANSACTION_PATTERN.test(intentText))) {
+  if (input.parts.some((part) => part.source === "wallet") || (WALLET_ADDRESS_PATTERN.test(intentText) && transactionIntent)) {
     labels.add("wallet_private");
     categories.add("linked_wallet_context");
     effectiveMode = maxMode(effectiveMode, "transaction");
   }
 
-  if (TRANSACTION_PATTERN.test(intentText) || requestedMode(input.privacyMode) === "transaction") {
+  if (transactionIntent || requestedMode(input.privacyMode) === "transaction") {
     labels.add("wallet_private");
     categories.add("transaction_intent");
     effectiveMode = "transaction";

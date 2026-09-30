@@ -13,6 +13,10 @@ import { AppSidebar } from "../../src/react-app/domains/session/sidebar/app-side
 import { ShellConfigProvider } from "../../src/react-app/shell/shell-config";
 import { SidebarProvider, SidebarTrigger } from "../../src/components/ui/sidebar";
 import { Button } from "../../src/components/ui/button";
+import { ModelSelect } from "../../src/components/model-select";
+import { WorkspaceProvider } from "../../src/react-app/shell/workspace-provider";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { providerListQueryKey } from "../../src/react-app/domains/connections/provider-list-query";
 import { PRIMARY_DESKS } from "../../src/app/lib/minimal-ui";
 import type { WorkspaceSessionGroup } from "../../src/app/types";
 import "../../src/app/index.css";
@@ -21,6 +25,28 @@ applyRetroUi(document.documentElement, RETRO_UI);
 document.documentElement.dataset.theme = new URLSearchParams(location.search).get("theme") === "dark" ? "dark" : "light";
 
 const noop = () => {};
+function CompactModelFixture() {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState({ providerID: "", modelID: "" });
+  const [draft, setDraft] = useState("Unsent compact-picker draft");
+  const [queryClient] = useState(() => {
+    const cache = new QueryClient();
+    cache.setQueryData(providerListQueryKey({ baseUrl: location.origin, directory: "/fixture" }), {
+      connected: ["cudos"], default: {}, all: [{ id: "cudos", name: "ASI:Cloud", source: "env", models: {
+        "asi1-mini": { id: "asi1-mini", name: "ASI1 Mini", capabilities: {}, variants: {} },
+        "text-embedding-3": { id: "text-embedding-3", name: "Embedding only", capabilities: {}, variants: {} },
+      } }],
+    });
+    return cache;
+  });
+  return <QueryClientProvider client={queryClient}><WorkspaceProvider client={null} opencodeBaseUrl={location.origin} selectedWorkspaceRoot="/fixture">
+    <main className="space-y-4 p-6"><h1>Isolated header model selector</h1>
+      <label>Draft<textarea value={draft} onChange={event => setDraft(event.target.value)} /></label>
+      <ModelSelect open={open} onOpenChange={setOpen} value={value} onChange={setValue} />
+      <output data-testid="model-selected">{value.modelID}</output>
+    </main>
+  </WorkspaceProvider></QueryClientProvider>;
+}
 const fixtureGroups: WorkspaceSessionGroup[] = [{
   workspace: { id: "fixture", name: "Disposable workspace", path: "/fixture", preset: "starter", workspaceType: "local" },
   sessions: [{ id: "fixture-chat", title: "Research draft", time: { created: 1 } }], status: "ready",
@@ -156,4 +182,4 @@ function Fixture() {
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing fixture root");
 const fixtureParams = new URLSearchParams(location.search);
-createRoot(root).render(fixtureParams.has("authBoundary") ? <AuthFixture /> : fixtureParams.has("sidebar") ? <SidebarFixture /> : <Fixture />);
+createRoot(root).render(fixtureParams.has("compactModels") ? <CompactModelFixture /> : fixtureParams.has("authBoundary") ? <AuthFixture /> : fixtureParams.has("sidebar") ? <SidebarFixture /> : <Fixture />);

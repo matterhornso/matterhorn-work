@@ -2223,6 +2223,11 @@ describe("guarded agent runtime transport", () => {
       runId: accepted.runId,
       messagesHash: sha256(JSON.stringify(messages)),
     });
+    expect(() => runtime.validateRuntimeProviderMessages({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      workspaceId: input.workspaceId, sessionId: input.sessionId,
+      expectedRunId: "replaced_run", messages,
+    })).toThrow("not bound to this active Matterhorn run");
     const exact = runtime.resolveRuntimeProviderSystem({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,

@@ -172,6 +172,20 @@ describe("agent capability broker", () => {
     expect(() => broker.consume({ token: capability.token, toolName: "matterhorn_sui_get_balance", args })).toThrow("capability_replayed");
   });
 
+  test("caps ordinary desk reads at twelve and cannot replenish the budget by replay", () => {
+    const broker = brokerWithRun();
+    const args = { address: `0x${"1".repeat(64)}`, network: "testnet" };
+    const request = { runId: "run_1", workspaceId: "ws_1", sessionId: "ses_1",
+      toolName: "matterhorn_sui_get_balance", args };
+    for (let index = 0; index < 12; index++) {
+      const issued = broker.issue({ ...request, callId: `read_${index}` });
+      expect(broker.consume({ token: issued.token, toolName: request.toolName, args }).runId).toBe("run_1");
+      expect(() => broker.consume({ token: issued.token, toolName: request.toolName, args })).toThrow("capability_replayed");
+    }
+    expect(() => broker.issue({ ...request, callId: "read_13" })).toThrow("capability_read_budget_exhausted");
+    expect(() => broker.issue({ ...request, callId: "read_0" })).toThrow("capability_call_reissued");
+  });
+
   test("seals durable tool context to the exact consumed call and bounded reconciliation window", () => {
     const broker = brokerWithRun();
     const now = new Date();

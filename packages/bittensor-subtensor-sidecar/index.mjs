@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import { createPythonBridge } from "./python-process.mjs";
+import { createSubnetCache } from "./subnet-cache.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -18,8 +19,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const pythonBridge = createPythonBridge({ script: join(here, "python_bridge.py"), network: NETWORK });
 let pythonHealthCache = null;
 let pythonHealthRefresh = null;
-let pythonSubnetCache = null;
-let pythonSubnetRefresh = null;
+const cachedPythonSubnets = createSubnetCache({
+  fetchSubnets: limit => pythonBridge("subnets", { limit }),
+  unavailable: () => liveMeta("bittensor-python-sdk"),
+  ttlMs: PYTHON_SUBNET_CACHE_MS,
+});
 
 function json(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -415,59 +419,6 @@ function cachedPythonHealth() {
   };
 }
 
-function startPythonSubnetRefresh(limit) {
-  if (pythonSubnetRefresh) return;
-  const refreshLimit = Math.max(limit, pythonSubnetCache?.limit ?? 0, 128);
-  pythonSubnetRefresh = pythonBridge("subnets", { limit: refreshLimit })
-    .then((payload) => {
-      pythonSubnetCache = { cachedAt: Date.now(), limit: refreshLimit, payload };
-    })
-    .catch((err) => {
-      pythonSubnetCache = {
-        cachedAt: Date.now(),
-        limit: 0,
-        payload: {
-          ...liveMeta("bittensor-python-sdk"),
-          subnets: [],
-          warnings: [err instanceof Error ? err.message : "Python subnet list refresh failed."],
-        },
-      };
-    })
-    .finally(() => {
-      pythonSubnetRefresh = null;
-    });
-}
-
-function cachedPythonSubnets(limit) {
-  const now = Date.now();
-  const cached = pythonSubnetCache;
-  const isFresh = cached && now - cached.cachedAt < PYTHON_SUBNET_CACHE_MS && cached.limit >= limit;
-  if (isFresh) {
-    const subnets = Array.isArray(cached.payload.subnets) ? cached.payload.subnets.slice(0, limit) : [];
-    return { ...cached.payload, subnets };
-  }
-  startPythonSubnetRefresh(limit);
-  if (cached) {
-    const subnets = Array.isArray(cached.payload.subnets)
-      ? cached.payload.subnets.slice(0, limit).map(subnet => ({ ...subnet, freshness: "stale" }))
-      : [];
-    return {
-      ...cached.payload,
-      subnets,
-      freshness: "stale",
-      warnings: [
-        ...(Array.isArray(cached.payload.warnings) ? cached.payload.warnings : []),
-        "Returning cached subnet list while a live Python SDK refresh runs in the background.",
-      ],
-    };
-  }
-  return {
-    ...liveMeta("bittensor-python-sdk"),
-    subnets: [],
-    warnings: ["Subnet list is warming from the Python SDK. Retry shortly for live subnet discovery."],
-  };
-}
-
 async function dispatch(req, res) {
   const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
   if (req.method === "GET" && url.pathname === "/liveness") {
@@ -481,7 +432,7 @@ async function dispatch(req, res) {
 
   if (req.method === "GET" && url.pathname === "/subnets") {
     const limit = limitFromUrl(url);
-    const data = MODE === "python" ? cachedPythonSubnets(limit) : mockSubnets();
+    const data = MODE === "python" ? await cachedPythonSubnets(limit) : mockSubnets();
     return json(res, 200, data);
   }
 

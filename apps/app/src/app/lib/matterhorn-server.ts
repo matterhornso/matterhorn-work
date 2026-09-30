@@ -1748,6 +1748,10 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     deleteWorkspace: 10_000,
     deleteSession: 12_000,
     sessionRead: 12_000,
+    // Dispatch can wait for host approval (30s by default) before the runtime
+    // acknowledges it. A read deadline can expire just as approval is granted,
+    // leaving a completed response under a misleading timeout/retry banner.
+    sessionDispatch: 120_000,
     status: 6_000,
     config: 10_000,
     // Disposing and recreating an engine can take longer than an ordinary
@@ -2458,7 +2462,7 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           hostToken,
           method: "POST",
           body: { ...input, messageID: input.messageID ?? pending.id },
-          timeoutMs: timeouts.sessionRead,
+          timeoutMs: timeouts.sessionDispatch,
         },
       );
       pending.accepted();

@@ -141,6 +141,16 @@ for (const theme of ["light", "dark"]) {
       const disabled = page.getByRole("button", { name: "Unavailable", exact: true });
       expect(await disabled.isDisabled()).toBe(true);
       expect(await disabled.evaluate(el => getComputedStyle(el).boxShadow)).toBe("none");
+      const grouped = page.getByRole("textbox", { name: "Grouped search", exact: true });
+      await grouped.fill("Keep this query");
+      expect(await grouped.evaluate(el => getComputedStyle(el).borderTopWidth)).toBe("0px");
+      expect(await grouped.evaluate(el => getComputedStyle(el.parentElement!).borderTopWidth)).toBe("2px");
+      expect(await grouped.evaluate(el => getComputedStyle(el.parentElement!).outlineWidth)).toBe("3px");
+      const groupedMessage = page.getByRole("textbox", { name: "Grouped message", exact: true });
+      await groupedMessage.fill("Keep this message");
+      expect(await groupedMessage.inputValue()).toBe("Keep this message");
+      const invalidGroup = page.getByRole("textbox", { name: "Invalid grouped field", exact: true });
+      expect(await invalidGroup.evaluate(el => getComputedStyle(el.parentElement!).borderTopColor)).toBe(theme === "light" ? "rgb(185, 28, 28)" : "rgb(255, 180, 173)");
       const consent = page.getByRole("checkbox", { name: "Fixture consent" });
       expect(await consent.isChecked()).toBe(false);
       expect(await consent.evaluate(el => getComputedStyle(el).borderTopWidth)).toBe("2px");
@@ -178,6 +188,9 @@ test("chat picker keeps disabled models unselectable, selection explicit and dra
   try {
     await page.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
     await page.goto(`${server.url}?picker`);
+    const done = page.getByRole("button", { name: "Done", exact: true });
+    expect(await done.evaluate(el => getComputedStyle(el).borderTopWidth)).toBe("2px");
+    expect(await done.evaluate(el => getComputedStyle(el).boxShadow)).toContain("3px 3px 0px");
     const search = page.getByRole("textbox", { name: "Search providers and models", exact: true });
     await search.fill("fixture");
     expect(await page.getByRole("button", { name: /Embedding fixture/ }).count()).toBe(0);
@@ -195,6 +208,9 @@ test("chat picker keeps disabled models unselectable, selection explicit and dra
     expect(await page.getByRole("textbox", { name: "Draft", exact: true }).inputValue()).toBe("Unsent fixture draft");
     await page.goto(`${server.url}?picker&empty&loading`);
     await page.getByRole("status").filter({ hasText: "Loading available models" }).waitFor();
+    await page.goto(`${server.url}?picker&unselected`);
+    await page.getByRole("button", { name: /ASI1 Mini Chat/ }).waitFor();
+    expect(await page.getByRole("button", { name: /ASI1 Mini Chat/ }).getAttribute("aria-pressed")).toBe("false");
   } finally { await page.close(); }
 }, 15_000);
 
@@ -204,6 +220,23 @@ test("flag-off styles remain the incumbent controls", async () => {
     await page.goto(`${server.url}?retro=0`);
     expect(await page.locator("html").getAttribute("data-matterhorn-ui")).toBeNull();
     expect(await page.getByRole("button", { name: "Save note", exact: true }).evaluate(el => getComputedStyle(el).borderTopWidth)).toBe("1px");
+  } finally { await page.close(); }
+});
+
+test("reopened picker reveals the model selected outside the dialog", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(5000);
+  try {
+    await page.goto(`${server.url}?picker&reopen`);
+    await page.getByRole("button", { name: /ASI1 Mini Chat/ }).waitFor();
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Change provider outside picker", exact: true }).click();
+    await page.getByRole("button", { name: "Choose model", exact: true }).click();
+    const current = page.getByRole("button", { name: /Other provider chat Chat/ });
+    await current.waitFor();
+    expect(await current.getAttribute("aria-pressed")).toBe("true");
+    await page.keyboard.press("Escape");
+    expect(await page.getByRole("textbox", { name: "Draft", exact: true }).inputValue()).toBe("Unsent fixture draft");
   } finally { await page.close(); }
 });
 
@@ -278,6 +311,10 @@ test("models filter and persist before first/later navigation; failed saves stay
     expect(await models.getByRole("button").count()).toBe(2);
     expect(await models.innerText()).not.toContain("embedding");
     expect(await models.innerText()).not.toContain("Disconnected");
+    await page.getByRole("searchbox", { name: "Search models" }).fill(" ASI1 Mini ");
+    expect(await models.getByRole("button").count()).toBe(1);
+    expect(await models.innerText()).toContain("ASI1 Mini");
+    await page.getByRole("searchbox", { name: "Search models" }).fill("");
     await page.getByRole("combobox", { name: "Provider", exact: true }).selectOption("venice");
     expect(await models.getByRole("button").count()).toBe(1);
     await page.getByRole("combobox", { name: "Provider", exact: true }).selectOption("");
@@ -442,6 +479,58 @@ test("public auth keeps an outage explicit and recovery unavailable until servic
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally { authAvailable = false; await page.close(); }
 }, 15_000);
+
+test("transcript tool labels, disclosure, focus and failure actions stay usable", async () => {
+  for (const theme of ["light", "dark"]) {
+    for (const width of [390, 650, 1280]) {
+      const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
+      await page.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+      try {
+        await page.goto(`${server.url}?chat&theme=${theme}`);
+        const tool = page.getByRole("button", { name: "Hyperliquid orderbook", exact: true });
+        await tool.waitFor();
+        expect(await tool.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+        await tool.focus();
+        expect(await tool.evaluate(el => getComputedStyle(el).outlineStyle)).not.toBe("none");
+        await tool.press("Enter");
+        expect(await tool.getAttribute("aria-expanded")).toBe("true");
+        expect(await page.getByText('"source": "synthetic-fixture"', { exact: false }).count()).toBeGreaterThan(0);
+        await tool.press("Enter");
+        expect(await tool.getAttribute("aria-expanded")).toBe("false");
+        await page.getByRole("button", { name: "Retry response", exact: true }).click();
+        await page.getByText("Fixture retry requested", { exact: true }).waitFor();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        const directory = process.env.RETRO_QA_CHAT_CAPTURES;
+        if (directory) {
+          await mkdir(directory, { recursive: true });
+          await verifyBundledFonts(page);
+          await page.screenshot({ path: `${directory}/chat-${theme}-${width}.png`, fullPage: true });
+        }
+        await page.getByRole("button", { name: "Dismiss error", exact: true }).click();
+        await page.getByText("Fixture warning dismissed", { exact: true }).waitFor();
+      } finally { await page.close(); }
+    }
+  }
+}, 45_000);
+
+test.skipIf(!process.env.RETRO_QA_CORE_CAPTURES)("capture scoped shared-controls and models review", async () => {
+  const directory = process.env.RETRO_QA_CORE_CAPTURES;
+  if (!directory) return;
+  await mkdir(directory, { recursive: true });
+  for (const theme of ["light", "dark"]) {
+    for (const { surface, width } of [{ surface: "models", width: 390 }, { surface: "picker", width: 650 }, { surface: "controls", width: 1280 }]) {
+      const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
+      try {
+        await page.goto(`${server.url}?${surface}&theme=${theme}`);
+        await page.locator("#root > *").first().waitFor();
+        await page.waitForLoadState("networkidle");
+        await verifyBundledFonts(page);
+        await page.screenshot({ path: `${directory}/${surface}-${theme}-${width}.png`, fullPage: true });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      } finally { await page.close(); }
+    }
+  }
+}, 30_000);
 
 test.skipIf(!process.env.RETRO_QA_CAPTURES)("capture component matrix for bounded visual review", async () => {
   const directory = process.env.RETRO_QA_CAPTURES;

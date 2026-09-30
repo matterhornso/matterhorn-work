@@ -127,7 +127,8 @@ function walletSummary(receipt: MatterhornAgentRunReceipt): string {
 }
 
 export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgentRunReceipt }) {
-  const totalTokens = receipt.usage.inputTokens + receipt.usage.outputTokens + receipt.usage.reasoningTokens;
+  const totalTokens = receipt.usage.inputTokens + receipt.usage.outputTokens + receipt.usage.reasoningTokens
+    + receipt.usage.cacheReadTokens + receipt.usage.cacheWriteTokens;
   const capabilityDenials = receipt.capabilities.filter((decision) => decision.decision === "denied").length;
   const contextLabel = selectedContextLabel(receipt);
   const focusedContext = focusedContextLabel(receipt);

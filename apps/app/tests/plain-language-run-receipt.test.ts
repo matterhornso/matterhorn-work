@@ -118,6 +118,14 @@ function renderReceipt(receipt: MatterhornAgentRunReceipt): string {
 }
 
 describe("plain-language response details", () => {
+  test("includes cache reads and writes in the same total as provider usage", () => {
+    const html = renderReceipt({ ...completedReceipt, usage: {
+      ...completedReceipt.usage, inputTokens: 100, outputTokens: 20, reasoningTokens: 5,
+      cacheReadTokens: 640, cacheWriteTokens: 10,
+    } });
+    expect(html).toContain("775 tokens");
+    expect(html).not.toContain("125 tokens");
+  });
   test("translates stored privacy values into language users can understand", () => {
     expect(privacyModeLabel("public_research")).toBe("Public research");
     expect(privacyModeLabel("private_workspace")).toBe("Private workspace");
@@ -167,7 +175,7 @@ describe("plain-language response details", () => {
     expect(html).toContain("Response details");
     expect(html).toContain("Completed");
     expect(html).toContain("1.3s");
-    expect(html).toContain("160 tokens");
+    expect(html).toContain("205 tokens");
     expect(html).toContain("Private workspace");
     expect(html).toContain("The provider does not use this request for training.");
     expect(html).toContain("The provider does not keep this request after processing.");

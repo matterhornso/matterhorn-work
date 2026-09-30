@@ -1,9 +1,13 @@
 /** @jsxImportSource react */
 import { useState } from "react";
+import type { UIMessage } from "ai";
+import { SessionTranscript } from "../../src/react-app/domains/session/surface/message-list";
+import { SessionErrorCard, parseSessionError } from "../../src/react-app/domains/session/surface/session-surface";
 import { createRoot } from "react-dom/client";
 import { Button } from "../../src/components/ui/button";
 import { Input } from "../../src/components/ui/input";
 import { Textarea } from "../../src/components/ui/textarea";
+import { InputGroup, InputGroupInput, InputGroupTextarea } from "../../src/components/ui/input-group";
 import { Checkbox } from "../../src/components/ui/checkbox";
 import { Switch } from "../../src/components/ui/switch";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../../src/components/ui/dialog";
@@ -118,13 +122,15 @@ const pickerOptions: ModelOption[] = [
 function PickerFixture() {
   const [open, setOpen] = useState(true);
   const [query, setQuery] = useState("");
-  const [current, setCurrent] = useState<ModelRef>({ providerID: "cudos", modelID: "asi1-mini" });
+  const [current, setCurrent] = useState<ModelRef>(params.has("unselected") ? { providerID: "", modelID: "" } : { providerID: "cudos", modelID: "asi1-mini" });
   const [draft, setDraft] = useState("Unsent fixture draft");
+  const options = params.has("reopen") ? [...pickerOptions, { ...pickerOptions[0], providerID: "venice", modelID: "fixture-chat", title: "Other provider chat", description: "Venice" }] : pickerOptions;
   return <main className="p-6">
     <p>Isolated chat model picker; no model requests.</p>
     <label>Draft<Textarea value={draft} onChange={event => setDraft(event.target.value)} /></label>
     <Button onClick={() => setOpen(true)}>Choose model</Button>
-    <ModelPickerModal open={open} options={params.has("empty") ? [] : pickerOptions} loading={params.has("loading")}
+    {params.has("reopen") && <Button onClick={() => setCurrent({ providerID: "venice", modelID: "fixture-chat" })}>Change provider outside picker</Button>}
+    <ModelPickerModal open={open} options={params.has("empty") ? [] : options} loading={params.has("loading")}
       target="session" current={current} query={query} setQuery={setQuery} onSelect={setCurrent}
       onBehaviorChange={() => undefined} onOpenSettings={() => setOpen(false)} onClose={() => setOpen(false)} />
   </main>;
@@ -144,6 +150,9 @@ function Fixture() {
     </div>
     <p role="status">{saved ? "Fixture saved" : "Not saved"}</p>
     <label className="block space-y-2">Note title<Input placeholder="Name your note" /></label>
+    <label className="block space-y-2">Grouped search<InputGroup><InputGroupInput placeholder="Search the fixture" /></InputGroup></label>
+    <label className="block space-y-2">Grouped message<InputGroup><InputGroupTextarea /></InputGroup></label>
+    <label className="block space-y-2">Invalid grouped field<InputGroup><InputGroupInput aria-invalid="true" /></InputGroup></label>
     <label className="block space-y-2">Draft<Textarea value={draft} onChange={event => setDraft(event.target.value)} /></label>
     <label className="block space-y-2">Invalid field<Input aria-invalid="true" aria-describedby="fixture-error" /></label>
     <p id="fixture-error">Enter a value to continue.</p>
@@ -168,7 +177,25 @@ createRoot(root).render(<QueryClientProvider client={queryClient}><MemoryRouter 
     {params.has("picker") ? <PickerFixture /> : params.has("settings") ? <SettingsFixture /> : params.has("auth") ? <PublicWebSigninPage config={authConfig} onSignedIn={onFixtureSignedIn} /> : params.has("wallet") ? <WalletFixture /> : params.has("integrations") ? <IntegrationsFixture /> : params.has("public") ? <PublicTrustRoute /> : params.has("notes") ?
       <div className="mx-auto h-dvh max-w-3xl"><NotesPage client={client} workspaceId="fixture" /></div> :
       params.has("memory") ? <div className="mx-auto h-dvh max-w-3xl"><MemoryPanel client={client} workspaceId="fixture" sessionId={null} onClose={() => undefined} /></div> :
-      params.has("models") ? <ModelsFixture /> : <Fixture />}
+      params.has("models") ? <ModelsFixture /> : params.has("chat") ? <ChatFixture /> : <Fixture />}
     <StatusToastsViewport />
   </StatusToastsProvider>
 </MemoryRouter></QueryClientProvider>);
+
+function ChatFixture() {
+  const [notice, setNotice] = useState("");
+  const messages: UIMessage[] = [
+    { id: "user-fixture", role: "user", parts: [{ type: "text", text: "Read the BTC orderbook. No transaction." }] },
+    { id: "tool-fixture", role: "assistant", parts: [{ type: "dynamic-tool", toolCallId: "orderbook-fixture", toolName: "matterhorn-work_matterhorn_hyperliquid_get_orderbook", state: "output-available", input: { coin: "BTC" }, output: { source: "synthetic-fixture", freshness: "illustrative", bid: 10, ask: 11 } }] },
+    { id: "answer-fixture", role: "assistant", parts: [{ type: "text", text: "**Orderbook**\n\nIllustrative bid: 10. Ask: 11. Source: synthetic-fixture, not live market data. No transaction was submitted." }] },
+  ];
+  return <main className="mx-auto max-w-3xl space-y-6 p-6">
+    <h1 className="text-xl font-bold">Conversation components</h1>
+    <p>Synthetic transcript. No provider requests or wallet actions.</p>
+    <SessionTranscript messages={messages} isStreaming={false} developerMode={false} />
+    <SessionErrorCard error={parseSessionError(new Error("Request timed out."))}
+      onDismiss={() => setNotice("Fixture warning dismissed")}
+      onRetry={() => setNotice("Fixture retry requested")} />
+    <p role="status">{notice}</p>
+  </main>;
+}

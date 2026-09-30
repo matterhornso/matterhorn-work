@@ -11,6 +11,7 @@ import { isChatModelId } from "@/app/lib/minimal-ui";
 import { resolveModelDisplayName } from "@/app/utils";
 import { isCatalogOnlyProviderId } from "../../connections/provider-list-query";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { notifyWorkspaceModelSelectionChanged } from "../model-selection-events";
 
 export function MinimalModels(props: {
@@ -45,9 +46,9 @@ export function MinimalModels(props: {
   const visible = models.filter(
     (model) =>
       (!provider || model.providerId === provider) &&
-      `${model.id} ${model.providerName}`
+      `${resolveModelDisplayName(model.id)} ${model.id} ${model.providerName}`
         .toLowerCase()
-        .includes(search.toLowerCase()),
+        .includes(search.trim().toLowerCase()),
   );
   const save = useMutation({
     mutationFn: async (model: { providerId: string; id: string }) => {
@@ -112,8 +113,7 @@ export function MinimalModels(props: {
           <div className="flex flex-wrap gap-3">
             <label className="min-w-0 flex-1 text-sm">
               Search models
-              <input
-                data-slot="input"
+              <Input
                 type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}

@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import { latestFinalRunReceipt } from "../../../../app/lib/latest-run-receipt";
 import type { CSSProperties } from "react";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UIMessage } from "ai";
@@ -1283,6 +1284,7 @@ export function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfir
     <div className="mx-auto max-w-[720px] px-3 py-3 sm:px-5">
       <div
         role={cancelled ? "status" : "alert"}
+        data-matterhorn-session-error={cancelled ? "cancelled" : "error"}
         aria-atomic="true"
         className={cn(
           "rounded-lg px-5 py-4 ring-1",
@@ -1293,9 +1295,9 @@ export function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfir
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className={cn("text-sm font-medium", cancelled ? "text-dls-text" : "text-red-11")}>{error.message}</div>
+            <div data-error-title="" className={cn("text-sm font-medium", cancelled ? "text-dls-text" : "text-red-11")}>{error.message}</div>
             {error.detail ? (
-              <p className={cn("mt-1 text-xs leading-5", cancelled ? "text-dls-secondary" : "text-red-11/80")}>
+              <p data-error-detail="" className={cn("mt-1 text-xs leading-5", cancelled ? "text-dls-secondary" : "text-red-11/80")}>
                 {error.detail}
               </p>
             ) : null}
@@ -1391,14 +1393,14 @@ export function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfir
             ) : null}
             {error.retryable && onRetry ? (
               <div className="mt-3">
-                <button
+                <Button
                   type="button"
                   className="inline-flex min-h-10 items-center rounded-md bg-dls-accent px-3 text-xs font-semibold text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.32)] disabled:cursor-wait disabled:opacity-60"
                   onClick={() => void onRetry()}
                   disabled={retrying}
                 >
                   {retrying ? "Retrying…" : "Retry response"}
-                </button>
+                </Button>
               </div>
             ) : null}
           </div>
@@ -1656,7 +1658,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     ),
     retry: 1,
   });
-  const latestCompletedRunReceipt = runReceiptsQuery.data?.items.find((receipt) => receipt.status !== "pending") ?? null;
+  const latestCompletedRunReceipt = latestFinalRunReceipt(runReceiptsQuery.data?.items);
   const sessionMissing = snapshotQuery.error instanceof MatterhornServerError && snapshotQuery.error.status === 404;
   useEffect(() => {
     if (sessionMissing) props.onSessionMissing?.();
@@ -1975,7 +1977,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
         ? "responding"
         : "idle";
   const optimisticRunTitle = sessionActivityRecord?.optimisticRunTitle?.trim();
-  const assistantActivityLabel = optimisticRunTitle && effectiveActivityStatus === "thinking"
+  const assistantActivityLabel = sending && !assistantOutputAfterAwaitStart
+    ? "Preparing request"
+    : optimisticRunTitle && effectiveActivityStatus === "thinking"
     ? `Working on ${optimisticRunTitle}`
     : getSessionActivityStatusLabel(effectiveActivityStatus);
   const assistantOrbActivity: AgentActivityKind | null = effectiveActivityStatus === "thinking"
