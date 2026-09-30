@@ -65,6 +65,49 @@ afterAll(() => {
 });
 
 describe("matterhorn-guard OpenCode plugin", () => {
+  test("revalidates an unchanged run-bound snapshot before a provider retry", async () => {
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    const messages = [{ info: { id: "msg_retry", role: "user", sessionID: "ses_retry" },
+      parts: [{ type: "text", text: "Read public data" }] }];
+    await plugin["experimental.chat.messages.transform"]({}, { messages });
+    const input = { sessionID: "ses_retry", model: { providerID: "cudos", id: "asi1-mini" } };
+    await plugin["experimental.chat.system.transform"](input, { system: [] });
+    await plugin["experimental.chat.system.transform"](input, { system: [] });
+    const validations = requests.filter(request => request.url.endsWith("/internal/agent-runs/provider-messages"));
+    expect(validations).toHaveLength(2);
+    expect(JSON.parse(String(validations[1]?.init?.body))).toMatchObject({
+      expectedRunId: "run_plugin_1", messages: [{ parts: [{ text: "Read public data" }] }],
+    });
+    expect(requests.at(-2)?.url).toEndWith("/internal/agent-runs/provider-messages");
+    expect(requests.at(-1)?.url).toEndWith("/internal/agent-runs/provider-system");
+    messages[0]!.parts[0]!.text = "late unreviewed mutation";
+    await expect(plugin["experimental.chat.system.transform"](input, { system: [] })).rejects.toThrow("messages changed");
+    messages[0]!.parts[0]!.text = "Read public data";
+    await plugin["experimental.chat.messages.transform"]({}, { messages });
+    await plugin["experimental.chat.system.transform"](input, { system: [] });
+    globalThis.fetch = Object.assign(async () => Response.json({ message: "Run replaced" }, { status: 409 }),
+      { preconnect: original.fetch.preconnect });
+    await expect(plugin["experimental.chat.system.transform"](input, { system: [] })).rejects.toThrow("Run replaced");
+  });
+
+  test("reports final usage and receipt completion even with capability mode off", async () => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "off";
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    await plugin.event({ event: { type: "message.updated", properties: { info: {
+      role: "assistant", id: "msg_off_completion", parentID: "msg_off_user", sessionID: "ses_off_completion",
+      finish: "stop", tokens: { input: 120, output: 30, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1000, completed: 2000 },
+    } } } });
+    const completions = requests.filter(request => request.url.endsWith("/internal/agent-runs/complete"));
+    expect(completions).toHaveLength(1);
+    expect(JSON.parse(String(completions[0]?.init?.body))).toMatchObject({
+      runId: "run_plugin_1", status: "success", usage: { inputTokens: 120, outputTokens: 30 },
+    });
+    expect(completions[0]?.init?.headers).toEqual(expect.objectContaining({
+      "X-Matterhorn-Agent-Runtime-Secret": "runtime-only-secret",
+    }));
+  });
+
   test("keeps a run active after a tool-call step until the final assistant response", async () => {
     const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
     const eventForStep = (id: string, finish: string) => ({

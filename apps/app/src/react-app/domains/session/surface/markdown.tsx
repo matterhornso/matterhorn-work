@@ -79,6 +79,9 @@ function createEmojiAliases() {
   const aliases: Record<string, string> = {};
   for (const [emoji, names] of Object.entries(emojiKeywords)) {
     for (const name of names) {
+      // Numeric aliases (e.g. :12:) also occur inside timestamps and ratios.
+      // Preserve source data; named aliases such as :smile: remain supported.
+      if (/^\d+$/.test(name)) continue;
       if (aliases[name] === undefined) aliases[name] = emoji;
     }
   }

@@ -2158,9 +2158,11 @@ function sidecarBaseUrl(): string {
   return readEnv("BITTENSOR_SUBTENSOR_SIDECAR_URL").replace(/\/$/, "");
 }
 
-function sidecarRequestTimeoutMs(): number {
+function sidecarRequestTimeoutMs(path: string): number {
   const parsed = Number(readEnv("BITTENSOR_SUBTENSOR_SIDECAR_TIMEOUT_MS"));
-  return Number.isFinite(parsed) && parsed > 0 ? Math.min(15_000, Math.max(1_000, parsed)) : 2_000;
+  // Discovery waits up to eight seconds for a cold SDK refresh. Health and
+  // other reads keep their existing short deadline; explicit limits still win.
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(15_000, Math.max(1_000, parsed)) : path === "/subnets" ? 10_000 : 2_000;
 }
 
 function bittensorNetwork(): BittensorSignerStatus["network"] {
@@ -2247,7 +2249,7 @@ class SubtensorSidecarClient {
       const res = await fetch(`${this.baseUrl}${path}`, {
         ...rest,
         headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(sidecarRequestTimeoutMs()),
+        signal: AbortSignal.timeout(sidecarRequestTimeoutMs(path)),
       });
       if (!res.ok) return null;
       return asRecord(await res.json());
@@ -5639,7 +5641,7 @@ async function runBittensorSubnetAdapter(
   return runHttpSubnetAdapter(adapter, input, requestSha256);
 }
 
-async function cached<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+async function cached<T>(key: string, fetcher: () => Promise<T>, cacheResult: (data: T) => boolean = () => true): Promise<T> {
   const hit = cache.get(key) as CacheEntry<T> | undefined;
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.data;
   const inFlight = inFlightCache.get(key) as Promise<T> | undefined;
@@ -5647,7 +5649,7 @@ async function cached<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
 
   const request = fetcher()
     .then((data) => {
-      cache.set(key, { at: Date.now(), data });
+      if (cacheResult(data)) cache.set(key, { at: Date.now(), data });
       return data;
     })
     .finally(() => {
@@ -12814,7 +12816,10 @@ export class TaoAppBittensorProvider implements BittensorProvider {
       } catch {
         return FALLBACK_SUBNETS;
       }
-    });
+    // The sidecar already coalesces refreshes. Do not pin its stale/warming
+    // result in a second 60s cache: a user retry must see the recovered service.
+    }, (subnets) => subnets.length > 0 && subnets.every((subnet) =>
+      subnet.source !== "curated-fallback" && subnet.freshness !== "stale"));
   }
 
   async getSubnet(netuid: number): Promise<BittensorSubnetDetail> {

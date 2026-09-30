@@ -133,6 +133,8 @@ function ModelPickerSearch(props: {
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-dls-secondary" />
         <input
+          data-slot="input"
+          aria-label={t("settings.search_models")}
           ref={props.searchInputRef}
           type="text"
           value={props.query}
@@ -267,6 +269,8 @@ function ModelOptionRow(props: {
   return (
     <div
       role="button"
+      data-slot="model-option"
+      aria-pressed={active}
       tabIndex={0}
       ref={props.registerOptionRef(props.index)}
       className={[

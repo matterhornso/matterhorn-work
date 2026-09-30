@@ -310,6 +310,32 @@ describe("TaoAppBittensorProvider", () => {
     if (previous !== undefined) process.env.TAO_APP_API_KEY = previous;
   });
 
+  test("subnet retries recover from warming and stale data without a second cache delay", async () => {
+    const previousSidecar = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    const previousFetch = globalThis.fetch;
+    process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = "http://subnet-cache-recovery.test";
+    let calls = 0;
+    globalThis.fetch = Object.assign(async () => {
+      calls += 1;
+      return Response.json({ subnets: calls === 1 ? [] : [{
+        netuid: 22, name: "Recovery fixture", source: "bittensor-python-sdk",
+        block: calls === 2 ? 100 : 101, freshness: calls === 2 ? "stale" : "live",
+      }] });
+    }, { preconnect: previousFetch.preconnect });
+    try {
+      const provider = new TaoAppBittensorProvider();
+      expect((await provider.listSubnets())[0]?.source).toBe("curated-fallback");
+      expect((await provider.listSubnets())[0]?.freshness).toBe("stale");
+      expect((await provider.listSubnets())[0]?.block).toBe(101);
+      expect((await provider.listSubnets())[0]?.freshness).toBe("live");
+      expect(calls).toBe(3);
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousSidecar === undefined) delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+      else process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previousSidecar;
+    }
+  });
+
   test("uses configured sidecar for live-read shaped subnet, wallet, and quote data", async () => {
     const previousSidecar = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
     const previousFetch = globalThis.fetch;

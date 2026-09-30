@@ -22,6 +22,26 @@ function baseInput() {
 }
 
 describe("agent privacy firewall", () => {
+  test("read-only disclaimers do not become proposed wallet actions", () => {
+    const firewall = new MatterhornPrivacyFirewall();
+    for (const disclaimer of ["No transfer or wallet action.", "Do not transfer or sign transactions.", "No transactions."]) {
+      const result = firewall.preflight({ ...baseInput(), parts: [{ type: "text",
+        text: `Read the SUI balance of public address 0x5 on mainnet. ${disclaimer}` }] });
+      expect(result.response.effectiveMode).toBe("public_research");
+      expect(result.response.detectedData.categories).not.toContain("transaction_intent");
+    }
+    for (const text of [
+      "No transfer or wallet action. Then send 1 SUI to address 0x5.",
+      "Do not transfer yet, but prepare a transfer of 1 SUI to address 0x5.",
+      "No transfer or wallet action except send 1 SUI to address 0x5.",
+    ]) {
+      expect(firewall.preflight({ ...baseInput(), parts: [{ type: "text", text }] })
+        .response.detectedData.categories).toContain("transaction_intent");
+    }
+    expect(firewall.preflight({ ...baseInput(), parts: [{ type: "text", source: "wallet", text: "Read balance only." }] })
+      .response.effectiveMode).toBe("transaction");
+  });
+
   test("allows disclosed public research without consent", () => {
     const firewall = new MatterhornPrivacyFirewall();
     const result = firewall.preflight(baseInput());

@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { modelEquals, resolveProviderDisplayName } from "../../../../app/utils";
 import type { ModelOption, ModelRef } from "../../../../app/types";
 import { isDefaultVisibleModel, isRecommendedModel } from "../../../../app/defaults";
@@ -102,7 +103,6 @@ type ProviderGroup = {
 export function ModelPickerModal(props: ModelPickerModalProps) {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set());
-  const [hiddenModels, setHiddenModels] = useState<Set<string>>(() => readHiddenModels());
 
   const disabledSet = useMemo(
     () => new Set(props.disabledProviders ?? []),
@@ -117,9 +117,6 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
         const seeded = seedHiddenModels(props.options);
         writeHiddenModels(seeded);
         markSeededHiddenModels();
-        setHiddenModels(seeded);
-      } else {
-        setHiddenModels(readHiddenModels());
       }
     }
   }, [props.open, props.options]);
@@ -189,10 +186,17 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
 
   // Expand current provider on open
   useEffect(() => {
-    if (!props.open) return;
-    const current = providerGroups.find((g) => g.hasCurrent);
-    if (current) setExpandedProviders(new Set([current.id]));
-  }, [props.open]);
+    if (!props.open) {
+      setExpandedProviders((previous) => previous.size ? new Set() : previous);
+      return;
+    }
+    setExpandedProviders((previous) => {
+      if (previous.size > 0) return previous;
+      const current = providerGroups.find((g) => g.hasCurrent)
+        ?? providerGroups.find((g) => !g.isDisabled);
+      return current ? new Set([current.id]) : previous;
+    });
+  }, [props.open, providerGroups]);
 
   const toggleProvider = useCallback((id: string) => {
     setExpandedProviders((prev) => {
@@ -201,33 +205,6 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
       return next;
     });
   }, []);
-
-  const toggleModelVisible = useCallback((providerID: string, modelID: string) => {
-    const key = `${providerID}/${modelID}`;
-    setHiddenModels((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      writeHiddenModels(next);
-      return next;
-    });
-  }, []);
-
-  const batchToggleProvider = useCallback((providerID: string, showAll: boolean) => {
-    setHiddenModels((prev) => {
-      const next = new Set(prev);
-      const models = filteredOptions.filter((o) => o.providerID === providerID);
-      for (const m of models) {
-        const key = `${m.providerID}/${m.modelID}`;
-        if (showAll) {
-          next.delete(key);
-        } else {
-          next.add(key);
-        }
-      }
-      writeHiddenModels(next);
-      return next;
-    });
-  }, [filteredOptions]);
 
   const handleSelect = useCallback(
     (opt: ModelOption) => props.onSelect({ providerID: opt.providerID, modelID: opt.modelID }),
@@ -255,7 +232,7 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
         <DialogHeader>
           <DialogTitle>Models</DialogTitle>
           <DialogDescription>
-            Select a model for this session.
+            {props.target === "session" ? "Choose a model for this chat." : "Choose a default for new chats."}
           </DialogDescription>
         </DialogHeader>
 
@@ -263,7 +240,7 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
           {/* Search */}
           <div className="relative mb-4 shrink-0">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-dls-secondary" />
-            <input
+            <Input
               ref={searchInputRef}
               type="text"
               className="h-10 w-full rounded-lg border border-dls-border bg-dls-surface pl-9 pr-3 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dls-accent-rgb)/0.2)]"
@@ -352,6 +329,7 @@ function ProviderAccordion({
       <div className="flex items-center gap-1">
         <button
           type="button"
+          aria-expanded={expanded}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-dls-hover"
           onClick={onToggleExpand}
         >
@@ -437,6 +415,9 @@ function DefaultModelRow({
   return (
     <button
       type="button"
+      data-slot="model-option"
+      aria-pressed={active}
+      disabled={opt.disabled}
       className={[
         "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors",
         active ? "bg-green-3/50" : "hover:bg-dls-hover",

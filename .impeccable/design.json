@@ -1,25 +1,656 @@
 {
   "schemaVersion": 2,
+  "generatedAt": "2026-09-28T20:54:35Z",
   "title": "Design System: Matterhorn",
   "extensions": {
+    "colorMeta": {
+      "brand-ice": {
+        "role": "secondary",
+        "displayName": "Brand Ice",
+        "tonalRamp": [
+          "oklch(15% 0.03863 223.55)",
+          "oklch(26.43% 0.03863 223.55)",
+          "oklch(37.86% 0.03863 223.55)",
+          "oklch(49.29% 0.03863 223.55)",
+          "oklch(60.71% 0.03863 223.55)",
+          "oklch(72.14% 0.03863 223.55)",
+          "oklch(83.57% 0.03863 223.55)",
+          "oklch(95% 0.03863 223.55)"
+        ]
+      },
+      "brand-ink": {
+        "role": "primary",
+        "displayName": "Brand Ink",
+        "tonalRamp": [
+          "oklch(15% 0.00000 89.88)",
+          "oklch(26.43% 0.00000 89.88)",
+          "oklch(37.86% 0.00000 89.88)",
+          "oklch(49.29% 0.00000 89.88)",
+          "oklch(60.71% 0.00000 89.88)",
+          "oklch(72.14% 0.00000 89.88)",
+          "oklch(83.57% 0.00000 89.88)",
+          "oklch(95% 0.00000 89.88)"
+        ]
+      },
+      "light-canvas": {
+        "role": "neutral",
+        "displayName": "Light Canvas",
+        "tonalRamp": [
+          "oklch(15% 0.00860 264.52)",
+          "oklch(26.43% 0.00860 264.52)",
+          "oklch(37.86% 0.00860 264.52)",
+          "oklch(49.29% 0.00860 264.52)",
+          "oklch(60.71% 0.00860 264.52)",
+          "oklch(72.14% 0.00860 264.52)",
+          "oklch(83.57% 0.00860 264.52)",
+          "oklch(95% 0.00860 264.52)"
+        ]
+      },
+      "dark-canvas": {
+        "role": "neutral",
+        "displayName": "Dark Canvas",
+        "tonalRamp": [
+          "oklch(15% 0.01081 259.64)",
+          "oklch(26.43% 0.01081 259.64)",
+          "oklch(37.86% 0.01081 259.64)",
+          "oklch(49.29% 0.01081 259.64)",
+          "oklch(60.71% 0.01081 259.64)",
+          "oklch(72.14% 0.01081 259.64)",
+          "oklch(83.57% 0.01081 259.64)",
+          "oklch(95% 0.01081 259.64)"
+        ]
+      },
+      "retro-light-paper": {
+        "role": "neutral",
+        "displayName": "Retro Light Paper",
+        "tonalRamp": [
+          "oklch(15% 0.00697 88.64)",
+          "oklch(26.43% 0.00697 88.64)",
+          "oklch(37.86% 0.00697 88.64)",
+          "oklch(49.29% 0.00697 88.64)",
+          "oklch(60.71% 0.00697 88.64)",
+          "oklch(72.14% 0.00697 88.64)",
+          "oklch(83.57% 0.00697 88.64)",
+          "oklch(95% 0.00697 88.64)"
+        ]
+      },
+      "retro-light-panel": {
+        "role": "neutral",
+        "displayName": "Retro Light Panel",
+        "tonalRamp": [
+          "oklch(15% 0.00000 89.88)",
+          "oklch(26.43% 0.00000 89.88)",
+          "oklch(37.86% 0.00000 89.88)",
+          "oklch(49.29% 0.00000 89.88)",
+          "oklch(60.71% 0.00000 89.88)",
+          "oklch(72.14% 0.00000 89.88)",
+          "oklch(83.57% 0.00000 89.88)",
+          "oklch(95% 0.00000 89.88)"
+        ]
+      },
+      "retro-light-ink": {
+        "role": "neutral",
+        "displayName": "Retro Light Ink",
+        "tonalRamp": [
+          "oklch(15% 0.00989 294.69)",
+          "oklch(26.43% 0.00989 294.69)",
+          "oklch(37.86% 0.00989 294.69)",
+          "oklch(49.29% 0.00989 294.69)",
+          "oklch(60.71% 0.00989 294.69)",
+          "oklch(72.14% 0.00989 294.69)",
+          "oklch(83.57% 0.00989 294.69)",
+          "oklch(95% 0.00989 294.69)"
+        ]
+      },
+      "retro-light-muted": {
+        "role": "neutral",
+        "displayName": "Retro Light Muted",
+        "tonalRamp": [
+          "oklch(15% 0.02504 300.58)",
+          "oklch(26.43% 0.02504 300.58)",
+          "oklch(37.86% 0.02504 300.58)",
+          "oklch(49.29% 0.02504 300.58)",
+          "oklch(60.71% 0.02504 300.58)",
+          "oklch(72.14% 0.02504 300.58)",
+          "oklch(83.57% 0.02504 300.58)",
+          "oklch(95% 0.02504 300.58)"
+        ]
+      },
+      "retro-light-line": {
+        "role": "neutral",
+        "displayName": "Retro Light Line",
+        "tonalRamp": [
+          "oklch(15% 0.02084 297.40)",
+          "oklch(26.43% 0.02084 297.40)",
+          "oklch(37.86% 0.02084 297.40)",
+          "oklch(49.29% 0.02084 297.40)",
+          "oklch(60.71% 0.02084 297.40)",
+          "oklch(72.14% 0.02084 297.40)",
+          "oklch(83.57% 0.02084 297.40)",
+          "oklch(95% 0.02084 297.40)"
+        ]
+      },
+      "retro-light-action": {
+        "role": "primary",
+        "displayName": "Retro Light Action",
+        "tonalRamp": [
+          "oklch(15% 0.24123 292.58)",
+          "oklch(26.43% 0.24123 292.58)",
+          "oklch(37.86% 0.24123 292.58)",
+          "oklch(49.29% 0.24123 292.58)",
+          "oklch(60.71% 0.24123 292.58)",
+          "oklch(72.14% 0.24123 292.58)",
+          "oklch(83.57% 0.24123 292.58)",
+          "oklch(95% 0.24123 292.58)"
+        ]
+      },
+      "retro-light-action-hover": {
+        "role": "primary",
+        "displayName": "Retro Light Action Hover",
+        "tonalRamp": [
+          "oklch(15% 0.21059 292.76)",
+          "oklch(26.43% 0.21059 292.76)",
+          "oklch(37.86% 0.21059 292.76)",
+          "oklch(49.29% 0.21059 292.76)",
+          "oklch(60.71% 0.21059 292.76)",
+          "oklch(72.14% 0.21059 292.76)",
+          "oklch(83.57% 0.21059 292.76)",
+          "oklch(95% 0.21059 292.76)"
+        ]
+      },
+      "retro-selection": {
+        "role": "secondary",
+        "displayName": "Retro Selection",
+        "tonalRamp": [
+          "oklch(15% 0.03863 223.55)",
+          "oklch(26.43% 0.03863 223.55)",
+          "oklch(37.86% 0.03863 223.55)",
+          "oklch(49.29% 0.03863 223.55)",
+          "oklch(60.71% 0.03863 223.55)",
+          "oklch(72.14% 0.03863 223.55)",
+          "oklch(83.57% 0.03863 223.55)",
+          "oklch(95% 0.03863 223.55)"
+        ]
+      },
+      "retro-selection-text": {
+        "role": "secondary",
+        "displayName": "Retro Selection Text",
+        "tonalRamp": [
+          "oklch(15% 0.00989 294.69)",
+          "oklch(26.43% 0.00989 294.69)",
+          "oklch(37.86% 0.00989 294.69)",
+          "oklch(49.29% 0.00989 294.69)",
+          "oklch(60.71% 0.00989 294.69)",
+          "oklch(72.14% 0.00989 294.69)",
+          "oklch(83.57% 0.00989 294.69)",
+          "oklch(95% 0.00989 294.69)"
+        ]
+      },
+      "retro-light-subtle": {
+        "role": "neutral",
+        "displayName": "Retro Light Subtle",
+        "tonalRamp": [
+          "oklch(15% 0.01561 306.40)",
+          "oklch(26.43% 0.01561 306.40)",
+          "oklch(37.86% 0.01561 306.40)",
+          "oklch(49.29% 0.01561 306.40)",
+          "oklch(60.71% 0.01561 306.40)",
+          "oklch(72.14% 0.01561 306.40)",
+          "oklch(83.57% 0.01561 306.40)",
+          "oklch(95% 0.01561 306.40)"
+        ]
+      },
+      "retro-light-danger": {
+        "role": "neutral",
+        "displayName": "Retro Light Danger",
+        "tonalRamp": [
+          "oklch(15% 0.19049 27.52)",
+          "oklch(26.43% 0.19049 27.52)",
+          "oklch(37.86% 0.19049 27.52)",
+          "oklch(49.29% 0.19049 27.52)",
+          "oklch(60.71% 0.19049 27.52)",
+          "oklch(72.14% 0.19049 27.52)",
+          "oklch(83.57% 0.19049 27.52)",
+          "oklch(95% 0.19049 27.52)"
+        ]
+      },
+      "retro-light-warning": {
+        "role": "neutral",
+        "displayName": "Retro Light Warning",
+        "tonalRamp": [
+          "oklch(15% 0.11041 58.60)",
+          "oklch(26.43% 0.11041 58.60)",
+          "oklch(37.86% 0.11041 58.60)",
+          "oklch(49.29% 0.11041 58.60)",
+          "oklch(60.71% 0.11041 58.60)",
+          "oklch(72.14% 0.11041 58.60)",
+          "oklch(83.57% 0.11041 58.60)",
+          "oklch(95% 0.11041 58.60)"
+        ]
+      },
+      "retro-light-success": {
+        "role": "neutral",
+        "displayName": "Retro Light Success",
+        "tonalRamp": [
+          "oklch(15% 0.10832 151.33)",
+          "oklch(26.43% 0.10832 151.33)",
+          "oklch(37.86% 0.10832 151.33)",
+          "oklch(49.29% 0.10832 151.33)",
+          "oklch(60.71% 0.10832 151.33)",
+          "oklch(72.14% 0.10832 151.33)",
+          "oklch(83.57% 0.10832 151.33)",
+          "oklch(95% 0.10832 151.33)"
+        ]
+      },
+      "retro-dark-paper": {
+        "role": "neutral",
+        "displayName": "Retro Dark Paper",
+        "tonalRamp": [
+          "oklch(15% 0.00989 294.69)",
+          "oklch(26.43% 0.00989 294.69)",
+          "oklch(37.86% 0.00989 294.69)",
+          "oklch(49.29% 0.00989 294.69)",
+          "oklch(60.71% 0.00989 294.69)",
+          "oklch(72.14% 0.00989 294.69)",
+          "oklch(83.57% 0.00989 294.69)",
+          "oklch(95% 0.00989 294.69)"
+        ]
+      },
+      "retro-dark-panel": {
+        "role": "neutral",
+        "displayName": "Retro Dark Panel",
+        "tonalRamp": [
+          "oklch(15% 0.01333 298.50)",
+          "oklch(26.43% 0.01333 298.50)",
+          "oklch(37.86% 0.01333 298.50)",
+          "oklch(49.29% 0.01333 298.50)",
+          "oklch(60.71% 0.01333 298.50)",
+          "oklch(72.14% 0.01333 298.50)",
+          "oklch(83.57% 0.01333 298.50)",
+          "oklch(95% 0.01333 298.50)"
+        ]
+      },
+      "retro-dark-ink": {
+        "role": "neutral",
+        "displayName": "Retro Dark Ink",
+        "tonalRamp": [
+          "oklch(15% 0.00695 88.64)",
+          "oklch(26.43% 0.00695 88.64)",
+          "oklch(37.86% 0.00695 88.64)",
+          "oklch(49.29% 0.00695 88.64)",
+          "oklch(60.71% 0.00695 88.64)",
+          "oklch(72.14% 0.00695 88.64)",
+          "oklch(83.57% 0.00695 88.64)",
+          "oklch(95% 0.00695 88.64)"
+        ]
+      },
+      "retro-dark-muted": {
+        "role": "neutral",
+        "displayName": "Retro Dark Muted",
+        "tonalRamp": [
+          "oklch(15% 0.01854 303.38)",
+          "oklch(26.43% 0.01854 303.38)",
+          "oklch(37.86% 0.01854 303.38)",
+          "oklch(49.29% 0.01854 303.38)",
+          "oklch(60.71% 0.01854 303.38)",
+          "oklch(72.14% 0.01854 303.38)",
+          "oklch(83.57% 0.01854 303.38)",
+          "oklch(95% 0.01854 303.38)"
+        ]
+      },
+      "retro-dark-line": {
+        "role": "neutral",
+        "displayName": "Retro Dark Line",
+        "tonalRamp": [
+          "oklch(15% 0.02852 304.69)",
+          "oklch(26.43% 0.02852 304.69)",
+          "oklch(37.86% 0.02852 304.69)",
+          "oklch(49.29% 0.02852 304.69)",
+          "oklch(60.71% 0.02852 304.69)",
+          "oklch(72.14% 0.02852 304.69)",
+          "oklch(83.57% 0.02852 304.69)",
+          "oklch(95% 0.02852 304.69)"
+        ]
+      },
+      "retro-dark-shadow": {
+        "role": "neutral",
+        "displayName": "Retro Dark Shadow",
+        "tonalRamp": [
+          "oklch(15% 0.00913 297.40)",
+          "oklch(26.43% 0.00913 297.40)",
+          "oklch(37.86% 0.00913 297.40)",
+          "oklch(49.29% 0.00913 297.40)",
+          "oklch(60.71% 0.00913 297.40)",
+          "oklch(72.14% 0.00913 297.40)",
+          "oklch(83.57% 0.00913 297.40)",
+          "oklch(95% 0.00913 297.40)"
+        ]
+      },
+      "retro-dark-action": {
+        "role": "primary",
+        "displayName": "Retro Dark Action",
+        "tonalRamp": [
+          "oklch(15% 0.13691 300.69)",
+          "oklch(26.43% 0.13691 300.69)",
+          "oklch(37.86% 0.13691 300.69)",
+          "oklch(49.29% 0.13691 300.69)",
+          "oklch(60.71% 0.13691 300.69)",
+          "oklch(72.14% 0.13691 300.69)",
+          "oklch(83.57% 0.13691 300.69)",
+          "oklch(95% 0.13691 300.69)"
+        ]
+      },
+      "retro-dark-action-hover": {
+        "role": "primary",
+        "displayName": "Retro Dark Action Hover",
+        "tonalRamp": [
+          "oklch(15% 0.09534 300.78)",
+          "oklch(26.43% 0.09534 300.78)",
+          "oklch(37.86% 0.09534 300.78)",
+          "oklch(49.29% 0.09534 300.78)",
+          "oklch(60.71% 0.09534 300.78)",
+          "oklch(72.14% 0.09534 300.78)",
+          "oklch(83.57% 0.09534 300.78)",
+          "oklch(95% 0.09534 300.78)"
+        ]
+      },
+      "retro-dark-subtle": {
+        "role": "neutral",
+        "displayName": "Retro Dark Subtle",
+        "tonalRamp": [
+          "oklch(15% 0.02337 299.16)",
+          "oklch(26.43% 0.02337 299.16)",
+          "oklch(37.86% 0.02337 299.16)",
+          "oklch(49.29% 0.02337 299.16)",
+          "oklch(60.71% 0.02337 299.16)",
+          "oklch(72.14% 0.02337 299.16)",
+          "oklch(83.57% 0.02337 299.16)",
+          "oklch(95% 0.02337 299.16)"
+        ]
+      },
+      "retro-dark-active": {
+        "role": "neutral",
+        "displayName": "Retro Dark Active",
+        "tonalRamp": [
+          "oklch(15% 0.05849 304.53)",
+          "oklch(26.43% 0.05849 304.53)",
+          "oklch(37.86% 0.05849 304.53)",
+          "oklch(49.29% 0.05849 304.53)",
+          "oklch(60.71% 0.05849 304.53)",
+          "oklch(72.14% 0.05849 304.53)",
+          "oklch(83.57% 0.05849 304.53)",
+          "oklch(95% 0.05849 304.53)"
+        ]
+      },
+      "retro-dark-danger": {
+        "role": "neutral",
+        "displayName": "Retro Dark Danger",
+        "tonalRamp": [
+          "oklch(15% 0.08867 25.08)",
+          "oklch(26.43% 0.08867 25.08)",
+          "oklch(37.86% 0.08867 25.08)",
+          "oklch(49.29% 0.08867 25.08)",
+          "oklch(60.71% 0.08867 25.08)",
+          "oklch(72.14% 0.08867 25.08)",
+          "oklch(83.57% 0.08867 25.08)",
+          "oklch(95% 0.08867 25.08)"
+        ]
+      },
+      "retro-dark-warning": {
+        "role": "neutral",
+        "displayName": "Retro Dark Warning",
+        "tonalRamp": [
+          "oklch(15% 0.11108 83.14)",
+          "oklch(26.43% 0.11108 83.14)",
+          "oklch(37.86% 0.11108 83.14)",
+          "oklch(49.29% 0.11108 83.14)",
+          "oklch(60.71% 0.11108 83.14)",
+          "oklch(72.14% 0.11108 83.14)",
+          "oklch(83.57% 0.11108 83.14)",
+          "oklch(95% 0.11108 83.14)"
+        ]
+      },
+      "retro-dark-success": {
+        "role": "neutral",
+        "displayName": "Retro Dark Success",
+        "tonalRamp": [
+          "oklch(15% 0.13627 154.45)",
+          "oklch(26.43% 0.13627 154.45)",
+          "oklch(37.86% 0.13627 154.45)",
+          "oklch(49.29% 0.13627 154.45)",
+          "oklch(60.71% 0.13627 154.45)",
+          "oklch(72.14% 0.13627 154.45)",
+          "oklch(83.57% 0.13627 154.45)",
+          "oklch(95% 0.13627 154.45)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "body": {
+        "displayName": "Inherited body",
+        "purpose": "Existing unlayered main-app/public-content body declaration, not the signed-out auth stack; actual rendered face depends on available families and user preferences."
+      },
+      "sans": {
+        "displayName": "Incumbent sans utility",
+        "purpose": "Existing separate sans utility stack; no retro font addition."
+      },
+      "heading": {
+        "displayName": "Incumbent heading utility",
+        "purpose": "Existing separate heading utility stack."
+      },
+      "public-auth": {
+        "displayName": "Incumbent signed-out auth",
+        "purpose": "Avenir Next/system stack inherited from index.html critical CSS. PublicSigninBootstrap intentionally omits the main app stylesheet; local fixture/distribution agreement does not certify installed/native typography."
+      },
+      "retro-title": {
+        "displayName": "Retro operational title",
+        "purpose": "Card/dialog title weight and tracking only; inherits its component family and size."
+      },
+      "retro-public-heading": {
+        "displayName": "Retro public heading",
+        "purpose": "Public article/auth heading emphasis only."
+      },
+      "retro-button": {
+        "displayName": "Retro button",
+        "purpose": "Shared compact button role, with existing primitive dimensions."
+      }
+    },
+    "shadows": [
+      {
+        "name": "retro-action",
+        "value": "3px 3px 0 var(--retro-shadow)",
+        "purpose": "Retro actions, composer and default shared cards."
+      },
+      {
+        "name": "retro-panel",
+        "value": "5px 5px 0 var(--retro-shadow)",
+        "purpose": "Retro launcher, overlay panels and transaction batch."
+      },
+      {
+        "name": "retro-pressed",
+        "value": "1px 1px 0 var(--retro-shadow)",
+        "purpose": "Enabled non-ghost/non-link shared buttons on press."
+      },
+      {
+        "name": "retro-quiet",
+        "value": "none",
+        "purpose": "Explicitly quiet shell/header, sheets, command dialog, Memory articles, user messages and protocol results."
+      }
+    ],
+    "motion": [
+      {
+        "name": "retro-button-transition",
+        "value": "background-color 120ms ease-out, box-shadow 120ms ease-out, translate 120ms ease-out",
+        "purpose": "Shared button state feedback, not decorative animation."
+      },
+      {
+        "name": "retro-button-press",
+        "value": "translate: 2px 2px",
+        "purpose": "Only enabled non-ghost/non-link shared buttons; disabled and aria-disabled have no translation or shadow."
+      },
+      {
+        "name": "retro-reduced-motion",
+        "value": "translate: none; transition: none",
+        "purpose": "Reduced motion removes button press translation and switch-thumb/sidebar transitions. Global policy reduces remaining transition/animation durations to 0.01ms and one iteration."
+      }
+    ],
     "breakpoints": [
-      { "name": "navigation-docked", "value": "768px" },
-      { "name": "context-sheet", "value": "1024px" },
-      { "name": "context-docked", "value": "1280px" }
+      {
+        "name": "retro-notes-memory-max",
+        "value": "480px"
+      },
+      {
+        "name": "retro-transaction-actions-max",
+        "value": "639px"
+      },
+      {
+        "name": "navigation-docked",
+        "value": "768px"
+      },
+      {
+        "name": "context-sheet",
+        "value": "1024px"
+      },
+      {
+        "name": "context-docked",
+        "value": "1280px"
+      },
+      {
+        "name": "settings-container-max (container query, not viewport)",
+        "value": "40rem"
+      }
     ]
   },
   "components": [
     {
-      "name": "Desk row",
+      "name": "Retro primary button",
+      "kind": "button",
+      "refersTo": "retro-button-primary",
+      "description": "Retro-only specimen of the existing shared button variant. Live-bound to root retro tokens; light fallbacks make the isolated preview readable. No application action is wired.",
+      "html": "<button class=\"ds-retro-button-primary\">Continue</button>",
+      "css": ".ds-retro-button-primary{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:2px solid var(--retro-line, #24212c);border-radius:var(--retro-radius, 3px);background:var(--retro-action, #6d28d9);color:var(--retro-action-text, #ffffff);font-family:inherit;font-size:.875rem;line-height:1.25rem;font-weight:650;white-space:nowrap;transform:none;transition:background-color 120ms ease-out,box-shadow 120ms ease-out,translate 120ms ease-out;box-shadow:3px 3px 0 var(--retro-shadow, #24212c);}.ds-retro-button-primary:not(:disabled,[aria-disabled=\"true\"]):hover{background:var(--retro-action-hover, #5b21b6)}.ds-retro-button-primary:focus-visible{outline:3px solid var(--retro-focus, #6d28d9);outline-offset:3px}.ds-retro-button-primary:not(:disabled,[aria-disabled=\"true\"]):active{translate:2px 2px;box-shadow:1px 1px 0 var(--retro-shadow, #24212c)}.ds-retro-button-primary:is(:disabled,[aria-disabled=\"true\"]){opacity:.5;pointer-events:none;box-shadow:none;translate:none}@media(prefers-reduced-motion:reduce){.ds-retro-button-primary{transition-duration:.01ms}.ds-retro-button-primary:not(:disabled,[aria-disabled=\"true\"]):active{translate:none}}"
+    },
+    {
+      "name": "Retro outline button",
+      "kind": "button",
+      "refersTo": "retro-button-outline",
+      "description": "Retro-only specimen of the existing shared button variant. Live-bound to root retro tokens; light fallbacks make the isolated preview readable. No application action is wired.",
+      "html": "<button class=\"ds-retro-button-outline\">Cancel</button>",
+      "css": ".ds-retro-button-outline{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:2px solid var(--retro-line, #24212c);border-radius:var(--retro-radius, 3px);background:var(--retro-panel, #ffffff);color:var(--retro-ink, #18171c);font-family:inherit;font-size:.875rem;line-height:1.25rem;font-weight:650;white-space:nowrap;transform:none;transition:background-color 120ms ease-out,box-shadow 120ms ease-out,translate 120ms ease-out;box-shadow:3px 3px 0 var(--retro-shadow, #24212c);}.ds-retro-button-outline:not(:disabled,[aria-disabled=\"true\"]):hover{background:var(--retro-subtle, #ece7f2);color:var(--retro-ink, #18171c)}.ds-retro-button-outline:focus-visible{outline:3px solid var(--retro-focus, #6d28d9);outline-offset:3px}.ds-retro-button-outline:not(:disabled,[aria-disabled=\"true\"]):active{translate:2px 2px;box-shadow:1px 1px 0 var(--retro-shadow, #24212c)}.ds-retro-button-outline:is(:disabled,[aria-disabled=\"true\"]){opacity:.5;pointer-events:none;box-shadow:none;translate:none}@media(prefers-reduced-motion:reduce){.ds-retro-button-outline{transition-duration:.01ms}.ds-retro-button-outline:not(:disabled,[aria-disabled=\"true\"]):active{translate:none}}"
+    },
+    {
+      "name": "Retro secondary button",
+      "kind": "button",
+      "refersTo": "retro-button-secondary",
+      "description": "Retro-only specimen of the existing shared button variant. Live-bound to root retro tokens; light fallbacks make the isolated preview readable. No application action is wired.",
+      "html": "<button class=\"ds-retro-button-secondary\">Workspace tools</button>",
+      "css": ".ds-retro-button-secondary{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:2px solid var(--retro-line, #24212c);border-radius:var(--retro-radius, 3px);background:var(--retro-selection, #d1f2ff);color:var(--retro-selection-text, #18171c);font-family:inherit;font-size:.875rem;line-height:1.25rem;font-weight:650;white-space:nowrap;transform:none;transition:background-color 120ms ease-out,box-shadow 120ms ease-out,translate 120ms ease-out;box-shadow:3px 3px 0 var(--retro-shadow, #24212c);}.ds-retro-button-secondary:not(:disabled,[aria-disabled=\"true\"]):hover{background:var(--retro-selection, #d1f2ff)}.ds-retro-button-secondary:focus-visible{outline:3px solid var(--retro-focus, #6d28d9);outline-offset:3px}.ds-retro-button-secondary:not(:disabled,[aria-disabled=\"true\"]):active{translate:2px 2px;box-shadow:1px 1px 0 var(--retro-shadow, #24212c)}.ds-retro-button-secondary:is(:disabled,[aria-disabled=\"true\"]){opacity:.5;pointer-events:none;box-shadow:none;translate:none}@media(prefers-reduced-motion:reduce){.ds-retro-button-secondary{transition-duration:.01ms}.ds-retro-button-secondary:not(:disabled,[aria-disabled=\"true\"]):active{translate:none}}"
+    },
+    {
+      "name": "Retro destructive button",
+      "kind": "button",
+      "refersTo": "retro-button-destructive",
+      "description": "Retro-only specimen of the existing shared button variant. Live-bound to root retro tokens; light fallbacks make the isolated preview readable. No application action is wired.",
+      "html": "<button class=\"ds-retro-button-destructive\">Remove</button>",
+      "css": ".ds-retro-button-destructive{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:2px solid var(--destructive, #b91c1c);border-radius:var(--retro-radius, 3px);background:var(--retro-panel, #ffffff);color:var(--destructive, #b91c1c);font-family:inherit;font-size:.875rem;line-height:1.25rem;font-weight:650;white-space:nowrap;transform:none;transition:background-color 120ms ease-out,box-shadow 120ms ease-out,translate 120ms ease-out;box-shadow:3px 3px 0 var(--retro-shadow, #24212c);}.ds-retro-button-destructive:not(:disabled,[aria-disabled=\"true\"]):hover{background:var(--retro-panel, #ffffff);border-color:var(--destructive, #b91c1c)}.ds-retro-button-destructive:focus-visible{outline:3px solid var(--retro-focus, #6d28d9);outline-offset:3px}.ds-retro-button-destructive:not(:disabled,[aria-disabled=\"true\"]):active{translate:2px 2px;box-shadow:1px 1px 0 var(--retro-shadow, #24212c)}.ds-retro-button-destructive:is(:disabled,[aria-disabled=\"true\"]){opacity:.5;pointer-events:none;box-shadow:none;translate:none}@media(prefers-reduced-motion:reduce){.ds-retro-button-destructive{transition-duration:.01ms}.ds-retro-button-destructive:not(:disabled,[aria-disabled=\"true\"]):active{translate:none}}"
+    },
+    {
+      "name": "Retro ghost button",
+      "kind": "button",
+      "refersTo": "retro-button-ghost",
+      "description": "Retro-only specimen of the existing shared button variant. Live-bound to root retro tokens; light fallbacks make the isolated preview readable. No application action is wired.",
+      "html": "<button class=\"ds-retro-button-ghost\">More</button>",
+      "css": ".ds-retro-button-ghost{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--retro-radius, 3px);background:transparent;color:var(--retro-ink, #18171c);font-family:inherit;font-size:.875rem;line-height:1.25rem;font-weight:650;white-space:nowrap;transform:none;transition:background-color 120ms ease-out,box-shadow 120ms ease-out,translate 120ms ease-out;}.ds-retro-button-ghost:not(:disabled,[aria-disabled=\"true\"]):hover{background:var(--retro-subtle, #ece7f2);color:var(--retro-ink, #18171c)}.ds-retro-button-ghost:focus-visible{outline:3px solid var(--retro-focus, #6d28d9);outline-offset:3px}.ds-retro-button-ghost:is(:disabled,[aria-disabled=\"true\"]){opacity:.5;pointer-events:none;box-shadow:none;translate:none}@media(prefers-reduced-motion:reduce){.ds-retro-button-ghost{transition-duration:.01ms}.ds-retro-button-ghost:not(:disabled,[aria-disabled=\"true\"]):active{translate:none}}"
+    },
+    {
+      "name": "Retro link button",
+      "kind": "button",
+      "refersTo": "retro-button-link",
+      "description": "Retro-only specimen of the existing shared button variant. Live-bound to root retro tokens; light fallbacks make the isolated preview readable. No application action is wired.",
+      "html": "<button class=\"ds-retro-button-link\">View details</button>",
+      "css": ".ds-retro-button-link{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--retro-radius, 3px);background:transparent;color:var(--retro-action, #6d28d9);font-family:inherit;font-size:.875rem;line-height:1.25rem;font-weight:650;white-space:nowrap;transform:none;transition:background-color 120ms ease-out,box-shadow 120ms ease-out,translate 120ms ease-out;}.ds-retro-button-link:not(:disabled,[aria-disabled=\"true\"]):hover{text-decoration:underline;text-underline-offset:4px}.ds-retro-button-link:focus-visible{outline:3px solid var(--retro-focus, #6d28d9);outline-offset:3px}.ds-retro-button-link:is(:disabled,[aria-disabled=\"true\"]){opacity:.5;pointer-events:none;box-shadow:none;translate:none}@media(prefers-reduced-motion:reduce){.ds-retro-button-link{transition-duration:.01ms}.ds-retro-button-link:not(:disabled,[aria-disabled=\"true\"]):active{translate:none}}"
+    },
+    {
+      "name": "Retro input",
+      "kind": "input",
+      "refersTo": "retro-input",
+      "description": "Shared field with responsive incumbent type sizing, retro border and independent focus. Label included for the isolated specimen.",
+      "html": "<label class=\"ds-retro-field\">Search models<input class=\"ds-retro-input\" placeholder=\"Search models\"></label>",
+      "css": ".ds-retro-field{display:grid;gap:4px;color:var(--retro-ink, #18171c);font-family:inherit;font-size:.875rem}.ds-retro-input{height:2.25rem;min-width:0;padding:.25rem .75rem;border:2px solid var(--retro-line, #24212c);border-radius:var(--retro-radius, 3px);background:var(--retro-panel, #ffffff);color:var(--retro-ink, #18171c);font-family:inherit;font-size:1rem;box-shadow:none;caret-color:var(--retro-action, #6d28d9)}.ds-retro-input::placeholder{color:var(--retro-muted, #55505f);opacity:1}.ds-retro-input:focus-visible{outline:3px solid var(--retro-focus, #6d28d9);outline-offset:3px}.ds-retro-input[aria-invalid=\"true\"]{border-color:var(--destructive, #b91c1c)}.ds-retro-input:disabled{opacity:.5;cursor:not-allowed}@media(min-width:768px){.ds-retro-input{font-size:.875rem}}"
+    },
+    {
+      "name": "Retro selected navigation",
       "kind": "nav",
-      "description": "An open row with the protocol mark, short purpose, and navigation action; no readiness claim.",
+      "refersTo": "retro-navigation-selected",
+      "description": "Selected sidebar entry, not a readiness badge. Its inset line and weight reinforce selection beyond color.",
+      "html": "<nav aria-label=\"Workspace\"><button class=\"ds-retro-nav\" aria-current=\"page\">Private AI</button></nav>",
+      "css": ".ds-retro-nav{display:flex;align-items:center;gap:8px;width:100%;height:1.75rem;padding:.5rem .75rem;border:0;border-radius:var(--retro-radius, 3px);background:var(--retro-selection, #d1f2ff);color:var(--retro-selection-text, #18171c);font-family:inherit;font-size:.875rem;font-weight:700;text-align:left;box-shadow:inset 0 0 0 2px var(--retro-line, #24212c)}.ds-retro-nav:hover,.ds-retro-nav:active{background:var(--retro-selection, #d1f2ff);color:var(--retro-selection-text, #18171c)}.ds-retro-nav:focus-visible{outline:3px solid var(--retro-focus, #6d28d9);outline-offset:3px}"
+    },
+    {
+      "name": "Retro badge",
+      "kind": "chip",
+      "refersTo": "retro-badge",
+      "description": "Existing compact default badge inherits semantic action colors and the radius formula. It is a text label, not an interactive approval or execution claim.",
+      "html": "<span class=\"ds-retro-badge\">Preview</span>",
+      "css": ".ds-retro-badge{display:inline-flex;align-items:center;justify-content:center;padding:.125rem .5rem;border:1px solid transparent;border-radius:calc(var(--radius, 3px) * .8);background:var(--retro-action, #6d28d9);color:var(--retro-action-text, #ffffff);font-family:inherit;font-size:.75rem;line-height:1rem;font-weight:500;white-space:nowrap;transition:background-color 150ms}.ds-retro-badge:hover{background:color-mix(in oklab,var(--retro-action, #6d28d9) 80%,transparent)}.ds-retro-badge:focus{outline:2px solid var(--retro-focus, #6d28d9);outline-offset:2px}@media(prefers-reduced-motion:reduce){.ds-retro-badge{transition-duration:.01ms}}"
+    },
+    {
+      "name": "Retro card",
+      "kind": "card",
+      "refersTo": "retro-card",
+      "description": "Existing default shared card with retro border, corners and action-depth shadow; not the shadowless Memory or protocol-result variants.",
+      "html": "<article class=\"ds-retro-card\"><h3 class=\"ds-retro-card-title\">Review details</h3><p class=\"ds-retro-card-copy\">Read the exact action before continuing.</p></article>",
+      "css": ".ds-retro-card{display:flex;flex-direction:column;gap:24px;padding:24px 0;border:2px solid var(--retro-line, #24212c);border-radius:var(--retro-radius, 3px);background:var(--retro-panel, #ffffff);color:var(--retro-ink, #18171c);font-family:inherit;font-size:.875rem;box-shadow:3px 3px 0 var(--retro-shadow, #24212c)}.ds-retro-card-title{margin:0;padding:0 24px;font-family:var(--font-heading,'Aeonik','IBM Plex Sans Variable',sans-serif);font-size:1rem;line-height:1.5rem;font-weight:700;letter-spacing:-.02em}.ds-retro-card-copy{margin:0;padding:0 24px;color:var(--retro-muted, #55505f)}"
+    },
+    {
+      "name": "Incumbent minimal desk row (retro off)",
+      "kind": "nav",
+      "description": "Preserved incumbent specimen: an open row with purpose and navigation, no readiness claim. Not a retro launcher-group specimen.",
       "html": "<button class=\"ds-desk\"><span>Private AI</span><small>Chat, write, and explore ideas.</small></button>",
-      "css": ".ds-desk{display:flex;flex-direction:column;justify-content:center;gap:4px;width:100%;min-height:80px;padding:12px 8px;border:0;border-bottom:1px solid var(--dls-border);background:transparent;color:var(--dls-text-primary);font:inherit;text-align:left}.ds-desk:hover{background:var(--dls-hover)}.ds-desk:focus-visible{outline:2px solid currentColor;outline-offset:-2px}.ds-desk small{font-size:14px;color:var(--dls-text-secondary)}"
+      "css": ".ds-desk{display:flex;flex-direction:column;justify-content:center;gap:4px;width:100%;min-height:80px;padding:12px 8px;border:0;border-bottom:1px solid var(--dls-border,#b9dceb);background:transparent;color:var(--dls-text-primary,#0C0C0C);font:inherit;text-align:left}.ds-desk:hover{background:var(--dls-hover,rgba(56,189,248,.12))}.ds-desk:focus-visible{outline:2px solid currentColor;outline-offset:-2px}.ds-desk small{font-size:14px;color:var(--dls-text-secondary,#41495a)}"
     }
   ],
   "narrative": {
-    "overview": "One left navigation column, a focused conversation and contextual tools on demand. Preserve Matterhorn branding and shared semantic theme tokens.",
-    "dos": ["Keep required consent and transaction terms explicit.", "Use server capability data rather than visual readiness assumptions."],
-    "donts": ["Do not enable the minimal layout before live runtime acceptance.", "Do not introduce decorative dashboards or duplicate navigation rails."]
+    "northStar": "Matterhorn workbench",
+    "overview": "Matterhorn is a focused, desk-first workspace for doing useful work through chat. Preserve the real logo, protocol marks, readable incumbent type, theme preferences and explicit review boundaries. The opt-in retro workbench uses flat paper/charcoal planes, ink outlines, violet actions, ice selection and hard offset depth; it is a visual alternative, not a rebrand or a simulated trading game.\n\nThe incumbent interface remains the default. Retro styling is scoped to the root marker set by the default-off build flag, and both interfaces use the same routes, persisted chats, model selections and draft stores. This source-backed contract documents implementation, not hosted deployment, installed-app typography acceptance or real agent/chain execution.",
+    "keyCharacteristics": [
+      "Familiar Matterhorn identity and compact operational typography.",
+      "Default-off retro geometry with separately preserved incumbent styling.",
+      "One focused conversation and contextual tools on demand.",
+      "Explicit focus, selection, unavailable states and reviewed-action boundaries."
+    ],
+    "rules": [
+      {
+        "name": "The Scope Rule",
+        "body": "Apply retro values only under the opt-in root marker; flag-off surfaces keep the incumbent semantic system.",
+        "section": "colors"
+      },
+      {
+        "name": "The Inherited Type Rule",
+        "body": "Preserve existing font assets, family preferences and readable text hierarchy; the retro flag changes geometry and emphasis, not font identity.",
+        "section": "typography"
+      },
+      {
+        "name": "The Structural Depth Rule",
+        "body": "Use hard offsets to identify actions and raised work surfaces; keep reading and conversation planes quiet.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do preserve the Matterhorn logo, protocol marks, existing type, user font preferences and both themes.",
+      "Do keep retro scoped to its default-off flag and distinguish minimal-only, retro and incumbent layouts.",
+      "Do keep required consent, source/freshness, transaction terms, signer boundaries and unavailable states explicit.",
+      "Do use server capability data rather than visual readiness assumptions.",
+      "Do preserve keyboard focus, reduced-motion behavior, editable drafts and contextual tool navigation."
+    ],
+    "donts": [
+      "Don't treat a local opt-in, a synthetic screenshot or this document as deployed rollout, installed-app typography acceptance or real execution proof.",
+      "Don't enable the minimal or retro layout for production before live runtime acceptance.",
+      "Don't introduce new fonts, pixel body text, decorative dashboards, gradients, duplicate navigation rails or fabricated statistics.",
+      "Don't use customer-facing Crypto workspace, Services, Computer Use, OpenWork or unexplained OpenCode copy.",
+      "Don't collect seed phrases, private keys, mnemonics, raw signatures, signed payloads, wallet exports, API secrets or exchange secrets in UI fields.",
+      "Don't allow agent-initiated, watch-triggered, unattended or unreviewed submission; Polymarket submission without explicit allowed compliance; unsupported Bittensor write submission; or hidden signing claims.",
+      "Don't ship trapped rails, horizontal overflow, nested scrolling inside cards, composer overlap, clipped button text or cards inside cards."
+    ]
   }
 }

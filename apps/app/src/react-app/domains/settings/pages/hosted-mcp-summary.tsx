@@ -300,6 +300,7 @@ function HostedMcpAccessPanel({ heading: Heading }: { heading: ElementType }) {
             <span className="mb-1 block text-[11px] font-medium text-dls-secondary">AI app</span>
             <select
               aria-label="AI app"
+              data-slot="native-select"
               value={clientLabel}
               onChange={(event) => setClientLabel(event.target.value as (typeof GUARDED_MCP_CLIENTS)[number])}
               className="h-10 w-full rounded-md border border-dls-border bg-dls-surface px-2.5 text-sm text-dls-text outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.35)]"
@@ -431,7 +432,7 @@ function HostedMcpCompactSummary({
   ).length;
 
   return (
-    <section className="space-y-4" aria-label="Matterhorn managed tools">
+    <section className="matterhorn-integrations space-y-4" aria-label="Matterhorn managed tools">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-dls-text">
@@ -463,6 +464,7 @@ function HostedMcpCompactSummary({
                 {group.title}
               </span>
               <Check
+                data-connection-ready="true"
                 className="ml-auto size-3.5 shrink-0 text-green-10"
                 aria-label="Available"
               />
@@ -507,7 +509,7 @@ export function HostedMcpSummary(props: HostedMcpSummaryProps) {
   const ItemHeading = props.showHeader === false ? "h3" : "h4";
 
   return (
-    <section className="w-full max-w-3xl space-y-8 animate-in fade-in duration-300">
+    <section className="matterhorn-integrations w-full max-w-3xl space-y-8 animate-in fade-in duration-300">
       {props.showHeader !== false ? (
         <header>
           <h2 className="text-xl font-semibold tracking-tight text-dls-text">
@@ -559,7 +561,7 @@ export function HostedMcpSummary(props: HostedMcpSummaryProps) {
                     {group.description}
                   </p>
                 </div>
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-green-10">
+                <span data-connection-ready="true" className="inline-flex items-center gap-1.5 text-[11px] font-medium text-green-10">
                   <Check className="size-3.5" aria-hidden="true" />
                   Available
                 </span>
@@ -595,6 +597,7 @@ export function HostedMcpSummary(props: HostedMcpSummaryProps) {
                   {connection.name}
                 </span>
                 <span
+                  data-connection-ready={connection.ready}
                   className={cn(
                     "inline-flex shrink-0 items-center gap-1.5 text-xs",
                     connection.ready ? "text-green-10" : "text-amber-10",

@@ -1520,6 +1520,7 @@ export class MatterhornGuardedAgentRuntime {
     workspaceId: string;
     sessionId: string;
     messages: unknown;
+    expectedRunId?: string;
   }): { accepted: true; runId: string; messagesHash: string } {
     this.assertRuntimeSecret(input.runtimeSecret);
     const runId = this.activeRun(input.sessionId);
@@ -1527,6 +1528,7 @@ export class MatterhornGuardedAgentRuntime {
     const scope = runId ? this.runScope(runId) : null;
     if (
       !runId
+      || (input.expectedRunId !== undefined && input.expectedRunId !== runId)
       || !context
       || !scope
       || context.expiresAtMs <= Date.now()

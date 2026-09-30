@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chromium, type Browser } from "playwright";
 import { build } from "vite";
+import tailwindcss from "@tailwindcss/vite";
+import { mkdir, readFile } from "node:fs/promises";
+import { verifyBundledFonts } from "./fixtures/verify-bundled-fonts";
 
 let browser: Browser;
 let server: ReturnType<typeof Bun.serve>;
@@ -8,10 +11,11 @@ let server: ReturnType<typeof Bun.serve>;
 beforeAll(async () => {
   const bundle = await build({
     configFile: false,
+    envDir: false,
     root: new URL("../", import.meta.url).pathname,
     logLevel: "error",
     resolve: { alias: { "@": new URL("../src", import.meta.url).pathname }, dedupe: ["react", "react-dom"] },
-    define: { "import.meta.env": "{}", "process.env.NODE_ENV": '"development"' },
+    define: { "import.meta.env.VITE_MATTERHORN_RETRO_UI": JSON.stringify(process.env.RETRO_QA_FLAG === "1" ? "1" : "0"), "process.env.NODE_ENV": '"development"' },
     build: {
       target: "esnext",
       write: false,
@@ -19,7 +23,7 @@ beforeAll(async () => {
       lib: { entry: new URL("./fixtures/composer-submit.tsx", import.meta.url).pathname, formats: ["es"] },
       rollupOptions: { output: { inlineDynamicImports: true } },
     },
-    plugins: [{
+    plugins: [tailwindcss(), {
       name: "isolated-host-policy",
       load(id) {
         // Only host configuration is stubbed; the composer and Lexical editor
@@ -35,14 +39,21 @@ beforeAll(async () => {
   const entry = built.output.find((output) => output.type === "chunk" && output.isEntry);
   if (!entry || entry.type !== "chunk") throw new Error("Fixture entry missing");
   const script = entry.code;
+  const css = built.output.filter(item => item.type === "asset" && item.fileName.endsWith(".css"));
   server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch(request) {
+    async fetch(request) {
       if (new URL(request.url).pathname === "/fixture.js") {
         return new Response(script, { headers: { "Content-Type": "text/javascript" } });
       }
-      return new Response('<div id="root"></div><script type="module" src="/fixture.js"></script>', {
+      if (new URL(request.url).pathname === "/fixture.css") return new Response(css.map(item => item.type === "asset" ? item.source : "").join("\n"), { headers: { "Content-Type": "text/css" } });
+      const path = new URL(request.url).pathname;
+      if (/^\/(?:extensions\/)?[a-z0-9/_-]+\.svg$/i.test(path)) {
+        const asset = await readFile(new URL(`../public${path}`, import.meta.url)).catch(() => null);
+        if (asset) return new Response(asset, { headers: { "Content-Type": "image/svg+xml" } });
+      }
+      return new Response('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/fixture.css"><style>html,body,#root{height:auto;overflow:visible}</style><div id="root"></div><script type="module" src="/fixture.js"></script></html>', {
         headers: { "Content-Type": "text/html" },
       });
     },
@@ -64,6 +75,49 @@ async function fixturePage() {
   page.setDefaultTimeout(3_000);
   return page;
 }
+
+test("header picker labels search and selection while retaining the unsent draft", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?compactModels`);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.getByRole("button", { name: "Change model", exact: true }).click();
+    const search = page.getByRole("combobox", { name: "Search models", exact: true });
+    await search.fill("asi1");
+    expect(await page.getByRole("option").count()).toBe(1);
+    await search.press("Enter");
+    expect(await page.getByTestId("model-selected").innerText()).toBe("asi1-mini");
+    expect(await page.getByRole("textbox", { name: "Draft", exact: true }).inputValue()).toBe("Unsent compact-picker draft");
+    await page.getByRole("button", { name: "Change model", exact: true }).click();
+    await page.getByRole("img", { name: "Selected model", exact: true }).waitFor();
+    expect(await page.getByText("Embedding only", { exact: true }).count()).toBe(0);
+    if (process.env.RETRO_QA_FLAG === "1") {
+      expect(await page.getByRole("option").evaluate(el => getComputedStyle(el).minHeight)).toBe("44px");
+    }
+    const directory = process.env.RETRO_QA_CORE_CAPTURES;
+    if (process.env.RETRO_QA_FLAG === "1") {
+      for (const theme of ["light", "dark"]) {
+        await page.locator("html").evaluate((el, value) => { el.setAttribute("data-theme", value); }, theme);
+        await page.waitForFunction(expected => getComputedStyle(document.querySelector('[data-slot="popover-content"]')!).backgroundColor === expected,
+          theme === "light" ? "rgb(255, 255, 255)" : "rgb(35, 33, 40)");
+      }
+    }
+    if (directory) {
+      await page.addStyleTag({ content: "*, *::before, *::after { animation: none !important; transition: none !important; }" });
+      await mkdir(directory, { recursive: true });
+      for (const theme of ["light", "dark"]) {
+        await page.locator("html").evaluate((el, value) => { el.setAttribute("data-theme", value); }, theme);
+        for (const width of [390, 650, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: `${directory}/header-picker-${theme}-${width}.png`, fullPage: true });
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+      }
+    }
+    await page.keyboard.press("Escape");
+    expect(await page.getByRole("textbox", { name: "Draft", exact: true }).inputValue()).toBe("Unsent compact-picker draft");
+  } finally { await page.close(); }
+});
 
 test("auth rechecks never flash sign-in or expose the desk before confirmation", async () => {
   const page = await fixturePage();
@@ -159,3 +213,77 @@ test("only explicit consent sends a token; subsequent ordinary sends do not reus
     await page.getByRole("button", { name: "Complete fixture request" }).click();
   } finally { await page.close(); }
 });
+
+test("all five real desk buttons are keyboard reachable and do not submit a draft", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?launcher`);
+    const desks = page.getByRole("region", { name: "Desks", exact: true });
+    expect(await desks.getByRole("button").count()).toBe(5);
+    for (const id of ["private_ai", "bittensor", "hyperliquid", "polymarket", "sui"]) {
+      const button = page.getByTestId(`open-${id}-desk`);
+      await button.focus();
+      await page.keyboard.press("Enter");
+      expect(await page.getByTestId("selected-desk").textContent()).toBe(id);
+      expect(await page.getByTestId("calls").textContent()).toBe("[]");
+      expect(await page.getByRole("textbox", { name: "Test prompt" }).innerText()).toBe("Explain a blockchain in one sentence.");
+    }
+  } finally { await page.close(); }
+});
+
+test.skipIf(process.env.RETRO_QA_FLAG !== "1")("mobile sidebar closes after navigation and restores its trigger focus", async () => {
+  const page = await fixturePage();
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${server.url}?sidebar`);
+    await page.getByRole("button", { name: "Toggle Sidebar", exact: true }).click();
+    const drawer = page.getByRole("dialog", { name: "Workspace navigation", exact: true });
+    await drawer.waitFor();
+    await drawer.getByRole("button", { name: "Bittensor", exact: true }).click();
+    await drawer.waitFor({ state: "hidden" });
+    expect(await page.getByRole("status").filter({ hasText: "Bittensor" }).innerText()).toBe("Bittensor");
+    await page.getByRole("button", { name: "Toggle Sidebar", exact: true }).click();
+    await drawer.waitFor();
+    await page.keyboard.press("Escape");
+    await drawer.waitFor({ state: "hidden" });
+    expect(await page.getByRole("button", { name: "Toggle Sidebar", exact: true }).evaluate(el => el === document.activeElement)).toBe(true);
+    await page.getByRole("button", { name: "Toggle Sidebar", exact: true }).click();
+    await drawer.getByRole("button", { name: "Close", exact: true }).click();
+    await drawer.waitFor({ state: "hidden" });
+    expect(await page.getByRole("textbox", { name: "Test prompt" }).innerText()).toBe("Explain a blockchain in one sentence.");
+  } finally { await page.close(); }
+});
+
+test.skipIf(!process.env.RETRO_QA_CAPTURES)("capture real launcher and composer in both themes and responsive sizes", async () => {
+  const directory = process.env.RETRO_QA_CAPTURES;
+  if (!directory) return;
+  await mkdir(directory, { recursive: true });
+  for (const theme of ["light", "dark"]) {
+    for (const width of [390, 768, 1280, 1440]) {
+      const page = await fixturePage();
+      try {
+        await page.setViewportSize({ width, height: 1100 });
+        await page.emulateMedia({ colorScheme: theme === "dark" ? "dark" : "light", reducedMotion: "reduce" });
+        await page.goto(`${server.url}?launcher&theme=${theme}`);
+        await page.getByRole("textbox", { name: "Test prompt" }).waitFor();
+        await page.waitForLoadState("networkidle");
+        await verifyBundledFonts(page);
+        await page.screenshot({ path: `${directory}/launcher-composer-${theme}-${width}.png`, fullPage: true });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        if (process.env.RETRO_QA_FLAG === "1") {
+          await page.goto(`${server.url}?sidebar&launcher&theme=${theme}`);
+          await page.getByRole("textbox", { name: "Test prompt" }).waitFor();
+          if (width < 768) await page.getByRole("button", { name: "Toggle Sidebar", exact: true }).click();
+          await verifyBundledFonts(page);
+          await page.screenshot({ path: `${directory}/sidebar-${theme}-${width}.png`, fullPage: true });
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+        await page.goto(`${server.url}?busy&empty&theme=${theme}`);
+        await page.getByRole("button", { name: "Stop generating", exact: true }).waitFor();
+        await verifyBundledFonts(page);
+        await page.screenshot({ path: `${directory}/composer-busy-${theme}-${width}.png`, fullPage: true });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      } finally { await page.close(); }
+    }
+  }
+}, 60_000);

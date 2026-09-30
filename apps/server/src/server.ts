@@ -11092,6 +11092,7 @@ function createRoutes(
         workspaceId: workspace.id,
         sessionId,
         messages: body.messages,
+        ...(typeof body.expectedRunId === "string" ? { expectedRunId: body.expectedRunId } : {}),
       });
       const response = jsonResponse(validated);
       response.headers.set("Cache-Control", "no-store");

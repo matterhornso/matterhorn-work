@@ -1,0 +1,706 @@
+/* One opt-in system. Portals inherit the root marker; legacy builds are unchanged. */
+html[data-matterhorn-ui="retro"] {
+  --retro-paper: #f7f5f0;
+  --retro-panel: #ffffff;
+  --retro-ink: #18171c;
+  --retro-muted: #55505f;
+  --retro-line: #24212c;
+  --retro-shadow: #24212c;
+  --retro-action: #6d28d9;
+  --retro-action-hover: #5b21b6;
+  --retro-action-text: #ffffff;
+  --retro-selection: #d1f2ff;
+  --retro-selection-text: #18171c;
+  --retro-subtle: #ece7f2;
+  --retro-focus: #6d28d9;
+  --retro-radius: 3px;
+  --retro-action-shadow: 3px 3px 0 var(--retro-shadow);
+  --retro-panel-shadow: 5px 5px 0 var(--retro-shadow);
+  --dls-surface: var(--retro-panel);
+  --dls-sidebar: var(--retro-paper);
+  --dls-app-bg: var(--retro-paper);
+  --dls-background: var(--retro-paper);
+  --dls-canvas: var(--retro-subtle);
+  --dls-surface-muted: var(--retro-subtle);
+  --dls-surface-raised: var(--retro-panel);
+  --dls-surface-overlay: var(--retro-panel);
+  --dls-border: var(--retro-line);
+  --dls-accent: var(--retro-action);
+  --dls-accent-hover: var(--retro-action-hover);
+  --dls-accent-fg: var(--retro-action-text);
+  --dls-accent-rgb: 109 40 217;
+  --dls-secondary-rgb: 85 80 95;
+  --dls-text-primary: var(--retro-ink);
+  --dls-text-secondary: var(--retro-muted);
+  --dls-hover: var(--retro-subtle);
+  --dls-active: var(--retro-selection);
+  --dls-radius: var(--retro-radius);
+  --dls-radius-lg: var(--retro-radius);
+  --dls-shell-shadow: none;
+  --dls-card-shadow: var(--retro-action-shadow);
+  --dls-overlay-shadow: var(--retro-panel-shadow);
+  --dls-glass-bg: var(--retro-panel);
+  --dls-glass-border: var(--retro-line);
+  --background: var(--retro-paper);
+  --foreground: var(--retro-ink);
+  --card: var(--retro-panel);
+  --card-foreground: var(--retro-ink);
+  --popover: var(--retro-panel);
+  --popover-foreground: var(--retro-ink);
+  --primary: var(--retro-action);
+  --primary-foreground: var(--retro-action-text);
+  --secondary: var(--retro-subtle);
+  --secondary-foreground: var(--retro-ink);
+  --muted: var(--retro-subtle);
+  --muted-foreground: var(--retro-muted);
+  --accent: var(--retro-selection);
+  --accent-foreground: var(--retro-selection-text);
+  --destructive: #b91c1c;
+  --warning: #8a4b08;
+  --retro-success: #166534;
+  --border: var(--retro-line);
+  --input: var(--retro-line);
+  --ring: var(--retro-focus);
+  --radius: var(--retro-radius);
+  --sidebar: var(--retro-paper);
+  --sidebar-foreground: var(--retro-ink);
+  --sidebar-primary: var(--retro-action);
+  --sidebar-primary-foreground: var(--retro-action-text);
+  --sidebar-accent: var(--retro-selection);
+  --sidebar-accent-foreground: var(--retro-selection-text);
+  --sidebar-border: var(--retro-line);
+  --sidebar-ring: var(--retro-focus);
+}
+
+html[data-matterhorn-ui="retro"]:is([data-theme="dark"], .dark) {
+  --retro-paper: #18171c;
+  --retro-panel: #232128;
+  --retro-ink: #faf8f3;
+  --retro-muted: #d3cedb;
+  --retro-line: #aaa2b5;
+  --retro-shadow: #09080c;
+  --retro-action: #c4a0ff;
+  --retro-action-hover: #d4bcff;
+  --retro-action-text: #18171c;
+  --retro-selection: #d1f2ff;
+  --retro-selection-text: #18171c;
+  --retro-subtle: #35313e;
+  --retro-focus: #d1f2ff;
+  --dls-accent-rgb: 196 160 255;
+  --dls-secondary-rgb: 211 206 219;
+  --dls-active: #453657;
+  --destructive: #ffb4ad;
+  --warning: #ffd583;
+  --retro-success: #86efac;
+}
+
+html[data-matterhorn-ui="retro"] body {
+  background: var(--retro-paper);
+  color: var(--retro-ink);
+}
+
+html[data-matterhorn-ui="retro"] ::selection {
+  background: var(--retro-selection);
+  color: var(--retro-selection-text);
+}
+
+html[data-matterhorn-ui="retro"] :where(input, textarea, [contenteditable="true"]) {
+  caret-color: var(--retro-action);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="button"], [data-matterhorn-button]) {
+  border-radius: var(--retro-radius);
+  font-weight: 650;
+  transform: none;
+  transition: background-color 120ms ease-out, box-shadow 120ms ease-out, translate 120ms ease-out;
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="button"], [data-matterhorn-button]):is([data-variant="default"], [data-variant="outline"], [data-variant="secondary"], [data-variant="destructive"]) {
+  border: 2px solid var(--retro-line);
+  box-shadow: var(--retro-action-shadow);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="button"], [data-matterhorn-button])[data-variant="default"] {
+  background: var(--retro-action);
+  color: var(--retro-action-text);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="button"], [data-matterhorn-button])[data-variant="outline"] {
+  background: var(--retro-panel);
+  color: var(--retro-ink);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="button"], [data-matterhorn-button])[data-variant="secondary"] {
+  background: var(--retro-selection);
+  color: var(--retro-selection-text);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="button"], [data-matterhorn-button])[data-variant="destructive"] {
+  background: var(--retro-panel);
+  color: var(--destructive);
+  border-color: var(--destructive);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="button"], [data-matterhorn-button])[data-variant="default"]:not(:disabled, [aria-disabled="true"]):hover {
+  background: var(--retro-action-hover);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="button"], [data-matterhorn-button]):is([data-variant="outline"], [data-variant="ghost"]):not(:disabled, [aria-disabled="true"]):hover {
+  background: var(--retro-subtle);
+  color: var(--retro-ink);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="button"], [data-matterhorn-button]):not([data-variant="ghost"], [data-variant="link"], :disabled, [aria-disabled="true"]):active {
+  translate: 2px 2px;
+  box-shadow: 1px 1px 0 var(--retro-shadow);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="button"], [data-matterhorn-button]):is(:disabled, [aria-disabled="true"]) {
+  box-shadow: none;
+  translate: none;
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
+  background: var(--retro-panel);
+  color: var(--retro-ink);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="input"], [data-slot="textarea"])::placeholder {
+  color: var(--retro-muted);
+  opacity: 1;
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"])[aria-invalid="true"] {
+  border-color: var(--destructive);
+}
+
+html[data-matterhorn-ui="retro"] :where(button, a, input, textarea, select, summary, [role="button"], [role="tab"], [contenteditable="true"]):focus-visible {
+  outline: 3px solid var(--retro-focus);
+  outline-offset: 3px;
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="card"], .ow-soft-card, .ow-soft-card-quiet, .ow-soft-shell) {
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-overlay-surface {
+  background: var(--retro-panel);
+  color: var(--retro-ink);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: var(--retro-panel-shadow);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"], [data-slot="context-menu-content"]) {
+  background: var(--retro-panel);
+  color: var(--retro-ink);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: var(--retro-panel-shadow);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="tabs-list"] {
+  gap: 4px;
+  border-radius: 0;
+  max-width: 100%;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="tabs-trigger"] {
+  border-radius: var(--retro-radius);
+  color: var(--retro-muted);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="tabs-trigger"][aria-selected="true"] {
+  background: var(--retro-selection);
+  color: var(--retro-selection-text);
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--retro-action);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="model-option"] {
+  min-height: 44px;
+  border-radius: var(--retro-radius);
+  color: var(--retro-ink);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="model-option"][aria-pressed="true"] {
+  background: var(--retro-selection);
+  color: var(--retro-selection-text);
+  outline: 2px solid var(--retro-line);
+  outline-offset: -2px;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="model-option"][aria-pressed="true"] :is(span, svg, div) {
+  color: inherit;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="model-option"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Shared compound controls keep one border and one focus boundary. */
+html[data-matterhorn-ui="retro"] [data-slot="input-group"] {
+  background: var(--retro-panel);
+  color: var(--retro-ink);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="input-group"]:focus-within {
+  outline: 3px solid var(--retro-focus);
+  outline-offset: 3px;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="input-group"]:has([aria-invalid="true"]) {
+  border-color: var(--destructive);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="input-group-control"] {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  box-shadow: none;
+  outline: none;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="input-group-control"]::placeholder {
+  color: var(--retro-muted);
+  opacity: 1;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="command-item"] {
+  min-height: 44px;
+  border-radius: var(--retro-radius);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="command-item"][data-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--retro-line);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="command-item"], [data-slot="autocomplete-item"])[data-highlighted] {
+  background: var(--retro-selection);
+  color: var(--retro-selection-text);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="command-item"], [data-slot="autocomplete-item"])[data-highlighted] :is(span, svg) {
+  color: inherit;
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="card-title"], [data-slot="dialog-title"], [data-slot="alert-dialog-title"]) {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-batch"] {
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+  box-shadow: var(--retro-panel-shadow);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-step"] {
+  border: 1px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-step"][data-state="active"] {
+  border-width: 2px;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-step"] > div:first-child > div:first-child {
+  color: var(--retro-ink);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-batch"] button[aria-label="Close transaction review"] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-integrations [data-connection-ready="true"] {
+  color: var(--retro-success);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-integrations [data-connection-ready="false"] {
+  color: var(--warning);
+}
+
+html[data-matterhorn-ui="retro"] [data-sidebar="sidebar"][data-mobile="true"] > [data-slot="sheet-close"] {
+  display: flex;
+  position: static;
+  order: -1;
+  align-self: flex-end;
+  margin: 8px 12px 0;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-warning"] {
+  color: var(--warning);
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="transaction-error"],
+html[data-matterhorn-ui="retro"] [data-slot="transaction-error"] > div {
+  color: var(--destructive);
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-integrations select {
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-integrations :is([data-slot="button"], [data-matterhorn-button]) {
+  white-space: normal;
+  height: auto;
+  min-height: 44px;
+  max-width: 100%;
+}
+
+@media (max-width: 639px) {
+  html[data-matterhorn-ui="retro"] [data-slot="transaction-actions"] {
+    flex-direction: column;
+  }
+  html[data-matterhorn-ui="retro"] [data-slot="transaction-batch"] {
+    padding: 16px;
+  }
+  html[data-matterhorn-ui="retro"] [data-slot="transaction-batch"] :is([data-slot="button"], [data-matterhorn-button]) {
+    white-space: normal;
+    height: auto;
+    min-height: 44px;
+  }
+  html[data-matterhorn-ui="retro"] .matterhorn-integrations [aria-labelledby="managed-tools-heading"] > div:first-child {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-matterhorn-ui="retro"] :is([data-slot="button"], [data-matterhorn-button]):not([data-variant="ghost"], [data-variant="link"], :disabled, [aria-disabled="true"]):active {
+    translate: none;
+  }
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-public-trust > :is(header, footer) {
+  border-color: var(--retro-line);
+  border-width: 2px 0;
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-public-trust nav[aria-label="Trust pages"] a {
+  border-radius: var(--retro-radius);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-public-trust nav[aria-label="Trust pages"] a[aria-current="page"] {
+  background: var(--retro-selection);
+  color: var(--retro-selection-text);
+  box-shadow: inset 0 0 0 2px var(--retro-line);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-public-trust article h1 {
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+
+html[data-matterhorn-ui="retro"] .public-auth-beta-status {
+  margin: 0 0 16px;
+  color: var(--retro-muted);
+  font-size: 0.875rem;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-rail-content > header {
+  background: var(--retro-panel);
+  border-bottom: 2px solid var(--retro-line);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-notes :is(input, select) {
+  background: var(--retro-panel);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-notes :is(input, select)::placeholder {
+  color: var(--retro-muted);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="note-title"], [data-slot="note-body"]) {
+  border-radius: 0;
+  border-bottom: 2px solid var(--retro-line);
+  padding-block: 8px;
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="note-title"], [data-slot="note-body"])::placeholder {
+  color: var(--retro-muted);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-memory article {
+  background: var(--retro-panel);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-memory select {
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+  color: var(--retro-ink);
+}
+
+html[data-matterhorn-ui="retro"] input[type="checkbox"] {
+  accent-color: var(--retro-action);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="memory-policy-warning"] {
+  color: var(--warning);
+  border: 1px solid currentColor;
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="memory-capture-error"] {
+  color: var(--destructive);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-crypto-catalog > div > header,
+html[data-matterhorn-ui="retro"] .matterhorn-crypto-catalog [aria-label="Available apps"] > article {
+  border-bottom-width: 2px;
+}
+
+@media (max-width: 480px) {
+  html[data-matterhorn-ui="retro"] [data-slot="notes-filters"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  html[data-matterhorn-ui="retro"] .matterhorn-memory [aria-label="Memory views"] {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-workspace-header {
+  background: var(--retro-panel);
+  border-bottom: 2px solid var(--retro-line);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-workspace-sidebar [data-sidebar="sidebar"] {
+  background: var(--retro-paper);
+  border-inline-end: 2px solid var(--retro-line);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="sidebar-menu-button"] {
+  border-radius: var(--retro-radius);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="sidebar-menu-button"][data-active="true"] {
+  background: var(--retro-selection);
+  color: var(--retro-selection-text);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 2px var(--retro-line);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-desk-launcher {
+  border: 2px solid var(--retro-line);
+  background: var(--retro-panel);
+  border-radius: var(--retro-radius);
+  box-shadow: var(--retro-panel-shadow);
+  margin-inline-end: 5px;
+  margin-bottom: 5px;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-desk-launcher > button {
+  padding-inline: 20px;
+  min-height: 76px;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-desk-launcher > button:focus-visible {
+  outline-offset: -5px;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-model-list [aria-label="Chat models"] {
+  border-block: 2px solid var(--retro-line);
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-model-list [aria-pressed] {
+  padding-inline: 12px;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-model-list [aria-pressed="true"] {
+  background: var(--retro-subtle);
+  box-shadow: inset 0 0 0 2px var(--retro-line);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="composer-panel"] {
+  background: var(--retro-panel);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: var(--retro-action-shadow);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="composer-panel"]:focus-within {
+  border-color: var(--retro-focus);
+}
+
+html[data-matterhorn-ui="retro"] .public-auth-shell {
+  --auth-bg: var(--retro-paper);
+  --auth-surface: var(--retro-panel);
+  --auth-text: var(--retro-ink);
+  --auth-secondary: var(--retro-muted);
+  --auth-border: var(--retro-line);
+  --auth-accent: var(--retro-action);
+  --auth-accent-text: var(--retro-action-text);
+  --auth-hover: var(--retro-subtle);
+  --auth-error: var(--destructive);
+}
+
+html[data-matterhorn-ui="retro"] :is(.public-auth-mode, .public-auth-submit, .public-auth-form input:not([type="checkbox"])) {
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+}
+
+html[data-matterhorn-ui="retro"] .public-auth-mode button {
+  border-radius: var(--retro-radius);
+}
+
+html[data-matterhorn-ui="retro"] .public-auth-mode button.is-active {
+  background: var(--retro-selection);
+  color: var(--retro-selection-text);
+  box-shadow: inset 0 -2px 0 var(--retro-action);
+}
+
+html[data-matterhorn-ui="retro"] .public-auth-submit:not(:disabled) {
+  box-shadow: var(--retro-action-shadow);
+}
+
+html[data-matterhorn-ui="retro"] .public-auth-title {
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+
+/* Conversation chrome stays quiet; structure, not decorative status, carries identity. */
+html[data-matterhorn-ui="retro"] [data-message-role="user"] > [data-slot="message-body"] {
+  background: var(--retro-subtle);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="protocol-result"] {
+  border-width: 2px;
+  border-radius: var(--retro-radius);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] .matterhorn-conversation-starters :is([data-slot="button"], [data-matterhorn-button]) {
+  white-space: normal;
+  height: auto;
+  min-height: 44px;
+  max-width: 100%;
+  padding-block: 10px;
+  text-align: start;
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="sheet-content"], [data-slot="command-dialog-popup"]) {
+  background: var(--retro-panel);
+  color: var(--retro-ink);
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] [data-sidebar="sidebar"][data-mobile="true"] {
+  background: var(--retro-paper);
+  border-radius: 0;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="settings-stack"] > [data-section] + [data-section] {
+  padding-block-start: 24px;
+  border-block-start: 2px solid var(--retro-line);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="settings-stack"] h2 {
+  font-weight: 700;
+}
+
+@container settings (max-width: 40rem) {
+  html[data-matterhorn-ui="retro"] [data-slot="settings-item-header"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html[data-matterhorn-ui="retro"] [data-slot="settings-item-header"] > [data-slot="item-header-actions"] {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+    max-width: 100%;
+    min-width: 0;
+    margin-block-start: 8px;
+  }
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="checkbox"], [data-slot="switch"]) {
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="checkbox"], [data-slot="switch"])[aria-checked="true"] {
+  background: var(--retro-action);
+  color: var(--retro-action-text);
+}
+
+html[data-matterhorn-ui="retro"] :is([data-slot="checkbox"], [data-slot="switch"])[aria-invalid="true"] {
+  border-color: var(--destructive);
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="switch-thumb"] {
+  border-radius: 1px;
+  background: var(--retro-ink);
+  box-shadow: none;
+}
+
+html[data-matterhorn-ui="retro"] [data-slot="switch"][aria-checked="true"] [data-slot="switch-thumb"] {
+  background: var(--retro-action-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-matterhorn-ui="retro"] :is([data-slot="switch-thumb"], [data-slot="sidebar-container"], [data-slot="sidebar-gap"]) {
+    transition: none;
+  }
+}
+/* Tool details remain quiet reading surfaces, with a usable touch target. */
+html[data-matterhorn-ui="retro"] [data-matterhorn-tool-disclosure] {
+  min-height: 44px;
+  padding-block: 8px;
+}
+
+html[data-matterhorn-ui="retro"] [data-matterhorn-session-error] {
+  border: 2px solid var(--retro-line);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel);
+  box-shadow: none;
+}
+html[data-matterhorn-ui="retro"] [data-matterhorn-session-error="error"] {
+  border-color: var(--destructive);
+}
+html[data-matterhorn-ui="retro"] [data-matterhorn-session-error="error"] [data-error-title] {
+  color: var(--destructive);
+}
+html[data-matterhorn-ui="retro"] [data-matterhorn-session-error] [data-error-detail] {
+  color: var(--retro-ink);
+}
+html[data-matterhorn-ui="retro"] [data-matterhorn-session-error] button {
+  min-height: 44px;
+}
+html[data-matterhorn-ui="retro"] [data-matterhorn-session-error] button[aria-label^="Dismiss"] {
+  min-width: 44px;
+  color: var(--retro-muted);
+}

@@ -17,6 +17,17 @@ function readShikiHighlighterSource() {
 }
 
 describe("Markdown security and dark-code rendering", () => {
+  test("chain timestamps and numeric data are not converted into emoji aliases", () => {
+    const timestamp = "2026-09-29T07:12:05.783137Z";
+    const html = renderToStaticMarkup(React.createElement(MarkdownBlock, {
+      text: `| Fetch time | Duration |\n| --- | --- |\n| ${timestamp} | 01:30:00 |\n\n:12: :100: :smile:`,
+    }));
+    expect(html).toContain(timestamp);
+    expect(html).toContain("01:30:00");
+    expect(html).toContain(":12: :100:");
+    expect(html).not.toContain(":smile:");
+  });
+
   test("raw HTML from model output is not passed through by a Shiki marker substring", () => {
     const html = renderToStaticMarkup(
       React.createElement(MarkdownBlock, {

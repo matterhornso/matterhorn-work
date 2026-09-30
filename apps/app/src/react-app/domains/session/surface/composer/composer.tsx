@@ -1195,6 +1195,7 @@ export function ReactSessionComposer(props: ComposerProps) {
         {/* Main composer panel */}
         <div
           data-testid="session-composer-shell"
+          data-slot="composer-panel"
           data-model-unavailable={props.modelUnavailable ? "true" : "false"}
           className={`relative overflow-visible rounded-xl border border-transparent bg-dls-surface-muted/[0.16] shadow-none transition-colors focus-within:border-dls-border/25 focus-within:bg-dls-surface-muted/[0.23] ${panelRoundedClass}`}
         >
