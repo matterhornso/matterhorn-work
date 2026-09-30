@@ -14,6 +14,8 @@ Record the exact approved merge SHA, web build SHA, API build SHA, runtime/plugi
 
 The [audit report](../../qa-reports/reliability/2026-09-30/RESULTS.md) records scope, tests, live-read evidence and unresolved limitations. The final publication commit identifies the exact package; consult the PR head rather than assuming a screenshot identifies its server version.
 
+Final local acceptance on publication head `ff2b14679b14b3517fbd6e161d7689a84c1b76c9` completed representative ASI1 requests on all five desks. The five request receipts reconciled 44,828 additional tokens, leaving 175,639 used/charged with zero reserved/pending at 22:05 UTC. All four applicable security CI jobs passed on that head. This does not certify live Jev, hosted services, every desk action or all model prose: Hyperliquid still generates a misleading “no warnings” phrase, and some receipt source/freshness fields are incomplete despite source-bearing tool payloads. Keep these qualifications in acceptance and rollout decisions.
+
 ## What the candidate changes
 
 - Truthful incomplete/stopped/failed chat states, safe answer-only continuation, draft-safe retry and explicit rate-limit recovery.

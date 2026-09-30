@@ -8,8 +8,8 @@ This report is for the release reviewer and deployment team. It covers the five-
 - Published review: [PR #1030](https://github.com/matterhornso/matterhorn-work/pull/1030), stacked on #1029. Initial publication head `fe4e7381ff47f25ab7bdf162c7809cc0f2b7c1be` contains the source candidate plus this evidence. Check the PR for later documentation commits and live CI state.
 - Final source candidate reviewed here: `652555e586597694be231787ec01ef5cbe13ddc2`. Later documentation/evidence commits do not change its application source.
 - Base: PR #1029, `codex/jev-chat-opt-in-2026-09-30`, commit `22a696626847f139f58adfad86c6cd20f5d0e5ad`. GitHub still reported OPEN on 30 September at approximately 21:41 UTC.
-- The real-provider runtime was incrementally refreshed through `1923df5bf5ec8433154e55b337e8190f5e429775` plus the identical agent guidance subsequently committed as `1914b3e544b278583f84b3b66eb1c7282cbca11b`. Browser verification additionally covered UI commits `35cde3740923e28d8da92cb802f4366f4c182f07` and `aa5f5b62f6f333b8c4715b664ac62add13d2ec15` through Vite.
-- Later memory-only fixes require their recorded regression results; the real-provider observations below are not relabelled as tests of a later exact full-tree SHA.
+- Earlier real-provider observations were collected during incremental runtime refreshes. A final five-desk pass used publication head `ff2b14679b14b3517fbd6e161d7689a84c1b76c9`, whose application source is identical to `652555e586597694be231787ec01ef5cbe13ddc2`. The separate final-pass section below preserves that distinction.
+- Refreshing the disposable QA runtime preserved its existing history and usage ledger. The private plaintext recovery copy is not encrypted-backup certification. The original user preview and chats were untouched.
 - No production configuration, signup activation, secret rotation, deployment, wallet signing or real-fund transaction was performed. Existing user chats were not migrated or deleted.
 
 ## Implemented corrections
@@ -46,6 +46,8 @@ A separate actual loopback 307 redirect test reproduced managed tool requests re
 
 GitHub full test, i18n and UI-MCP workflows target PRs into `dev`, not a stacked feature branch. Security workflows accept stacked PRs. A skipped full workflow is not a pass: retarget after #1029 merges and require all final-merge checks before deployment. Remote CI status must be read from the new PR, not inferred from these local results.
 
+At the final verification, all four jobs in [security workflow run 36782422142](https://github.com/matterhornso/matterhorn-work/actions/runs/36782422142) passed on `ff2b14679b14b3517fbd6e161d7689a84c1b76c9`: CodeQL JavaScript/TypeScript, Rust dependency security, repository security gates and dependency review. Subsequent documentation commits require their own applicable CI; this result does not describe an untested future merge.
+
 GitHub's push notice reported five open **default-branch** advisories. Their alert records identify brace-expansion (three), engine.io and fast-uri. The candidate lockfile already contains patched versions 5.0.12, 6.6.10 and 3.1.8 respectively, inherited from #1029. Open default-branch alerts are not evidence that this candidate uses the old versions, and a clean candidate audit does not close alerts until the relevant branch receives the fixes. Do not dismiss them merely to make the repository badge green.
 
 ## Real provider and five desk evidence
@@ -63,6 +65,24 @@ These are authenticated browser requests using a disposable local account, ASI1 
 At 21:27:53.839 UTC, the collected 12-session local ledger reported **130,811 used = 130,811 charged, reserved 0, pending 0**. This includes failed attempts and recovery tests, not just the five rows above. Direct provider diagnostics were outside this ledger and are not represented as application-accounted requests.
 
 ASI1 separately reproduced an upstream `length` finish after 35 completion tokens when copying a repetitive zero-padded identifier despite a 512-token limit. Compact input completed. Safe continuation stayed tool-free and preserved the draft, but did not guarantee that the provider would finish the repetitive content. Mini returned HTTP 429 without a Retry-After header. No unchanged repeated quota probes were performed.
+
+### Final source browser acceptance
+
+The final pass used the same normally authenticated disposable account, ASI1 and existing QA conversations. All four chain tools retained issued/allowed read capabilities; no transaction was prepared or submitted. Responses and receipts were read back through the authenticated API at **22:05:16.340 UTC** and checked against the actual tool payloads.
+
+| Desk | Final observation | Request tokens | Qualification |
+| --- | --- | ---: | --- |
+| Private AI | Two-sentence contextual follow-up completed at 22:04:42 UTC, without tools | 6,780 | A representative follow-up, not a general quality benchmark |
+| Bittensor | Subnet 12, block 9,183,576, price 0.004733255 TAO; source 21:57:53.685886 UTC | 8,968 | Missing metagraph fields explicitly disclosed |
+| Hyperliquid | BTC bid 83,738 / ask 83,739 / spread 1; source 21:57:23.408 UTC | 10,701 | Values match. Generated “no warnings” remains misleading; authoritative depth limitation is separately rendered |
+| Polymarket | Market 4789394, Over 0.06 / Under 0.94; source 21:58:48.037 UTC | 11,527 | Exact lookup and both outcomes match; truncated rules disclosed. The prose's characterization as last-traded prices is not proven by the tool payload |
+| Sui | Full supplied address correctly normalized to equivalent `0x5`, mainnet, 31.018584912 SUI; source 22:03:57.565 UTC | 6,852 | No unsupported ownership explanation in this final answer; earlier failure remains recorded |
+
+The five requests total **44,828 tokens**, exactly matching the corresponding receipt totals and the ledger increase from 130,811 to **175,639**. Used and charged both equal 175,639; reserved and pending are both zero. This proves reconciliation for these observed requests, not guaranteed delivery through arbitrary process loss.
+
+The receipt metadata is less complete than the underlying tool payload: the Polymarket receipt has null source/freshness despite a source-bearing market result; the Sui receipt has a source but no freshness label. Do not infer missing freshness or discard the underlying timestamp. Broader receipt provenance normalization remains a follow-up. Live Jev was not enabled or tested in this pass.
+
+See the [final Sui browser capture](captures/final-source-sui.png). These checks establish representative local real-provider execution on the final source, not exhaustive desk coverage or hosted launch acceptance.
 
 ## Security and lifecycle coverage
 
