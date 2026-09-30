@@ -316,12 +316,12 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_sui_get_balance",
     title: "Sui public balance",
-    description: "Read a public Sui address balance. Never requests or handles wallet secrets.",
+    description: "Read public Sui balance on the requested network. No secrets.",
     inputSchema: objectSchema({
-      address: { type: "string", description: "Public Sui address." },
+      address: { type: "string", description: "Public address; short hex accepted." },
       network: { type: "string", enum: ["mainnet", "testnet"] },
-      coinType: { type: "string", description: "Optional public coin type." },
-    }, ["address"]),
+      coinType: { type: "string" },
+    }, ["address", "network"]),
     deskIds: ["sui"],
     actionIds: ["sui_account_read"],
     access: "read",

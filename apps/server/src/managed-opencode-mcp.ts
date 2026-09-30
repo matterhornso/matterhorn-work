@@ -340,12 +340,12 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_sui_get_balance",
     title: "Sui public balance",
-    description: "Read a public Sui address balance. Never requests or handles wallet secrets.",
+    description: "Read public Sui balance on the requested network. No secrets.",
     inputSchema: objectSchema({
-      address: { type: "string", description: "Public Sui address." },
+      address: { type: "string", description: "Public address; short hex accepted." },
       network: { type: "string", enum: ["mainnet", "testnet"] },
-      coinType: { type: "string", description: "Optional public coin type." },
-    }, ["address"]),
+      coinType: { type: "string" },
+    }, ["address", "network"]),
     request: (args) => ({
       path: queryPath(`/api/sui/balance/${encodeURIComponent(stringArg(args, "address"))}`, args, ["network", "coinType"]),
     }),
@@ -476,6 +476,7 @@ const MODEL_SAFE_MCP_ERROR_CODES = new Set([
   "matterhorn_tool_result_rejected",
   "polymarket_token_id_invalid",
   "polymarket_market_id_invalid",
+  "sui_network_required",
   "reviewed_action_receipt_unavailable",
   "transaction_capability_proof_missing",
   "transaction_context_invalid",
@@ -1029,6 +1030,10 @@ async function callBackendTool(input: {
   let source: string | undefined;
   let freshness: string | undefined;
   try {
+    if (input.tool.name === "matterhorn_sui_get_balance"
+      && input.args.network !== "mainnet" && input.args.network !== "testnet") {
+      throw new Error("sui_network_required");
+    }
     if (input.authorization?.coworker && input.executeCertifiedTool) {
       // Certified external adapters retain their existing conservative check;
       // the local backend below has its own structurally read-only dispatcher.

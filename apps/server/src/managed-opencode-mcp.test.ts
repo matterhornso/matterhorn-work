@@ -156,6 +156,28 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(result.body).toMatchObject({ jsonrpc: "2.0", id: "sui-native-balance", result: {} });
     expect(JSON.stringify(result.body)).toContain("31.018584912");
   });
+
+  test("requires an explicit Sui read network instead of silently defaulting to testnet", async () => {
+    for (const network of [undefined, null, "", "mainnet ", "devnet", 1]) {
+      let requests = 0;
+      const result = await handleManagedOpencodeMcp({
+        payload: { jsonrpc: "2.0", id: "sui-network", method: "tools/call", params: {
+          name: "matterhorn_sui_get_balance", arguments: { address: "0x5", network },
+        } },
+        serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+        fetchImpl: Object.assign(async () => { requests += 1; return Response.json({ success: true, balance: {} }); }, { preconnect() {} }),
+      });
+      expect(requests).toBe(0);
+      expect(JSON.stringify(result.body)).toContain("sui_network_required");
+    }
+    const catalog = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "sui-schema", method: "tools/list" },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+    });
+    expect(catalog.body).toMatchObject({ result: { tools: expect.arrayContaining([
+      expect.objectContaining({ name: "matterhorn_sui_get_balance", inputSchema: expect.objectContaining({ required: ["address", "network"] }) }),
+    ]) } });
+  });
   test("injects an authenticated runtime-only remote MCP config", () => {
     const content = buildManagedOpencodeRuntimeConfig({
       serverUrl: "http://127.0.0.1:4130/",
@@ -1362,7 +1384,7 @@ describe("managed OpenCode Matterhorn MCP", () => {
         jsonrpc: "2.0",
         id: "unknown-success-shape",
         method: "tools/call",
-        params: { name: "matterhorn_sui_get_balance", arguments: { address: `0x${"4".repeat(64)}` } },
+        params: { name: "matterhorn_sui_get_balance", arguments: { address: `0x${"4".repeat(64)}`, network: "mainnet" } },
       },
       serverUrl: "http://127.0.0.1:4130",
       clientToken: "test-client-token",
