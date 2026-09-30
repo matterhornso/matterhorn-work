@@ -1,6 +1,8 @@
 import { dirname, join } from "node:path";
 import { createReadStream } from "node:fs";
-import { appendFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open, rename, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import type { AuditEntry } from "./types.js";
@@ -44,18 +46,109 @@ async function resolveReadableAuditPath(workspaceRoot: string, workspaceId: stri
   return null;
 }
 
+const auditMutations = new Map<string, Promise<void>>();
+
+async function withAuditMutation<T>(path: string, task: () => Promise<T>): Promise<T> {
+  const previous = auditMutations.get(path) ?? Promise.resolve();
+  const result = previous.then(task);
+  const settled = result.then(() => undefined, () => undefined);
+  auditMutations.set(path, settled);
+  try {
+    return await result;
+  } finally {
+    if (auditMutations.get(path) === settled) auditMutations.delete(path);
+  }
+}
+
+function isMemoryContentAudit(action: unknown): boolean {
+  return action === "memory.capture" || action === "memory.record.update";
+}
+
+async function assertAuditLocation(root: string, parts: string[]): Promise<void> {
+  let current = root;
+  for (const part of parts) {
+    if (part === ".." || part.includes("/") || part.includes("\\")) throw new Error("Invalid audit storage path.");
+    current = join(current, part);
+    try {
+      if ((await lstat(current)).isSymbolicLink()) throw new Error("Audit storage must not use symbolic links.");
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    }
+  }
+}
+
 export async function recordAudit(workspaceRoot: string, entry: AuditEntry): Promise<void> {
   const workspaceId = entry.workspaceId?.trim();
-  if (!workspaceId) {
-    const path = legacyAuditLogPath(workspaceRoot);
+  const path = workspaceId ? auditLogPath(workspaceId) : legacyAuditLogPath(workspaceRoot);
+  await withAuditMutation(path, async () => {
+    await assertAuditLocation(workspaceId ? resolveOpenworkDataDir() : workspaceRoot,
+      workspaceId ? ["audit", `${workspaceId}.jsonl`] : [".opencode", "openwork", "audit.jsonl"]);
     await ensureDir(dirname(path));
-    await appendFile(path, JSON.stringify(entry) + "\n", "utf8");
-    return;
-  }
+    const stored = isMemoryContentAudit(entry.action)
+      ? { ...entry, summary: entry.action === "memory.capture" ? "Captured memory" : "Updated memory", metadata: undefined }
+      : entry;
+    const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_NOFOLLOW, 0o600);
+    try {
+      await file.chmod(0o600);
+      await file.writeFile(`${JSON.stringify(stored)}\n`, "utf8");
+    } finally {
+      await file.close();
+    }
+  });
+}
 
-  const path = auditLogPath(workspaceId);
-  await ensureDir(dirname(path));
-  await appendFile(path, JSON.stringify(entry) + "\n", "utf8");
+/** Remove historical memory content while retaining who/when/action/target audit evidence. */
+export async function redactMemoryAuditContent(workspaceRoot: string, workspaceId: string, memoryId: string): Promise<void> {
+  for (const path of [auditLogPath(workspaceId), legacyAuditLogPath(workspaceRoot)]) {
+    await withAuditMutation(path, async () => {
+      const primary = path === auditLogPath(workspaceId);
+      await assertAuditLocation(primary ? resolveOpenworkDataDir() : workspaceRoot,
+        primary ? ["audit", `${workspaceId}.jsonl`] : [".opencode", "openwork", "audit.jsonl"]);
+      const input = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW).catch((error: unknown) => {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (!input) return;
+      const temp = `${path}.${randomUUID()}.tmp`;
+      let created = false;
+      try {
+        const output = await open(temp, "wx", 0o600);
+        created = true;
+        try {
+          const lines = createInterface({ input: input.createReadStream({ autoClose: false }), crlfDelay: Infinity });
+          try {
+            for await (const line of lines) {
+              if (!line.trim()) continue;
+              let parsed: unknown;
+              try {
+                parsed = JSON.parse(line);
+              } catch {
+                throw new Error("Cannot redact a malformed audit log. Repair it before deleting memory.");
+              }
+              let serialized = line;
+              if (typeof parsed === "object" && parsed !== null &&
+                "action" in parsed && isMemoryContentAudit(parsed.action) &&
+                "target" in parsed && parsed.target === memoryId &&
+                (("workspaceId" in parsed && parsed.workspaceId === workspaceId) ||
+                  (!primary && (!("workspaceId" in parsed) || parsed.workspaceId === "")))) {
+                serialized = JSON.stringify({ ...parsed, summary: "Memory record content removed", metadata: undefined });
+              }
+              await output.writeFile(`${serialized}\n`, "utf8");
+            }
+          } finally {
+            lines.close();
+          }
+          await output.sync();
+        } finally {
+          await output.close();
+        }
+        await rename(temp, path);
+      } finally {
+        await input.close();
+        if (created) await rm(temp, { force: true });
+      }
+    });
+  }
 }
 
 export async function readLastAudit(workspaceRoot: string, workspaceId: string): Promise<AuditEntry | null> {

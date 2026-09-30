@@ -523,7 +523,7 @@ import {
   updateJsoncTopLevel,
   writeJsoncFile,
 } from "./jsonc.js";
-import { auditLogPath, recordAudit, readAuditEntries, readLastAudit } from "./audit.js";
+import { auditLogPath, recordAudit, readAuditEntries, readLastAudit, redactMemoryAuditContent } from "./audit.js";
 import { deriveTaskRuns, readTaskEvents, recordTaskEvent, taskEventsPath } from "./task-events.js";
 import { ReloadEventStore } from "./events.js";
 import { computeReloadFingerprint } from "./reload-fingerprint.js";
@@ -18746,6 +18746,7 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
       assertWorkspaceMemoryRecord(await workspaceVault.getRecord(ctx.params.memoryId), workspace);
+      await redactMemoryAuditContent(workspace.path, workspace.id, ctx.params.memoryId);
       const result = await workspaceVault.forgetRecord(ctx.params.memoryId, "Deleted through Matterhorn Desks workspace memory API.");
       await recordMemoryMutationAudit(workspace, ctx, {
         action: "memory.record.forget",
@@ -19224,6 +19225,7 @@ function createRoutes(
       if (ctx.matterhornWorkspace) {
         assertWorkspaceMemoryRecord(await requestVault.getRecord(ctx.params.id), ctx.matterhornWorkspace);
       }
+      if (auditWorkspace) await redactMemoryAuditContent(auditWorkspace.path, auditWorkspace.id, ctx.params.id);
       const result = await requestVault.forgetRecord(ctx.params.id, "Deleted through Matterhorn Desks memory API.");
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.record.forget",
@@ -19253,6 +19255,7 @@ function createRoutes(
       if (ctx.matterhornWorkspace) {
         assertWorkspaceMemoryRecord(await requestVault.getRecord(id), ctx.matterhornWorkspace);
       }
+      if (auditWorkspace) await redactMemoryAuditContent(auditWorkspace.path, auditWorkspace.id, id);
       const result = await requestVault.forgetRecord(id, reason);
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.record.forget",
