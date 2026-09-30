@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 // Mounted production SessionSurface with disposable HTTP fixtures only.
 import { createRoot } from "react-dom/client";
+import { Button } from "../../src/components/ui/button";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { SessionSurface } from "../../src/react-app/domains/session/surface/session-surface";
@@ -24,6 +25,8 @@ createRoot(document.getElementById("root")!).render(
   <MemoryRouter><QueryClientProvider client={query}><LocalProvider><DenAuthProvider><DesktopConfigProvider><RestrictionNoticeProvider><ShellConfigProvider><QuickJotProvider>
     <div className="flex h-screen flex-col">
       <p className="p-3 text-sm">Recovery QA fixture — no live models, credentials, chains, or accounts.</p>
+      {new URLSearchParams(location.search).get("scenario") === "jev-lifecycle" &&
+        <div className="px-3 pb-3"><Button variant="outline" onClick={() => void fetch("/__qa/release-jev", { method: "POST" })}>Release synthetic Jev result</Button></div>}
       <SessionSurface client={client} workspaceId="ws_recovery" workspaceRoot="/fixture" sessionId="ses_recovery"
         opencodeBaseUrl={location.origin} matterhornToken="disposable-fixture" developerMode={false}
         modelLabel="Fixture model" onModelClick={noop} modelPickerOpen={false}
@@ -32,6 +35,7 @@ createRoot(document.getElementById("root")!).render(
           const result = await fetch("/__qa/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
           const body = await result.json();
           if (!result.ok) throw new Error(JSON.stringify(body));
+          await query.invalidateQueries();
         }} onDraftChange={noop} attachmentsEnabled={false} attachmentsDisabledReason="Fixture"
         modelBehaviorTitle="Default" modelVariantLabel="Default" modelVariant={null} modelBehaviorIsProviderDefault
         modelBehaviorDefaultLabel="Default" onModelVariantChange={noop} responsePerspective="balanced" onResponsePerspectiveChange={noop}

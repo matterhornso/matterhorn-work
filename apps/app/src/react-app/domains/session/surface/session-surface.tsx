@@ -74,7 +74,7 @@ import {
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { ReactSessionComposer } from "./composer/composer";
 import { useComposerSubmission } from "./composer/use-composer-submission";
-import { useJevChat } from "./use-jev-chat";
+import { JevPreparationCancelledError, useJevChat } from "./use-jev-chat";
 import { JevChatControl } from "./jev-chat-control";
 import type { ResponsePerspective } from "../perspectives/response-perspective";
 import { decodeComposerMentionValue, encodeComposerMentionValue } from "./composer/mention-encoding";
@@ -1036,6 +1036,10 @@ export function findPrivacyPreflightInError(value: unknown, depth = 0): Matterho
 }
 
 export function parseSessionError(thrown: unknown): SessionError {
+  if (thrown instanceof JevPreparationCancelledError) {
+    return { message: "Request stopped.", detail: "Nothing was sent to your answering model. Your draft is still available.",
+      kind: "cancelled", retryable: false };
+  }
   const raw = thrown instanceof Error ? thrown.message : String(thrown);
   let parsed: unknown;
   // Try to detect ProviderModelNotFoundError from the SDK error shape.
@@ -3684,6 +3688,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         busy={chatStreaming}
         disabled={model.transitionState !== "idle"}
         sendDisabled={
+          sending ||
           model.transitionState !== "idle" ||
           (!publicBetaWeb && props.providerPrivacyPolicy?.allowed === false) ||
           (Boolean(props.modelUnavailable) && !localReviewedActionReady)

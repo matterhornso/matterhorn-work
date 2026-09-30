@@ -66,4 +66,13 @@ describe("composer consent request boundary", () => {
     expect(source).toContain("onSend={handleSend}");
     expect(source).toContain("await handleSend();");
   });
+
+  test("pending classification exposes Stop even though the submitted draft is preserved", () => {
+    const surface = readFileSync(new URL("../src/react-app/domains/session/surface/session-surface.tsx", import.meta.url), "utf8");
+    const composer = readFileSync(new URL("../src/react-app/domains/session/surface/composer/composer.tsx", import.meta.url), "utf8");
+    expect(surface).toMatch(/sendDisabled=\{\s*sending \|\|/);
+    expect(composer).toMatch(/\{props\.busy \? \(\s*<button\s*type="button"\s*onClick=\{\(\) => props\.onStop\(\)\}/);
+    expect(composer).toContain("!props.busy || (canSend && !props.sendDisabled && !props.disabled)");
+    expect(composer).toContain("onClick={() => props.onStop()}");
+  });
 });

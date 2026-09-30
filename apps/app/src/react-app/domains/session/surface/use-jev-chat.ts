@@ -3,6 +3,13 @@ import { JEV_CONSENT_VERSION, JEV_MAX_TEXT_LENGTH, type JevAvailability, type Je
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import type { ComposerDraft, ModelRef } from "../../../../app/types";
 
+export class JevPreparationCancelledError extends Error {
+  constructor() {
+    super("Message cancelled before model submission. Your draft is preserved.");
+    this.name = "JevPreparationCancelledError";
+  }
+}
+
 export function jevPreferenceKey(scope: string) { return `matterhorn.jev.${JEV_CONSENT_VERSION}.${scope}`; }
 export function jevDraftText(draft: ComposerDraft): string | null {
   if (draft.mode !== "prompt" || draft.command || draft.attachments.length || draft.privacy?.mode === "private_workspace"
@@ -74,13 +81,17 @@ export function useJevChat(input: {
       setNotice(`Jev: ${result.topic.replaceAll("_", " ")} · ${result.task}. Your selected model answers.`);
       return { ...draft, jevReceipt: result.receipt };
     } catch {
-      if (pending.signal.reason !== "chat_cancelled") setNotice("Jev did not finish. Using your selected model without classification.");
+      if (pending.signal.reason === "jev_disabled") setNotice("Jev is off. Your selected model answers without classification.");
+      else if (pending.signal.reason !== "chat_cancelled") setNotice("Jev did not finish. Using your selected model without classification.");
       return draft;
     } finally {
-      setClassifying(false);
-      if (controller.current === pending) controller.current = null;
+      if (controller.current === pending) {
+        setClassifying(false);
+        controller.current = null;
+        if (pending.signal.reason === "chat_cancelled") setNotice("Jev classification stopped.");
+      }
       // Stopping or leaving the conversation must not dispatch a late model request.
-      if (pending.signal.reason === "chat_cancelled") throw new Error("Message cancelled before model submission. Your draft is preserved.");
+      if (pending.signal.reason === "chat_cancelled") throw new JevPreparationCancelledError();
     }
   }, [availability, input.client, input.workspaceId, input.sessionId, input.model, input.privateMode]);
   return { availability, enabled, notice, classifying, change, cancel, prepare };

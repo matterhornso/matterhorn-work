@@ -2,6 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import { parseSessionError } from "../src/react-app/domains/session/surface/session-surface";
 import { MatterhornServerError } from "../src/app/lib/matterhorn-server";
+import { JevPreparationCancelledError } from "../src/react-app/domains/session/surface/use-jev-chat";
+
+test("Jev Stop distinguishes the answering model from classification already shared", () => {
+  const parsed = parseSessionError(new JevPreparationCancelledError());
+  expect(parsed.kind).toBe("cancelled");
+  expect(parsed.detail).toContain("Nothing was sent to your answering model");
+  expect(parsed.retryable).toBe(false);
+  expect(parseSessionError(new Error("Message cancelled before model submission. Your draft is preserved.")).kind).not.toBe("cancelled");
+});
 
 describe("cancelled approval responses", () => {
   const body = { code: "write_denied", message: "Write request denied", details: { reason: "cancelled" } };
