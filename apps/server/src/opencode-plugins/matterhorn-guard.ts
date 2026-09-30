@@ -109,6 +109,9 @@ async function postInternal(path: string, body: Record<string, unknown>): Promis
   if (!settings.url || !settings.secret) throw new Error("Matterhorn guarded runtime is not configured.");
   const response = await fetch(`${settings.url}${path}`, {
     method: "POST",
+    // Internal credentials must never follow a redirect to another service.
+    redirect: "error",
+    signal: AbortSignal.timeout(30_000),
     headers: {
       "Content-Type": "application/json",
       "X-Matterhorn-Agent-Runtime-Secret": settings.secret,
@@ -187,18 +190,21 @@ async function completeRun(runId: string, status: "success" | "partial" | "cance
     cacheWriteTokens: total.cacheWriteTokens + step.cacheWriteTokens,
     estimatedCostUsd: total.estimatedCostUsd + step.estimatedCostUsd,
   }), { inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, estimatedCostUsd: 0 }) : undefined;
-  pendingUsage.delete(runId);
   try {
-    await postInternal("/internal/agent-runs/complete", { runId, status, ...(usage ? { usage } : {}) });
+    const response = await postInternal("/internal/agent-runs/complete", { runId, status, ...(usage ? { usage } : {}) });
+    if (response.ok !== true) throw new Error("Matterhorn settlement acknowledgement was invalid.");
   } catch (error) {
+    // Keep every model step and its run binding for a replay after a lost or
+    // rejected acknowledgement. Never replay model/tool execution here.
     if (guardedMode() === "enforce") throw error;
-  } finally {
-    for (const [messageId, boundRunId] of runIdByAssistantMessage) {
-      if (boundRunId === runId) runIdByAssistantMessage.delete(messageId);
-    }
-    for (const [callId, boundRunId] of runIdByCall) {
-      if (boundRunId === runId) runIdByCall.delete(callId);
-    }
+    return;
+  }
+  pendingUsage.delete(runId);
+  for (const [messageId, boundRunId] of runIdByAssistantMessage) {
+    if (boundRunId === runId) runIdByAssistantMessage.delete(messageId);
+  }
+  for (const [callId, boundRunId] of runIdByCall) {
+    if (boundRunId === runId) runIdByCall.delete(callId);
   }
 }
 
@@ -382,7 +388,6 @@ export const MatterhornGuard = async (context: PluginContext) => {
       if (observed.completed || observed.failed) {
         if (retryMessages.get(observed.sessionId)?.runId === runId) retryMessages.delete(observed.sessionId);
         await completeRun(runId, observed.cancelled ? "cancelled" : observed.failed ? "error" : observed.finish === "stop" ? "success" : "partial");
-        runIdByAssistantMessage.delete(observed.assistantMessageId);
       }
       return;
     }

@@ -2501,7 +2501,9 @@ export class MatterhornGuardedAgentRuntime {
     const scope = this.runScope(runId);
     const coworker = this.capabilities.coworkerForRun(runId);
     if (scope) await this.receipts.get(scope.workspaceId, runId);
-    const capabilityDecisions = this.capabilities.decisionsForRun(runId);
+    // A completion replay arrives after revocation cleared the broker's
+    // decisions. Preserve the persisted audit evidence in that case.
+    const capabilityDecisions = scope ? this.capabilities.decisionsForRun(runId) : undefined;
     try {
       await this.receipts.complete({ runId, status, usage, capabilityDecisions });
       if (scope && coworker) {

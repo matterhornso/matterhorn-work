@@ -1203,6 +1203,16 @@ describe("guarded agent runtime transport", () => {
       args: { address: `0x${"1".repeat(64)}`, _matterhornCallId: "call_complete_pending" },
     })).toThrow("unknown, expired, or replayed");
     expect((await runtime.receipts.get("ws_complete", accepted.runId))?.status).toBe("success");
+    const completed = await runtime.receipts.get("ws_complete", accepted.runId);
+    expect(completed?.capabilities.length).toBeGreaterThan(0);
+    // A lost HTTP acknowledgement can replay completion after authority was
+    // revoked. It must not erase the original security decisions.
+    await runtime.completeRun({
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId,
+      status: "success",
+    });
+    expect((await runtime.receipts.get("ws_complete", accepted.runId))?.capabilities).toEqual(completed?.capabilities);
   });
 
   test("revokes staged authority immediately when a bound coworker changes state", async () => {
