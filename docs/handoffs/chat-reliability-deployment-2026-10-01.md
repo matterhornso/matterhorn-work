@@ -6,6 +6,8 @@ Engineering team: review and deploy the tested chat reliability candidate only a
 
 Repository: `https://github.com/matterhornso/matterhorn-work`.
 
+Review [PR #1029](https://github.com/matterhornso/matterhorn-work/pull/1029) followed by the published reliability [PR #1030](https://github.com/matterhornso/matterhorn-work/pull/1030). Neither was merged or deployed by this work block.
+
 The reliability branch is `codex/chat-reliability-audit-2026-09-30`, built on PR #1029 at `22a696626847f139f58adfad86c6cd20f5d0e5ad`. The final source candidate is `652555e586597694be231787ec01ef5cbe13ddc2`; subsequent evidence/documentation commits must be included in review. PR #1029 was still open on 30 September at approximately 21:41 UTC. Review that base first. The reliability PR should initially target `codex/jev-chat-opt-in-2026-09-30` so its additional changes are reviewable. After the base merges into `dev`, retarget/rebase as necessary, then rerun required CI against the final merge candidate. Full test/i18n/UI-MCP workflows filter on `dev`; only applicable security checks are expected while stacked. Skipped workflows are not green acceptance. Do not deploy a floating “latest PR” or assume that a green base PR covers these changes.
 
 Record the exact approved merge SHA, web build SHA, API build SHA, runtime/plugin artifact version and sidecar image digest. Deploy a coordinated web/API/runtime release: the new continuation acknowledgement, Sui schema and Jev lifecycle must not be validated against a stale backend. Preserve durable account data, sessions, memory, receipts, provider configuration and signing material. Do not copy the disposable developer test runtime into production.

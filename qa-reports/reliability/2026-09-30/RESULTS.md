@@ -5,6 +5,7 @@ This report is for the release reviewer and deployment team. It covers the five-
 ## Release identity and scope
 
 - Branch: `codex/chat-reliability-audit-2026-09-30`.
+- Published review: [PR #1030](https://github.com/matterhornso/matterhorn-work/pull/1030), stacked on #1029. Initial publication head `fe4e7381ff47f25ab7bdf162c7809cc0f2b7c1be` contains the source candidate plus this evidence. Check the PR for later documentation commits and live CI state.
 - Final source candidate reviewed here: `652555e586597694be231787ec01ef5cbe13ddc2`. Later documentation/evidence commits do not change its application source.
 - Base: PR #1029, `codex/jev-chat-opt-in-2026-09-30`, commit `22a696626847f139f58adfad86c6cd20f5d0e5ad`. GitHub still reported OPEN on 30 September at approximately 21:41 UTC.
 - The real-provider runtime was incrementally refreshed through `1923df5bf5ec8433154e55b337e8190f5e429775` plus the identical agent guidance subsequently committed as `1914b3e544b278583f84b3b66eb1c7282cbca11b`. Browser verification additionally covered UI commits `35cde3740923e28d8da92cb802f4366f4c182f07` and `aa5f5b62f6f333b8c4715b664ac62add13d2ec15` through Vite.
@@ -44,6 +45,8 @@ The interrupted-purge test first failed because the index entry had already disa
 A separate actual loopback 307 redirect test reproduced managed tool requests reaching an unexpected destination. Commit `652555e586597694be231787ec01ef5cbe13ddc2` rejects redirects; the focused managed transport suite passed 39 tests and 244 assertions. Only fake credentials and a disposable local server were used. Final server suite, typecheck, build and platform gate subsequently passed.
 
 GitHub full test, i18n and UI-MCP workflows target PRs into `dev`, not a stacked feature branch. Security workflows accept stacked PRs. A skipped full workflow is not a pass: retarget after #1029 merges and require all final-merge checks before deployment. Remote CI status must be read from the new PR, not inferred from these local results.
+
+GitHub's push notice reported five open **default-branch** advisories. Their alert records identify brace-expansion (three), engine.io and fast-uri. The candidate lockfile already contains patched versions 5.0.12, 6.6.10 and 3.1.8 respectively, inherited from #1029. Open default-branch alerts are not evidence that this candidate uses the old versions, and a clean candidate audit does not close alerts until the relevant branch receives the fixes. Do not dismiss them merely to make the repository badge green.
 
 ## Real provider and five desk evidence
 
