@@ -58,6 +58,7 @@ import {
 import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { resultCardDeskId } from "./result-card-memory";
 import { responseCompletionSummary } from "../message-completion-metadata";
+import { PublicReadLimitations } from "./public-read-limitations";
 
 type TranscriptPart = Part;
 
@@ -1749,6 +1750,7 @@ function StepRow(props: {
         </span>
       </button>
       {statusText ? <div className="ml-7 mt-2 text-sm leading-[1.65] text-muted-foreground">{statusText}</div> : null}
+      {props.part.type === "tool" ? <PublicReadLimitations tool={props.part.tool} output={toolOutput} /> : null}
       {bittensorCards.length ? (
         <div className="mt-3 ml-7 max-w-[720px]">
           <BittensorToolCards
