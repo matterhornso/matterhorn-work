@@ -25,6 +25,33 @@ import { planBittensorChat } from "./tools/bittensor.js";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("managed OpenCode Matterhorn MCP", () => {
+  test("does not follow an internal redirect with the client credential or tool request", async () => {
+    let redirectedRequests = 0;
+    const server = Bun.serve({
+      hostname: "127.0.0.1", port: 0,
+      fetch(request) {
+        if (new URL(request.url).pathname === "/api/bittensor/chat/execute") {
+          return new Response(null, { status: 307, headers: { location: "/unexpected-destination" } });
+        }
+        redirectedRequests += 1;
+        return Response.json({ success: true, data: { discovery: {} } });
+      },
+    });
+    try {
+      const result = await handleManagedOpencodeMcp({
+        payload: { jsonrpc: "2.0", id: "redirect-rejected", method: "tools/call", params: {
+          name: "matterhorn_bittensor_chat", arguments: { message: "Public subnet fixture", netuid: 12 },
+        } },
+        serverUrl: `http://127.0.0.1:${server.port}`, clientToken: "fixture-only-client-credential",
+      });
+      expect(redirectedRequests).toBe(0);
+      expect(result.body).toMatchObject({ error: expect.any(Object) });
+      expect(JSON.stringify(result.body)).not.toContain("fixture-only-client-credential");
+    } finally {
+      await server.stop(true);
+    }
+  });
+
   test("advertises exact market lookup and typed Bittensor reads in the canonical model contract", async () => {
     const result = await handleManagedOpencodeMcp({
       payload: { jsonrpc: "2.0", id: "read-contracts", method: "tools/list" },

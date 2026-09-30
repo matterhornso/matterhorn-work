@@ -1075,6 +1075,9 @@ async function callBackendTool(input: {
     const request = input.tool.request(input.args);
     const response = await input.fetchImpl(`${input.serverUrl.replace(/\/+$/, "")}${request.path}`, {
       method: request.method ?? "GET",
+      // Internal tool requests are bound to this endpoint. Never forward their
+      // credential, workspace header or body through an unexpected redirect.
+      redirect: "error",
       headers: {
         Authorization: `Bearer ${input.clientToken}`,
         ...(input.authorization?.workspaceId ? { "X-Matterhorn-Workspace-Id": input.authorization.workspaceId } : {}),
