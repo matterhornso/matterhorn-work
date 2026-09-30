@@ -153,3 +153,32 @@ test("export does not chmod an existing user-selected folder", async (t) => {
   await vault.exportBundle(output)
   assert.equal((await stat(output)).mode, before)
 })
+
+test("workspace purge retains its deletion inventory if log cleanup fails, then retries completely", async (t) => {
+  const { vault } = await fixture(t)
+  await vault.captureRecord(memory())
+  await vault.captureRecord({ ...memory("mem_other"), tags: ["bittensor", "workspace:ws_other"] })
+  await vault.storeSuggestions([{
+    version: "matterhorn.memory.suggestion.v1", id: "suggest_purge", proposedRecord: memory("mem_proposed"),
+    reason: "ERASE_THIS_MEMORY_CONTENT", source: "chat_capture", confidence: 1,
+    desk: "bittensor", useCase: "bittensor_wallet_label", userAction: "dismiss",
+    captureMode: "user_confirmed_only", canAutoCapture: false, requiresExplicitConsent: true,
+    forbiddenIfSecretDetected: true,
+  }])
+  const log = await readFile(vault.logPath, "utf8")
+  // A real filesystem failure, restricted to this disposable fixture.
+  await rm(vault.logPath)
+  await mkdir(vault.logPath)
+  await assert.rejects(() => vault.purgeWorkspace("ws_delete"))
+  assert.ok(JSON.parse(await readFile(vault.indexPath, "utf8")).entries.mem_delete)
+  assert.ok(await vault.getSuggestion("suggest_purge"))
+  await rm(vault.logPath, { recursive: true })
+  await writeFile(vault.logPath, log)
+  assert.deepEqual(await vault.purgeWorkspace("ws_delete"), {
+    workspaceId: "ws_delete", deletedRecords: 1, deletedSuggestions: 1,
+  })
+  assert.equal(await vault.getRecord("mem_delete"), null)
+  assert.equal(await vault.getSuggestion("suggest_purge"), null)
+  assert.ok(await vault.getRecord("mem_other"))
+  assert.doesNotMatch(await readFile(vault.logPath, "utf8"), /mem_delete|suggest_purge/)
+})

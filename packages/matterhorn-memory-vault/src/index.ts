@@ -736,10 +736,11 @@ export class MatterhornMemoryVault {
     for (const suggestionId of suggestionIds) {
       delete inbox.entries[suggestionId]
     }
-    await this.writeIndex(index)
-    await this.writeSuggestionInbox(inbox)
-
+    // Keep the persisted deletion inventory until content-bearing logs have
+    // been cleaned. A failed cleanup must remain discoverable on retry.
     await this.removeLogEntries(deletedIds)
+    await this.writeSuggestionInbox(inbox)
+    await this.writeIndex(index)
 
     return {
       workspaceId,
