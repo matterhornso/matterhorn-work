@@ -90,6 +90,7 @@ describe("ensureWorkspaceFiles", () => {
       expect(hyperliquidAgent).toContain("complete order request");
       expect(hyperliquidAgent).toContain("typed Review in wallet card");
       expect(hyperliquidAgent).toContain("single most specific Hyperliquid desk tool");
+      expect(hyperliquidAgent).toContain("Preserve warnings from both the result and its source");
       expect(hyperliquidAgent).toContain("The user opens the separate trade ticket");
       expect(polymarketAgent).toContain("Polymarket Agent");
       expect(polymarketAgent).toContain("wallet-approved action agent");
@@ -105,6 +106,9 @@ describe("ensureWorkspaceFiles", () => {
       expect(suiAgent).toContain("task: deny");
       expect(suiAgent).toContain('"matterhorn-work_matterhorn_sui_preview_transfer": true');
       expect(suiAgent).toContain("amountSui as a positive decimal string");
+      expect(suiAgent).toContain("Pass the requested network explicitly");
+      expect(suiAgent).toContain("Preserve every nonzero address digit");
+      expect(suiAgent).toContain("coinBalanceMist and addressBalanceMist are separate components");
       expect(suiAgent).toContain("no valid preview was generated");
       expect(suiAgent).toContain("Never invent a gas budget");
       expect(suiAgent).toContain("outputs/sui/<session-slug>");
