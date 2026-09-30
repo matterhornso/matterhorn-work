@@ -1215,6 +1215,61 @@ describe("guarded agent runtime transport", () => {
     expect((await runtime.receipts.get("ws_complete", accepted.runId))?.capabilities).toEqual(completed?.capabilities);
   });
 
+  test("rehydrates a completed receipt before acknowledging a replay after restart", async () => {
+    const path = join(dataDir, "completed-replay-restart.db");
+    const first = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    const accepted = await first.acceptPrompt({
+      workspaceId: "ws_replay_restart", sessionId: "ses_replay_restart",
+      parts: [{ type: "text", text: "Read public Sui balance" }],
+      providerId: "cudos", modelId: "asi1-mini", agentId: "matterhorn-sui", executionMode: "work",
+    });
+    await first.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId, status: "success", usage: { inputTokens: 100, outputTokens: 23 } });
+    const before = await first.receipts.get("ws_replay_restart", accepted.runId);
+    first.close();
+    const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    // No UI/list call has primed the process-local receipt cache.
+    await restored.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: accepted.runId, status: "success", usage: { inputTokens: 400, outputTokens: 73 } });
+    const after = await restored.receipts.get("ws_replay_restart", accepted.runId);
+    expect(after?.usage.inputTokens).toBe(400);
+    expect(after?.usage.outputTokens).toBe(73);
+    expect(after?.capabilities).toEqual(before?.capabilities);
+    expect(restored.capabilities.activeRun("ses_replay_restart")).toBeNull();
+    restored.close();
+  });
+
+  test("does not acknowledge completion for an unknown receipt", async () => {
+    const runtime = new MatterhornGuardedAgentRuntime();
+    await expect(runtime.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+      runId: "run_unknown_completion", status: "success" })).rejects.toThrow();
+    runtime.close();
+  });
+
+  test("refuses a mismatched or missing receipt index and revokes remaining authority", async () => {
+    for (const variant of ["missing", "hash", "workspace"]) {
+      const path = join(dataDir, `completion-index-${variant}.db`);
+      const store = new MatterhornGuardedRuntimeStateStore(path);
+      const runtime = new MatterhornGuardedAgentRuntime(store);
+      const workspaceId = `ws_completion_${variant}`;
+      const sessionId = `ses_completion_${variant}`;
+      const accepted = await runtime.acceptPrompt({ workspaceId, sessionId,
+        parts: [{ type: "text", text: "Read public Sui balance" }], providerId: "cudos",
+        modelId: "asi1-mini", agentId: "matterhorn-sui", executionMode: "work" });
+      const record = store.getRecord<unknown>("receipt_index", accepted.runId);
+      if (!record || !record.value || typeof record.value !== "object" || !("value" in record.value)
+        || !record.value.value || typeof record.value.value !== "object") throw new Error("Missing test index");
+      if (variant === "missing") store.delete("receipt_index", accepted.runId);
+      else replaceAuthorizedRecord(store, record, { ...record.value.value,
+        ...(variant === "hash" ? { recordHash: "0".repeat(64) } : { workspaceId: "ws_other" }) });
+      await expect(runtime.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        runId: accepted.runId, status: "success", usage: { inputTokens: 473 } })).rejects.toThrow();
+      expect(runtime.capabilities.activeRun(sessionId)).toBeNull();
+      expect((await runtime.receipts.get(workspaceId, accepted.runId))?.status).toBe("pending");
+      runtime.close();
+    }
+  });
+
   test("revokes staged authority immediately when a bound coworker changes state", async () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     runtime.setCoworkerResolver(() => true);
