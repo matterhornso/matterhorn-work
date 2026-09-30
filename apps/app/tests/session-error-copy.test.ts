@@ -53,6 +53,18 @@ test("missing desk permission policy explains setup without suggesting blind ret
 });
 
 describe("session error copy", () => {
+  test("rate limiting offers explicit recovery without model substitution or diagnostic leakage", () => {
+    for (const error of ["rate limit exceeded", JSON.stringify({ name: "APIError", data: { statusCode: 429, message: "private provider diagnostic" } })]) {
+      const parsed = parseSessionError(new Error(error));
+      expect(parsed.kind).toBe("rate-limited");
+      expect(parsed.retryable).toBe(true);
+      expect(parsed.detail).toContain("will not switch models");
+      expect(parsed.detail).toContain("prompt is preserved");
+      expect(JSON.stringify(parsed)).not.toContain("private provider diagnostic");
+    }
+    expect(parseSessionError(JSON.stringify({ code: "model_usage_exceeded", statusCode: 429 })).kind).toBe("generic");
+  });
+
   test("keeps internal engine names out of customer-facing recovery", () => {
     const errors = [
       new Error("OpenCode request failed"),

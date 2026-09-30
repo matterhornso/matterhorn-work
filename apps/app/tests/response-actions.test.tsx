@@ -2,12 +2,16 @@ import React from "react";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { UIMessage } from "ai";
+import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
+import { accountClientState, AccountStateChangedError } from "../src/app/lib/account-client-state";
 
 import { SessionTranscript } from "../src/react-app/domains/session/surface/message-list";
 import {
   resolveAssistantResponseRetryTurn,
   responseOutputTitle,
   runAssistantResponseRetry,
+  requireAnswerContinuationSupport,
+  failedContinuationResponseId,
 } from "../src/react-app/domains/session/surface/response-actions";
 
 const messages: UIMessage[] = [
@@ -21,6 +25,7 @@ const messages: UIMessage[] = [
     role: "assistant",
     metadata: {
       opencode: {
+        finish: "stop",
         created: 1_000,
         completed: 3_500,
         tokens: { total: 1_650, input: 1_200, output: 400, reasoning: 50 },
@@ -46,6 +51,83 @@ function renderTranscript(isStreaming: boolean) {
 }
 
 describe("assistant response actions", () => {
+  for (const boundary of ["prepare", "abort", "revert", "dispatch"]) {
+    test(`account switch during ${boundary} prevents subsequent retry mutations`, async () => {
+      const calls: string[] = [];
+      const step = async (name: string) => {
+        calls.push(name);
+        if (boundary === name) {
+          accountClientState.clear();
+          if (name === "dispatch") throw new Error("old account dispatch failed");
+        }
+      };
+      await expect(runAssistantResponseRetry({
+        prepare: () => step("prepare"), abort: () => step("abort"), revert: () => step("revert"),
+        dispatch: () => step("dispatch"), restore: () => step("restore"),
+      })).rejects.toThrow(AccountStateChangedError);
+      const steps = ["prepare", "abort", "revert", "dispatch"];
+      expect(calls).toEqual(steps.slice(0, steps.indexOf(boundary) + 1));
+    });
+  }
+  test("accepted continuation failures retry that response rather than the unrelated draft", () => {
+    const failure = { id: "msg_assistant_1", retryMessage: MATTERHORN_CONTINUE_ANSWER_TEXT };
+    expect(failedContinuationResponseId(failure, messages)).toBe("msg_assistant_1");
+    expect(failedContinuationResponseId(null, messages)).toBeNull();
+    expect(failedContinuationResponseId({ ...failure, retryMessage: "Ordinary question" }, messages)).toBeNull();
+    expect(failedContinuationResponseId(failure, [...messages, { id: "later", role: "user", parts: [] }])).toBeNull();
+    expect(failedContinuationResponseId({ ...failure, id: "older" }, messages)).toBeNull();
+  });
+  test("safe continuation requires acknowledgement from the backend for this exact answer", () => {
+    expect(() => requireAnswerContinuationSupport({}, "partial")).toThrow("backend does not support safe answer continuation");
+    expect(() => requireAnswerContinuationSupport({ continuation: { messageId: "other", tools: "disabled" } }, "partial")).toThrow();
+    expect(() => requireAnswerContinuationSupport({ continuation: { messageId: "partial", tools: "disabled" } }, "partial")).not.toThrow();
+  });
+
+  test.each(["length", "stop", "content-filter", "unknown"])("continuation action is available only for length, not %s", (finish) => {
+    const html = renderToStaticMarkup(React.createElement(SessionTranscript, {
+      messages: [{ id: "partial", role: "assistant", parts: [{ type: "text", text: "Answer" }],
+        metadata: { opencode: { finish, completed: 2000, created: 1000 } } }],
+      isStreaming: false, developerMode: false, onContinueAssistantResponse: async () => undefined,
+    }));
+    expect(html.includes("Continue answer")).toBe(finish === "length");
+  });
+
+  test("streaming and older incomplete answers do not expose continuation", () => {
+    const partial: UIMessage = { id: "partial", role: "assistant", parts: [{ type: "text", text: "Answer" }],
+      metadata: { opencode: { finish: "length", completed: 2000 } } };
+    for (const streaming of [false, true]) {
+      const html = renderToStaticMarkup(React.createElement(SessionTranscript, {
+        messages: streaming ? [partial] : [partial, ...messages], isStreaming: streaming,
+        developerMode: false, onContinueAssistantResponse: async () => undefined,
+      }));
+      expect(html).not.toContain("Continue answer");
+    }
+  });
+
+  test("a persisted truncated answer stays incomplete in the rendered transcript", () => {
+    const html = renderToStaticMarkup(React.createElement(SessionTranscript, {
+      messages: [{ id: "partial", role: "assistant", parts: [{ type: "text", text: "Cut off" }],
+        metadata: { opencode: { finish: "length", completed: 2000, created: 1000 } } }],
+      isStreaming: false, developerMode: false,
+    }));
+    expect(html).toContain('data-response-state="incomplete"');
+    expect(html).toContain("The model reached its output limit before finishing.");
+    expect(html).not.toContain('data-response-state="completed"');
+  });
+
+  test("a later user turn hides continuation even before another assistant exists", () => {
+    const html = renderToStaticMarkup(React.createElement(SessionTranscript, {
+      messages: [
+        { id: "partial", role: "assistant", parts: [{ type: "text", text: "Cut off" }],
+          metadata: { opencode: { finish: "length", completed: 2000 } } },
+        { id: "followup", role: "user", parts: [{ type: "text", text: "New question" }] },
+      ],
+      isStreaming: false, developerMode: false, onContinueAssistantResponse: async () => undefined,
+    }));
+    expect(html).not.toContain("Continue answer");
+    expect(html).toContain('data-response-state="incomplete"');
+  });
+
   test("completed responses expose one coherent, accessible action group", () => {
     const html = renderTranscript(false);
 
@@ -121,6 +203,7 @@ describe("assistant response actions", () => {
     const dispatchError = new Error("Selected model is unavailable.");
 
     await expect(runAssistantResponseRetry({
+      prepare: async () => { calls.push("prepare"); },
       abort: async () => { calls.push("abort"); },
       revert: async () => { calls.push("revert"); },
       dispatch: async () => {
@@ -130,29 +213,46 @@ describe("assistant response actions", () => {
       restore: async () => { calls.push("restore"); },
     })).rejects.toBe(dispatchError);
 
-    expect(calls).toEqual(["abort", "revert", "dispatch", "restore"]);
+    expect(calls).toEqual(["prepare", "abort", "revert", "dispatch", "restore"]);
   });
 
   test("retry does not restore after a successful replacement dispatch", async () => {
     const calls: string[] = [];
 
     await runAssistantResponseRetry({
+      prepare: async () => { calls.push("prepare"); return { jevReceipt: "scoped-receipt", answerOnly: true }; },
       abort: async () => { calls.push("abort"); },
       revert: async () => { calls.push("revert"); },
-      dispatch: async () => { calls.push("dispatch"); },
+      dispatch: async (prepared) => {
+        expect(prepared).toEqual({ jevReceipt: "scoped-receipt", answerOnly: true });
+        calls.push("dispatch");
+      },
       restore: async () => { calls.push("restore"); },
     });
 
-    expect(calls).toEqual(["abort", "revert", "dispatch"]);
+    expect(calls).toEqual(["prepare", "abort", "revert", "dispatch"]);
   });
 
   test("retry reports when both dispatch and conversation restoration fail", async () => {
     await expect(runAssistantResponseRetry({
+      prepare: async () => undefined,
       abort: async () => undefined,
       revert: async () => undefined,
       dispatch: async () => { throw new Error("Dispatch unavailable"); },
       restore: async () => { throw new Error("Restore unavailable"); },
     })).rejects.toThrow("could not restore the original conversation");
+  });
+
+  test("cancelled Jev preparation leaves the original conversation untouched", async () => {
+    const calls: string[] = [];
+    await expect(runAssistantResponseRetry({
+      prepare: async () => { calls.push("prepare"); throw new Error("Message cancelled before model submission."); },
+      abort: async () => { calls.push("abort"); },
+      revert: async () => { calls.push("revert"); },
+      dispatch: async () => { calls.push("dispatch"); },
+      restore: async () => { calls.push("restore"); },
+    })).rejects.toThrow("cancelled");
+    expect(calls).toEqual(["prepare"]);
   });
 
   test("saved-output titles are compact, plain, and deterministic", () => {

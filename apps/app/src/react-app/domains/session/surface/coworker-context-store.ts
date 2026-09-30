@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { accountClientState } from "../../../../app/lib/account-client-state";
 
 export type MatterhornSessionCoworkerContext = {
   id: string;
@@ -105,6 +106,8 @@ export function getMatterhornSessionCoworkerContext(
 ): MatterhornSessionCoworkerContext | null {
   return state.contexts[sessionId] ?? null;
 }
+
+accountClientState.register("coworker-context", () => useMatterhornSessionCoworkerContextStore.setState({ contexts: {} }));
 
 export const useMatterhornSessionCoworkerContextStore = create<MatterhornSessionCoworkerContextStore>((set) => ({
   contexts: readStoredMatterhornCoworkerContexts(),

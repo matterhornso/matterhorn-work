@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { accountClientState } from "../../../../app/lib/account-client-state";
 
 export type MatterhornSessionAgentFile = {
   id: string;
@@ -151,6 +152,8 @@ export function describeMatterhornAgentFileContext(context: MatterhornSessionAge
   const extra = context.files.length > 3 ? ` +${context.files.length - 3} more` : "";
   return `${context.coworker.name} can read ${names}${extra}`;
 }
+
+accountClientState.register("agent-file-context", () => useMatterhornSessionAgentFileContextStore.setState({ contexts: {} }));
 
 export const useMatterhornSessionAgentFileContextStore = create<MatterhornSessionAgentFileContextStore>((set) => ({
   contexts: readStoredMatterhornAgentFileContexts(),

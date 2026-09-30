@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { accountClientState } from "../../../../app/lib/account-client-state";
 
 import type { ComposerAttachment } from "../../../../app/types";
 
@@ -43,6 +44,15 @@ function createEmptyComposerSession(): ComposerSessionState {
 function getWritableSession(state: ComposerStateStore, sessionId: string): ComposerSessionState {
   return state.sessions[sessionId] ?? createEmptyComposerSession();
 }
+
+accountClientState.register("composer-context", () => {
+  for (const session of Object.values(useComposerStateStore.getState().sessions)) {
+    for (const attachment of session.attachments) {
+      if (attachment.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(attachment.previewUrl);
+    }
+  }
+  useComposerStateStore.setState({ sessions: {} });
+});
 
 export const useComposerStateStore = create<ComposerStateStore>((set) => ({
   sessions: {},

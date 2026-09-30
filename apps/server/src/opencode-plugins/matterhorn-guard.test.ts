@@ -65,6 +65,33 @@ afterAll(() => {
 });
 
 describe("matterhorn-guard OpenCode plugin", () => {
+  test("records user cancellation separately from provider failure", async () => {
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    await plugin.event({ event: { type: "message.updated", properties: { info: {
+      role: "assistant", id: "msg_cancelled", parentID: "msg_cancelled_parent", sessionID: "ses_cancelled",
+      error: { name: "MessageAbortedError", data: { message: "cancelled" } },
+      tokens: { input: 120, output: 36, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1000, completed: 2000 },
+    } } } });
+    const completion = requests.find(request => request.url.endsWith("/internal/agent-runs/complete"));
+    expect(JSON.parse(String(completion?.init?.body))).toMatchObject({
+      status: "cancelled", usage: { inputTokens: 120, outputTokens: 36 },
+    });
+  });
+  test.each(["length", "content-filter"])("settles %s as partial while retaining actual usage", async (finish) => {
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    await plugin.event({ event: { type: "message.updated", properties: { info: {
+      role: "assistant", id: `msg_partial_${finish}`, parentID: "msg_user_partial", sessionID: "ses_partial",
+      finish, tokens: { input: 120, output: 36, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1000, completed: 2000 },
+    } } } });
+    const completion = requests.find(request => request.url.endsWith("/internal/agent-runs/complete"));
+    expect(completion).toBeDefined();
+    expect(JSON.parse(String(completion?.init?.body))).toMatchObject({
+      status: "partial", usage: { inputTokens: 120, outputTokens: 36 },
+    });
+  });
+
   test("revalidates an unchanged run-bound snapshot before a provider retry", async () => {
     const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
     const messages = [{ info: { id: "msg_retry", role: "user", sessionID: "ses_retry" },

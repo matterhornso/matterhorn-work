@@ -1,4 +1,22 @@
 import type { UIMessage } from "ai";
+import type { MatterhornAgentPrivacyPreflightResponse } from "@matterhorn-work/types/guarded-agent-runtime";
+import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
+import { AccountStateChangedError, captureAccountGeneration } from "../../../../app/lib/account-client-state";
+
+export function failedContinuationResponseId(
+  failure: { id: string; retryMessage: string } | null,
+  messages: readonly UIMessage[],
+): string | null {
+  const latest = messages.at(-1);
+  return failure?.retryMessage === MATTERHORN_CONTINUE_ANSWER_TEXT
+    && latest?.role === "assistant" && latest.id === failure.id ? failure.id : null;
+}
+
+export function requireAnswerContinuationSupport(preflight: Pick<MatterhornAgentPrivacyPreflightResponse, "continuation">, messageId: string) {
+  if (preflight.continuation?.messageId !== messageId || preflight.continuation.tools !== "disabled") {
+    throw new Error("This backend does not support safe answer continuation yet. Ask the workspace owner to update it; your draft is unchanged.");
+  }
+}
 
 export type AssistantResponseRetryTurn = {
   responseIndex: number;
@@ -6,21 +24,31 @@ export type AssistantResponseRetryTurn = {
   prompt: string;
 };
 
-export type AssistantResponseRetryTransaction = {
+export type AssistantResponseRetryTransaction<T> = {
+  prepare: () => Promise<T>;
   abort: () => Promise<void>;
   revert: () => Promise<unknown>;
-  dispatch: () => Promise<void> | void;
+  dispatch: (prepared: T) => Promise<void> | void;
   restore: () => Promise<unknown>;
 };
 
-export async function runAssistantResponseRetry(
-  transaction: AssistantResponseRetryTransaction,
+export async function runAssistantResponseRetry<T>(
+  transaction: AssistantResponseRetryTransaction<T>,
 ): Promise<void> {
+  const isCurrentAccount = captureAccountGeneration();
+  const requireCurrentAccount = () => { if (!isCurrentAccount()) throw new AccountStateChangedError(); };
+  // Classification/consent preparation can be cancelled. Do not change the
+  // existing conversation until it finishes successfully.
+  const prepared = await transaction.prepare();
+  requireCurrentAccount();
   await transaction.abort();
+  requireCurrentAccount();
   await transaction.revert();
+  requireCurrentAccount();
   try {
-    await transaction.dispatch();
+    await transaction.dispatch(prepared);
   } catch (dispatchError) {
+    requireCurrentAccount();
     try {
       await transaction.restore();
     } catch {

@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
+import { accountClientState, captureAccountGeneration } from "../../../../app/lib/account-client-state";
 
 import type { ComposerDraft, PromptMode } from "../../../../app/types";
 
@@ -44,6 +45,11 @@ const emitDraftStoreChange = () => {
     listener();
   }
 };
+
+accountClientState.register("session-drafts", () => {
+  draftCache = new Map();
+  emitDraftStoreChange();
+});
 
 const subscribeDraftStore = (callback: () => void) => {
   listeners.add(callback);
@@ -98,6 +104,7 @@ export const saveSessionDraft = (
   sessionId: string | null | undefined,
   snapshot: SessionDraftSnapshot,
 ) => {
+  if (accountClientState.isResetting()) return;
   const key = sessionDraftScopeKey(workspaceId, sessionId);
   if (!key) return;
 
@@ -127,6 +134,7 @@ export const clearSessionDraft = (
   workspaceId: string,
   sessionId: string | null | undefined,
 ) => {
+  if (accountClientState.isResetting()) return;
   const key = sessionDraftScopeKey(workspaceId, sessionId);
   if (!key) return;
   const cache = loadDraftCache();
@@ -155,6 +163,7 @@ export function useSessionDraftState(
   workspaceId: string,
   sessionId: string | null | undefined,
 ) {
+  const isCurrentAccount = useRef(captureAccountGeneration()).current;
   const snapshot = useSessionDraftSnapshot(workspaceId, sessionId);
   const scopeKey = useMemo(
     () => sessionDraftScopeKey(workspaceId, sessionId),
@@ -163,14 +172,16 @@ export function useSessionDraftState(
 
   const save = useCallback(
     (nextSnapshot: SessionDraftSnapshot) => {
+      if (!isCurrentAccount()) return;
       saveSessionDraft(workspaceId, sessionId, nextSnapshot);
     },
-    [workspaceId, sessionId],
+    [workspaceId, sessionId, isCurrentAccount],
   );
 
   const clear = useCallback(() => {
+    if (!isCurrentAccount()) return;
     clearSessionDraft(workspaceId, sessionId);
-  }, [workspaceId, sessionId]);
+  }, [workspaceId, sessionId, isCurrentAccount]);
 
   return useMemo(
     () => ({ scopeKey, snapshot, save, clear }),

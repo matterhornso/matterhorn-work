@@ -1,6 +1,7 @@
 export const MATTERHORN_AGENT_PRIVACY_PREFLIGHT_VERSION = "matterhorn.agent-privacy-preflight.v1" as const;
 export const MATTERHORN_AGENT_CAPABILITY_VERSION = "matterhorn.agent-capability.v1" as const;
 export const MATTERHORN_AGENT_RUN_RECEIPT_VERSION = "matterhorn.agent-run-receipt.v1" as const;
+export const MATTERHORN_CONTINUE_ANSWER_TEXT = "Continue the incomplete answer using only the information already in this chat. Do not repeat tools or actions.";
 
 export type MatterhornGuardedRuntimeMode = "off" | "shadow" | "enforce";
 
@@ -48,6 +49,8 @@ export type MatterhornAgentMessagePart = {
 };
 
 export type MatterhornAgentPrivacyPreflightRequest = {
+  /** Latest length-truncated assistant message; server enforces answer-only execution. */
+  continuationOf?: string;
   /** Server-signed, exact-message optional Jev advisory. Never grants authority. */
   jevReceipt?: string;
   version?: typeof MATTERHORN_AGENT_PRIVACY_PREFLIGHT_VERSION;
@@ -91,6 +94,8 @@ export type MatterhornAgentMessageResponse = {
 };
 
 export type MatterhornAgentPrivacyPreflightResponse = {
+  /** Present only when this backend has validated and enforced answer-only continuation. */
+  continuation?: { messageId: string; tools: "disabled" };
   version: typeof MATTERHORN_AGENT_PRIVACY_PREFLIGHT_VERSION;
   requestHash: string;
   workspaceId: string;

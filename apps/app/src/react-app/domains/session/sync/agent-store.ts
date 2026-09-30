@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
+import { accountClientState, captureAccountGeneration } from "../../../../app/lib/account-client-state";
 
 const STORAGE_KEY = "matterhorn.session-agents.v1";
 const MAX_AGENT_COUNT = 100;
@@ -20,6 +21,11 @@ export const sessionAgentScopeKey = (
 const emitAgentStoreChange = () => {
   for (const listener of listeners) listener();
 };
+
+accountClientState.register("session-agents", () => {
+  agentCache = new Map();
+  emitAgentStoreChange();
+});
 
 const subscribeAgentStore = (callback: () => void) => {
   listeners.add(callback);
@@ -71,6 +77,7 @@ export const saveSessionAgent = (
   sessionId: string | null | undefined,
   agent: string | null,
 ) => {
+  if (accountClientState.isResetting()) return;
   const key = sessionAgentScopeKey(workspaceId, sessionId);
   if (!key) return;
 
@@ -93,6 +100,7 @@ export function useSessionAgentState(
   workspaceId: string,
   sessionId: string | null | undefined,
 ) {
+  const isCurrentAccount = useRef(captureAccountGeneration()).current;
   const scopeKey = useMemo(
     () => sessionAgentScopeKey(workspaceId, sessionId),
     [workspaceId, sessionId],
@@ -103,8 +111,10 @@ export function useSessionAgentState(
     () => null,
   );
   const setAgent = useCallback(
-    (nextAgent: string | null) => saveSessionAgent(workspaceId, sessionId, nextAgent),
-    [workspaceId, sessionId],
+    (nextAgent: string | null) => {
+      if (isCurrentAccount()) saveSessionAgent(workspaceId, sessionId, nextAgent);
+    },
+    [workspaceId, sessionId, isCurrentAccount],
   );
   return [agent, setAgent] as const;
 }

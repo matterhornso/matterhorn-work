@@ -196,6 +196,7 @@ type SessionTranscriptProps = {
   onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<OpenTarget | void> | OpenTarget | void;
   onSaveResultToMemory?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
   onRetryAssistantResponse?: (messageId: string) => Promise<void> | void;
+  onContinueAssistantResponse?: (messageId: string) => Promise<void> | void;
   onSaveAssistantResponse?: (messageId: string, text: string) => Promise<OpenTarget | void> | OpenTarget | void;
   onRateAssistantResponse?: (messageId: string, rating: "helpful" | "not_helpful") => Promise<void> | void;
 };
@@ -531,6 +532,7 @@ function AssistantResponseActions(props: {
   messageId: string;
   getText: () => string;
   onRetry?: (messageId: string) => Promise<void> | void;
+  onContinue?: (messageId: string) => Promise<void> | void;
   onSave?: (messageId: string, text: string) => Promise<OpenTarget | void> | OpenTarget | void;
   onRate?: (messageId: string, rating: "helpful" | "not_helpful") => Promise<void> | void;
   onOpenTarget?: (target: OpenTarget) => void;
@@ -538,10 +540,11 @@ function AssistantResponseActions(props: {
   onFork?: (messageId: string) => void;
 }) {
   const [retryState, setRetryState] = useState<"idle" | "retrying" | "failed">("idle");
+  const [continueState, setContinueState] = useState<"idle" | "pending" | "failed">("idle");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [savedTarget, setSavedTarget] = useState<OpenTarget | null>(null);
   const [ratingState, setRatingState] = useState<"idle" | "submitting" | "helpful" | "not_helpful" | "failed">("idle");
-  const busy = retryState === "retrying" || saveState === "saving" || ratingState === "submitting";
+  const busy = continueState === "pending" || retryState === "retrying" || saveState === "saving" || ratingState === "submitting";
   const completion = useMemo(() => responseCompletionSummary(props.message), [props.message]);
   const statusLabel = saveState === "saved"
     ? "Saved to Outputs"
@@ -551,7 +554,7 @@ function AssistantResponseActions(props: {
         ? "Retry failed"
         : ratingState === "failed"
           ? "Feedback failed"
-          : "Completed";
+          : completion.label;
 
   const rate = async (rating: "helpful" | "not_helpful") => {
     if (!props.onRate || busy) return;
@@ -565,16 +568,16 @@ function AssistantResponseActions(props: {
   };
 
   return (
-    <div className="mt-2 flex min-h-7 min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2" data-response-state={saveState === "saved" ? "saved" : "completed"}>
+    <div className="mt-2 flex min-h-7 min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2" data-response-state={completion.state}>
       <div
         className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] font-medium text-dls-muted"
-        aria-label={`${statusLabel}. ${completion.tokenLabel}. ${completion.durationLabel}. ${completion.transaction.detail}`}
+        aria-label={`${statusLabel}. ${completion.detail} ${completion.tokenLabel}. ${completion.durationLabel}. ${completion.transaction.detail}`}
         aria-live="polite"
         role="status"
       >
-        <span className="inline-flex items-center gap-1.5">
-          <BadgeCheck size={13} aria-hidden="true" />
-          {statusLabel}
+        <span className="inline-flex items-center gap-1.5" title={completion.detail}>
+          {completion.state === "completed" ? <BadgeCheck size={13} aria-hidden="true" /> : <CircleAlert size={13} aria-hidden="true" />}
+          {completion.label}{statusLabel !== completion.label ? ` · ${statusLabel}` : ""}
         </span>
         <span aria-hidden="true">·</span>
         <span data-response-token-usage title={completion.tokenDetail}>{completion.tokenLabel}</span>
@@ -585,6 +588,22 @@ function AssistantResponseActions(props: {
           {completion.transaction.label}
         </span>
       </div>
+      {completion.canContinue && props.onContinue ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-dls-secondary">
+          <span>{continueState === "failed" ? "Could not continue. Check the chat error and try again." : "Answer cut short."}</span>
+          <button type="button" disabled={busy}
+            className="min-h-11 shrink-0 rounded-md px-3 py-2 text-sm font-medium text-dls-text underline underline-offset-4 hover:bg-dls-hover/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            title="Continue from existing chat evidence without running tools again"
+            onClick={async () => {
+              if (busy) return;
+              setContinueState("pending");
+              try { await props.onContinue?.(props.messageId); setContinueState("idle"); }
+              catch { setContinueState("failed"); }
+            }}>
+            {continueState === "pending" ? "Continuing…" : "Continue answer"}
+          </button>
+        </div>
+      ) : null}
       <div
         className="relative z-10 flex max-w-full touch-pan-x items-center gap-0.5 overflow-x-auto select-none opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
         role="group"
@@ -1932,6 +1951,7 @@ function MessageBlockRow(props: {
   onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<OpenTarget | void> | OpenTarget | void;
   onSaveResultToMemory?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
   onRetryAssistantResponse?: (messageId: string) => Promise<void> | void;
+  onContinueAssistantResponse?: (messageId: string) => Promise<void> | void;
   onSaveAssistantResponse?: (messageId: string, text: string) => Promise<OpenTarget | void> | OpenTarget | void;
   onRateAssistantResponse?: (messageId: string, rating: "helpful" | "not_helpful") => Promise<void> | void;
 }) {
@@ -2132,6 +2152,7 @@ function MessageBlockRow(props: {
             messageId={block.messageId}
             getText={() => messageToText(block.message)}
             onRetry={block.messageId === props.latestAssistantMessageId ? props.onRetryAssistantResponse : undefined}
+            onContinue={!props.isStreaming && block.messageId === props.latestAssistantMessageId ? props.onContinueAssistantResponse : undefined}
             onSave={props.onSaveAssistantResponse}
             onRate={props.onRateAssistantResponse}
             onOpenTarget={props.onOpenTarget}
@@ -2446,6 +2467,7 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
                       onSaveBittensorEvidence={props.onSaveBittensorEvidence}
                       onSaveResultToMemory={props.onSaveResultToMemory}
                       onRetryAssistantResponse={props.onRetryAssistantResponse}
+                      onContinueAssistantResponse={props.messages.at(-1)?.id === latestAssistantMessageId ? props.onContinueAssistantResponse : undefined}
                       onSaveAssistantResponse={props.onSaveAssistantResponse}
                       onRateAssistantResponse={props.onRateAssistantResponse}
                     />
@@ -2479,6 +2501,7 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
               onSaveBittensorEvidence={props.onSaveBittensorEvidence}
               onSaveResultToMemory={props.onSaveResultToMemory}
               onRetryAssistantResponse={props.onRetryAssistantResponse}
+              onContinueAssistantResponse={props.messages.at(-1)?.id === latestAssistantMessageId ? props.onContinueAssistantResponse : undefined}
               onSaveAssistantResponse={props.onSaveAssistantResponse}
               onRateAssistantResponse={props.onRateAssistantResponse}
             />

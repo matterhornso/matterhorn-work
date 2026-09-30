@@ -116,6 +116,10 @@ export type SlashCommandOption = {
 };
 
 export type ComposerDraft = {
+  /** Transient answer-only recovery action, not an editable/persisted draft. */
+  continuationOf?: string;
+  /** Retry of an answer-only turn must retain its no-tools restriction. */
+  answerOnly?: boolean;
   /** Ephemeral Jev context receipt; never persisted with the draft. */
   jevReceipt?: string;
   mode: PromptMode;

@@ -1,8 +1,16 @@
 import { QueryClient } from "@tanstack/react-query";
+import { accountClientState } from "../../app/lib/account-client-state";
 
 type QueryClientGlobal = typeof globalThis & {
   __owReactQueryClient?: QueryClient;
 };
+
+accountClientState.register("query-cache", () => {
+  const client = (globalThis as QueryClientGlobal).__owReactQueryClient;
+  if (!client) return;
+  void client.cancelQueries();
+  client.clear();
+});
 
 export function getReactQueryClient(): QueryClient {
   const target = globalThis as QueryClientGlobal;

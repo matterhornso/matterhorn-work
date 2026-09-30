@@ -134,6 +134,8 @@ function assistantUsage(value: unknown): {
   userMessageId: string;
   completed: boolean;
   failed: boolean;
+  cancelled: boolean;
+  finish: string | null;
   usage: AssistantUsage;
 } | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -162,6 +164,8 @@ function assistantUsage(value: unknown): {
       && typeof Reflect.get(info, "finish") === "string"
       && !["tool-calls", "unknown"].includes(String(Reflect.get(info, "finish")))),
     failed: Boolean(Reflect.get(info, "error")),
+    cancelled: Reflect.get(info, "error")?.name === "MessageAbortedError",
+    finish: typeof Reflect.get(info, "finish") === "string" ? String(Reflect.get(info, "finish")) : null,
     usage: {
       inputTokens: numeric(Reflect.get(tokens, "input")),
       outputTokens: numeric(Reflect.get(tokens, "output")),
@@ -173,7 +177,7 @@ function assistantUsage(value: unknown): {
   };
 }
 
-async function completeRun(runId: string, status: "success" | "cancelled" | "error"): Promise<void> {
+async function completeRun(runId: string, status: "success" | "partial" | "cancelled" | "error"): Promise<void> {
   const steps = pendingUsage.get(runId);
   const usage = steps ? [...steps.values()].reduce((total, step) => ({
     inputTokens: total.inputTokens + step.inputTokens,
@@ -377,7 +381,7 @@ export const MatterhornGuard = async (context: PluginContext) => {
       pendingUsage.set(runId, steps);
       if (observed.completed || observed.failed) {
         if (retryMessages.get(observed.sessionId)?.runId === runId) retryMessages.delete(observed.sessionId);
-        await completeRun(runId, observed.failed ? "error" : "success");
+        await completeRun(runId, observed.cancelled ? "cancelled" : observed.failed ? "error" : observed.finish === "stop" ? "success" : "partial");
         runIdByAssistantMessage.delete(observed.assistantMessageId);
       }
       return;

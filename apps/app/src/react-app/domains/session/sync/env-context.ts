@@ -1,5 +1,6 @@
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { readMatterhornEnvPendingChanges } from "../../../../app/lib/matterhorn-env-runtime";
+import { accountClientState, captureAccountGeneration } from "../../../../app/lib/account-client-state";
 
 const DEFAULT_CACHE_KEY = "__openwork_env_default__";
 const MAX_CONTEXT_CACHE_ENTRIES = 100;
@@ -9,6 +10,8 @@ const envSystemContextCache = new Map<string, string | undefined>();
 export function clearOpenworkEnvSystemContextCache(): void {
   envSystemContextCache.clear();
 }
+
+accountClientState.register("environment-context", clearOpenworkEnvSystemContextCache);
 
 function normalizeEnvKeys(keys: string[]): string[] {
   return Array.from(
@@ -29,6 +32,7 @@ export async function buildOpenworkEnvSystemContext(
     readPendingChanges?: () => boolean;
   } = {},
 ): Promise<string | undefined> {
+  const isCurrentAccount = captureAccountGeneration();
   if (!client) return undefined;
   const readPendingChanges = options.readPendingChanges ??
     (() => readMatterhornEnvPendingChanges(options.runtimeKey));
@@ -41,6 +45,7 @@ export async function buildOpenworkEnvSystemContext(
 
   try {
     const response = await client.listUserEnvKeys();
+    if (!isCurrentAccount()) return undefined;
     const keys = normalizeEnvKeys(response.keys ?? []);
     if (keys.length === 0) {
       rememberEnvSystemContext(cacheKey, undefined);

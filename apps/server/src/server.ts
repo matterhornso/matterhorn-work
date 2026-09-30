@@ -1,6 +1,7 @@
 import { getPortfolio } from "./tools/portfolio-tracker.js";
 import { resolveConfinedWorkspacePath } from "./workspace-path-boundary.js";
 import { hostBackupFresh } from "./host-backup-readiness.js";
+import { parseAnswerContinuation, assertAnswerContinuationTarget, answerContinuationSystemContext } from "./answer-continuation.js";
 import { getCowQuote } from "./tools/cow-swap.js";
 import {
   buildAaveSupplyTx,
@@ -2478,6 +2479,16 @@ function appendJevSystemContext(resolved: { system: string; privacyParts: Matter
   resolved.privacyParts.push({ type: "jev_compiled_system_context", text: resolved.system,
     source: "system", label: "public", contentHash: sha256Bytes(resolved.system),
     sizeBytes: Buffer.byteLength(resolved.system, "utf8"), version: JEV_CONSENT_VERSION });
+}
+
+function appendAnswerContinuationContext(resolved: { system: string; privacyParts: MatterhornAgentPrivacyPart[] }, messageId: string | undefined): void {
+  if (!messageId) return;
+  resolved.system = [resolved.system, answerContinuationSystemContext(messageId)].filter(Boolean).join("\n\n");
+  // Bind the exact appended section as well as the ordered provider manifest.
+  // Retain the separately classified memory, files, and history unchanged.
+  resolved.privacyParts.push({ type: "continuation_compiled_system_context", source: "system", label: "public",
+    contentHash: sha256Bytes(resolved.system), sizeBytes: Buffer.byteLength(resolved.system, "utf8"),
+    version: "matterhorn.answer-continuation.v1" });
 }
 
 function matterhornCompactionPrivacyParts(
@@ -15416,9 +15427,11 @@ function createRoutes(
       routedTools,
       ...(coworker ? [coworkerToolProfile(coworker.binding)] : []),
       ...parseAgentRequestToolProfiles(body),
+      ...(body.continuationOf !== undefined ? [{ "*": false }] : []),
     ]
       .filter((profile): profile is Record<string, boolean> => Boolean(profile));
     const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
+    const continuationOf = await validateAnswerContinuation(config, workspace, sessionId, body);
     const privacyMode = parseAgentPrivacyMode(body.privacyMode);
     const resolved = await resolveAuthoritativeAgentMessage({
       body,
@@ -15438,6 +15451,7 @@ function createRoutes(
     });
     const jevContext = jevMessageContext(ctx, workspace, body, sessionId, rawParts, modelResolution.model);
     appendJevSystemContext(resolved, jevContext);
+    appendAnswerContinuationContext(resolved, continuationOf);
     const authorizationContextHash = coworkerAuthorizationContextHash({
       executionMode,
       requestToolProfiles,
@@ -15472,7 +15486,7 @@ function createRoutes(
       authorizationContextHash,
       ...(jurisdiction ? { jurisdiction } : {}),
     });
-    const result = jsonResponse(response);
+    const result = jsonResponse({ ...response, ...(continuationOf ? { continuation: { messageId: continuationOf, tools: "disabled" } } : {}) });
     result.headers.set("Cache-Control", "no-store");
     return result;
   });
@@ -15730,9 +15744,13 @@ function createRoutes(
       "Agent message",
     );
     const rawParts = parseSessionPromptParts(body);
+    const continuationRequestTarget = parseAnswerContinuation(body);
     // Client IDs deduplicate requests, but never become runtime message IDs.
     // Scope them to the authenticated subject and workspace; persist only hashes.
-    const requestId = typeof body.messageID === "string" ? body.messageID : randomUUID();
+    // One initial continuation per answer also deduplicates two tabs whose
+    // clients generated different IDs before the new turn appeared in history.
+    const requestId = continuationRequestTarget ? `continue_${sha256Bytes(continuationRequestTarget)}`
+      : typeof body.messageID === "string" ? body.messageID : randomUUID();
     if (!/^[A-Za-z0-9_-]{8,160}$/.test(requestId)) {
       throw new ApiError(400, "invalid_payload", "Invalid message request ID");
     }
@@ -15740,6 +15758,7 @@ function createRoutes(
     // Jev receipts expire/renew independently of the user's logical request.
     // Keep retries idempotent; new dispatch still validates the current receipt.
     const { jevReceipt: _jevReceipt, ...requestIdentity } = body;
+    if (continuationRequestTarget) delete requestIdentity.messageID;
     const requestHash = sha256Bytes(JSON.stringify(requestIdentity));
     const unknownDispatch = () => new ApiError(409, "message_outcome_unknown",
       "The previous send may still be running. Check chat history, then retry to check its status. No second run will be started.");
@@ -15828,8 +15847,10 @@ function createRoutes(
       ...(coworker ? [coworkerToolProfile(coworker.binding)] : []),
       legacyClientRestrictions,
       ...parseAgentRequestToolProfiles(body),
+      ...(body.continuationOf !== undefined ? [{ "*": false }] : []),
     ]
       .filter((profile): profile is Record<string, boolean> => Boolean(profile));
+    const continuationOf = await validateAnswerContinuation(config, workspace, sessionId, body);
     const privacyMode = parseAgentPrivacyMode(body.privacyMode);
     const resolved = await resolveAuthoritativeAgentMessage({
       body,
@@ -15849,6 +15870,7 @@ function createRoutes(
     });
     const jevContext = jevMessageContext(ctx, workspace, body, sessionId, rawParts, modelResolution.model);
     appendJevSystemContext(resolved, jevContext);
+    appendAnswerContinuationContext(resolved, continuationOf);
     const authorizationContextHash = coworkerAuthorizationContextHash({
       executionMode,
       requestToolProfiles,
@@ -15909,6 +15931,9 @@ function createRoutes(
     }
     let dispatchStarted = false;
     const dispatchNewMessage = async () => {
+      // Approval can wait. Recheck eligibility after it, before aborting or
+      // reserving anything, so a continuation cannot replace a newer turn.
+      if (continuationOf) await validateAnswerContinuation(config, workspace, sessionId, body);
       const usage = await reserveModelUsage({
         config,
         workspace,
@@ -15937,6 +15962,7 @@ function createRoutes(
           sessionId,
           guardedRuntime,
         });
+        if (continuationOf) await validateAnswerContinuation(config, workspace, sessionId, body);
         guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
           {
             ...guardedInput,
@@ -21859,6 +21885,16 @@ function guardedRuntimeApiError(error: unknown): ApiError {
     return new ApiError(error.status, error.code, error.message, error.details);
   }
   return new ApiError(500, "guarded_runtime_failed", "Matterhorn's guarded agent runtime could not complete this request.");
+}
+
+async function validateAnswerContinuation(config: ServerConfig, workspace: WorkspaceInfo, sessionId: string, body: Record<string, unknown>) {
+  const messageId = parseAnswerContinuation(body);
+  if (!messageId) return undefined;
+  const execution = await readWorkspaceSessionExecutionStatus(config, workspace, sessionId);
+  if (execution.busy) throw new ApiError(409, "continuation_unavailable", "Wait for the active response to stop before continuing an answer.");
+  const messages = await readWorkspaceSessionMessages(config, workspace, sessionId, {});
+  assertAnswerContinuationTarget({ messageId, session: execution.session, messages });
+  return messageId;
 }
 
 function parseSessionPromptParts(body: Record<string, unknown>): unknown[] {

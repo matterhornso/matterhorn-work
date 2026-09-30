@@ -1,4 +1,5 @@
 import { recordDevLog } from "./dev-log";
+import { accountClientState } from "./account-client-state";
 
 export type ModelOperationContext = {
   id: number;
@@ -49,6 +50,12 @@ type ModelMetricsRoot = typeof globalThis & {
   __matterhornModelMetrics?: ModelOperationMetric[];
   __matterhornPendingModelOperations?: Record<string, ModelOperationContext[]>;
 };
+
+accountClientState.register("model-metrics", () => {
+  const root = globalThis as ModelMetricsRoot;
+  root.__matterhornModelMetrics = [];
+  root.__matterhornPendingModelOperations = {};
+});
 
 const METRIC_LIMIT = 300;
 const SAFE_ID_MAX_LENGTH = 180;

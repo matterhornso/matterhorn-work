@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { accountClientState } from "../src/app/lib/account-client-state";
 
 import type { OpenworkServerClient } from "../src/app/lib/openwork-server";
 import {
@@ -17,6 +18,22 @@ function client(keys: string[], calls: { count: number }): OpenworkServerClient 
 }
 
 describe("buildOpenworkEnvSystemContext", () => {
+  test("a delayed old-account environment response is not cached or returned", async () => {
+    clearOpenworkEnvSystemContextCache();
+    const result = Promise.withResolvers<{ keys: string[] }>();
+    const calls = { count: 0 };
+    const server = client([], calls);
+    server.listUserEnvKeys = () => result.promise;
+    const pending = buildOpenworkEnvSystemContext(server, { cacheKey: "shared-session", readPendingChanges: () => false });
+    accountClientState.clear();
+    result.resolve({ keys: ["ACCOUNT_A_SECRET_NAME"] });
+    expect(await pending).toBeUndefined();
+    const next = await buildOpenworkEnvSystemContext(client(["ACCOUNT_B_KEY"], calls), {
+      cacheKey: "shared-session", readPendingChanges: () => false,
+    });
+    expect(next).toContain("ACCOUNT_B_KEY");
+    expect(next).not.toContain("ACCOUNT_A_SECRET_NAME");
+  });
   test("lists configured key names without inventing secret values", async () => {
     clearOpenworkEnvSystemContextCache();
     const calls = { count: 0 };

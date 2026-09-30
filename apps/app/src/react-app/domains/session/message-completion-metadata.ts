@@ -3,6 +3,10 @@ import type { UIMessage } from "ai";
 type RecordValue = Record<string, unknown>;
 
 export type ResponseCompletionSummary = {
+  canContinue: boolean;
+  state: "completed" | "incomplete" | "failed" | "stopped" | "step" | "unknown";
+  label: string;
+  detail: string;
   tokenLabel: string;
   tokenDetail: string;
   durationLabel: string;
@@ -185,6 +189,8 @@ export function buildOpenCodeMessageMetadata(info: unknown): UIMessage["metadata
     : null;
 
   const opencode = {
+    ...(typeof info.finish === "string" ? { finish: info.finish } : {}),
+    ...(isRecord(info.error) ? { errorName: typeof info.error.name === "string" ? info.error.name : "UnknownError" } : {}),
     ...(created !== null ? { created } : {}),
     ...(completed !== null ? { completed } : {}),
     ...(tokens ? { tokens } : {}),
@@ -203,6 +209,8 @@ export function responseCompletionSummary(message: UIMessage): ResponseCompletio
     : null;
 
   return {
+    ...responseOutcome(metadata),
+    canContinue: metadata?.finish === "length" && !metadata.errorName && completed !== null,
     tokenLabel: totalTokens === null ? "Tokens unavailable" : `${totalTokens.toLocaleString()} tokens`,
     tokenDetail: tokenBreakdown(tokens),
     durationLabel: duration === null ? "Time unavailable" : formatDuration(duration),
@@ -211,4 +219,20 @@ export function responseCompletionSummary(message: UIMessage): ResponseCompletio
       : `Elapsed time from provider request start to completed response: ${formatDuration(duration)}.`,
     transaction: transactionSummary(message),
   };
+}
+
+function responseOutcome(metadata: RecordValue | null): Pick<ResponseCompletionSummary, "state" | "label" | "detail"> {
+  if (metadata?.errorName === "MessageAbortedError") {
+    return { state: "stopped", label: "Stopped", detail: "Generation stopped. Any partial answer is preserved." };
+  }
+  if (metadata?.errorName) return { state: "failed", label: "Failed", detail: "The model could not finish this response." };
+  if (metadata?.finish === "length") {
+    return { state: "incomplete", label: "Incomplete", detail: "The model reached its output limit before finishing." };
+  }
+  if (metadata?.finish === "stop") return { state: "completed", label: "Completed", detail: "The model finished this response." };
+  if (metadata?.finish === "tool-calls") return { state: "step", label: "Tool step", detail: "This tool step is not the final answer." };
+  if (metadata?.finish === "content-filter") {
+    return { state: "incomplete", label: "Incomplete", detail: "The provider stopped this response because of its content policy." };
+  }
+  return { state: "unknown", label: "Completion unverified", detail: "The provider did not report a verified final completion state." };
 }

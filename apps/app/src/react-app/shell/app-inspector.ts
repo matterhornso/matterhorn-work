@@ -13,6 +13,8 @@
  * `publishInspectorSlice("route", () => ({...}))`. Slices expose a pull
  * function so we never hold stale snapshots.
  */
+import { accountClientState } from "../../app/lib/account-client-state";
+
 export type InspectorSliceGetter = () => unknown;
 
 type InspectorAPI = {
@@ -47,6 +49,11 @@ const registry: Registry = {
   events: [],
   installed: false,
 };
+
+accountClientState.register("app-inspector", () => {
+  registry.slices.clear();
+  registry.events = [];
+});
 
 function safeCall(getter: InspectorSliceGetter): unknown {
   try {

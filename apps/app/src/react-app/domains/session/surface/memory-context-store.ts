@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { accountClientState } from "../../../../app/lib/account-client-state";
 
 import type { MatterhornMemoryRecord } from "@matterhorn-work/types";
 import {
@@ -127,6 +128,8 @@ export function writeStoredMatterhornMemoryContexts(
     // Keep chat usable if browser storage is disabled or full.
   }
 }
+
+accountClientState.register("memory-context", () => useMatterhornSessionMemoryContextStore.setState({ contexts: {} }));
 
 export const useMatterhornSessionMemoryContextStore = create<MatterhornSessionMemoryContextStore>((set) => ({
   // Explicitly selected memory survives a reload within this browser tab, but
