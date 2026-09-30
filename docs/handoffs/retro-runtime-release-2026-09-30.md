@@ -105,6 +105,29 @@ the handoff. Use platform access controls and a password manager.
 
 ## Status
 
-Local acceptance and release packaging complete; PR/CI status is recorded in
-the task. Canonical deployment and authenticated hosted acceptance are blocked
+Published as [PR #1028](https://github.com/matterhornso/matterhorn-work/pull/1028),
+initial acceptance commit `62df2d4483b1711cf29d5384351322d1744849d8`.
+Canonical deployment and authenticated hosted acceptance are blocked
 on the access/target details above. No production changes have been made.
+
+### CI security correction
+
+The initial CI dependency audit found 19 low-or-higher advisories, including
+high-severity Electron sandbox and Undici transport issues. The PR adds only
+the minimum same-major patched versions covering the reported ranges:
+Electron **43.5.0**, Undici **6.28.1 / 7.29.1**, and ip-address **10.5.1**.
+Both ip-address override locations agree. No advisory suppression or audit
+threshold reduction was used. Unrelated package-manager peer-resolution and
+optional metadata churn was removed from the generated lockfile.
+
+Official npm bulk-advisory checks of these exact versions returned no findings.
+The full lockfile audit then passed across **1,457 locked versions**, with no
+low-or-higher advisories. Frozen lockfile validation and Electron packaging /
+tester-artifact contracts passed. Running previews retain their existing
+node_modules; fresh dependency runtime verification belongs to CI. This does
+not constitute a packaged native Electron smoke test.
+
+Advisory sources include
+[Electron sandbox](https://github.com/advisories/GHSA-qmv3-fv6v-rmhq),
+[Undici TLS options](https://github.com/advisories/GHSA-w293-vg96-wgc3), and
+[IP classification](https://github.com/advisories/GHSA-2vr4-cq9g-pvrc).
