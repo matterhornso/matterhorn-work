@@ -240,13 +240,16 @@ export function modelUsageAssistantMessages(value: unknown): ModelUsageAssistant
       id,
       sessionId: typeof info.sessionID === "string" ? info.sessionID : undefined,
       parentId: typeof info.parentID === "string" ? info.parentID : undefined,
-      terminal: info.finish !== "tool-calls" && info.finish !== "unknown"
+      // A terminal error/cancellation may retain the previous tool-step finish
+      // marker and parts. Its completed timestamp and recorded usage still
+      // settle this request; do not leave its full reservation held forever.
+      terminal: typeof recordValue(info.error)?.name === "string" || (info.finish !== "tool-calls" && info.finish !== "unknown"
         && !(Array.isArray(message?.parts) && message.parts.some((entry) => {
           const part = recordValue(entry);
           const state = recordValue(part?.state);
           return part?.type === "tool" && !recordValue(part.metadata)?.providerExecuted
             && !(state?.status === "error" && recordValue(state.metadata)?.interrupted === true);
-        })),
+        }))),
       createdAt,
       completedAt,
       providerId: typeof info.providerID === "string" ? info.providerID.trim() : "unknown",

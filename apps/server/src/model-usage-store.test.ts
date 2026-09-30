@@ -34,6 +34,31 @@ async function store(config: Partial<MatterhornModelUsageConfig> = {}) {
 }
 
 describe("MatterhornModelUsageStore", () => {
+  for (const finish of ["unknown", "tool-calls", "stop"]) {
+    for (const name of ["MessageAbortedError", "APIError"]) {
+      test(`settles actual usage after terminal ${name} with stale ${finish} finish`, async () => {
+        const usage = await store();
+        try {
+          const now = Date.now();
+          const scope = { subject: { id: "failed-step" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
+          const reservation = usage.reserve({ ...scope, now: new Date(now) });
+          expect(reservation.allowed).toBe(true);
+          usage.bindUserMessage(reservation.reservationId, "user");
+          const message = {
+            info: { id: "failed", parentID: "user", sessionID: "ses", role: "assistant", providerID: "fixture", modelID: "fixture",
+              finish, time: { created: now, completed: now + 1 }, tokens: { input: 120, output: 36 },
+              error: { name, data: { message: "Fixture terminal failure" } } },
+            parts: [{ type: "tool", state: { status: "completed" } }],
+          };
+          expect(usage.reconcile({ ...scope, messages: [{ ...message, info: { ...message.info, time: { created: now } } }] })).toBe(0);
+          expect(usage.reconcile({ ...scope, messages: [message] })).toBe(1);
+          expect(usage.reconcile({ ...scope, messages: [message] })).toBe(0);
+          expect(usage.status(scope.subject)).toMatchObject({ pendingRequests: 0,
+            monthly: { usedTokens: 156, chargedTokens: 156, reservedTokens: 0 } });
+        } finally { usage.close(); }
+      });
+    }
+  }
   for (const restart of [false, true]) {
     for (const boundFinishesFirst of [false, true]) {
       test(`settles mixed legacy/bound requests exactly once (restart=${restart}, bound first=${boundFinishesFirst})`, async () => {
@@ -234,7 +259,7 @@ describe("MatterhornModelUsageStore", () => {
     expect(usage.reserve({ ...request, now: afterMidnight }).allowed).toBe(false);
   });
 
-  test("keeps tool-loop reservations pending and charges every step exactly once", async () => {
+  test.each(["tool-calls", "unknown"])("keeps %s reservations pending and charges every step exactly once", async (stepFinish) => {
     const usage = await store();
     const createdAt = Date.now();
     const scope = { subject: { id: "user_steps" }, workspaceId: "ws_steps", sessionId: "ses_steps" };
@@ -247,7 +272,7 @@ describe("MatterhornModelUsageStore", () => {
         tokens: { total, input: total - 100, output: 100 }, cost: total / 1_000_000,
       }, parts: [],
     });
-    const tool = step("msg_steps_tool", 10, 1000, "tool-calls");
+    const tool = step("msg_steps_tool", 10, 1000, stepFinish);
     const final = step("msg_steps_final", 30, 1500, "stop");
     expect(usage.reconcile({ ...scope, messages: [tool] })).toBe(0);
     expect(usage.status(scope.subject).pendingRequests).toBe(1);
