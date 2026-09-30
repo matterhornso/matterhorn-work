@@ -1317,3 +1317,21 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(result).toEqual({ status: 202, body: null });
   });
 });
+test("Bittensor reads force a read-only backend even when the query mentions stake", async () => {
+  let calls = 0;
+  const result = await handleManagedOpencodeMcp({
+    payload: { jsonrpc: "2.0", id: "subnet-read", method: "tools/call", params: {
+      name: "matterhorn_bittensor_chat", arguments: {
+        message: "Read subnet 12 emission, price, stake. Read-only, no transactions.", netuid: 12,
+      },
+    } },
+    serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+    fetchImpl: Object.assign(async (_input: string | URL | Request, init?: RequestInit) => {
+      calls += 1;
+      expect(JSON.parse(String(init?.body))).toMatchObject({ netuid: 12, readOnly: true });
+      return Response.json({ success: true, execution: "answered", data: { subnet: { netuid: 12, block: 99 } } });
+    }, { preconnect() {} }),
+  });
+  expect(calls).toBe(1);
+  expect(JSON.stringify(result.body)).toContain('"block":99');
+});

@@ -76,6 +76,7 @@ import {
   doctorBittensorSubnetAdapters,
   evaluateBittensorWatches,
   executeBittensorChatWorkflow,
+  findForbiddenBittensorChatCredentialInput,
   exportBittensorSubnetAdapterMarketplace,
   exportBittensorSubnetAdapterRoadmap,
   findBittensorSubnetsForGoal,
@@ -20708,6 +20709,44 @@ function createRoutes(
     const message = typeof body.message === "string" ? body.message : "";
     if (!message.trim()) {
       throw new ApiError(400, "invalid_message", "message is required");
+    }
+    // Managed read tools force this mode. Never feed their natural-language
+    // text into the mixed read/prepare/watch/service workflow below.
+    if (body.readOnly === true) {
+      if (message.length > 4096) throw new ApiError(400, "invalid_message", "Read queries must be at most 4096 characters");
+      if (findForbiddenBittensorChatCredentialInput(body)) {
+        throw new ApiError(400, "credential_input_rejected", "Remove wallet credentials before requesting public data");
+      }
+      const operation = body.readOperation ?? (body.netuid != null ? "subnet" : body.ss58Address ? "wallet" : "discovery");
+      const netuid = body.netuid;
+      const limit = body.limit == null ? 5 : body.limit;
+      if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 20) {
+        throw new ApiError(400, "invalid_limit", "limit must be an integer from 1 to 20");
+      }
+      let data: Record<string, unknown>;
+      if (operation === "subnet" || operation === "validators") {
+        if (typeof netuid !== "number" || !Number.isInteger(netuid) || netuid < 0) {
+          throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+        }
+        if (operation === "subnet") {
+          data = { subnet: await bittensorProvider.getSubnet(netuid) };
+        } else {
+          const strategy = body.strategy === "yield" || body.strategy === "safety" ? body.strategy : "balanced";
+          data = { comparison: await compareBittensorValidators({ netuid, strategy, limit }) };
+        }
+      } else if (operation === "wallet") {
+        if (typeof body.ss58Address !== "string" || !isValidSs58Address(body.ss58Address)) {
+          throw new ApiError(400, "invalid_ss58_address", "A public SS58 address is required for a wallet read");
+        }
+        data = { wallet: await bittensorProvider.getWallet(body.ss58Address) };
+      } else if (operation === "discovery") {
+        data = { discovery: await findBittensorSubnetsForGoal({ goal: message, limit }) };
+      } else {
+        throw new ApiError(400, "invalid_read_operation", "Choose subnet, wallet, validators, or discovery");
+      }
+      return jsonResponse({ success: true, execution: "answered", data,
+        responseText: "Public Bittensor data only. No action was prepared, watch created, or subnet service invoked.",
+        requiresClarification: false, clarificationQuestion: null });
     }
     const strategy = typeof body.strategy === "string" && ["balanced", "yield", "safety"].includes(body.strategy)
       ? body.strategy as BittensorChatExecutionInput["strategy"]

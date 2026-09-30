@@ -90,6 +90,8 @@ Use these MCP tools when the venue is known:
 
 Suggested prompts:
 
+In the managed chat runtime, `matterhorn_bittensor_chat` always forces the backend's read-only dispatcher. Optional `readOperation` selects `subnet`, `wallet`, `validators`, or `discovery`; subnet/validator reads require `netuid`, and wallet reads require a public `ss58Address`. Without a selector, a supplied netuid selects a subnet read, an address selects a wallet read, and otherwise the message is used only as a discovery query. Words such as “stake” do not authorize an action. Transaction previews still use the separate prepare tool and wallet review. The general operator chat API/CLI remains separate; certified external adapters retain their existing conservative checks.
+
 ```text
 Use matterhorn_bittensor_chat to show my TAO for public SS58 address <public-ss58-coldkey>. Do not ask for seeds or private keys.
 ```

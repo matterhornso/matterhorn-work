@@ -121,15 +121,16 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Run a Bittensor-native public read through the Matterhorn desk workflow. Transaction intents use the separate prepare tool. Never signs or broadcasts.",
+    description: "Read Bittensor public data. Choose readOperation for subnet, wallet, validators, or discovery; supply netuid or ss58Address when needed. The message is a discovery query, never an action instruction. Transaction intents use the separate prepare tool.",
     inputSchema: objectSchema({
       message: { type: "string", description: "Plain-language Bittensor request." },
+      readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] },
       ss58Address: { type: "string", description: "Optional public SS58 address." },
       netuid: { type: "number", description: "Optional subnet netuid." },
       limit: { type: "number", description: "Optional result limit." },
       strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
     }, ["message"]),
-    request: (args) => ({ path: "/api/bittensor/chat/execute", method: "POST", body: args }),
+    request: (args) => ({ path: "/api/bittensor/chat/execute", method: "POST", body: { ...args, readOnly: true } }),
   },
   {
     name: "matterhorn_bittensor_prepare_action",
@@ -1016,9 +1017,11 @@ async function callBackendTool(input: {
   let reviewedAction: ReviewedActionHandoffV2 | undefined;
   let source: string | undefined;
   let freshness: string | undefined;
-  assertReadToolArguments(input.tool, input.args);
   try {
     if (input.authorization?.coworker && input.executeCertifiedTool) {
+      // Certified external adapters retain their existing conservative check;
+      // the local backend below has its own structurally read-only dispatcher.
+      assertReadToolArguments(input.tool, input.args);
       const certified = await input.executeCertifiedTool({
         toolName: input.tool.name,
         args: input.args,
