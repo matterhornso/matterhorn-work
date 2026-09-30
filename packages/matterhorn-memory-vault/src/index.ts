@@ -1,5 +1,7 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
-import { createHash } from "node:crypto"
+import { chmod, lstat, mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises"
+import { AsyncLocalStorage } from "node:async_hooks"
+import { constants } from "node:fs"
+import { createHash, randomUUID } from "node:crypto"
 import path from "node:path"
 import {
   DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS,
@@ -199,11 +201,17 @@ export class MatterhornMemoryVault {
   }
 
   async initialize(): Promise<void> {
-    await mkdir(this.rootDir, { recursive: true })
+    return withVaultMutation(this.rootDir, () => this.initializeUnlocked())
+  }
+
+  private async initializeUnlocked(): Promise<void> {
+    await assertNoVaultSymlink(this.rootDir, this.rootDir)
+    await ensurePrivateDirectory(this.rootDir)
     await Promise.all(
       [
         "People",
         "Projects",
+        "Protocols",
         "Protocols/Bittensor",
         "Protocols/Hyperliquid",
         "Protocols/Polymarket",
@@ -213,9 +221,21 @@ export class MatterhornMemoryVault {
         "Receipts",
         "Decisions",
         "Sources",
-      ].map((dir) => mkdir(path.join(this.rootDir, dir), { recursive: true })),
+      ].map(async (dir) => {
+        const directory = path.join(this.rootDir, dir)
+        await assertNoVaultSymlink(this.rootDir, directory)
+        await ensurePrivateDirectory(directory)
+      }),
     )
 
+    for (const file of [this.indexPath, this.suggestionInboxPath, this.logPath]) {
+      await assertNoVaultSymlink(this.rootDir, file)
+      try {
+        await chmod(file, 0o600)
+      } catch (error) {
+        if (!isNotFoundError(error)) throw error
+      }
+    }
     try {
       await readFile(this.indexPath, "utf8")
     } catch (error) {
@@ -239,14 +259,23 @@ export class MatterhornMemoryVault {
   }
 
   async captureRecord(record: MatterhornMemoryRecord): Promise<MatterhornMemoryCaptureResult> {
+    return withVaultMutation(this.rootDir, () => this.captureRecordUnlocked(record))
+  }
+
+  private async captureRecordUnlocked(record: MatterhornMemoryRecord): Promise<MatterhornMemoryCaptureResult> {
     await this.initialize()
     this.assertSafe(record)
 
-    const markdownPath = this.markdownPathForRecord(record)
-    await mkdir(path.dirname(markdownPath), { recursive: true })
-    await writeFile(markdownPath, renderMemoryMarkdown(record), "utf8")
-
     const index = await this.readIndex()
+    const existing = index.entries[record.id]
+    const markdownPath = this.markdownPathForRecord(record)
+    await assertNoVaultSymlink(this.rootDir, markdownPath)
+    if (existing) await this.assertRecordPath(existing)
+    await ensurePrivateDirectory(path.dirname(markdownPath))
+    await writeTextAtomic(markdownPath, renderMemoryMarkdown(record))
+    if (existing && existing.markdownPath !== markdownPath) {
+      await rm(existing.markdownPath, { force: true })
+    }
     index.entries[record.id] = { record, markdownPath, deleted: false }
     await this.writeIndex(index)
     await this.appendLog("capture", record.id, { markdownPath })
@@ -256,6 +285,13 @@ export class MatterhornMemoryVault {
   async resolveSuggestion(
     suggestion: MatterhornMemorySuggestion,
     options: MatterhornMemorySuggestionResolveOptions = {},
+  ): Promise<MatterhornMemorySuggestionResolveResult> {
+    return withVaultMutation(this.rootDir, () => this.resolveSuggestionUnlocked(suggestion, options))
+  }
+
+  private async resolveSuggestionUnlocked(
+    suggestion: MatterhornMemorySuggestion,
+    options: MatterhornMemorySuggestionResolveOptions,
   ): Promise<MatterhornMemorySuggestionResolveResult> {
     await this.initialize()
     const resolved = sanitizeMemorySuggestionForDisplay(applySuggestionResolution(suggestion, options))
@@ -299,6 +335,10 @@ export class MatterhornMemoryVault {
   }
 
   async storeSuggestions(suggestions: MatterhornMemorySuggestion[]): Promise<MatterhornMemorySuggestionStoreResult> {
+    return withVaultMutation(this.rootDir, () => this.storeSuggestionsUnlocked(suggestions))
+  }
+
+  private async storeSuggestionsUnlocked(suggestions: MatterhornMemorySuggestion[]): Promise<MatterhornMemorySuggestionStoreResult> {
     await this.initialize()
     const inbox = await this.readSuggestionInbox()
     const now = new Date().toISOString()
@@ -384,6 +424,13 @@ export class MatterhornMemoryVault {
   async resolveStoredSuggestion(
     id: string,
     options: MatterhornMemorySuggestionResolveOptions = {},
+  ): Promise<MatterhornMemorySuggestionResolveResult & { entry: MatterhornMemorySuggestionInboxEntry }> {
+    return withVaultMutation(this.rootDir, () => this.resolveStoredSuggestionUnlocked(id, options))
+  }
+
+  private async resolveStoredSuggestionUnlocked(
+    id: string,
+    options: MatterhornMemorySuggestionResolveOptions,
   ): Promise<MatterhornMemorySuggestionResolveResult & { entry: MatterhornMemorySuggestionInboxEntry }> {
     await this.initialize()
     const inbox = await this.readSuggestionInbox()
@@ -511,6 +558,13 @@ export class MatterhornMemoryVault {
     id: string,
     patch: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>,
   ): Promise<MatterhornMemoryRecord> {
+    return withVaultMutation(this.rootDir, () => this.updateRecordUnlocked(id, patch))
+  }
+
+  private async updateRecordUnlocked(
+    id: string,
+    patch: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>,
+  ): Promise<MatterhornMemoryRecord> {
     await this.initialize()
     assertSafeMemoryId(id)
     const index = await this.readIndex()
@@ -533,11 +587,13 @@ export class MatterhornMemoryVault {
     this.assertSafe(next)
 
     const markdownPath = this.markdownPathForRecord(next)
+    await assertNoVaultSymlink(this.rootDir, markdownPath)
+    await this.assertRecordPath(existing)
+    await ensurePrivateDirectory(path.dirname(markdownPath))
+    await writeTextAtomic(markdownPath, renderMemoryMarkdown(next))
     if (markdownPath !== existing.markdownPath) {
       await rm(existing.markdownPath, { force: true })
     }
-    await mkdir(path.dirname(markdownPath), { recursive: true })
-    await writeFile(markdownPath, renderMemoryMarkdown(next), "utf8")
     index.entries[id] = { record: next, markdownPath, deleted: false }
     await this.writeIndex(index)
     await this.appendLog("update", id, { markdownPath })
@@ -545,6 +601,10 @@ export class MatterhornMemoryVault {
   }
 
   async forgetRecord(id: string, reason = "User requested deletion."): Promise<MatterhornMemoryForgetResult> {
+    return withVaultMutation(this.rootDir, () => this.forgetRecordUnlocked(id, reason))
+  }
+
+  private async forgetRecordUnlocked(id: string, reason: string): Promise<MatterhornMemoryForgetResult> {
     await this.initialize()
     assertSafeMemoryId(id)
     const index = await this.readIndex()
@@ -552,15 +612,32 @@ export class MatterhornMemoryVault {
     if (!entry) {
       return { id, forgotten: false, reason: "Memory record was not found." }
     }
+    await this.assertRecordPath(entry)
 
+    const inbox = await this.readSuggestionInbox()
+    const deletedIds = new Set([id])
+    for (const [suggestionId, suggestion] of Object.entries(inbox.entries)) {
+      if (suggestion.recordId === id || suggestion.proposedRecord?.id === id || suggestion.suggestion.proposedRecord.id === id) {
+        deletedIds.add(suggestionId)
+        delete inbox.entries[suggestionId]
+      }
+    }
     await rm(entry.markdownPath, { force: true })
-    entry.deleted = true
+    // Remove copies before the index entry so an interrupted deletion can be retried.
+    await this.writeSuggestionInbox(inbox)
+    await this.removeLogEntries(deletedIds)
+    delete index.entries[id]
     await this.writeIndex(index)
-    await this.appendLog("forget", id, { reason })
+    // User-supplied reasons can repeat the forgotten content. Keep only a minimal event.
+    await this.appendLog("forget", id, {})
     return { id, forgotten: true, reason }
   }
 
   async purgeWorkspace(workspaceId: string): Promise<MatterhornMemoryWorkspacePurgeResult> {
+    return withVaultMutation(this.rootDir, () => this.purgeWorkspaceUnlocked(workspaceId))
+  }
+
+  private async purgeWorkspaceUnlocked(workspaceId: string): Promise<MatterhornMemoryWorkspacePurgeResult> {
     await this.initialize()
     if (!SAFE_MEMORY_ID_PATTERN.test(workspaceId)) {
       throw new Error("Workspace id contains unsupported characters.")
@@ -577,6 +654,9 @@ export class MatterhornMemoryVault {
     const deletedIds = new Set([...recordIds, ...suggestionIds])
 
     for (const recordId of recordIds) {
+      await this.assertRecordPath(index.entries[recordId])
+    }
+    for (const recordId of recordIds) {
       const entry = index.entries[recordId]
       if (entry) await rm(entry.markdownPath, { force: true })
       delete index.entries[recordId]
@@ -587,21 +667,7 @@ export class MatterhornMemoryVault {
     await this.writeIndex(index)
     await this.writeSuggestionInbox(inbox)
 
-    try {
-      const lines = (await readFile(this.logPath, "utf8")).split("\n")
-      const retained = lines.filter((line) => {
-        if (!line.trim()) return false
-        try {
-          const parsed = JSON.parse(line) as { id?: unknown }
-          return typeof parsed.id !== "string" || !deletedIds.has(parsed.id)
-        } catch {
-          return true
-        }
-      })
-      await writeFile(this.logPath, retained.length ? `${retained.join("\n")}\n` : "", "utf8")
-    } catch (error) {
-      if (!isNotFoundError(error)) throw error
-    }
+    await this.removeLogEntries(deletedIds)
 
     return {
       workspaceId,
@@ -610,9 +676,37 @@ export class MatterhornMemoryVault {
     }
   }
 
+  private async removeLogEntries(deletedIds: Set<string>): Promise<void> {
+    try {
+      const lines = (await readFile(this.logPath, "utf8")).split("\n")
+      const retained = lines.filter((line) => {
+        if (!line.trim()) return false
+        try {
+          const parsed: unknown = JSON.parse(line)
+          if (!isPlainObject(parsed)) return true
+          if (typeof parsed.id === "string" && deletedIds.has(parsed.id)) return false
+          const recordId = isPlainObject(parsed.details) ? parsed.details.recordId : undefined
+          return typeof recordId !== "string" || !deletedIds.has(recordId)
+        } catch {
+          return true
+        }
+      })
+      await writeTextAtomic(this.logPath, retained.length ? `${retained.join("\n")}\n` : "")
+    } catch (error) {
+      if (!isNotFoundError(error)) throw error
+    }
+  }
+
   async exportBundle(outputDir: string): Promise<MatterhornMemoryExportResult> {
+    return withVaultMutation(this.rootDir, () => this.exportBundleUnlocked(outputDir))
+  }
+
+  private async exportBundleUnlocked(outputDir: string): Promise<MatterhornMemoryExportResult> {
     await this.initialize()
-    await mkdir(outputDir, { recursive: true })
+    await assertNoVaultSymlink(outputDir, outputDir)
+    // The selected export destination may be a user-owned shared folder. Do not
+    // change an existing directory's permissions; exported files remain private.
+    await mkdir(outputDir, { recursive: true, mode: 0o700 })
     const records = (await this.listAllRecords()).filter((record) => recordCanExportByDeskPolicy(record))
     const manifest = {
       version: MATTERHORN_MEMORY_VAULT_VERSION,
@@ -631,10 +725,10 @@ export class MatterhornMemoryVault {
     const recordsPath = path.join(outputDir, "matterhorn-memory-records.json")
     const sha256Path = path.join(outputDir, "matterhorn-memory-export.sha256")
 
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
-    await writeFile(recordsPath, `${JSON.stringify(records, null, 2)}\n`, "utf8")
+    await writeJsonAtomic(manifestPath, manifest)
+    await writeJsonAtomic(recordsPath, records)
     const sha256 = sha256Hex(await readFile(recordsPath, "utf8"))
-    await writeFile(sha256Path, `${sha256}  matterhorn-memory-records.json\n`, "utf8")
+    await writeTextAtomic(sha256Path, `${sha256}  matterhorn-memory-records.json\n`)
     await this.appendLog("export", "memory-export", { outputDir, recordCount: records.length, sha256 })
 
     return {
@@ -667,6 +761,14 @@ export class MatterhornMemoryVault {
   private markdownPathForRecord(record: MatterhornMemoryRecord): string {
     assertSafeMemoryId(record.id)
     return path.join(this.rootDir, folderForRecord(record), `${record.id}-${slugify(record.title)}.md`)
+  }
+
+  private async assertRecordPath(entry: MatterhornMemoryIndexEntry): Promise<void> {
+    if (typeof entry.markdownPath !== "string" ||
+      path.resolve(entry.markdownPath) !== path.resolve(this.markdownPathForRecord(entry.record))) {
+      throw new Error(`Invalid memory record path for ${entry.record.id}.`)
+    }
+    await assertNoVaultSymlink(this.rootDir, entry.markdownPath)
   }
 
   private async readIndex(): Promise<MatterhornMemoryIndex> {
@@ -703,6 +805,7 @@ export class MatterhornMemoryVault {
         throw new Error(`Could not read Matterhorn memory index: malformed entry ${id}.`)
       }
       assertSafeMemoryId(entry.record.id)
+      if (id !== entry.record.id) throw new Error(`Invalid memory record identity for ${id}.`)
     }
     return index
   }
@@ -749,17 +852,19 @@ export class MatterhornMemoryVault {
   }
 
   private async appendLog(action: MemoryLogAction, id: string, details: Record<string, unknown>): Promise<void> {
-    await writeFile(
-      this.logPath,
-      `${JSON.stringify({
+    const file = await open(this.logPath, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_NOFOLLOW, 0o600)
+    try {
+      await file.chmod(0o600)
+      await file.writeFile(`${JSON.stringify({
         version: MATTERHORN_MEMORY_VAULT_VERSION,
         action,
         id,
         at: new Date().toISOString(),
         details,
-      })}\n`,
-      { encoding: "utf8", flag: "a" },
-    )
+      })}\n`, "utf8")
+    } finally {
+      await file.close()
+    }
   }
 }
 
@@ -905,9 +1010,78 @@ function assertSafeMemoryId(id: string): void {
 }
 
 async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`
-  await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, "utf8")
-  await rename(tempPath, filePath)
+  await writeTextAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`)
+}
+
+// Coordinate all instances in this server process, including nested suggestion saves.
+// This portable file store still requires a single writer process per vault.
+const vaultMutations = new Map<string, Promise<void>>()
+const vaultMutationContext = new AsyncLocalStorage<string>()
+
+async function canonicalVaultRoot(rootDir: string): Promise<string> {
+  let current = path.resolve(rootDir)
+  const missing: string[] = []
+  while (true) {
+    try {
+      return path.join(await realpath(current), ...missing)
+    } catch (error) {
+      if (!isNotFoundError(error) || path.dirname(current) === current) throw error
+      missing.unshift(path.basename(current))
+      current = path.dirname(current)
+    }
+  }
+}
+
+async function withVaultMutation<T>(rootDir: string, task: () => Promise<T>): Promise<T> {
+  const key = await canonicalVaultRoot(rootDir)
+  if (vaultMutationContext.getStore() === key) return task()
+  const previous = vaultMutations.get(key) ?? Promise.resolve()
+  const result = previous.then(() => vaultMutationContext.run(key, task))
+  const settled = result.then(() => undefined, () => undefined)
+  vaultMutations.set(key, settled)
+  try {
+    return await result
+  } finally {
+    if (vaultMutations.get(key) === settled) vaultMutations.delete(key)
+  }
+}
+
+async function ensurePrivateDirectory(directory: string): Promise<void> {
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  await chmod(directory, 0o700)
+}
+
+async function writeTextAtomic(filePath: string, content: string): Promise<void> {
+  const tempPath = `${filePath}.${randomUUID()}.tmp`
+  const file = await open(tempPath, "wx", 0o600)
+  try {
+    try {
+      await file.writeFile(content, "utf8")
+      await file.sync()
+    } finally {
+      await file.close()
+    }
+    await rename(tempPath, filePath)
+  } finally {
+    await rm(tempPath, { force: true })
+  }
+}
+
+async function assertNoVaultSymlink(rootDir: string, filePath: string): Promise<void> {
+  const root = path.resolve(rootDir)
+  const relative = path.relative(root, path.resolve(filePath))
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("Invalid memory storage path outside the vault.")
+  }
+  let current = root
+  for (const part of ["", ...relative.split(path.sep)]) {
+    current = path.join(current, part)
+    try {
+      if ((await lstat(current)).isSymbolicLink()) throw new Error("Invalid memory storage path: symbolic links are not supported.")
+    } catch (error) {
+      if (!isNotFoundError(error)) throw error
+    }
+  }
 }
 
 function isNotFoundError(error: unknown): boolean {

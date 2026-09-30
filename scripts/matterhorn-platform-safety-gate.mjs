@@ -10,6 +10,13 @@ const PREPARATION = {
 
 const STAGES = [
   {
+    id: "memory.storage.lifecycle",
+    label: "Memory storage lifecycle",
+    summary: "Hard deletion, related suggestion removal, file confinement, restrictive permissions and concurrent-write protection.",
+    themes: ["Security data hygiene", "Memory deletion"],
+    command: ["pnpm", "test:matterhorn-memory-vault"],
+  },
+  {
     id: "wallet.approval.behavior",
     label: "Wallet approval behavior",
     summary: "Approval requests, chain gates, normalized values, address book, and wallet security logs.",

@@ -192,6 +192,9 @@ try {
   assert.equal(exported.sha256.length, 64)
   assert.match(await readFile(exported.sha256Path, "utf8"), /matterhorn-memory-records\.json/)
 
+  const logBeforeForget = await readFile(path.join(rootDir, "memory-log.jsonl"), "utf8")
+  assert.match(logBeforeForget, /"action":"capture"/)
+  assert.match(logBeforeForget, /"action":"update"/)
   const forgotten = await vault.forgetRecord("mem_test_bittensor_wallet", "test forget")
   assert.equal(forgotten.forgotten, true)
   assert.equal(await vault.getRecord("mem_test_bittensor_wallet"), null)
@@ -201,10 +204,10 @@ try {
   assert.equal((await vault.searchRecords({ query: "TAO", limit: 10 })).length, 0)
 
   const log = await readFile(path.join(rootDir, "memory-log.jsonl"), "utf8")
-  assert.match(log, /"action":"capture"/)
+  assert.doesNotMatch(log, /"action":"capture"/)
   assert.match(log, /"action":"suggestion_dismiss"/)
   assert.match(log, /"action":"suggestion_reject"/)
-  assert.match(log, /"action":"update"/)
+  assert.doesNotMatch(log, /"action":"update"/)
   assert.match(log, /"action":"export"/)
   assert.match(log, /"action":"forget"/)
 

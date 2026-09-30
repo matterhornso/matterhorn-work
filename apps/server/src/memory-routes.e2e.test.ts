@@ -330,7 +330,7 @@ describe("Matterhorn memory API routes", () => {
   });
 
   test("workspace memory routes namespace records by workspace", async () => {
-    const { base } = await boot();
+    const { base, dir } = await boot();
 
     const captured = await jsonFetch(base, "/workspace/ws_memory/memory/capture", {
       method: "POST",
@@ -378,6 +378,9 @@ describe("Matterhorn memory API routes", () => {
     const afterDelete = await jsonFetch(base, "/workspace/ws_memory/memory/search?tags=bittensor&limit=10");
     expect(afterDelete.response.status).toBe(200);
     expect(afterDelete.payload.count).toBe(0);
+    const persistedIndex = await readFile(join(dir, ".matterhorn-work", "memory", "memory-index.json"), "utf8");
+    expect(persistedIndex).not.toContain("mem_workspace_namespace");
+    expect(existsSync(captured.payload.markdownPath)).toBe(false);
 
     const audit = await jsonFetch(base, "/workspace/ws_memory/audit?limit=10");
     expect(audit.response.status).toBe(200);

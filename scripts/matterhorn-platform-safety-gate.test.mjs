@@ -184,8 +184,9 @@ assert.deepEqual(report.preparation, {
   summary: "Builds generated workspace packages required by backend safety tests.",
   command: ["pnpm", "--filter", "@matterhorn-work/crypto-app-sdk", "build"],
 });
-assert.equal(report.stageCount, 10);
+assert.equal(report.stageCount, 11);
 assert.deepEqual(report.stages.map((stage) => stage.id), [
+  "memory.storage.lifecycle",
   "wallet.approval.behavior",
   "money.path.security",
   "desk.depth",
