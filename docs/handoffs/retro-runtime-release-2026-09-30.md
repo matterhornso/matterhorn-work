@@ -56,6 +56,9 @@ Canonical app: **https://desks.matterhorn.so**. Fresh GETs returned:
 
 These are diagnostics of the existing release, not acceptance of this patch;
 health flags do not prove inbox delivery, restored backups or five-desk runs.
+An unauthenticated browser check reproduced the old Security → Back to app
+defect: URL changes to `/session` but the page renders Support. This is further
+evidence the newer navigation repair has not reached the canonical release.
 
 The canonical response is served by Railway. The connected Vercel account
 contains only the older Matterhorn canary; inspecting the canonical domain
@@ -115,12 +118,16 @@ on the access/target details above. No production changes have been made.
 The initial CI dependency audit found 19 low-or-higher advisories, including
 high-severity Electron sandbox and Undici transport issues. The PR adds only
 the minimum same-major patched versions covering the reported ranges:
-Electron **43.5.0**, Undici **6.28.1 / 7.29.1**, and ip-address **10.5.1**.
+Electron **43.5.0**, Undici **6.28.1 / 7.29.1**, and ip-address **10.7.1**.
 Both ip-address override locations agree. No advisory suppression or audit
 threshold reduction was used. Unrelated package-manager peer-resolution and
 optional metadata churn was removed from the generated lockfile.
 
-Official npm bulk-advisory checks of these exact versions returned no findings.
+The first ip-address update to 10.5.1 passed npm's current feed, but GitHub's
+independent dependency review caught two additional advisories not in that
+response (GHSA-h3mg-xc3c-68pw and GHSA-j6r3-76f7-8jcv). Both require 10.7.1;
+the final pin covers them. Both independent gates must pass on the final SHA.
+Official npm bulk-advisory checks returned no findings after the updates.
 The full lockfile audit then passed across **1,457 locked versions**, with no
 low-or-higher advisories. Frozen lockfile validation and Electron packaging /
 tester-artifact contracts passed. Running previews retain their existing
