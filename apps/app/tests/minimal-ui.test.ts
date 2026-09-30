@@ -7,14 +7,14 @@ import {
 } from "../src/app/lib/minimal-ui";
 
 describe("minimal workspace release", () => {
-  test("is default off and requires an explicit build flag", () => {
+  test("defaults to desk-first through retro and preserves explicit legacy rollback", () => {
+    expect(resolveMinimalUi(undefined)).toBe(true);
     for (const value of [undefined, "", "0", "false", false, true])
-      expect(resolveMinimalUi({ VITE_MATTERHORN_MINIMAL_UI: value })).toBe(
+      expect(resolveMinimalUi({ VITE_MATTERHORN_RETRO_UI: "0", VITE_MATTERHORN_MINIMAL_UI: value })).toBe(
         false,
       );
-    expect(resolveMinimalUi(undefined)).toBe(false);
     for (const value of ["1", "true"])
-      expect(resolveMinimalUi({ VITE_MATTERHORN_MINIMAL_UI: value })).toBe(
+      expect(resolveMinimalUi({ VITE_MATTERHORN_RETRO_UI: "0", VITE_MATTERHORN_MINIMAL_UI: value })).toBe(
         true,
       );
   });

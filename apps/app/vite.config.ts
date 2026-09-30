@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { resolveRetroUi } from "./src/app/lib/retro-ui";
 
 const portValue = Number.parseInt(process.env.PORT ?? "", 10);
 const devPort = Number.isFinite(portValue) && portValue > 0 ? portValue : 5173;
@@ -158,8 +159,7 @@ export default defineConfig({
     {
       name: "matterhorn-public-auth-critical-render",
       configResolved(config) {
-        retroUiBuild = config.env.VITE_MATTERHORN_RETRO_UI === "1"
-          || config.env.VITE_MATTERHORN_RETRO_UI === "true";
+        retroUiBuild = resolveRetroUi(config.env);
       },
       transformIndexHtml: {
         order: "pre",

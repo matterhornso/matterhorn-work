@@ -27,7 +27,7 @@ import { AppearanceView } from "../../src/react-app/domains/settings/pages/appea
 import { PrivacySettingsView } from "../../src/react-app/domains/settings/pages/privacy-view";
 import { ModelPickerModal } from "../../src/react-app/domains/session/modals/model-picker-modal";
 import type { ModelOption, ModelRef } from "../../src/app/types";
-import { setThemeMode } from "../../src/app/theme";
+import { bootstrapTheme, setThemeMode } from "../../src/app/theme";
 import type { Language } from "../../src/i18n";
 import "../../src/react-app/domains/cloud/public-web-signin.css";
 import { StatusToastsProvider, StatusToastsViewport } from "../../src/react-app/domains/shell-feedback/status-toasts";
@@ -38,6 +38,7 @@ import "../../src/app/index.css";
 const params = new URLSearchParams(location.search);
 applyRetroUi(document.documentElement, params.get("retro") !== "0");
 document.documentElement.dataset.theme = params.get("theme") === "dark" ? "dark" : "light";
+if (params.has("settings")) bootstrapTheme();
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const client = createMatterhornServerClient({ baseUrl: location.origin });

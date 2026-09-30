@@ -56,13 +56,13 @@ interface ThemePickerProps {
 function ThemePicker(props: ThemePickerProps) {
   return (
     <ToggleGroup
+      aria-label={t("settings.theme_title")}
       value={[props.themeMode]}
       onValueChange={(value) => {
-        if (value[0] === null) {
-          return;
+        const mode = value[0];
+        if (mode === "system" || mode === "light" || mode === "dark") {
+          props.setThemeMode(mode);
         }
-
-        props.setThemeMode(value[0] as SettingsThemeMode);
       }}
       disabled={props.busy}
       className={cn("w-full gap-6 max-w-xl", props.className)}

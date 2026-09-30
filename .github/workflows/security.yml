@@ -109,5 +109,7 @@ jobs:
         run: pnpm verify:elliptic-security-patch
       - name: Audit locked dependencies
         run: pnpm audit:dependencies
+      - name: Smoke test patched release dependencies
+        run: pnpm test:release-dependency-patches
       - name: Exercise auth, tenancy, and shared rate-limit controls
         run: bun test apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts --timeout 15000

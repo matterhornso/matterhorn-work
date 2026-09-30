@@ -1,6 +1,8 @@
 /** Visual rollout only. Never reads or writes account/workspace preferences. */
 export function resolveRetroUi(env: Record<string, unknown> | undefined): boolean {
-  return env?.VITE_MATTERHORN_RETRO_UI === "1" || env?.VITE_MATTERHORN_RETRO_UI === "true";
+  const value = env?.VITE_MATTERHORN_RETRO_UI;
+  // The approved release defaults to retro. Explicit 0/false retains rollback.
+  return value === undefined || value === "" || value === "1" || value === "true";
 }
 
 export const RETRO_UI = resolveRetroUi(import.meta.env);

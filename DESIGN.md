@@ -1,6 +1,6 @@
 ---
 name: Matterhorn
-description: A focused, desk-first workspace with an incumbent default and an opt-in retro workbench.
+description: A focused, desk-first retro workbench with light, dark and system themes and a legacy rollback option.
 colors:
   brand-ice: "#D1F2FF"
   brand-ink: "#0C0C0C"
@@ -126,14 +126,14 @@ components:
 
 **Creative North Star: "Matterhorn workbench"**
 
-Matterhorn is a focused, desk-first workspace for doing useful work through chat. Preserve the real logo, protocol marks, readable incumbent type, theme preferences and explicit review boundaries. The opt-in retro workbench uses flat paper/charcoal planes, ink outlines, violet actions, ice selection and hard offset depth; it is a visual alternative, not a rebrand or a simulated trading game.
+Matterhorn is a focused, desk-first workspace for doing useful work through chat. Preserve the real logo, protocol marks, readable incumbent type, theme preferences and explicit review boundaries. The retro workbench uses flat paper/charcoal planes, ink outlines, violet actions, ice selection and hard offset depth; it is not a rebrand or a simulated trading game.
 
-The incumbent interface remains the default. Retro styling is scoped to the root marker set by the default-off build flag, and both interfaces use the same routes, persisted chats, model selections and draft stores. This source-backed contract documents implementation, not hosted deployment, installed-app typography acceptance or real agent/chain execution.
+Retro is the approved release default as of 30 September 2026. Styling remains scoped to the root marker, with an explicit build-time legacy rollback; both interfaces use the same routes, persisted chats, model selections and draft stores. This source-backed contract documents implementation, not hosted deployment, installed-app typography acceptance or real agent/chain execution.
 
 **Key Characteristics:**
 
 - Familiar Matterhorn identity and compact operational typography.
-- Default-off retro geometry with separately preserved incumbent styling.
+- Default retro geometry with separately preserved incumbent rollback styling.
 - One focused conversation and contextual tools on demand.
 - Explicit focus, selection, unavailable states and reviewed-action boundaries.
 
@@ -167,7 +167,7 @@ The sidecar's eight-step OKLCH tonal ramps are synthesized documentation swatche
 - Desk colors are accents, not full-page floods: Bittensor cyan/violet, Hyperliquid blue/green, Polymarket purple/amber, Longevity coral/mint and Memory gold/slate. Retro preserves these existing desk/protocol accents rather than replacing the marks.
 - Existing semantic `dls` tokens and theme preferences remain authoritative. The minimal-layout-only option introduces no new palette or decorative motion; retro is the separate, explicitly scoped alternative.
 
-**The Scope Rule.** Apply retro values only under the opt-in root marker; flag-off surfaces keep the incumbent semantic system.
+**The Scope Rule.** Apply retro values only under the retro root marker; flag-off surfaces keep the incumbent semantic system.
 
 ## Typography
 
@@ -185,7 +185,9 @@ Local fixture/distribution checks now compare the hydrated auth title's family, 
 
 ### Rollout and rollback
 
-`VITE_MATTERHORN_RETRO_UI=1` opts into both retro styling and the existing desk-first minimal layout. The parser also accepts the exact string `true`; missing, `0`, and other values are off. `VITE_MATTERHORN_MINIMAL_UI=1` (or `true`) remains independently available for the minimal layout with incumbent styling. With both flags off, the existing layout and legacy right rail remain.
+Retro styling and the desk-first minimal layout are enabled when `VITE_MATTERHORN_RETRO_UI` is absent, empty, `1` or `true`. Set it explicitly to `0` or `false` and rebuild for legacy styling; other invalid values also remain off. `VITE_MATTERHORN_MINIMAL_UI=1` (or `true`) remains independently available for the minimal layout with incumbent styling. With both flags explicitly off, the existing layout and legacy right rail remain.
+
+Settings → Appearance offers System, Light and Dark. System is the first-use default. The bootstrap reads the same canonical preference and legacy-key precedence as the hydrated app, before first paint. Existing choices are preserved on reload; the Settings sidebar inherits theme tokens instead of forcing a dark palette.
 
 The app bootstrap and desktop overlay set `html[data-matterhorn-ui="retro"]`; the public auth build adds the same marker and critical retro CSS for first paint. Portals inherit root tokens. Disabling retro removes the marker and restores incumbent styling; a separately enabled minimal flag still keeps the minimal layout. These are build-time options, not stored account/workspace settings, and rollback does not migrate chats, drafts or model selections.
 
@@ -269,7 +271,7 @@ The primary desks are Private AI, Bittensor, Hyperliquid, Polymarket, and Sui. M
 ### Do:
 
 - Do preserve the Matterhorn logo, protocol marks, existing type, user font preferences and both themes.
-- Do keep retro scoped to its default-off flag and distinguish minimal-only, retro and incumbent layouts.
+- Do keep retro scoped to its release switch and distinguish minimal-only, retro and incumbent layouts.
 - Do keep required consent, source/freshness, transaction terms, signer boundaries and unavailable states explicit.
 - Do use server capability data rather than visual readiness assumptions.
 - Do preserve keyboard focus, reduced-motion behavior, editable drafts and contextual tool navigation.

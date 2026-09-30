@@ -6,6 +6,8 @@ WORKDIR /app
 COPY . /app
 ARG VITE_MATTERHORN_BUILD_COMMIT
 ENV VITE_MATTERHORN_BUILD_COMMIT=${VITE_MATTERHORN_BUILD_COMMIT}
+ARG VITE_MATTERHORN_RETRO_UI=1
+ENV VITE_MATTERHORN_RETRO_UI=${VITE_MATTERHORN_RETRO_UI}
 RUN pnpm install --frozen-lockfile --ignore-scripts --prefer-offline \
   && pnpm --filter @matterhorn-work/app build:web
 
