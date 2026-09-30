@@ -60,6 +60,12 @@ export interface MatterhornMemoryWorkspacePurgeResult {
   deletedSuggestions: number
 }
 
+export interface MatterhornLegacyMemoryCleanupPlan {
+  workspaceId: string
+  recordIds: string[]
+  fingerprint: string
+}
+
 export interface MatterhornMemoryExportResult {
   version: typeof MATTERHORN_MEMORY_VAULT_VERSION
   outputDir: string
@@ -602,6 +608,72 @@ export class MatterhornMemoryVault {
 
   async forgetRecord(id: string, reason = "User requested deletion."): Promise<MatterhornMemoryForgetResult> {
     return withVaultMutation(this.rootDir, () => this.forgetRecordUnlocked(id, reason))
+  }
+
+  /** Read-only inventory: unlike normal reads, never initializes or chmods storage. */
+  async planLegacyMemoryCleanup(workspaceId: string): Promise<MatterhornLegacyMemoryCleanupPlan> {
+    return withVaultMutation(this.rootDir, async () => {
+      assertSafeMemoryId(workspaceId)
+      await assertNoVaultSymlink(this.rootDir, this.rootDir)
+      if (!(await lstat(this.rootDir)).isDirectory()) throw new Error("Memory vault must be an existing directory.")
+      const fingerprint = createHash("sha256")
+      fingerprint.update(JSON.stringify(["legacy-memory-cleanup-v1", await realpath(this.rootDir), workspaceId]))
+      for (const file of [this.indexPath, this.suggestionInboxPath, this.logPath]) {
+        await assertNoVaultSymlink(this.rootDir, file)
+        const content = await readFile(file).catch((error: unknown) => {
+          // An absent index is not an initialized vault; never silently target another directory.
+          if (file !== this.indexPath && isNotFoundError(error)) return null
+          throw error
+        })
+        fingerprint.update(JSON.stringify([path.basename(file), content?.length ?? null]))
+        if (content) fingerprint.update(content)
+        if (file === this.logPath && content) {
+          for (const line of content.toString("utf8").split("\n")) {
+            if (line.trim() && !isPlainObject(JSON.parse(line))) {
+              throw new Error("Repair malformed memory log entries before cleanup.")
+            }
+          }
+        }
+      }
+      const index = await this.readIndex()
+      await this.readSuggestionInbox()
+      const recordIds: string[] = []
+      const workspaceTag = `workspace:${workspaceId}`.toLowerCase()
+      for (const [id, entry] of Object.entries(index.entries).sort(([left], [right]) => left.localeCompare(right))) {
+        if (entry.deleted !== true) continue
+        const workspaceTags = entry.record.tags.filter((tag) => tag.toLowerCase().startsWith("workspace:"))
+        if (!workspaceTags.some((tag) => tag.toLowerCase() === workspaceTag)) continue
+        if (workspaceTags.some((tag) => tag.toLowerCase() !== workspaceTag)) {
+          throw new Error("Deleted memory has ambiguous workspace ownership; repair ownership before cleanup.")
+        }
+        await this.assertRecordPath(entry)
+        const content = await readFile(entry.markdownPath).catch((error: unknown) => {
+          if (isNotFoundError(error)) return null // A prior interrupted deletion may have removed it.
+          throw error
+        })
+        fingerprint.update(JSON.stringify([id, content?.length ?? null]))
+        if (content) fingerprint.update(content)
+        recordIds.push(id)
+      }
+      return { workspaceId, recordIds, fingerprint: fingerprint.digest("hex") }
+    })
+  }
+
+  /** Offline operator operation. Stop every writer process; this queue is process-local only. */
+  async cleanupLegacyMemory(
+    workspaceId: string,
+    expectedFingerprint: string,
+    beforeDelete: (recordIds: readonly string[]) => Promise<void>,
+  ): Promise<{ deletedRecords: number }> {
+    return withVaultMutation(this.rootDir, async () => {
+      const plan = await this.planLegacyMemoryCleanup(workspaceId)
+      if (plan.fingerprint !== expectedFingerprint) throw new Error("Memory cleanup plan is stale; run a new dry run.")
+      if (!plan.recordIds.length) return { deletedRecords: 0 }
+      // Scrub/validate external audit copies before removing the retryable index entries.
+      await beforeDelete(plan.recordIds)
+      for (const id of plan.recordIds) await this.forgetRecordUnlocked(id, "Legacy deletion cleanup.")
+      return { deletedRecords: plan.recordIds.length }
+    })
   }
 
   private async forgetRecordUnlocked(id: string, reason: string): Promise<MatterhornMemoryForgetResult> {

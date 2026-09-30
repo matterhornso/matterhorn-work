@@ -60,6 +60,8 @@ const STAGES = [
       "apps/server/src/wallet-safety-policy-routes.e2e.test.ts",
       "apps/server/src/backend-security.e2e.test.ts",
       "apps/server/src/notes-routes.e2e.test.ts",
+      "apps/server/src/memory-routes.e2e.test.ts",
+      "apps/server/src/legacy-memory-cleanup.test.ts",
     ],
   },
   {

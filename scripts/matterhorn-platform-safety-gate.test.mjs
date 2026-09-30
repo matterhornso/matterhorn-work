@@ -113,6 +113,8 @@ for (const required of [
   "production-cors-readiness.mjs",
   "generated-media-diagnostics.test.ts",
   "apps/server/src/auth-email-outbox.test.ts",
+  "apps/server/src/memory-routes.e2e.test.ts",
+  "apps/server/src/legacy-memory-cleanup.test.ts",
   "apps/server/src/email-outbox.test.ts",
   "apps/server/src/host-backup-readiness.test.ts",
   "apps/server/src/public-launch-readiness.test.ts",

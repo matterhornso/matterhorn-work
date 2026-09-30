@@ -2,7 +2,7 @@ import { dirname, join } from "node:path";
 import { createReadStream } from "node:fs";
 import { constants } from "node:fs";
 import { lstat, open, rename, rm } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import type { AuditEntry } from "./types.js";
@@ -99,7 +99,25 @@ export async function recordAudit(workspaceRoot: string, entry: AuditEntry): Pro
 
 /** Remove historical memory content while retaining who/when/action/target audit evidence. */
 export async function redactMemoryAuditContent(workspaceRoot: string, workspaceId: string, memoryId: string): Promise<void> {
+  await processMemoryAuditContent(workspaceRoot, workspaceId, new Set([memoryId]), true);
+}
+
+/** Offline cleanup preflight. Reads both log locations without changing files or modes. */
+export async function inspectMemoryAuditCleanup(workspaceRoot: string, workspaceId: string, memoryIds: readonly string[]) {
+  return processMemoryAuditContent(workspaceRoot, workspaceId, new Set(memoryIds), false);
+}
+
+export async function redactMemoryAuditBatch(workspaceRoot: string, workspaceId: string, memoryIds: readonly string[]) {
+  // Validate both logs before rewriting either one. The offline caller must stop all writers.
+  await inspectMemoryAuditCleanup(workspaceRoot, workspaceId, memoryIds);
+  await processMemoryAuditContent(workspaceRoot, workspaceId, new Set(memoryIds), true);
+}
+
+async function processMemoryAuditContent(workspaceRoot: string, workspaceId: string, memoryIds: ReadonlySet<string>, apply: boolean) {
+  const fingerprint = createHash("sha256");
+  let matchingEvents = 0;
   for (const path of [auditLogPath(workspaceId), legacyAuditLogPath(workspaceRoot)]) {
+    fingerprint.update(JSON.stringify([path]));
     await withAuditMutation(path, async () => {
       const primary = path === auditLogPath(workspaceId);
       await assertAuditLocation(primary ? resolveOpenworkDataDir() : workspaceRoot,
@@ -108,16 +126,21 @@ export async function redactMemoryAuditContent(workspaceRoot: string, workspaceI
         if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         throw error;
       });
-      if (!input) return;
+      if (!input) {
+        fingerprint.update("missing");
+        return;
+      }
+      fingerprint.update("present");
       const temp = `${path}.${randomUUID()}.tmp`;
       let created = false;
       try {
-        const output = await open(temp, "wx", 0o600);
-        created = true;
+        const output = apply ? await open(temp, "wx", 0o600) : null;
+        created = output !== null;
         try {
           const lines = createInterface({ input: input.createReadStream({ autoClose: false }), crlfDelay: Infinity });
           try {
             for await (const line of lines) {
+              fingerprint.update(JSON.stringify([line]));
               if (!line.trim()) continue;
               let parsed: unknown;
               try {
@@ -128,27 +151,29 @@ export async function redactMemoryAuditContent(workspaceRoot: string, workspaceI
               let serialized = line;
               if (typeof parsed === "object" && parsed !== null &&
                 "action" in parsed && isMemoryContentAudit(parsed.action) &&
-                "target" in parsed && parsed.target === memoryId &&
+                "target" in parsed && typeof parsed.target === "string" && memoryIds.has(parsed.target) &&
                 (("workspaceId" in parsed && parsed.workspaceId === workspaceId) ||
                   (!primary && (!("workspaceId" in parsed) || parsed.workspaceId === "")))) {
                 serialized = JSON.stringify({ ...parsed, summary: "Memory record content removed", metadata: undefined });
+                matchingEvents++;
               }
-              await output.writeFile(`${serialized}\n`, "utf8");
+              await output?.writeFile(`${serialized}\n`, "utf8");
             }
           } finally {
             lines.close();
           }
-          await output.sync();
+          await output?.sync();
         } finally {
-          await output.close();
+          await output?.close();
         }
-        await rename(temp, path);
+        if (output) await rename(temp, path);
       } finally {
         await input.close();
         if (created) await rm(temp, { force: true });
       }
     });
   }
+  return { fingerprint: fingerprint.digest("hex"), matchingEvents };
 }
 
 export async function readLastAudit(workspaceRoot: string, workspaceId: string): Promise<AuditEntry | null> {
