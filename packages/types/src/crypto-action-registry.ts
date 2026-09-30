@@ -40,12 +40,13 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Run a Bittensor-native public read through the Matterhorn desk workflow. Transaction intents use the separate prepare tool. Never signs or broadcasts.",
+    description: "Read public Bittensor data using readOperation and netuid/ss58Address. Never executes actions.",
     inputSchema: objectSchema({
-      message: { type: "string", description: "Plain-language Bittensor request." },
+      message: { type: "string", description: "Discovery text." },
+      readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] },
       ss58Address: { type: "string", description: "Optional public SS58 address." },
-      netuid: { type: "number", description: "Optional subnet netuid." },
-      limit: { type: "number", description: "Optional result limit." },
+      netuid: { type: "number" },
+      limit: { type: "number" },
       strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
     }, ["message"]),
     deskIds: ["bittensor"],
@@ -239,9 +240,10 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_polymarket_search_markets",
     title: "Polymarket market search",
-    description: "Search public Polymarket markets with source, liquidity, and compliance context.",
+    description: "Read public markets. Use marketId for exact numeric IDs; otherwise query. Never places orders.",
     inputSchema: objectSchema({
       query: { type: "string", description: "Market search text." },
+      marketId: { type: "string", pattern: "^[1-9][0-9]{0,19}$", description: "Exact ID; omit query and limit." },
       limit: { type: "number", minimum: 1, maximum: 50 },
     }),
     deskIds: ["polymarket"],

@@ -121,13 +121,13 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Read Bittensor public data. Choose readOperation for subnet, wallet, validators, or discovery; supply netuid or ss58Address when needed. The message is a discovery query, never an action instruction. Transaction intents use the separate prepare tool.",
+    description: "Read public Bittensor data using readOperation and netuid/ss58Address. Never executes actions.",
     inputSchema: objectSchema({
-      message: { type: "string", description: "Plain-language Bittensor request." },
+      message: { type: "string", description: "Discovery text." },
       readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] },
       ss58Address: { type: "string", description: "Optional public SS58 address." },
-      netuid: { type: "number", description: "Optional subnet netuid." },
-      limit: { type: "number", description: "Optional result limit." },
+      netuid: { type: "number" },
+      limit: { type: "number" },
       strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
     }, ["message"]),
     request: (args) => ({ path: "/api/bittensor/chat/execute", method: "POST", body: { ...args, readOnly: true } }),
@@ -268,12 +268,22 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_polymarket_search_markets",
     title: "Polymarket market search",
-    description: "Search public Polymarket markets with source, liquidity, and compliance context.",
+    description: "Read public markets. Use marketId for exact numeric IDs; otherwise query. Never places orders.",
     inputSchema: objectSchema({
       query: { type: "string", description: "Market search text." },
+      marketId: { type: "string", pattern: "^[1-9][0-9]{0,19}$", description: "Exact ID; omit query and limit." },
       limit: { type: "number", minimum: 1, maximum: 50 },
     }),
-    request: (args) => ({ path: queryPath("/api/polymarket/markets", args, ["query", "limit"]) }),
+    request: (args) => {
+      if (args.marketId !== undefined) {
+        if (typeof args.marketId !== "string" || !/^[1-9][0-9]{0,19}$/.test(args.marketId)
+          || args.query !== undefined || args.limit !== undefined) {
+          throw new Error("polymarket_market_id_invalid");
+        }
+        return { path: `/api/polymarket/markets/${args.marketId}` };
+      }
+      return { path: queryPath("/api/polymarket/markets", args, ["query", "limit"]) };
+    },
   },
   {
     name: "matterhorn_polymarket_get_orderbook",
@@ -405,7 +415,7 @@ const LEGACY_MODEL_RESULT_KEYS: Readonly<Record<string, readonly string[]>> = {
   matterhorn_hyperliquid_preview_order: ["success", "preview"],
   matterhorn_prediction_market_venues: ["version", "venues", "safety"],
   matterhorn_prediction_markets_search: ["version", "query", "markets", "venues", "fetchedAt", "safety"],
-  matterhorn_polymarket_search_markets: ["success", "markets"],
+  matterhorn_polymarket_search_markets: ["success", "markets", "market"],
   matterhorn_polymarket_get_orderbook: ["success", "orderbook"],
   matterhorn_polymarket_check_compliance: ["success", "compliance"],
   matterhorn_polymarket_preview_order: ["success", "preview"],
@@ -465,6 +475,7 @@ const MODEL_SAFE_MCP_ERROR_CODES = new Set([
   "matterhorn_read_tool_cannot_prepare_action",
   "matterhorn_tool_result_rejected",
   "polymarket_token_id_invalid",
+  "polymarket_market_id_invalid",
   "reviewed_action_receipt_unavailable",
   "transaction_capability_proof_missing",
   "transaction_context_invalid",

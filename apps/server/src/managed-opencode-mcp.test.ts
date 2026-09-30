@@ -25,6 +25,75 @@ import { planBittensorChat } from "./tools/bittensor.js";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("managed OpenCode Matterhorn MCP", () => {
+  test("advertises exact market lookup and typed Bittensor reads in the canonical model contract", async () => {
+    const result = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "read-contracts", method: "tools/list" },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+    });
+    expect(result.body).toMatchObject({ result: { tools: expect.arrayContaining([
+      expect.objectContaining({ name: "matterhorn_polymarket_search_markets", inputSchema: expect.objectContaining({
+        properties: expect.objectContaining({ marketId: expect.objectContaining({ type: "string" }) }),
+      }) }),
+      expect.objectContaining({ name: "matterhorn_bittensor_chat", inputSchema: expect.objectContaining({
+        properties: expect.objectContaining({ readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] } }),
+      }) }),
+    ]) } });
+  });
+
+  test("looks up an exact Polymarket market ID without treating it as search text", async () => {
+    const urls: string[] = [];
+    const result = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "exact-market", method: "tools/call", params: {
+        name: "matterhorn_polymarket_search_markets", arguments: { marketId: "4789394" },
+      } },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async (input: string | URL | Request) => {
+        urls.push(String(input));
+        return Response.json({ success: true, market: { id: "4789394", question: "Example market?",
+          outcomes: [{ outcome: "Over", price: 0.06 }, { outcome: "Under", price: 0.94 }],
+          source: { source: "fixture", fetchedAt: "2026-09-30T20:00:00Z" } } });
+      }, { preconnect() {} }),
+    });
+    expect(urls).toEqual(["http://127.0.0.1:4130/api/polymarket/markets/4789394"]);
+    for (const label of ["Example market?", "Over", "Under", "0.06", "0.94"]) expect(JSON.stringify(result.body)).toContain(label);
+  });
+
+  test("rejects malformed or ambiguous exact market lookup before fetching", async () => {
+    for (const args of [
+      { marketId: "../compliance" }, { marketId: "4789394?limit=50" }, { marketId: "4789394/preview" },
+      { marketId: "" }, { marketId: " 4789394" }, { marketId: "0" }, { marketId: "1".repeat(21) },
+      { marketId: 4789394 }, { marketId: null }, { marketId: "4789394", query: "other" },
+      { marketId: "4789394", limit: 5 },
+    ]) {
+      let requests = 0;
+      const result = await handleManagedOpencodeMcp({
+        payload: { jsonrpc: "2.0", id: "invalid-market", method: "tools/call", params: {
+          name: "matterhorn_polymarket_search_markets", arguments: args,
+        } },
+        serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+        fetchImpl: Object.assign(async () => { requests += 1; return Response.json({ success: true }); }, { preconnect() {} }),
+      });
+      expect(requests).toBe(0);
+      expect(JSON.stringify(result.body)).toContain("polymarket_market_id_invalid");
+    }
+  });
+
+  test("retains text search without guessing numeric search text is an ID", async () => {
+    const urls: string[] = [];
+    const result = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "market-search", method: "tools/call", params: {
+        name: "matterhorn_polymarket_search_markets", arguments: { query: "2026", limit: 3 },
+      } },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async (input: string | URL | Request) => {
+        urls.push(String(input));
+        return Response.json({ success: true, markets: [{ id: "4789394", question: "Example?" }] });
+      }, { preconnect() {} }),
+    });
+    expect(urls).toEqual(["http://127.0.0.1:4130/api/polymarket/markets?query=2026&limit=3"]);
+    expect(JSON.stringify(result.body)).toContain("Example?");
+  });
+
   test("Bittensor's generated safety notice can cross the guarded result boundary", async () => {
     const plan = planBittensorChat({ message: "List current Finney subnets" });
     expect(containsForbiddenMemorySecretMaterial(plan)).toBe(false);
