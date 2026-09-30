@@ -367,6 +367,8 @@ import { fileURLToPath } from "node:url";
 import { isIP } from "node:net";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { buildMatterhornGeneralCryptoToolProfile } from "./agent-tool-routing.js";
+import { JevRuntime, type JevTransport } from "./jev.js";
+import { JEV_CONSENT_VERSION, JEV_MAX_TEXT_LENGTH, JEV_MODEL } from "@matterhorn-work/types/jev";
 import {
   activeDeskToolDefinitions,
   compileMatterhornCryptoState,
@@ -1425,6 +1427,8 @@ type MatterhornSuiEvidenceAnchorPackageState = {
 };
 
 export type MatterhornServerDependencies = {
+  /** Trusted transport injection for isolated acceptance tests, never request data. */
+  jevTransport?: JevTransport;
   // Trusted local-shell injection only; never populated from request bodies or
   // hosted workspace configuration. Feature remains off unless explicitly wired.
   stmCredentials?: StmCredentials;
@@ -2466,6 +2470,16 @@ function guardedProviderSystemPrivacyPart(
   };
 }
 
+function appendJevSystemContext(resolved: { system: string; privacyParts: MatterhornAgentPrivacyPart[] }, advisory: string): void {
+  if (!advisory) return;
+  resolved.system += `\n\n${advisory}`;
+  // The final section's exact bytes must be classified as well as its ordered
+  // manifest. Keep all existing private-context labels; this does not replace them.
+  resolved.privacyParts.push({ type: "jev_compiled_system_context", text: resolved.system,
+    source: "system", label: "public", contentHash: sha256Bytes(resolved.system),
+    sizeBytes: Buffer.byteLength(resolved.system, "utf8"), version: JEV_CONSENT_VERSION });
+}
+
 function matterhornCompactionPrivacyParts(
   agentContext: Awaited<ReturnType<typeof resolveMatterhornSessionAgentContext>>,
 ): MatterhornAgentPrivacyPart[] {
@@ -2984,6 +2998,9 @@ async function proxyOpencodeRequest(input: {
     }
     if (!isRecord(payload)) {
       throw new ApiError(400, "invalid_payload", "Prompt body must be a JSON object");
+    }
+    if (payload.jevReceipt !== undefined) {
+      throw new ApiError(400, "jev_gateway_required", "Use the Matterhorn messages endpoint for Jev-assisted chats.");
     }
 
     const bodyExecutionMode = payload.executionMode == null
@@ -10140,7 +10157,7 @@ function createRoutes(
   recoveryErasureLedger: MatterhornRecoveryErasureLedger | null,
   drainEmailOutbox: () => Promise<void>,
   reviewedActionProtocolRefresh: ReviewedActionRefreshAdapter,
-  dependencies: Pick<MatterhornServerDependencies, "stmCredentials" | "stmConsumers" | "stmMcpLauncher">,
+  dependencies: Pick<MatterhornServerDependencies, "stmCredentials" | "stmConsumers" | "stmMcpLauncher" | "jevTransport">,
 ): Route[] {
   const stm = dependencies.stmCredentials ?? createLocalStmCredentials({ host: config.host });
   const stmMcpLaunches = createLocalStmMcpLaunches(stm);
@@ -10154,6 +10171,27 @@ function createRoutes(
   const googleWorkspaceConnectFlows = createGoogleWorkspaceConnectFlowManager(config);
   const memoryVault = createMatterhornMemoryVault(resolveMatterhornMemoryRoot());
   const authAttemptLimiter = createAuthAttemptLimiter(requestRateLimitStore);
+  const jev = new JevRuntime(process.env, dependencies.jevTransport);
+  const jevMessageContext = (ctx: RequestContext, workspace: WorkspaceInfo, body: Record<string, unknown>, sessionId: string,
+    parts: unknown[], model: { providerID: string; modelID: string }) => {
+    if (body.jevReceipt === undefined) return "";
+    try {
+      if (guardedRuntime.resolveSessionHistoryLabel({ workspaceId: workspace.id, sessionId, hasStoredHistory: false }) !== "public") {
+        throw new Error("private_session");
+      }
+      if (promptPartsHaveAttachments(parts) || body.coworkerId ||
+        ["attachmentIds", "memoryIds", "selectedMemoryIds", "agentFileIds"].some((key) => promptPrivateContextIds(body, key).length)) {
+        throw new Error("private_context");
+      }
+      return jev.context(body.jevReceipt, {
+        subjectId: modelUsageSubject(clientAccessFromRequestContext(ctx, workspace)).id,
+        workspaceId: workspace.id, sessionId, text: promptTextFromParts(parts),
+        providerId: model.providerID, modelId: model.modelID,
+      }, typeof body.privacyMode === "string" ? body.privacyMode : undefined);
+    } catch {
+      throw new ApiError(409, "jev_receipt_invalid", "Jev's classification expired or no longer matches this message. Turn Jev off and retry, or classify again.");
+    }
+  };
   const workflowRuns = new WorkflowRunEngine({
     persistenceRoot: config.workspaces[0]?.path ?? process.cwd(),
     onEvent: recordWorkflowTaskEvent,
@@ -15271,6 +15309,60 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "GET", "/workspace/:id/jev", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const subjectId = modelUsageSubject(clientAccessFromRequestContext(ctx, workspace)).id;
+    return noStoreJsonResponse(jev.availability(subjectId, workspace.id));
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/jev", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = ctx.params.sessionId;
+    const body = await readJsonBody(ctx.request, 24_000, "Jev classification");
+    if (typeof body.text !== "string" || body.text.length > JEV_MAX_TEXT_LENGTH || body.consentVersion !== JEV_CONSENT_VERSION) {
+      throw new ApiError(400, "jev_consent_required", "Jev requires current data-sharing consent and a message of at most 4,000 characters.");
+    }
+    const subjectId = modelUsageSubject(clientAccessFromRequestContext(ctx, workspace)).id;
+    if (!jev.availability(subjectId, workspace.id).available) {
+      return noStoreJsonResponse({ status: "unavailable", reason: "Jev needs operator setup. Your selected model can still answer." });
+    }
+    await readWorkspaceSession(config, workspace, sessionId);
+    const history = await readWorkspaceSessionMessages(config, workspace, sessionId, {});
+    if (guardedRuntime.resolveSessionHistoryLabel({ workspaceId: workspace.id, sessionId, hasStoredHistory: history.length > 0 }) !== "public") {
+      return noStoreJsonResponse({ status: "skipped", reason: "Jev skipped this chat because its privacy history is private or unverified. Your selected model can still answer." });
+    }
+    const { model } = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
+    const input = { subjectId, workspaceId: workspace.id, sessionId, text: body.text,
+      providerId: model.providerID, modelId: model.modelID };
+    const privacyMode = parseAgentPrivacyMode(body.privacyMode);
+    if (!jev.eligible(input, privacyMode)) {
+      return noStoreJsonResponse({ status: "skipped", reason: "Jev skipped this private, sensitive, or empty message. Your selected model can still answer." });
+    }
+    await requireApproval(ctx, { workspaceId: workspace.id, action: "jev.classify",
+      summary: "Share this message with TypeSafe for optional classification", paths: [workspace.path] }, { sessionId, subjectId });
+    // Approval may wait while another turn raises the chat's privacy floor.
+    if (ctx.request.signal.aborted || guardedRuntime.resolveSessionHistoryLabel({ workspaceId: workspace.id, sessionId, hasStoredHistory: false }) !== "public") {
+      return noStoreJsonResponse({ status: "skipped", reason: "Jev skipped because the request was cancelled or the chat became private." });
+    }
+    // Use the existing atomic store. Multi-instance hosts must share this store.
+    for (const [key, maxRequests] of [[`jev:subject:${sha256Bytes(subjectId)}`, 60], ["jev:deployment", 600]] satisfies Array<[string, number]>) {
+      const limit = await requestRateLimitStore.consume({ key, maxRequests, windowMs: 3_600_000, now: Date.now() });
+      if (!limit.allowed) return noStoreJsonResponse({ status: "unavailable", reason: "Jev's request limit was reached. Continuing with your selected model." });
+    }
+    const started = Date.now();
+    const evaluation = await jev.classify(input, body.consentVersion, ctx.request.signal);
+    await recordAudit(workspace.path, {
+      id: shortId(), workspaceId: workspace.id, actor: ctx.actor ?? { type: "remote" },
+      action: "jev.classify", target: sessionId, summary: "Optional Jev classification", timestamp: Date.now(),
+      metadata: { model: JEV_MODEL, status: evaluation.result.status, durationMs: Date.now() - started, usageKnown: Boolean(evaluation.usage),
+        consentVersion: JEV_CONSENT_VERSION, ...(evaluation.usage ? { inputTokens: evaluation.usage.input_tokens, outputTokens: evaluation.usage.output_tokens } : {}),
+        ...(evaluation.failure ? { failure: evaluation.failure } : {}) },
+    });
+    return noStoreJsonResponse(evaluation.result);
+  });
+
   addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages/preflight", "client", async (ctx) => {
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
@@ -15344,6 +15436,8 @@ function createRoutes(
       coworkerState,
       resourceScope: coworker?.resourceScope,
     });
+    const jevContext = jevMessageContext(ctx, workspace, body, sessionId, rawParts, modelResolution.model);
+    appendJevSystemContext(resolved, jevContext);
     const authorizationContextHash = coworkerAuthorizationContextHash({
       executionMode,
       requestToolProfiles,
@@ -15643,7 +15737,10 @@ function createRoutes(
       throw new ApiError(400, "invalid_payload", "Invalid message request ID");
     }
     const subjectId = modelUsageSubject(clientAccessFromRequestContext(ctx, workspace)).id;
-    const requestHash = sha256Bytes(JSON.stringify(body));
+    // Jev receipts expire/renew independently of the user's logical request.
+    // Keep retries idempotent; new dispatch still validates the current receipt.
+    const { jevReceipt: _jevReceipt, ...requestIdentity } = body;
+    const requestHash = sha256Bytes(JSON.stringify(requestIdentity));
     const unknownDispatch = () => new ApiError(409, "message_outcome_unknown",
       "The previous send may still be running. Check chat history, then retry to check its status. No second run will be started.");
     const existing = modelUsageStore.messageDispatch(subjectId, workspace.id, sessionId, requestId);
@@ -15750,6 +15847,8 @@ function createRoutes(
       coworkerState,
       resourceScope: coworker?.resourceScope,
     });
+    const jevContext = jevMessageContext(ctx, workspace, body, sessionId, rawParts, modelResolution.model);
+    appendJevSystemContext(resolved, jevContext);
     const authorizationContextHash = coworkerAuthorizationContextHash({
       executionMode,
       requestToolProfiles,

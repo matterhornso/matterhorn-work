@@ -48,6 +48,8 @@ export type MatterhornAgentMessagePart = {
 };
 
 export type MatterhornAgentPrivacyPreflightRequest = {
+  /** Server-signed, exact-message optional Jev advisory. Never grants authority. */
+  jevReceipt?: string;
   version?: typeof MATTERHORN_AGENT_PRIVACY_PREFLIGHT_VERSION;
   parts: MatterhornAgentMessagePart[];
   model: { providerId: string; modelId: string };

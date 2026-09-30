@@ -1,0 +1,110 @@
+{
+  "scope": "Disposable local account; real CUDOS inference, enforcing guard; Jev unavailable, no live chain reads",
+  "evidence": [
+    {
+      "desk": "Private AI",
+      "sessionId": "ses_f0da79774ffebt6VLKptB9GOEr",
+      "dispatch": 202,
+      "finish": "stop",
+      "model": "asi1",
+      "provider": "cudos",
+      "tokens": {
+        "total": 6691,
+        "input": 879,
+        "output": 52,
+        "reasoning": 0,
+        "cache": {
+          "read": 5760,
+          "write": 0
+        }
+      },
+      "answer": "A public wallet address is like your account number — a safe-to-share identifier that others use to send you funds. A private key is like your signature and password combined — a secret that proves ownership and authorizes spending, which must never be shared.",
+      "jevDisabled": true
+    },
+    {
+      "desk": "Bittensor",
+      "sessionId": "ses_f0da777f5ffe3f4cHNDyWObh0O",
+      "dispatch": 202,
+      "finish": "stop",
+      "model": "asi1",
+      "provider": "cudos",
+      "tokens": {
+        "total": 3069,
+        "input": 2989,
+        "output": 80,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      },
+      "answer": "Bittensor is an open-source, decentralized network that uses blockchain technology to create a marketplace for machine intelligence, where participants contribute AI models and computing power in exchange for TAO, the network's native token. It organizes specialized AI services into \"subnets,\" each run by miners who produce outputs and validators who score their quality, so that the most useful models earn the most rewards.",
+      "jevDisabled": true
+    },
+    {
+      "desk": "Hyperliquid",
+      "sessionId": "ses_f0da75f69ffegZprFhXIuFVJnb",
+      "dispatch": 202,
+      "finish": "stop",
+      "model": "asi1",
+      "provider": "cudos",
+      "tokens": {
+        "total": 3402,
+        "input": 3323,
+        "output": 79,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      },
+      "answer": "Hyperliquid is a decentralized, on-chain perpetual futures and spot exchange built as its own high-performance Layer-1 blockchain, where trading happens through a fully transparent order book without a centralized intermediary. It combines the speed and user experience of a centralized exchange with the self-custody and verifiability of DeFi, with all positions, collateral, and orders secured and settled on-chain.",
+      "jevDisabled": true
+    },
+    {
+      "desk": "Polymarket",
+      "sessionId": "ses_f0da746d3ffeiE04CkcwrC79fm",
+      "dispatch": 202,
+      "finish": "stop",
+      "model": "asi1",
+      "provider": "cudos",
+      "tokens": {
+        "total": 3650,
+        "input": 3581,
+        "output": 69,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      },
+      "answer": "Polymarket is a decentralized prediction market platform built on Polygon where people buy and sell shares in the outcomes of real-world events, such as elections, sports results, or economic data releases. Prices of these shares reflect the crowd's collective probability estimate of each outcome occurring, and traders profit if their prediction proves correct when the event resolves.",
+      "jevDisabled": true
+    },
+    {
+      "desk": "Sui",
+      "sessionId": "ses_f0da73649ffeoimhwNLjthmzmT",
+      "dispatch": 202,
+      "finish": "stop",
+      "model": "asi1",
+      "provider": "cudos",
+      "tokens": {
+        "total": 1935,
+        "input": 1221,
+        "output": 74,
+        "reasoning": 0,
+        "cache": {
+          "read": 640,
+          "write": 0
+        }
+      },
+      "answer": "Sui is a Layer 1 blockchain built by Mysten Labs that uses the Move programming language and an object-centric data model, designed to enable high-throughput, low-latency transactions. Its distinctive architecture allows many transactions to be processed in parallel rather than sequentially, making it well suited for applications like gaming, digital assets, and other high-volume use cases.",
+      "jevDisabled": true
+    }
+  ],
+  "totals": {
+    "used": 63892,
+    "charged": 63892,
+    "pending": 0
+  }
+}

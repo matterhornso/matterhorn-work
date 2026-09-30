@@ -58,6 +58,17 @@ test("header timeout never starts body consumption", async () => {
   expect(read).toBe(false);
 });
 
+test("an external cancellation signal does not disable the request deadline", async () => {
+  const external = new AbortController();
+  let aborted = false;
+  await expect(fetchResponseWithTimeout(async (_url, init) => {
+    init?.signal?.addEventListener("abort", () => { aborted = true; });
+    return new Promise<Response>(() => {});
+  }, "http://fixture.invalid", { signal: external.signal }, 20, response => response.text())).rejects.toThrow("Request timed out.");
+  expect(aborted).toBe(true);
+  expect(external.signal.aborted).toBe(false);
+});
+
 test("a successful body finishes before the deadline and releases the timer", async () => {
   let aborted = false;
   const result = await fetchResponseWithTimeout(async (_url, init) => {

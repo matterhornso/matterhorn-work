@@ -1,6 +1,11 @@
 # Matterhorn retro release deployment handoff
 
 Prepared on 30 September 2026 for the engineer deploying **https://desks.matterhorn.so**.
+Publication update: the pending commits below are included in the combined
+`codex/jev-chat-opt-in-2026-09-30` PR to `dev`. Do not create a duplicate retro-only
+PR using the historical publishing commands below. Also review the
+[Jev handoff](jev-chat-opt-in-2026-09-30.md); Jev remains disabled until separately
+configured, consented and accepted in staging.
 Deploy the security correction and enabled retro UI described here, not PR #1028 alone.
 Local checks pass, but fresh-install CI, production deployment and authenticated hosted
 acceptance remain release gates. No production settings, secrets or services were changed.

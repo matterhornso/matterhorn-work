@@ -71,6 +71,8 @@ import {
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { ReactSessionComposer } from "./composer/composer";
 import { useComposerSubmission } from "./composer/use-composer-submission";
+import { useJevChat } from "./use-jev-chat";
+import { JevChatControl } from "./jev-chat-control";
 import type { ResponsePerspective } from "../perspectives/response-perspective";
 import { decodeComposerMentionValue, encodeComposerMentionValue } from "./composer/mention-encoding";
 import { DevProfiler } from "../../../shell/dev-profiler";
@@ -2163,6 +2165,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
     };
   }, [agentFileContext, coworkerContext?.id, memoryContext?.records, mentions, pasteParts, props.privateModeEnabled]);
 
+  const jevChat = useJevChat({ client: props.client, workspaceId: props.workspaceId, sessionId: props.sessionId,
+    model: props.selectedModel, privateMode: Boolean(props.privateModeEnabled) });
+
   const handleComposerDraftChange = useCallback((value: string) => {
     setComposerDraft(props.sessionId, value);
   }, [props.sessionId, setComposerDraft]);
@@ -2338,7 +2343,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
           });
       }
 
-      await props.onSendDraft(nextDraft);
+      await props.onSendDraft(await jevChat.prepare(nextDraft));
       recordModelOperationAccepted(operation);
       if (useComposerStateStore.getState().clearSubmittedSession(props.sessionId, submittedComposer)) {
         attachments.forEach(revokeAttachmentPreview);
@@ -2357,7 +2362,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
     }
-  }, [activeWorkflowDeskAgent, attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.modelVariant, props.onDraftChange, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
+  }, [activeWorkflowDeskAgent, attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.modelVariant, props.onDraftChange, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft, jevChat.prepare]);
 
   // UI callbacks accept no arguments. Consent enters only through confirmation.
   const { send: handleSend, sendWithConsent } = useComposerSubmission(sendDraft);
@@ -2383,6 +2388,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   }, [confirmingPrivacy, error?.privacyPreflight, sendWithConsent, props.client, props.sessionId, props.workspaceId, sending]);
 
   const handleAbort = useCallback(async () => {
+    jevChat.cancel();
     if (!chatStreaming) return;
     suppressNextAbortFailureRef.current = true;
     setError(null);
@@ -2401,7 +2407,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       suppressNextAbortFailureRef.current = false;
       setError({ message: nextError instanceof Error ? nextError.message : "Failed to stop run." });
     }
-  }, [chatStreaming, opencodeClient, props.sessionId, props.workspaceId, snapshotQuery.refetch]);
+  }, [chatStreaming, opencodeClient, props.sessionId, props.workspaceId, snapshotQuery.refetch, jevChat.cancel]);
 
   const handleRetryResponse = useCallback(async () => {
     if (sending || !draft.trim()) return;
@@ -3545,6 +3551,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
       </div>
 
       <div ref={composerShellRef} className="shrink-0 bg-dls-surface px-0 pb-3 pt-3">
+        <JevChatControl enabled={jevChat.enabled} available={Boolean(jevChat.availability?.available)}
+          loading={!jevChat.availability && !jevChat.notice} privateMode={Boolean(props.privateModeEnabled)}
+          notice={jevChat.notice} onChange={jevChat.change} />
         <PrivateModePrivacyNotice
           modelUnavailable={props.modelUnavailable}
           providerPrivacyPolicy={props.providerPrivacyPolicy}

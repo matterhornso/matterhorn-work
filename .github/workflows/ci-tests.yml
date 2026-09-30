@@ -258,6 +258,9 @@ jobs:
       - name: Test real composer interactions
         run: pnpm --filter @matterhorn-work/app test:composer-browser
 
+      - name: Test optional Jev consent and chat fallback
+        run: bun test apps/app/scripts/jev-chat.browser.test.ts
+
       - name: Test selected-secret adapter and migration
         run: pnpm --dir packages/stm-credentials test
 
