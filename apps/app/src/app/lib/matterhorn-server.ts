@@ -1,6 +1,7 @@
 import type { Message, Part, Session, Todo } from "@opencode-ai/sdk/v2/client";
 import { validatePrivacyConsentToken } from "./agent-privacy-consent";
 import { pendingMessageRequest } from "./message-request-id";
+import type { JevAvailability, JevRequest, JevResult } from "@matterhorn-work/types/jev";
 import type {
   MatterhornMemoryExportManifest,
   MatterhornMemoryRecord,
@@ -1602,7 +1603,7 @@ export async function fetchResponseWithTimeout<T>(
 
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const signal = controller?.signal;
-  const initWithSignal = signal && !init.signal ? { ...init, signal } : init;
+  const initWithSignal = signal ? { ...init, signal: init.signal ? AbortSignal.any([signal, init.signal]) : signal } : init;
 
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -1631,7 +1632,7 @@ export async function fetchResponseWithTimeout<T>(
 async function requestJson<T>(
   baseUrl: string,
   path: string,
-  options: { method?: string; token?: string; hostToken?: string; body?: unknown; timeoutMs?: number } = {},
+  options: { method?: string; token?: string; hostToken?: string; body?: unknown; timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<T> {
   const url = `${baseUrl}${path}`;
   const fetchImpl = resolveFetch(url);
@@ -1643,6 +1644,7 @@ async function requestJson<T>(
       headers: buildHeaders(options.token, options.hostToken),
       body: options.body ? JSON.stringify(options.body) : undefined,
       credentials: "same-origin",
+      ...(options.signal ? { signal: options.signal } : {}),
     },
     options.timeoutMs ?? DEFAULT_OPENWORK_SERVER_TIMEOUT_MS,
     async (response) => ({ response, text: await response.text() }),
@@ -2447,13 +2449,21 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.sessionRead,
       },
     ),
+    getJevAvailability: (workspaceId: string) => requestJson<JevAvailability>(baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/jev`, { token, hostToken }),
+    classifyWithJev: (workspaceId: string, sessionId: string, input: JevRequest, signal?: AbortSignal) => requestJson<JevResult>(baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/jev`,
+      { token, hostToken, method: "POST", body: input, timeoutMs: 12_000, signal }),
     sendAgentMessage: async (
       workspaceId: string,
       sessionId: string,
       input: MatterhornAgentMessageRequest,
     ) => {
       validatePrivacyConsentToken(input.privacyConsentToken);
-      const pending = await pendingMessageRequest(`${baseUrl}/${workspaceId}/${sessionId}`, input);
+      // Renewing or disabling an advisory must not create a second chat request
+      // after a lost acknowledgement. The gateway validates it at dispatch.
+      const { jevReceipt: _jevReceipt, ...requestIdentity } = input;
+      const pending = await pendingMessageRequest(`${baseUrl}/${workspaceId}/${sessionId}`, requestIdentity);
       const result = await requestJson<MatterhornAgentMessageResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages`,

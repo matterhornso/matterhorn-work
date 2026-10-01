@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { MINIMAL_UI } from "@/app/lib/minimal-ui";
+import { RETRO_UI } from "@/app/lib/retro-ui";
 import type * as React from "react";
 import {
   ArrowLeft,
@@ -413,7 +414,9 @@ const SETTINGS_SIDEBAR_ITEM_CLASS =
   "rounded-md px-3 text-[rgb(var(--matterhorn-blue-rgb)/0.78)] transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-blue-rgb)/0.07)] hover:text-[var(--matterhorn-blue)] data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] data-active:font-semibold data-active:text-[var(--matterhorn-blue)] data-active:[&_svg]:text-[var(--matterhorn-blue)] mac:data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] dark:mac:data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)]";
 
 const SETTINGS_SIDEBAR_HEADER_ITEM_CLASS =
-  "text-[rgb(244_251_255/0.78)] hover:bg-[rgb(var(--matterhorn-blue-rgb)/0.09)] hover:text-[#f4fbff]";
+  RETRO_UI
+    ? "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+    : "text-[rgb(244_251_255/0.78)] hover:bg-[rgb(var(--matterhorn-blue-rgb)/0.09)] hover:text-[#f4fbff]";
 
 const SETTINGS_SIDEBAR_STYLE = {
   "--sidebar": "var(--matterhorn-ink)",
@@ -470,7 +473,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
   return (
     <Sidebar
       className="matterhorn-settings-sidebar border-[rgb(var(--matterhorn-blue-rgb)/0.16)] mac:**:data-[sidebar=sidebar]:bg-transparent"
-      style={SETTINGS_SIDEBAR_STYLE}
+      style={RETRO_UI ? undefined : SETTINGS_SIDEBAR_STYLE}
     >
       <div className="hidden h-10 mac:block mac:titlebar-drag" />
       <SidebarHeader>

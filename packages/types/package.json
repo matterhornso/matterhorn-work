@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./jev": "./src/jev.ts",
     ".": {
       "types": "./src/index.ts",
       "development": "./src/index.ts",

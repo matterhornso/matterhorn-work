@@ -65,3 +65,9 @@ When uncertain, prefer: Tailwind, TypeScript, React, shadcn/ui (Base UI), TanSta
 ### Workflow
 
 - If asked to do too much work at once, stop and state that clearly.
+
+### TypeSafe and Jev
+
+- For TypeSafe/Jev integration or semantic agent-routing work, read `.agents/skills/typesafe-ai/SKILL.md` and its relevant live documentation before designing or changing the implementation.
+- Keep deterministic permissions, provider consent, wallet approvals, and accounting in Matterhorn code. Jev judgments are recommendations, not authorization or proof of correctness.
+- Follow `docs/architecture/jev-integration-plan.md`. Installation of the development skill does not enable Jev in the application or authorize sending workspace data to another provider.

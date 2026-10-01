@@ -10,6 +10,8 @@ import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
 import { configureVenicePrivateModelRegistry } from "./venice-provider.js";
 import { resolveMatterhornManagedAgentPrompt } from "./workspace-init.js";
+import type { JevTransport } from "./jev.js";
+import { JEV_CONSENT_VERSION, JEV_MODEL } from "@matterhorn-work/types/jev";
 
 type Served = {
   port: number;
@@ -18,6 +20,7 @@ type Served = {
 
 const stops: Array<() => void | Promise<void>> = [];
 const roots: string[] = [];
+const priorJevEnv = ["MATTERHORN_JEV_ENABLED", "TYPESAFE_API_KEY", "MATTERHORN_JEV_POLICY_REVIEWED_AT"].map(name => ({ name, value: process.env[name] }));
 const priorModelUsageEnv = {
   enforcement: process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT,
   daily: process.env.MATTERHORN_MODEL_USAGE_DAILY_LIMIT,
@@ -54,6 +57,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  for (const { name, value } of priorJevEnv) restoreEnv(name, value);
   configureVenicePrivateModelRegistry([]);
   while (stops.length) {
     await stops.pop()?.();
@@ -432,6 +436,7 @@ async function startOpenworkServer(input: {
   hardModelUsageLimit?: number;
   trustedProxySecret?: string;
   approval?: ServerConfig["approval"];
+  jevTransport?: JevTransport;
 }) {
   // Keep every test's durable guarded-runtime state isolated from both the
   // developer machine and other tests that reuse the same workspace/session IDs.
@@ -472,7 +477,7 @@ async function startOpenworkServer(input: {
     reloadWatchers: false,
     ...(input.trustedProxySecret ? { trustedProxySecret: input.trustedProxySecret } : {}),
   };
-  const server = await startServer(config) as Served;
+  const server = await startServer(config, { jevTransport: input.jevTransport }) as Served;
   stops.push(() => server.stop(true));
   return { server, token: config.token, hostToken: config.hostToken };
 }
@@ -512,6 +517,92 @@ async function waitUntil(predicate: () => boolean) {
 }
 
 describe("workspace session read APIs", () => {
+  test("Jev cannot bypass authentication, read-only mode, or host approval", async () => {
+    process.env.MATTERHORN_JEV_ENABLED = "1";
+    process.env.TYPESAFE_API_KEY = "fixture-only-never-live";
+    process.env.MATTERHORN_JEV_POLICY_REVIEWED_AT = new Date(Date.now() - 1000).toISOString();
+    let calls = 0;
+    for (const readOnly of [true, false]) {
+      const workspaceRoot = await createWorkspaceRoot();
+      const mock = startMockOpencode();
+      const openwork = await startOpenworkServer({ workspaceRoot, opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly,
+        approval: { mode: "manual", timeoutMs: 100 }, jevTransport: async () => { calls++; return Response.json({}); } });
+      const url = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/jev`;
+      const body = JSON.stringify({ text: "Explain public validators", model: { providerId: "openai", modelId: "gpt-4.1" }, consentVersion: JEV_CONSENT_VERSION });
+      expect((await fetch(url, { method: "POST", body, headers: { "Content-Type": "application/json" } })).status).toBe(401);
+      const response = await fetch(url, { method: "POST", body, headers: { ...auth(openwork.token), "Content-Type": "application/json" } });
+      expect(response.ok).toBe(false);
+      expect(calls).toBe(0);
+    }
+  });
+
+  for (const agent of ["matterhorn", "matterhorn-bittensor", "matterhorn-hyperliquid", "matterhorn-polymarket", "matterhorn-sui"]) {
+    test(`Jev fixture classification preserves ${agent}, selected model and preflight/send binding`, async () => {
+      process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+      process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "jev-isolated-guard-fixture-secret";
+      process.env.MATTERHORN_JEV_ENABLED = "1";
+      process.env.TYPESAFE_API_KEY = "fixture-only-never-live";
+      process.env.MATTERHORN_JEV_POLICY_REVIEWED_AT = new Date(Date.now() - 1000).toISOString();
+      const workspaceRoot = await createWorkspaceRoot();
+      const mock = startMockOpencode({ sessionAgent: agent });
+      let calls = 0;
+      const openwork = await startOpenworkServer({ workspaceRoot, opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false,
+        jevTransport: async (_url, init) => {
+          calls++;
+          const input = JSON.parse(String(init.body));
+          expect(input.state).toEqual({ message: "Explain this desk without using tools." });
+          const answers = Object.fromEntries(Object.entries(input.questions).map(([key, value]) => {
+            const options = Object.keys((value as { criteria: Record<string, string> }).criteria);
+            return [key, { type: "choice", choice: options[0], confidence: 1, probabilities: Object.fromEntries(options.map((option, index) => [option, index === 0 ? 1 : 0])) }];
+          }));
+          return Response.json({ model: JEV_MODEL, answers, usage: { input_tokens: 473, output_tokens: 34 } });
+        } });
+      const base = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1`;
+      const post = (path: string, body: unknown) => fetch(`${base}/${path}`, { method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const request = { text: "Explain this desk without using tools.", model: { providerId: "openai", modelId: "gpt-4.1" }, consentVersion: JEV_CONSENT_VERSION };
+      expect((await post("jev", { ...request, consentVersion: "old" })).status).toBe(400);
+      await expect((await post("jev", { ...request, privacyMode: "private_workspace" })).json()).resolves.toMatchObject({ status: "skipped" });
+      expect(calls).toBe(0);
+      const classification = await post("jev", request);
+      expect(classification.status).toBe(200);
+      const result = await classification.json();
+      expect(result.status).toBe("classified");
+      const message = { messageID: `jev_fixture_${agent}`, message: request.text, agentId: agent, model: request.model, jevReceipt: result.receipt };
+      const preflight = await post("messages/preflight", message);
+      expect(preflight.status).toBe(200);
+      expect((await preflight.json()).decision).toBe("allow");
+      expect((await post("messages", { ...message, message: "Modified message" })).status).toBe(409);
+      expect((await post("messages", message)).status).toBe(202);
+      // A lost-ack retry must return the original result, not re-dispatch when
+      // the optional advisory is removed or renewed. The body otherwise matches.
+      expect((await post("messages", { ...message, jevReceipt: undefined })).status).toBe(202);
+      expect(mock.requests.filter(request => request.pathname.endsWith("/prompt_async"))).toHaveLength(1);
+      expect(calls).toBe(1);
+      const prompt = mock.requests.find(request => request.pathname.endsWith("/prompt_async"));
+      expect(prompt?.body).toMatchObject({ agent, model: { providerID: "openai", modelID: "gpt-4.1" } });
+      expect(JSON.stringify(prompt?.body)).toContain("Optional Jev classification");
+      expect(JSON.stringify(prompt?.body)).not.toContain(result.receipt);
+    });
+  }
+
+  test("Jev skips unverified existing history without sending it to the provider", async () => {
+    process.env.MATTERHORN_JEV_ENABLED = "1";
+    process.env.TYPESAFE_API_KEY = "fixture-only-never-live";
+    process.env.MATTERHORN_JEV_POLICY_REVIEWED_AT = new Date(Date.now() - 1000).toISOString();
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode({ sessionMessages: defaultSessionMessages() });
+    let calls = 0;
+    const openwork = await startOpenworkServer({ workspaceRoot, opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false,
+      jevTransport: async () => { calls++; return Response.json({}); } });
+    const response = await fetch(`http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/jev`, {
+      method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "Explain a public topic", model: { providerId: "openai", modelId: "gpt-4.1" }, consentVersion: JEV_CONSENT_VERSION }),
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ status: "skipped" });
+    expect(calls).toBe(0);
+  });
+
   for (const agent of ["matterhorn", "matterhorn-bittensor", "matterhorn-hyperliquid", "matterhorn-polymarket", "matterhorn-sui"]) {
     test(`${agent} reports missing policy before asking the host to approve unusable work`, async () => {
       const workspaceRoot = await createWorkspaceRoot();

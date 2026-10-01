@@ -116,6 +116,8 @@ export type SlashCommandOption = {
 };
 
 export type ComposerDraft = {
+  /** Ephemeral Jev context receipt; never persisted with the draft. */
+  jevReceipt?: string;
   mode: PromptMode;
   parts: ComposerPart[];
   attachments: ComposerAttachment[];

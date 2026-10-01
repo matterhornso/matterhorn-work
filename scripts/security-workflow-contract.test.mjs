@@ -21,6 +21,7 @@ for (const required of [
   "pnpm test:dependency-bulk-audit",
   "pnpm verify:elliptic-security-patch",
   "pnpm audit:dependencies",
+  "pnpm test:release-dependency-patches",
   "request-rate-limit-store.test.ts",
 ]) {
   assert.ok(workflow.includes(required), `security workflow must include ${required}`);

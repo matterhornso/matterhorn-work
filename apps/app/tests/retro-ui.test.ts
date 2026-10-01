@@ -4,15 +4,23 @@ import { applyRetroUi, resolveRetroUi } from "../src/app/lib/retro-ui";
 import { resolveMinimalUi } from "../src/app/lib/minimal-ui";
 
 describe("retro visual rollout", () => {
-  test("is default-off and accepts only explicit build values", () => {
-    expect(resolveRetroUi(undefined)).toBe(false);
-    for (const value of [undefined, "", "0", "false", false, true, "yes"])
+  test("defaults to retro with an explicit visual rollback", () => {
+    expect(resolveRetroUi(undefined)).toBe(true);
+    for (const value of ["0", "false", false, true, "yes"])
       expect(resolveRetroUi({ VITE_MATTERHORN_RETRO_UI: value })).toBe(false);
-    for (const value of ["1", "true"]) {
+    for (const value of [undefined, "", "1", "true"]) {
       const env = { VITE_MATTERHORN_RETRO_UI: value };
       expect(resolveRetroUi(env)).toBe(true);
       expect(resolveMinimalUi(env)).toBe(true);
     }
+  });
+
+  test("public first paint and Docker rollout use the same release switch", () => {
+    const vite = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+    const docker = readFileSync(new URL("../../../packaging/docker/Dockerfile.public-beta-web", import.meta.url), "utf8");
+    expect(vite).toContain("retroUiBuild = resolveRetroUi(config.env)");
+    expect(docker).toContain("ARG VITE_MATTERHORN_RETRO_UI=1");
+    expect(docker).toContain("ENV VITE_MATTERHORN_RETRO_UI=${VITE_MATTERHORN_RETRO_UI}");
   });
 
   test("rollback removes only the visual marker and does not touch theme or data", () => {
@@ -34,7 +42,13 @@ describe("retro visual rollout", () => {
     }
   });
 
-  test("retro styling is opt-in and retains errors, focus and reduced motion", () => {
+  test("settings navigation inherits light and dark tokens instead of fixed dark styling", () => {
+    const source = readFileSync(new URL("../src/react-app/domains/settings/shell/settings-page.tsx", import.meta.url), "utf8");
+    expect(source).toContain("style={RETRO_UI ? undefined : SETTINGS_SIDEBAR_STYLE}");
+    expect(source).toContain("text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground");
+  });
+
+  test("retro styling is scoped and retains errors, focus and reduced motion", () => {
     const css = readFileSync(new URL("../src/styles/retro.css", import.meta.url), "utf8");
     expect(css).toContain('html[data-matterhorn-ui="retro"]');
     expect(css).toContain('[aria-invalid="true"]');

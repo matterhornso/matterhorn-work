@@ -12,10 +12,12 @@ import { MANAGED_OPENCODE_PERMISSION_POLICY } from "../apps/server/src/managed-o
 import type { ServerConfig } from "../apps/server/src/types";
 import { createClient } from "../apps/app/src/app/lib/opencode";
 import { abortSession } from "../apps/app/src/app/lib/opencode-session";
+import { JEV_CONSENT_VERSION, JEV_MODEL } from "../packages/types/src/jev";
 
 const binary = process.env.MATTERHORN_QA_OPENCODE_BIN;
 if (!binary) throw new Error("Set MATTERHORN_QA_OPENCODE_BIN to the pinned OpenCode 1.18.31 executable");
 const lostAck = process.argv.includes("--lost-ack");
+const jevMatrix = process.argv.includes("--jev");
 const guardedMode = process.argv.includes("--guarded-enforce") ? "enforce" : "off";
 const retryAfterLostAck = process.argv.includes("--retry-after-lost-ack");
 const abortRejected = process.argv.includes("--abort-rejected");
@@ -28,6 +30,7 @@ const toolProbe = process.argv.includes("--read-tool-loop") || outsideRead || sy
 if (toolProbe && (lostAck || abortInFlight)) throw new Error("Run tool probes separately from transport/cancellation probes");
 if (retryAfterLostAck && !lostAck) throw new Error("Retry probe requires --lost-ack");
 if (abortInFlight && lostAck) throw new Error("Run abort and lost-ack probes independently");
+if (jevMatrix && (lostAck || abortInFlight || toolProbe)) throw new Error("Run the Jev matrix separately from transport/tool probes");
 let dropAcknowledgements = lostAck;
 if (createHash("sha256").update(readFileSync(binary)).digest("hex") !== (process.env.MATTERHORN_QA_OPENCODE_SHA256 ?? "16c960ba77421da11b53e785f359b73f328a86118b48feb4af143db5d9afb198")) throw new Error("Runtime digest mismatch");
 const root = realpathSync(mkdtempSync(join(tmpdir(), "mh-gateway-guard-")));
@@ -52,9 +55,16 @@ const testEnv = {
   MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS: "10000", MATTERHORN_GUARDED_RUNTIME_MODE: guardedMode,
   MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED: "1", MATTERHORN_AGENT_RUNTIME_SECRET: runtimeSecret,
   MATTERHORN_CAPABILITY_SIGNING_SECRET: randomBytes(32).toString("hex"),
+  // Fixture-only classifier. No external TypeSafe transport is used by this probe.
+  MATTERHORN_JEV_ENABLED: jevMatrix ? "1" : "0",
+  TYPESAFE_API_KEY: "synthetic-jev-only",
+  MATTERHORN_JEV_POLICY_REVIEWED_AT: new Date(Date.now() - 1000).toISOString(),
 };
 Object.assign(process.env, testEnv);
 let modelCalls = 0;
+let jevCalls = 0;
+let jevUnavailable = false;
+let lastAdvisorySeen = false;
 let holdModelResponse = false;
 let providerDisconnects = 0;
 let toolProbeActive = false;
@@ -65,7 +75,8 @@ const stub = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   if (new URL(request.url).pathname !== "/v1/chat/completions") return new Response("Not found", { status: 404 });
   const requestBody = await request.json();
   modelCalls++;
-  if (modelCalls > 12) return new Response("Synthetic call cap", { status: 429 });
+  lastAdvisorySeen = JSON.stringify(requestBody.messages).includes("Optional Jev classification");
+  if (modelCalls > (jevMatrix ? 18 : 12)) return new Response("Synthetic call cap", { status: 429 });
   const common = { id: `qa_${modelCalls}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: "fixture" };
   if (toolProbeActive) {
     if (!toolRequested) {
@@ -165,7 +176,16 @@ const config: ServerConfig = {
   workspaces: [{ id: "ws_guard_qa", name: "Guard QA", path: workspace, preset: "starter", workspaceType: "local", baseUrl: gatewayRuntimeBase, opencodeUsername: "qa", opencodePassword: password }],
   authorizedRoots: [workspace], readOnly: false, startedAt: Date.now(), tokenSource: "cli", hostTokenSource: "cli", logFormat: "pretty", logRequests: false, reloadWatchers: false,
 };
-const gateway = await startServer(config);
+const gateway = await startServer(config, { jevTransport: async (_url, init) => {
+  jevCalls++;
+  if (jevUnavailable) return new Response("Synthetic throttling", { status: 429 });
+  const payload = JSON.parse(String(init.body));
+  if (Object.keys(payload.state).join() !== "message") throw new Error("Classifier received excess context");
+  return Response.json({ model: JEV_MODEL, usage: { input_tokens: 80, output_tokens: 20 }, answers: {
+    topic: { type: "choice", choice: "general", confidence: 1, probabilities: { general: 1, bittensor: 0, hyperliquid: 0, polymarket: 0, sui: 0, cross_desk: 0, unclear: 0 } },
+    task: { type: "choice", choice: "explain", confidence: 1, probabilities: { explain: 1, compare: 0, research: 0, troubleshoot: 0, other: 0, unclear: 0 } },
+  } });
+} });
 const gatewayBase = `http://127.0.0.1:${gateway.port}`;
 const guardObservations: Array<{ path: string; status: number; code?: string }> = [];
 const guardBridge = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
@@ -210,13 +230,20 @@ try {
   let cancellationPassed = !abortInFlight;
   let failedStopReportedSuccess = false;
   let toolProbePassed = !toolProbe;
-  for (const agentId of agents) {
+  for (const jevMode of (jevMatrix ? ["off", "on", "unavailable"] : ["off"])) for (const agentId of agents) {
     const created = await api("/workspace/ws_guard_qa/sessions", { title: `Synthetic ${agentId}`, agentId });
     if (created.status !== 201) throw new Error(`Session create: ${created.status} ${created.data?.code}`);
     const sessionId = created.data.item.id;
-    const body = { messageID: `req_fixture_${agentId}`, message: "Explain what public information this desk can research. This is a synthetic QA check.", agentId, model: { providerID: "fixture", modelID: "fixture" } };
+    const body: { messageID: string; message: string; agentId: string; model: { providerID: string; modelID: string }; jevReceipt?: string } = { messageID: `req_fixture_${agentId}_${jevMode}`, message: "Explain what public information this desk can research. This is a synthetic QA check.", agentId, model: { providerID: "fixture", modelID: "fixture" } };
     const path = `/workspace/ws_guard_qa/sessions/${sessionId}`;
     firstSessionPath ??= path;
+    const beforeJev = jevCalls;
+    if (jevMode !== "off") {
+      jevUnavailable = jevMode === "unavailable";
+      const classified = await api(`${path}/jev`, { text: body.message, model: { providerId: "fixture", modelId: "fixture" }, consentVersion: JEV_CONSENT_VERSION });
+      if (classified.status !== 200 || classified.data.status !== (jevUnavailable ? "unavailable" : "classified")) throw new Error("Jev classification contract failed");
+      if (classified.data.status === "classified") body.jevReceipt = classified.data.receipt;
+    }
     const preflight = await api(`${path}/messages/preflight`, body);
     const beforeCalls = modelCalls;
     const beforePosts = promptPostAttempts;
@@ -239,7 +266,8 @@ try {
         return terminal;
       }, `${agentId} response`);
     }
-    results.push({ agentId, preflight: preflight.data?.decision, status: sent.status, code: sent.data?.code, modelCalls: modelCalls - beforeCalls, ...(lostAck ? { promptPostAttempts: promptPostAttempts - beforePosts } : {}), finish, runtimeTokens, promptTextCopies, error });
+    if (jevMatrix && (lastAdvisorySeen !== (jevMode === "on") || jevCalls - beforeJev !== (jevMode === "off" ? 0 : 1))) throw new Error(`Jev parity failed: preflight=${preflight.data?.decision}, status=${sent.status}, code=${sent.data?.code}, error=${error ?? "none"}`);
+    results.push({ agentId, ...(jevMatrix ? { jevMode, jevCalls: jevCalls - beforeJev, advisoryReachedSelectedModel: lastAdvisorySeen } : {}), preflight: preflight.data?.decision, status: sent.status, code: sent.data?.code, modelCalls: modelCalls - beforeCalls, ...(lostAck ? { promptPostAttempts: promptPostAttempts - beforePosts } : {}), finish, runtimeTokens, promptTextCopies, error });
     console.log(JSON.stringify({ probe: "gateway-runtime-guard-desk", ...results.at(-1) }));
   }
   if (firstSessionPath) {
@@ -255,7 +283,7 @@ try {
       const beforeIds = new Set(beforeMessages.map((message: { info: { id: string } }) => message.info.id));
       const beforeCalls = modelCalls;
       const resent = await api(`${firstSessionPath}/messages`, {
-        messageID: "req_fixture_matterhorn",
+        messageID: "req_fixture_matterhorn_off",
         message: "Explain what public information this desk can research. This is a synthetic QA check.",
         agentId: "matterhorn", model: { providerID: "fixture", modelID: "fixture" },
       });
@@ -407,7 +435,7 @@ try {
   console.log(JSON.stringify({ probe: "raw-runtime-without-gateway-run", status: raw.status, errorName: rawError?.name, errorMessage: rawMessage.slice(0, 220), guardResults: rawGuardResults, blockedBeforeInference: rawBlocked, extraModelCalls: modelCalls - beforeBlocked }));
   const usage = await api("/workspace/ws_guard_qa/model-usage/status");
   console.log(JSON.stringify({ scope: "real local Matterhorn gateway + pinned OpenCode + real guard plugin; synthetic inference, no external tools, NOT hosted or full desk acceptance", guardedMode, lostAck, modelCalls, promptPostAttempts, completedBeforeDrop, usedTokens: usage.data?.status?.monthly?.usedTokens, chargedTokens: usage.data?.status?.monthly?.chargedTokens, pendingRequests: usage.data?.status?.pendingRequests }));
-  process.exitCode = results.every(result => result.status === 202 && result.finish === "stop" && result.modelCalls === 1) && usage.data?.status?.monthly?.usedTokens === (toolProbe ? 7000 : abortInFlight ? 6000 : 5000) && secretBlocked && rawBlocked && !retryCausedAdditionalInference && cancellationPassed && !failedStopReportedSuccess && toolProbePassed ? 0 : 1;
+  process.exitCode = results.every(result => result.status === 202 && result.finish === "stop" && result.modelCalls === 1) && usage.data?.status?.monthly?.usedTokens === (jevMatrix ? 15000 : toolProbe ? 7000 : abortInFlight ? 6000 : 5000) && usage.data?.status?.pendingRequests === 0 && secretBlocked && rawBlocked && !retryCausedAdditionalInference && cancellationPassed && !failedStopReportedSuccess && toolProbePassed ? 0 : 1;
 } catch (error) {
   console.log(JSON.stringify({ probe: "gateway-runtime-guard", error: error instanceof Error ? error.message : "QA failed", modelCalls }));
   process.exitCode = 1;

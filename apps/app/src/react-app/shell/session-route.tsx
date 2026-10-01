@@ -2922,6 +2922,7 @@ export function SessionRoute() {
         if (!draft.privacy?.consentToken) {
           const privacyPreflight = await requestDiagnostics.observe("preflight", () => client.preflightAgentMessage(selectedWorkspaceId, selectedSessionId, {
             parts,
+            ...(draft.jevReceipt ? { jevReceipt: draft.jevReceipt } : {}),
             model: selectedPromptModel
               ? { providerId: selectedPromptModel.providerID, modelId: selectedPromptModel.modelID }
               : { providerId: "", modelId: "" },
@@ -2965,9 +2966,10 @@ export function SessionRoute() {
         try {
           // Memory always uses authoritative records, including on desktop.
           // Preserve local-only system overlays when no Memory is selected.
-          if (publicBetaWeb || draft.privacy?.memoryIds?.length) {
+          if (publicBetaWeb || draft.privacy?.memoryIds?.length || draft.jevReceipt) {
             await requestDiagnostics.observe("dispatch", () => client.sendAgentMessage(selectedWorkspaceId, selectedSessionId, {
               parts,
+              ...(draft.jevReceipt ? { jevReceipt: draft.jevReceipt } : {}),
               model: selectedPromptModel
                 ? { providerId: selectedPromptModel.providerID, modelId: selectedPromptModel.modelID }
                 : { providerId: "", modelId: "" },
