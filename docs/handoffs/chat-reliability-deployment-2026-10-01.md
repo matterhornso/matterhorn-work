@@ -1,5 +1,9 @@
 # Matterhorn reliability deployment handoff
 
+## 1 October review correction
+
+PR #1029 is merged into `dev` as `5e4b5516c3683410923f5b8d789418707a448485`; #1030 now targets `dev`. The earlier statement that four security workflow jobs passed was accurate but incomplete: the separate CodeQL code-scanning check failed with two high-severity findings. This revision removes the ambiguous slug-trimming regex and changes the fixture snapshot reader to inspect/read the same no-follow file handle, with regressions. Both the separate scanning check and the dev-targeted integration checks must pass on the updated head before merge. Consult GitHub for that final status; the historical test results below are not evidence for an untested later head. Deployment still needs explicit operator approval and hosted acceptance.
+
 Engineering team: review and deploy the tested chat reliability candidate only after release approval. This handoff explains what changed, the required dependencies, configuration and evidence, and when to stop. It does not authorize changing production during the ongoing audit.
 
 ## Release and dependency order

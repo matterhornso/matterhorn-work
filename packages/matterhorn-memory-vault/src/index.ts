@@ -1205,7 +1205,8 @@ function slugify(value: string): string {
   const slug = value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
+    // Normalization above collapses every separator run to one hyphen.
+    .replace(/^-|-$/g, "")
     .slice(0, 80)
   return slug || "memory"
 }

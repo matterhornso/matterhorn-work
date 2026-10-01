@@ -1,5 +1,9 @@
 # Matterhorn chat reliability and release audit
 
+## 1 October CodeQL follow-up
+
+PR #1029 merged into `dev` at `5e4b5516c3683410923f5b8d789418707a448485`, and #1030 now targets `dev`. Correction: four successful security workflow jobs did **not** mean all security gates passed. The separate CodeQL scanning check reported two high-severity findings on the previous head: polynomial regex in the memory filename slug and a filesystem check/read race in the test snapshot helper. The follow-up replaces quantified trimming with single-character anchors (normalization already collapses separator runs) and uses one no-follow open handle for metadata/content reads. Added public-vault filename regressions for long separator runs, Unicode-only titles and truncation, plus a symlink-rejection test for the helper. Focused local checks passed: 19 legacy-cleanup tests, 16 memory-deletion/filename tests and memory-vault smoke. Final current-head CI remains the merge gate; no alert dismissal or bypass is authorized. Historical source and live-read results below retain their original revision scope.
+
 This report is for the release reviewer and deployment team. It covers the five-hour reliability work beginning 30 September 2026 at 17:18 UTC. The candidate improves chat recovery, accounting, data deletion and public-chain reads. It is **not a hosted release approval**: production revision/guard drift, live Jev configuration, Mini quota, inbox delivery and backup restoration remain unresolved or unverified.
 
 ## Release identity and scope

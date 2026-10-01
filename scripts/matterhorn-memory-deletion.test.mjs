@@ -26,6 +26,26 @@ async function fixture(t) {
   return { dir, vault }
 }
 
+test("memory filenames preserve normalized slugs for long separator runs and bounded titles", async (t) => {
+  const { vault } = await fixture(t)
+  const cases = [
+    ["---Main / TAO---wallet!!!", "main-tao-wallet"],
+    ["-".repeat(100_000), "memory"],
+    ["-".repeat(100_000) + "Wallet" + "-".repeat(100_000), "wallet"],
+    ["A".repeat(100), "a".repeat(80)],
+    ["A".repeat(79) + "---B", "a".repeat(79) + "-"],
+    ["💎 / !!!", "memory"],
+  ]
+  for (const [index, [title, slug]] of cases.entries()) {
+    const id = `mem_slug_${index}`
+    const saved = await vault.captureRecord({ ...memory(id), title })
+    assert.equal(path.basename(saved.markdownPath), `${id}-${slug}.md`)
+    assert.equal((await vault.getRecord(id)).title, title)
+    await vault.forgetRecord(id)
+    await assert.rejects(readFile(saved.markdownPath), { code: "ENOENT" })
+  }
+})
+
 test("forget erases index and related suggestion content, including resolved suggestions", async (t) => {
   const { vault } = await fixture(t)
   const record = memory()

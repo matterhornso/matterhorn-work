@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { chmod, lstat, mkdir, mkdtemp, open, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createMatterhornMemoryVault } from "@matterhorn-work/memory-vault";
@@ -61,11 +62,22 @@ async function snapshot(directory: string): Promise<unknown[]> {
   const results: unknown[] = [];
   for (const name of (await readdir(directory)).sort()) {
     const file = join(directory, name);
-    const info = await lstat(file);
-    results.push([name, info.mode, info.mtimeMs, info.isDirectory() ? await snapshot(file) : await readFile(file, "utf8")]);
+    const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const info = await handle.stat();
+      results.push([name, info.mode, info.mtimeMs, info.isDirectory() ? await snapshot(file) : await handle.readFile("utf8")]);
+    } finally {
+      await handle.close();
+    }
   }
   return results;
 }
+
+test("fixture snapshots reject symbolic links instead of reading their targets", async () => {
+  const { root } = await fixture();
+  await symlink(join(root, "vault", "memory-index.json"), join(root, "snapshot-link"));
+  await expect(snapshot(root)).rejects.toMatchObject({ code: "ELOOP" });
+});
 
 test("dry run is content-free and changes no bytes, permissions or modification times", async () => {
   const { root, vault, options } = await fixture();
