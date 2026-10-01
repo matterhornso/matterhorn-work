@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { create } from "zustand";
+import { accountClientState } from "../../../../app/lib/account-client-state";
 
 import { t } from "../../../../i18n";
 
@@ -171,6 +172,10 @@ function removeValue(values: string[], value: string) {
 function addValue(values: string[], value: string) {
   return values.includes(value) ? values : [...values, value];
 }
+
+accountClientState.register("session-activity", () => useSessionActivityStore.setState({
+  recordsByWorkspaceId: {}, statusesByWorkspaceId: {},
+}));
 
 export const useSessionActivityStore = create<SessionActivityStore>((set, get) => ({
   recordsByWorkspaceId: {},

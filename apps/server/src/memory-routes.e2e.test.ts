@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,7 @@ import type { MatterhornMemoryRecord } from "@matterhorn-work/types/memory";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
+import { auditLogPath, legacyAuditLogPath, recordAudit, redactMemoryAuditContent } from "./audit.js";
 
 type Served = {
   port: number;
@@ -186,6 +187,102 @@ afterEach(async () => {
 });
 
 describe("Matterhorn memory API routes", () => {
+  test("memory audit events do not copy record titles", async () => {
+    const { base } = await boot();
+    const marker = "Private fixture memory title must not enter audit";
+    const captured = await jsonFetch(base, "/workspace/ws_memory/memory/capture", {
+      method: "POST", body: JSON.stringify({ record: record({ title: marker }) }),
+    });
+    expect(captured.response.status).toBe(201);
+    const audit = await readFile(auditLogPath("ws_memory"), "utf8");
+    expect(audit).toContain('"action":"memory.capture"');
+    expect(audit).not.toContain(marker);
+  });
+
+  test("forget scrubs historical memory summaries without removing audit identity or unrelated events", async () => {
+    const { base, dir } = await boot();
+    await jsonFetch(base, "/workspace/ws_memory/memory/capture", {
+      method: "POST", body: JSON.stringify({ record: record() }),
+    });
+    const old = {
+      id: "audit_legacy_memory", workspaceId: "ws_memory", actor: { type: "remote" },
+      action: "memory.capture", target: "mem_route_tao_wallet", timestamp: 123,
+      summary: "Captured memory ERASE_OLD_TITLE", metadata: { title: "ERASE_OLD_TITLE" },
+    };
+    const unrelated = { ...old, id: "audit_keep", action: "wallet.approval.denied", summary: "KEEP", metadata: { safe: true } };
+    const otherWorkspace = { ...old, id: "audit_other_workspace", workspaceId: "ws_other", summary: "KEEP_OTHER_WORKSPACE", metadata: { title: "OTHER_WORKSPACE_TITLE" } };
+    const legacy = legacyAuditLogPath(dir);
+    await mkdir(join(dir, ".opencode", "openwork"), { recursive: true });
+    const content = `${JSON.stringify(old)}\n${JSON.stringify(unrelated)}\n${JSON.stringify(otherWorkspace)}\n`;
+    await writeFile(auditLogPath("ws_memory"), content);
+    const legacyWithoutWorkspace = { ...old, id: "audit_without_workspace", workspaceId: undefined };
+    await writeFile(legacy, `${content}${JSON.stringify(legacyWithoutWorkspace)}\n`);
+    const forgotten = await jsonFetch(base, "/workspace/ws_memory/memory/entities/mem_route_tao_wallet", { method: "DELETE" });
+    expect(forgotten.response.status).toBe(200);
+    for (const file of [auditLogPath("ws_memory"), legacy]) {
+      const raw = await readFile(file, "utf8");
+      expect(raw).not.toContain("ERASE_OLD_TITLE");
+      const rows = raw.trim().split("\n").map((line) => JSON.parse(line));
+      expect(rows.find((entry) => entry.id === old.id)).toMatchObject({
+        id: old.id, workspaceId: old.workspaceId, actor: old.actor,
+        action: old.action, target: old.target, timestamp: old.timestamp,
+      });
+      expect(rows.find((entry) => entry.id === unrelated.id)).toEqual(unrelated);
+      expect(rows.find((entry) => entry.id === otherWorkspace.id)).toMatchObject(otherWorkspace);
+      if (file === legacy) {
+        expect(rows.find((entry) => entry.id === legacyWithoutWorkspace.id)?.summary).toBe("Memory record content removed");
+      }
+    }
+  });
+
+  test("malformed audit history blocks deletion without losing the memory or rewriting history", async () => {
+    const { base } = await boot();
+    const captured = await jsonFetch(base, "/workspace/ws_memory/memory/capture", {
+      method: "POST", body: JSON.stringify({ record: record() }),
+    });
+    expect(captured.response.status).toBe(201);
+    await writeFile(auditLogPath("ws_memory"), "{ malformed audit\n");
+    const deleted = await jsonFetch(base, "/workspace/ws_memory/memory/entities/mem_route_tao_wallet", { method: "DELETE" });
+    expect(deleted.response.status).toBeGreaterThanOrEqual(400);
+    expect(await readFile(auditLogPath("ws_memory"), "utf8")).toBe("{ malformed audit\n");
+    expect(existsSync(captured.payload.markdownPath)).toBe(true);
+    const fetched = await jsonFetch(base, "/workspace/ws_memory/memory/entities/mem_route_tao_wallet");
+    expect(fetched.response.status).toBe(200);
+  });
+
+  test("concurrent audit appends survive memory redaction", async () => {
+    const { dir } = await boot();
+    await recordAudit(dir, { id: "initial", workspaceId: "ws_memory", actor: { type: "remote" },
+      action: "memory.capture", target: "mem_route_tao_wallet", summary: "PRIVATE", timestamp: 1 });
+    await Promise.all([
+      redactMemoryAuditContent(dir, "ws_memory", "mem_route_tao_wallet"),
+      ...Array.from({ length: 20 }, (_, index) => recordAudit(dir, {
+        id: `parallel_${index}`, workspaceId: "ws_memory", actor: { type: "remote" },
+        action: "wallet.approval.denied", target: `intent_${index}`, summary: "Preserve security evidence", timestamp: index + 2,
+      })),
+    ]);
+    const lines = (await readFile(auditLogPath("ws_memory"), "utf8")).trim().split("\n");
+    expect(lines).toHaveLength(21);
+    expect(lines.join("\n")).not.toContain("PRIVATE");
+    expect(new Set(lines.map((line) => JSON.parse(line).id)).size).toBe(21);
+  });
+
+  test("audit redaction refuses a symlinked legacy log directory", async () => {
+    const { base, dir } = await boot();
+    const captured = await jsonFetch(base, "/workspace/ws_memory/memory/capture", {
+      method: "POST", body: JSON.stringify({ record: record() }),
+    });
+    expect(captured.response.status).toBe(201);
+    const outside = join(dir, "unrelated-audit");
+    await mkdir(outside);
+    await writeFile(join(outside, "audit.jsonl"), "DO_NOT_TOUCH\n");
+    await mkdir(join(dir, ".opencode"), { recursive: true });
+    await symlink(outside, join(dir, ".opencode", "openwork"));
+    const deleted = await jsonFetch(base, "/workspace/ws_memory/memory/entities/mem_route_tao_wallet", { method: "DELETE" });
+    expect(deleted.response.status).toBeGreaterThanOrEqual(400);
+    expect(await readFile(join(outside, "audit.jsonl"), "utf8")).toBe("DO_NOT_TOUCH\n");
+    expect(existsSync(captured.payload.markdownPath)).toBe(true);
+  });
   test("plans desk suggestions without writing memory", async () => {
     const { base } = await boot();
 
@@ -330,7 +427,7 @@ describe("Matterhorn memory API routes", () => {
   });
 
   test("workspace memory routes namespace records by workspace", async () => {
-    const { base } = await boot();
+    const { base, dir } = await boot();
 
     const captured = await jsonFetch(base, "/workspace/ws_memory/memory/capture", {
       method: "POST",
@@ -378,6 +475,9 @@ describe("Matterhorn memory API routes", () => {
     const afterDelete = await jsonFetch(base, "/workspace/ws_memory/memory/search?tags=bittensor&limit=10");
     expect(afterDelete.response.status).toBe(200);
     expect(afterDelete.payload.count).toBe(0);
+    const persistedIndex = await readFile(join(dir, ".matterhorn-work", "memory", "memory-index.json"), "utf8");
+    expect(persistedIndex).not.toContain("mem_workspace_namespace");
+    expect(existsSync(captured.payload.markdownPath)).toBe(false);
 
     const audit = await jsonFetch(base, "/workspace/ws_memory/audit?limit=10");
     expect(audit.response.status).toBe(200);

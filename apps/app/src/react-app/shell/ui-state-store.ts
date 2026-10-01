@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { accountClientState } from "../../app/lib/account-client-state";
 
 export const PERSISTED_UI_STATE_KEY = "openwork:ui-state:v1";
 export const GLOBAL_HOME_SIDE_PANEL_KEY = "__matterhorn_home__";
@@ -362,4 +363,7 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
 
 syncApplicationMenuVisible(useUiStateStore.getState().applicationMenuVisible);
 
-useUiStateStore.subscribe((state) => persistUiState(state));
+accountClientState.register("session-panels", () => useUiStateStore.setState({ sidePanelState: {} }));
+useUiStateStore.subscribe((state) => {
+  if (!accountClientState.isResetting()) persistUiState(state);
+});

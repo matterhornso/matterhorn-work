@@ -40,12 +40,13 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Run a Bittensor-native public read through the Matterhorn desk workflow. Transaction intents use the separate prepare tool. Never signs or broadcasts.",
+    description: "Read public Bittensor data using readOperation and netuid/ss58Address. Never executes actions.",
     inputSchema: objectSchema({
-      message: { type: "string", description: "Plain-language Bittensor request." },
+      message: { type: "string", description: "Discovery text." },
+      readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] },
       ss58Address: { type: "string", description: "Optional public SS58 address." },
-      netuid: { type: "number", description: "Optional subnet netuid." },
-      limit: { type: "number", description: "Optional result limit." },
+      netuid: { type: "number" },
+      limit: { type: "number" },
       strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
     }, ["message"]),
     deskIds: ["bittensor"],
@@ -239,9 +240,10 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_polymarket_search_markets",
     title: "Polymarket market search",
-    description: "Search public Polymarket markets with source, liquidity, and compliance context.",
+    description: "Read public markets. Use marketId for exact numeric IDs; otherwise query. Never places orders.",
     inputSchema: objectSchema({
       query: { type: "string", description: "Market search text." },
+      marketId: { type: "string", pattern: "^[1-9][0-9]{0,19}$", description: "Exact ID; omit query and limit." },
       limit: { type: "number", minimum: 1, maximum: 50 },
     }),
     deskIds: ["polymarket"],
@@ -314,12 +316,12 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_sui_get_balance",
     title: "Sui public balance",
-    description: "Read a public Sui address balance. Never requests or handles wallet secrets.",
+    description: "Read public Sui balance on the requested network. No secrets.",
     inputSchema: objectSchema({
-      address: { type: "string", description: "Public Sui address." },
+      address: { type: "string", description: "Public address; short hex accepted." },
       network: { type: "string", enum: ["mainnet", "testnet"] },
-      coinType: { type: "string", description: "Optional public coin type." },
-    }, ["address"]),
+      coinType: { type: "string" },
+    }, ["address", "network"]),
     deskIds: ["sui"],
     actionIds: ["sui_account_read"],
     access: "read",

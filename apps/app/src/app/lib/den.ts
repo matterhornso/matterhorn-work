@@ -37,6 +37,7 @@ import type {
   MatterhornExtensionSourceFormat,
 } from "../extensions";
 import { DenApiError } from "./den-api-error";
+import { accountClientState, captureAccountGeneration } from "./account-client-state";
 export { DenApiError } from "./den-api-error";
 
 const STORAGE_BASE_URL = "matterhorn.den.baseUrl";
@@ -811,6 +812,10 @@ export function clearDenSession(options?: { includeBaseUrls?: boolean }) {
     return;
   }
 
+  // Invalidate in-flight content before notifying auth/settings consumers.
+  let cleanupError: unknown;
+  try { accountClientState.clear(); } catch (error) { cleanupError = error; }
+
   if (options?.includeBaseUrls) {
     window.localStorage.removeItem(STORAGE_BASE_URL);
     window.localStorage.removeItem(STORAGE_API_BASE_URL);
@@ -825,9 +830,11 @@ export function clearDenSession(options?: { includeBaseUrls?: boolean }) {
   dispatchDenSettingsChanged({
     settings: readDenSettings(),
   });
+  if (cleanupError) throw cleanupError;
 }
 
 export async function ensureDenActiveOrganization(options?: { forceServerSync?: boolean }) {
+  const isCurrentAccount = captureAccountGeneration();
   const settings = readDenSettings();
   const token = settings.authToken?.trim() ?? "";
   if (!token && !isPublicBetaWebDeployment()) {
@@ -841,6 +848,7 @@ export async function ensureDenActiveOrganization(options?: { forceServerSync?: 
   });
 
   const response = await client.listOrgs();
+  if (!isCurrentAccount()) return null;
   const selectedOrgId = settings.activeOrgId?.trim() ?? "";
   const selectedOrgSlug = settings.activeOrgSlug?.trim() ?? "";
   const targetOrg =
@@ -866,6 +874,7 @@ export async function ensureDenActiveOrganization(options?: { forceServerSync?: 
     (!response.activeOrgId || response.activeOrgId !== targetOrg.id)
   ) {
     await client.setActiveOrganization({ organizationId: targetOrg.id });
+    if (!isCurrentAccount()) return null;
   }
 
   writeDenSettings({

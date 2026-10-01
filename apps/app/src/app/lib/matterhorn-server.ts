@@ -1,6 +1,7 @@
 import type { Message, Part, Session, Todo } from "@opencode-ai/sdk/v2/client";
 import { validatePrivacyConsentToken } from "./agent-privacy-consent";
 import { pendingMessageRequest } from "./message-request-id";
+import { accountClientState, AccountStateChangedError, captureAccountGeneration } from "./account-client-state";
 import type { JevAvailability, JevRequest, JevResult } from "@matterhorn-work/types/jev";
 import type {
   MatterhornMemoryExportManifest,
@@ -1588,6 +1589,12 @@ const DEFAULT_OPENWORK_SERVER_TIMEOUT_MS = 10_000;
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+const accountRequests = new Set<AbortController>();
+accountClientState.register("server-requests", () => {
+  for (const controller of accountRequests) controller.abort();
+  accountRequests.clear();
+}, "stop");
+
 // One deadline covers both headers and body consumption. Streams use separate
 // OpenCode transports and do not pass through this finite-response reader.
 export async function fetchResponseWithTimeout<T>(
@@ -1597,19 +1604,25 @@ export async function fetchResponseWithTimeout<T>(
   timeoutMs: number,
   readResponse: (response: Response) => Promise<T>,
 ): Promise<T> {
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    return readResponse(await fetchImpl(url, init));
-  }
+  if (accountClientState.isResetting()) throw new AccountStateChangedError();
+  const isCurrentAccount = captureAccountGeneration();
+  const controller = new AbortController();
+  accountRequests.add(controller);
+  const signal = controller.signal;
+  const initWithSignal = { ...init, signal: init.signal ? AbortSignal.any([signal, init.signal]) : signal };
 
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const signal = controller?.signal;
-  const initWithSignal = signal ? { ...init, signal: init.signal ? AbortSignal.any([signal, init.signal]) : signal } : init;
+  let rejectAccountChange: (() => void) | undefined;
+  const accountChanged = new Promise<never>((_, reject) => {
+    rejectAccountChange = () => { if (!isCurrentAccount()) reject(new AccountStateChangedError()); };
+    signal.addEventListener("abort", rejectAccountChange);
+  });
 
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   const timeoutPromise = new Promise<never>((_, reject) => {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return;
     timeoutId = setTimeout(() => {
       try {
-        controller?.abort();
+        controller.abort();
       } catch {
         // ignore
       }
@@ -1618,13 +1631,18 @@ export async function fetchResponseWithTimeout<T>(
   });
 
   try {
-    return await Promise.race([fetchImpl(url, initWithSignal).then(readResponse), timeoutPromise]);
+    const result = await Promise.race([fetchImpl(url, initWithSignal).then(readResponse), timeoutPromise, accountChanged]);
+    if (!isCurrentAccount()) throw new AccountStateChangedError();
+    return result;
   } catch (error) {
+    if (!isCurrentAccount()) throw new AccountStateChangedError();
     if (error && typeof error === "object" && "name" in error && error.name === "AbortError") {
       throw new Error("Request timed out.");
     }
     throw error;
   } finally {
+    if (rejectAccountChange) signal.removeEventListener("abort", rejectAccountChange);
+    accountRequests.delete(controller);
     if (timeoutId) clearTimeout(timeoutId);
   }
 }

@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
+import { AccountStateChangedError, captureAccountGeneration } from "../../app/lib/account-client-state";
 import type {
   AgentPartInput,
   FilePartInput,
@@ -25,6 +26,7 @@ import type { MatterhornWorkflowRunListItem } from "@matterhorn-work/types/workf
 
 import { createClient, unwrap } from "../../app/lib/opencode";
 import { validatePrivacyConsentToken } from "../../app/lib/agent-privacy-consent";
+import { requireAnswerContinuationSupport } from "../domains/session/surface/response-actions";
 import { createPromptRequestDiagnostics, diagnosticIdentifier } from "./prompt-request-diagnostics";
 import { forkSession, revertSession, shellInSession } from "../../app/lib/opencode-session";
 import {
@@ -661,6 +663,7 @@ async function draftToParts(draft: ComposerDraft, workspaceRoot: string) {
 }
 
 export function SessionRoute() {
+  const isCurrentAccount = useRef(captureAccountGeneration()).current;
   const publicBetaWeb = isPublicBetaWebDeployment();
   const executionModeFeatureEnabled = executionModesEnabled();
   const navigate = useNavigate();
@@ -2821,6 +2824,8 @@ export function SessionRoute() {
         handleOpenSettings(section === "skills" ? "/settings/skills" : section === "mcps" || section === "extensions" ? "/settings/extensions/mcp" : section === "plugins" ? "/settings/extensions/plugins" : "/settings/general");
       },
       onSendDraft: async (draft: ComposerDraft) => {
+        const requireCurrentAccount = () => { if (!isCurrentAccount()) throw new AccountStateChangedError(); };
+        requireCurrentAccount();
         validatePrivacyConsentToken(draft.privacy?.consentToken);
         const text = (draft.resolvedText ?? draft.text).trim();
         if (!text && draft.attachments.length === 0) return;
@@ -2889,6 +2894,7 @@ export function SessionRoute() {
             ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
             ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
           };
+          requireCurrentAccount();
           const result = await opencodeClient.session.command(commandRequest);
           if (result.error) {
             throw new Error(serializeSDKError(result.error));
@@ -2912,16 +2918,18 @@ export function SessionRoute() {
             ? Promise.resolve(undefined)
             : buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode),
         ]);
-        const executionModeTools = buildMatterhornPromptTools({
+        requireCurrentAccount();
+        const executionModeTools = draft.answerOnly || draft.continuationOf ? { "*": false } : buildMatterhornPromptTools({
           mode: executionMode,
           agentId: selectedAgent,
           text,
           hasAttachments: draft.attachments.length > 0,
         });
 
-        if (!draft.privacy?.consentToken) {
+        if (!draft.privacy?.consentToken || draft.continuationOf) {
           const privacyPreflight = await requestDiagnostics.observe("preflight", () => client.preflightAgentMessage(selectedWorkspaceId, selectedSessionId, {
             parts,
+            ...(draft.continuationOf ? { continuationOf: draft.continuationOf } : {}),
             ...(draft.jevReceipt ? { jevReceipt: draft.jevReceipt } : {}),
             model: selectedPromptModel
               ? { providerId: selectedPromptModel.providerID, modelId: selectedPromptModel.modelID }
@@ -2937,7 +2945,8 @@ export function SessionRoute() {
             } : {}),
             ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
           }));
-          if (privacyPreflight.decision !== "allow") {
+          if (draft.continuationOf) requireAnswerContinuationSupport(privacyPreflight, draft.continuationOf);
+          if (!draft.privacy?.consentToken && privacyPreflight.decision !== "allow") {
             throw new Error(JSON.stringify({
               code: privacyPreflight.decision === "blocked" ? "agent_privacy_blocked" : "agent_privacy_consent_required",
               message: privacyPreflight.reason,
@@ -2946,6 +2955,7 @@ export function SessionRoute() {
           }
         }
 
+        requireCurrentAccount();
         const dispatchStartedAt = performance.now();
         promptTimingRef.current.set(selectedSessionId, {
           startedAt: dispatchStartedAt,
@@ -2966,9 +2976,10 @@ export function SessionRoute() {
         try {
           // Memory always uses authoritative records, including on desktop.
           // Preserve local-only system overlays when no Memory is selected.
-          if (publicBetaWeb || draft.privacy?.memoryIds?.length || draft.jevReceipt) {
+          if (publicBetaWeb || draft.privacy?.memoryIds?.length || draft.jevReceipt || draft.continuationOf || draft.answerOnly) {
             await requestDiagnostics.observe("dispatch", () => client.sendAgentMessage(selectedWorkspaceId, selectedSessionId, {
               parts,
+              ...(draft.continuationOf ? { continuationOf: draft.continuationOf } : {}),
               ...(draft.jevReceipt ? { jevReceipt: draft.jevReceipt } : {}),
               model: selectedPromptModel
                 ? { providerId: selectedPromptModel.providerID, modelId: selectedPromptModel.modelID }
@@ -3008,6 +3019,7 @@ export function SessionRoute() {
           promptTimingRef.current.delete(selectedSessionId);
           throw error;
         }
+        requireCurrentAccount();
         recordInspectorEvent("session.prompt.dispatch_accepted", {
           attemptId,
           dispatchDurationMs: Math.round(performance.now() - dispatchStartedAt),
@@ -3016,6 +3028,7 @@ export function SessionRoute() {
         });
       },
       onDraftChange: (draft: ComposerDraft) => {
+        if (!isCurrentAccount()) return;
         saveSessionDraft(selectedWorkspaceId, selectedSessionId, sessionDraftForStorage(draft));
       },
       onSessionMissing: recoverMissingSession,

@@ -126,7 +126,10 @@ describe("encrypted Agent Files store", () => {
       const persisted = state.get<MatterhornAgentFileRecord>("agent_file_record", created.id);
       expect(persisted).not.toBeNull();
       expect(JSON.stringify(persisted)).not.toContain(secretText);
-      expect(store.list({ workspaceId: "ws_alpha", ownerId: "owner_alpha" })).toEqual([created]);
+      expect(store.list({ workspaceId: "ws_alpha", ownerId: "owner_alpha",
+        now: new Date("2026-09-02T00:00:00.000Z") })).toEqual([created]);
+      expect(store.list({ workspaceId: "ws_alpha", ownerId: "owner_alpha",
+        now: new Date("2026-10-01T00:00:00.000Z") })).toEqual([]);
       const context = await store.readContext({
         workspaceId: "ws_alpha",
         ownerId: "owner_alpha",

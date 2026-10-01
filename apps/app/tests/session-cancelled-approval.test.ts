@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from "bun:test";
 import { recordSessionSubmissionFailure } from "../src/react-app/domains/session/surface/session-surface";
 import { useSessionActivityStore } from "../src/react-app/domains/session/status/session-activity-store";
 import { useComposerStateStore } from "../src/react-app/domains/session/surface/composer-state-store";
+import { JevPreparationCancelledError } from "../src/react-app/domains/session/surface/use-jev-chat";
 import {
   beginModelOperation, clearModelOperationMetrics, pendingModelOperation,
   readModelOperationMetrics, recordModelOperationCancelled,
@@ -17,8 +18,9 @@ beforeEach(() => {
   useComposerStateStore.getState().clearSession(sessionId);
 });
 
+for (const { label, error } of [{ label: "approval", error: cancelled }, { label: "Jev preparation", error: new JevPreparationCancelledError() }]) {
 for (const stopFirst of [false, true]) {
-  test(`cancelled approval returns to idle and records cancellation once (Stop first: ${stopFirst})`, () => {
+  test(`cancelled ${label} returns to idle and records cancellation once (Stop first: ${stopFirst})`, () => {
     const operation = beginModelOperation({ workspaceId, sessionId, source: "chat" });
     const activity = useSessionActivityStore.getState();
     activity.setRunStatus(workspaceId, sessionId, { type: "busy" });
@@ -26,7 +28,7 @@ for (const stopFirst of [false, true]) {
     useComposerStateStore.getState().setDraft(sessionId, "My newer draft");
     if (stopFirst) recordModelOperationCancelled(operation);
 
-    expect(recordSessionSubmissionFailure(operation, cancelled).kind).toBe("cancelled");
+    expect(recordSessionSubmissionFailure(operation, error).kind).toBe("cancelled");
     if (!stopFirst) {
       const pending = pendingModelOperation(sessionId);
       if (pending) recordModelOperationCancelled(pending);
@@ -37,6 +39,7 @@ for (const stopFirst of [false, true]) {
     expect(readModelOperationMetrics().filter((metric) => metric.event === "provider_error")).toHaveLength(0);
     expect(useComposerStateStore.getState().sessions[sessionId]?.draft).toBe("My newer draft");
   });
+}
 }
 
 test("a real failure remains an error with its draft intact", () => {

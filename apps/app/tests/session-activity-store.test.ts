@@ -172,7 +172,7 @@ describe("session activity timing", () => {
     });
   });
 
-  test("ignores an older failure after a later assistant response succeeds", () => {
+  test.each(["assistant", "user"])("ignores an older failure after a later %s turn", (role) => {
     const snapshot = {
       messages: [
         {
@@ -180,7 +180,7 @@ describe("session activity timing", () => {
           parts: [],
         },
         {
-          info: { id: "assistant-success", role: "assistant", time: { created: 120, completed: 140 } },
+          info: { id: "later-message", role, time: { created: 120, completed: 140 } },
           parts: [{ type: "text", text: "Done" }],
         },
       ],

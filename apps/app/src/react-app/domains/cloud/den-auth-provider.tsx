@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import {
   createContext,
+  Fragment,
   useCallback,
   use,
   useEffect,
@@ -30,6 +31,7 @@ import {
 } from "../../../app/lib/deep-link-bridge";
 import { parseDenAuthDeepLink } from "../../../app/lib/matterhorn-links";
 import { isPublicBetaWebDeployment } from "../../../app/lib/matterhorn-deployment";
+import { accountClientState, AccountCacheCleanupError, captureAccountGeneration } from "../../../app/lib/account-client-state";
 
 export type DenAuthStatus = "checking" | "signed_in" | "signed_out";
 
@@ -48,6 +50,7 @@ type DenAuthProviderProps = {
 };
 
 function userFacingCloudSessionError(error: unknown): string | null {
+  if (error instanceof AccountCacheCleanupError) return error.message;
   // An expired or missing browser session is an ordinary signed-out state, not
   // an error the user needs to diagnose. Other failures stay deliberately
   // generic so browser/network internals are never surfaced in the product.
@@ -71,6 +74,7 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
 
   const refresh = useCallback(async () => {
     const currentRun = ++refreshTokenRef.current;
+    const isCurrentAccount = captureAccountGeneration();
     const settings = readDenSettings();
     const token = settings.authToken?.trim() ?? "";
     const publicBetaWeb = isPublicBetaWebDeployment();
@@ -91,14 +95,17 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
         token: token || undefined,
       }).getSession();
 
-      if (currentRun !== refreshTokenRef.current) return;
+      if (currentRun !== refreshTokenRef.current || !isCurrentAccount()) return;
+
+      const accountChanged = accountClientState.bind(settings.apiBaseUrl || settings.baseUrl, nextUser.id);
+      const isBoundAccount = captureAccountGeneration();
 
       await ensureDenActiveOrganization({
         forceServerSync:
-          !settings.activeOrgId?.trim() || !settings.activeOrgSlug?.trim(),
+          accountChanged || !settings.activeOrgId?.trim() || !settings.activeOrgSlug?.trim(),
       }).catch(() => null);
 
-      if (currentRun !== refreshTokenRef.current) return;
+      if (currentRun !== refreshTokenRef.current || !isBoundAccount()) return;
 
       setUser(nextUser);
       setError(null);
@@ -107,7 +114,8 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
       if (currentRun !== refreshTokenRef.current) return;
 
       if (nextError instanceof DenApiError && nextError.status === 401) {
-        clearDenSession();
+        if (!isCurrentAccount()) return;
+        try { clearDenSession(); } catch (cleanupError) { nextError = cleanupError; }
       }
 
       setUser(null);
@@ -124,10 +132,24 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
     const handleSessionUpdated = () => {
       void refresh();
     };
+    const handleStorage = (event: StorageEvent) => {
+      try {
+        if (!accountClientState.receiveBoundary(event.key, event.newValue)) return;
+        setUser(null);
+        void refresh();
+      } catch (cleanupError) {
+        refreshTokenRef.current += 1;
+        setUser(null);
+        setError(userFacingCloudSessionError(cleanupError));
+        setStatus("signed_out");
+      }
+    };
 
     window.addEventListener(denSessionUpdatedEvent, handleSessionUpdated);
+    window.addEventListener("storage", handleStorage);
     return () => {
       window.removeEventListener(denSessionUpdatedEvent, handleSessionUpdated);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [refresh]);
 
@@ -202,7 +224,11 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
   );
 
   return (
-    <DenAuthContext.Provider value={value}>{children}</DenAuthContext.Provider>
+    <DenAuthContext.Provider value={value}>
+      {/* Also reset local/desktop surfaces which do not require the sign-in gate.
+          Their old callbacks must not remain mounted after invalidation. */}
+      <Fragment key={accountClientState.generation()}>{children}</Fragment>
+    </DenAuthContext.Provider>
   );
 }
 

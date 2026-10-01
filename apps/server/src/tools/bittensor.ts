@@ -6713,7 +6713,7 @@ function buildBittensorWalletBaselineClearCard(report: BittensorWalletBaselineCl
   };
 }
 
-function findForbiddenBittensorChatCredentialInput(value: unknown, rootPath: string[] = []): string | null {
+export function findForbiddenBittensorChatCredentialInput(value: unknown, rootPath: string[] = []): string | null {
   const MAX_NODES = 100_000;
   const MAX_DEPTH = 256;
   const stack: Array<{ value: unknown; path: string[]; depth: number }> = [{ value, path: rootPath, depth: 0 }];

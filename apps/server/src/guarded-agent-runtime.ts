@@ -2064,7 +2064,28 @@ export class MatterhornGuardedAgentRuntime {
     usage?: Partial<Omit<MatterhornAgentRunReceipt["usage"], "toolCallBudget">>;
   }): Promise<void> {
     this.assertRuntimeSecret(input.runtimeSecret);
-    await this.finishRun(input.runId, input.status, input.usage);
+    // Completed runs no longer have a capability scope. Rehydrate their
+    // receipt through the authenticated index before acknowledging a replay,
+    // including the first replay after a server restart.
+    try {
+      const nowMs = Date.now();
+      const index = assertGuardedReceiptIndexState(
+        this.authorizedState("receipt_index", "agent_run_receipt_index_invalid")
+          .getRecord<unknown>(input.runId, nowMs),
+        input.runId,
+        nowMs,
+      );
+      if (!index) throw new GuardedRuntimeError(409, "agent_run_receipt_unavailable", "The run receipt is unavailable; completion was not recorded.");
+      const receipt = await this.receipts.get(index.workspaceId, input.runId);
+      if (!receipt || receipt.id !== index.receiptId || receipt.sessionId !== index.sessionId
+        || receipt.integrity.recordHash !== index.recordHash) {
+        throw new GuardedRuntimeError(409, "agent_run_receipt_unavailable", "The run receipt could not be verified; completion was not recorded.");
+      }
+      await this.finishRun(input.runId, input.status, input.usage);
+    } finally {
+      // A failed receipt check must not leave execution authority alive.
+      this.revokeRun(input.runId);
+    }
   }
 
   async failRun(runId: string, status: "cancelled" | "error" = "error"): Promise<void> {
@@ -2501,7 +2522,9 @@ export class MatterhornGuardedAgentRuntime {
     const scope = this.runScope(runId);
     const coworker = this.capabilities.coworkerForRun(runId);
     if (scope) await this.receipts.get(scope.workspaceId, runId);
-    const capabilityDecisions = this.capabilities.decisionsForRun(runId);
+    // A completion replay arrives after revocation cleared the broker's
+    // decisions. Preserve the persisted audit evidence in that case.
+    const capabilityDecisions = scope ? this.capabilities.decisionsForRun(runId) : undefined;
     try {
       await this.receipts.complete({ runId, status, usage, capabilityDecisions });
       if (scope && coworker) {

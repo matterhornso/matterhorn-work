@@ -121,15 +121,16 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Run a Bittensor-native public read through the Matterhorn desk workflow. Transaction intents use the separate prepare tool. Never signs or broadcasts.",
+    description: "Read public Bittensor data using readOperation and netuid/ss58Address. Never executes actions.",
     inputSchema: objectSchema({
-      message: { type: "string", description: "Plain-language Bittensor request." },
+      message: { type: "string", description: "Discovery text." },
+      readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] },
       ss58Address: { type: "string", description: "Optional public SS58 address." },
-      netuid: { type: "number", description: "Optional subnet netuid." },
-      limit: { type: "number", description: "Optional result limit." },
+      netuid: { type: "number" },
+      limit: { type: "number" },
       strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
     }, ["message"]),
-    request: (args) => ({ path: "/api/bittensor/chat/execute", method: "POST", body: args }),
+    request: (args) => ({ path: "/api/bittensor/chat/execute", method: "POST", body: { ...args, readOnly: true } }),
   },
   {
     name: "matterhorn_bittensor_prepare_action",
@@ -267,12 +268,22 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_polymarket_search_markets",
     title: "Polymarket market search",
-    description: "Search public Polymarket markets with source, liquidity, and compliance context.",
+    description: "Read public markets. Use marketId for exact numeric IDs; otherwise query. Never places orders.",
     inputSchema: objectSchema({
       query: { type: "string", description: "Market search text." },
+      marketId: { type: "string", pattern: "^[1-9][0-9]{0,19}$", description: "Exact ID; omit query and limit." },
       limit: { type: "number", minimum: 1, maximum: 50 },
     }),
-    request: (args) => ({ path: queryPath("/api/polymarket/markets", args, ["query", "limit"]) }),
+    request: (args) => {
+      if (args.marketId !== undefined) {
+        if (typeof args.marketId !== "string" || !/^[1-9][0-9]{0,19}$/.test(args.marketId)
+          || args.query !== undefined || args.limit !== undefined) {
+          throw new Error("polymarket_market_id_invalid");
+        }
+        return { path: `/api/polymarket/markets/${args.marketId}` };
+      }
+      return { path: queryPath("/api/polymarket/markets", args, ["query", "limit"]) };
+    },
   },
   {
     name: "matterhorn_polymarket_get_orderbook",
@@ -329,12 +340,12 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_sui_get_balance",
     title: "Sui public balance",
-    description: "Read a public Sui address balance. Never requests or handles wallet secrets.",
+    description: "Read public Sui balance on the requested network. No secrets.",
     inputSchema: objectSchema({
-      address: { type: "string", description: "Public Sui address." },
+      address: { type: "string", description: "Public address; short hex accepted." },
       network: { type: "string", enum: ["mainnet", "testnet"] },
-      coinType: { type: "string", description: "Optional public coin type." },
-    }, ["address"]),
+      coinType: { type: "string" },
+    }, ["address", "network"]),
     request: (args) => ({
       path: queryPath(`/api/sui/balance/${encodeURIComponent(stringArg(args, "address"))}`, args, ["network", "coinType"]),
     }),
@@ -404,7 +415,7 @@ const LEGACY_MODEL_RESULT_KEYS: Readonly<Record<string, readonly string[]>> = {
   matterhorn_hyperliquid_preview_order: ["success", "preview"],
   matterhorn_prediction_market_venues: ["version", "venues", "safety"],
   matterhorn_prediction_markets_search: ["version", "query", "markets", "venues", "fetchedAt", "safety"],
-  matterhorn_polymarket_search_markets: ["success", "markets"],
+  matterhorn_polymarket_search_markets: ["success", "markets", "market"],
   matterhorn_polymarket_get_orderbook: ["success", "orderbook"],
   matterhorn_polymarket_check_compliance: ["success", "compliance"],
   matterhorn_polymarket_preview_order: ["success", "preview"],
@@ -464,6 +475,8 @@ const MODEL_SAFE_MCP_ERROR_CODES = new Set([
   "matterhorn_read_tool_cannot_prepare_action",
   "matterhorn_tool_result_rejected",
   "polymarket_token_id_invalid",
+  "polymarket_market_id_invalid",
+  "sui_network_required",
   "reviewed_action_receipt_unavailable",
   "transaction_capability_proof_missing",
   "transaction_context_invalid",
@@ -1016,9 +1029,15 @@ async function callBackendTool(input: {
   let reviewedAction: ReviewedActionHandoffV2 | undefined;
   let source: string | undefined;
   let freshness: string | undefined;
-  assertReadToolArguments(input.tool, input.args);
   try {
+    if (input.tool.name === "matterhorn_sui_get_balance"
+      && input.args.network !== "mainnet" && input.args.network !== "testnet") {
+      throw new Error("sui_network_required");
+    }
     if (input.authorization?.coworker && input.executeCertifiedTool) {
+      // Certified external adapters retain their existing conservative check;
+      // the local backend below has its own structurally read-only dispatcher.
+      assertReadToolArguments(input.tool, input.args);
       const certified = await input.executeCertifiedTool({
         toolName: input.tool.name,
         args: input.args,
@@ -1056,6 +1075,9 @@ async function callBackendTool(input: {
     const request = input.tool.request(input.args);
     const response = await input.fetchImpl(`${input.serverUrl.replace(/\/+$/, "")}${request.path}`, {
       method: request.method ?? "GET",
+      // Internal tool requests are bound to this endpoint. Never forward their
+      // credential, workspace header or body through an unexpected redirect.
+      redirect: "error",
       headers: {
         Authorization: `Bearer ${input.clientToken}`,
         ...(input.authorization?.workspaceId ? { "X-Matterhorn-Workspace-Id": input.authorization.workspaceId } : {}),

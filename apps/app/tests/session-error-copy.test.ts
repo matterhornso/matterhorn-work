@@ -2,6 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import { parseSessionError } from "../src/react-app/domains/session/surface/session-surface";
 import { MatterhornServerError } from "../src/app/lib/matterhorn-server";
+import { JevPreparationCancelledError } from "../src/react-app/domains/session/surface/use-jev-chat";
+
+test("Jev Stop distinguishes the answering model from classification already shared", () => {
+  const parsed = parseSessionError(new JevPreparationCancelledError());
+  expect(parsed.kind).toBe("cancelled");
+  expect(parsed.detail).toContain("Nothing was sent to your answering model");
+  expect(parsed.retryable).toBe(false);
+  expect(parseSessionError(new Error("Message cancelled before model submission. Your draft is preserved.")).kind).not.toBe("cancelled");
+});
 
 describe("cancelled approval responses", () => {
   const body = { code: "write_denied", message: "Write request denied", details: { reason: "cancelled" } };
@@ -53,6 +62,18 @@ test("missing desk permission policy explains setup without suggesting blind ret
 });
 
 describe("session error copy", () => {
+  test("rate limiting offers explicit recovery without model substitution or diagnostic leakage", () => {
+    for (const error of ["rate limit exceeded", JSON.stringify({ name: "APIError", data: { statusCode: 429, message: "private provider diagnostic" } })]) {
+      const parsed = parseSessionError(new Error(error));
+      expect(parsed.kind).toBe("rate-limited");
+      expect(parsed.retryable).toBe(true);
+      expect(parsed.detail).toContain("will not switch models");
+      expect(parsed.detail).toContain("prompt is preserved");
+      expect(JSON.stringify(parsed)).not.toContain("private provider diagnostic");
+    }
+    expect(parseSessionError(JSON.stringify({ code: "model_usage_exceeded", statusCode: 429 })).kind).toBe("generic");
+  });
+
   test("keeps internal engine names out of customer-facing recovery", () => {
     const errors = [
       new Error("OpenCode request failed"),

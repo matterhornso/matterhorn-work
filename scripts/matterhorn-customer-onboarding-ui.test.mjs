@@ -377,7 +377,6 @@ for (const phrase of [
 }
 
 for (const phrase of [
-  "Stop generating (cancels current run)",
   "All models",
   "Change model",
   'aria-label={`${t("composer.assistant_identity")} ${label}`}',
@@ -393,6 +392,17 @@ for (const phrase of [
     `chat chrome should show Matterhorn identity while keeping model controls technical: ${phrase}`,
   );
 }
+
+assert.match(
+  composer,
+  /\{props\.busy \? \(\s*<button\s*type="button"\s*onClick=\{\(\) => props\.onStop\(\)\}/,
+  "busy chat must expose the real Stop handler even when a draft remains",
+);
+assert.match(
+  sessionSurface,
+  /sendDisabled=\{\s*sending \|\|/,
+  "pending preparation must not present a duplicate send action",
+);
 
 assert.ok(
   composer.includes("protocolDeskIdForComposerExtension(entry)") &&

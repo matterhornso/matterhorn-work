@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { accountClientState } from "../../../../app/lib/account-client-state";
 
 import type {
   BittensorChatContext,
@@ -320,6 +321,8 @@ export function addBittensorContextToResolvedText(text: string, context: Bittens
   if (!contextText) return text;
   return `${text}\n\nBittensor active context:\n${contextText}\nUse bittensor_chat with this public context when the request is about Bittensor.`;
 }
+
+accountClientState.register("bittensor-context", () => useBittensorSessionContextStore.setState({ contexts: {} }));
 
 export const useBittensorSessionContextStore = create<BittensorSessionContextStore>((set) => ({
   contexts: {},

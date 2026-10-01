@@ -25,8 +25,13 @@ describe("responsive accessibility polish contracts", () => {
     expect(readSource("react-app/domains/settings/pages/extensions-view.tsx"))
       .toContain("inline-flex items-center text-green-12");
     expect(readSource("react-app/domains/session/surface/composer/editor.tsx"))
-      .toContain("text-[15px] leading-6 text-dls-secondary");
+      .toContain("text-base sm:text-[15px] leading-6 text-dls-secondary");
     expect(readSource("components/model-behavior-select.tsx"))
       .toContain("text-sm text-gray-11");
+  });
+
+  test("keeps mobile editor and placeholder at the non-zooming input size", () => {
+    const editor = readSource("react-app/domains/session/surface/composer/editor.tsx");
+    expect(editor.match(/text-base sm:text-\[15px\]/g)?.length).toBe(2);
   });
 });

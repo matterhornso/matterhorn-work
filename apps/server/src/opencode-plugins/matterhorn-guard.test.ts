@@ -65,6 +65,110 @@ afterAll(() => {
 });
 
 describe("matterhorn-guard OpenCode plugin", () => {
+  test.each(["enforce", "off"])("retains every usage step until settlement acknowledgement in %s mode", async (mode) => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode;
+    const completions: unknown[] = [];
+    let rejectCompletion = true;
+    globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith("/bind-message")) return Response.json({ runId: `run_ack_${mode}` });
+      completions.push(JSON.parse(String(init?.body)));
+      if (rejectCompletion) throw new Error("Settlement connection interrupted");
+      return Response.json({ ok: true });
+    }, { preconnect: original.fetch.preconnect });
+    const plugin = await MatterhornGuard({});
+    const step = (id: string, finish: string) => ({ event: { type: "message.updated", properties: { info: {
+      role: "assistant", id: `${mode}_${id}`, parentID: "user_ack", sessionID: `ses_ack_${mode}`,
+      finish, time: { completed: 2000 }, tokens: { input: 100, output: 20 },
+    } } } });
+    await plugin.event(step("tool", "tool-calls"));
+    const failed = plugin.event(step("final", "stop"));
+    if (mode === "enforce") await expect(failed).rejects.toThrow("Settlement connection interrupted");
+    else await failed;
+    rejectCompletion = false;
+    await plugin.event(step("final", "stop"));
+    expect(completions).toHaveLength(2);
+    for (const completion of completions) expect(completion).toMatchObject({
+      runId: `run_ack_${mode}`, status: "success", usage: { inputTokens: 200, outputTokens: 40 },
+    });
+  });
+
+  test("requires an explicit completion acknowledgement and confines internal credentials", async () => {
+    const completions: unknown[] = [];
+    let acknowledged = false;
+    globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
+      expect(init?.redirect).toBe("error");
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      if (String(input).endsWith("/bind-message")) return Response.json({ runId: "run_invalid_ack" });
+      completions.push(JSON.parse(String(init?.body)));
+      return Response.json(acknowledged ? { ok: true } : {});
+    }, { preconnect: original.fetch.preconnect });
+    const plugin = await MatterhornGuard({});
+    const step = (id: string, finish: string) => ({ event: { type: "message.updated", properties: { info: {
+      role: "assistant", id, parentID: "user_invalid_ack", sessionID: "ses_invalid_ack",
+      finish, time: { completed: 2000 }, tokens: { input: 50, output: 10 },
+    } } } });
+    await plugin.event(step("invalid_ack_tool", "tool-calls"));
+    await expect(plugin.event(step("invalid_ack_final", "stop"))).rejects.toThrow("acknowledgement");
+    acknowledged = true;
+    await plugin.event(step("invalid_ack_final", "stop"));
+    expect(completions).toHaveLength(2);
+    expect(completions[1]).toMatchObject({ usage: { inputTokens: 100, outputTokens: 20 } });
+  });
+
+  test("records user cancellation separately from provider failure", async () => {
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    await plugin.event({ event: { type: "message.updated", properties: { info: {
+      role: "assistant", id: "msg_cancelled", parentID: "msg_cancelled_parent", sessionID: "ses_cancelled",
+      error: { name: "MessageAbortedError", data: { message: "cancelled" } },
+      tokens: { input: 120, output: 36, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1000, completed: 2000 },
+    } } } });
+    const completion = requests.find(request => request.url.endsWith("/internal/agent-runs/complete"));
+    expect(JSON.parse(String(completion?.init?.body))).toMatchObject({
+      status: "cancelled", usage: { inputTokens: 120, outputTokens: 36 },
+    });
+  });
+
+  test("never forwards the runtime credential through an actual HTTP redirect", async () => {
+    let redirectedRequests = 0;
+    const destination = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch() {
+      redirectedRequests += 1;
+      return Response.json({ runId: "unexpected_redirect_run" });
+    } });
+    const source = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch() {
+      return new Response(null, { status: 307, headers: { location: destination.url.href } });
+    } });
+    const previousUrl = process.env.OPENWORK_SERVER_URL;
+    try {
+      process.env.OPENWORK_SERVER_URL = source.url.href;
+      globalThis.fetch = original.fetch;
+      const plugin = await MatterhornGuard({});
+      await expect(plugin.event({ event: { type: "message.updated", properties: { info: {
+        role: "assistant", id: "redirect_assistant", parentID: "redirect_user", sessionID: "redirect_session",
+        tokens: { input: 1, output: 1 }, finish: "stop", time: { completed: 2000 },
+      } } } })).rejects.toThrow();
+      expect(redirectedRequests).toBe(0);
+    } finally {
+      process.env.OPENWORK_SERVER_URL = previousUrl;
+      globalThis.fetch = mockFetch;
+      source.stop(true);
+      destination.stop(true);
+    }
+  });
+  test.each(["length", "content-filter"])("settles %s as partial while retaining actual usage", async (finish) => {
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    await plugin.event({ event: { type: "message.updated", properties: { info: {
+      role: "assistant", id: `msg_partial_${finish}`, parentID: "msg_user_partial", sessionID: "ses_partial",
+      finish, tokens: { input: 120, output: 36, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1000, completed: 2000 },
+    } } } });
+    const completion = requests.find(request => request.url.endsWith("/internal/agent-runs/complete"));
+    expect(completion).toBeDefined();
+    expect(JSON.parse(String(completion?.init?.body))).toMatchObject({
+      status: "partial", usage: { inputTokens: 120, outputTokens: 36 },
+    });
+  });
+
   test("revalidates an unchanged run-bound snapshot before a provider retry", async () => {
     const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
     const messages = [{ info: { id: "msg_retry", role: "user", sessionID: "ses_retry" },

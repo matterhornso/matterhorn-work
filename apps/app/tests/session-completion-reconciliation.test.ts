@@ -21,6 +21,14 @@ for (const [name, merge] of [
   ["snapshot refresh", mergeSnapshotIntoCachedMessages],
 ] as const) {
   describe(`${name} completion metadata`, () => {
+    test("retains incomplete status across a late pending snapshot", () => {
+      const incomplete = { ...message(3000, 473), metadata: buildOpenCodeMessageMetadata({
+        finish: "length", time: { created: 1000, completed: 3000 }, tokens: { total: 473 },
+      }) };
+      expect(responseCompletionSummary(merge([message()], [incomplete])[0]!).state).toBe("incomplete");
+      expect(responseCompletionSummary(merge([incomplete], [message()])[0]!).state).toBe("incomplete");
+    });
+
     test("keeps completed usage and timing when a pending snapshot arrives late", () => {
       const completed = message(3_000, 473);
       const [result] = merge([message()], [completed]);

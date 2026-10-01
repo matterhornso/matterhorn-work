@@ -1,3 +1,5 @@
+import { accountClientState } from "./account-client-state";
+
 export type DevLogLevel = "debug" | "warn" | "perf";
 
 export type DevLogRecord = {
@@ -74,6 +76,8 @@ export const clearDevLogs = () => {
   root.__openworkDevLogs = [];
   root.__openworkDevLogSeq = 0;
 };
+
+accountClientState.register("dev-log", clearDevLogs);
 
 export const formatDevLogLine = (entry: DevLogRecord) => {
   const prefix = `[${entry.at}] ${entry.level.toUpperCase()} ${entry.source}:${entry.label}`;

@@ -25,6 +25,102 @@ import { planBittensorChat } from "./tools/bittensor.js";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("managed OpenCode Matterhorn MCP", () => {
+  test("does not follow an internal redirect with the client credential or tool request", async () => {
+    let redirectedRequests = 0;
+    const server = Bun.serve({
+      hostname: "127.0.0.1", port: 0,
+      fetch(request) {
+        if (new URL(request.url).pathname === "/api/bittensor/chat/execute") {
+          return new Response(null, { status: 307, headers: { location: "/unexpected-destination" } });
+        }
+        redirectedRequests += 1;
+        return Response.json({ success: true, data: { discovery: {} } });
+      },
+    });
+    try {
+      const result = await handleManagedOpencodeMcp({
+        payload: { jsonrpc: "2.0", id: "redirect-rejected", method: "tools/call", params: {
+          name: "matterhorn_bittensor_chat", arguments: { message: "Public subnet fixture", netuid: 12 },
+        } },
+        serverUrl: `http://127.0.0.1:${server.port}`, clientToken: "fixture-only-client-credential",
+      });
+      expect(redirectedRequests).toBe(0);
+      expect(result.body).toMatchObject({ error: expect.any(Object) });
+      expect(JSON.stringify(result.body)).not.toContain("fixture-only-client-credential");
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  test("advertises exact market lookup and typed Bittensor reads in the canonical model contract", async () => {
+    const result = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "read-contracts", method: "tools/list" },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+    });
+    expect(result.body).toMatchObject({ result: { tools: expect.arrayContaining([
+      expect.objectContaining({ name: "matterhorn_polymarket_search_markets", inputSchema: expect.objectContaining({
+        properties: expect.objectContaining({ marketId: expect.objectContaining({ type: "string" }) }),
+      }) }),
+      expect.objectContaining({ name: "matterhorn_bittensor_chat", inputSchema: expect.objectContaining({
+        properties: expect.objectContaining({ readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] } }),
+      }) }),
+    ]) } });
+  });
+
+  test("looks up an exact Polymarket market ID without treating it as search text", async () => {
+    const urls: string[] = [];
+    const result = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "exact-market", method: "tools/call", params: {
+        name: "matterhorn_polymarket_search_markets", arguments: { marketId: "4789394" },
+      } },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async (input: string | URL | Request) => {
+        urls.push(String(input));
+        return Response.json({ success: true, market: { id: "4789394", question: "Example market?",
+          outcomes: [{ outcome: "Over", price: 0.06 }, { outcome: "Under", price: 0.94 }],
+          source: { source: "fixture", fetchedAt: "2026-09-30T20:00:00Z" } } });
+      }, { preconnect() {} }),
+    });
+    expect(urls).toEqual(["http://127.0.0.1:4130/api/polymarket/markets/4789394"]);
+    for (const label of ["Example market?", "Over", "Under", "0.06", "0.94"]) expect(JSON.stringify(result.body)).toContain(label);
+  });
+
+  test("rejects malformed or ambiguous exact market lookup before fetching", async () => {
+    for (const args of [
+      { marketId: "../compliance" }, { marketId: "4789394?limit=50" }, { marketId: "4789394/preview" },
+      { marketId: "" }, { marketId: " 4789394" }, { marketId: "0" }, { marketId: "1".repeat(21) },
+      { marketId: 4789394 }, { marketId: null }, { marketId: "4789394", query: "other" },
+      { marketId: "4789394", limit: 5 },
+    ]) {
+      let requests = 0;
+      const result = await handleManagedOpencodeMcp({
+        payload: { jsonrpc: "2.0", id: "invalid-market", method: "tools/call", params: {
+          name: "matterhorn_polymarket_search_markets", arguments: args,
+        } },
+        serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+        fetchImpl: Object.assign(async () => { requests += 1; return Response.json({ success: true }); }, { preconnect() {} }),
+      });
+      expect(requests).toBe(0);
+      expect(JSON.stringify(result.body)).toContain("polymarket_market_id_invalid");
+    }
+  });
+
+  test("retains text search without guessing numeric search text is an ID", async () => {
+    const urls: string[] = [];
+    const result = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "market-search", method: "tools/call", params: {
+        name: "matterhorn_polymarket_search_markets", arguments: { query: "2026", limit: 3 },
+      } },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async (input: string | URL | Request) => {
+        urls.push(String(input));
+        return Response.json({ success: true, markets: [{ id: "4789394", question: "Example?" }] });
+      }, { preconnect() {} }),
+    });
+    expect(urls).toEqual(["http://127.0.0.1:4130/api/polymarket/markets?query=2026&limit=3"]);
+    expect(JSON.stringify(result.body)).toContain("Example?");
+  });
+
   test("Bittensor's generated safety notice can cross the guarded result boundary", async () => {
     const plan = planBittensorChat({ message: "List current Finney subnets" });
     expect(containsForbiddenMemorySecretMaterial(plan)).toBe(false);
@@ -86,6 +182,28 @@ describe("managed OpenCode Matterhorn MCP", () => {
     });
     expect(result.body).toMatchObject({ jsonrpc: "2.0", id: "sui-native-balance", result: {} });
     expect(JSON.stringify(result.body)).toContain("31.018584912");
+  });
+
+  test("requires an explicit Sui read network instead of silently defaulting to testnet", async () => {
+    for (const network of [undefined, null, "", "mainnet ", "devnet", 1]) {
+      let requests = 0;
+      const result = await handleManagedOpencodeMcp({
+        payload: { jsonrpc: "2.0", id: "sui-network", method: "tools/call", params: {
+          name: "matterhorn_sui_get_balance", arguments: { address: "0x5", network },
+        } },
+        serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+        fetchImpl: Object.assign(async () => { requests += 1; return Response.json({ success: true, balance: {} }); }, { preconnect() {} }),
+      });
+      expect(requests).toBe(0);
+      expect(JSON.stringify(result.body)).toContain("sui_network_required");
+    }
+    const catalog = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "sui-schema", method: "tools/list" },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+    });
+    expect(catalog.body).toMatchObject({ result: { tools: expect.arrayContaining([
+      expect.objectContaining({ name: "matterhorn_sui_get_balance", inputSchema: expect.objectContaining({ required: ["address", "network"] }) }),
+    ]) } });
   });
   test("injects an authenticated runtime-only remote MCP config", () => {
     const content = buildManagedOpencodeRuntimeConfig({
@@ -1293,7 +1411,7 @@ describe("managed OpenCode Matterhorn MCP", () => {
         jsonrpc: "2.0",
         id: "unknown-success-shape",
         method: "tools/call",
-        params: { name: "matterhorn_sui_get_balance", arguments: { address: `0x${"4".repeat(64)}` } },
+        params: { name: "matterhorn_sui_get_balance", arguments: { address: `0x${"4".repeat(64)}`, network: "mainnet" } },
       },
       serverUrl: "http://127.0.0.1:4130",
       clientToken: "test-client-token",
@@ -1316,4 +1434,22 @@ describe("managed OpenCode Matterhorn MCP", () => {
     });
     expect(result).toEqual({ status: 202, body: null });
   });
+});
+test("Bittensor reads force a read-only backend even when the query mentions stake", async () => {
+  let calls = 0;
+  const result = await handleManagedOpencodeMcp({
+    payload: { jsonrpc: "2.0", id: "subnet-read", method: "tools/call", params: {
+      name: "matterhorn_bittensor_chat", arguments: {
+        message: "Read subnet 12 emission, price, stake. Read-only, no transactions.", netuid: 12,
+      },
+    } },
+    serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+    fetchImpl: Object.assign(async (_input: string | URL | Request, init?: RequestInit) => {
+      calls += 1;
+      expect(JSON.parse(String(init?.body))).toMatchObject({ netuid: 12, readOnly: true });
+      return Response.json({ success: true, execution: "answered", data: { subnet: { netuid: 12, block: 99 } } });
+    }, { preconnect() {} }),
+  });
+  expect(calls).toBe(1);
+  expect(JSON.stringify(result.body)).toContain('"block":99');
 });

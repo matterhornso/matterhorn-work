@@ -179,11 +179,13 @@ describe("Agent file safety boundary", () => {
       descriptor,
       bytes,
       coworkerId: "other_coworker",
+      now: new Date("2026-09-02T00:00:00.000Z"),
     })).toThrow("agent_file_access_denied");
     expect(() => compileMatterhornAgentFileContext({
       descriptor,
       bytes: encoder.encode('{"allocation":21}'),
       coworkerId: "risk_monitor",
+      now: new Date("2026-09-02T00:00:00.000Z"),
     })).toThrow("agent_file_content_mismatch");
     expect(() => compileMatterhornAgentFileContext({
       descriptor,
@@ -194,6 +196,7 @@ describe("Agent file safety boundary", () => {
     expect(scanMatterhornAgentFile({
       request: request({ name: "broken.json", mimeType: "application/json" }),
       bytes: encoder.encode("{broken"),
+      now: new Date("2026-09-02T00:00:00.000Z"),
     }).issues).toContain("agent_file_json_invalid");
   });
 

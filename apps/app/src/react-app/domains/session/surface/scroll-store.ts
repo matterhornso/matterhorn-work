@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { accountClientState } from "../../../../app/lib/account-client-state";
 
 export const SESSION_SCROLL_STORAGE_KEY = "openwork:session-scroll:v1";
 
@@ -71,6 +72,7 @@ function readPersistedSessionScrollState(): SessionScrollStateById {
 }
 
 function persistSessionScrollState(sessions: SessionScrollStateById): void {
+  if (accountClientState.isResetting()) return;
   if (globalThis.window === undefined) return;
 
   try {
@@ -169,4 +171,5 @@ export const useSessionScrollStore = create<SessionScrollStore>((set) => ({
   }),
 }));
 
+accountClientState.register("session-scroll", () => useSessionScrollStore.setState({ sessions: {} }));
 useSessionScrollStore.subscribe((state) => persistSessionScrollState(state.sessions));

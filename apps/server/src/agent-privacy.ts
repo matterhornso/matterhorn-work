@@ -41,10 +41,11 @@ const TRANSACTION_PATTERN = /\b(?:send|transfer|stake|unstake|buy|sell|swap|brid
 // Ignore only complete, unambiguous read-only disclaimers. Mixed clauses ("but",
 // "except", amounts or destinations) still go through conservative detection.
 const READ_ONLY_DISCLAIMER = /^(?:no|do not|don't|never)\s+(?:transfers?|transactions?|wallet actions?|sign transactions?)(?:\s+(?:or|and)\s+(?:transfers?|transactions?|wallet actions?|sign transactions?))*$/i;
+const NO_ORDER_DISCLAIMER = /^(?:do not|don't|never)\s+(?:prepare|place)(?:\s+(?:or|and)\s+(?:prepare|place))?\s+(?:an?\s+)?orders?$/i;
 
 function hasTransactionIntent(text: string): boolean {
   return TRANSACTION_PATTERN.test(text.split(/[.!?;\n]/)
-    .filter((clause) => !READ_ONLY_DISCLAIMER.test(clause.trim()))
+    .filter((clause) => !READ_ONLY_DISCLAIMER.test(clause.trim()) && !NO_ORDER_DISCLAIMER.test(clause.trim()))
     .join("\n"));
 }
 

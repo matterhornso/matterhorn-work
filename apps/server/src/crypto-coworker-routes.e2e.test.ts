@@ -1062,7 +1062,7 @@ describe("crypto coworker HTTP boundary", () => {
         name: "portfolio-policy.md",
         mimeType: "text/markdown",
         coworkerIds: [coworkerId],
-        expiresAt: "2026-10-01T00:00:00.000Z",
+        expiresAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
         contentBase64: Buffer.from(privateText).toString("base64"),
       },
     });

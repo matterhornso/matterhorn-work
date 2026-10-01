@@ -30,6 +30,7 @@ import {
 } from "../../../app/lib/den-session-events";
 import { useDenAuth } from "./den-auth-provider";
 import { isPublicBetaWebDeployment } from "../../../app/lib/matterhorn-deployment";
+import { accountClientState, captureAccountGeneration } from "../../../app/lib/account-client-state";
 
 export type DesktopConfigStore = {
   config: DenDesktopConfig;
@@ -176,6 +177,7 @@ export function DesktopConfigProvider({ children }: DesktopConfigProviderProps) 
 
   const desktopConfigHandler = useCallback(async () => {
     const currentRun = ++refreshRunRef.current;
+    const isCurrentAccount = captureAccountGeneration();
     const settings = readDenSettings();
     const token = settings.authToken?.trim() ?? "";
     const cacheKey = getDesktopConfigCacheKey();
@@ -206,12 +208,12 @@ export function DesktopConfigProvider({ children }: DesktopConfigProviderProps) 
         token: token || undefined,
       }).getDesktopConfig();
 
-      if (currentRun !== refreshRunRef.current) return;
+      if (currentRun !== refreshRunRef.current || !isCurrentAccount()) return;
 
       writeCachedDesktopConfig(cacheKey, nextConfig);
       applyDesktopConfigActions(nextConfig);
     } catch (error) {
-      if (currentRun !== refreshRunRef.current) return;
+      if (currentRun !== refreshRunRef.current || !isCurrentAccount()) return;
 
       // If the server says the active org doesn't exist, re-sync Better Auth
       // so the next refresh hits a valid org. Same recovery path as Solid.
@@ -223,17 +225,24 @@ export function DesktopConfigProvider({ children }: DesktopConfigProviderProps) 
         await ensureDenActiveOrganization({ forceServerSync: true }).catch(
           () => null,
         );
+        if (!isCurrentAccount()) return;
       }
 
       applyDesktopConfigActions(cached ?? DEFAULT_DESKTOP_CONFIG);
     } finally {
-      if (currentRun === refreshRunRef.current) {
+      if (currentRun === refreshRunRef.current && isCurrentAccount()) {
         setDesktopConfigState((current) => ({ ...current, loading: false }));
       }
     }
   }, [applyDesktopConfigActions, isSignedIn, publicBetaWeb]);
 
   const refresh = desktopConfigHandler;
+
+  useEffect(() => accountClientState.register("desktop-config", () => {
+    refreshRunRef.current += 1;
+    currentDesktopConfigRef.current = DEFAULT_DESKTOP_CONFIG;
+    setDesktopConfigState({ config: DEFAULT_DESKTOP_CONFIG, loading: false });
+  }), []);
 
   // Re-run whenever auth flips or Den settings change. Read the cache
   // synchronously so gated UI never flickers through "unrestricted" just

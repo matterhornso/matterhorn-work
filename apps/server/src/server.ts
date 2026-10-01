@@ -1,6 +1,7 @@
 import { getPortfolio } from "./tools/portfolio-tracker.js";
 import { resolveConfinedWorkspacePath } from "./workspace-path-boundary.js";
 import { hostBackupFresh } from "./host-backup-readiness.js";
+import { parseAnswerContinuation, assertAnswerContinuationTarget, answerContinuationSystemContext } from "./answer-continuation.js";
 import { getCowQuote } from "./tools/cow-swap.js";
 import {
   buildAaveSupplyTx,
@@ -75,6 +76,7 @@ import {
   doctorBittensorSubnetAdapters,
   evaluateBittensorWatches,
   executeBittensorChatWorkflow,
+  findForbiddenBittensorChatCredentialInput,
   exportBittensorSubnetAdapterMarketplace,
   exportBittensorSubnetAdapterRoadmap,
   findBittensorSubnetsForGoal,
@@ -523,7 +525,7 @@ import {
   updateJsoncTopLevel,
   writeJsoncFile,
 } from "./jsonc.js";
-import { auditLogPath, recordAudit, readAuditEntries, readLastAudit } from "./audit.js";
+import { auditLogPath, recordAudit, readAuditEntries, readLastAudit, redactMemoryAuditContent } from "./audit.js";
 import { deriveTaskRuns, readTaskEvents, recordTaskEvent, taskEventsPath } from "./task-events.js";
 import { ReloadEventStore } from "./events.js";
 import { computeReloadFingerprint } from "./reload-fingerprint.js";
@@ -2478,6 +2480,16 @@ function appendJevSystemContext(resolved: { system: string; privacyParts: Matter
   resolved.privacyParts.push({ type: "jev_compiled_system_context", text: resolved.system,
     source: "system", label: "public", contentHash: sha256Bytes(resolved.system),
     sizeBytes: Buffer.byteLength(resolved.system, "utf8"), version: JEV_CONSENT_VERSION });
+}
+
+function appendAnswerContinuationContext(resolved: { system: string; privacyParts: MatterhornAgentPrivacyPart[] }, messageId: string | undefined): void {
+  if (!messageId) return;
+  resolved.system = [resolved.system, answerContinuationSystemContext(messageId)].filter(Boolean).join("\n\n");
+  // Bind the exact appended section as well as the ordered provider manifest.
+  // Retain the separately classified memory, files, and history unchanged.
+  resolved.privacyParts.push({ type: "continuation_compiled_system_context", source: "system", label: "public",
+    contentHash: sha256Bytes(resolved.system), sizeBytes: Buffer.byteLength(resolved.system, "utf8"),
+    version: "matterhorn.answer-continuation.v1" });
 }
 
 function matterhornCompactionPrivacyParts(
@@ -15416,9 +15428,11 @@ function createRoutes(
       routedTools,
       ...(coworker ? [coworkerToolProfile(coworker.binding)] : []),
       ...parseAgentRequestToolProfiles(body),
+      ...(body.continuationOf !== undefined ? [{ "*": false }] : []),
     ]
       .filter((profile): profile is Record<string, boolean> => Boolean(profile));
     const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
+    const continuationOf = await validateAnswerContinuation(config, workspace, sessionId, body);
     const privacyMode = parseAgentPrivacyMode(body.privacyMode);
     const resolved = await resolveAuthoritativeAgentMessage({
       body,
@@ -15438,6 +15452,7 @@ function createRoutes(
     });
     const jevContext = jevMessageContext(ctx, workspace, body, sessionId, rawParts, modelResolution.model);
     appendJevSystemContext(resolved, jevContext);
+    appendAnswerContinuationContext(resolved, continuationOf);
     const authorizationContextHash = coworkerAuthorizationContextHash({
       executionMode,
       requestToolProfiles,
@@ -15472,7 +15487,7 @@ function createRoutes(
       authorizationContextHash,
       ...(jurisdiction ? { jurisdiction } : {}),
     });
-    const result = jsonResponse(response);
+    const result = jsonResponse({ ...response, ...(continuationOf ? { continuation: { messageId: continuationOf, tools: "disabled" } } : {}) });
     result.headers.set("Cache-Control", "no-store");
     return result;
   });
@@ -15730,9 +15745,13 @@ function createRoutes(
       "Agent message",
     );
     const rawParts = parseSessionPromptParts(body);
+    const continuationRequestTarget = parseAnswerContinuation(body);
     // Client IDs deduplicate requests, but never become runtime message IDs.
     // Scope them to the authenticated subject and workspace; persist only hashes.
-    const requestId = typeof body.messageID === "string" ? body.messageID : randomUUID();
+    // One initial continuation per answer also deduplicates two tabs whose
+    // clients generated different IDs before the new turn appeared in history.
+    const requestId = continuationRequestTarget ? `continue_${sha256Bytes(continuationRequestTarget)}`
+      : typeof body.messageID === "string" ? body.messageID : randomUUID();
     if (!/^[A-Za-z0-9_-]{8,160}$/.test(requestId)) {
       throw new ApiError(400, "invalid_payload", "Invalid message request ID");
     }
@@ -15740,6 +15759,7 @@ function createRoutes(
     // Jev receipts expire/renew independently of the user's logical request.
     // Keep retries idempotent; new dispatch still validates the current receipt.
     const { jevReceipt: _jevReceipt, ...requestIdentity } = body;
+    if (continuationRequestTarget) delete requestIdentity.messageID;
     const requestHash = sha256Bytes(JSON.stringify(requestIdentity));
     const unknownDispatch = () => new ApiError(409, "message_outcome_unknown",
       "The previous send may still be running. Check chat history, then retry to check its status. No second run will be started.");
@@ -15828,8 +15848,10 @@ function createRoutes(
       ...(coworker ? [coworkerToolProfile(coworker.binding)] : []),
       legacyClientRestrictions,
       ...parseAgentRequestToolProfiles(body),
+      ...(body.continuationOf !== undefined ? [{ "*": false }] : []),
     ]
       .filter((profile): profile is Record<string, boolean> => Boolean(profile));
+    const continuationOf = await validateAnswerContinuation(config, workspace, sessionId, body);
     const privacyMode = parseAgentPrivacyMode(body.privacyMode);
     const resolved = await resolveAuthoritativeAgentMessage({
       body,
@@ -15849,6 +15871,7 @@ function createRoutes(
     });
     const jevContext = jevMessageContext(ctx, workspace, body, sessionId, rawParts, modelResolution.model);
     appendJevSystemContext(resolved, jevContext);
+    appendAnswerContinuationContext(resolved, continuationOf);
     const authorizationContextHash = coworkerAuthorizationContextHash({
       executionMode,
       requestToolProfiles,
@@ -15909,6 +15932,9 @@ function createRoutes(
     }
     let dispatchStarted = false;
     const dispatchNewMessage = async () => {
+      // Approval can wait. Recheck eligibility after it, before aborting or
+      // reserving anything, so a continuation cannot replace a newer turn.
+      if (continuationOf) await validateAnswerContinuation(config, workspace, sessionId, body);
       const usage = await reserveModelUsage({
         config,
         workspace,
@@ -15937,6 +15963,7 @@ function createRoutes(
           sessionId,
           guardedRuntime,
         });
+        if (continuationOf) await validateAnswerContinuation(config, workspace, sessionId, body);
         guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
           {
             ...guardedInput,
@@ -18746,6 +18773,7 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
       assertWorkspaceMemoryRecord(await workspaceVault.getRecord(ctx.params.memoryId), workspace);
+      await redactMemoryAuditContent(workspace.path, workspace.id, ctx.params.memoryId);
       const result = await workspaceVault.forgetRecord(ctx.params.memoryId, "Deleted through Matterhorn Desks workspace memory API.");
       await recordMemoryMutationAudit(workspace, ctx, {
         action: "memory.record.forget",
@@ -19224,6 +19252,7 @@ function createRoutes(
       if (ctx.matterhornWorkspace) {
         assertWorkspaceMemoryRecord(await requestVault.getRecord(ctx.params.id), ctx.matterhornWorkspace);
       }
+      if (auditWorkspace) await redactMemoryAuditContent(auditWorkspace.path, auditWorkspace.id, ctx.params.id);
       const result = await requestVault.forgetRecord(ctx.params.id, "Deleted through Matterhorn Desks memory API.");
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.record.forget",
@@ -19253,6 +19282,7 @@ function createRoutes(
       if (ctx.matterhornWorkspace) {
         assertWorkspaceMemoryRecord(await requestVault.getRecord(id), ctx.matterhornWorkspace);
       }
+      if (auditWorkspace) await redactMemoryAuditContent(auditWorkspace.path, auditWorkspace.id, id);
       const result = await requestVault.forgetRecord(id, reason);
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.record.forget",
@@ -20680,6 +20710,44 @@ function createRoutes(
     if (!message.trim()) {
       throw new ApiError(400, "invalid_message", "message is required");
     }
+    // Managed read tools force this mode. Never feed their natural-language
+    // text into the mixed read/prepare/watch/service workflow below.
+    if (body.readOnly === true) {
+      if (message.length > 4096) throw new ApiError(400, "invalid_message", "Read queries must be at most 4096 characters");
+      if (findForbiddenBittensorChatCredentialInput(body)) {
+        throw new ApiError(400, "credential_input_rejected", "Remove wallet credentials before requesting public data");
+      }
+      const operation = body.readOperation ?? (body.netuid != null ? "subnet" : body.ss58Address ? "wallet" : "discovery");
+      const netuid = body.netuid;
+      const limit = body.limit == null ? 5 : body.limit;
+      if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 20) {
+        throw new ApiError(400, "invalid_limit", "limit must be an integer from 1 to 20");
+      }
+      let data: Record<string, unknown>;
+      if (operation === "subnet" || operation === "validators") {
+        if (typeof netuid !== "number" || !Number.isInteger(netuid) || netuid < 0) {
+          throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+        }
+        if (operation === "subnet") {
+          data = { subnet: await bittensorProvider.getSubnet(netuid) };
+        } else {
+          const strategy = body.strategy === "yield" || body.strategy === "safety" ? body.strategy : "balanced";
+          data = { comparison: await compareBittensorValidators({ netuid, strategy, limit }) };
+        }
+      } else if (operation === "wallet") {
+        if (typeof body.ss58Address !== "string" || !isValidSs58Address(body.ss58Address)) {
+          throw new ApiError(400, "invalid_ss58_address", "A public SS58 address is required for a wallet read");
+        }
+        data = { wallet: await bittensorProvider.getWallet(body.ss58Address) };
+      } else if (operation === "discovery") {
+        data = { discovery: await findBittensorSubnetsForGoal({ goal: message, limit }) };
+      } else {
+        throw new ApiError(400, "invalid_read_operation", "Choose subnet, wallet, validators, or discovery");
+      }
+      return jsonResponse({ success: true, execution: "answered", data,
+        responseText: "Public Bittensor data only. No action was prepared, watch created, or subnet service invoked.",
+        requiresClarification: false, clarificationQuestion: null });
+    }
     const strategy = typeof body.strategy === "string" && ["balanced", "yield", "safety"].includes(body.strategy)
       ? body.strategy as BittensorChatExecutionInput["strategy"]
       : null;
@@ -21856,6 +21924,16 @@ function guardedRuntimeApiError(error: unknown): ApiError {
     return new ApiError(error.status, error.code, error.message, error.details);
   }
   return new ApiError(500, "guarded_runtime_failed", "Matterhorn's guarded agent runtime could not complete this request.");
+}
+
+async function validateAnswerContinuation(config: ServerConfig, workspace: WorkspaceInfo, sessionId: string, body: Record<string, unknown>) {
+  const messageId = parseAnswerContinuation(body);
+  if (!messageId) return undefined;
+  const execution = await readWorkspaceSessionExecutionStatus(config, workspace, sessionId);
+  if (execution.busy) throw new ApiError(409, "continuation_unavailable", "Wait for the active response to stop before continuing an answer.");
+  const messages = await readWorkspaceSessionMessages(config, workspace, sessionId, {});
+  assertAnswerContinuationTarget({ messageId, session: execution.session, messages });
+  return messageId;
 }
 
 function parseSessionPromptParts(body: Record<string, unknown>): unknown[] {

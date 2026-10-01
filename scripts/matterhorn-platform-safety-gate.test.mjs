@@ -113,6 +113,8 @@ for (const required of [
   "production-cors-readiness.mjs",
   "generated-media-diagnostics.test.ts",
   "apps/server/src/auth-email-outbox.test.ts",
+  "apps/server/src/memory-routes.e2e.test.ts",
+  "apps/server/src/legacy-memory-cleanup.test.ts",
   "apps/server/src/email-outbox.test.ts",
   "apps/server/src/host-backup-readiness.test.ts",
   "apps/server/src/public-launch-readiness.test.ts",
@@ -184,8 +186,9 @@ assert.deepEqual(report.preparation, {
   summary: "Builds generated workspace packages required by backend safety tests.",
   command: ["pnpm", "--filter", "@matterhorn-work/crypto-app-sdk", "build"],
 });
-assert.equal(report.stageCount, 10);
+assert.equal(report.stageCount, 11);
 assert.deepEqual(report.stages.map((stage) => stage.id), [
+  "memory.storage.lifecycle",
   "wallet.approval.behavior",
   "money.path.security",
   "desk.depth",

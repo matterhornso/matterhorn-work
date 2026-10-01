@@ -88,9 +88,12 @@ export function BetaAuthProvider({ children }: BetaAuthProviderProps) {
       }).signOut();
     }
 
-    clearDenSession();
-    dispatchDenSessionUpdated({ status: "signed_out" });
-    await denAuth.refresh();
+    try {
+      clearDenSession();
+    } finally {
+      dispatchDenSessionUpdated({ status: "signed_out" });
+      await denAuth.refresh();
+    }
   }, [denAuth]);
 
   const user = denUserToBetaUser(denAuth.user ?? undefined);

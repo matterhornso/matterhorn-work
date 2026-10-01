@@ -1640,13 +1640,11 @@ export function ReactSessionComposer(props: ComposerProps) {
               </div>
 
               {/*
-                Single action button that toggles between Stop generating and Run task.
-                When busy with no draft: Stop generating (cancels current run).
-                When busy with a draft: Run task (queues a follow-up).
-                When idle: Run task.
+                Always keep Stop available during a run, including while editing a draft.
+                A follow-up can replace an accepted run, but not a still-pending submission.
               */}
               <div className="ml-auto flex shrink-0 items-end gap-1.5">
-                {props.busy && !canSend ? (
+                {props.busy ? (
                   <button
                     type="button"
                     onClick={() => props.onStop()}
@@ -1656,7 +1654,8 @@ export function ReactSessionComposer(props: ComposerProps) {
                     <Square size={10} fill="currentColor" />
                     <span>{t("composer.stop")}</span>
                   </button>
-                ) : (
+                ) : null}
+                {!props.busy || (canSend && !props.sendDisabled && !props.disabled) ? (
                   <button
                     type="button"
                     onClick={canSend ? () => props.onSend() : props.busy ? () => props.onStop() : undefined}
@@ -1671,7 +1670,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                     <ArrowUp size={15} />
                     <span>{t("composer.run_task")}</span>
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
           </div>

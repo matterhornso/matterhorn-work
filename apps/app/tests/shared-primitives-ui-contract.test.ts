@@ -1203,7 +1203,7 @@ describe("Shared primitives UI contract", () => {
     const compact = source.replace(/\s+/g, " ");
 
     expect(compact).toContain(
-      "onDraftChange: (draft: ComposerDraft) => { saveSessionDraft(selectedWorkspaceId, selectedSessionId, sessionDraftForStorage(draft)); }",
+      "onDraftChange: (draft: ComposerDraft) => { if (!isCurrentAccount()) return; saveSessionDraft(selectedWorkspaceId, selectedSessionId, sessionDraftForStorage(draft)); }",
     );
     expect(source).not.toContain(
       "Draft persistence will be wired once the full React shell owns session state.",

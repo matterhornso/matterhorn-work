@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { accountClientState } from "../src/app/lib/account-client-state";
 import type { UIMessage } from "ai";
+import { responseCompletionSummary } from "../src/react-app/domains/session/message-completion-metadata";
 import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2/client";
 
 import type { OpenworkSessionSnapshot } from "../src/app/lib/openwork-server";
@@ -96,6 +98,22 @@ afterEach(() => {
 });
 
 describe("session permission sync", () => {
+  test("live completion events retain length finishes through idle and snapshot reconciliation", () => {
+    const syncInput = { workspaceId: "workspace-completion", baseUrl: "http://127.0.0.1:1234", openworkToken: "fixture" };
+    const cleanup = __createWorkspaceSessionSyncForTest(syncInput);
+    const releaseSession = trackWorkspaceSessionSync(syncInput, "session-a");
+    try {
+      __applySessionSyncEventForTest(syncInput, { type: "message.updated", properties: { info: {
+        id: "assistant-partial", role: "assistant", sessionID: "session-a", finish: "length",
+        time: { created: 1000, completed: 2000 }, tokens: { input: 437, output: 36 },
+      } } });
+      __applySessionSyncEventForTest(syncInput, { type: "session.idle", properties: { sessionID: "session-a" } });
+      const result = getReactQueryClient().getQueryData<UIMessage[]>(transcriptKey("workspace-completion", "session-a"));
+      expect(result).toHaveLength(1);
+      expect(responseCompletionSummary(result![0]!)).toMatchObject({ state: "incomplete", canContinue: true, tokenLabel: "473 tokens" });
+    } finally { releaseSession(); cleanup(); }
+  });
+
   test("seeds only permissions for the selected session", () => {
     seedPermissionState("workspace-a", "session-a", [
       permission("perm-a", "session-a"),
@@ -191,6 +209,28 @@ describe("session question sync", () => {
 });
 
 describe("session transcript sync", () => {
+  test("account reset discards pending deltas and old cleanup cannot dispose a new stream", async () => {
+    const input = { workspaceId: "ws_account", baseUrl: "http://127.0.0.1:1234", matterhornToken: "fixture" };
+    __createWorkspaceSessionSyncForTest(input);
+    const releaseOldWorkspace = ensureWorkspaceSessionSync(input);
+    const releaseOldSession = trackWorkspaceSessionSync(input, "ses_account");
+    getReactQueryClient().setQueryData(transcriptKey(input.workspaceId, "ses_account"), [
+      uiMessage("msg_a", "assistant", "account A"),
+    ]);
+    __applySessionSyncEventForTest(input, { type: "message.part.delta", properties: {
+      sessionID: "ses_account", messageID: "msg_a", partID: "part_a", delta: " private pending delta",
+    } });
+    accountClientState.clear();
+    expect(__hasWorkspaceSessionSyncForTest(input)).toBe(false);
+    await Promise.resolve();
+    expect(getReactQueryClient().getQueryData(transcriptKey(input.workspaceId, "ses_account"))).toBeUndefined();
+    const cleanup = __createWorkspaceSessionSyncForTest(input);
+    try {
+      releaseOldSession();
+      releaseOldWorkspace();
+      expect(__hasWorkspaceSessionSyncForTest(input)).toBe(true);
+    } finally { cleanup(); }
+  });
   test("reports the first visible assistant output but ignores synthetic text", () => {
     const outputs: Array<{ sessionId: string; messageId: string }> = [];
     const syncInput = {

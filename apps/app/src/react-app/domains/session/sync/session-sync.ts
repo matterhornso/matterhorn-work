@@ -10,6 +10,7 @@ import type { MatterhornSessionSnapshot } from "@/app/lib/matterhorn-server";
 import { reconcileTranscriptMessages } from "./transcript-reconcile";
 import { useSessionActivityStore } from "../status/session-activity-store";
 import { buildOpenCodeMessageMetadata } from "../message-completion-metadata";
+import { accountClientState } from "@/app/lib/account-client-state";
 
 type SyncOptions = {
   workspaceId: string;
@@ -50,6 +51,18 @@ type SyncEntry = {
 
 const idleStatus: SessionStatus = { type: "idle" };
 const syncs = new Map<string, SyncEntry>();
+accountClientState.register("session-streams", () => {
+  for (const [key, entry] of syncs) {
+    entry.refs = 0;
+    entry.deltaFlushBuffer = [];
+    entry.pendingDeltas.clear();
+    entry.trackedSessionRefs.clear();
+    entry.sessionUpdatedListeners.clear();
+    entry.sessionStatusListeners.clear();
+    entry.assistantOutputListeners.clear();
+    disposeWorkspaceSync(key, entry);
+  }
+}, "stop");
 const todoSnapshotFirstSeen = new WeakMap<MatterhornSessionSnapshot, number>();
 const retainedSessionTtlMs = 10 * 60_000;
 const idleRetainedSessionTtlMs = 10_000;
@@ -976,7 +989,7 @@ export function ensureWorkspaceSessionSync(input: SyncOptions) {
     if (input.onSessionStatus) existing.sessionStatusListeners.add(input.onSessionStatus);
     if (input.onAssistantOutput) existing.assistantOutputListeners.add(input.onAssistantOutput);
     existing.refs += 1;
-    return () => releaseWorkspaceSessionSync(input);
+    return () => releaseWorkspaceSessionSync(input, existing);
   }
 
   syncs.set(key, {
@@ -997,13 +1010,13 @@ export function ensureWorkspaceSessionSync(input: SyncOptions) {
   const created = syncs.get(key)!;
   created.dispose = startSync(input);
 
-  return () => releaseWorkspaceSessionSync(input);
+  return () => releaseWorkspaceSessionSync(input, created);
 }
 
-function releaseWorkspaceSessionSync(input: SyncOptions) {
+function releaseWorkspaceSessionSync(input: SyncOptions, expectedEntry: SyncEntry) {
   const key = syncKey(input);
   const existing = syncs.get(key);
-  if (!existing) return;
+  if (!existing || existing !== expectedEntry) return;
   if (input.onSessionUpdated) existing.sessionUpdatedListeners.delete(input.onSessionUpdated);
   if (input.onSessionStatus) existing.sessionStatusListeners.delete(input.onSessionStatus);
   if (input.onAssistantOutput) existing.assistantOutputListeners.delete(input.onAssistantOutput);
@@ -1082,6 +1095,7 @@ export function trackWorkspaceSessionSync(input: SyncOptions, sessionId: string 
   );
 
   return () => {
+    if (syncs.get(syncKey(input)) !== entry) return;
     const current = entry.trackedSessionRefs.get(normalizedSessionId) ?? 0;
     if (current <= 1) {
       entry.trackedSessionRefs.delete(normalizedSessionId);

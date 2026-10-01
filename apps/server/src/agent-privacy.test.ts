@@ -24,7 +24,8 @@ function baseInput() {
 describe("agent privacy firewall", () => {
   test("read-only disclaimers do not become proposed wallet actions", () => {
     const firewall = new MatterhornPrivacyFirewall();
-    for (const disclaimer of ["No transfer or wallet action.", "Do not transfer or sign transactions.", "No transactions."]) {
+    for (const disclaimer of ["No transfer or wallet action.", "Do not transfer or sign transactions.", "No transactions.",
+      "Do not prepare or place an order.", "Never place orders.", "Don't prepare an order."]) {
       const result = firewall.preflight({ ...baseInput(), parts: [{ type: "text",
         text: `Read the SUI balance of public address 0x5 on mainnet. ${disclaimer}` }] });
       expect(result.response.effectiveMode).toBe("public_research");
@@ -34,6 +35,9 @@ describe("agent privacy firewall", () => {
       "No transfer or wallet action. Then send 1 SUI to address 0x5.",
       "Do not transfer yet, but prepare a transfer of 1 SUI to address 0x5.",
       "No transfer or wallet action except send 1 SUI to address 0x5.",
+      "Do not prepare or place an order, but buy 10 USDC of YES.",
+      "Do not prepare or place an order. Then place an order for 10 USDC.",
+      "Never place orders except buy 10 USDC of YES.",
     ]) {
       expect(firewall.preflight({ ...baseInput(), parts: [{ type: "text", text }] })
         .response.detectedData.categories).toContain("transaction_intent");

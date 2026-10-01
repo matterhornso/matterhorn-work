@@ -1,5 +1,8 @@
 /** @jsxImportSource react */
 import { latestFinalRunReceipt } from "../../../../app/lib/latest-run-receipt";
+import { captureAccountGeneration } from "../../../../app/lib/account-client-state";
+import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
+import { responseCompletionSummary } from "../message-completion-metadata";
 import type { CSSProperties } from "react";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UIMessage } from "ai";
@@ -71,7 +74,7 @@ import {
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { ReactSessionComposer } from "./composer/composer";
 import { useComposerSubmission } from "./composer/use-composer-submission";
-import { useJevChat } from "./use-jev-chat";
+import { JevPreparationCancelledError, useJevChat } from "./use-jev-chat";
 import { JevChatControl } from "./jev-chat-control";
 import type { ResponsePerspective } from "../perspectives/response-perspective";
 import { decodeComposerMentionValue, encodeComposerMentionValue } from "./composer/mention-encoding";
@@ -94,7 +97,7 @@ import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from ".
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
-import { resolveAssistantResponseRetryTurn, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
+import { failedContinuationResponseId, resolveAssistantResponseRetryTurn, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
 import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionActivityStatus } from "../status/session-activity-store";
 import { deriveOpenTargets, selectAutoOpenTarget, type OpenTarget } from "../artifacts/open-target";
 import {
@@ -649,7 +652,7 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
 type SessionError = {
   message: string;
   detail?: string;
-  kind?: "model-not-found" | "provider-unavailable" | "privacy-blocked" | "privacy-consent" | "cancelled" | "generic";
+  kind?: "model-not-found" | "provider-unavailable" | "rate-limited" | "privacy-blocked" | "privacy-consent" | "cancelled" | "generic";
   retryable?: boolean;
   /** For model-not-found: the model that failed. */
   failedModel?: { providerID: string; modelID: string };
@@ -1033,6 +1036,10 @@ export function findPrivacyPreflightInError(value: unknown, depth = 0): Matterho
 }
 
 export function parseSessionError(thrown: unknown): SessionError {
+  if (thrown instanceof JevPreparationCancelledError) {
+    return { message: "Request stopped.", detail: "Nothing was sent to your answering model. Your draft is still available.",
+      kind: "cancelled", retryable: false };
+  }
   const raw = thrown instanceof Error ? thrown.message : String(thrown);
   let parsed: unknown;
   // Try to detect ProviderModelNotFoundError from the SDK error shape.
@@ -1149,6 +1156,14 @@ export function parseSessionError(thrown: unknown): SessionError {
       retryable: false,
     };
   }
+  if (/rate limit exceeded|too many requests|"statusCode"\s*:\s*429/i.test(diagnostic)) {
+    return {
+      message: "The model provider is limiting requests.",
+      detail: "Wait before retrying, or choose another model. Your prompt is preserved; Matterhorn will not switch models for you.",
+      kind: "rate-limited",
+      retryable: true,
+    };
+  }
   if (/wallet_airlock_required/i.test(diagnostic)) {
     return {
       message: "This action needs your wallet review.",
@@ -1230,9 +1245,9 @@ export function recordSessionSubmissionFailure(operation: ModelOperationContext,
 
 export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot | null) {
   if (!snapshot) return null;
-  const assistantMessage = [...snapshot.messages]
-    .reverse()
-    .find((message) => message.info.role === "assistant");
+  // A new user turn supersedes an earlier failure even before its assistant
+  // response arrives. Never restore the newer prompt as the older turn's retry.
+  const assistantMessage = snapshot.messages.at(-1);
   if (!assistantMessage || assistantMessage.info.role !== "assistant" || !assistantMessage.info.error) return null;
 
   const rawError = assistantMessage.info.error as unknown as {
@@ -1259,7 +1274,7 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
           message: "Generation stopped. Your prompt is still available to edit or send again.",
           kind: "cancelled",
         } satisfies SessionError
-      : normalizedError.kind === "provider-unavailable" || normalizedError.kind === "model-not-found" || normalizedError.kind === "privacy-blocked"
+      : normalizedError.kind === "provider-unavailable" || normalizedError.kind === "model-not-found" || normalizedError.kind === "privacy-blocked" || normalizedError.kind === "rate-limited"
         ? normalizedError
         : {
             message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry.",
@@ -1364,7 +1379,7 @@ export function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfir
                 ) : null}
               </div>
             ) : null}
-            {error.kind === "model-not-found" ? (
+            {error.kind === "model-not-found" || (error.kind === "rate-limited" && onOpenModelPicker) ? (
               <div className="mt-2 flex flex-wrap gap-2">
                 {error.suggestions && error.suggestions.length > 0 ? (
                   error.suggestions.map((s) => (
@@ -1538,6 +1553,7 @@ function revokeAttachmentPreview(attachment: { previewUrl?: string | undefined }
 }
 
 export function SessionSurface(props: SessionSurfaceProps) {
+  const isCurrentAccount = useRef(captureAccountGeneration()).current;
   const publicBetaWeb = isPublicBetaWebDeployment();
   const local = useLocal();
   const { openQuickJot } = useQuickJot();
@@ -1593,6 +1609,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const handledTerminalFailureRef = useRef<string | null>(null);
   const reconciledUsageMessageIdsRef = useRef(new Set<string>());
   const suppressNextAbortFailureRef = useRef(false);
+  const pendingContinuationRef = useRef<{ sessionId: string; messageId: string } | null>(null);
+  const pendingRetryRef = useRef<{ sessionId: string; messageId: string } | null>(null);
+  const retrySendingRef = useRef(false);
+  const continuationSendingRef = useRef(false);
   const opencodeClient = useMemo(
     () => createClient(props.opencodeBaseUrl, undefined, {
       token: props.matterhornToken,
@@ -1704,6 +1724,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
     initializedAutoOpenSessionRef.current = null;
     handledTerminalFailureRef.current = null;
     suppressNextAbortFailureRef.current = false;
+    pendingContinuationRef.current = null;
+    pendingRetryRef.current = null;
     setVerifiedOpenTargets([]);
   }, [props.sessionId]);
 
@@ -1764,10 +1786,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
     if (hydratedKeyRef.current === key) return;
     hydratedKeyRef.current = key;
     const id = window.setTimeout(() => {
+      if (!isCurrentAccount()) return;
       seedSessionState(props.workspaceId, currentSnapshot);
     }, 0);
     return () => window.clearTimeout(id);
-  }, [props.sessionId, currentSnapshot, props.workspaceId]);
+  }, [props.sessionId, currentSnapshot, props.workspaceId, isCurrentAccount]);
 
   useEffect(() => {
     if (!currentSnapshot) return;
@@ -2198,7 +2221,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
     setError(failure.error);
     activity.setError(props.workspaceId, props.sessionId);
-    if (failure.retryMessage && !draft.trim()) {
+    if (failure.retryMessage && failure.retryMessage !== MATTERHORN_CONTINUE_ANSWER_TEXT && !draft.trim()) {
       setComposerDraft(props.sessionId, failure.retryMessage);
       props.onDraftChange(buildDraft(failure.retryMessage, []));
     }
@@ -2241,6 +2264,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
   };
 
   const sendDraft = useCallback(async (privacyConsentToken?: string) => {
+    if (!isCurrentAccount()) return;
+    pendingContinuationRef.current = null;
+    pendingRetryRef.current = null;
     const text = draft.trim();
     if (!text && attachments.length === 0) return;
     const submittedComposer = useComposerStateStore.getState().sessions[props.sessionId];
@@ -2343,7 +2369,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
           });
       }
 
-      await props.onSendDraft(await jevChat.prepare(nextDraft));
+      const prepared = await jevChat.prepare(nextDraft);
+      if (!isCurrentAccount()) return;
+      await props.onSendDraft(prepared);
+      if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
       if (useComposerStateStore.getState().clearSubmittedSession(props.sessionId, submittedComposer)) {
         attachments.forEach(revokeAttachmentPreview);
@@ -2352,6 +2381,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       props.onDraftChange(buildDraft(getComposerDraft(currentComposer, props.sessionId), getComposerAttachments(currentComposer, props.sessionId)));
       setSending(false);
     } catch (nextError) {
+      if (!isCurrentAccount()) return;
       const parsed = recordSessionSubmissionFailure(operation, nextError);
       setError(parsed);
       // Sending never removed the draft. Preserve its current contents rather
@@ -2367,36 +2397,62 @@ export function SessionSurface(props: SessionSurfaceProps) {
   // UI callbacks accept no arguments. Consent enters only through confirmation.
   const { send: handleSend, sendWithConsent } = useComposerSubmission(sendDraft);
 
-  const handleConfirmPrivacy = useCallback(async () => {
-    const preflight = error?.privacyPreflight;
-    const challenge = preflight?.challenge;
-    if (!preflight || !challenge || confirmingPrivacy || sending) return;
-    setConfirmingPrivacy(true);
-    try {
-      const consent = await props.client.confirmAgentPrivacyConsent(
-        props.workspaceId,
-        challenge.id,
-        { sessionId: props.sessionId, requestHash: preflight.requestHash },
-      );
-      setError(null);
-      await sendWithConsent(consent.consentToken);
-    } catch (nextError) {
-      setError(parseSessionError(nextError));
-    } finally {
-      setConfirmingPrivacy(false);
+  const continueAssistantResponse = useCallback(async (messageId: string, privacyConsentToken?: string) => {
+    if (!isCurrentAccount()) return;
+    if (sending || chatStreaming || continuationSendingRef.current) return;
+    const latest = renderedMessages.at(-1);
+    if (!latest || latest.id !== messageId || latest.role !== "assistant" || !responseCompletionSummary(latest).canContinue) {
+      throw new Error("Refresh this chat and continue only its latest incomplete answer.");
     }
-  }, [confirmingPrivacy, error?.privacyPreflight, sendWithConsent, props.client, props.sessionId, props.workspaceId, sending]);
+    continuationSendingRef.current = true;
+    pendingRetryRef.current = null;
+    pendingContinuationRef.current = { sessionId: props.sessionId, messageId };
+    setError(null);
+    setSending(true);
+    setAwaitingAssistantBaseline(renderedMessages.length);
+    setNoVisibleAssistantOutputBaseline(null);
+    const activity = useSessionActivityStore.getState();
+    activity.setRunStatus(props.workspaceId, props.sessionId, { type: "busy" });
+    const operation = beginModelOperation({ workspaceId: props.workspaceId, sessionId: props.sessionId,
+      providerId: props.selectedModel.providerID, modelId: props.selectedModel.modelID,
+      reasoningLevel: props.modelVariant, source: "chat" });
+    try {
+      const continuation = { ...buildDraft(MATTERHORN_CONTINUE_ANSWER_TEXT, [], { privacyConsentToken }), continuationOf: messageId };
+      const prepared = await jevChat.prepare(continuation);
+      if (!isCurrentAccount()) return;
+      await props.onSendDraft(prepared);
+      if (!isCurrentAccount()) return;
+      recordModelOperationAccepted(operation);
+      pendingContinuationRef.current = null;
+      void snapshotQuery.refetch();
+      // No composer writes: an unrelated draft and attachments stay untouched.
+    } catch (nextError) {
+      if (!isCurrentAccount()) return;
+      setError(recordSessionSubmissionFailure(operation, nextError));
+      setAwaitingAssistantBaseline(null);
+      setNoVisibleAssistantOutputBaseline(null);
+      activity.setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
+      throw nextError;
+    } finally {
+      continuationSendingRef.current = false;
+      setSending(false);
+    }
+  }, [buildDraft, chatStreaming, jevChat.prepare, props.modelVariant, props.onSendDraft, props.selectedModel.modelID,
+    props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery]);
 
   const handleAbort = useCallback(async () => {
+    if (!isCurrentAccount()) return;
     jevChat.cancel();
     if (!chatStreaming) return;
     suppressNextAbortFailureRef.current = true;
     setError(null);
     try {
       await abortSession(opencodeClient, props.sessionId);
+      if (!isCurrentAccount()) return;
       const operation = pendingModelOperation(props.sessionId);
       if (operation) recordModelOperationCancelled(operation);
       await snapshotQuery.refetch();
+      if (!isCurrentAccount()) return;
       setSending(false);
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
@@ -2409,17 +2465,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
   }, [chatStreaming, opencodeClient, props.sessionId, props.workspaceId, snapshotQuery.refetch, jevChat.cancel]);
 
-  const handleRetryResponse = useCallback(async () => {
-    if (sending || !draft.trim()) return;
-    await handleSend();
-  }, [draft, handleSend, sending]);
-
-  const handleRetryAssistantResponse = useCallback(async (messageId: string) => {
-    if (sending || chatStreaming) {
+  const handleRetryAssistantResponse = useCallback(async (messageId: string, privacyConsentToken?: string) => {
+    if (!isCurrentAccount()) return;
+    if (sending || chatStreaming || retrySendingRef.current) {
       throw new Error("Wait for the active response to finish before retrying another response.");
     }
-    const latestAssistantMessageId = [...renderedMessages].reverse().find((message) => message.role === "assistant")?.id;
-    if (latestAssistantMessageId !== messageId) {
+    const latestMessage = renderedMessages.at(-1);
+    if (latestMessage?.role !== "assistant" || latestMessage.id !== messageId) {
       throw new Error("Fork from an earlier response to preserve the turns that followed it.");
     }
     const retryTurn = resolveAssistantResponseRetryTurn(renderedMessages, messageId);
@@ -2427,6 +2479,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
     const prompt = retryTurn.prompt;
     if (!prompt) throw new Error("This response came from an attachment-only prompt. Re-send it from the composer to include the attachment.");
 
+    retrySendingRef.current = true;
+    pendingContinuationRef.current = null;
+    pendingRetryRef.current = { sessionId: props.sessionId, messageId };
     suppressNextAbortFailureRef.current = false;
     setError(null);
     setSending(true);
@@ -2451,12 +2506,17 @@ export function SessionSurface(props: SessionSurfaceProps) {
     try {
       let resolvedText = addBittensorContextToResolvedText(prompt, bittensorContext);
       await runAssistantResponseRetry({
+        prepare: () => jevChat.prepare({ ...buildDraft(prompt, [], { resolvedText, privacyConsentToken }),
+          ...(prompt === MATTERHORN_CONTINUE_ANSWER_TEXT ? { answerOnly: true } : {}),
+        }),
         abort: () => abortSession(opencodeClient, props.sessionId),
         revert: () => revertSession(opencodeClient, props.sessionId, retryTurn.promptMessageId),
-        dispatch: () => props.onSendDraft(buildDraft(prompt, [], { resolvedText })),
+        dispatch: (prepared) => props.onSendDraft(prepared),
         restore: () => unrevertSession(opencodeClient, props.sessionId),
       });
+      if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
+      pendingRetryRef.current = null;
       void snapshotQuery.refetch();
       setSending(false);
       setNotice({
@@ -2465,15 +2525,68 @@ export function SessionSurface(props: SessionSurfaceProps) {
         tone: "info",
       });
     } catch (nextError) {
+      if (!isCurrentAccount()) return;
       const parsed = recordSessionSubmissionFailure(operation, nextError);
       setError(parsed);
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
+      useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
       void snapshotQuery.refetch();
       throw nextError;
+    } finally {
+      retrySendingRef.current = false;
     }
-  }, [bittensorContext, buildDraft, chatStreaming, memoryContext, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery]);
+  }, [bittensorContext, buildDraft, chatStreaming, jevChat.prepare, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery]);
+
+  const handleConfirmPrivacy = useCallback(async () => {
+    const preflight = error?.privacyPreflight;
+    const challenge = preflight?.challenge;
+    if (!preflight || !challenge || confirmingPrivacy || sending) return;
+    setConfirmingPrivacy(true);
+    try {
+      const consent = await props.client.confirmAgentPrivacyConsent(
+        props.workspaceId, challenge.id,
+        { sessionId: props.sessionId, requestHash: preflight.requestHash },
+      );
+      setError(null);
+      const continuation = pendingContinuationRef.current;
+      const retry = pendingRetryRef.current;
+      if (continuation?.sessionId === props.sessionId) {
+        await continueAssistantResponse(continuation.messageId, consent.consentToken);
+      } else if (retry?.sessionId === props.sessionId) {
+        await handleRetryAssistantResponse(retry.messageId, consent.consentToken);
+      } else {
+        await sendWithConsent(consent.consentToken);
+      }
+    } catch (nextError) {
+      setError(parseSessionError(nextError));
+    } finally {
+      setConfirmingPrivacy(false);
+    }
+  }, [confirmingPrivacy, error?.privacyPreflight, sendWithConsent, continueAssistantResponse, handleRetryAssistantResponse, props.client, props.sessionId, props.workspaceId, sending]);
+
+  const handleRetryResponse = useCallback(async () => {
+    const continuation = pendingContinuationRef.current;
+    if (continuation?.sessionId === props.sessionId) {
+      try { await continueAssistantResponse(continuation.messageId); } catch { /* The continuation error is already visible. */ }
+      return;
+    }
+    const retry = pendingRetryRef.current;
+    if (retry?.sessionId === props.sessionId) {
+      try { await handleRetryAssistantResponse(retry.messageId); } catch { /* The retry error is already visible. */ }
+      return;
+    }
+    const failedContinuation = failedContinuationResponseId(latestSessionSnapshotFailure(currentSnapshot), renderedMessages);
+    if (failedContinuation) {
+      // Retry the accepted continuation, never the unrelated composer draft.
+      // The retry dispatcher retains the answer-only tool restriction.
+      try { await handleRetryAssistantResponse(failedContinuation); } catch { /* The retry error is already visible. */ }
+      return;
+    }
+    if (sending || !draft.trim()) return;
+    await handleSend();
+  }, [continueAssistantResponse, currentSnapshot, draft, handleRetryAssistantResponse, handleSend, props.sessionId, renderedMessages, sending]);
 
   const handleSaveAssistantResponse = useCallback(async (messageId: string, content: string): Promise<OpenTarget> => {
     if (!content.trim()) throw new Error("This response has no content to save.");
@@ -3488,6 +3601,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     onSaveBittensorEvidence={handleSaveBittensorEvidence}
                     onSaveResultToMemory={handleSaveResultToMemory}
                     onRetryAssistantResponse={handleRetryAssistantResponse}
+                    onContinueAssistantResponse={(messageId) => continueAssistantResponse(messageId)}
                     onSaveAssistantResponse={handleSaveAssistantResponse}
                     onRateAssistantResponse={handleRateAssistantResponse}
                     footer={assistantStatusFooter}
@@ -3574,6 +3688,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         busy={chatStreaming}
         disabled={model.transitionState !== "idle"}
         sendDisabled={
+          sending ||
           model.transitionState !== "idle" ||
           (!publicBetaWeb && props.providerPrivacyPolicy?.allowed === false) ||
           (Boolean(props.modelUnavailable) && !localReviewedActionReady)

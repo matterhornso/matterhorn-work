@@ -1,7 +1,30 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { createMatterhornServerClient, fetchResponseWithTimeout } from "../src/app/lib/matterhorn-server";
+import { accountClientState, AccountStateChangedError } from "../src/app/lib/account-client-state";
 
 const spies: Array<ReturnType<typeof spyOn>> = [];
+
+test("account invalidation rejects immediately even without a deadline or cooperative transport", async () => {
+  const request = fetchResponseWithTimeout(() => new Promise<Response>(() => {}),
+    "http://fixture.invalid", {}, 0, response => response.text());
+  accountClientState.clear();
+  await expect(request).rejects.toThrow(AccountStateChangedError);
+});
+
+test("late old-account response cannot reach consumers even if the transport ignores abort", async () => {
+  const response = Promise.withResolvers<Response>();
+  let signal: AbortSignal | null | undefined;
+  const request = fetchResponseWithTimeout(async (_url, init) => {
+    signal = init?.signal;
+    return response.promise;
+  }, "http://fixture.invalid", {}, 1000, (value) => value.text());
+  accountClientState.clear();
+  expect(signal?.aborted).toBe(true);
+  response.resolve(new Response("account A private answer"));
+  await expect(request).rejects.toThrow(AccountStateChangedError);
+  expect(await fetchResponseWithTimeout(async () => new Response("account B answer"),
+    "http://fixture.invalid", {}, 1000, (value) => value.text())).toBe("account B answer");
+});
 afterEach(() => { for (const spy of spies.splice(0)) spy.mockRestore(); });
 
 test("JSON client deadline includes a body that stalls after headers arrive", async () => {

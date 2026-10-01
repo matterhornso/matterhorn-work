@@ -16,6 +16,25 @@ function assistantMessage(parts: UIMessage["parts"], metadata?: UIMessage["metad
 }
 
 describe("completed response metadata", () => {
+  test.each([
+    ["stop", "completed", "Completed"],
+    ["length", "incomplete", "Incomplete"],
+    ["tool-calls", "step", "Tool step"],
+    ["content-filter", "incomplete", "Incomplete"],
+    ["unknown", "unknown", "Completion unverified"],
+    [undefined, "unknown", "Completion unverified"],
+  ])("reports finish %s without inferring success from a timestamp", (finish, state, label) => {
+    const metadata = buildOpenCodeMessageMetadata({ finish, time: { created: 1000, completed: 2000 }, tokens: { total: 473 } });
+    expect(responseCompletionSummary(assistantMessage([{ type: "text", text: "Partial" }], metadata)))
+      .toMatchObject({ state, label, tokenLabel: "473 tokens" });
+  });
+
+  test.each([["MessageAbortedError", "stopped"], ["APIError", "failed"]])("error %s overrides stop", (name, state) => {
+    const metadata = buildOpenCodeMessageMetadata({ finish: "stop", error: { name, data: { message: "private provider detail" } } });
+    expect(responseCompletionSummary(assistantMessage([], metadata)).state).toBe(state);
+    expect(JSON.stringify(metadata)).not.toContain("private provider detail");
+  });
+
   test("preserves provider usage and timing from the OpenCode message", () => {
     const metadata = buildOpenCodeMessageMetadata({
       role: "assistant",

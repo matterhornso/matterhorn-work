@@ -12,6 +12,7 @@ import { configureVenicePrivateModelRegistry } from "./venice-provider.js";
 import { resolveMatterhornManagedAgentPrompt } from "./workspace-init.js";
 import type { JevTransport } from "./jev.js";
 import { JEV_CONSENT_VERSION, JEV_MODEL } from "@matterhorn-work/types/jev";
+import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
 
 type Served = {
   port: number;
@@ -185,6 +186,7 @@ function defaultSessionMessages() {
 }
 
 function startMockOpencode(input?: {
+  sessionStatus?: "idle" | "busy";
   abortStatus?: number;
   invalidList?: boolean;
   holdCommand?: Promise<void>;
@@ -334,7 +336,7 @@ function startMockOpencode(input?: {
       }
 
       if (url.pathname === "/session/status") {
-        return Response.json({ ses_1: { type: "busy" } });
+        return Response.json({ ses_1: { type: input?.sessionStatus ?? "busy" } });
       }
 
       if (url.pathname === "/event") {
@@ -517,6 +519,76 @@ async function waitUntil(predicate: () => boolean) {
 }
 
 describe("workspace session read APIs", () => {
+  test("answer continuation is answer-only, consent-bound and idempotent", async () => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+    process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "continuation-isolated-runtime-fixture";
+    const workspaceRoot = await createWorkspaceRoot();
+    let laterTurn = false;
+    const mock = startMockOpencode({ sessionStatus: "idle", sessionAgent: "matterhorn-sui",
+      agentPrompts: { "matterhorn-sui": "Use the approved Sui tools. Never sign transactions." }, sessionMessages: () => [{
+      info: { id: laterTurn ? "msg_newer" : "msg_truncated", sessionID: "ses_1", role: "assistant",
+        parentID: "msg_previous_user", finish: "length", time: { created: 200, completed: 250 } },
+      parts: [{ id: "prt_partial", messageID: "msg_truncated", sessionID: "ses_1", type: "text", text: "Public Sui balance is" }],
+    }] });
+    const openwork = await startOpenworkServer({ workspaceRoot, opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+    const base = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1`;
+    const post = (path: string, body: unknown) => fetch(`${base}/${path}`, {
+      method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const request = { messageID: "continue_idempotent_1", continuationOf: "msg_truncated",
+      parts: [{ type: "text", text: MATTERHORN_CONTINUE_ANSWER_TEXT }],
+      agentId: "matterhorn-sui", model: { providerId: "openai", modelId: "gpt-4.1" }, executionMode: "work",
+      requestToolProfiles: [{ "*": true, "matterhorn-work_matterhorn_sui_get_balance": true }],
+    };
+    const preflight = await post("sessions/ses_1/messages/preflight", request);
+    expect(preflight.status).toBe(200);
+    const privacy = await preflight.json();
+    expect(privacy.continuation).toEqual({ messageId: "msg_truncated", tools: "disabled" });
+    expect(privacy.decision).not.toBe("blocked");
+    let privacyConsentToken: string | undefined;
+    if (privacy.decision === "consent_required") {
+      const confirmation = await post(`privacy-consents/${privacy.challenge.id}/confirm`, { sessionId: "ses_1", requestHash: privacy.requestHash });
+      expect(confirmation.status).toBe(200);
+      privacyConsentToken = (await confirmation.json()).consentToken;
+    }
+    const send = () => post("sessions/ses_1/messages", { ...request, privacyConsentToken });
+    const accepted = await send();
+    expect(accepted.status).toBe(202);
+    const first = await accepted.json();
+    laterTurn = true;
+    // Retry returns the already accepted result, even after history advances.
+    const retried = await send();
+    expect(retried.status).toBe(202);
+    expect(await retried.json()).toEqual(first);
+    const otherTab = await post("sessions/ses_1/messages", { ...request, messageID: "different_client_id", privacyConsentToken });
+    expect(otherTab.status).toBe(202);
+    expect(await otherTab.json()).toEqual(first);
+    const prompts = mock.requests.filter(request => request.pathname.endsWith("/prompt_async"));
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]?.body).toMatchObject({ agent: "matterhorn-sui", model: { providerID: "openai", modelID: "gpt-4.1" } });
+    expect(JSON.stringify(prompts[0]?.body)).toContain("All tools are disabled for this turn");
+    const permissions = mock.requests.filter(request => request.method === "PATCH" && request.pathname === "/session/ses_1");
+    expect(permissions.at(-1)?.body).toMatchObject({ permission: [{ permission: "*", pattern: "*", action: "deny" }] });
+    const stale = await post("sessions/ses_1/messages", { ...request, continuationOf: "msg_old_missing", messageID: "continue_stale_2", privacyConsentToken });
+    expect(stale.status).toBe(409);
+    expect((await stale.json()).code).toBe("continuation_unavailable");
+    expect(mock.requests.filter(request => request.pathname.endsWith("/prompt_async"))).toHaveLength(1);
+  });
+
+  test("answer continuation rejects a busy runtime before aborting or dispatching", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({ workspaceRoot, opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+    const response = await fetch(`http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ continuationOf: "msg_truncated", parts: [{ type: "text", text: MATTERHORN_CONTINUE_ANSWER_TEXT }],
+        model: { providerId: "openai", modelId: "gpt-4.1" } }),
+    });
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe("continuation_unavailable");
+    expect(mock.requests.filter(request => request.pathname.endsWith("/abort") || request.pathname.endsWith("/prompt_async"))).toHaveLength(0);
+  });
+
   test("Jev cannot bypass authentication, read-only mode, or host approval", async () => {
     process.env.MATTERHORN_JEV_ENABLED = "1";
     process.env.TYPESAFE_API_KEY = "fixture-only-never-live";
