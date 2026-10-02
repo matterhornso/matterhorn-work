@@ -35,6 +35,14 @@ test("HTML and structured-data text are escaped without executing content", () =
   assert.throws(() => renderGuide(publicGuides[0], { buildCommit: '<script>' }), /full SHA/);
 });
 
+test("guidance qualifies model defaults, processing privacy and live readiness", () => {
+  const index = renderGuide(publicGuides[0]);
+  assert.match(index, /Workspace defaults can apply when no model is selected/);
+  assert.doesNotMatch(index, /does not substitute a different model without your choice/);
+  assert.match(index, /not a live availability guarantee/);
+  assert.match(renderGuide(publicGuides[1]), /does not guarantee on-device processing/);
+});
+
 test("every public page is useful HTML without loading the authenticated app", () => {
   for (const guide of publicGuides) {
     const html = renderGuide(guide);
