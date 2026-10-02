@@ -7,7 +7,7 @@ Prepared 2 October 2026. **Local candidate only; not published or approved for d
 - Repository: `https://github.com/matterhornso/matterhorn-work`.
 - Local branch: `codex/search-discovery-2026-10-02`.
 - Base: `e4342d6bef8d833d12e36bd8093a87c8dbe84856`.
-- Tested implementation checkpoint: `8352821811ed4145d6fce3bea446c1973859e61b`.
+- Tested implementation checkpoint: `d242f7429cdcd9444c1f2f3e9ff85f43144126db` (full build/typecheck and generated artifact SHA verified). Later commits update a frontend test assertion and documentation; obtain the final full branch SHA for CI/release as described below.
 - Earlier changes: `6724f8e43b` foundation; `5ee558608b76f8b75e04c9aa451f0f40f384bc48` generated guides and publication gate. Later documentation/content review commits must accompany the final reviewed candidate; obtain its full SHA from `git rev-parse HEAD` and record it before release.
 - No PR, push, merge or deployment was performed in this work block. The branch may not exist on GitHub yet. Do not assume pulling `dev` includes this work. Owner must authorize publication of the tested branch as a reviewable PR; CI/review must pass before merge/deployment.
 - Tech team: release configuration, canonical routing, preview isolation, post-deploy HTTP and normal-user acceptance. Product/content owner: claims and examples. Security/privacy owner: data boundaries and optional tracking. Growth owner: verified webmaster properties and later editorial/distribution work.
@@ -33,7 +33,9 @@ pnpm --filter @matterhorn-work/app build:web
 git diff --check
 ```
 
-Recorded implementation checkpoint: Node16pass; frontend36pass/216assertions; typecheck and full web build pass. This is a scoped regression set, not all platform tests. Existing circular chunk/large app-bundle/Polkadot annotation warnings remain. Guides do not load the authenticated app bundle. If Bun is absent, use the repository-supported test runtime setup; do not silently omit those tests.
+Latest local results: Node20pass; **full frontend1304pass/8030assertions across187files** with loopback permission for synthetic HTTP tests; typecheck and full web build pass on the implementation checkpoint. Run `pnpm --filter @matterhorn-work/app test` for the full frontend suite in addition to the scoped commands above. One assertion was updated from the old navigation label to require the new labelled group containing Explore the desks, Security and Privacy. Three initial server-start failures disappeared with approved loopback access; they were environment failures, not ignored tests.
+
+Safety-gate wiring contract, bundle-budget test and actual built bundle-budget gate pass. This is **not** a rerun of the full multi-stage backend/platform safety suite or hosted runtime acceptance. Existing circular chunk/large app-bundle/Polkadot annotation warnings remain. Guides do not load the authenticated app bundle. If Bun is absent, use the repository-supported test runtime setup; do not silently omit those tests. CI now includes the Node discovery suite in the existing platform-safety job; actual GitHub CI remains unrun because nothing has been pushed.
 
 Local evidence: `qa-reports/search-growth/2026-10-02/PROGRESS.md`, `local-http-audit.json`, `FINISH-REVIEW.md`, `DESIGN-CONFORMANCE.md` and captures. Browser checks cover all seven navigation destinations, desktop/mobile/forced-dark/legacy variants and first-tab focus. Actual200% browser zoom, saved/system-theme transitions, Safari and Firefox remain unverified; complete or explicitly waive with owner sign-off. There is no hosted sign-off from these local checks.
 

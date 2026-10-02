@@ -127,9 +127,11 @@ describe("responsive accessibility regressions", () => {
     const signin = readAppSource("domains/cloud/public-web-signin-page.tsx");
     const signinStyles = readAppSource("domains/cloud/public-web-signin.css");
 
-    expect(signin).toContain('aria-label="Security and privacy"');
-    expect(signin).toContain('<a href="/security">Security</a>');
-    expect(signin).toContain('<a href="/privacy">Privacy</a>');
+    const trustNav = signin.match(/<nav className="public-auth-trust" aria-label="Product guides and trust">[\s\S]*?<\/nav>/)?.[0];
+    if (!trustNav) throw new Error("Public entry needs a labelled product and trust navigation group");
+    expect(trustNav).toContain('<a href="/learn">Explore the desks</a>');
+    expect(trustNav).toContain('<a href="/security">Security</a>');
+    expect(trustNav).toContain('<a href="/privacy">Privacy</a>');
     expect(signin).toContain("window.visualViewport");
     expect(signin).toContain('active.closest(".public-auth-form")');
     expect(signin).toContain("active.scrollIntoView({");
