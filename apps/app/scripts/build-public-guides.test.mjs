@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildPublicGuides, escapeHtml, publicGuideRoutes, renderGuide, renderSitemap, searchPublication, validateGuides } from "./build-public-guides.mjs";
 import { CONTENT_DATE, PUBLIC_ORIGIN, guidePath, publicGuides } from "../content/public-guides.mjs";
+import { inspectResponse } from "../../../scripts/search-discovery-audit.mjs";
 
 test("publication requires explicit approval and a production build", () => {
   for (const env of [{}, { MATTERHORN_SEARCH_INDEXABLE: "1" }, { MATTERHORN_SEARCH_INDEXABLE: "1", VERCEL_ENV: "preview" }, { MATTERHORN_SEARCH_INDEXABLE: "0", VERCEL_ENV: "production" }]) {
@@ -107,6 +108,53 @@ test("both Vercel layouts route approved guides ahead of SPA fallback and noinde
     const slugs = guideRule.source.slice("/learn/:guide(".length, -1).split("|");
     assert.deepEqual(slugs, publicGuides.filter((g) => g.slug).map((g) => g.slug));
     assert.ok(config.rewrites.some((r) => r.source === "/api/:path*" && r.destination.includes("matterhorn-proxy")));
+  }
+});
+
+test("production generation uses only approved public configuration, never unrelated environment context", async (t) => {
+  const outDir = await mkdtemp(join(tmpdir(), "matterhorn-guides-privacy-test-"));
+  t.after(() => rm(outDir, { recursive: true, force: true }));
+  const sentinel = "SYNTHETIC_PRIVATE_CONTEXT_NOT_FOR_PUBLIC_OUTPUT";
+  const env = {
+    MATTERHORN_SEARCH_INDEXABLE: "1", VERCEL_ENV: "production",
+    VITE_MATTERHORN_BUILD_COMMIT: "b".repeat(40),
+    PROVIDER_API_KEY: sentinel, DATABASE_URL: sentinel,
+    WORKSPACE_ROOT: sentinel, MEMORY_VAULT_ROOT: sentinel,
+    VITE_PRIVATE_CONTEXT: sentinel,
+  };
+  const result = await buildPublicGuides({ outDir, env });
+  assert.equal(result.indexable, true);
+  const files = [];
+  async function inspectDirectory(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) await inspectDirectory(path);
+      else {
+        const body = await readFile(path, "utf8");
+        assert.equal(body.includes(sentinel), false, `Unexpected environment context in ${entry.name}`);
+        files.push(path);
+      }
+    }
+  }
+  await inspectDirectory(outDir);
+  assert.equal(files.length, 18);
+  for (const guide of publicGuides) {
+    const body = await readFile(join(outDir, "learn", `${guide.slug || "index"}.html`), "utf8");
+    const response = inspectResponse({ pathname: guidePath(guide), status: 200, headers: new Headers({ "content-type": "text/html" }), body });
+    assert.deepEqual(response.findings, []);
+    assert.doesNotMatch(body, /type="module"|(?:href|src)="\/api\/|ws_web_|ses_[a-z0-9]/);
+  }
+  for (const [pathname, contentType] of [["/sitemap.xml", "application/xml"], ["/robots.txt", "text/plain"]]) {
+    assert.deepEqual(inspectResponse({ pathname, status: 200, headers: new Headers({ "content-type": contentType }), body: await readFile(join(outDir, pathname.slice(1)), "utf8") }).findings, []);
+  }
+});
+
+test("invalid publication or commit configuration fails before writing public artifacts", async (t) => {
+  const outDir = await mkdtemp(join(tmpdir(), "matterhorn-guides-invalid-test-"));
+  t.after(() => rm(outDir, { recursive: true, force: true }));
+  for (const env of [{ MATTERHORN_SEARCH_INDEXABLE: "yes" }, { VITE_MATTERHORN_BUILD_COMMIT: "invalid-fixture" }]) {
+    await assert.rejects(() => buildPublicGuides({ outDir, env }));
+    assert.deepEqual(await readdir(outDir), []);
   }
 });
 
