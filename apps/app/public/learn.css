@@ -1,0 +1,95 @@
+/* Public reading composition; colors inherit the existing retro system. */
+:root {
+  color-scheme: light;
+  --guide-paper: var(--retro-paper, #f6f9ff);
+  --guide-panel: var(--retro-panel, #ffffff);
+  --guide-ink: var(--retro-ink, #101826);
+  --guide-muted: var(--retro-muted, #596579);
+  --guide-line: var(--retro-line, #cbd5e1);
+  --guide-action: var(--retro-action, #6d28d9);
+  --guide-action-text: var(--retro-action-text, #ffffff);
+  --guide-subtle: var(--retro-subtle, #ece7f2);
+  --guide-focus: var(--retro-focus, #6d28d9);
+  --guide-radius: var(--retro-radius, 8px);
+  font-family: "Avenir Next", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --guide-paper: var(--retro-paper, #05070b);
+  --guide-panel: var(--retro-panel, #11151c);
+  --guide-ink: var(--retro-ink, #fafcff);
+  --guide-muted: var(--retro-muted, #c5d0dc);
+  --guide-line: var(--retro-line, #aaa2b5);
+  --guide-action: var(--retro-action, #c4a0ff);
+  --guide-action-text: var(--retro-action-text, #18171c);
+  --guide-focus: var(--retro-focus, #d1f2ff);
+  --guide-subtle: var(--retro-subtle, #35313e);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --guide-paper: #18171c; --guide-panel: #232128; --guide-ink: #faf8f3;
+    --guide-muted: #d3cedb; --guide-line: #aaa2b5; --guide-action: #c4a0ff;
+    --guide-action-text: #18171c; --guide-subtle: #35313e; --guide-focus: #d1f2ff;
+  }
+}
+* { box-sizing: border-box; }
+html { background: var(--guide-paper); color: var(--guide-ink); scrollbar-color: var(--guide-muted) var(--guide-paper); }
+html body.guide-page { margin: 0; background: var(--guide-paper); color: var(--guide-ink); font-size: 1rem; line-height: 1.65; }
+::selection { background: #d1f2ff; color: #18171c; }
+a { color: var(--guide-action); text-underline-offset: .2em; overflow-wrap: anywhere; }
+a:hover { text-decoration-thickness: 2px; }
+a:focus-visible, main:focus-visible { outline: 3px solid var(--guide-focus); outline-offset: 4px; }
+.guide-container { width: 100%; max-width: 1152px; margin-inline: auto; padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right)); }
+.guide-header { border-bottom: 1px solid var(--guide-line); padding-top: env(safe-area-inset-top); }
+.guide-header > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 72px; padding-block: 12px; }
+.guide-brand { display: inline-flex; align-items: center; gap: 8px; color: var(--guide-ink); font-weight: 700; text-decoration: none; min-width: 0; }
+.guide-brand img { flex-shrink: 0; }
+.guide-app-link { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 16px; background: var(--guide-action); color: var(--guide-action-text); border-radius: var(--guide-radius); text-decoration: none; font-weight: 650; line-height: 1.4; text-align: center; }
+.guide-header .guide-app-link { flex-shrink: 0; }
+.guide-layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 40px; padding-block: 40px 56px; }
+.guide-nav { align-self: start; display: flex; flex-direction: column; gap: 4px; }
+.guide-nav a { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; text-decoration: none; color: var(--guide-muted); border-radius: var(--guide-radius); }
+.guide-nav a:hover { background: var(--guide-subtle); color: var(--guide-ink); }
+.guide-nav a[aria-current] { background: #d1f2ff; color: #18171c; font-weight: 650; }
+article { min-width: 0; max-width: 72ch; }
+h1, h2, h3 { color: var(--guide-ink); line-height: 1.25; text-wrap: balance; }
+h1 { margin: 0 0 16px; font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 750; letter-spacing: -.03em; }
+h2 { font-size: 1.25rem; margin: 0 0 12px; font-weight: 700; letter-spacing: -.02em; }
+h3 { font-size: 1rem; margin: 0 0 12px; }
+p { margin: 0 0 16px; }
+.guide-answer { font-size: 1.125rem; color: var(--guide-ink); }
+.guide-note { font-size: .875rem; color: var(--guide-muted); }
+section { padding-block: 28px; border-bottom: 1px solid var(--guide-line); }
+section:last-child { border-bottom: 0; padding-bottom: 0; }
+section p, section li { color: var(--guide-muted); }
+section > :last-child { margin-bottom: 0; }
+ul, ol { margin: 12px 0 20px; padding-left: 24px; }
+li { margin-block: 8px; padding-left: 4px; }
+.guide-links a { display: inline-block; padding-block: 6px; }
+.guide-prompt { padding: 20px; margin-block: 24px; border: 1px solid var(--guide-line); background: var(--guide-panel); border-radius: var(--guide-radius); overflow-wrap: anywhere; }
+.guide-prompt > p:first-of-type { color: var(--guide-ink); }
+.guide-prompt > :last-child { margin-bottom: 0; }
+.guide-breadcrumb { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 20px; padding: 0; font-size: .875rem; color: var(--guide-muted); }
+.guide-breadcrumb li { margin: 0; padding: 0; }
+.guide-breadcrumb a { display: inline-block; padding-block: 4px; }
+.guide-footer { border-top: 1px solid var(--guide-line); padding-block: 24px max(24px, env(safe-area-inset-bottom)); color: var(--guide-muted); font-size: .875rem; }
+.guide-footer p { max-width: 72ch; }
+.guide-footer nav { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.guide-footer nav a { display: inline-flex; align-items: center; min-height: 44px; }
+.guide-skip { position: absolute; top: 8px; left: 24px; padding: 12px; background: var(--guide-panel); z-index: 2; transform: translateY(-200%); }
+.guide-skip:focus { transform: none; }
+@media (max-width: 767px) {
+  .guide-layout { grid-template-columns: minmax(0, 1fr); gap: 28px; padding-top: 24px; }
+  .guide-nav { flex-direction: row; flex-wrap: wrap; border-bottom: 1px solid var(--guide-line); padding-bottom: 20px; }
+  .guide-nav a { padding-inline: 8px; }
+}
+@media (max-width: 420px) {
+  .guide-container { padding-inline: 20px; }
+  .guide-header > div { gap: 12px; }
+  .guide-brand { font-size: .875rem; }
+  .guide-header .guide-app-link { padding-inline: 12px; font-size: .875rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-page *, .guide-page *::before, .guide-page *::after { transition: none !important; animation: none !important; }
+}

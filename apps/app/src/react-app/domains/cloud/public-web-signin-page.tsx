@@ -575,7 +575,8 @@ export function PublicWebSigninPage({
             ) : null}
           </div>
 
-          <nav className="public-auth-trust" aria-label="Security and privacy">
+          <nav className="public-auth-trust" aria-label="Product guides and trust">
+            <a href="/learn">Explore the desks</a>
             <a href="/security">Security</a>
             <a href="/privacy">Privacy</a>
           </nav>

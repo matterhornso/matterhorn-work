@@ -4,6 +4,8 @@ Matterhorn Desks is a task-first workspace for focused AI desks, tools, and dura
 
 ## Public resources
 
+- [Product and desk guides](https://desks.matterhorn.so/learn)
+- [Check an AI crypto-research answer](https://desks.matterhorn.so/learn/check-an-ai-crypto-answer)
 - [Documentation](https://github.com/matterhornso/matterhorn-work/tree/dev/docs)
 - [Security policy](https://github.com/matterhornso/matterhorn-work/blob/dev/SECURITY.md)
 - [Source repository](https://github.com/matterhornso/matterhorn-work)
@@ -14,4 +16,6 @@ Matterhorn Desks is a task-first workspace for focused AI desks, tools, and dura
 - Public-beta protocol desks default to research, monitoring, previews, and evidence.
 - Reviewed financial actions are fail-closed unless explicitly enabled for a release.
 - Matterhorn does not hold private keys or sign wallet transactions for users.
-- Longevity workflows support non-medical planning and offline client deliverables.
+- The five primary desks are Private AI, Bittensor, Hyperliquid, Polymarket and Sui.
+- Private AI is a desk name, not proof of local inference or a provider's retention policy.
+- Guides describe workflows, not current deployment availability. Verify the app's model, agent and tool state.

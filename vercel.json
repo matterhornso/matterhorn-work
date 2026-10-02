@@ -5,6 +5,11 @@
   "outputDirectory": "apps/app/dist",
   "headers": [
     {
+      "source": "/(.*)",
+      "missing": [{ "type": "host", "value": "desks.matterhorn.so" }],
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, follow" }]
+    },
+    {
       "source": "/assets/:path*",
       "headers": [
         {
@@ -48,6 +53,18 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/learn",
+      "destination": "/learn/index.html"
+    },
+    {
+      "source": "/learn/",
+      "destination": "/learn/index.html"
+    },
+    {
+      "source": "/learn/:guide(private-ai|bittensor|hyperliquid|polymarket|sui|check-an-ai-crypto-answer)",
+      "destination": "/learn/:guide.html"
+    },
     {
       "source": "/api/:path*",
       "destination": "/api/matterhorn-proxy?__matterhorn_path=/api/:path*"

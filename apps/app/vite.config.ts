@@ -74,6 +74,7 @@ const publicAuthStaticShell = (retro: boolean) => `<main class="public-auth-shel
       <p class="public-auth-description">Chat with focused AI, use crypto tools, and keep your files and transaction history in one private workspace.</p>
       ${retro ? '<p class="public-auth-beta-status">Public beta</p>' : ""}
       <p class="public-auth-status" role="status" aria-live="polite">Opening secure account access…</p>
+      <nav class="public-auth-trust" aria-label="Product guides and trust"><a href="/learn">Explore the desks</a><a href="/security">Security</a><a href="/privacy">Privacy</a></nav>
       <div aria-hidden="true" style="min-height: 300px"></div>
     </section>
     <aside class="public-auth-context" aria-labelledby="public-auth-context-title">

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { buildPublicGuides } from "./build-public-guides.mjs";
 
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const commitPattern = /^[a-f0-9]{40}$/i;
@@ -42,4 +43,5 @@ if (result.error) {
   throw result.error;
 }
 
-process.exit(result.status ?? 1);
+if (result.status !== 0) process.exit(result.status ?? 1);
+await buildPublicGuides({ env: { ...process.env, VITE_MATTERHORN_BUILD_COMMIT: buildCommit } });
