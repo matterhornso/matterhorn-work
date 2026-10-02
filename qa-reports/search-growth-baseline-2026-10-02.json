@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-02T17:25:31.791Z",
+  "origin": "https://desks.matterhorn.so",
+  "scope": "Unauthenticated raw HTTP only; no ranking, rendering or runtime acceptance claim",
+  "pages": [
+    {
+      "pathname": "/",
+      "status": 200,
+      "contentType": "text/html;charset=utf-8",
+      "bytes": 15054,
+      "title": "Matterhorn Desks",
+      "h1": "Serious work deserves more than a chat.",
+      "canonical": null,
+      "robots": null,
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/robots.txt",
+      "status": 200,
+      "contentType": "text/plain;charset=utf-8",
+      "bytes": 24,
+      "title": null,
+      "h1": null,
+      "canonical": null,
+      "robots": null,
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/sitemap.xml",
+      "status": 200,
+      "contentType": "text/html;charset=utf-8",
+      "bytes": 15054,
+      "title": "Matterhorn Desks",
+      "h1": "Serious work deserves more than a chat.",
+      "canonical": null,
+      "robots": null,
+      "headerRobots": null,
+      "findings": [
+        "Sitemap must return XML with the sitemap namespace, not an app fallback"
+      ]
+    },
+    {
+      "pathname": "/session",
+      "status": 200,
+      "contentType": "text/html;charset=utf-8",
+      "bytes": 15054,
+      "title": "Matterhorn Desks",
+      "h1": "Serious work deserves more than a chat.",
+      "canonical": null,
+      "robots": null,
+      "headerRobots": null,
+      "findings": [
+        "Account/session entry has no observed noindex directive"
+      ]
+    },
+    {
+      "pathname": "/learn/",
+      "status": 200,
+      "contentType": "text/html;charset=utf-8",
+      "bytes": 15054,
+      "title": "Matterhorn Desks",
+      "h1": "Serious work deserves more than a chat.",
+      "canonical": null,
+      "robots": null,
+      "headerRobots": null,
+      "findings": [
+        "Public guide lacks a canonical URL"
+      ]
+    }
+  ]
+}
