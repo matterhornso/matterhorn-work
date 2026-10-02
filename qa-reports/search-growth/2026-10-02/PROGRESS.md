@@ -1,6 +1,6 @@
 # Public discovery implementation — local evidence
 
-## Batch 2 — 2 October 2026, 18:10 UTC
+## Batch 2 — 2 October 2026, approximately 18:00 UTC
 
 Implementation branch: `codex/search-discovery-2026-10-02`. No publication or deployment.
 
@@ -34,3 +34,16 @@ Next editorial work: evidence ledger tying product claims to implementation, con
 - Protocol references: [Bittensor](https://www.bittensor.com/docs), [Hyperliquid info endpoint](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint), [Polymarket](https://docs.polymarket.com/), [Sui object model](https://docs.sui.io/develop/sui-architecture/object-model).
 
 Initial Vercel short documentation URLs were unavailable to the web reader; canonical configuration reference was retrieved successfully. This is a research-tool limitation, not evidence of a product outage.
+
+## Batch 3 — 2 October 2026, 18:10 UTC
+
+- Expanded the diagnostic to **11 fixed public paths**, covering every guide. It now distinguishes approved-production vs preview expectations, checks exact route titles/canonicals and matching parseable WebPage JSON-LD, and rejects a sitemap that omits approved guides or includes other routes. Regression suite: **16 pass**. It still does not retain bodies, follow redirects, send auth or crawl arbitrary links.
+- Added `scripts/preview-public-guides.mjs`: loopback-only, no-backend fixture with an explicit asset/guide allowlist, no-store/noindex responses and scripts blocked by CSP. Forced dark/legacy rendering is fixture evidence; it does not prove actual OS or saved-preference transitions. No browser preferences changed.
+- Browser confirmed dark desktop1280 and dark320px no-JavaScript readability, and retro-off light768px layout; scrollWidth equaled viewport at all three widths. Full-page captures in `.impeccable/review/search-guides/`, opened/validated before review. Earlier390px/1280px real built-page evidence remains valid.
+- Contrast calculations using observed dark computed colors and shared light tokens: dark body16.79:1, dark muted11.56:1, dark links8.33:1; light muted7.14:1, light links6.52:1, light primary-button text7.10:1. These sampled pairs are not a full WCAG certification.
+- All seven guide navigation destinations render their intended heading. Guide → Security → Back to app works. Local account screen correctly reports unavailable account access because this isolated frontend has no backend; no signup/login attempted. This is not hosted acceptance.
+- Functional regression caught and fixed: Vite preview served `/learn/` correctly but `/learn` fell back to the account SPA. Generator now emits an identical `learn.html` entry as well as `learn/index.html`; both retain `/learn` canonical. Added output-equivalence regression; browser reload of `/learn` now renders the correct guide. Vercel's explicit entry rewrites remain unchanged. This is a build-artifact correction, not a visual redesign.
+- Independent skill-required review: `FINISH-REVIEW.md`, **disposition: ship**, scoped to code and the five provided local capture variants. No material visual fixes. Does not sign off hosted behavior, external documentation freshness, live model/chain execution,200% zoom or Safari/Firefox. Documentation conformance review follows separately; do not expand that verdict to untested surfaces.
+- Remaining: actual browser zoom, real OS/saved-theme transitions, Safari/Firefox and hosted Vercel routing/header acceptance are unverified. No dedicated browser engine/emulation capability was used to claim them. Global positioning, content/source ledger, distribution priorities, measurement and operator handoff are the next workstream.
+- Post-fix web build passed again (10.86s Vite build; same pre-existing warnings). Raw HTTP against the actual local preview: **11/11 route checks clear**, four guide assets200 with correct MIME types; sanitized evidence `local-http-audit.json`. Injected loopback fetch is explicitly labelled local, never hosted.
+- Independent design documentation complete: `DESIGN-CONFORMANCE.md` confirms scoped extension, records inherited palette/type/layout/depth and unresolved environment checks. Root DESIGN.md and sidecar preserved; existing documentation drift was not repaired. No further visual refinements are planned in this work block absent a material finding.

@@ -143,6 +143,9 @@ export async function buildPublicGuides({ outDir = resolve(appRoot, "dist"), env
   const output = join(outDir, "learn");
   await mkdir(output, { recursive: true });
   for (const page of pages) await writeFile(join(output, `${page.name}.html`), page.html);
+  // Vite preview resolves extensionless files but not a directory without its
+  // trailing slash. Keep both index entry forms identical and canonicalized.
+  await writeFile(join(outDir, "learn.html"), pages.find((page) => page.name === "index").html);
   await copyFile(resolve(appRoot, "src/styles/retro.css"), join(output, "retro.css"));
   await copyFile(resolve(appRoot, "public/learn.css"), join(outDir, "learn.css"));
   await writeFile(join(outDir, "sitemap.xml"), renderSitemap(indexable));

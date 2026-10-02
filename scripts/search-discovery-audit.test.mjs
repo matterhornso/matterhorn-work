@@ -2,20 +2,24 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { AUDIT_PATHS, auditOrigin, inspectResponse, readBoundedText } from "./search-discovery-audit.mjs";
+import { publicGuides, guidePath } from "../apps/app/content/public-guides.mjs";
+import { renderGuide, renderSitemap } from "../apps/app/scripts/build-public-guides.mjs";
 
 const inspect = (pathname, body, type = "text/html", extra = {}) => inspectResponse({ pathname, body, status: 200, headers: new Headers({ "content-type": type, ...extra }) });
 
 test("detects a false-success sitemap returning the SPA", () => {
   assert.equal(inspect("/sitemap.xml", "<title>Matterhorn Desks</title>").findings.length, 1);
-  assert.equal(inspect("/sitemap.xml", '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>', "application/xml").findings.length, 0);
+  assert.equal(inspect("/sitemap.xml", renderSitemap(true), "application/xml").findings.length, 0);
+  assert.match(inspect("/sitemap.xml", renderSitemap(false), "application/xml").findings[0], /allowlist/);
+  assert.match(inspect("/sitemap.xml", renderSitemap(true).replace('/learn</loc>', '/workspace/private</loc>'), "application/xml").findings[0], /allowlist/);
 });
 
 test("recognizes public metadata without persisting body text", () => {
-  const body = `<html><title>Crypto &amp; AI</title><meta name='description' content='Research'><link href='https://desks.matterhorn.so/learn/' rel='canonical'><h1>Research <span>with evidence</span></h1><p>Do not persist this paragraph</p></html>`;
+  const body = renderGuide(publicGuides[0], { indexable: true }).replace('</article>', '<p>Do not persist this paragraph</p></article>');
   const result = inspect("/learn/", body);
-  assert.equal(result.title, "Crypto & AI");
-  assert.equal(result.h1, "Research with evidence");
-  assert.equal(result.canonical, "https://desks.matterhorn.so/learn/");
+  assert.equal(result.title, `${publicGuides[0].title} | Matterhorn Desks`);
+  assert.equal(result.h1, publicGuides[0].title);
+  assert.equal(result.canonical, "https://desks.matterhorn.so/learn");
   assert.deepEqual(result.findings, []);
   assert.equal(JSON.stringify(result).includes("Do not persist"), false);
 });
@@ -24,7 +28,31 @@ test("private-route noindex can be supplied by HTML or HTTP header", () => {
   assert.equal(inspect("/session", "<h1>Sign in</h1>").findings.length, 1);
   assert.equal(inspect("/session", '<meta content="noindex, follow" name="robots">').findings.length, 0);
   assert.equal(inspect("/session", "", "text/html", { "x-robots-tag": "noindex" }).findings.length, 0);
-  assert.equal(inspect("/learn/", '<title>Guide</title><h1>Guide</h1><link rel="canonical" href="https://desks.matterhorn.so/learn/"><meta name="robots" content="noindex">').findings.length, 1);
+  assert.equal(inspect("/learn/", renderGuide(publicGuides[0])).findings.length, 1);
+});
+
+test("detects malformed schema, wrong-page fallback and non-HTML guides", () => {
+  const html = renderGuide(publicGuides[1], { indexable: true });
+  assert.deepEqual(inspect('/learn/private-ai', html).findings, []);
+  assert.ok(inspect('/learn/bittensor', html).findings.some((f) => f.includes('release drift')));
+  assert.ok(inspect('/learn/private-ai', html.replace('"@graph":', 'invalid:')).findings.some((f) => f.includes('structured data')));
+  assert.ok(inspect('/learn/private-ai', '{}', 'application/json').findings.some((f) => f.includes('must return HTML')));
+});
+
+test("production and preview fixture audits cover all seven guides without contacting an app", async () => {
+  for (const expectIndexable of [true, false]) {
+    const result = await auditOrigin('https://example.com', async (url) => {
+      let body = '<meta name="robots" content="noindex, follow">';
+      let type = 'text/html';
+      if (url.pathname === '/robots.txt') { body = 'User-agent: *\nDisallow:'; type = 'text/plain'; }
+      if (url.pathname === '/sitemap.xml') { body = renderSitemap(expectIndexable); type = 'application/xml'; }
+      const guide = publicGuides.find((g) => guidePath(g) === url.pathname);
+      if (guide) body = renderGuide(guide, { indexable: expectIndexable });
+      return new Response(body, { headers: { 'content-type': type } });
+    }, { expectIndexable });
+    assert.equal(result.pages.length, 11);
+    assert.deepEqual(result.pages.flatMap((page) => page.findings), []);
+  }
 });
 
 test("app shell is not an indexable copy of every private/unknown route", () => {

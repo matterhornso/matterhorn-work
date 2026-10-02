@@ -71,6 +71,7 @@ test("isolated generation writes seven pages, existing shared styles and safe cr
   assert.equal((await readdir(join(outDir, "learn"))).filter((f) => f.endsWith(".html")).length, 7);
   assert.doesNotMatch(await readFile(join(outDir, "robots.txt"), "utf8"), /Sitemap:/);
   assert.match(await readFile(join(outDir, "learn/index.html"), "utf8"), /data-matterhorn-ui="retro"/);
+  assert.equal(await readFile(join(outDir, "learn.html"), "utf8"), await readFile(join(outDir, "learn/index.html"), "utf8"));
   assert.equal(await readFile(join(outDir, "learn/retro.css"), "utf8"), await readFile(new URL("../src/styles/retro.css", import.meta.url), "utf8"));
   await buildPublicGuides({ outDir, env: { MATTERHORN_SEARCH_INDEXABLE: "1", VERCEL_ENV: "production", VITE_MATTERHORN_RETRO_UI: "0", VITE_MATTERHORN_BUILD_COMMIT: sha } });
   const html = await readFile(join(outDir, "learn/index.html"), "utf8");
