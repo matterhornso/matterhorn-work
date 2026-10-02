@@ -31,6 +31,33 @@ test("private-route noindex can be supplied by HTML or HTTP header", () => {
   assert.equal(inspect("/learn/", renderGuide(publicGuides[0])).findings.length, 1);
 });
 
+test("combines robots directives and recognizes none without mistaking image settings", () => {
+  const html = renderGuide(publicGuides[0], { indexable: true });
+  for (const extra of ['<meta name="robots" content="none">', '<meta name="GOOGLEBOT" content="NOINDEX">', '<meta name="bingbot" content="noindex">']) {
+    assert.ok(inspect('/learn', html.replace('</head>', `${extra}</head>`)).findings.some((f) => f.includes('noindex')));
+  }
+  assert.deepEqual(inspect('/learn', html.replace('max-image-preview:large', 'max-image-preview:none')).findings, []);
+  for (const body of ['<meta name="robots" content="none">', '<meta name="robots" content="index"><meta name="robots" content="NOINDEX">']) {
+    assert.deepEqual(inspect('/session', body).findings, []);
+  }
+  assert.ok(inspect('/session', '<meta name="googlebot" content="noindex">').findings.length > 0);
+  assert.ok(inspect('/session', '', 'text/html', { 'x-robots-tag': 'otherbot: noindex, nofollow' }).findings.length > 0);
+  assert.ok(inspect('/session', '', 'text/html', { 'x-robots-tag': 'googlebot: max-snippet:0, noindex' }).findings.length > 0);
+  assert.deepEqual(inspect('/session', '', 'text/html', { 'x-robots-tag': 'max-image-preview:none, noindex' }).findings, []);
+  assert.deepEqual(inspect('/session', '', 'text/html', { 'x-robots-tag': 'none' }).findings, []);
+  assert.ok(inspect('/', '<h1>Sign in</h1>').findings.length > 0);
+});
+
+test("robots text must match reviewed crawl access and canonical sitemap declaration", () => {
+  const expected = 'User-agent: *\nDisallow:\nSitemap: https://desks.matterhorn.so/sitemap.xml\n';
+  assert.deepEqual(inspect('/robots.txt', expected, 'text/plain').findings, []);
+  assert.deepEqual(inspect('/robots.txt', `# comment\n${expected}`, 'text/plain').findings, []);
+  for (const body of ['', 'User-agent: *\nDisallow: /', expected.replace('/sitemap.xml', '/private.xml'), `${expected}User-agent: Googlebot\nDisallow: /learn`]) {
+    assert.ok(inspect('/robots.txt', body, 'text/plain').findings.length > 0);
+  }
+  assert.deepEqual(inspectResponse({ pathname: '/robots.txt', status: 200, headers: new Headers({ 'content-type': 'text/plain' }), body: 'User-agent: *\nDisallow:', expectIndexable: false }).findings, []);
+});
+
 test("detects malformed schema, wrong-page fallback and non-HTML guides", () => {
   const html = renderGuide(publicGuides[1], { indexable: true });
   assert.deepEqual(inspect('/learn/private-ai', html).findings, []);
@@ -44,7 +71,7 @@ test("production and preview fixture audits cover all seven guides without conta
     const result = await auditOrigin('https://example.com', async (url) => {
       let body = '<meta name="robots" content="noindex, follow">';
       let type = 'text/html';
-      if (url.pathname === '/robots.txt') { body = 'User-agent: *\nDisallow:'; type = 'text/plain'; }
+      if (url.pathname === '/robots.txt') { body = `User-agent: *\nDisallow:\n${expectIndexable ? 'Sitemap: https://desks.matterhorn.so/sitemap.xml\n' : ''}`; type = 'text/plain'; }
       if (url.pathname === '/sitemap.xml') { body = renderSitemap(expectIndexable); type = 'application/xml'; }
       const guide = publicGuides.find((g) => guidePath(g) === url.pathname);
       if (guide) body = renderGuide(guide, { indexable: expectIndexable });
@@ -53,6 +80,23 @@ test("production and preview fixture audits cover all seven guides without conta
     assert.equal(result.pages.length, 11);
     assert.deepEqual(result.pages.flatMap((page) => page.findings), []);
   }
+});
+
+test("production aliases keep the production sitemap but require general HTTP noindex", async () => {
+  const fixture = async (url, withHeader) => {
+    let body = '<meta name="robots" content="noindex, follow">';
+    let type = 'text/html';
+    if (url.pathname === '/robots.txt') { body = 'User-agent: *\nDisallow:\nSitemap: https://desks.matterhorn.so/sitemap.xml'; type = 'text/plain'; }
+    if (url.pathname === '/sitemap.xml') { body = renderSitemap(true); type = 'application/xml'; }
+    const guide = publicGuides.find((g) => guidePath(g) === url.pathname);
+    if (guide) body = renderGuide(guide, { indexable: true });
+    return new Response(body, { headers: { 'content-type': type, ...(withHeader ? { 'x-robots-tag': 'noindex, follow' } : {}) } });
+  };
+  const options = { expectIndexable: false, sitemapPublished: true, requireHeaderNoindex: true };
+  const pass = await auditOrigin('https://alias.example', (url) => fixture(url, true), options);
+  assert.deepEqual(pass.pages.flatMap((page) => page.findings), []);
+  const fail = await auditOrigin('https://alias.example', (url) => fixture(url, false), options);
+  assert.equal(fail.pages.every((page) => page.findings.some((f) => f.includes('HTTP header'))), true);
 });
 
 test("app shell is not an indexable copy of every private/unknown route", () => {

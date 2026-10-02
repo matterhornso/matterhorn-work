@@ -66,6 +66,10 @@
       "destination": "/learn/:guide.html"
     },
     {
+      "source": "/learn/:guide(private-ai|bittensor|hyperliquid|polymarket|sui|check-an-ai-crypto-answer)/",
+      "destination": "/learn/:guide.html"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/matterhorn-proxy?__matterhorn_path=/api/:path*"
     },

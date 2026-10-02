@@ -252,6 +252,9 @@ jobs:
       - name: Run full web app test suite
         run: pnpm --filter @matterhorn-work/app test
 
+      - name: Validate public discovery and preview indexing boundaries
+        run: node --test scripts/search-discovery-audit.test.mjs apps/app/scripts/build-public-guides.test.mjs
+
       - name: Install composer test browser
         run: pnpm exec playwright install --with-deps chromium
 

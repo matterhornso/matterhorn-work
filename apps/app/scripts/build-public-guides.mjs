@@ -15,7 +15,7 @@ export function escapeHtml(value) {
 function safeLink(href) {
   if (publicGuideRoutes.includes(href) || publicAppLinks.has(href)) return href;
   const url = new URL(href);
-  if (url.protocol !== "https:" || !protocolHosts.has(url.hostname) || url.username || url.password || url.search || url.hash) {
+  if (url.protocol !== "https:" || !protocolHosts.has(url.hostname) || url.port || url.username || url.password || url.search || url.hash) {
     throw new Error("Public guide link must be an approved public document");
   }
   return url.href;
@@ -142,7 +142,14 @@ export async function buildPublicGuides({ outDir = resolve(appRoot, "dist"), env
   const pages = publicGuides.map((guide) => ({ name: guide.slug || "index", html: renderGuide(guide, { indexable, buildCommit, retro }) }));
   const output = join(outDir, "learn");
   await mkdir(output, { recursive: true });
-  for (const page of pages) await writeFile(join(output, `${page.name}.html`), page.html);
+  for (const page of pages) {
+    await writeFile(join(output, `${page.name}.html`), page.html);
+    if (page.name !== "index") {
+      // Trailing-slash links must not fall through to the authenticated SPA.
+      await mkdir(join(output, page.name), { recursive: true });
+      await writeFile(join(output, page.name, "index.html"), page.html);
+    }
+  }
   // Vite preview resolves extensionless files but not a directory without its
   // trailing slash. Keep both index entry forms identical and canonicalized.
   await writeFile(join(outDir, "learn.html"), pages.find((page) => page.name === "index").html);

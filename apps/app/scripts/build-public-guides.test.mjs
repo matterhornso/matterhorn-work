@@ -20,7 +20,7 @@ test("seven unique public guides contain the five primary desks and a verificati
   assert.equal(new Set(publicGuides.map((g) => g.description)).size, 7);
   assert.throws(() => validateGuides([...publicGuides, publicGuides[0]]), /duplicate/);
   assert.throws(() => validateGuides([{ ...publicGuides[0], slug: "../session" }]), /slug/);
-  for (const href of ["javascript:alert(1)", "http://docs.sui.io/", "https://docs.sui.io/?secret=test", "https://user:pass@docs.sui.io/", "/workspace/private", "https://unapproved.example/"]) {
+  for (const href of ["javascript:alert(1)", "http://docs.sui.io/", "https://docs.sui.io:8443/", "https://docs.sui.io/?secret=test", "https://user:pass@docs.sui.io/", "/workspace/private", "https://unapproved.example/"]) {
     assert.throws(() => validateGuides([{ ...publicGuides[0], sections: [{ title: "Source", links: [[href, "Source"]] }] }]));
   }
 });
@@ -80,6 +80,9 @@ test("isolated generation writes seven pages, existing shared styles and safe cr
   assert.doesNotMatch(await readFile(join(outDir, "robots.txt"), "utf8"), /Sitemap:/);
   assert.match(await readFile(join(outDir, "learn/index.html"), "utf8"), /data-matterhorn-ui="retro"/);
   assert.equal(await readFile(join(outDir, "learn.html"), "utf8"), await readFile(join(outDir, "learn/index.html"), "utf8"));
+  for (const guide of publicGuides.filter((item) => item.slug)) {
+    assert.equal(await readFile(join(outDir, "learn", guide.slug, "index.html"), "utf8"), await readFile(join(outDir, "learn", `${guide.slug}.html`), "utf8"));
+  }
   assert.equal(await readFile(join(outDir, "learn/retro.css"), "utf8"), await readFile(new URL("../src/styles/retro.css", import.meta.url), "utf8"));
   await buildPublicGuides({ outDir, env: { MATTERHORN_SEARCH_INDEXABLE: "1", VERCEL_ENV: "production", VITE_MATTERHORN_RETRO_UI: "0", VITE_MATTERHORN_BUILD_COMMIT: sha } });
   const html = await readFile(join(outDir, "learn/index.html"), "utf8");
@@ -100,6 +103,7 @@ test("both Vercel layouts route approved guides ahead of SPA fallback and noinde
     assert.ok(config.rewrites.some((r) => r.source === "/learn" && r.destination === "/learn/index.html"));
     const guideRule = config.rewrites.find((r) => r.source.startsWith("/learn/:guide("));
     assert.equal(guideRule.destination, "/learn/:guide.html");
+    assert.ok(config.rewrites.some((r) => r.source === `${guideRule.source}/` && r.destination === guideRule.destination));
     const slugs = guideRule.source.slice("/learn/:guide(".length, -1).split("|");
     assert.deepEqual(slugs, publicGuides.filter((g) => g.slug).map((g) => g.slug));
     assert.ok(config.rewrites.some((r) => r.source === "/api/:path*" && r.destination.includes("matterhorn-proxy")));
