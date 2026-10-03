@@ -11,11 +11,74 @@ const config = {
   requireSignin: true,
 };
 
+const authConfig = {
+  signupsAvailable: true,
+  signupStatus: "open",
+  emailVerificationRequired: true,
+  passwordResetAvailable: true,
+  legalAcceptanceRequired: true,
+  minimumPasswordLength: 12,
+  turnstileSiteKey: "public-site-key",
+};
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
 describe("public auth client", () => {
+  test.each([
+    "null",
+    "",
+    "{}",
+    "[]",
+    "<!doctype html><title>App</title>",
+    JSON.stringify({ ...authConfig, signupsAvailable: "true" }),
+    JSON.stringify({ ...authConfig, signupStatus: "unknown" }),
+    JSON.stringify({ ...authConfig, signupsAvailable: false }),
+    JSON.stringify({ ...authConfig, emailVerificationRequired: null }),
+    JSON.stringify({ ...authConfig, passwordResetAvailable: undefined }),
+    JSON.stringify({ ...authConfig, legalAcceptanceRequired: "false" }),
+    JSON.stringify({ ...authConfig, minimumPasswordLength: 0 }),
+    JSON.stringify({ ...authConfig, minimumPasswordLength: 12.5 }),
+    JSON.stringify({ ...authConfig, turnstileSiteKey: {} }),
+    JSON.stringify({ ...authConfig, turnstileSiteKey: " " }),
+  ])("rejects malformed successful auth configuration: %s", async (body) => {
+    globalThis.fetch = mock(async () => new Response(body)) as typeof fetch;
+    await expect(createPublicAuthClient(config).getPublicAuthConfig()).rejects.toThrow(
+      "Account configuration is temporarily unavailable.",
+    );
+  });
+
+  for (const action of ["resendVerification", "requestPasswordReset", "confirmPasswordReset"] as const) {
+    test.each(["null", "{}", "[]", "<!doctype html><title>App</title>", '{"ok":false}', '{"ok":"true"}'])(`${action} rejects invalid acknowledgement: %s`, async (body) => {
+      globalThis.fetch = mock(async () => new Response(body)) as typeof fetch;
+      const client = createPublicAuthClient(config);
+      const request = action === "confirmPasswordReset"
+        ? client.confirmPasswordReset("disposable-token", "new test password")
+        : client[action]("person@example.com");
+      await expect(request).rejects.toThrow("Account service returned an invalid response.");
+    });
+
+    test(`${action} accepts the server acknowledgement`, async () => {
+      globalThis.fetch = mock(async () => Response.json({ ok: true }, { status: action === "confirmPasswordReset" ? 200 : 202 })) as typeof fetch;
+      const client = createPublicAuthClient(config);
+      const request = action === "confirmPasswordReset"
+        ? client.confirmPasswordReset("disposable-token", "new test password")
+        : client[action]("person@example.com");
+      await expect(request).resolves.toEqual({ ok: true });
+    });
+  }
+
+  test.each(["open", "paused", "setup_required"])("accepts valid %s configuration with additive server fields", async (signupStatus) => {
+    const expected = { ...authConfig, signupStatus, signupsAvailable: signupStatus === "open", turnstileSiteKey: null };
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("https://matterhorn.example/api/auth/config");
+      expect(init).toMatchObject({ method: "GET", credentials: "include" });
+      return Response.json({ ...expected, infrastructureReady: true, launchReady: true });
+    }) as typeof fetch;
+    await expect(createPublicAuthClient(config).getPublicAuthConfig()).resolves.toMatchObject(expected);
+  });
+
   test("uses the small cookie-backed auth surface and preserves verification state", async () => {
     const fetchMock = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("https://matterhorn.example/api/auth/sign-up/email");

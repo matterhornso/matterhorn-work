@@ -2,6 +2,8 @@
 
 3 October 2026. Decision: **LAUNCH BLOCKED; local regression package passes.** This execution followed the approved launch plan, starting with release/desk readiness. Hosted access blocked completion of stage 1; independent provider-document review proceeded as preparation, not as a claim that stage 2 had fully passed. No merge, deployment, production configuration change, signup/indexing activation or paid inference was performed.
 
+Follow-up: [4 October auth failure-path QA](../2026-10-04/RESULTS.md) records subsequent client fixes and fresh local tests. The hosted observations below remain dated 3 October, not reverified live state.
+
 ## Release baseline
 
 Read-only GitHub checks on this date returned:
