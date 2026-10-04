@@ -637,3 +637,39 @@ The new suite covers the nine original interleavings, expired-code replacement, 
 Evidence logs: `/tmp/matterhorn-credential-concurrency-red-2026-10-04.log`, `/tmp/matterhorn-credential-concurrency-focused-final-2026-10-04.log`, `/tmp/matterhorn-credential-concurrency-http-2026-10-04.log`, and `/tmp/matterhorn-credential-concurrency-{typecheck,build,safety}-2026-10-04.log`. Run the six named server suites with `bun test`; run the three HTTP/security/rate-limit suites with `--timeout 20000`; run `pnpm --filter matterhorn-work-server typecheck`, `pnpm --filter matterhorn-work-server build`, and `pnpm test:matterhorn-platform-safety`.
 
 No frontend changes or fresh frontend/browser acceptance are claimed in this pass. Hosted inbox delivery, browser cookie ordering, all five desks and operational release gates remain open. The next security review covers account-deletion preparation and revoking other sessions across concurrent authority changes. No push, merge or deployment occurred.
+
+## Concurrent account deletion and session revocation
+
+The credential correction above is committed as `5948947622b265e1794a5bedfc98ccab8658127b`. The next review reproduced stale authorization in `beginAccountDeletion` and `revokeOtherSessions`: both checked session authority before their final writes. An already-validated request could still queue deletion or revoke the account's newer sessions after sign-out, password change, recovery or expiry. Deletion also failed to notice a workspace member added between its ownership check and job creation. Deletion requires the originally valid session and password; this is not a credential-free deletion exploit or evidence of a production incident.
+
+Eleven deterministic worker/main SQLite interleavings initially returned success instead of rejecting stale authority. They cover five boundaries for each operation (sign-out, password change, recovery, expiry and competing deletion), plus new shared membership for deletion. A competing deletion case tests rejection of obsolete authorization, not creation of a duplicate job. After correction all reject with the expected auth or shared-ownership error; surviving sessions, winning credentials, the other account and the new member are preserved.
+
+Both operations now begin their write transaction with an exact, unexpired session check that obtains SQLite write authority without extending the expiry. Pending deletion invalidates that authority. Session validation, deletion password/ownership checks, job insertion and revocation then run under that transaction. The read-only `prepareAccountDeletion` method remains a preview, not authorization for a later job. Failed validation or writes roll back the transaction. The rare deletion path now holds the writer lock during its password check; the existing HTTP security-attempt limiter remains unchanged. No schema migration, production deletion, session purge or cleanup job was run.
+
+Two additional worker tests pause after the guard and prove that competing session, credential and membership writes are blocked until the operation finishes. Two trigger-induced failure tests prove that a failed session revocation preserves sessions and leaves no partial deletion job; valid retries work after the injected failure is removed. Wrong-password deletion preserves the original session expiry. These tests use only generated disposable directories and databases.
+
+| Check | Result |
+| --- | --- |
+| New account-authority suite | 15 pass, zero fail |
+| Seven focused auth suites including the new suite | 57 pass, zero fail, 357 assertions |
+| Local auth HTTP, backend security and rate-limit suites | 110 pass, zero fail, 1,102 assertions |
+| Node/better-sqlite3 built-server smoke | 10 assertions pass |
+| Server typecheck and build | Pass |
+| Security workflow and safety-gate contracts | Pass |
+| Full platform safety gate | All 11 stages pass; terminal exit zero |
+| Diff whitespace | Pass |
+
+```sh
+bun test apps/server/src/auth-account-authority-concurrency.test.ts apps/server/src/auth-credential-concurrency.test.ts apps/server/src/auth-reset-concurrency.test.ts apps/server/src/auth-password-lifecycle.test.ts apps/server/src/auth-store-verification.test.ts apps/server/src/auth-email-outbox.test.ts apps/server/src/auth-store-maintenance.test.ts
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+node scripts/security-workflow-contract.test.mjs
+node scripts/matterhorn-platform-safety-gate.test.mjs
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+Logs: `/tmp/matterhorn-account-authority-{red,focused-final,http,typecheck,build,node,safety}-2026-10-04.log`. The separate Node smoke imports the built auth store and checks successful revocation/count/unchanged expiry, revoked-session rejection, wrong-password rejection, pending deletion and other-account preservation. Concurrency was exercised with Bun SQLite workers; the Node smoke is sequential, not proof of multi-process native-driver behavior. Both test environments are local, not hosted acceptance. No new UI changes or frontend regression rerun are claimed.
+
+The new suite is included in the security workflow and safety gate, with required-entry contract tests. Next review targets are organization creation/selection and external-access credential mutations against concurrent revocation/deletion; these paths are not covered merely because they share the auth store. All broader hosted, UI, provider, accounting, wallet, privacy and operational launch gates remain open. No push, merge or deployment occurred.

@@ -23,16 +23,22 @@ port.once("message", (input: unknown) => {
   if (!descriptor) throw new Error("Missing SQLite prepare method");
   const original = Database.prototype.prepare;
   let armed = true;
-  // Pause before the first credential/session write, after credential reads
-  // and hashing. This test-only interception stays inside this worker. It
-  // neither modifies production SQL nor installs a production test hook.
+  const pauseAfterLock = "pauseAfterLock" in input && input.pauseAfterLock === true;
+  // Pause before the first credential/session write, or after an account
+  // operation acquires write authority. This interception stays inside this
+  // worker; it does not modify production SQL or add a production test hook.
   Object.defineProperty(Database.prototype, "prepare", { ...descriptor,
     value: function(this: Database, sql: unknown, ...args: unknown[]) {
-      if (armed && typeof sql === "string" && (
+      if (armed && typeof sql === "string" && (pauseAfterLock
+        ? /SELECT\s+token_hash,\s*user_id,\s*active_org_id,\s*expires_at\s+FROM\s+sessions/i.test(sql)
+        : (
         /UPDATE\s+users\s+SET\s+(password_hash|email_verified_at)/i.test(sql)
         || /INSERT\s+INTO\s+sessions/i.test(sql)
         || /DELETE\s+FROM\s+email_verification_challenges/i.test(sql)
-      )) {
+        || /DELETE\s+FROM\s+sessions/i.test(sql)
+        || /INSERT\s+INTO\s+account_deletion_jobs/i.test(sql)
+        || /UPDATE\s+sessions\s+SET\s+expires_at/i.test(sql)
+      ))) {
         armed = false;
         port.postMessage({ phase: "credential-read" });
         if (Atomics.wait(barrier, 0, 0, 5000) === "timed-out") {
@@ -47,6 +53,8 @@ port.once("message", (input: unknown) => {
     else if (input.operation === "change-password") {
       store.changePassword(input.token, { currentPassword: input.password, newPassword: input.newPassword });
     } else if (input.operation === "verify-email") store.verifyEmail(input.email, input.code);
+    else if (input.operation === "begin-deletion") store.beginAccountDeletion(input.token, input.password);
+    else if (input.operation === "revoke-sessions") store.revokeOtherSessions(input.token);
     else throw new Error("Unknown fixture operation");
     port.postMessage({ phase: "result", ok: true });
   } catch (error) {

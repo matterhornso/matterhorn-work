@@ -1830,12 +1830,15 @@ export class MatterhornAuthStore {
   }
 
   revokeOtherSessions(token: string): number {
-    const session = this.requireSession(token);
-    const result = statement(
-      this.db,
-      "DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?",
-    ).run(session.user.id, hashSessionToken(token));
-    return result.changes ?? 0;
+    return this.withTransaction(() => {
+      this.lockActiveSession(token);
+      const session = this.requireSession(token);
+      const result = statement(
+        this.db,
+        "DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?",
+      ).run(session.user.id, hashSessionToken(token));
+      return result.changes ?? 0;
+    });
   }
 
   changePassword(
@@ -1909,10 +1912,11 @@ export class MatterhornAuthStore {
   }
 
   beginAccountDeletion(token: string, password: string): MatterhornAuthAccountDeletionJob {
-    const deletion = this.prepareAccountDeletion(token, password);
-    const now = Date.now();
-    const jobId = `account_deletion_${randomUUID().replaceAll("-", "")}`;
-    this.withTransaction(() => {
+    const deletion = this.withTransaction(() => {
+      this.lockActiveSession(token);
+      const deletion = this.prepareAccountDeletion(token, password);
+      const now = Date.now();
+      const jobId = `account_deletion_${randomUUID().replaceAll("-", "")}`;
       statement(this.db, `
         INSERT INTO account_deletion_jobs(
           job_id, user_id, organization_ids_json, status, steps_json,
@@ -1928,6 +1932,7 @@ export class MatterhornAuthStore {
         now,
       );
       statement(this.db, "DELETE FROM sessions WHERE user_id = ?").run(deletion.userId);
+      return deletion;
     });
     const job = this.accountDeletionJobForUser(deletion.userId);
     if (!job) throw new Error("Failed to persist account deletion manifest.");
@@ -2209,6 +2214,21 @@ export class MatterhornAuthStore {
       );
     }
     return session;
+  }
+
+  // First statement in a write transaction: prevent a revoked/expired session
+  // from authorizing a later mutation, and serialize subsequent credential and
+  // membership checks with other writers. This does not extend the session.
+  private lockActiveSession(token: string): void {
+    const current = statement(this.db, `
+      UPDATE sessions SET expires_at = expires_at
+      WHERE token_hash = ? AND expires_at > ?
+        AND NOT EXISTS (SELECT 1 FROM account_deletion_jobs
+          WHERE user_id = sessions.user_id AND status <> 'completed')
+    `).run(hashSessionToken(token), Date.now());
+    if (current.changes !== 1) {
+      throw new MatterhornAuthError("unauthorized", "Session is no longer valid. Sign in again.");
+    }
   }
 
   private passwordMatches(row: UserRow, password: string): boolean {

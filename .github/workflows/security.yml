@@ -112,4 +112,4 @@ jobs:
       - name: Smoke test patched release dependencies
         run: pnpm test:release-dependency-patches
       - name: Exercise auth, tenancy, and shared rate-limit controls
-        run: bun test apps/server/src/auth.e2e.test.ts apps/server/src/auth-password-lifecycle.test.ts apps/server/src/auth-reset-concurrency.test.ts apps/server/src/auth-credential-concurrency.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts --timeout 15000
+        run: bun test apps/server/src/auth.e2e.test.ts apps/server/src/auth-password-lifecycle.test.ts apps/server/src/auth-reset-concurrency.test.ts apps/server/src/auth-credential-concurrency.test.ts apps/server/src/auth-account-authority-concurrency.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts --timeout 15000
