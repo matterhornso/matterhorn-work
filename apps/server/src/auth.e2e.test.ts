@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1085,6 +1087,110 @@ describe("public account authentication", () => {
     expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
       body: { email, password: newPassword },
     })).response.status).toBe(401);
+  });
+
+  test.each(["api", "workspace", "inbox"].flatMap(surface =>
+    ["delete", "logout", "workspace-change", "unchanged"].map(change => ({ surface, change })),
+  ))("rechecks delayed upload access: $surface, $change", async ({ surface, change }) => {
+    const app = await boot();
+    const email = "late-memory-owner@example.com";
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email, password: PASSWORD },
+    });
+    expect(signup.response.status).toBe(200);
+    const cookie = sessionCookie(signup.response);
+    const workspacePath = join(app.root, "data", "web-workspaces", signup.payload.organization.id);
+    const workspaceId = `ws_web_${createHash("sha256")
+      .update(`matterhorn-web-workspace:${signup.payload.organization.id}`).digest("hex").slice(0, 16)}`;
+    const endpoint = surface === "api" ? "/api/memory/capture"
+      : `/workspace/${workspaceId}/${surface === "inbox" ? "inbox" : "memory/capture"}`;
+    const memoryBody = { record: {
+      id: "mem_late_upload", kind: "user_preference", scope: "workspace",
+      title: "Delayed local fixture", summary: "Must not survive account deletion",
+      body: { responseStyle: "deleted-account-fixture" }, tags: [], links: [],
+      provenance: { source: "user_confirmed", capturedAt: "2026-10-04T00:00:00.000Z", capturedBy: "user", confidence: 1, reasonRemembered: "Disposable race test" },
+      sensitivity: "private", createdAt: "2026-10-04T00:00:00.000Z", updatedAt: "2026-10-04T00:00:00.000Z",
+      canUseInChat: true, canExport: false, canDelete: true,
+    } };
+    const boundary = "matterhorn-disposable-upload-boundary";
+    const body = surface === "inbox"
+      ? `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="late.txt"\r\nContent-Type: text/plain\r\n\r\nDisposable upload\r\n--${boundary}--\r\n`
+      : JSON.stringify(memoryBody);
+    const contentType = surface === "inbox" ? `multipart/form-data; boundary=${boundary}` : "application/json";
+    // A second account's existing memory must remain usable after the first
+    // account is deleted or revoked. This also detects cross-account purges.
+    const other = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "unaffected-memory-owner@example.com", password: PASSWORD },
+    });
+    expect(other.response.status).toBe(200);
+    const otherCookie = sessionCookie(other.response);
+    const otherCapture = await jsonRequest(app.base, "/api/memory/capture", {
+      cookie: otherCookie, body: memoryBody,
+    });
+    expect(otherCapture.response.status).toBe(200);
+    const otherBefore = await jsonRequest(app.base, "/api/memory/entities", { cookie: otherCookie });
+    expect(otherBefore.response.status).toBe(200);
+    let finishUpload = () => {};
+    const completed = new Promise<number>((resolve, reject) => {
+      const request = httpRequest(`${app.base}${endpoint}`, {
+        method: "POST",
+        // Revocation must reject the original account request, not fall back
+        // to this otherwise valid local operator token after reading the body.
+        headers: { Cookie: cookie, Authorization: `Bearer ${TOKEN}`, "Content-Type": contentType, "Content-Length": Buffer.byteLength(body) },
+      }, response => {
+        response.resume();
+        response.on("end", () => resolve(response.statusCode ?? 0));
+        response.on("error", reject);
+      });
+      request.on("error", reject);
+      request.setTimeout(4000, () => request.destroy(new Error("Disposable upload timed out")));
+      finishUpload = () => request.end(body.slice(1));
+      request.write(body.slice(0, 1));
+      request.flushHeaders();
+    });
+    try {
+      // Workspace creation proves the streaming request reached account-scoped
+      // middleware; the rest of its body remains withheld from the handler.
+      for (let attempt = 0; attempt < 200 && !existsSync(workspacePath); attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect(existsSync(workspacePath)).toBe(true);
+      if (change === "delete") {
+        const deleted = await jsonRequest(app.base, "/api/auth/account", {
+          method: "DELETE", cookie, body: { password: PASSWORD, confirmationEmail: email },
+        });
+        expect(deleted.response.status).toBe(200);
+        expect(existsSync(workspacePath)).toBe(false);
+      } else if (change === "logout") {
+        expect((await jsonRequest(app.base, "/api/auth/sign-out", {
+          method: "POST", cookie,
+        })).response.status).toBe(200);
+      } else if (change === "workspace-change") {
+        const created = await jsonRequest(app.base, "/api/auth/organization/create", {
+          cookie, body: { name: "Other disposable workspace", slug: "other-disposable-workspace" },
+        });
+        expect(created.response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/den/v1/me/active-organization", {
+          cookie, body: { organizationId: created.payload.organization.id },
+        })).response.status).toBe(200);
+      }
+    } finally {
+      finishUpload();
+      await completed;
+    }
+    if (change === "delete") expect(existsSync(workspacePath)).toBe(false);
+    expect(await completed).toBe(change === "unchanged" ? (surface === "workspace" ? 201 : 200) : change === "workspace-change" ? 403 : 401);
+    if (surface === "inbox") {
+      const uploaded = join(workspacePath, ".opencode", "openwork", "inbox", "late.txt");
+      expect(existsSync(uploaded)).toBe(change === "unchanged");
+      if (change === "unchanged") expect(readFileSync(uploaded, "utf8")).toBe("Disposable upload");
+    } else if (change !== "unchanged") {
+      const memoryIndex = join(workspacePath, ".matterhorn-work", "memory", "memory-index.json");
+      if (existsSync(memoryIndex)) expect(readFileSync(memoryIndex, "utf8")).not.toContain("mem_late_upload");
+    }
+    const otherAfter = await jsonRequest(app.base, "/api/memory/entities", { cookie: otherCookie });
+    expect(otherAfter.response.status).toBe(200);
+    expect(otherAfter.payload).toEqual(otherBefore.payload);
   });
 
   test("blocks deletion while the account owns a workspace with other members", async () => {

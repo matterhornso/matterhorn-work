@@ -2960,6 +2960,7 @@ async function proxyOpencodeRequest(input: {
   const rawBody = method === "GET" || method === "HEAD"
     ? undefined
     : await input.request.arrayBuffer().then((buf) => (buf.byteLength > 0 ? buf : undefined));
+  assertRequestAccessCurrent(input.request);
   const stopSessionMatch = method === "POST"
     ? normalizeOpencodeProxyPath(proxyPath).match(/^\/session\/([^/]+)\/abort$/)
     : null;
@@ -6231,6 +6232,7 @@ function buildNoteMemorySuggestion(
 }
 
 function memoryApiError(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
   const message = error instanceof Error ? error.message : String(error);
   if (/Could not read Matterhorn memory (index|suggestion inbox)/i.test(message)) {
     return new ApiError(
@@ -6625,6 +6627,15 @@ async function requireClient(request: Request, config: ServerConfig, tokens: Tok
   return { type: "remote", clientId, tokenHash: hashToken(token), scope };
 }
 
+// Request bodies may arrive long after authentication. Recheck the original
+// principal after reading them; never fall back to a different credential.
+// Weak keys keep request-scoped checks from retaining completed requests.
+const requestAccessChecks = new WeakMap<Request, () => void>();
+
+function assertRequestAccessCurrent(request: Request): void {
+  requestAccessChecks.get(request)?.();
+}
+
 async function requireClientAccess(
   request: Request,
   config: ServerConfig,
@@ -6641,6 +6652,15 @@ async function requireClientAccess(
     if (!token) continue;
     const session = authStore.getSession(token);
     if (!session) continue;
+    requestAccessChecks.set(request, () => {
+      const current = authStore.getSession(token);
+      if (!current || current.user.id !== session.user.id) {
+        throw new ApiError(401, "unauthorized", "Your session is no longer active. Sign in again.");
+      }
+      if (current.activeOrgId !== session.activeOrgId) {
+        throw new ApiError(403, "organization_access_denied", "Your active workspace changed. Retry in the current workspace.");
+      }
+    });
     return {
       actor: {
         type: "remote",
@@ -6659,6 +6679,12 @@ async function requireClientAccess(
 
   const hostedMcpAccess = resolveMatterhornHostedMcpAccess(request, authStore);
   if (hostedMcpAccess && bearer) {
+    requestAccessChecks.set(request, () => {
+      const current = resolveMatterhornHostedMcpAccess(request, authStore);
+      if (!current || current.user.id !== hostedMcpAccess.user.id || current.activeOrgId !== hostedMcpAccess.activeOrgId) {
+        throw new ApiError(401, "unauthorized", "Hosted tool access is no longer active.");
+      }
+    });
     const session: MatterhornAuthSession = {
       token: "",
       user: hostedMcpAccess.user,
@@ -16355,6 +16381,7 @@ function createRoutes(
     } catch {
       throw new ApiError(400, "invalid_payload", "Invalid multipart upload");
     }
+    assertRequestAccessCurrent(ctx.request);
     const file = form.get("file");
     if (!(file instanceof File)) {
       throw new ApiError(400, "file_required", "Form field 'file' is required");
@@ -23195,6 +23222,7 @@ async function readBodyTextLimited(
     throw new ApiError(413, "payload_too_large", `${label} payload is too large`);
   }
 
+  assertRequestAccessCurrent(request);
   if (!request.body) return "";
 
   const reader = request.body.getReader();
@@ -23215,6 +23243,7 @@ async function readBodyTextLimited(
   } finally {
     reader.releaseLock();
   }
+  assertRequestAccessCurrent(request);
 
   const bytes = new Uint8Array(total);
   let offset = 0;

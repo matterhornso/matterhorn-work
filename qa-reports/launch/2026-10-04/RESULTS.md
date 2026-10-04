@@ -1,6 +1,6 @@
-# Authentication failure path QA
+# Authentication and account deletion QA
 
-4 October 2026. This review fixed client response-validation and auth recovery defects. The full-platform QA goal remains incomplete. No hosted release, account, provider, production setting, existing preview runtime or chat was changed. Disposable loopback UI fixtures were created and stopped after testing.
+4 October 2026. This review fixed client response-validation, auth recovery and delayed-upload authorization defects. The full-platform QA goal remains incomplete. No hosted release, account, provider, production setting, existing preview runtime or chat was changed. All account-deletion tests use disposable loopback accounts and files. Disposable loopback UI fixtures were created and stopped after testing.
 
 ## Reproduced findings and corrections
 
@@ -72,12 +72,42 @@ Final validation after the UI source changes:
 
 An initial full frontend run caught the old preview-specific copy assertion. The assertion was updated to the new recovery message; existing fail-closed, unavailable-state and Check again assertions remain. The final full suite passed. Logs: `/tmp/matterhorn-auth-ui-tests-final-2026-10-04.log`, `/tmp/matterhorn-auth-ui-typecheck-2026-10-04.log`, `/tmp/matterhorn-auth-ui-build-2026-10-04.log`.
 
+## Delayed uploads after account deletion
+
+The account-boundary review reproduced a write after deletion. A client sent valid authentication headers and only the first byte of a memory capture request. The test waited for the server to create that account's workspace, proving that authenticated middleware had run. Account deletion then returned 200 and removed the directory. Completing the withheld upload returned 200 and recreated the deleted directory. Separate failing assertions confirmed both the success status and the recreated path. This is a local authenticated request race, not evidence that one account can read another account's data or that hosted data has been exploited.
+
+The initial test did not flush its HTTP headers and failed before reaching the intended barrier. That failure was a test transport issue, not vulnerability evidence. Calling `flushHeaders()` established the barrier and exposed the actual defect; response status and filesystem assertions then failed on the original implementation.
+
+The server now pins a request-scoped authorization check to the originally accepted account session or hosted tool credential. After bounded body reads, multipart parsing and buffered OpenCode proxy body reads, it rechecks that identity and workspace access. A revoked or expired session cannot fall back to another supplied credential. Workspace changes reject the old request. Memory error mapping preserves explicit authorization status codes instead of turning them into generic 400 errors. Operator-token authentication and public signup/recovery policy are unchanged.
+
+The behavioral matrix covers both memory capture APIs and multipart inbox uploads, each with account deletion, logout, workspace selection changes and an unchanged-session control. Deletion cases verify the directory stays absent after the upload completes. Multipart cases verify no file is written for rejected requests and exact bytes are written for valid requests. Every case also compares a second account's existing memory before and after the first account's operation. Sessions and temporary files are cleaned up by the fixture; no real account, inbox, provider or production data is used.
+
+| Check | Result |
+| --- | --- |
+| Original implementation with flushed delayed upload | Fails: accepted write and recreated deleted workspace |
+| Final delayed upload matrix | 12 pass, zero fail, 119 assertions |
+| Auth endpoints, auth-store verification, memory routes, inbox boundaries and hosted tool credential regressions | 81 pass, zero fail, 1,110 assertions across five files |
+| Server typecheck | Pass |
+| Complete local platform safety gate | All 11 stages pass |
+| Diff whitespace check | Pass |
+
+```sh
+bun test apps/server/src/auth.e2e.test.ts --test-name-pattern 'delayed upload'
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/auth-store-verification.test.ts apps/server/src/memory-routes.e2e.test.ts apps/server/src/inbox-boundary.e2e.test.ts apps/server/src/hosted-mcp-access.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm test:matterhorn-platform-safety
+```
+
+Logs are `/tmp/matterhorn-deletion-race-red-2026-10-04.log`, `/tmp/matterhorn-deletion-race-path-red-2026-10-04.log`, `/tmp/matterhorn-delayed-upload-matrix-2026-10-04.log`, `/tmp/matterhorn-delayed-upload-regressions-final-2026-10-04.log` and `/tmp/matterhorn-delayed-upload-typecheck-2026-10-04.log`. Temporary logs supplement this recorded evidence; they are not durable hosted acceptance artifacts.
+
+This correction closes the reproduced delayed-body path, not every possible in-flight deletion race. It does not serialize deletion against all background jobs, writes already past body parsing, external runtime operations, approval waits or multiple server processes. The proxy and hosted tool checks were added at the same authorization boundary, but their specific delayed-upload revocation paths still need dedicated behavioral fixtures. The unchanged-session controls demonstrate usable uploads; no browser UI was changed in this server pass.
+
 ## Remaining work
 
 - The hosted signup-screen/API discrepancy is not root-caused by this local reproduction. Inspect the deployed response and network failure in a working browser session before attributing it to this bug.
 - The local auth config loading/failure/recovery defects above are corrected. In-flight auth mutation completion across connection/account changes still needs a separate lifecycle review; the present cancellation tests cover access checks, not server-side rollback of mutations.
 - Fresh hosted responses on all five desks, optional Jev acceptance, accounting settlement, two-account isolation, real email/reset delivery, logout cleanup and production backup/restore evidence remain outstanding as recorded in the [previous launch report](../2026-10-03/RESULTS.md). No fresh hosted state is asserted in this pass.
 - The limited responsive and keyboard evidence above does not establish platform-wide accessibility, cross-browser or theme acceptance.
-- The complete safety gate last passed on the previous candidate; this pass reran the affected frontend suite, typecheck/build and four auth endpoint tests, not every backend gate.
+- All 11 local safety stages pass on the server correction. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-deletion-safety-gate-2026-10-04.log`.
 
-These corrections and regression results do not establish launch readiness. Continue with auth mutation lifecycle and account-boundary review, followed by the remaining acceptance work above.
+These corrections and regression results do not establish launch readiness. Continue with writes already past request-body validation, auth mutation lifecycle and the remaining acceptance work above.
