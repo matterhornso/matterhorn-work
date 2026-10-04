@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { Transaction, TransactionDataBuilder } from "@mysten/sui/transactions";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 
 import type {
   MatterhornAgentPrivacyPreflightResponse,
@@ -1501,6 +1501,59 @@ describe("crypto coworker HTTP boundary", () => {
     });
     expect(replay.response.status).toBe(410);
     expect(replay.payload.code).toBe("agent_file_walrus_renewal_expired_or_replayed");
+  });
+
+  test("account deletion removes an expired Sui anchor preview without signing", async () => {
+    const server = await boot("internal", { agentFiles: true, walrus: true, anchor: true });
+    const email = "anchor-deletion-cleanup@example.com";
+    const signup = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email, password: PASSWORD },
+    });
+    const other = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "anchor-deletion-control@example.com", password: PASSWORD },
+    });
+    const sessionCookie = cookie(signup.response);
+    const workspaceId = String((await request(server.base, "/workspaces", { cookie: sessionCookie })).payload.items[0].id);
+    const coworker = await request(server.base, `/workspace/${workspaceId}/coworkers`, {
+      cookie: sessionCookie, body: privateCoworkerInput(),
+    });
+    if (!server.keyManager) throw new Error("route_test_key_manager_missing");
+    const record = await seedCryptoEvidence({
+      guardedDb: server.guardedDb, keyManager: server.keyManager, workspaceId,
+      ownerId: String(signup.payload.user.id), coworkerId: String(coworker.payload.coworker.id),
+      runId: "run_anchor_deletion_cleanup",
+    });
+    const path = `/workspace/${workspaceId}/crypto-evidence/${record.id}`;
+    expect((await request(server.base, `${path}/publish`, {
+      cookie: sessionCookie, body: {
+        expectedRevision: 1, network: "testnet", ownerAddress: ROUTE_SIGNER, acknowledgePublicCiphertext: true,
+      },
+    })).response.status).toBe(200);
+    const prepared = await request(server.base, `${path}/anchor`, {
+      cookie: sessionCookie, body: {
+        expectedRevision: 2, network: "testnet", signer: ROUTE_SIGNER, acknowledgePermanentPublicAnchor: true,
+      },
+    });
+    expect(prepared.response.status).toBe(200);
+    const observedAt = Date.now();
+    const state = new MatterhornGuardedRuntimeStateStore(server.guardedDb);
+    try {
+      expect(state.getRecord("crypto_evidence_sui_anchor_intent", record.id, observedAt)).not.toBeNull();
+      setSystemTime(new Date(Date.parse(prepared.payload.preview.expiresAt) + 1));
+      const deleted = await request(server.base, "/api/auth/account", {
+        method: "DELETE", cookie: sessionCookie, body: { confirmationEmail: email, password: PASSWORD },
+      });
+      expect(deleted.response.status).toBe(200);
+      expect(deleted.payload.status).toBe("deleted");
+      expect(server.keyManager.keys.size).toBe(0);
+      // Inspect physical retention using the pre-expiry read time, not a TTL-filtered absence.
+      expect(state.getRecord("crypto_evidence_sui_anchor_intent", record.id, observedAt)).toBeNull();
+      expect(state.isWorkspaceDeleted(workspaceId)).toBe(true);
+      expect((await request(server.base, "/workspaces", { cookie: cookie(other.response) })).response.status).toBe(200);
+    } finally {
+      setSystemTime();
+      state.close();
+    }
   });
 
   test("destroys Agent File recovery keys before account deletion completes", async () => {

@@ -1571,6 +1571,28 @@ describe("guarded agent runtime transport", () => {
     expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
   });
 
+  test("workspace purge removes active Sui anchor intents only for its workspace", () => {
+    const state = new MatterhornGuardedRuntimeStateStore(join(dataDir, "anchor-intent-purge.db"));
+    const runtime = new MatterhornGuardedAgentRuntime(state);
+    const nowMs = Date.now();
+    try {
+      for (const workspaceId of ["ws_anchor_purge", "ws_anchor_keep"]) {
+        state.put({
+          kind: "crypto_evidence_sui_anchor_intent", key: `evidence_${workspaceId}`, workspaceId,
+          value: { syntheticPendingWalletReview: true }, expiresAtMs: nowMs + 300_000, nowMs,
+        });
+      }
+      runtime.beginWorkspaceDeletion("ws_anchor_purge");
+      runtime.purgeWorkspace("ws_anchor_purge");
+      expect(state.getRecord("crypto_evidence_sui_anchor_intent", "evidence_ws_anchor_purge", nowMs)).toBeNull();
+      expect(state.getRecord("crypto_evidence_sui_anchor_intent", "evidence_ws_anchor_keep", nowMs)?.value)
+        .toEqual({ syntheticPendingWalletReview: true });
+      expect(state.isWorkspaceDeleted("ws_anchor_purge")).toBe(true);
+    } finally {
+      runtime.close();
+    }
+  });
+
   test("retries a failed coworker evidence seal without retaining agent authority", async () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     runtime.setCoworkerResolver(() => true);

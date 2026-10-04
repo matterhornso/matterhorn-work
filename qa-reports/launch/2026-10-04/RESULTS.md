@@ -336,6 +336,23 @@ Impeccable guided the correction toward plain factual recovery text, and Uncodix
 
 This pass covers renewal responses only. Separate deletion/anchor error mappings, some expired-claim responses and unknown-error fallbacks still need review. The wallet callbacks also need tests for retaining already-submitted transaction details and safely retrying confirmation without asking for another signature. No live wallet transaction, remote erasure or hosted acceptance was performed. The preceding verification fix is commit `97dcad1cebab6cb87d1c4686e1e36e34258e16f1`.
 
+## Sui anchor intent cleanup
+
+Direct workspace purge omitted active `crypto_evidence_sui_anchor_intent` rows. A failing regression reproduced the retained target-workspace row; the explicit purge list now includes that kind. The test preserves another workspace's intent and the durable deletion barrier. Its synthetic row proves cleanup scope, not validity of a signed wallet intent.
+
+A separate normal HTTP account-deletion test prepares an anchor through the API without signing, advances the disposable fixture clock past preview expiry, and deletes the account. This test already passed before the correction: key destruction triggers existing expired-state cleanup. It checks physical removal using a pre-expiry lookup time, destroyed fixture keys, preservation of the deletion barrier and continued access for another account. Do not describe this passing baseline as a reproduced account-deletion failure.
+
+Final local results: 77 targeted runtime/store/anchor tests pass with 297 assertions; all 21 coworker HTTP tests pass with 450 assertions; server typecheck and all 11 platform-safety stages pass. Logs are `/tmp/matterhorn-anchor-purge-final-2026-10-04.log`, `/tmp/matterhorn-anchor-purge-http-2026-10-04.log`, `/tmp/matterhorn-anchor-purge-typecheck-2026-10-04.log` and `/tmp/matterhorn-anchor-purge-safety-2026-10-04.log`. The initial direct-purge failure is in `/tmp/matterhorn-anchor-purge-red-2026-10-04.log`. Despite its filename, `/tmp/matterhorn-anchor-intent-cleanup-red-2026-10-04.log` contains the passing HTTP baseline.
+
+```sh
+bun test apps/server/src/guarded-agent-runtime.test.ts apps/server/src/crypto-evidence-sui-anchor.test.ts apps/server/src/guarded-runtime-state-store.test.ts
+bun test apps/server/src/crypto-coworker-routes.e2e.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm test:matterhorn-platform-safety
+```
+
+Source review also confirms that evidence renewal/deletion/anchoring and Agent File renewal callbacks prepare and request wallet submission on each attempt; no separate pending-confirmation state is retained. This is a recovery gap, not proof that a duplicate transaction was executed: cached intents may retain the same transaction digest, while committed confirmations change the record state. Test transient verification failure, lost acknowledgments, expiry, navigation/reload and account/wallet changes before claiming safe retry. No real wallet, provider or hosted request was used for this pass. The preceding recovery-copy correction is commit `c3aabb7f84a3c587522dc903ad15bcdda4674b53`.
+
 ## Polymarket policy review deadline
 
 The broader regression run found that the bundled policy's review deadline is `2026-10-04T00:00:00.000Z`, which had passed at execution time. `evaluatePolymarketOpenPositionJurisdiction` now returns `policy_review_required` for otherwise valid jurisdiction evidence, and guarded capability issuance denies new-position preparation. This is intended fail-closed behavior. The production deadline and restrictions were not changed. This result concerns the local candidate; the exact hosted policy version and user-facing recovery text have not been verified. It does not establish that public research reads are broken.
