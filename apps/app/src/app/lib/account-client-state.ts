@@ -160,3 +160,20 @@ export function captureAccountGeneration() {
   const generation = accountClientState.generation();
   return () => generation === accountClientState.generation();
 }
+
+/** Discard obsolete results; this does not undo a mutation already sent. */
+export async function runAccountScopedRequest<T>(
+  request: () => Promise<T>,
+  isCurrent: () => boolean = captureAccountGeneration(),
+): Promise<T> {
+  const assertCurrent = () => { if (!isCurrent()) throw new AccountStateChangedError(); };
+  assertCurrent();
+  try {
+    const result = await request();
+    assertCurrent();
+    return result;
+  } catch (error) {
+    assertCurrent();
+    throw error;
+  }
+}

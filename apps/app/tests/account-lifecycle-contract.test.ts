@@ -51,6 +51,13 @@ describe("account lifecycle contract", () => {
     expect(denSessionSource).toContain("onSessionEnded: (message?: string | null) => clearSignedInState(message)");
   });
 
+  test("all security requests and completion effects respect the mounted account scope", () => {
+    expect(accountSecuritySource.match(/runAccountScopedRequest\(\(\) => client\./g)).toHaveLength(5);
+    expect(accountSecuritySource.match(/if \(!isCurrent\(\)\) return;/g)).toHaveLength(4);
+    expect(accountSecuritySource).toContain("return () => { mounted.current = false; }");
+    expect(accountSecuritySource).toContain("mounted.current && accountCurrent.current()");
+  });
+
   test("requires reauthentication and explicit confirmation for destructive changes", () => {
     expect(accountSecuritySource).toContain('autoComplete="current-password"');
     expect(accountSecuritySource).toContain('autoComplete="new-password"');
@@ -58,6 +65,8 @@ describe("account lifecycle contract", () => {
     expect(accountSecuritySource).toContain("confirmationEmail.trim().toLowerCase() === user.email.toLowerCase()");
     expect(accountSecuritySource).toContain("deletionBlockers.length > 0");
     expect(accountSecuritySource).toContain('variant="destructive"');
+    expect(accountSecuritySource).toContain("Account deletion is pending.");
+    expect(accountSecuritySource).not.toContain("Account deleted, but");
   });
 
   test("keeps account actions accessible on touch screens and communicates progress", () => {

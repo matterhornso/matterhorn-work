@@ -427,7 +427,7 @@ Release action: review the current official venue restrictions and the applicabl
 ## Remaining work
 
 - The hosted signup-screen/API discrepancy is not root-caused by this local reproduction. Inspect the deployed response and network failure in a working browser session before attributing it to this bug.
-- The public auth mutation lifetime correction below now covers obsolete form callbacks. It does not roll back server mutations or establish browser-cookie ordering across simultaneous logins. Authenticated account-security exports, password-change and deletion completion callbacks need a separate lifecycle review.
+- The public auth mutation lifetime correction below now covers obsolete form callbacks. The account-security review below adds guards for exports, password changes and deletion callbacks. Neither correction rolls back server mutations or establishes browser-cookie ordering across simultaneous logins. Mounted-component/browser checks for authenticated security actions remain open.
 - Fresh hosted responses on all five desks, optional Jev acceptance, accounting settlement, two-account isolation, real email/reset delivery, logout cleanup and production backup/restore evidence remain outstanding as recorded in the [previous launch report](../2026-10-03/RESULTS.md). No fresh hosted state is asserted in this pass.
 - The limited responsive and keyboard evidence above does not establish platform-wide accessibility, cross-browser or theme acceptance.
 - The Polymarket policy review and expiry-state UI/hosted checks above are open release actions; passing historical policy tests does not establish current eligibility.
@@ -456,4 +456,33 @@ git diff --check
 
 Logs: `/tmp/matterhorn-auth-lifetime-focused-2026-10-04.log`, `/tmp/matterhorn-auth-lifetime-frontend-2026-10-04.log`, `/tmp/matterhorn-auth-lifetime-typecheck-2026-10-04.log`, `/tmp/matterhorn-auth-lifetime-safety-2026-10-04.log` and `/tmp/matterhorn-auth-lifetime-build-2026-10-04.log`. The full safety gate completed successfully with all 11 stages passed; the subsequent production build passed with the existing large-chunk advisory. Diff whitespace checking passed. These stages include offline/source contracts, not fresh hosted or real inbox evidence.
 
-Impeccable's hardening guidance kept progress/error ownership tied to the active form; Uncodixfy preserved the existing interface. The documentation skill kept this evidence and its limitations in the established repository report. The browser reproduction covers delayed sign-in, not every form branch, real credential changes, email delivery, cookie side effects or multi-tab login ordering. Aborting a request cannot undo an account, email, password or session already changed on the server. Do not claim full auth mutation safety or hosted release readiness. The authenticated account-security component's asynchronous export/session-ending callbacks remain a separate next review item.
+Impeccable's hardening guidance kept progress/error ownership tied to the active form; Uncodixfy preserved the existing interface. The documentation skill kept this evidence and its limitations in the established repository report. The browser reproduction covers delayed sign-in, not every form branch, real credential changes, email delivery, cookie side effects or multi-tab login ordering. Aborting a request cannot undo an account, email, password or session already changed on the server. Do not claim full auth mutation safety or hosted release readiness. The following section records the subsequent authenticated account-security review.
+
+## Account security response lifetime and validation
+
+Five delayed-response regressions initially failed: security summary, account export, session revocation, password change and account deletion could resolve after the account boundary changed. The client now checks the account generation before dispatch and after either success or failure. The keyed account-security component also checks its mounted lifetime before accepting data or running download, cache-refresh and session-ending callbacks. A stale server error becomes a generic account-change error instead of displaying the old account's server message. This discards obsolete results; it does not abort these requests, undo server-side mutations or prevent a response from changing browser cookies.
+
+A separate failing reproduction showed all five methods accepting malformed HTTP-success bodies. Each now validates the fields used by the UI against the current server contract. Checks include session counts, organization roles, export version/profile/legal fields and safe JSON filename, explicit password/session acknowledgments, and consistent completed versus pending deletion results. Invalid responses produce an uncertainty message instead of claiming success. Valid 202 deletion responses remain accepted as pending. Pending-deletion copy no longer claims that the account has already been deleted. No authorization, registration, consent or deployment setting changed, and no dependency was added.
+
+The focused tests use synthetic fetch responses through the real Den client, plus actual TanStack Query mutation observers. They cover unchanged-account success, all five stale completions, stale errors, disposed requests, malformed responses, contradictory deletion states, valid pending deletion, suppression of an export callback after disposal and suppression of a password-success callback after an invalid acknowledgment. The component wiring test is a source assertion, not a mounted React interaction test. Existing rendered account-security regressions run as static markup.
+
+Current results:
+
+- Focused account-security/lifecycle suite: 43 pass, zero fail, 175 assertions across four files.
+- Full frontend suite: 1,412 pass, zero fail, 8,393 assertions across 191 files.
+- Existing local auth HTTP suite: 46 pass, zero fail, 786 assertions. It uses disposable normal-signup accounts and covers actual server session revocation, password rotation, account/workspace/memory deletion and access denial. It does not exercise the frontend validator through a browser or send real email.
+- Safety gate: all 11 stages pass. Frontend typecheck and production build pass; the existing large-chunk build advisory remains. Diff whitespace check passes.
+
+```sh
+bun test apps/app/tests/account-security-client-lifetime.test.ts apps/app/tests/account-client-state.test.ts apps/app/tests/account-lifecycle-contract.test.ts apps/app/tests/account-security-render.test.tsx
+pnpm --filter @matterhorn-work/app test
+bun test apps/server/src/auth.e2e.test.ts --timeout 20000
+pnpm test:matterhorn-platform-safety
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build
+git diff --check
+```
+
+Failing reproductions: `/tmp/matterhorn-account-security-lifetime-red-2026-10-04.log` and `/tmp/matterhorn-account-security-response-red-2026-10-04.log`. Passing logs: `/tmp/matterhorn-account-security-focused-2026-10-04.log`, `/tmp/matterhorn-account-security-final-frontend-permitted-2026-10-04.log`, `/tmp/matterhorn-account-security-auth-http-2026-10-04.log`, and `/tmp/matterhorn-account-security-final-{safety,typecheck,build}-2026-10-04.log`. The initial sandboxed frontend run failed three loopback-listener tests; the permitted rerun passed without test changes.
+
+Impeccable guided truthful failure/pending states; Uncodixfy preserved the existing layout, and the documentation skill kept the evidence in this repository. No new browser capture was made for this pass. Remaining checks include mounted-component account switching/unmounting, actual downloads, visibility of notices across the existing hard redirect, multi-tab cookie ordering, real inbox flows and hosted two-account acceptance. In particular, the session-ended message is stored in React state before `window.location.assign`; durable display after that navigation remains unverified. Server deletion-job recovery and production backup/restore evidence are separate gates. No production account was changed; nothing was pushed, merged or deployed. The overall QA goal remains incomplete.

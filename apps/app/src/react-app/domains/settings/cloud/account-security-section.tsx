@@ -13,6 +13,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { DenClient, DenUser } from "../../../../app/lib/den";
 import { accountSecurityQueryKey } from "./account-security-scope";
+import { captureAccountGeneration, runAccountScopedRequest } from "../../../../app/lib/account-client-state";
 import {
   SettingsInset,
   SettingsNotice,
@@ -56,6 +57,13 @@ function ScopedAccountSecuritySection({
   onSessionEnded,
 }: AccountSecuritySectionProps) {
   const queryClient = useQueryClient();
+  const mounted = React.useRef(true);
+  const accountCurrent = React.useRef(captureAccountGeneration());
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const isCurrent = () => mounted.current && accountCurrent.current();
   const [passwordOpen, setPasswordOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [currentPassword, setCurrentPassword] = React.useState("");
@@ -67,34 +75,38 @@ function ScopedAccountSecuritySection({
 
   const securityQuery = useQuery({
     queryKey,
-    queryFn: () => client.getAccountSecurity(),
+    queryFn: () => runAccountScopedRequest(() => client.getAccountSecurity(), isCurrent),
     staleTime: 15_000,
   });
   const revokeMutation = useMutation({
-    mutationFn: () => client.revokeOtherSessions(),
+    mutationFn: () => runAccountScopedRequest(() => client.revokeOtherSessions(), isCurrent),
     onSuccess: async () => {
+      if (!isCurrent()) return;
       await queryClient.invalidateQueries({ queryKey });
     },
   });
   const exportMutation = useMutation({
-    mutationFn: () => client.exportAccount(),
+    mutationFn: () => runAccountScopedRequest(() => client.exportAccount(), isCurrent),
     onSuccess: (accountExport) => {
+      if (!isCurrent()) return;
       downloadAccountRecord(accountExport.filename, accountExport);
     },
   });
   const passwordMutation = useMutation({
-    mutationFn: () => client.changePassword(currentPassword, newPassword),
+    mutationFn: () => runAccountScopedRequest(() => client.changePassword(currentPassword, newPassword), isCurrent),
     onSuccess: () => {
+      if (!isCurrent()) return;
       onSessionEnded("Password changed. Sign in again on this device.");
       window.location.assign("/");
     },
   });
   const deleteMutation = useMutation({
-    mutationFn: () => client.deleteAccount(deletePassword, confirmationEmail),
+    mutationFn: () => runAccountScopedRequest(() => client.deleteAccount(deletePassword, confirmationEmail), isCurrent),
     onSuccess: (result) => {
+      if (!isCurrent()) return;
       const message = result.workspaceDataDeletionComplete
         ? "Account and owned workspace data deleted."
-        : "Account deleted, but some workspace data still needs operator cleanup.";
+        : "Account deletion is pending. You have been signed out; contact support to confirm completion.";
       onSessionEnded(message);
       window.location.assign("/");
     },
