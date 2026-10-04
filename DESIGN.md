@@ -260,6 +260,8 @@ Within a chat, submission feedback belongs to its request identity. An older rej
 
 Stop captures the viewed request when clicked. A delayed acknowledgement refreshes that original chat, not the subsequently viewed chat; it must not clear a newer request's pending state. A Stop failure remains visible for the unchanged request but cannot replace feedback after navigation, a newer request or an account change. Server cancellation and usage settlement remain independently verified concerns.
 
+Response retry rechecks account and local request ownership before preparation and each subsequent abort, revert, dispatch or failure restore. A newer request supersedes the old retry without permitting another mutation; an already accepted dispatch remains accepted. Navigation alone does not suppress ordinary failed-retry restoration. This local guard is not atomic server rollback protection across clients and cannot retract a mutation already sent.
+
 Selected sidebar entries use ice/ink, 700 weight and a 2px inset line; selected tabs use ice/ink and a 2px action-colored underline. Picker options add a 2px inset outline and keep title, capability, identifier and checkmark on the same selection ink. Unavailable picker options stay disabled with 0.6 opacity and a not-allowed cursor. The full model list retains its separately scoped subtle selected treatment.
 
 Dialogs, alert dialogs, popovers and menus use framed panels with panel depth. Sheets and command dialogs use the same geometry without that shadow. The mobile drawer keeps an explicit 44px close control. Shared badges remain compact inherited components, not invented readiness certifications.

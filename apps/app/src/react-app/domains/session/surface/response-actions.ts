@@ -58,6 +58,7 @@ export function restoreResponseRetryAttachments(turn: AssistantResponseRetryTurn
 }
 
 export type AssistantResponseRetryTransaction<T> = {
+  isCurrent: () => boolean;
   prepare: () => Promise<T>;
   abort: () => Promise<void>;
   revert: () => Promise<unknown>;
@@ -65,23 +66,35 @@ export type AssistantResponseRetryTransaction<T> = {
   restore: () => Promise<unknown>;
 };
 
+export class ResponseRetrySupersededError extends Error {
+  constructor() {
+    super("A newer request replaced this retry.");
+  }
+}
+
 export async function runAssistantResponseRetry<T>(
   transaction: AssistantResponseRetryTransaction<T>,
 ): Promise<void> {
   const isCurrentAccount = captureAccountGeneration();
-  const requireCurrentAccount = () => { if (!isCurrentAccount()) throw new AccountStateChangedError(); };
+  const requireCurrent = () => {
+    if (!isCurrentAccount()) throw new AccountStateChangedError();
+    if (!transaction.isCurrent()) throw new ResponseRetrySupersededError();
+  };
   // Classification/consent preparation can be cancelled. Do not change the
   // existing conversation until it finishes successfully.
+  requireCurrent();
   const prepared = await transaction.prepare();
-  requireCurrentAccount();
+  requireCurrent();
   await transaction.abort();
-  requireCurrentAccount();
+  requireCurrent();
   await transaction.revert();
-  requireCurrentAccount();
+  requireCurrent();
   try {
     await transaction.dispatch(prepared);
   } catch (dispatchError) {
-    requireCurrentAccount();
+    // Never compensate an older retry over newer work. This guards local
+    // ownership, not mutations already accepted by the server or other clients.
+    requireCurrent();
     try {
       await transaction.restore();
     } catch {

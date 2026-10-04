@@ -10,6 +10,7 @@ import {
   restoreResponseRetryAttachments,
   responseOutputTitle,
   runAssistantResponseRetry,
+  ResponseRetrySupersededError,
   requireAnswerContinuationSupport,
   failedResponseId,
 } from "../src/react-app/domains/session/surface/response-actions";
@@ -51,6 +52,41 @@ function renderTranscript(isStreaming: boolean) {
 }
 
 describe("assistant response actions", () => {
+  for (const boundary of ["before", "prepare", "abort", "revert", "dispatch"]) {
+    test(`newer request during ${boundary} prevents subsequent retry mutations`, async () => {
+      const calls: string[] = [];
+      let current = boundary !== "before";
+      const step = async (name: string) => {
+        calls.push(name);
+        if (boundary === name) {
+          current = false;
+          if (name === "dispatch") throw new Error("older dispatch failed");
+        }
+      };
+      await expect(runAssistantResponseRetry({
+        isCurrent: () => current,
+        prepare: () => step("prepare"), abort: () => step("abort"), revert: () => step("revert"),
+        dispatch: () => step("dispatch"), restore: () => step("restore"),
+      })).rejects.toThrow(ResponseRetrySupersededError);
+      const steps = ["prepare", "abort", "revert", "dispatch"];
+      expect(calls).toEqual(steps.slice(0, steps.indexOf(boundary) + 1));
+    });
+  }
+
+  test("accepted older retry remains accepted without restoring over newer work", async () => {
+    const calls: string[] = [];
+    let current = true;
+    await runAssistantResponseRetry({
+      isCurrent: () => current,
+      prepare: async () => { calls.push("prepare"); },
+      abort: async () => { calls.push("abort"); },
+      revert: async () => { calls.push("revert"); },
+      dispatch: async () => { calls.push("dispatch"); current = false; },
+      restore: async () => { calls.push("restore"); },
+    });
+    expect(calls).toEqual(["prepare", "abort", "revert", "dispatch"]);
+  });
+
   for (const boundary of ["prepare", "abort", "revert", "dispatch"]) {
     test(`account switch during ${boundary} prevents subsequent retry mutations`, async () => {
       const calls: string[] = [];
@@ -62,6 +98,7 @@ describe("assistant response actions", () => {
         }
       };
       await expect(runAssistantResponseRetry({
+        isCurrent: () => true,
         prepare: () => step("prepare"), abort: () => step("abort"), revert: () => step("revert"),
         dispatch: () => step("dispatch"), restore: () => step("restore"),
       })).rejects.toThrow(AccountStateChangedError);
@@ -250,6 +287,7 @@ describe("assistant response actions", () => {
     const dispatchError = new Error("Selected model is unavailable.");
 
     await expect(runAssistantResponseRetry({
+      isCurrent: () => true,
       prepare: async () => { calls.push("prepare"); },
       abort: async () => { calls.push("abort"); },
       revert: async () => { calls.push("revert"); },
@@ -267,6 +305,7 @@ describe("assistant response actions", () => {
     const calls: string[] = [];
 
     await runAssistantResponseRetry({
+      isCurrent: () => true,
       prepare: async () => { calls.push("prepare"); return { jevReceipt: "scoped-receipt", answerOnly: true }; },
       abort: async () => { calls.push("abort"); },
       revert: async () => { calls.push("revert"); },
@@ -282,6 +321,7 @@ describe("assistant response actions", () => {
 
   test("retry reports when both dispatch and conversation restoration fail", async () => {
     await expect(runAssistantResponseRetry({
+      isCurrent: () => true,
       prepare: async () => undefined,
       abort: async () => undefined,
       revert: async () => undefined,
@@ -293,6 +333,7 @@ describe("assistant response actions", () => {
   test("cancelled Jev preparation leaves the original conversation untouched", async () => {
     const calls: string[] = [];
     await expect(runAssistantResponseRetry({
+      isCurrent: () => true,
       prepare: async () => { calls.push("prepare"); throw new Error("Message cancelled before model submission."); },
       abort: async () => { calls.push("abort"); },
       revert: async () => { calls.push("revert"); },

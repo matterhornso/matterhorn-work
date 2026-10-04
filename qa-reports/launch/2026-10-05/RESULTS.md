@@ -524,3 +524,31 @@ node scripts/product-hunt-deployment-probe.mjs \
 ```
 
 Update the expected commits to the approved candidate for deployment acceptance. No account, email, model request, wallet action or production configuration was created or changed by this probe. The public beta remains **not certified for launch**.
+
+## Retry ownership before conversation mutation
+
+Following `8052ecc4d5bd537d49766f8834b047c266a16a3d`, two mounted regressions reproduced an older failed retry issuing `/unrevert` after a newer request started in the same chat. Both newer-request states were affected: accepted and still waiting for an HTTP response. Two continuation controls passed. This is evidence of an inappropriate restore request, not a demonstration of actual hosted data loss.
+
+The retry transaction now requires a local request-ownership check alongside the existing account-generation check. It checks before preparation and before each subsequent abort, revert, dispatch and failure restore. A superseded retry stops without issuing another mutation. Successful dispatch remains accepted even if newer work started while its response was pending. Supersession is recorded as cancellation rather than a provider error and cannot cancel the newer operation. Ordinary failed dispatch still restores the original conversation when there is no newer operation; navigation alone does not suppress that recovery.
+
+Seven new unit cases cover supersession before preparation and after each asynchronous step, accepted dispatch, and exact-operation cancellation metrics. The focused response-action/cancellation suites pass **57 cases, zero failures, 161 assertions**. One initial test incorrectly expected the activity store's public status to be `busy`; the existing store maps that run status to `thinking`. The assertion now checks preservation of the entire activity record instead of inventing a public status. The production implementation was not changed for that fixture correction.
+
+The browser reproduction is `/tmp/matterhorn-retry-ownership-red-2026-10-05.log`: two retry failures and two passing continuation controls. The corrected focused run passes **10 cases, zero failures, 65 assertions**, including unchanged, navigated and returned retry flows. The final mounted suite additionally asserts the exact restore count for ordinary rejected retries and no restore for accepted ones.
+
+Final aggregate verification passes **136 mounted browser cases, zero failures, 829 assertions**; **1,486 frontend tests, zero failures, 8,597 assertions across 193 files**; typecheck; web build; and **all 11 platform-safety stages**, with terminal exit zero for each command. Existing bundle-size warnings remain.
+
+```sh
+bun test apps/app/tests/response-actions.test.tsx apps/app/tests/session-cancelled-approval.test.ts
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --test-name-pattern 'same chat late|pending retry' --timeout 120000
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+bun test apps/app/tests
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+pnpm test:matterhorn-platform-safety
+```
+
+Final logs use `/tmp/matterhorn-retry-ownership-`: `unit-final-2026-10-05.log`, `focused-2026-10-05.log`, `mounted-final-2026-10-05.log`, `app-final-2026-10-05.log`, `typecheck-2026-10-05.log`, `build-2026-10-05.log` and `safety-2026-10-05.log`. The initial `unit-2026-10-05.log` contains the documented activity-status assertion error and is not a final pass.
+
+This is local synthetic account/runtime evidence. The guard cannot retract an abort, revert, dispatch or restore already sent, and does not establish atomic server rollback protection against another tab/device, same-operation Stop cancellation during retry, or exact runtime-message correlation. Those remain separate reviews. Existing account, consent, attachments, drafts, layout and signing boundaries are preserved; Impeccable hardening and Uncodixfy introduced no visual redesign or new screenshot certification. No real provider call, hosted configuration change, push, merge or deployment occurred.
+
+Next review: exercise retry cancellation and mutations already in flight, then authoritative server ordering for competing clients. The gateway currently forwards abort/revert/unrevert under workspace authorization; the local ownership check is not a server revision or transaction claim. Repeated Stop ordering, message-to-metric correlation, native image-decoding bounds and the previously recorded hosted operational gates also remain unverified.

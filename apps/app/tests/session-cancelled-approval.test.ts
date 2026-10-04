@@ -3,6 +3,7 @@ import { recordSessionSubmissionFailure } from "../src/react-app/domains/session
 import { useSessionActivityStore } from "../src/react-app/domains/session/status/session-activity-store";
 import { useComposerStateStore } from "../src/react-app/domains/session/surface/composer-state-store";
 import { JevPreparationCancelledError } from "../src/react-app/domains/session/surface/use-jev-chat";
+import { ResponseRetrySupersededError } from "../src/react-app/domains/session/surface/response-actions";
 import {
   beginModelOperation, clearModelOperationMetrics, pendingModelOperation,
   readModelOperationMetrics, recordModelOperationCancelled, recordModelOperationCompleted,
@@ -81,4 +82,17 @@ test("cancellation of a newer request removes that request rather than the oldes
   recordSessionSubmissionFailure(older, cancelled);
   expect(pendingModelOperation(sessionId)).toBeNull();
   expect(readModelOperationMetrics().filter(metric => metric.event === "cancelled").map(metric => metric.operationId)).toEqual([newer.id, older.id]);
+});
+
+test("superseded retry is cancelled without a provider error or cancelling newer work", () => {
+  const older = beginModelOperation({ workspaceId, sessionId, source: "chat" });
+  const newer = beginModelOperation({ workspaceId, sessionId, source: "chat" });
+  useSessionActivityStore.getState().setRunStatus(workspaceId, sessionId, { type: "busy" });
+  const before = useSessionActivityStore.getState().recordsByWorkspaceId[workspaceId][sessionId];
+  const parsed = recordSessionSubmissionFailure(older, new ResponseRetrySupersededError());
+  expect(parsed).toEqual({ message: "A newer request replaced this retry.", kind: "cancelled", retryable: false });
+  expect(pendingModelOperation(sessionId)).toEqual(newer);
+  expect(useSessionActivityStore.getState().recordsByWorkspaceId[workspaceId][sessionId]).toEqual(before);
+  expect(readModelOperationMetrics().filter(metric => metric.event === "provider_error")).toHaveLength(0);
+  expect(readModelOperationMetrics().filter(metric => metric.operationId === older.id && metric.event === "cancelled")).toHaveLength(1);
 });

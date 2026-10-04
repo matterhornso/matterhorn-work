@@ -630,6 +630,7 @@ for (const earlier of ["retry", "continue"]) {
         await oldResponse;
         await page.waitForTimeout(250);
         expect((await editor.innerText()).trim()).toBe("Keep the newest draft");
+        if (earlier === "retry") expect(requests.filter(request => request.path.endsWith("/unrevert"))).toEqual([]);
         expect(await page.locator('[data-matterhorn-session-error]').filter({ hasText: "Synthetic delayed dispatch failed" }).count()).toBe(0);
         expect(await page.locator('[aria-label="Error"][title="Error"]').count()).toBe(0);
         expect(await page.evaluate(start => {
@@ -766,6 +767,9 @@ for (const operation of ["send", "retry", "continue"]) {
           await response;
           await page.waitForTimeout(350);
           expect(promptRequests.filter(request => request.stage === "dispatch")).toHaveLength(1);
+          if (operation === "retry") {
+            expect(requests.filter(request => request.path.endsWith("/unrevert"))).toHaveLength(rejected ? 1 : 0);
+          }
           expect((await editor.innerText()).trim()).toBe("Keep current draft");
           expect(await page.getByText("current.txt", { exact: true }).count()).toBe(1);
           const error = page.locator('[data-matterhorn-session-error]');

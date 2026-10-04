@@ -101,7 +101,7 @@ import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from ".
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
-import { failedResponseId, resolveAssistantResponseRetryTurn, restoreResponseRetryAttachments, ResponseRetryAttachmentError, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
+import { failedResponseId, resolveAssistantResponseRetryTurn, restoreResponseRetryAttachments, ResponseRetryAttachmentError, ResponseRetrySupersededError, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
 import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionActivityStatus } from "../status/session-activity-store";
 import { deriveOpenTargets, selectAutoOpenTarget, type OpenTarget } from "../artifacts/open-target";
 import {
@@ -1041,6 +1041,9 @@ export function findPrivacyPreflightInError(value: unknown, depth = 0): Matterho
 }
 
 export function parseSessionError(thrown: unknown): SessionError {
+  if (thrown instanceof ResponseRetrySupersededError) {
+    return { message: thrown.message, kind: "cancelled", retryable: false };
+  }
   if (thrown instanceof ResponseRetryAttachmentError) {
     return { message: thrown.message, kind: "generic", retryable: false };
   }
@@ -2552,6 +2555,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       if (!prompt && retryAttachments.length === 0) throw new Error("This turn has no saved prompt to retry. Send a new message from the composer.");
       let resolvedText = addBittensorContextToResolvedText(prompt, bittensorContext);
       await runAssistantResponseRetry({
+        isCurrent: () => isLatestModelOperation(operation),
         prepare: () => jevChat.prepare({ ...buildDraft(prompt, retryAttachments, { resolvedText, privacyConsentToken }),
           ...(prompt === MATTERHORN_CONTINUE_ANSWER_TEXT ? { answerOnly: true } : {}),
         }),
