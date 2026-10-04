@@ -4,7 +4,7 @@ import { SessionPreparationRegistry } from "./session-preparation.js";
 const scope = { workspaceId: "workspace", sessionId: "chat", subjectId: "user:first" };
 
 test("Stop cancels only admitted preparations for the exact authenticated scope", async () => {
-  const registry = new SessionPreparationRegistry();
+  const registry = new SessionPreparationRegistry(() => {});
   for (const other of [scope, { ...scope, workspaceId: "other" },
     { ...scope, sessionId: "other" }, { ...scope, subjectId: "user:other" }]) {
     const request = new Request("http://local.test");
@@ -18,7 +18,7 @@ test("Stop cancels only admitted preparations for the exact authenticated scope"
 });
 
 test("Stop invalidates overlapping preparations, but not a fresh explicit request", async () => {
-  const registry = new SessionPreparationRegistry();
+  const registry = new SessionPreparationRegistry(() => {});
   const first = new Request("http://local.test/first");
   const second = new Request("http://local.test/second");
   await registry.run(scope, first, async () => registry.run(scope, second, async () => {
@@ -32,7 +32,7 @@ test("Stop invalidates overlapping preparations, but not a fresh explicit reques
 });
 
 test("Disconnect blocks preparation and completion always unregisters", async () => {
-  const registry = new SessionPreparationRegistry();
+  const registry = new SessionPreparationRegistry(() => {});
   const controller = new AbortController();
   const request = new Request("http://local.test", { signal: controller.signal });
   await expect(registry.run(scope, request, async () => {
@@ -47,7 +47,7 @@ test("Disconnect blocks preparation and completion always unregisters", async ()
 });
 
 test("A Stop after dispatch does not retroactively reject an accepted response", async () => {
-  const registry = new SessionPreparationRegistry();
+  const registry = new SessionPreparationRegistry(() => {});
   const request = new Request("http://local.test");
   await expect(registry.run(scope, request, async () => {
     registry.assertActive(request);
@@ -55,4 +55,28 @@ test("A Stop after dispatch does not retroactively reject an accepted response",
     registry.stop(scope);
     return "accepted";
   })).resolves.toBe("accepted");
+});
+
+test("Every preparation checkpoint rechecks the admitted request's authority", async () => {
+  const request = new Request("http://local.test");
+  let allowed = true;
+  let checks = 0;
+  const registry = new SessionPreparationRegistry(candidate => {
+    expect(candidate).toBe(request);
+    checks += 1;
+    if (!allowed) throw new Error("Access revoked");
+  });
+  await expect(registry.run(scope, request, async () => {
+    registry.assertActive(request);
+    allowed = false;
+    registry.assertActive(request);
+  })).rejects.toThrow("Access revoked");
+  expect(checks).toBe(3);
+  allowed = true;
+  registry.stop(scope);
+  expect(() => registry.assertActive(request)).not.toThrow();
+  allowed = false;
+  let prepared = false;
+  await expect(registry.run(scope, request, async () => { prepared = true; })).rejects.toThrow("Access revoked");
+  expect(prepared).toBe(false);
 });

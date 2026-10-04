@@ -611,3 +611,33 @@ Evidence uses `/tmp/matterhorn-gateway-stop-`: `red2-2026-10-05.log` is the stab
 The registry is per server instance and covers preparations already admitted there. It is **not** a distributed cancellation epoch, cross-process lock or atomic session revision. An old Stop arriving after a newer preparation is admitted can still target that session, and this does not retract an already-forwarded abort/revert/unrevert. Cross-instance ordering, precise Stop targeting, mutations already in flight and provider-side cancellation remain open. Raw command transport failure/accounting and authority revocation during alternate-route preparation need separate review. All new HTTP traffic, accounts, models and runtime responses are disposable/local or synthetic. No frontend redesign, fresh rendered acceptance, hosted inference, email delivery, backup restore, production configuration, push, merge or deployment is claimed.
 
 Next review: exercise the alternate submission routes under authority revocation during preparation, then authoritative mutation/Stop ordering across clients and gateway instances. Keep the broader launch gates above open.
+
+## Authority revocation during model preparation
+
+Following local commit `f66dc8c08c260431c876736560df35fd9f08f11f`, a stabilized 30-case HTTP matrix reproduced **eight unauthorized dispatches**, with 22 passing controls. Hosted compaction still dispatched after sign-out or a workspace change during its later agent check. Operator-token prompts, commands and summaries still dispatched after revocation during either early or later agent lookup. Hosted ordinary messages already blocked those inference cases. Hosted users are denied raw inference routes at entry; that boundary remains unchanged.
+
+Every preparation checkpoint now invokes the original request's existing authority check, in addition to the Stop/disconnect check. This does not reauthenticate under a different credential or replace the admitted principal. Existing rejection paths release undispatched usage reservations and clear unsent dispatch claims.
+
+Stricter checks then reproduced four permission writes after revocation despite the first correction preventing inference: two hosted message cases and two operator prompt/command cases. The permission-profile helper now requires a current-preparation callback and invokes it after asynchronous agent lookup, before updating permissions. All three callers supply the same authority/cancellation check. These are runtime permission mutations, not evidence of a completed unauthorized tool call or wallet action.
+
+### Authority verification
+
+The final focused group passes **133 tests, zero failures, 1,046 assertions**. It covers guarded mode `off` and `enforce`, hosted messages/compaction, owner/collaborator raw prompts/commands/summaries, early/later lookup, sign-out, workspace changes, revocation of the requesting or an unrelated token, unchanged controls and delayed accepted responses. A unit test requires authority validation on admission and at each preparation checkpoint. Revoked preparations make no subsequent runtime mutation in the tested windows and leave no pending usage hold.
+
+Already-dispatched requests retain their accounting state. Raw prompt/summary responses are withheld from revoked tokens without releasing the accepted request's hold. Commands acknowledge dispatch before the held runtime response, so later revocation does not rewrite that earlier acknowledgement. These synthetic delayed-response controls do not establish provider cancellation, actual billed usage or recovery after a lost command acknowledgement.
+
+Server typecheck and build pass. The broader backend suites pass **821 tests, zero failures, 5,710 assertions across six files**. The full safety log ends with **Matterhorn platform safety gate passed**, covering all 11 stages.
+
+```sh
+bun test apps/server/src/session-preparation.test.ts apps/server/src/session-read-model.e2e.test.ts --test-name-pattern 'submission authority|Every preparation' --timeout 15000
+bun test apps/server/src/session-preparation.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/approvals.test.ts apps/server/src/model-usage-store.test.ts apps/server/src/token-authority.e2e.test.ts apps/server/src/auth.e2e.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+```
+
+Evidence uses `/tmp/matterhorn-submission-authority-`: `red2-2026-10-05.log` records the eight dispatch failures; `mutations-red-2026-10-05.log` records the four permission-update failures after the initial correction; `focused-final-2026-10-05.log` records the final 133-case matrix; and `build-2026-10-05.log` records the serial typecheck/build. The first `red` log contains fixture errors: raw inference is correctly unavailable to hosted accounts, and a workspace change is rejected with 403 rather than the fixture's expected 404. Those are not additional application defects. No restriction was relaxed to reach an otherwise forbidden route; raw-route tests use separately issued disposable operator tokens.
+
+The final broader-suite and safety logs are `/tmp/matterhorn-submission-authority-backend-2026-10-05.log` and `/tmp/matterhorn-submission-authority-safety-2026-10-05.log`.
+
+No frontend source, existing preview/chat, real provider, production account/configuration, wallet, push, merge or deployment was changed. The documentation distinguishes local gateway/auth/storage checks from hosted acceptance. Cross-instance authority propagation and mutation ordering, precise Stop targeting, raw command transport-failure accounting, privacy-preflight response lifetime and the broader launch gates remain open. Source review identified a possible workspace-alias cancellation identity mismatch; reproduce that next, then review the authoritative session mutation boundary across clients and instances. Do not infer full platform safety from this matrix.

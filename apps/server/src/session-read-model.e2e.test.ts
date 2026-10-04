@@ -201,6 +201,7 @@ function startMockOpencode(input?: {
   invalidList?: boolean;
   holdCommand?: Promise<void>;
   holdPrompt?: Promise<void>;
+  holdSummary?: Promise<void>;
   holdPermission?: Promise<void>;
   beforeMessages?: () => Promise<void>;
   onAbort?: () => void;
@@ -457,6 +458,7 @@ function startMockOpencode(input?: {
       }
 
       if (url.pathname === "/session/ses_1/summarize" && request.method === "POST") {
+        await input?.holdSummary;
         return Response.json({ ok: true });
       }
 
@@ -560,7 +562,7 @@ async function waitUntil(predicate: () => boolean) {
 }
 
 async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Promise<void>, holdEvent?: Promise<void>,
-  responseForRequest?: (pathname: string) => Response | undefined) {
+  responseForRequest?: (pathname: string) => Response | undefined, hardModelUsageLimit?: number) {
   const workspaceRoot = await createWorkspaceRoot();
   process.env.MATTERHORN_AUTH_DB = join(workspaceRoot, "accounts.db");
   process.env.MATTERHORN_WORK_DATA_DIR = join(workspaceRoot, "data");
@@ -573,7 +575,7 @@ async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Pro
   process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET = "disposable-session-read-integrity-secret";
   const mock = startMockOpencode({ beforeRead, holdEvent, responseForRequest, sessionMessages: defaultSessionMessages() });
   const openwork = await startOpenworkServer({ workspaceRoot,
-    opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+    opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false, hardModelUsageLimit });
   const base = `http://127.0.0.1:${openwork.server.port}`;
   const signup = await fetch(`${base}/api/auth/sign-up/email`, {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -610,7 +612,7 @@ async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Pro
       })).status).toBe(200);
     }
   };
-  return { base, workspaceId, cookie, accessToken: credential.accessToken, revoke,
+  return { base, workspaceId, workspaceRoot, cookie, accessToken: credential.accessToken, revoke,
     streamAborts: mock.streamAborts, runtimeRequests: mock.requests };
 }
 
@@ -2044,6 +2046,133 @@ describe("workspace session read APIs", () => {
     });
     expect(JSON.stringify(ledgerBody)).not.toContain("Summarize this workspace");
   });
+
+  for (const { action, runtimeMode } of ["off", "enforce"].flatMap(runtimeMode =>
+    ["messages", "compact"].map(action => ({ action, runtimeMode })))) {
+    for (const boundary of ["first-agent", "second-agent"]) {
+      for (const change of ["cookie-revoked", "workspace-changed", "unchanged"]) {
+        test(`submission authority ${runtimeMode} ${action} ${boundary} ${change} is checked before runtime dispatch`, async () => {
+          process.env.MATTERHORN_GUARDED_RUNTIME_MODE = runtimeMode;
+          process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "isolated-submission-authority-runtime-fixture";
+          const gate = deferred();
+          let reading = false;
+          let agentReads = 0;
+          let reached = false;
+          const app = await createReadAuthorityFixture(async (pathname) => {
+            if (!reading || pathname !== "/agent") return;
+            agentReads += 1;
+            if (agentReads === (boundary === "first-agent" ? 1 : 2)) {
+              reached = true;
+              await gate.promise;
+            }
+          }, undefined, undefined, 1000);
+          const target = action === "messages" ? "prompt_async" : "summarize";
+          const path = `/workspace/${app.workspaceId}/sessions/ses_1/${action}`;
+          const body = { model: { providerID: "ollama", modelID: "local-private" }, parts: [{ type: "text", text: "Synthetic authority check" }] };
+          reading = true;
+          const pending = fetch(`${app.base}${path}`, { method: "POST",
+            headers: { Cookie: app.cookie, "Content-Type": "application/json" }, body: JSON.stringify(body),
+          });
+          try {
+            expect(await waitUntil(() => reached)).toBe(true);
+            const requestBoundary = app.runtimeRequests.length;
+            await app.revoke(change);
+            gate.resolve();
+            const response = await pending;
+            const dispatches = () => app.runtimeRequests.filter(request => request.method === "POST"
+              && request.pathname === `/session/ses_1/${target}`).length;
+            if (change === "unchanged") expect(await waitUntil(() => dispatches() === 1)).toBe(true);
+            expect(dispatches()).toBe(change === "unchanged" ? 1 : 0);
+            if (change !== "unchanged") expect(app.runtimeRequests.slice(requestBoundary)
+              .filter(request => request.method !== "GET")).toEqual([]);
+            expect(response.status).toBe(change === "cookie-revoked" ? 401 : change === "workspace-changed" ? 403 : 202);
+            const db = new Database(join(app.workspaceRoot, ".model-usage.db"), { readonly: true });
+            try {
+              expect(db.query("SELECT COUNT(*) AS count FROM model_usage_operations WHERE status = 'pending'").get()).toEqual({ count: change === "unchanged" ? 1 : 0 });
+            } finally { db.close(); }
+          } finally { gate.resolve(); await pending; }
+        }, 15000);
+      }
+    }
+  }
+
+  for (const { action, scope, runtimeMode } of ["off", "enforce"].flatMap(runtimeMode =>
+    ["owner", "collaborator"].flatMap(scope =>
+      ["prompt_async", "command", "summarize"].map(action => ({ action, scope, runtimeMode }))))) {
+    for (const boundary of ["first-agent", "second-agent", "accepted"]) {
+      for (const change of ["revoked", "other-revoked", "unchanged"]) {
+        test(`submission authority ${runtimeMode} ${scope} ${action} ${boundary} ${change} preserves dispatch ownership`, async () => {
+          process.env.MATTERHORN_GUARDED_RUNTIME_MODE = runtimeMode;
+          process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "isolated-submission-authority-runtime-fixture";
+          const workspaceRoot = await createWorkspaceRoot();
+          const gate = deferred();
+          let agentReads = 0;
+          let reached = false;
+          const mock = startMockOpencode({
+            holdPrompt: boundary === "accepted" && action === "prompt_async" ? gate.promise : undefined,
+            holdCommand: boundary === "accepted" && action === "command" ? gate.promise : undefined,
+            holdSummary: boundary === "accepted" && action === "summarize" ? gate.promise : undefined,
+            beforeRead: async (pathname) => {
+              if (boundary === "accepted" || pathname !== "/agent") return;
+              agentReads += 1;
+              if (agentReads === (boundary === "first-agent" ? 1 : 2)) {
+                reached = true;
+                await gate.promise;
+              }
+            },
+          });
+          const openwork = await startOpenworkServer({ workspaceRoot,
+            opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false, hardModelUsageLimit: 1000,
+          });
+          const base = `http://127.0.0.1:${openwork.server.port}`;
+          const hostHeaders = { "x-matterhorn-host-token": openwork.hostToken, "Content-Type": "application/json" };
+          const issue = async () => {
+            const response = await fetch(`${base}/tokens`, { method: "POST", headers: hostHeaders,
+              body: JSON.stringify({ scope, label: "Disposable submission authority" }),
+            });
+            expect(response.status).toBe(201);
+            const issued = await response.json();
+            if (typeof issued.id !== "string" || typeof issued.token !== "string") throw new Error("Missing disposable token");
+            return { id: issued.id, token: issued.token };
+          };
+          const actor = await issue();
+          const other = await issue();
+          const body = action === "command" ? { command: "explain", arguments: "Synthetic authority check", model: "ollama/local-private" }
+            : action === "summarize" ? { providerID: "ollama", modelID: "local-private" }
+            : { model: { providerID: "ollama", modelID: "local-private" }, parts: [{ type: "text", text: "Synthetic authority check" }] };
+          const pending = fetch(`${base}/w/ws_1/opencode/session/ses_1/${action}`, { method: "POST",
+            headers: { ...auth(actor.token), "Content-Type": "application/json" }, body: JSON.stringify(body),
+          });
+          try {
+            expect(await waitUntil(() => boundary === "accepted"
+              ? mock.requests.some(request => request.method === "POST" && request.pathname === `/session/ses_1/${action}`)
+              : reached)).toBe(true);
+            const requestBoundary = mock.requests.length;
+            if (change !== "unchanged") expect((await fetch(`${base}/tokens/${change === "revoked" ? actor.id : other.id}`, {
+              method: "DELETE", headers: hostHeaders,
+            })).status).toBe(200);
+            gate.resolve();
+            const response = await pending;
+            const dispatches = () => mock.requests.filter(request => request.method === "POST"
+              && request.pathname === `/session/ses_1/${action}`).length;
+            const dispatched = boundary === "accepted" || change !== "revoked";
+            if (dispatched) expect(await waitUntil(() => dispatches() === 1)).toBe(true);
+            expect(dispatches()).toBe(dispatched ? 1 : 0);
+            if (!dispatched) expect(mock.requests.slice(requestBoundary)
+              .filter(request => request.method !== "GET")).toEqual([]);
+            // Commands acknowledge dispatch immediately, before the held
+            // runtime response and this later revocation. Other raw routes
+            // withhold their response from a revoked principal.
+            expect(response.status).toBe(change === "revoked" && !(action === "command" && boundary === "accepted") ? 401 : 200);
+            const db = new Database(join(workspaceRoot, ".model-usage.db"), { readonly: true });
+            try {
+              expect(db.query("SELECT COUNT(*) AS count FROM model_usage_operations WHERE status = 'pending'").get()).toEqual({ count: dispatched ? 1 : 0 });
+            } finally { db.close(); }
+          } finally { gate.resolve(); await pending; }
+        }, 15000);
+      }
+    }
+  }
 
   for (const { runtimeMode, boundary } of ["off", "enforce"].flatMap(runtimeMode =>
     ["agent", "permission", "accepted", "padded-session"].map(boundary => ({ runtimeMode, boundary })))) {

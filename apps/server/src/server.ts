@@ -1460,7 +1460,7 @@ export async function startServer(
   dependencies: MatterhornServerDependencies = {},
 ): Promise<ServeResult> {
   const approvals = new ApprovalService(config.approval);
-  const sessionPreparations = new SessionPreparationRegistry();
+  const sessionPreparations = new SessionPreparationRegistry(assertRequestAccessCurrent);
   const reloadEvents = new ReloadEventStore();
   const tokens = new TokenService(config);
   const authStore = new MatterhornAuthStore();
@@ -2560,6 +2560,7 @@ async function ensureMatterhornSessionPermissionProfile(input: {
   config: ServerConfig;
   workspace: WorkspaceInfo;
   sessionId: string;
+  assertCurrent: () => void;
   agentId?: string;
   expectedAgentId?: string;
   expectedAgentPromptHash?: string;
@@ -2574,6 +2575,7 @@ async function ensureMatterhornSessionPermissionProfile(input: {
         expectedAgentPromptHash: input.expectedAgentPromptHash,
       })
     : await resolveMatterhornSessionAgentContext(input);
+  input.assertCurrent();
   const { opencode, directory, session } = context;
   const agentPermission = normalizeMatterhornPermissionRules(context.agent.permission);
   const profile = buildMatterhornSessionPermissionProfile({
@@ -3300,6 +3302,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
           config: input.config,
           workspace,
           sessionId,
+          assertCurrent: () => input.sessionPreparations.assertActive(input.request),
           agentId: agentContext.agentId,
           expectedAgentId: agentContext.agentId,
           expectedAgentPromptHash: agentContext.promptHash,
@@ -3456,6 +3459,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
       await ensureMatterhornSessionPermissionProfile({
         config: input.config,
         ...promptPermissionRequest,
+        assertCurrent: () => input.sessionPreparations.assertActive(input.request),
       });
     } catch (error) {
       input.modelUsageStore?.cancel(usageReservationId);
@@ -16237,6 +16241,7 @@ function createRoutes(
           config,
           workspace,
           sessionId,
+          assertCurrent: () => sessionPreparations.assertActive(ctx.request),
           agentId: agent,
           expectedAgentId: agentContext.agentId,
           expectedAgentPromptHash: agentContext.promptHash,

@@ -6,10 +6,12 @@ export interface SessionPreparationScope {
   subjectId: string;
 }
 
-// Tracks admitted, in-process preparations, not accepted runtime work. This is
-// deliberately separate from auth revocation and from provider cancellation.
+// Tracks admitted, in-process preparations, not accepted runtime work. Every
+// checkpoint rechecks the original principal as well as explicit cancellation.
 export class SessionPreparationRegistry {
   private readonly pending = new Map<Request, { scope: SessionPreparationScope; stopped: boolean }>();
+
+  constructor(private readonly assertAccess: (request: Request) => void) {}
 
   async run<T>(scope: SessionPreparationScope, request: Request, prepare: () => Promise<T>): Promise<T> {
     const entry = { scope, stopped: false };
@@ -23,6 +25,7 @@ export class SessionPreparationRegistry {
   }
 
   assertActive(request: Request): void {
+    this.assertAccess(request);
     if (request.signal.aborted || this.pending.get(request)?.stopped) {
       throw new ApiError(403, "write_denied", "Request stopped before model dispatch.", { reason: "cancelled" });
     }
