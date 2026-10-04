@@ -93,6 +93,7 @@ export default {
   "composer.default_agent": "Default agent",
   "composer.file_exceeds_limit": "{name} exceeds the {limit} MB limit.",
   "composer.file_prepare_failed": "Could not prepare {name}. Try another file.",
+  "composer.preparing_attachments": "Preparing attachments. You can send when they are ready.",
   "composer.more_files_skipped": "Other files not attached: {count}.",
   "composer.file_kind": "File",
   "composer.image_kind": "Image",

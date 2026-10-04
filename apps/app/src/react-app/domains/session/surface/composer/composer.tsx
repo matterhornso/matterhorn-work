@@ -93,6 +93,7 @@ type ComposerProps = {
   onModelChange: (model: ModelRef) => void;
   attachments: ComposerAttachment[];
   onAttachFiles: (files: File[]) => void;
+  onAttachmentPreparationChange?: (pending: boolean) => void;
   onRemoveAttachment: (id: string) => void;
   attachmentsEnabled: boolean;
   attachmentsDisabledReason: string | null;
@@ -479,12 +480,21 @@ export function ReactSessionComposer(props: ComposerProps) {
   const imeComposingRef = useRef(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const isCurrentAccount = useRef(captureAccountGeneration()).current;
-  const attachmentLifetimeRef = useRef<{ active: boolean } | null>(null);
+  const [preparingAttachments, setPreparingAttachments] = useState(false);
+  const preparationChangeRef = useRef(props.onAttachmentPreparationChange);
   useLayoutEffect(() => {
-    const lifetime = { active: true };
+    preparationChangeRef.current = props.onAttachmentPreparationChange;
+  }, [props.onAttachmentPreparationChange]);
+  const attachmentLifetimeRef = useRef<{ active: boolean; pending: number } | null>(null);
+  useLayoutEffect(() => {
+    const lifetime = { active: true, pending: 0 };
     attachmentLifetimeRef.current = lifetime;
+    setPreparingAttachments(false);
     // A return to the same chat or permission state must not revive old work.
-    return () => { lifetime.active = false; };
+    return () => {
+      lifetime.active = false;
+      preparationChangeRef.current?.(false);
+    };
   }, [props.draftScopeKey, props.attachmentsEnabled]);
   const draftRef = useRef(props.draft);
   useEffect(() => {
@@ -850,6 +860,11 @@ export function ReactSessionComposer(props: ComposerProps) {
     return readiness.visible ? [{ entry, readiness }] : [];
   });
   const canSend = props.draft.trim().length > 0 || props.attachments.length > 0;
+  const sendDisabled = preparingAttachments || (props.sendDisabled ?? props.disabled);
+  const sendPreparedDraft = () => {
+    if (attachmentLifetimeRef.current?.pending || !isCurrentAccount() || sendDisabled) return;
+    return props.onSend();
+  };
 
   useEffect(() => {
     if (!toolMenuSection.startsWith("plugin:")) return;
@@ -1028,7 +1043,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   const addAttachments = async (inputFiles: File[]) => {
     const lifetime = attachmentLifetimeRef.current;
     const isCurrent = () => Boolean(lifetime?.active) && isCurrentAccount();
-    if (!inputFiles.length || !isCurrent()) return;
+    if (!inputFiles.length || !lifetime || !isCurrent()) return;
     if (!props.attachmentsEnabled) {
       props.onNotice({
         title: props.attachmentsDisabledReason ?? t("composer.attachments_unavailable"),
@@ -1039,45 +1054,54 @@ export function ReactSessionComposer(props: ComposerProps) {
 
     const accepted: File[] = [];
     const warnings: string[] = [];
-
-    for (const original of inputFiles) {
-      if (!isCurrent()) return;
-      try {
-        const processed = original.type.startsWith("image/") ? await compressImageFile(original) : original;
+    lifetime.pending++;
+    setPreparingAttachments(true);
+    preparationChangeRef.current?.(true);
+    try {
+      for (const original of inputFiles) {
         if (!isCurrent()) return;
-        if (processed.size > CHAT_ATTACHMENT_MAX_BYTES) {
-          warnings.push(t("composer.file_exceeds_limit", {
-            name: processed.name || original.name, limit: CHAT_ATTACHMENT_MAX_BYTES / 1_000_000,
-          }));
-          continue;
+        try {
+          const processed = original.type.startsWith("image/") ? await compressImageFile(original) : original;
+          if (!isCurrent()) return;
+          if (processed.size > CHAT_ATTACHMENT_MAX_BYTES) {
+            warnings.push(t("composer.file_exceeds_limit", {
+              name: processed.name || original.name, limit: CHAT_ATTACHMENT_MAX_BYTES / 1_000_000,
+            }));
+            continue;
+          }
+          accepted.push(processed);
+        } catch {
+          if (!isCurrent()) return;
+          warnings.push(t("composer.file_prepare_failed", { name: original.name }));
         }
-        accepted.push(processed);
-      } catch {
-        if (!isCurrent()) return;
-        warnings.push(t("composer.file_prepare_failed", { name: original.name }));
+      }
+
+      if (!isCurrent()) return;
+      if (accepted.length) {
+        props.onAttachFiles(accepted);
+        props.onNotice({
+          title:
+            accepted.length === 1
+              ? t("composer.uploaded_single_file", { name: accepted[0]?.name ?? t("composer.file_kind") })
+              : t("composer.uploaded_multiple_files", { count: accepted.length }),
+          tone: "success",
+        });
+      }
+
+      if (warnings.length) {
+        props.onNotice({
+          title: warnings[0],
+          description: warnings.length > 1 ? t("composer.more_files_skipped", { count: warnings.length - 1 }) : undefined,
+          tone: "warning",
+        });
+      }
+    } finally {
+      lifetime.pending--;
+      if (isCurrent()) {
+        setPreparingAttachments(lifetime.pending > 0);
+        preparationChangeRef.current?.(lifetime.pending > 0);
       }
     }
-
-    if (!isCurrent()) return;
-    if (accepted.length) {
-      props.onAttachFiles(accepted);
-      props.onNotice({
-        title:
-          accepted.length === 1
-            ? t("composer.uploaded_single_file", { name: accepted[0]?.name ?? t("composer.file_kind") })
-            : t("composer.uploaded_multiple_files", { count: accepted.length }),
-        tone: "success",
-      });
-    }
-
-    if (warnings.length) {
-      props.onNotice({
-        title: warnings[0],
-        description: warnings.length > 1 ? t("composer.more_files_skipped", { count: warnings.length - 1 }) : undefined,
-        tone: "warning",
-      });
-    }
-
   };
 
   const activeMcpItems = mcpServers.map((entry) => ({
@@ -1222,6 +1246,7 @@ export function ReactSessionComposer(props: ComposerProps) {
         >
           {props.topAccessory ? <div className="relative z-10 px-3 pt-3 sm:px-4">{props.topAccessory}</div> : null}
           <ReactComposerNotice notice={props.notice} />
+          {preparingAttachments ? <p role="status" className="px-3 pt-3 text-sm text-dls-text sm:px-4">{t("composer.preparing_attachments")}</p> : null}
 
           {renderMentionMenu()}
           {renderSlashMenu()}
@@ -1285,7 +1310,7 @@ export function ReactSessionComposer(props: ComposerProps) {
               disabled={props.disabled}
               placeholder={props.placeholder ?? t("composer.placeholder")}
               onChange={props.onDraftChange}
-              onSubmit={props.onSend}
+              onSubmit={sendPreparedDraft}
               onExpandPastedText={handleExpandPastedText}
               onPasteText={props.onPasteText}
               onPaste={(event) => {
@@ -1679,10 +1704,10 @@ export function ReactSessionComposer(props: ComposerProps) {
                 {!props.busy || (canSend && !props.sendDisabled && !props.disabled) ? (
                   <button
                     type="button"
-                    onClick={canSend ? () => props.onSend() : props.busy ? () => props.onStop() : undefined}
-                    disabled={(props.sendDisabled ?? props.disabled) || (!canSend && !props.busy)}
+                    onClick={canSend ? sendPreparedDraft : props.busy ? () => props.onStop() : undefined}
+                    disabled={sendDisabled || (!canSend && !props.busy)}
                     className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium transition-colors ${
-                      !canSend || (props.sendDisabled ?? props.disabled)
+                      !canSend || sendDisabled
                         ? "bg-dls-hover/35 text-dls-secondary/65"
                         : "bg-[var(--dls-accent)] text-[var(--dls-accent-fg)] hover:bg-[var(--dls-accent-hover)]"
                     }`}

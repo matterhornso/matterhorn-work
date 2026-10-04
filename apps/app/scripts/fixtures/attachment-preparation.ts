@@ -6,7 +6,14 @@ export async function delayImagePreparation(page: Page) {
     const decode = window.createImageBitmap.bind(window);
     Object.defineProperty(window, "createImageBitmap", { configurable: true, value: async (image: Blob) => {
       document.documentElement.dataset.imagePreparing = "true";
-      await new Promise<void>(resolve => window.addEventListener("qa-release-image", () => resolve(), { once: true }));
+      await new Promise<void>(resolve => {
+        const release = (event: Event) => {
+          if (event instanceof CustomEvent && event.detail && (!(image instanceof File) || event.detail !== image.name)) return;
+          window.removeEventListener("qa-release-image", release);
+          resolve();
+        };
+        window.addEventListener("qa-release-image", release);
+      });
       try {
         const bitmap = await decode(image);
         const close = bitmap.close.bind(bitmap);
@@ -23,8 +30,11 @@ export async function delayImagePreparation(page: Page) {
   });
 }
 
-export async function releaseImagePreparation(page: Page) {
-  await page.evaluate(() => window.dispatchEvent(new Event("qa-release-image")));
+export async function releaseImagePreparation(page: Page, filename?: string) {
+  await page.evaluate(name => {
+    delete document.documentElement.dataset.imageSettled;
+    window.dispatchEvent(new CustomEvent("qa-release-image", { detail: name }));
+  }, filename);
   await page.waitForFunction(() => document.documentElement.dataset.imageSettled === "true");
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 }

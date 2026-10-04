@@ -17,6 +17,9 @@ let signedIn = true;
 let forked = false;
 let action: "fork" | "revert" = "fork";
 let rejectAction = false;
+let promptFailure: "preflight" | "dispatch" | null = null;
+let promptFixture = false;
+const promptRequests: Array<{ stage: string; body: unknown }> = [];
 const session = (id: string) => ({
   id,
   slug: id,
@@ -209,6 +212,15 @@ beforeAll(async () => {
           },
         );
       requests.push({ path, method: request.method });
+      if (promptFixture && request.method === "POST" && (path.endsWith("/messages/preflight") || path.endsWith("/messages"))) {
+        const stage = path.endsWith("/preflight") ? "preflight" : "dispatch";
+        promptRequests.push({ stage, body: await request.json() });
+        if (promptFailure === stage) return Response.json({
+          code: "attachments_too_large", message: "Remove a file and try again. Synthetic attachment rejection.",
+        }, { status: 413 });
+        if (stage === "preflight") return Response.json({ decision: "allow", reason: "Synthetic fixture only" });
+        return Response.json({ accepted: true }, { status: 202 });
+      }
       if (path === "/v1/me")
         return signedIn
           ? Response.json({
@@ -356,10 +368,80 @@ beforeEach(() => {
   signedIn = true;
   forked = false;
   rejectAction = false;
+  promptFailure = null;
+  promptFixture = false;
+  promptRequests.length = 0;
   requests.length = 0;
 });
 
 const operations: Array<"fork" | "revert"> = ["fork", "revert"];
+for (const failure of ["preflight", "dispatch"] satisfies Array<"preflight" | "dispatch">) {
+  for (const withText of [false, true]) {
+    test(`mounted attachment ${failure} rejection preserves ${withText ? "text and files" : "files only"} for retry`, async () => {
+      promptFixture = true;
+      promptFailure = failure;
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      context.setDefaultTimeout(8000);
+      await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+      const page = await context.newPage();
+      try {
+        await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+        await page.getByRole("button", { name: "Change model", exact: true }).click();
+        await page.getByRole("option", { name: /Fixture model/ }).click();
+        const input = page.locator('input[type="file"]');
+        await input.setInputFiles({ name: "retry.txt", mimeType: "text/plain", buffer: Buffer.from("Disposable attachment") });
+        const editor = page.getByRole("textbox").first();
+        if (withText) await editor.fill("Summarize my attachment");
+        await page.getByRole("button", { name: "Ask", exact: true }).click();
+        await page.getByText(/Synthetic attachment rejection/).first().waitFor();
+        expect((await editor.innerText()).trim()).toBe(withText ? "Summarize my attachment" : "");
+        expect(await page.getByText("retry.txt", { exact: true }).count()).toBe(1);
+        expect(promptRequests.map(request => request.stage)).toEqual(failure === "preflight" ? ["preflight"] : ["preflight", "dispatch"]);
+        const failedRequest = promptRequests.at(-1)?.body;
+        expect(failedRequest).toMatchObject({ parts: expect.arrayContaining([
+          expect.objectContaining({ type: "file", filename: "retry.txt", url: "data:text/plain;base64,RGlzcG9zYWJsZSBhdHRhY2htZW50" }),
+        ]) });
+        promptFailure = null;
+        await page.getByRole("button", { name: "Retry response", exact: true }).last().click();
+        await page.getByText("retry.txt", { exact: true }).waitFor({ state: "hidden" });
+        expect((await editor.innerText()).trim()).toBe("");
+        expect(promptRequests.at(-1)?.body).toMatchObject({ parts: expect.arrayContaining([
+          expect.objectContaining({ type: "file", filename: "retry.txt", url: "data:text/plain;base64,RGlzcG9zYWJsZSBhdHRhY2htZW50" }),
+        ]) });
+        expect(promptRequests.filter(request => request.stage === "dispatch").length).toBe(failure === "preflight" ? 1 : 2);
+      } finally { await context.close(); }
+    }, 30000);
+  }
+}
+
+test("mounted preparation blocks the control action as well as the composer", async () => {
+  promptFixture = true;
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  context.setDefaultTimeout(8000);
+  await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+  const page = await context.newPage();
+  page.on("dialog", dialog => void dialog.accept());
+  try {
+    await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+    await page.getByRole("button", { name: "Change model", exact: true }).click();
+    await page.getByRole("option", { name: /Fixture model/ }).click();
+    await page.getByRole("textbox").first().fill("Summarize pending image");
+    await page.evaluate(() => window.__openworkControl?.setEnabled(true));
+    await delayImagePreparation(page);
+    await page.locator('input[type="file"]').setInputFiles(await delayedImage(page));
+    await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+    const blocked = await page.evaluate(() => window.__openworkControl?.execute("composer.send"));
+    expect(blocked?.ok).toBe(false);
+    expect(promptRequests).toEqual([]);
+    await releaseImagePreparation(page);
+    expect(promptRequests).toEqual([]);
+    await page.getByRole("button", { name: "Ask", exact: true }).click();
+    await page.getByText("pending.jpg", { exact: true }).waitFor({ state: "hidden" });
+    expect(promptRequests.at(-1)?.body).toMatchObject({ parts: expect.arrayContaining([
+      expect.objectContaining({ type: "file", filename: "pending.jpg" }),
+    ]) });
+  } finally { await context.close(); }
+}, 30000);
 for (const boundary of ["append", "remove", "navigate", "return", "cross-tab logout"]) {
   test(`mounted attachment preparation after ${boundary}`, async () => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });

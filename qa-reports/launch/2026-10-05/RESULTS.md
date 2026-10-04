@@ -240,4 +240,36 @@ Evidence logs use `/tmp/matterhorn-attachment-lifetime-`: `red2-2026-10-05.log`,
 
 Impeccable hardening and Uncodixfy kept the correction behavioral: no layout, copy, token or motion changes. No new screenshot round was needed for this correction; the preceding visual evidence is not extended into a new cross-browser or screen-reader claim. The automatic design hook reported no deterministic issues and continued reporting the pre-existing stale design sidecar; no unrequested metadata migration occurred.
 
-Next verify mounted send rejection/retry with attachments, including encoded-body and aggregate limits, and sending while image preparation is still pending. Resource ceilings for decoding, historical attachment rehydration and real-provider interpretation remain outside this correction. Hosted acceptance, actual two-account authorization, Safari/Firefox and assistive-technology checks remain open. No existing runtime/chat was restarted, and nothing was pushed, merged or deployed.
+Pending-preparation sends and mounted rejection/retry are addressed below. Combined browser-to-real-backend encoded-body/aggregate boundary testing remains open. Resource ceilings for decoding, historical attachment rehydration and real-provider interpretation remain outside this correction. Hosted acceptance, actual two-account authorization, Safari/Firefox and assistive-technology checks remain open. No existing runtime/chat was restarted, and nothing was pushed, merged or deployed.
+
+## Sending during attachment preparation and retry recovery
+
+Following `16f84786e503d750a3e97fe2e475d98fa6f61471`, four mounted composer cases reproduced an incomplete send: both button clicks and Enter dispatched the text before a selected image finished preparation, whether that preparation later succeeded or failed. Stop was already usable and its control passed. Preparation now has a scoped pending count, so Send/Enter wait for all current selections. The parent send path and control action also observe pending preparation. An inline status explains the wait while editing and Stop remain available. Completion never automatically sends a request. The new English status uses the existing locale fallback; native-language review remains unverified.
+
+The production shell, model picker, chat surface, file serialization and API client were then exercised against disposable same-origin HTTP responses. These checks preserved text/files after synthetic HTTP 413 responses at both preflight and dispatch, and explicit resending retained the exact attachment bytes. However, the error card's Retry response button failed in two attachment-only cases while both text-plus-file controls passed. Its guard incorrectly required nonempty text. The corrected guard admits either text or attachments while still rejecting a busy or empty composer. The mounted tests now use this actual retry button, not just Send, and verify the file is consumed only after acceptance.
+
+### Preparation and retry verification
+
+- Retro composer browser suite: **32 pass, zero fail, one optional capture skip, 145 assertions**, including six new cases for click/Enter, successful/corrupt preparation, Stop, and independently released overlapping selections. The existing lifetime, account-reset and fresh-selection controls remain green.
+- Legacy layout: **31 pass, zero fail, two skips, 135 assertions**. Skips are retro-only mobile navigation and optional launcher captures.
+- Mounted production shell suite: **36 pass, zero fail, 273 assertions**, including four real error-card retry cases and a pending-preparation control-action case. The latter selects the model through the real picker, proves the control action is disabled during preparation, and then explicitly sends the prepared file.
+- Frontend regressions: **1,456 pass, zero fail, 8,513 assertions across 193 files**. Frontend typecheck and web build pass. Existing bundle-size warnings remain.
+- The full platform safety gate passes all 11 stages with terminal exit zero.
+
+Initial mounted test attempts were blocked by the fixture's missing model selection; no product guard was bypassed. Tests were corrected to select the synthetic model through its accessible Change model control. A later empty-editor assertion was corrected to account for Lexical's newline-only empty DOM. Neither fixture issue is counted as a repaired product defect. The first full frontend run failed only on a source assertion demanding the old text-only retry guard. That assertion now documents the text-or-attachment condition, backed by the failing-then-passing mounted tests.
+
+One existing attachment capture was inspected as baseline, followed by one new batched capture round of the preparation state in light/dark at 390, 768 and 1280 px, with reduced motion and no horizontal overflow. The mobile light and desktop dark captures were visually inspected. Images are under `/tmp/matterhorn-preparing-send-captures-2026-10-05`. Fixture-only controls are outside the production composer. This is not full-app mobile, Safari/Firefox, native screen-reader, 200% zoom or installed desktop acceptance. Impeccable hardening and Uncodixfy preserved existing tokens and layout; the inline status avoids overlapping the existing floating notice. The automatic design hook found no deterministic issues. The existing stale design sidecar was not migrated.
+
+```sh
+RETRO_QA_FLAG=1 bun test apps/app/scripts/composer-submit.browser.test.ts --timeout 30000
+RETRO_QA_FLAG=0 bun test apps/app/scripts/composer-submit.browser.test.ts --timeout 30000
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+bun test apps/app/tests
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+pnpm test:matterhorn-platform-safety
+```
+
+Logs use `/tmp/matterhorn-preparing-send-`: `red-2026-10-05.log`, `retry-red-2026-10-05.log`, `browser-final-2026-10-05.log`, `legacy-2026-10-05.log`, `mounted-final-2026-10-05.log`, `app-final-2026-10-05.log`, `typecheck-final-2026-10-05.log`, `build-2026-10-05.log` and `safety-2026-10-05.log`. Add `PREPARATION_QA_CAPTURES=<disposable-directory>` to reproduce captures. Both browser suites are already invoked by CI. Logs and captures remain local evidence, not published artifacts.
+
+The mounted HTTP responses deliberately simulate rejection followed by acceptance of small files. They do not execute the backend's byte-budget implementation or establish that an actually oversized request can succeed unchanged. Backend size-limit tests are separate evidence. Next join the mounted browser with the real isolated server for wire/aggregate limits and privacy rejection, then inspect historical attachment recovery and control actions whose state changes during choreography. Native decoding resource ceilings/cancellation, real provider interpretation and hosted acceptance remain open. Nothing was pushed, merged or deployed, and existing previews/chats were untouched.

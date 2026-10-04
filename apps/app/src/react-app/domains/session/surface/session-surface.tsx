@@ -1590,6 +1590,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [error, setError] = useState<SessionError | null>(null);
   const [sending, setSending] = useState(false);
+  const [preparingAttachments, setPreparingAttachments] = useState(false);
+  const preparingAttachmentsRef = useRef(false);
+  const handleAttachmentPreparationChange = useCallback((pending: boolean) => {
+    preparingAttachmentsRef.current = pending;
+    setPreparingAttachments(pending);
+  }, []);
   const [confirmingPrivacy, setConfirmingPrivacy] = useState(false);
   const [clearingCoworker, setClearingCoworker] = useState(false);
   const [showDelayedLoading, setShowDelayedLoading] = useState(false);
@@ -2266,6 +2272,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   const sendDraft = useCallback(async (privacyConsentToken?: string) => {
     if (!isCurrentAccount()) return;
+    if (preparingAttachmentsRef.current) return;
     pendingContinuationRef.current = null;
     pendingRetryRef.current = null;
     const text = draft.trim();
@@ -2585,9 +2592,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
       try { await handleRetryAssistantResponse(failedContinuation); } catch { /* The retry error is already visible. */ }
       return;
     }
-    if (sending || !draft.trim()) return;
+    if (sending || (!draft.trim() && attachments.length === 0)) return;
     await handleSend();
-  }, [continueAssistantResponse, currentSnapshot, draft, handleRetryAssistantResponse, handleSend, props.sessionId, renderedMessages, sending]);
+  }, [attachments.length, continueAssistantResponse, currentSnapshot, draft, handleRetryAssistantResponse, handleSend, props.sessionId, renderedMessages, sending]);
 
   const handleSaveAssistantResponse = useCallback(async (messageId: string, content: string): Promise<OpenTarget> => {
     if (!content.trim()) throw new Error("This response has no content to save.");
@@ -3204,6 +3211,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     description: "Send the currently visible composer draft to the active session.",
     sideEffect: "mutation",
     disabled:
+      preparingAttachments ||
       (Boolean(props.modelUnavailable) && !localReviewedActionReady) ||
       (!draft.trim() && attachments.length === 0) ||
       model.transitionState !== "idle",
@@ -3212,7 +3220,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       await handleSend();
       return true;
     },
-  }), [attachments.length, draft, handleSend, localReviewedActionReady, model.transitionState, props.modelUnavailable]);
+  }), [attachments.length, draft, handleSend, localReviewedActionReady, model.transitionState, preparingAttachments, props.modelUnavailable]);
   useControlAction(composerSendControlAction);
 
   const composerStopControlAction = useMemo<MatterhornControlAction>(() => ({
@@ -3685,6 +3693,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         <DevProfiler id="SessionComposer">
         <ReactSessionComposer
           draftScopeKey={JSON.stringify([props.workspaceId, props.sessionId])}
+          onAttachmentPreparationChange={handleAttachmentPreparationChange}
           draft={draft}
           placeholder={privateAiActive ? "Message Private AI…" : undefined}
           mentions={mentions}

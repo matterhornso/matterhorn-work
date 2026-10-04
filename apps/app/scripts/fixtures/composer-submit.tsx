@@ -102,7 +102,10 @@ function Fixture() {
   const params = new URLSearchParams(location.search);
   const send = (privacyConsentToken?: unknown) => {
     try {
-      setResult(JSON.stringify({ parts: [{ type: "text", text: draft }], privacyConsentToken }));
+      setResult(JSON.stringify({ parts: [
+        { type: "text", text: draft },
+        ...attachments.map(file => ({ type: "file", filename: file.name })),
+      ], privacyConsentToken }));
     } catch {
       setResult("serialization_failed");
     }

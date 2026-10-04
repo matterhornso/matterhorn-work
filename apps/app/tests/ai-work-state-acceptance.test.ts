@@ -42,7 +42,9 @@ describe("Milestone 3 AI work-state acceptance", () => {
     expect(surface).toContain('retryable: true');
     expect(surface).toContain('"Retry response"');
     expect(surface).toContain("handleRetryResponse");
-    expect(surface).toContain("if (sending || !draft.trim()) return;");
+    // Attachment-only drafts are valid retries too; mounted browser tests cover
+    // both preflight and dispatch rejection followed by the real retry button.
+    expect(surface).toContain("if (sending || (!draft.trim() && attachments.length === 0)) return;");
     expect(surface).toContain("snapshotQuery.refetch()");
     expect(messages).toContain('role="alert"');
     expect(messages).toContain('status === "failed"');

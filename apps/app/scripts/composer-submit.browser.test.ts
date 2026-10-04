@@ -77,6 +77,93 @@ async function fixturePage() {
   return page;
 }
 
+for (const action of ["click", "Enter"]) {
+  for (const corrupt of [false, true]) {
+    test(`preparing attachments blocks ${action} until ${corrupt ? "failure" : "success"} without auto-send`, async () => {
+      const page = await fixturePage();
+      try {
+        await page.goto(`${server.url}?attachments`);
+        await delayImagePreparation(page);
+        await page.locator('input[type="file"]').setInputFiles(await delayedImage(page, corrupt));
+        await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+        const editor = page.getByRole("textbox", { name: "Test prompt" });
+        const send = page.getByRole("button", { name: "Ask", exact: true });
+        if (action === "click") await send.evaluate(element => { if (element instanceof HTMLButtonElement) element.click(); });
+        else await editor.press("Enter");
+        expect(await page.getByTestId("result").textContent()).toBe("");
+        expect(await send.isDisabled()).toBe(true);
+        await page.getByRole("status").filter({ hasText: "Preparing attachments" }).waitFor();
+        const directory = process.env.PREPARATION_QA_CAPTURES;
+        if (directory && action === "click" && !corrupt) {
+          await mkdir(directory, { recursive: true });
+          await page.emulateMedia({ reducedMotion: "reduce" });
+          for (const theme of ["light", "dark"]) {
+            await page.locator("html").evaluate((element, value) => element.setAttribute("data-theme", value), theme);
+            for (const width of [390, 768, 1280]) {
+              await page.setViewportSize({ width, height: 900 });
+              await page.screenshot({ path: `${directory}/preparing-${theme}-${width}.png`, fullPage: true });
+              expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+            }
+          }
+        }
+        await editor.fill("Keep this edited draft");
+        await releaseImagePreparation(page);
+        expect(await page.getByTestId("result").textContent()).toBe("");
+        expect(await editor.innerText()).toBe("Keep this edited draft");
+        expect(await send.isEnabled()).toBe(true);
+        if (corrupt) await page.getByRole("alert").filter({ hasText: "Could not prepare pending.png" }).waitFor();
+        else await page.getByText("pending.jpg", { exact: true }).waitFor();
+        await send.click();
+        expect(JSON.parse(await page.getByTestId("result").textContent() ?? "null")).toEqual({ parts: [
+          { type: "text", text: "Keep this edited draft" },
+          ...(corrupt ? [] : [{ type: "file", filename: "pending.jpg" }]),
+        ] });
+      } finally { await page.close(); }
+    });
+  }
+}
+
+test("preparing attachments leaves Stop available during an active response", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments&busy`);
+    await delayImagePreparation(page);
+    await page.locator('input[type="file"]').setInputFiles(await delayedImage(page));
+    await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+    await page.getByRole("button", { name: "Stop generating", exact: true }).click();
+    expect(await page.getByTestId("result").textContent()).toBe("stopped");
+    await releaseImagePreparation(page);
+    expect(await page.getByTestId("result").textContent()).toBe("stopped");
+  } finally { await page.close(); }
+});
+
+test("preparing attachments waits for every overlapping selection", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments`);
+    await delayImagePreparation(page);
+    const input = page.locator('input[type="file"]');
+    await input.setInputFiles(await delayedImage(page));
+    await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+    await page.evaluate(() => { delete document.documentElement.dataset.imagePreparing; });
+    await input.setInputFiles({ ...await delayedImage(page), name: "second.png" });
+    await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+    await releaseImagePreparation(page, "pending.png");
+    const send = page.getByRole("button", { name: "Ask", exact: true });
+    expect(await send.isDisabled()).toBe(true);
+    await page.getByRole("textbox", { name: "Test prompt" }).press("Enter");
+    expect(await page.getByTestId("result").textContent()).toBe("");
+    await page.getByText("pending.jpg", { exact: true }).waitFor();
+    await releaseImagePreparation(page, "second.png");
+    expect(await send.isEnabled()).toBe(true);
+    expect(await page.getByTestId("result").textContent()).toBe("");
+    await send.click();
+    expect(JSON.parse(await page.getByTestId("result").textContent() ?? "null")).toMatchObject({ parts: expect.arrayContaining([
+      { type: "file", filename: "pending.jpg" }, { type: "file", filename: "second.jpg" },
+    ]) });
+  } finally { await page.close(); }
+});
+
 for (const boundary of ["chat", "chat-return", "permission", "permission-return", "unmount", "account"]) {
   for (const corrupt of [false, true]) {
     test(`attachment lifetime ignores ${corrupt ? "failed" : "successful"} preparation after ${boundary}`, async () => {
