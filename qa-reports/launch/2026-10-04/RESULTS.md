@@ -100,7 +100,42 @@ pnpm test:matterhorn-platform-safety
 
 Logs are `/tmp/matterhorn-deletion-race-red-2026-10-04.log`, `/tmp/matterhorn-deletion-race-path-red-2026-10-04.log`, `/tmp/matterhorn-delayed-upload-matrix-2026-10-04.log`, `/tmp/matterhorn-delayed-upload-regressions-final-2026-10-04.log` and `/tmp/matterhorn-delayed-upload-typecheck-2026-10-04.log`. Temporary logs supplement this recorded evidence; they are not durable hosted acceptance artifacts.
 
-This correction closes the reproduced delayed-body path, not every possible in-flight deletion race. It does not serialize deletion against all background jobs, writes already past body parsing, external runtime operations, approval waits or multiple server processes. The proxy and hosted tool checks were added at the same authorization boundary, but their specific delayed-upload revocation paths still need dedicated behavioral fixtures. The unchanged-session controls demonstrate usable uploads; no browser UI was changed in this server pass.
+Commit `db096d2177ad0d1916aa615e540b82f47231813b` closes the reproduced delayed-body path, not every possible in-flight deletion race. The approval-wait follow-up below addresses another path. The proxy and hosted tool checks were added at the same authorization boundary, but their specific delayed-upload revocation paths still need dedicated behavioral fixtures. The unchanged-session controls demonstrate usable uploads; no browser UI was changed in this server pass.
+
+## Approval waits during account deletion
+
+A second local reproduction sent a complete multipart file upload and waited until it appeared in the host approval queue. Account deletion returned 200 and removed the account's workspace, but the stale approval remained actionable. Allowing it afterward let the upload recreate the directory. The failing filesystem assertion is recorded in `/tmp/matterhorn-approval-deletion-red-2026-10-04.log`. This is distinct from a delayed request body: parsing and its authorization check had already finished.
+
+Commit `b32d542ff9f17773ab36fbd4be1c59b216dfd09d` cancels every pending approval for each deleted workspace before content removal, including deletion retries. Cancellation uses the authoritative workspace on the approval request, not optional chat-cancellation metadata. It clears timers and abort listeners through the existing settlement path. Shared approval handling now rechecks the original authorization both before queuing and after waiting, so an allow response cannot revive a logged-out session or apply to a previously selected workspace.
+
+The four loopback scenarios cover deletion, logout, workspace changes and unchanged authorization. A second account has a pending upload in each case: its approval remains queued, can be allowed, and writes the expected bytes. The deleted account's stale approval returns 404 and its directory remains absent. Revoked or changed-session uploads write no file; unchanged authorization remains usable. A separate service test covers scoped and unscoped approvals, repeat cancellation, listener cleanup and stale reply rejection.
+
+| Check | Result |
+| --- | --- |
+| Approval matrix and cancellation unit test | 5 pass, zero fail, 79 assertions |
+| Auth, approval, recovery, inbox, guarded-runtime and jurisdiction suites | 132 pass, zero fail, 1,217 assertions across six files |
+| Server typecheck on final source | Pass |
+| Full local safety gate after approval correction | All 11 stages pass |
+| Diff whitespace check | Pass |
+
+```sh
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/approvals.test.ts --test-name-pattern 'pending workspace approvals|workspace deletion'
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/approvals.test.ts apps/server/src/auth-store-verification.test.ts apps/server/src/inbox-boundary.e2e.test.ts apps/server/src/guarded-agent-runtime.test.ts apps/server/src/polymarket-jurisdiction-policy.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm test:matterhorn-platform-safety
+```
+
+Final logs: `/tmp/matterhorn-approval-revocation-matrix-2026-10-04.log`, `/tmp/matterhorn-approval-revocation-regressions-final-2026-10-04.log`, `/tmp/matterhorn-approval-revocation-typecheck-final-2026-10-04.log` and `/tmp/matterhorn-approval-safety-gate-2026-10-04.log`. The first typecheck caught an implicit array type in the new fixture; it was explicitly typed, and the final check passed.
+
+These fixes do not establish a global deletion lock. Writes already past approval, provider responses, evidence sealing, external runtime operations and multiple server processes still require review. Source inspection identified `sealFinalizedCoworkerRunEvidence` waiting for key creation before persisting a record, while workspace deletion enumerates existing records. A delayed-finalization test is the next step; this source observation alone is not a confirmed vulnerability. Existing guarded-runtime tests prove queued finalization entries are removed by a purge, not that an already-running finalizer cannot write afterward.
+
+## Polymarket policy review deadline
+
+The broader regression run found that the bundled policy's review deadline is `2026-10-04T00:00:00.000Z`, which had passed at execution time. `evaluatePolymarketOpenPositionJurisdiction` now returns `policy_review_required` for otherwise valid jurisdiction evidence, and guarded capability issuance denies new-position preparation. This is intended fail-closed behavior. The production deadline and restrictions were not changed. This result concerns the local candidate; the exact hosted policy version and user-facing recovery text have not been verified. It does not establish that public research reads are broken.
+
+The old runtime test used wall-clock time while always expecting an allowed preparation. It was changed to exercise both a reviewed date and the exact expiry boundary using separate disposable state databases, with clock restoration in `finally`. Both retain the assertions that raw location is absent from capability/receipt output. An initial attempt shared the runtime database across clock changes and failed grant validation; isolation corrected the test setup without weakening grant checks. Final tests pass before and at expiry; they do not renew the policy or prove current venue eligibility.
+
+Release action: review the current official venue restrictions and the applicable product/compliance scope before approving a versioned policy update. Do not simply advance the date, bypass the gate or accept browser/model location claims. Until that review is complete, new-position preparation must remain unavailable with accurate guidance. Verify the expiry-state UI and hosted behavior before advertising that workflow as ready.
 
 ## Remaining work
 
@@ -108,6 +143,7 @@ This correction closes the reproduced delayed-body path, not every possible in-f
 - The local auth config loading/failure/recovery defects above are corrected. In-flight auth mutation completion across connection/account changes still needs a separate lifecycle review; the present cancellation tests cover access checks, not server-side rollback of mutations.
 - Fresh hosted responses on all five desks, optional Jev acceptance, accounting settlement, two-account isolation, real email/reset delivery, logout cleanup and production backup/restore evidence remain outstanding as recorded in the [previous launch report](../2026-10-03/RESULTS.md). No fresh hosted state is asserted in this pass.
 - The limited responsive and keyboard evidence above does not establish platform-wide accessibility, cross-browser or theme acceptance.
-- All 11 local safety stages pass on the server correction. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-deletion-safety-gate-2026-10-04.log`.
+- The Polymarket policy review and expiry-state UI/hosted checks above are open release actions; passing historical policy tests does not establish current eligibility.
+- All 11 local safety stages pass on the approval correction. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-approval-safety-gate-2026-10-04.log`.
 
 These corrections and regression results do not establish launch readiness. Continue with writes already past request-body validation, auth mutation lifecycle and the remaining acceptance work above.
