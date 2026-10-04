@@ -117,6 +117,8 @@ for (const required of [
   "apps/server/src/auth-reset-concurrency.test.ts",
   "apps/server/src/auth-credential-concurrency.test.ts",
   "apps/server/src/auth-account-authority-concurrency.test.ts",
+  "apps/server/src/auth-workspace-authority-concurrency.test.ts",
+  "apps/server/src/hosted-mcp-access.test.ts",
   "apps/server/src/memory-routes.e2e.test.ts",
   "apps/server/src/legacy-memory-cleanup.test.ts",
   "apps/server/src/email-outbox.test.ts",

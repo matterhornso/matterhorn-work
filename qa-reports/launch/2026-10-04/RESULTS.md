@@ -673,3 +673,38 @@ git diff --check
 Logs: `/tmp/matterhorn-account-authority-{red,focused-final,http,typecheck,build,node,safety}-2026-10-04.log`. The separate Node smoke imports the built auth store and checks successful revocation/count/unchanged expiry, revoked-session rejection, wrong-password rejection, pending deletion and other-account preservation. Concurrency was exercised with Bun SQLite workers; the Node smoke is sequential, not proof of multi-process native-driver behavior. Both test environments are local, not hosted acceptance. No new UI changes or frontend regression rerun are claimed.
 
 The new suite is included in the security workflow and safety gate, with required-entry contract tests. Next review targets are organization creation/selection and external-access credential mutations against concurrent revocation/deletion; these paths are not covered merely because they share the auth store. All broader hosted, UI, provider, accounting, wallet, privacy and operational launch gates remain open. No push, merge or deployment occurred.
+
+## Concurrent workspace and external access authority
+
+The preceding deletion/session-revocation correction is committed as `c8e2fd5e78ff384b4c7132b723e0323b8e5f1f12`. The next review found four more mutation paths using session or workspace state captured before their final transaction: organization creation, organization selection, external-access key creation and external-access key revocation. Nineteen deterministic two-connection SQLite tests initially returned success after their authority changed. These reproductions require another writer to the same database; they do not establish an observed production exploit or a credential-free bypass.
+
+All four operations now obtain current session write authority within the transaction that commits their mutation. Organization selection rereads membership under that lock instead of returning success from a stale membership read or an update affecting a revoked session. External-access key creation verifies that the active workspace still matches the captured selection; changed selection or removed membership returns `hosted_mcp_access_invalid`, without issuing a key for either workspace. Key revocation rereads its user-scoped credential under the lock, preserving integrity-seal verification and cross-account rejection. No feature is enabled, no signing or provider request occurs, and no schema change is introduced.
+
+The new suite covers sign-out, password change, pending deletion and session expiry for all four mutations; removed membership for workspace selection and key creation; and a workspace switch during key creation. A twentieth interleaving fills the five-key allowance before issuance and confirms that the pending request cannot create a sixth key. Four trigger-induced failure cases verify rollback of workspace membership/session updates and credential writes, unchanged session expiry, intact credential seals, other-account preservation and successful retry after removing the fixture failure. All 24 new tests pass.
+
+The fixtures create only isolated disposable accounts and databases. They use an explicit test-only integrity key, never load production secrets, do not print generated tokens, and intercept SQL preparation only within their worker. The initial 19 failing cases and the final passing cases use the same worker barrier before the first statement that needs current authority. No test hook is added to production code.
+
+| Check | Result |
+| --- | --- |
+| Nine focused auth and external-access suites | 85 pass, zero fail, 606 assertions |
+| Local auth HTTP, backend security and rate-limit suites | 110 pass, zero fail, 1,102 assertions |
+| Built-server Node/better-sqlite3 smoke | 13 assertions pass |
+| Server typecheck and build | Pass after a nullable fixture-ID correction |
+| Security workflow and safety-gate contracts | Pass |
+| Full platform safety gate | All 11 stages pass; terminal exit zero |
+| Diff whitespace | Pass |
+
+```sh
+bun test apps/server/src/auth-workspace-authority-concurrency.test.ts apps/server/src/hosted-mcp-access.test.ts apps/server/src/auth-account-authority-concurrency.test.ts apps/server/src/auth-credential-concurrency.test.ts apps/server/src/auth-reset-concurrency.test.ts apps/server/src/auth-password-lifecycle.test.ts apps/server/src/auth-store-verification.test.ts apps/server/src/auth-email-outbox.test.ts apps/server/src/auth-store-maintenance.test.ts
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+node scripts/security-workflow-contract.test.mjs
+node scripts/matterhorn-platform-safety-gate.test.mjs
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+Logs: `/tmp/matterhorn-workspace-authority-{red,focused-final,http,typecheck-final,build-final,node,safety}-2026-10-04.log`. The first typecheck failed because the test expected an array of non-null workspace IDs without checking its fixture account's nullable `activeOrgId`. An explicit fixture invariant fixes that error without a cast. The final typecheck/build pass, and the expanded gate exercises that final test source. The separate Node smoke uses the built auth store to verify normal workspace creation/selection, scoped key creation/resolution/revocation, cross-account denial and rejection of all four mutations after sign-out. Native-driver concurrency was not tested by that sequential smoke.
+
+The new concurrency suite and the existing four-test hosted-MCP credential integrity/expiry suite are now explicitly required by both the security workflow and platform safety gate. Remote CI has not run. No frontend code or new frontend/browser acceptance is claimed here. Next security coverage should examine request-level use of external-access credentials and in-flight revocation boundaries, including cookie/bearer precedence and workspace scope; do not infer those guarantees from management-method tests. Hosted five-desk responses, inbox delivery, accounting, wallet behavior, isolation, encryption/restore and full UI accessibility acceptance remain open. No push, merge or deployment occurred.

@@ -878,6 +878,14 @@ export class MatterhornAuthStore {
     }
     const label = normalizeHostedMcpAccessLabel(input.label);
     return this.withTransaction(() => {
+      this.lockActiveSession(sessionToken);
+      const current = this.requireSession(sessionToken);
+      if (!current.activeOrgId || current.activeOrgId !== session.activeOrgId) {
+        throw new MatterhornAuthError(
+          "hosted_mcp_access_invalid",
+          "Workspace access changed. Select the workspace and try again.",
+        );
+      }
       const now = Date.now();
       const activeRows = statement(this.db, `
         SELECT id, token_hash, user_id, active_org_id, label,
@@ -905,7 +913,7 @@ export class MatterhornAuthStore {
         id,
         token_hash: hashHostedMcpAccessToken(token),
         user_id: session.user.id,
-        active_org_id: session.activeOrgId!,
+        active_org_id: current.activeOrgId,
         label,
         expires_at: expiresAt,
         created_at: now,
@@ -1028,8 +1036,9 @@ export class MatterhornAuthStore {
     credentialId: string,
   ): boolean {
     const authorityKey = this.requireHostedMcpAccessAuthorityKey();
-    const session = this.requireSession(sessionToken);
     return this.withTransaction(() => {
+      this.lockActiveSession(sessionToken);
+      const session = this.requireSession(sessionToken);
       const row = statement(this.db, `
         SELECT id, token_hash, user_id, active_org_id, label,
           expires_at, created_at, last_used_at, revoked_at, authority_seal
@@ -2046,35 +2055,38 @@ export class MatterhornAuthStore {
     token: string,
     input: { organizationId?: string | null; organizationSlug?: string | null },
   ): MatterhornAuthOrganization {
-    const session = this.requireSession(token);
     const organizationId = input.organizationId?.trim() ?? "";
     const organizationSlug = input.organizationSlug?.trim() ?? "";
-    const row = statement(
-      this.db,
-      `SELECT o.id, o.name, o.slug, m.role
-        FROM organizations o
-        JOIN organization_members m ON m.organization_id = o.id
-        WHERE m.user_id = ?
-          AND ((? <> '' AND o.id = ?) OR (? <> '' AND o.slug = ?))
-        LIMIT 1`,
-    ).get(
-      session.user.id,
-      organizationId,
-      organizationId,
-      organizationSlug,
-      organizationSlug,
-    ) as OrganizationRow | undefined;
-    if (!row) {
-      throw new MatterhornAuthError(
-        "invalid_organization",
-        "Workspace was not found for this account.",
-      );
-    }
-    statement(
-      this.db,
-      "UPDATE sessions SET active_org_id = ? WHERE token_hash = ?",
-    ).run(row.id, hashSessionToken(token));
-    return row;
+    return this.withTransaction(() => {
+      this.lockActiveSession(token);
+      const session = this.requireSession(token);
+      const row = statement(
+        this.db,
+        `SELECT o.id, o.name, o.slug, m.role
+          FROM organizations o
+          JOIN organization_members m ON m.organization_id = o.id
+          WHERE m.user_id = ?
+            AND ((? <> '' AND o.id = ?) OR (? <> '' AND o.slug = ?))
+          LIMIT 1`,
+      ).get(
+        session.user.id,
+        organizationId,
+        organizationId,
+        organizationSlug,
+        organizationSlug,
+      ) as OrganizationRow | undefined;
+      if (!row) {
+        throw new MatterhornAuthError(
+          "invalid_organization",
+          "Workspace was not found for this account.",
+        );
+      }
+      statement(
+        this.db,
+        "UPDATE sessions SET active_org_id = ? WHERE token_hash = ?",
+      ).run(row.id, hashSessionToken(token));
+      return row;
+    });
   }
 
   createOrganization(
@@ -2103,6 +2115,7 @@ export class MatterhornAuthStore {
     };
     const now = Date.now();
     this.withTransaction(() => {
+      this.lockActiveSession(token);
       statement(
         this.db,
         `INSERT INTO organizations (id, name, slug, created_at)
