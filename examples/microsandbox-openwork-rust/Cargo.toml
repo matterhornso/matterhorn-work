@@ -6,7 +6,7 @@ publish = false
 
 [dependencies]
 anyhow = "1"
-microsandbox = "0.6.8"
+microsandbox = "0.6.16"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time"] }
