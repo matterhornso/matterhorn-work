@@ -1445,28 +1445,32 @@ export class MatterhornAuthStore {
         "This account is being deleted and can no longer be used.",
       );
     }
-    if (passwordVerification.needsUpgrade) {
-      statement(
+    const passwordHash = passwordVerification.needsUpgrade
+      ? encodePasswordHash(password, Buffer.from(row.password_salt, "hex"))
+      : row.password_hash;
+    return this.withTransaction(() => {
+      // Pin the credential that was verified before hashing. Even without a
+      // hash upgrade this conditional write serializes session issuance with
+      // password rotation in other connections.
+      const current = statement(
         this.db,
-        "UPDATE users SET password_hash = ? WHERE id = ?",
-      ).run(
-        encodePasswordHash(password, Buffer.from(row.password_salt, "hex")),
-        row.id,
-      );
-    }
-
-    const firstOrg = statement(
-      this.db,
-      `SELECT organization_id
-        FROM organization_members
-        WHERE user_id = ?
-        ORDER BY created_at ASC
-        LIMIT 1`,
-    ).get(row.id) as { organization_id: string } | undefined;
-    return this.createSessionForUser(
-      row.id,
-      firstOrg?.organization_id ?? null,
-    );
+        `UPDATE users SET password_hash = ?
+          WHERE id = ? AND password_hash = ? AND password_salt = ?
+            AND email_verified_at IS NOT NULL`,
+      ).run(passwordHash, row.id, row.password_hash, row.password_salt);
+      if (current.changes !== 1) {
+        throw new MatterhornAuthError("invalid_credentials", "Email or password is incorrect.");
+      }
+      const firstOrg = statement(
+        this.db,
+        `SELECT organization_id
+          FROM organization_members
+          WHERE user_id = ?
+          ORDER BY created_at ASC
+          LIMIT 1`,
+      ).get(row.id) as { organization_id: string } | undefined;
+      return this.createSessionForUser(row.id, firstOrg?.organization_id ?? null);
+    });
   }
 
   createEmailVerificationChallenge(
@@ -1537,8 +1541,9 @@ export class MatterhornAuthStore {
     if (challenge.expires_at <= Date.now()) {
       statement(
         this.db,
-        "DELETE FROM email_verification_challenges WHERE user_id = ?",
-      ).run(user.id);
+        `DELETE FROM email_verification_challenges
+          WHERE user_id = ? AND code_hash = ? AND code_salt = ? AND expires_at <= ?`,
+      ).run(user.id, challenge.code_hash, challenge.code_salt, Date.now());
       throw new MatterhornAuthError(
         "expired_verification_code",
         "That verification code has expired. Request a new code.",
@@ -1556,29 +1561,28 @@ export class MatterhornAuthStore {
       );
     }
 
-    const verifiedAt = Date.now();
-    this.withTransaction(() => {
+    return this.withTransaction(() => {
+      const consumed = statement(this.db, `
+        DELETE FROM email_verification_challenges
+        WHERE user_id = ? AND code_hash = ? AND code_salt = ? AND expires_at > ?
+      `).run(user.id, challenge.code_hash, challenge.code_salt, Date.now());
+      if (consumed.changes !== 1) {
+        throw new MatterhornAuthError("invalid_verification_code", "That verification code is invalid.");
+      }
       statement(
         this.db,
         "UPDATE users SET email_verified_at = ? WHERE id = ?",
-      ).run(verifiedAt, user.id);
-      statement(
+      ).run(Date.now(), user.id);
+      const firstOrg = statement(
         this.db,
-        "DELETE FROM email_verification_challenges WHERE user_id = ?",
-      ).run(user.id);
+        `SELECT organization_id
+          FROM organization_members
+          WHERE user_id = ?
+          ORDER BY created_at ASC
+          LIMIT 1`,
+      ).get(user.id) as { organization_id: string } | undefined;
+      return this.createSessionForUser(user.id, firstOrg?.organization_id ?? null);
     });
-    const firstOrg = statement(
-      this.db,
-      `SELECT organization_id
-        FROM organization_members
-        WHERE user_id = ?
-        ORDER BY created_at ASC
-        LIMIT 1`,
-    ).get(user.id) as { organization_id: string } | undefined;
-    return this.createSessionForUser(
-      user.id,
-      firstOrg?.organization_id ?? null,
-    );
   }
 
   createPasswordResetChallenge(
@@ -1861,10 +1865,17 @@ export class MatterhornAuthStore {
     const salt = randomBytes(16);
     const passwordHash = encodePasswordHash(input.newPassword, salt);
     this.withTransaction(() => {
-      statement(
+      const current = statement(
         this.db,
-        "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
-      ).run(passwordHash, salt.toString("hex"), session.user.id);
+        `UPDATE users SET password_hash = ?, password_salt = ?
+          WHERE id = ? AND password_hash = ? AND password_salt = ?
+            AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = ? AND user_id = users.id AND expires_at > ?)
+            AND NOT EXISTS (SELECT 1 FROM account_deletion_jobs WHERE user_id = users.id AND status <> 'completed')`,
+      ).run(passwordHash, salt.toString("hex"), session.user.id,
+        row.password_hash, row.password_salt, hashSessionToken(token), Date.now());
+      if (current.changes !== 1) {
+        throw new MatterhornAuthError("unauthorized", "Session or credentials changed. Sign in again.");
+      }
       statement(this.db, "DELETE FROM sessions WHERE user_id = ?").run(
         session.user.id,
       );

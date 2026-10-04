@@ -25,6 +25,7 @@ for (const required of [
   "request-rate-limit-store.test.ts",
   "auth-password-lifecycle.test.ts",
   "auth-reset-concurrency.test.ts",
+  "auth-credential-concurrency.test.ts",
 ]) {
   assert.ok(workflow.includes(required), `security workflow must include ${required}`);
 }

@@ -620,3 +620,20 @@ git diff --check
 Logs: `/tmp/matterhorn-reset-concurrency-red-2026-10-04.log`, `/tmp/matterhorn-reset-concurrency-focused-final-2026-10-04.log`, `/tmp/matterhorn-reset-concurrency-http-2026-10-04.log`, `/tmp/matterhorn-reset-concurrency-typecheck-final-2026-10-04.log`, `/tmp/matterhorn-reset-concurrency-build-2026-10-04.log` and `/tmp/matterhorn-reset-concurrency-safety-2026-10-04.log`.
 
 Next security coverage is concurrent sign-in, authenticated password change and email-verification completion against credential/session changes. This reset-specific correction does not certify those separate paths, browser cookie ordering, actual inbox delivery or hosted rollout. The broader UI, five-desk, accounting, privacy and operational acceptance requirements remain unchanged. The documentation skill keeps the new evidence scoped to the tested reset path.
+
+## Concurrent credential and verification authority
+
+The subsequent review reproduced nine unsafe interleavings in sign-in, password change and verification. Two independent SQLite connections to a disposable database pause a worker after its credential reads, while the other connection rotates credentials, signs out, replaces a verification challenge or completes verification. Before correction all nine stale operations incorrectly succeeded. This is a deterministic concurrent database reproduction, not an observed hosted incident or a multi-host certification.
+
+Sign-in now conditionally matches the verified password hash and salt inside the session-creation transaction, including legacy hash upgrades. Password changes also require the exact session to remain active and the captured credentials to remain unchanged at the write. Verification consumes the exact unexpired challenge within the same transaction as verification and session issuance. Expired-challenge cleanup matches the captured challenge so it cannot delete a replacement code. No schema or production data change is introduced.
+
+The new suite covers the nine original interleavings, expired-code replacement, and rollback after failed session creation for both legacy sign-in and verification. Winning credentials, replacement challenges, other accounts and valid subsequent recovery remain usable. The worker-local interception does not add production hooks or print credentials. The suite is included in the local safety gate and GitHub security workflow; remote CI has not run.
+
+- Focused credential/reset/password/verification/outbox/maintenance suites: **42 pass, zero fail, 251 assertions across six files**.
+- Local auth HTTP, backend security and request rate-limit suites: **110 pass, zero fail, 1,102 assertions across three files**.
+- Server typecheck and build, both workflow contract checks, and diff whitespace: pass.
+- Full platform safety gate: **all 11 stages pass**, with a confirmed terminal exit of zero.
+
+Evidence logs: `/tmp/matterhorn-credential-concurrency-red-2026-10-04.log`, `/tmp/matterhorn-credential-concurrency-focused-final-2026-10-04.log`, `/tmp/matterhorn-credential-concurrency-http-2026-10-04.log`, and `/tmp/matterhorn-credential-concurrency-{typecheck,build,safety}-2026-10-04.log`. Run the six named server suites with `bun test`; run the three HTTP/security/rate-limit suites with `--timeout 20000`; run `pnpm --filter matterhorn-work-server typecheck`, `pnpm --filter matterhorn-work-server build`, and `pnpm test:matterhorn-platform-safety`.
+
+No frontend changes or fresh frontend/browser acceptance are claimed in this pass. Hosted inbox delivery, browser cookie ordering, all five desks and operational release gates remain open. The next security review covers account-deletion preparation and revoking other sessions across concurrent authority changes. No push, merge or deployment occurred.
