@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash, createHmac } from "node:crypto";
-import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { createServer as createHttpServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
+import { pathToFileURL } from "node:url";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
@@ -3265,6 +3266,165 @@ describe("workspace session read APIs", () => {
     expect(sent.status).toBe(409);
     await expect(sent.json()).resolves.toMatchObject({ code: "agent_context_changed" });
     expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/prompt_async")).toHaveLength(0);
+  });
+
+  for (const change of ["unchanged", "replace-after-inspection"]) {
+    test(`workspace attachment dispatch uses inspected bytes: ${change}`, async () => {
+      const workspaceRoot = await createWorkspaceRoot();
+      const path = join(workspaceRoot, "attachment.txt");
+      const reviewedText = "Public validator notes from the disposable fixture.";
+      await writeFile(path, reviewedText);
+      let agentReads = 0;
+      const mock = startMockOpencode({ beforeRead: async pathname => {
+        if (pathname === "/agent" && ++agentReads === 2 && change !== "unchanged") {
+          await writeFile(path, "PRIVATE_KEY=disposable-unreviewed-file-value");
+        }
+      } });
+      const openwork = await startOpenworkServer({ workspaceRoot,
+        opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+      const sent = await fetch(`http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/messages`, {
+        method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({ parts: [
+          { type: "text", text: "Summarize these notes" },
+          { type: "file", filename: "attachment.txt", mime: "text/plain", url: pathToFileURL(path).href },
+        ], model: { providerID: "local", modelID: "private-local-model" } }),
+      });
+      expect(sent.status).toBe(202);
+      expect(agentReads).toBeGreaterThanOrEqual(2);
+      const dispatched = mock.requests.filter(entry => entry.pathname === "/session/ses_1/prompt_async");
+      expect(dispatched).toHaveLength(1);
+      expect(await readFile(path, "utf8")).toBe(change === "unchanged" ? reviewedText : "PRIVATE_KEY=disposable-unreviewed-file-value");
+      expect(dispatched[0].body).toMatchObject({ parts: expect.arrayContaining([expect.objectContaining({
+        type: "file", filename: "attachment.txt", mime: "text/plain",
+        url: `data:text/plain;base64,${Buffer.from(reviewedText).toString("base64")}`,
+      })]) });
+      expect(JSON.stringify(dispatched[0].body)).not.toContain("disposable-unreviewed-file-value");
+    });
+  }
+
+  for (const endpoint of ["messages", "messages/preflight"]) {
+    for (const kind of ["empty", "regular", "oversize", "missing", "directory", "outside", "outside-symlink", "outside-parent-symlink", "secret", "invalid-mime"]) {
+      test(`workspace attachment validation ${endpoint}: ${kind}`, async () => {
+        const workspaceRoot = await createWorkspaceRoot();
+        const outside = await createWorkspaceRoot();
+        let path = join(workspaceRoot, "attachment.txt");
+        let contents = kind === "empty" ? "" : "Disposable public validator notes.";
+        if (kind === "secret") contents = "PRIVATE_KEY=disposable-never-forward-this";
+        if (kind === "outside") path = join(outside, "outside.txt");
+        if (kind === "directory") await mkdir(path);
+        else if (kind === "outside-symlink") {
+          await writeFile(join(outside, "outside.txt"), contents);
+          await symlink(join(outside, "outside.txt"), path);
+        } else if (kind === "outside-parent-symlink") {
+          await writeFile(join(outside, "outside.txt"), contents);
+          await symlink(outside, path, "dir");
+          path = join(path, "outside.txt");
+        } else if (kind !== "missing") {
+          await writeFile(path, contents);
+          if (kind === "oversize") await truncate(path, 5_000_001);
+        }
+        const mock = startMockOpencode();
+        const openwork = await startOpenworkServer({ workspaceRoot,
+          opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+        const response = await fetch(`http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/${endpoint}`, {
+          method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+          body: JSON.stringify({ parts: [
+            { type: "text", text: "Summarize these notes" },
+            { type: "file", filename: "attachment.txt", mime: kind === "invalid-mime" ? "text/plain,injected" : "text/plain", url: pathToFileURL(path).href },
+          ], model: { providerID: "local", modelID: "private-local-model" } }),
+        });
+        const expected = kind === "empty" || kind === "regular" ? (endpoint === "messages" ? 202 : 200)
+          : kind === "oversize" ? 413 : kind === "secret" ? (endpoint === "messages" ? 422 : 200)
+            : kind === "missing" || kind === "directory" ? 404 : 400;
+        const payload = await response.json();
+        expect(response.status, JSON.stringify(payload)).toBe(expected);
+        expect(JSON.stringify(payload)).not.toContain("disposable-never-forward-this");
+        const dispatched = mock.requests.filter(entry => entry.pathname === "/session/ses_1/prompt_async");
+        expect(dispatched).toHaveLength(expected === 202 ? 1 : 0);
+        if (kind === "secret" && endpoint === "messages/preflight") expect(payload).toMatchObject({ decision: "blocked" });
+        if (expected === 202) expect(dispatched[0].body).toMatchObject({ parts: expect.arrayContaining([expect.objectContaining({
+          type: "file", filename: "attachment.txt", mime: "text/plain",
+          url: `data:text/plain;base64,${Buffer.from(contents).toString("base64")}`,
+        })]) });
+        if (kind === "oversize") expect(payload).toMatchObject({ code: "attachment_too_large", details: { maxBytes: 5_000_000 } });
+      });
+    }
+  }
+
+  for (const size of [0, 4_999_999, 5_000_000, 5_000_001]) {
+    test(`workspace snapshot APIs preserve byte limit ${size}`, async () => {
+      const workspaceRoot = await createWorkspaceRoot();
+      process.env.MATTERHORN_WORK_DATA_DIR = join(workspaceRoot, "data");
+      process.env.MATTERHORN_AUTH_DB = join(workspaceRoot, "auth.db");
+      process.env.MATTERHORN_WORK_MEMORY_ROOT = join(workspaceRoot, "memory");
+      const bytes = Buffer.alloc(size, 97);
+      await writeFile(join(workspaceRoot, "snapshot.txt"), bytes);
+      const openwork = await startOpenworkServer({ workspaceRoot, readOnly: false });
+      const base = `http://127.0.0.1:${openwork.server.port}`;
+      const headers = { ...auth(openwork.token), "Content-Type": "application/json" };
+      for (const route of ["content", "raw"]) {
+        const response = await fetch(`${base}/workspace/ws_1/files/${route}?path=snapshot.txt`, { headers });
+        expect(response.status).toBe(size > 5_000_000 ? 413 : 200);
+        if (size > 5_000_000) expect(await response.json()).toMatchObject({ code: "file_too_large" });
+        else if (route === "content") expect(await response.json()).toMatchObject({ content: bytes.toString(), bytes: size });
+        else expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
+      }
+      const created = await fetch(`${base}/workspace/ws_1/files/sessions`, {
+        method: "POST", headers, body: JSON.stringify({ write: false }),
+      });
+      expect(created.status).toBe(200);
+      const { session } = await created.json();
+      const batch = await fetch(`${base}/files/sessions/${session.id}/read-batch`, {
+        method: "POST", headers, body: JSON.stringify({ paths: ["snapshot.txt"] }),
+      });
+      expect(batch.status).toBe(200);
+      expect(await batch.json()).toMatchObject({ items: [size > 5_000_000
+        ? { ok: false, path: "snapshot.txt", code: "file_too_large" }
+        : { ok: true, path: "snapshot.txt", bytes: size, contentBase64: bytes.toString("base64") }] });
+    });
+  }
+
+  test("workspace attachment consent stays bound to file contents", async () => {
+    process.env.MATTERHORN_PROVIDER_PRIVACY_MODE = "verified-only";
+    const workspaceRoot = await createWorkspaceRoot();
+    const path = join(workspaceRoot, "notes.txt");
+    await writeFile(path, "Private validator preference A.");
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({ workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+    const base = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1`;
+    const headers = { ...auth(openwork.token), "Content-Type": "application/json" };
+    const body = { parts: [
+      { type: "text", text: "Summarize these private notes" },
+      { type: "file", filename: "notes.txt", mime: "text/plain", url: pathToFileURL(path).href },
+    ], model: { providerID: "openai", modelID: "gpt-4.1" } };
+    const preflight = await fetch(`${base}/sessions/ses_1/messages/preflight`, { method: "POST", headers, body: JSON.stringify(body) });
+    expect(preflight.status).toBe(200);
+    const privacy = await preflight.json();
+    expect(privacy.decision).toBe("consent_required");
+    const confirmed = await fetch(`${base}/privacy-consents/${privacy.challenge.id}/confirm`, {
+      method: "POST", headers, body: JSON.stringify({ sessionId: "ses_1", requestHash: privacy.requestHash }),
+    });
+    expect(confirmed.status).toBe(200);
+    const consent = await confirmed.json();
+    await writeFile(path, "Private validator preference B.");
+    const changed = await fetch(`${base}/sessions/ses_1/messages`, {
+      method: "POST", headers, body: JSON.stringify({ ...body, privacyConsentToken: consent.consentToken }),
+    });
+    expect(changed.status).toBe(409);
+    expect(await changed.json()).toMatchObject({ code: "agent_privacy_consent_required" });
+    expect(mock.requests.filter(entry => entry.pathname === "/session/ses_1/prompt_async")).toHaveLength(0);
+    await writeFile(path, "Private validator preference A.");
+    const exact = await fetch(`${base}/sessions/ses_1/messages`, {
+      method: "POST", headers, body: JSON.stringify({ ...body, privacyConsentToken: consent.consentToken }),
+    });
+    expect(exact.status).toBe(202);
+    expect(await exact.json()).toMatchObject({ privacy: { consentUsed: true } });
+    const dispatched = mock.requests.filter(entry => entry.pathname === "/session/ses_1/prompt_async");
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0].body).toMatchObject({ parts: expect.arrayContaining([expect.objectContaining({
+      type: "file", url: `data:text/plain;base64,${Buffer.from("Private validator preference A.").toString("base64")}`,
+    })]) });
   });
 
   test("blocks secret attachment bytes before quota reservation or provider dispatch", async () => {

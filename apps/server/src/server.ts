@@ -9451,13 +9451,13 @@ function fileRevision(info: { mtimeMs: number; size: number }): string {
   return `${Math.floor(info.mtimeMs)}:${info.size}`;
 }
 
-async function readWorkspaceFileSnapshot(absPath: string, maxBytes: number): Promise<{
+export async function readWorkspaceFileSnapshot(absPath: string, maxBytes: number): Promise<{
   content: Buffer;
   info: { mtimeMs: number; size: number };
 }> {
   const flags = process.platform === "win32"
     ? fsConstants.O_RDONLY
-    : fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW;
+    : fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK;
   let handle;
   try {
     handle = await open(absPath, flags);
@@ -9481,7 +9481,16 @@ async function readWorkspaceFileSnapshot(absPath: string, maxBytes: number): Pro
       });
     }
 
-    const content = await handle.readFile();
+    // Never let growth after stat turn a small snapshot into an unbounded read.
+    // One extra byte detects growth even when the file fills the initial buffer.
+    const buffer = Buffer.alloc(before.size + 1);
+    let total = 0;
+    while (total < buffer.byteLength) {
+      const { bytesRead } = await handle.read(buffer, total, buffer.byteLength - total, total);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+    }
+    const content = buffer.subarray(0, total);
     const after = await handle.stat();
     if (content.byteLength > maxBytes || after.size > maxBytes) {
       throw new ApiError(413, "file_too_large", "File exceeds size limit", {
@@ -22379,7 +22388,7 @@ async function resolveAgentAttachment(
   upstream: Record<string, unknown>;
   privacy: MatterhornAgentPrivacyPart;
 }> {
-  const url = typeof part.url === "string" ? part.url.trim() : "";
+  let url = typeof part.url === "string" ? part.url.trim() : "";
   const requestedMime = typeof part.mime === "string" ? part.mime.trim().slice(0, 160) : "";
   let bytes: Uint8Array;
   let mime = requestedMime;
@@ -22398,12 +22407,27 @@ async function resolveAgentAttachment(
     }
     const safePath = resolveSafeChildPath(workspace.path, relative(workspace.path, requestedPath));
     try {
-      bytes = await readFile(safePath);
-    } catch {
+      bytes = (await readWorkspaceFileSnapshot(safePath, AGENT_MESSAGE_MAX_ATTACHMENT_BYTES)).content;
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "file_too_large") {
+        throw new ApiError(413, "attachment_too_large", "Attachments must be 5 MB or smaller.", {
+          maxBytes: AGENT_MESSAGE_MAX_ATTACHMENT_BYTES,
+        });
+      }
+      if (error instanceof ApiError && error.code === "file_changed") {
+        throw new ApiError(409, "attachment_changed", "The attachment changed while being read. Review it and try again.");
+      }
       throw new ApiError(404, "attachment_not_found", "The workspace attachment is no longer available.");
     }
     fallbackName = basename(safePath);
     mime ||= contentTypeForPath(safePath).split(";")[0] ?? "application/octet-stream";
+    const mediaType = mime.split(";")[0].trim();
+    if (!/^[\w.+-]+\/[\w.+-]+$/.test(mediaType)) {
+      throw new ApiError(400, "attachment_unverifiable", "The attachment media type is invalid.");
+    }
+    // Forward exactly the inspected snapshot, not a mutable path the runtime
+    // could reopen after privacy checks and consent have already completed.
+    url = `data:${mediaType};base64,${Buffer.from(bytes).toString("base64")}`;
   } else {
     throw new ApiError(
       400,

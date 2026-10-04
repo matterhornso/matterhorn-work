@@ -341,6 +341,7 @@ const STAGES = [
       "bun",
       "test",
       "apps/server/src/session-read-model.e2e.test.ts",
+      "apps/server/src/workspace-file-snapshot.test.ts",
       "apps/server/src/jev.test.ts",
       "apps/server/src/agent-token-budget.test.ts",
       "apps/server/src/agent-tool-routing.test.ts",

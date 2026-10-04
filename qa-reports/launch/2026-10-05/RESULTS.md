@@ -80,4 +80,35 @@ Logs use `/tmp/matterhorn-upload-`: `bounds-red3-2026-10-05.log`, `bounds-final3
 
 ### Remaining upload and release review
 
-The composer still uses an 8 MiB attachment limit, while canonical backend attachment inspection allows 5,000,000 bytes. Review and align that user-facing contract and verify rendered failure/draft recovery; this backend change does not claim to fix it. Workspace `file://` attachments also call `readFile` before their decoded-size check; review bounded file reads and path handling separately. Aggregate upload limits do not certify total process memory under concurrent requests, gateway/proxy timeout settings, slow-client protection, or every binary/file endpoint. All existing hosted launch gates above remain open. No push, merge, deployment, real provider request or existing preview/chat change occurred.
+The composer still uses an 8 MiB attachment limit, while canonical backend attachment inspection allows 5,000,000 bytes. Review and align that user-facing contract and verify rendered failure/draft recovery; this backend change does not claim to fix it. Workspace `file://` attachment inspection is addressed by the subsequent snapshot correction below. Aggregate upload limits do not certify total process memory under concurrent requests, gateway/proxy timeout settings, slow-client protection, or every binary/file endpoint. All existing hosted launch gates above remain open. No push, merge, deployment, real provider request or existing preview/chat change occurred.
+
+## Workspace attachment snapshots
+
+Following `c480df97f132b9fae35cbc97a97fb3c9acc77421`, review found that workspace-file attachments were inspected with an unbounded `readFile`, then forwarded as the original mutable `file://` URL. A controlled HTTP test replaces the file with synthetic secret-shaped text during the later agent recheck. The old implementation still sent the file URL to the fake runtime, allowing a later file read to see bytes other than those inspected. This demonstrates the inspection/dispatch mismatch; it is not evidence that a real provider received a secret.
+
+Canonical chat now forwards a base64 snapshot of the inspected bytes, retaining filename and MIME metadata. The existing bounded file-snapshot helper is reused for attachment inspection. It rejects oversized initial files before reading and replaces its own `readFile` with a buffer capped at the initial file size plus one byte, never more than the allowed maximum plus one. Before/after metadata checks reject observed growth, shrinkage or modification. Non-Windows opens are nonblocking so a FIFO without a writer can be rejected as a nonregular file. Missing files, invalid MIME, changed files, and oversized attachments receive safe errors without raw content. The existing consent hash remains tied to the inspected attachment bytes.
+
+The initial ten-case matrix had six failed expectations and four passing controls: two required immutable dispatch and four required bounded reads rather than `readFile`. These are regression cases for the two mechanisms above, not six independent vulnerabilities. The final focused matrix passes **32 cases, zero failures and 108 assertions**. It includes file growth/shrinkage, closure of handles on success/error, a FIFO, static outside-workspace paths and leaf/parent symlinks, secret rejection, empty/ordinary files, oversize files, invalid MIME, mutation after inspection, and exact-content consent. Preflight correctly returns HTTP 200 with `decision: blocked` for secret content; the final tests assert that distinction from a rejected send. The first typecheck exposed a fixture overload mismatch, corrected by returning captured metadata once without replacing the overloaded method signature.
+
+### Attachment verification
+
+- Focused helper and attachment matrix: 32 pass, zero fail, 108 assertions.
+- Existing content, raw-file and batch-read API consumers: four size cases exercise all three routes, with 28 assertions passing at 0, 4,999,999, 5,000,000 and 5,000,001 bytes.
+- Broader affected group: 430 pass, zero fail, 2,834 assertions across seven files. The four final API-consumer cases were added and passed separately without further production changes.
+- Server typecheck including the final tests, server build, safety-gate wiring contract and whitespace check: pass.
+- Actual Node v26.7.0 file reader: all five supplementary checks pass (the four real 5 MB boundary sizes and a FIFO without a writer).
+- Full platform safety gate: all 11 stages pass, terminal exit zero, including the new snapshot unit suite and all final HTTP cases.
+
+```sh
+bun test apps/server/src/workspace-file-snapshot.test.ts apps/server/src/session-read-model.e2e.test.ts --test-name-pattern 'workspace file snapshot|workspace attachment' --timeout 20000
+bun test apps/server/src/session-read-model.e2e.test.ts --test-name-pattern 'workspace snapshot APIs' --timeout 20000
+bun test apps/server/src/workspace-file-snapshot.test.ts apps/server/src/file-sessions.test.ts apps/server/src/artifact-files.e2e.test.ts apps/server/src/workspace-path-boundary.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/token-authority.e2e.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+node scripts/matterhorn-platform-safety-gate.test.mjs
+pnpm test:matterhorn-platform-safety
+```
+
+Logs: `/tmp/matterhorn-attachment-snapshot-red2-2026-10-05.log`, `/tmp/matterhorn-attachment-snapshot-final-2026-10-05.log`, `/tmp/matterhorn-file-apis-2026-10-05.log`, `/tmp/matterhorn-attachment-http-2026-10-05.log`, `/tmp/matterhorn-attachment-typecheck-final2-2026-10-05.log`, `/tmp/matterhorn-attachment-build-2026-10-05.log`, `/tmp/matterhorn-file-snapshot-node-2026-10-05.log`, and `/tmp/matterhorn-attachment-safety-2026-10-05.log`. The new snapshot unit tests and existing HTTP suite are wired into the platform safety gate. The supplementary Node script is `/tmp/matterhorn-file-snapshot-node-2026-10-05.mjs`; it uses the already-installed tsx loader and is not a durable CI artifact.
+
+This is local, synthetic acceptance, not real-model or hosted attachment acceptance. It does not prove hostile concurrent parent-directory replacement is impossible, guarantee a transactional filesystem snapshot against a writer that restores metadata, or bound aggregate memory across many file attachments/concurrent requests. Review those separately along with the 8 MiB/5 MB composer mismatch and mounted error/draft recovery. The raw proxy still constructs privacy parts through `normalizePrivacyParts` rather than the canonical attachment resolver; test its attachment inspection and consent parity next, without treating this canonical-path fix as proof for that separate route. Windows-specific filesystem behavior and Electron remain unverified. Nothing was pushed, merged or deployed; existing user chats and previews were preserved.
