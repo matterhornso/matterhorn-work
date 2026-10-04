@@ -158,7 +158,38 @@ Logs: `/tmp/matterhorn-finalizer-deletion-red-2026-10-04.log`, `/tmp/matterhorn-
 
 The deletion marker retains a workspace identifier indefinitely, not chat/file content or keys. It uses the existing generic state table; no new database table is required. It does not survive replacement of the database with a pre-deletion backup, deliberate deletion of the marker, or bypassing these guarded paths. Operators must preserve deletion/erasure evidence during restore. KMS envelope-key destruction is not proof of deleting an individual KMS resource or every backup copy; hosted key-service and restore evidence remain required.
 
-Next review targets are evidence decryption and key rotation across key-service waits, publication/renewal completions, and downstream use of already-returned context. Source inspection shows these are separate paths; the passing file matrix is not their acceptance evidence. The changes are local, with no push, merge, deployment, production configuration change or user-preview restart.
+Commit `9156180c9bf848fc5c2116246b6d3471a69389f5` contains these creation/file-read corrections. The next section separately covers evidence decryption and rotation; publication/renewal completions and downstream use of already-returned context remain open. The changes are local, with no push, merge, deployment, production configuration change or user-preview restart.
+
+## Evidence decryption and rotation during deletion
+
+The evidence-store follow-up reproduced five failing cases: delayed decryption returned a bundle after workspace cleanup or key destruction; delayed rotation persisted after workspace deletion began, after its claim was removed as expired, and after another operation destroyed the key. In the last case it overwrote the destroyed record with its earlier snapshot and a new wrapped key. Three initial controls passed: unchanged decryption/rotation and deletion of a different workspace. These are synthetic key-service tests against disposable local stores, not evidence of hosted exploitation or real KMS behavior.
+
+Decryption now revalidates the durable deletion marker, current record, tenant, revision and erasure state after the key-service wait. Validation, decryption and successful audit persistence share a synchronous SQLite transaction. The returned plaintext key buffer is cleared on success and rejection. Failure auditing rechecks current state in a transaction and does not recreate an audit row for a purged/deleted workspace.
+
+Rotation now revalidates the current record and exact live operation claim before saving. The record update, verification-status invalidation, access audit and single-use claim consumption commit atomically. A replaced claim is left intact; failed claim consumption rolls back the update and its success audit. Deletion that initially cannot acquire the busy key claim can retry successfully after the rejected rotation releases its claim. Rejected rotation output is not persisted; this does not require destroying a shared KMS master key.
+
+A separate clock-controlled regression caught a scheduled-rotation defect: `rotateDue` passed its initial timestamp to every completion check, allowing a six-minute key-service wait to use an expired five-minute claim when no cleanup task had removed it. Production scheduled rotation now uses a fresh clock in `rotateKey`; explicitly injected test timestamps remain supported. The fixture restores the clock in `finally`. A test-extension typo initially called a nonexistent audit-list method; correcting it did not change production behavior or weaken the rollback assertions.
+
+| Check | Result |
+| --- | --- |
+| Initial delayed decryption/rotation matrix | Five reproduced failures, three passing controls |
+| Scheduled rotation with elapsed claim and no cleanup | Reproduced failure before clock correction |
+| Final evidence-store suite including replacement and rollback | 16 pass, zero fail, 120 assertions |
+| Auth, guarded runtime, evidence stores/finalizer/publisher/renewal/deletion/verification/anchor, file store and durable state | 172 pass, zero fail, 1,450 assertions across 11 files |
+| Server typecheck on final source | Pass |
+| Full local platform safety gate | All 11 stages pass |
+| Diff whitespace check | Pass |
+
+```sh
+bun test apps/server/src/crypto-evidence-store.test.ts
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/guarded-agent-runtime.test.ts apps/server/src/crypto-evidence-store.test.ts apps/server/src/crypto-evidence-finalizer.test.ts apps/server/src/crypto-evidence-walrus-publisher.test.ts apps/server/src/crypto-evidence-walrus-renewal.test.ts apps/server/src/crypto-evidence-walrus-deletion.test.ts apps/server/src/crypto-evidence-verification.test.ts apps/server/src/crypto-evidence-sui-anchor.test.ts apps/server/src/agent-file-store.test.ts apps/server/src/guarded-runtime-state-store.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm test:matterhorn-platform-safety
+```
+
+Reproduction logs: `/tmp/matterhorn-evidence-await-red-2026-10-04.log` and `/tmp/matterhorn-evidence-rotation-clock-red-2026-10-04.log`. Final verification logs: `/tmp/matterhorn-evidence-await-final-2026-10-04.log`, `/tmp/matterhorn-evidence-await-regressions-2026-10-04.log`, `/tmp/matterhorn-evidence-await-typecheck-final-2026-10-04.log` and `/tmp/matterhorn-evidence-await-safety-2026-10-04.log`.
+
+Publication and renewal after deletion remain separate acceptance targets. Inspection shows they use operation claims and perform their own completion writes; the passing existing publisher tests do not prove the new workspace-deletion marker is enforced on those paths. No real Walrus upload, wallet signature or provider request was made. Hosted release, key management, backup restore and full user-journey acceptance remain unverified.
 
 ## Polymarket policy review deadline
 
@@ -175,6 +206,6 @@ Release action: review the current official venue restrictions and the applicabl
 - Fresh hosted responses on all five desks, optional Jev acceptance, accounting settlement, two-account isolation, real email/reset delivery, logout cleanup and production backup/restore evidence remain outstanding as recorded in the [previous launch report](../2026-10-03/RESULTS.md). No fresh hosted state is asserted in this pass.
 - The limited responsive and keyboard evidence above does not establish platform-wide accessibility, cross-browser or theme acceptance.
 - The Polymarket policy review and expiry-state UI/hosted checks above are open release actions; passing historical policy tests does not establish current eligibility.
-- All 11 local safety stages pass after the delayed encryption/file-read corrections. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-deletion-followup-safety-2026-10-04.log`.
+- All 11 local safety stages pass after the evidence decryption/rotation corrections. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-evidence-await-safety-2026-10-04.log`.
 
 These corrections and regression results do not establish launch readiness. Continue with writes already past request-body validation, auth mutation lifecycle and the remaining acceptance work above.
