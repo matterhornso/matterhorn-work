@@ -248,6 +248,123 @@ afterEach(async () => {
 });
 
 describe("public account authentication", () => {
+  for (const operation of ["session", "profile", "security", "export", "sign-out", "password", "revoke-other-sessions", "create-workspace"]) {
+    test(`mixed credentials keep the browser account for ${operation}`, async () => {
+      const app = await boot();
+      const browserEmail = "mixed-browser@example.com";
+      const bearerEmail = "mixed-bearer@example.com";
+      const browser = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email: browserEmail, password: PASSWORD },
+      });
+      const external = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email: bearerEmail, password: PASSWORD },
+      });
+      expect(browser.response.status).toBe(200);
+      expect(external.response.status).toBe(200);
+      const cookie = sessionCookie(browser.response);
+      const bearer = cookieToken(sessionCookie(external.response));
+      const mixed = { cookie, bearer };
+      const expectedWorkspace = await jsonRequest(app.base, "/workspaces", { cookie });
+      const actualWorkspace = await jsonRequest(app.base, "/workspaces", mixed);
+      expect(actualWorkspace.response.status).toBe(200);
+      expect(actualWorkspace.payload.items.map((item: { id: string }) => item.id))
+        .toEqual(expectedWorkspace.payload.items.map((item: { id: string }) => item.id));
+
+      if (["session", "profile", "security", "export"].includes(operation)) {
+        const path = operation === "session" ? "/api/den/v1/session"
+          : operation === "profile" ? "/api/den/v1/me" : `/api/auth/account/${operation}`;
+        const result = await jsonRequest(app.base, path, mixed);
+        expect(result.response.status).toBe(200);
+        const expectedId = operation === "security" ? browser.payload.organization.id : browser.payload.user.id;
+        const unrelatedId = operation === "security" ? external.payload.organization.id : external.payload.user.id;
+        expect(JSON.stringify(result.payload)).toContain(expectedId);
+        expect(JSON.stringify(result.payload)).not.toContain(unrelatedId);
+      } else if (operation === "sign-out") {
+        const result = await jsonRequest(app.base, "/api/auth/sign-out", { ...mixed, body: {} });
+        expect(result.response.status).toBe(200);
+        expect(result.response.headers.get("set-cookie")).toContain("Max-Age=0");
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie })).response.status).toBe(401);
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { bearer })).response.status).toBe(200);
+      } else if (operation === "password") {
+        const newPassword = "mixed-browser-replacement-password";
+        const result = await jsonRequest(app.base, "/api/auth/account/change-password", {
+          ...mixed, body: { currentPassword: PASSWORD, newPassword },
+        });
+        expect(result.response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
+          body: { email: browserEmail, password: newPassword },
+        })).response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
+          body: { email: bearerEmail, password: PASSWORD },
+        })).response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { bearer })).response.status).toBe(200);
+      } else if (operation === "revoke-other-sessions") {
+        const browserOther = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+          body: { email: browserEmail, password: PASSWORD },
+        });
+        const externalOther = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+          body: { email: bearerEmail, password: PASSWORD },
+        });
+        const result = await jsonRequest(app.base, "/api/auth/account/revoke-other-sessions", { ...mixed, body: {} });
+        expect(result.response.status).toBe(200);
+        expect(result.payload.revokedSessions).toBe(1);
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: sessionCookie(browserOther.response) })).response.status).toBe(401);
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: sessionCookie(externalOther.response) })).response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie })).response.status).toBe(200);
+      } else {
+        const result = await jsonRequest(app.base, "/api/auth/organization/create", {
+          ...mixed, body: { name: "Browser workspace", slug: "browser-workspace" },
+        });
+        expect(result.response.status).toBe(200);
+        const browserOrgs = await jsonRequest(app.base, "/api/den/v1/me/orgs", { cookie });
+        const externalOrgs = await jsonRequest(app.base, "/api/den/v1/me/orgs", { bearer });
+        expect(JSON.stringify(browserOrgs.payload)).toContain(result.payload.organization.id);
+        expect(JSON.stringify(externalOrgs.payload)).not.toContain(result.payload.organization.id);
+      }
+    });
+  }
+
+  for (const state of ["missing-cookie", "invalid-cookie", "revoked-cookie", "invalid-bearer", "operator-bearer"]) {
+    test(`mixed credential controls preserve access with ${state}`, async () => {
+      const app = await boot();
+      const browser = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email: "credential-control-browser@example.com", password: PASSWORD },
+      });
+      const external = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email: "credential-control-bearer@example.com", password: PASSWORD },
+      });
+      expect(browser.response.status).toBe(200);
+      expect(external.response.status).toBe(200);
+      const browserCookie = sessionCookie(browser.response);
+      const externalToken = cookieToken(sessionCookie(external.response));
+      if (state === "revoked-cookie") {
+        expect((await jsonRequest(app.base, "/api/auth/sign-out", { cookie: browserCookie, body: {} })).response.status).toBe(200);
+      }
+      const cookie = state === "missing-cookie" ? undefined
+        : state === "invalid-cookie" ? "mh_session=invalid-disposable-session" : browserCookie;
+      const bearer = state === "invalid-bearer" ? "invalid-disposable-bearer"
+        : state === "operator-bearer" ? TOKEN : externalToken;
+      const browserWins = state === "invalid-bearer" || state === "operator-bearer";
+      const expected = browserWins ? browser : external;
+      const request = { cookie, bearer };
+      const profile = await jsonRequest(app.base, "/api/den/v1/me", request);
+      expect(profile.response.status).toBe(200);
+      expect(profile.payload.user.id).toBe(expected.payload.user.id);
+      const session = await jsonRequest(app.base, "/api/den/v1/session", request);
+      expect(session.payload.user.id).toBe(expected.payload.user.id);
+      const workspace = await jsonRequest(app.base, "/workspaces", request);
+      const expectedWorkspace = await jsonRequest(app.base, "/workspaces", browserWins ? { cookie: browserCookie } : { bearer: externalToken });
+      expect(workspace.response.status).toBe(200);
+      expect(workspace.payload.items.map((item: { id: string }) => item.id))
+        .toEqual(expectedWorkspace.payload.items.map((item: { id: string }) => item.id));
+      expect((await jsonRequest(app.base, "/api/auth/sign-out", { ...request, body: {} })).response.status).toBe(200);
+      expect((await jsonRequest(app.base, "/api/den/v1/me", browserWins ? { cookie: browserCookie } : { bearer: externalToken })).response.status).toBe(401);
+      if (browserWins || state !== "revoked-cookie") {
+        expect((await jsonRequest(app.base, "/api/den/v1/me", browserWins ? { bearer: externalToken } : { cookie: browserCookie })).response.status).toBe(200);
+      }
+    });
+  }
+
   test("exports only the signed-in account record and never credential material", async () => {
     const app = await boot();
     process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
@@ -824,6 +941,19 @@ describe("public account authentication", () => {
     const workspaceId = workspaces.payload.items[0].id as string;
     expect(workspaceId).toMatch(/^ws_web_/);
 
+    // A first-party cookie must select its own account, not be poisoned by
+    // another account's restricted MCP credential in an injected header.
+    for (const path of ["/api/den/v1/me", "/api/den/v1/session", "/api/auth/account/export"]) {
+      const mixed = await jsonRequest(app.base, path, { cookie: otherCookie, bearer: accessToken });
+      expect(mixed.response.status).toBe(200);
+      expect(JSON.stringify(mixed.payload)).toContain(other.payload.user.id);
+      expect(JSON.stringify(mixed.payload)).not.toContain(owner.payload.user.id);
+    }
+    const mixedWorkspace = await jsonRequest(app.base, "/workspaces", { cookie: otherCookie, bearer: accessToken });
+    expect(mixedWorkspace.response.status).toBe(200);
+    expect(mixedWorkspace.payload.items).toHaveLength(1);
+    expect(mixedWorkspace.payload.items[0].id).not.toBe(workspaceId);
+
     const mcpHeaders = {
       Accept: "application/json, text/event-stream",
       "MCP-Protocol-Version": "2025-11-25",
@@ -831,6 +961,7 @@ describe("public account authentication", () => {
     for (const auth of [
       { cookie: ownerCookie },
       { bearer: TOKEN },
+      { cookie: otherCookie, bearer: accessToken },
     ]) {
       const notInvitedTransport = await jsonRequest(app.base, "/mcp/guarded", {
         ...auth,
@@ -1011,6 +1142,77 @@ describe("public account authentication", () => {
       body: { jsonrpc: "2.0", id: "revoked", method: "tools/list" },
     })).response.status).toBe(401);
   });
+
+  for (const change of ["key-revoked", "mode-disabled", "eligibility-removed", "unchanged"]) {
+    test(`delayed MCP body preserves access errors after ${change}`, async () => {
+      process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET = "disposable-mcp-body-integrity-secret";
+      process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "invite";
+      const app = await boot();
+      const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email: "mcp-body@example.com", password: PASSWORD },
+      });
+      expect(signup.response.status).toBe(200);
+      const cookie = sessionCookie(signup.response);
+      process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS = signup.payload.user.id;
+      const created = await jsonRequest(app.base, "/api/auth/account/mcp-access", {
+        cookie, body: { label: "Disposable body upload" },
+      });
+      expect(created.response.status).toBe(201);
+      const workspacePath = join(app.root, "data", "web-workspaces", signup.payload.organization.id);
+      expect(existsSync(workspacePath)).toBe(false);
+      const body = JSON.stringify({ jsonrpc: "2.0", id: "delayed-body", method: "tools/list" });
+      let finishUpload = () => {};
+      const completed = new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const request = httpRequest(`${app.base}/mcp/guarded`, {
+          method: "POST", headers: {
+            Authorization: `Bearer ${created.payload.credential.accessToken}`,
+            "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body),
+            Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25",
+          },
+        }, response => {
+          let result = "";
+          response.setEncoding("utf8");
+          response.on("data", chunk => { result += chunk; });
+          response.on("end", () => resolve({ status: response.statusCode ?? 0, body: result }));
+          response.on("error", reject);
+        });
+        request.on("error", reject);
+        request.setTimeout(4000, () => request.destroy(new Error("Disposable MCP upload timed out")));
+        finishUpload = () => {
+          finishUpload = () => {};
+          request.end(body.slice(1));
+        };
+        request.write(body.slice(0, 1));
+        request.flushHeaders();
+      });
+      try {
+        // Provisioning proves the key passed authentication while the valid
+        // JSON payload is still incomplete. No sleep-only race assumption.
+        for (let attempt = 0; attempt < 200 && !existsSync(workspacePath); attempt += 1) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        expect(existsSync(workspacePath)).toBe(true);
+        if (change === "key-revoked") {
+          const revoked = await jsonRequest(app.base, `/api/auth/account/mcp-access/${created.payload.credential.id}`, {
+            cookie, method: "DELETE",
+          });
+          expect(revoked.response.status).toBe(200);
+        } else if (change === "mode-disabled") {
+          process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "off";
+        } else if (change === "eligibility-removed") {
+          process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS = "";
+        }
+        finishUpload();
+        const result = await completed;
+        expect(result.status).toBe(change === "unchanged" ? 200 : 401);
+        if (change === "unchanged") expect(JSON.parse(result.body).result.tools).toHaveLength(11);
+        else expect(JSON.parse(result.body).code).toBe("unauthorized");
+      } finally {
+        finishUpload();
+        await completed.catch(() => undefined);
+      }
+    });
+  }
 
   test("manages sessions, rotates passwords, and deletes owned account data", async () => {
     const app = await boot();

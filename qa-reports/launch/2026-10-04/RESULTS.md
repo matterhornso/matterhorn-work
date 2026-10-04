@@ -734,4 +734,33 @@ git diff --check
 
 Valid failing evidence: `/tmp/matterhorn-mcp-request-red-final-2026-10-04.log`, `/tmp/matterhorn-mcp-request-late-red-2026-10-04.log` and `/tmp/matterhorn-mcp-history-red-final-2026-10-04.log`. Final broader checks: `/tmp/matterhorn-mcp-authority-{http,typecheck,build,safety}-2026-10-04.log`. The session-read-model suite is already part of the platform safety gate. No new workflow or dependency is required.
 
-This correction does not cancel inference already dispatched or undo completed side effects. It does not certify all MCP operations, native multi-process races or hosted execution. Next local security coverage is consistent cookie/bearer identity selection across workspace and account routes, plus error handling when access expires during MCP body upload. Those are review targets, not yet reproduced findings. Frontend and hosted acceptance remain separate open work; the prior frontend result was not rerun for this backend-only correction. No push, merge or deployment occurred.
+This correction does not cancel inference already dispatched or undo completed side effects. It does not certify all MCP operations, native multi-process races or hosted execution. The cookie/bearer identity and delayed MCP body follow-up is recorded below. Frontend and hosted acceptance remain separate open work; the prior frontend result was not rerun for this backend-only correction. No push, merge or deployment occurred.
+
+## Account identity consistency and delayed MCP uploads
+
+The guarded dispatch correction above is committed as `b7ccc2f2a4fde7652dc95d807521137897b5dd63`. The next two-account HTTP review reproduced eight account-selection failures when a valid browser cookie and a different account's valid session bearer appeared in the same request. Workspace routes selected the browser account, but session/profile/security/export routes selected the bearer account. Sign-out revoked the bearer session while clearing the browser cookie; session revocation and workspace creation also targeted the bearer account. Password change targeted it when the supplied current password matched that account; the fixture accounts deliberately share a test password. These reproductions require supplied valid credentials for both accounts. They are not unauthenticated cross-account access or evidence of a production incident.
+
+Account routes now use the established workspace rule: a currently valid first-party cookie takes precedence. If no valid cookie exists, bearer-session authentication remains supported. The token captured for an operation is still subject to existing mutation and in-flight authority checks; this change does not introduce fallback to another principal after a pending operation is revoked. Cookie-only MCP-key management remains cookie-only, and an MCP key cannot authorize account-security APIs on its own.
+
+All eight original cases now pass. Five additional controls verify missing, invalid and revoked cookies with a valid bearer, plus invalid and local-operator bearer headers with a valid cookie. They check account identity, workspace selection and which exact session sign-out revokes. The existing invited-MCP test now verifies that another account's MCP header does not poison the browser's profile/export/session access or grant it guarded-MCP transport authority. Bearer-only MCP restrictions and cross-account denials remain covered.
+
+A separate slow-upload reproduction withheld all but the first byte of a valid JSON body until workspace provisioning proved that MCP authentication had succeeded. Revoking its key, disabling MCP access or removing account eligibility then incorrectly returned HTTP 400/Invalid JSON. The body parser now preserves `ApiError`, including the existing body-size limit, instead of treating authorization rejection as JSON syntax failure. All three cases return 401/unauthorized; unchanged access completes normally and the existing malformed-JSON test remains 400. This was misleading failure classification, not execution after revocation.
+
+All accounts, keys, workspace provisioning, password changes and revocations in these tests are disposable and local. No existing preview, user session, hosted account, provider, email inbox or production configuration was changed.
+
+- Full local auth, backend-security, chat, rate-limit and guarded-MCP suites: **238 pass, zero fail, 2,201 assertions across five files**.
+- Server typecheck and build: pass.
+- Full platform safety gate: **all 11 stages pass**, with terminal exit zero.
+- Diff whitespace: pass.
+
+```sh
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts apps/server/src/hosted-guarded-mcp.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+Failing reproductions: `/tmp/matterhorn-mixed-principal-red-2026-10-04.log` (eight failures) and `/tmp/matterhorn-mcp-body-red-2026-10-04.log` (three failures, unchanged control passing). Final regression evidence: `/tmp/matterhorn-principal-body-{http,typecheck,build,safety}-2026-10-04.log`. The auth suite is already part of the full safety gate; no dependency, migration, production cleanup or new workflow is required.
+
+Next local review targets are session snapshots and event streams across revocation while awaiting runtime data, including reconnect and cancellation. Their authorization freshness is not proved by these account-route and request-body tests. The full browser/UI, hosted five-desk, inbox, accounting and encryption/restore gates remain open. No push, merge or deployment occurred.

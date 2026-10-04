@@ -5229,13 +5229,14 @@ function parseCookieHeader(header: string | null): Map<string, string> {
   return cookies;
 }
 
-function matterhornSessionToken(request: Request): string | null {
+function matterhornSessionToken(request: Request, authStore: MatterhornAuthStore): string | null {
+  // Match workspace authentication: a valid first-party browser session wins
+  // over an unrelated bearer header, including on security and sign-out routes.
+  const cookie = matterhornCookieSessionToken(request);
+  if (cookie && authStore.getSession(cookie)) return cookie;
   const authorization = request.headers.get("authorization")?.trim() ?? "";
   const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-  if (bearer) return bearer;
-  return parseCookieHeader(request.headers.get("cookie")).get(
-    MATTERHORN_SESSION_COOKIE,
-  ) ?? null;
+  return bearer ?? cookie;
 }
 
 function matterhornCookieSessionToken(request: Request): string | null {
@@ -5416,7 +5417,7 @@ function requireMatterhornSessionToken(
   request: Request,
   authStore: MatterhornAuthStore,
 ): string {
-  const token = matterhornSessionToken(request);
+  const token = matterhornSessionToken(request, authStore);
   if (!token || !authStore.getSession(token)) {
     throw new ApiError(401, "unauthorized", "Sign in to continue.");
   }
@@ -10641,7 +10642,7 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/auth/sign-out", "none", async ({ request }) => {
-    const token = matterhornSessionToken(request);
+    const token = matterhornSessionToken(request, authStore);
     if (token) authStore.signOut(token);
     const response = jsonResponse({ ok: true });
     response.headers.append(
@@ -10833,7 +10834,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/api/den/v1/session", "none", async ({ request }) => {
-    const token = matterhornSessionToken(request);
+    const token = matterhornSessionToken(request, authStore);
     const session = token ? authStore.getSession(token) : null;
     const response = jsonResponse(
       session
@@ -11111,7 +11112,7 @@ function createRoutes(
     try {
       payload = JSON.parse(await readBodyTextLimited(ctx.request, 524_288, "Hosted MCP")) as unknown;
     } catch (error) {
-      if (error instanceof ApiError && error.status === 413) throw error;
+      if (error instanceof ApiError) throw error;
       return hostedGuardedMcpParseError();
     }
     return handleHostedGuardedMcpPost({
