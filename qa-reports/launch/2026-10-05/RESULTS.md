@@ -552,3 +552,33 @@ Final logs use `/tmp/matterhorn-retry-ownership-`: `unit-final-2026-10-05.log`, 
 This is local synthetic account/runtime evidence. The guard cannot retract an abort, revert, dispatch or restore already sent, and does not establish atomic server rollback protection against another tab/device, same-operation Stop cancellation during retry, or exact runtime-message correlation. Those remain separate reviews. Existing account, consent, attachments, drafts, layout and signing boundaries are preserved; Impeccable hardening and Uncodixfy introduced no visual redesign or new screenshot certification. No real provider call, hosted configuration change, push, merge or deployment occurred.
 
 Next review: exercise retry cancellation and mutations already in flight, then authoritative server ordering for competing clients. The gateway currently forwards abort/revert/unrevert under workspace authorization; the local ownership check is not a server revision or transaction claim. Repeated Stop ordering, message-to-metric correlation, native image-decoding bounds and the previously recorded hosted operational gates also remain unverified.
+
+## Stop during chat preparation
+
+Following `0578272a2f3fb4ad89543b7ea0206fc47cd51c1d`, two browser cases reproduced a retry dispatching after Stop while its abort or revert response was delayed. Three additional cases reproduced ordinary sends, retries and continuations dispatching after Stop while privacy preflight was delayed. Five unchanged controls passed. These reproductions use the production shell with synthetic account/runtime HTTP responses, not a real model.
+
+Pending submissions now have request-specific cancellation signals. Stop marks the exact request synchronously, before waiting for the server acknowledgement. Account reset stops pending preparation and clears registrations; completion releases them. The shared send route checks cancellation after attachment/context preparation, after preflight and before dispatch. It does not recheck cancellation after acceptance, because accepted work cannot truthfully be labelled unsent. A cancelled retry that has already reverted invokes restoration only if its account and local request ownership remain current. If restoration fails, the existing recovery error remains explicit; no successful rollback is claimed.
+
+The accepted-response checks caught a defect in the initial correction: reusing the preparation check after dispatch caused six cases to misreport accepted work as cancelled, including two retries that sent an inappropriate restore. The check is now limited to preparation; the post-dispatch account guard remains. These failures describe the intermediate local patch, not an additional defect in the preceding committed baseline.
+
+Thirteen added unit cases cover exact-operation cancellation, another workspace/newer request, registration cleanup, account reset, cancellation at each retry boundary, restoration failure, supersession, accepted dispatch and idempotent cancellation metrics. The focused unit suites pass **70 tests, zero failures, 193 assertions**. The expanded browser group passes **22 cases, zero failures, 109 assertions**, including accepted/rejected Stop acknowledgements, no-Stop controls, correct restore counts, draft preservation and a fresh explicit send after Stop.
+
+Final checks pass **158 mounted browser cases, zero failures, 938 assertions**; **1,499 frontend tests, zero failures, 8,629 assertions across 194 files**; typecheck; web build; and **all 11 platform-safety stages**, with terminal exit zero. Existing bundle-size warnings remain. Two overlapping typechecks failed on missing generated Crypto App SDK declarations while other commands were rebuilding the same clean output directory. After those commands finished, the serialized typecheck passed without source changes or type suppression. Use serialized artifact-producing checks when reproducing this gate.
+
+```sh
+bun test apps/app/tests/chat-submission-control.test.ts apps/app/tests/response-actions.test.tsx apps/app/tests/session-cancelled-approval.test.ts
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --test-name-pattern 'held at' --timeout 120000
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+bun test apps/app/tests
+pnpm test:matterhorn-platform-safety
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+```
+
+Evidence: `/tmp/matterhorn-retry-stop-red-2026-10-05.log` and `/tmp/matterhorn-presend-stop-red-2026-10-05.log` reproduce the five original failures. `/tmp/matterhorn-presend-stop-accepted-red-2026-10-05.log` records the six intermediate-patch failures. Final logs use `/tmp/matterhorn-presend-stop-`: `unit-2026-10-05.log`, `final-focused-2026-10-05.log`, `mounted-final-2026-10-05.log`, `app-final-2026-10-05.log`, `safety-final-2026-10-05.log`, `typecheck-serial-2026-10-05.log` and `build-final-2026-10-05.log`. `typecheck-final` and `typecheck-verified` are the failed overlapping runs, not final passes.
+
+Impeccable hardening and Uncodixfy preserved the existing interface and made cancellation feedback explicit. One bounded capture round inspected **390px light** and **1440px dark** with reduced motion. The message wraps without clipping, the composer remains usable, and both widths pass the page-overflow assertion. Captures are `/tmp/matterhorn-presend-stop-captures-2026-10-05/stop-light-390.png` and `stop-dark-1440.png`. The capture test passes one case with seven assertions. This is not Safari, Firefox, assistive-technology, 200% zoom or hosted acceptance certification.
+
+Existing accepted requests still require actual runtime cancellation and usage reconciliation. Requests already forwarded to the server, concurrent clients, repeated Stop acknowledgements, and workflow-status bookkeeping need separate review. Source inspection found that desk workflow staging/start runs independently of prompt preflight; the start endpoint changes persisted workflow status rather than invoking inference, but its cancellation/status behavior has not yet been exercised. No existing previews/chats, real credentials, hosted configuration, providers or wallets were changed; nothing was pushed, merged or deployed.
+
+Next task: verify cancellation once the gateway has received a message, including Stop racing with gateway preparation, then session mutation ordering across clients. A client-side signal cannot withdraw an HTTP request already accepted by the gateway. Keep hosted release drift, guarded mode, five-desk real responses, inbox/recovery, isolation, encryption and backup restore as separate launch gates.

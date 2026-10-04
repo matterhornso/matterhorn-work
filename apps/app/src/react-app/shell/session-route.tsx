@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { AccountStateChangedError, captureAccountGeneration } from "../../app/lib/account-client-state";
+import { requireActiveChatSubmission } from "../../app/lib/chat-submission-control";
 import type {
   AgentPartInput,
   FilePartInput,
@@ -2830,9 +2831,12 @@ export function SessionRoute() {
       onOpenSettingsSection: (section: "commands" | "skills" | "mcps" | "extensions" | "plugins") => {
         handleOpenSettings(section === "skills" ? "/settings/skills" : section === "mcps" || section === "extensions" ? "/settings/extensions/mcp" : section === "plugins" ? "/settings/extensions/plugins" : "/settings/general");
       },
-      onSendDraft: async (draft: ComposerDraft) => {
-        const requireCurrentAccount = () => { if (!isCurrentAccount()) throw new AccountStateChangedError(); };
-        requireCurrentAccount();
+      onSendDraft: async (draft: ComposerDraft, signal?: AbortSignal) => {
+        const requireCurrentPreparation = () => {
+          if (!isCurrentAccount()) throw new AccountStateChangedError();
+          requireActiveChatSubmission(signal);
+        };
+        requireCurrentPreparation();
         validatePrivacyConsentToken(draft.privacy?.consentToken);
         const text = (draft.resolvedText ?? draft.text).trim();
         if (!text && draft.attachments.length === 0) return;
@@ -2881,6 +2885,7 @@ export function SessionRoute() {
               agentId: selectedAgent ?? undefined,
               ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
             });
+            requireCurrentPreparation();
             if (privacyPreflight.decision !== "allow") {
               throw new Error(JSON.stringify({
                 code: privacyPreflight.decision === "blocked" ? "agent_privacy_blocked" : "agent_privacy_consent_required",
@@ -2901,7 +2906,7 @@ export function SessionRoute() {
             ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
             ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
           };
-          requireCurrentAccount();
+          requireCurrentPreparation();
           const result = await opencodeClient.session.command(commandRequest);
           if (result.error) {
             throw new Error(serializeSDKError(result.error));
@@ -2925,7 +2930,7 @@ export function SessionRoute() {
             ? Promise.resolve(undefined)
             : buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode),
         ]);
-        requireCurrentAccount();
+        requireCurrentPreparation();
         const executionModeTools = draft.answerOnly || draft.continuationOf ? { "*": false } : buildMatterhornPromptTools({
           mode: executionMode,
           agentId: selectedAgent,
@@ -2952,6 +2957,7 @@ export function SessionRoute() {
             } : {}),
             ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
           }));
+          requireCurrentPreparation();
           if (draft.continuationOf) requireAnswerContinuationSupport(privacyPreflight, draft.continuationOf);
           if (!draft.privacy?.consentToken && privacyPreflight.decision !== "allow") {
             throw new Error(JSON.stringify({
@@ -2962,7 +2968,7 @@ export function SessionRoute() {
           }
         }
 
-        requireCurrentAccount();
+        requireCurrentPreparation();
         const dispatchStartedAt = performance.now();
         promptTimingRef.current.set(selectedSessionId, {
           startedAt: dispatchStartedAt,
@@ -3026,7 +3032,9 @@ export function SessionRoute() {
           promptTimingRef.current.delete(selectedSessionId);
           throw error;
         }
-        requireCurrentAccount();
+        // Cancellation gates preparation, not accepted upstream work. Throwing
+        // a local Stop here would misreport acceptance and trigger retry restore.
+        if (!isCurrentAccount()) throw new AccountStateChangedError();
         recordInspectorEvent("session.prompt.dispatch_accepted", {
           attemptId,
           dispatchDurationMs: Math.round(performance.now() - dispatchStartedAt),

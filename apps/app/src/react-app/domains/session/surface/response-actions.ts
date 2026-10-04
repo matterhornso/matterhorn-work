@@ -3,6 +3,7 @@ import type { MatterhornAgentPrivacyPreflightResponse } from "@matterhorn-work/t
 import { AccountStateChangedError, captureAccountGeneration } from "../../../../app/lib/account-client-state";
 import type { ComposerAttachment } from "../../../../app/types";
 import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
+import { requireActiveChatSubmission } from "../../../../app/lib/chat-submission-control";
 
 export function failedResponseId(
   responseMessageId: string | undefined,
@@ -59,6 +60,7 @@ export function restoreResponseRetryAttachments(turn: AssistantResponseRetryTurn
 
 export type AssistantResponseRetryTransaction<T> = {
   isCurrent: () => boolean;
+  signal: AbortSignal;
   prepare: () => Promise<T>;
   abort: () => Promise<void>;
   revert: () => Promise<unknown>;
@@ -83,13 +85,17 @@ export async function runAssistantResponseRetry<T>(
   // Classification/consent preparation can be cancelled. Do not change the
   // existing conversation until it finishes successfully.
   requireCurrent();
+  requireActiveChatSubmission(transaction.signal);
   const prepared = await transaction.prepare();
   requireCurrent();
+  requireActiveChatSubmission(transaction.signal);
   await transaction.abort();
   requireCurrent();
+  requireActiveChatSubmission(transaction.signal);
   await transaction.revert();
-  requireCurrent();
   try {
+    requireCurrent();
+    requireActiveChatSubmission(transaction.signal);
     await transaction.dispatch(prepared);
   } catch (dispatchError) {
     // Never compensate an older retry over newer work. This guards local

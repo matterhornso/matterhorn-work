@@ -4,6 +4,7 @@ import { useSessionActivityStore } from "../src/react-app/domains/session/status
 import { useComposerStateStore } from "../src/react-app/domains/session/surface/composer-state-store";
 import { JevPreparationCancelledError } from "../src/react-app/domains/session/surface/use-jev-chat";
 import { ResponseRetrySupersededError } from "../src/react-app/domains/session/surface/response-actions";
+import { ChatSubmissionStoppedError } from "../src/app/lib/chat-submission-control";
 import {
   beginModelOperation, clearModelOperationMetrics, pendingModelOperation,
   readModelOperationMetrics, recordModelOperationCancelled, recordModelOperationCompleted,
@@ -19,7 +20,7 @@ beforeEach(() => {
   useComposerStateStore.getState().clearSession(sessionId);
 });
 
-for (const { label, error } of [{ label: "approval", error: cancelled }, { label: "Jev preparation", error: new JevPreparationCancelledError() }]) {
+for (const { label, error } of [{ label: "approval", error: cancelled }, { label: "Jev preparation", error: new JevPreparationCancelledError() }, { label: "submission preparation", error: new ChatSubmissionStoppedError() }]) {
 for (const stopFirst of [false, true]) {
   test(`cancelled ${label} returns to idle and records cancellation once (Stop first: ${stopFirst})`, () => {
     const operation = beginModelOperation({ workspaceId, sessionId, source: "chat" });

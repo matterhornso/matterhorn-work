@@ -25,11 +25,14 @@ let promptFixture = false;
 let consentFixture = false;
 let rejectConsent = false;
 let delayedPromptDispatch = false;
+let delayedPromptPreflight = false;
 let rejectDelayedPrompt = false;
 let delayedStop = false;
 let rejectStop = false;
 let releaseStop: (() => void) | undefined;
 let responseRetryFixture = false;
+let delayedRetryMutation: "abort" | "revert" | undefined;
+let releaseRetryMutation: (() => void) | undefined;
 let historyText = true;
 let terminalFailure = false;
 let terminalRateLimited = false;
@@ -293,6 +296,10 @@ beforeAll(async () => {
           : Response.json({ consentToken: "synthetic-consent-token" });
       }
       if (responseRetryFixture && request.method === "POST" && /\/(abort|revert|unrevert)$/.test(path)) {
+        if (delayedRetryMutation && path.endsWith(`/${delayedRetryMutation}`) && !releaseRetryMutation) {
+          await new Promise<void>(resolve => { releaseRetryMutation = resolve; });
+        }
+        if (path.endsWith("/abort") && rejectStop) return Response.json({ message: "Synthetic Stop failed." }, { status: 500 });
         return Response.json(path.endsWith("/abort") ? true : session("ses_fixture"));
       }
       if (realGateway && request.method === "POST" && (path.endsWith("/messages/preflight") || path.endsWith("/messages"))) {
@@ -309,6 +316,7 @@ beforeAll(async () => {
       if (promptFixture && request.method === "POST" && (path.endsWith("/messages/preflight") || path.endsWith("/messages"))) {
         const stage = path.endsWith("/preflight") ? "preflight" : "dispatch";
         promptRequests.push({ stage, body: await request.json() });
+        if (stage === "preflight" && delayedPromptPreflight) await new Promise<void>(resolve => { release = resolve; });
         if (stage === "dispatch" && delayedPromptDispatch) {
           await new Promise<void>(resolve => { release = resolve; });
           if (rejectDelayedPrompt) return Response.json({ message: "Synthetic delayed dispatch failed." }, { status: 500 });
@@ -475,6 +483,7 @@ beforeAll(async () => {
 afterAll(async () => {
   release?.();
   releaseStop?.();
+  releaseRetryMutation?.();
   await browser?.close();
   server?.stop(true);
 });
@@ -488,10 +497,13 @@ beforeEach(() => {
   consentFixture = false;
   rejectConsent = false;
   delayedPromptDispatch = false;
+  delayedPromptPreflight = false;
   rejectDelayedPrompt = false;
   delayedStop = rejectStop = false;
   releaseStop = undefined;
   responseRetryFixture = false;
+  delayedRetryMutation = undefined;
+  releaseRetryMutation = undefined;
   historyText = true;
   terminalFailure = false;
   terminalRateLimited = false;
@@ -506,6 +518,107 @@ beforeEach(() => {
 });
 
 const operations: Array<"fork" | "revert"> = ["fork", "revert"];
+for (const operation of ["send", "retry", "continue"]) {
+  for (const stage of ["preflight", "dispatch"]) {
+  for (const stopResult of ["none", "accepted", "rejected"]) {
+    const stopped = stopResult !== "none";
+    test(`${operation} held at ${stage} respects Stop=${stopResult}`, async () => {
+      promptFixture = responseRetryFixture = true;
+      delayedPromptPreflight = stage === "preflight";
+      delayedPromptDispatch = stage === "dispatch";
+      terminalFailure = operation === "retry";
+      incompleteResponse = operation === "continue";
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      context.setDefaultTimeout(6000);
+      await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+      const page = await context.newPage();
+      try {
+        await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+        await page.getByRole("button", { name: "Change model", exact: true }).click();
+        await page.getByRole("option", { name: /Fixture model/ }).click();
+        const editor = page.getByRole("textbox").first();
+        await editor.fill("Preserve unsent preflight draft");
+        await page.getByRole("button", { name: operation === "send" ? "Ask" : operation === "retry" ? "Retry response" : "Continue answer", exact: true }).click();
+        for (let attempt = 0; attempt < 100 && !release; attempt++) await page.waitForTimeout(20);
+        expect(release).toBeDefined();
+        if (stopped) {
+          rejectStop = stopResult === "rejected";
+          const stoppedResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/abort"));
+          await page.getByRole("button", { name: "Stop generating", exact: true }).click();
+          await stoppedResponse;
+        }
+        const heldResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith(stage === "preflight" ? "/preflight" : "/messages"));
+        release?.();
+        await heldResponse;
+        await page.waitForTimeout(350);
+        const dispatchCount = stopped && stage === "preflight" ? 0 : 1;
+        expect(promptRequests.filter(request => request.stage === "dispatch")).toHaveLength(dispatchCount);
+        expect(requests.filter(request => request.path.endsWith("/unrevert"))).toHaveLength(stopped && stage === "preflight" && operation === "retry" ? 1 : 0);
+        if (stage === "dispatch") expect(await page.locator('[data-matterhorn-session-error]').filter({ hasText: "Request stopped before the message was sent" }).count()).toBe(0);
+        if ((stopped && stage === "preflight") || operation !== "send") expect((await editor.innerText()).trim()).toBe("Preserve unsent preflight draft");
+        if (operation === "retry" && stage === "preflight" && stopResult === "accepted" && process.env.STOP_PREPARATION_CAPTURES) {
+          await mkdir(process.env.STOP_PREPARATION_CAPTURES, { recursive: true });
+          await page.emulateMedia({ reducedMotion: "reduce" });
+          const error = page.locator('[data-matterhorn-session-error]');
+          await error.getByText("Request stopped before the message was sent. Your draft is still available.", { exact: true }).waitFor();
+          for (const [theme, width] of [["light", 390], ["dark", 1440]] satisfies [string, number][]) {
+            await page.evaluate(value => {
+              document.documentElement.dataset.theme = value;
+              document.documentElement.classList.toggle("dark", value === "dark");
+            }, theme);
+            await page.setViewportSize({ width, height: 1000 });
+            await error.scrollIntoViewIfNeeded();
+            await page.screenshot({ path: join(process.env.STOP_PREPARATION_CAPTURES, `stop-${theme}-${width}.png`), fullPage: true });
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+          }
+        }
+        if (stopped) {
+          delayedPromptPreflight = delayedPromptDispatch = rejectStop = terminalFailure = incompleteResponse = false;
+          await editor.fill("Fresh explicit send after Stop");
+          await page.getByRole("button", { name: "Ask", exact: true }).click();
+          for (let attempt = 0; attempt < 100 && promptRequests.filter(request => request.stage === "dispatch").length < dispatchCount + 1; attempt++) await page.waitForTimeout(20);
+          expect(promptRequests.filter(request => request.stage === "dispatch")).toHaveLength(dispatchCount + 1);
+        }
+      } finally { release?.(); await context.close(); }
+    }, 30000);
+  }
+  }
+}
+for (const boundary of ["abort", "revert"] satisfies Array<"abort" | "revert">) {
+  for (const stopped of [false, true]) {
+    test(`retry held at ${boundary} respects Stop=${stopped}`, async () => {
+      promptFixture = responseRetryFixture = terminalFailure = true;
+      delayedRetryMutation = boundary;
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      context.setDefaultTimeout(6000);
+      await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+      const page = await context.newPage();
+      try {
+        await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+        await page.getByRole("button", { name: "Change model", exact: true }).click();
+        await page.getByRole("option", { name: /Fixture model/ }).click();
+        const editor = page.getByRole("textbox").first();
+        await editor.fill("Preserve draft when stopping retry");
+        await page.getByRole("button", { name: "Retry response", exact: true }).click();
+        for (let attempt = 0; attempt < 100 && !releaseRetryMutation; attempt++) await page.waitForTimeout(20);
+        expect(releaseRetryMutation).toBeDefined();
+        if (stopped) {
+          const stopResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/abort"));
+          await page.getByRole("button", { name: "Stop generating", exact: true }).click();
+          await stopResponse;
+        }
+        const retryResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith(`/${boundary}`));
+        releaseRetryMutation?.();
+        await retryResponse;
+        await page.waitForTimeout(350);
+        expect(promptRequests.filter(request => request.stage === "dispatch")).toHaveLength(stopped ? 0 : 1);
+        expect(requests.filter(request => request.path.endsWith("/revert"))).toHaveLength(stopped && boundary === "abort" ? 0 : 1);
+        expect(requests.filter(request => request.path.endsWith("/unrevert"))).toHaveLength(stopped && boundary === "revert" ? 1 : 0);
+        expect((await editor.innerText()).trim()).toBe("Preserve draft when stopping retry");
+      } finally { releaseRetryMutation?.(); await context.close(); }
+    }, 30000);
+  }
+}
 for (const boundary of ["unchanged", "newer", "navigate", "return", "navigate empty", "return empty", "cross-tab logout"]) {
   for (const rejected of [false, true]) {
     test(`delayed Stop rejected=${rejected} after ${boundary}`, async () => {

@@ -35,6 +35,7 @@ import {
 
 import { createClient, unwrap } from "../../../../app/lib/opencode";
 import { abortSession, revertSession, unrevertSession } from "../../../../app/lib/opencode-session";
+import { beginChatSubmission, stopChatSubmission, requireActiveChatSubmission, ChatSubmissionStoppedError } from "../../../../app/lib/chat-submission-control";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import { MINIMAL_UI } from "../../../../app/lib/minimal-ui";
 import { Button } from "@/components/ui/button";
@@ -688,7 +689,7 @@ export type SessionSurfaceProps = {
   onPrivateModeChange?: (enabled: boolean) => void;
   onModelPickerOpenChange: (open: boolean) => void;
   onModelChange: (model: ModelRef) => void;
-  onSendDraft: (draft: ComposerDraft) => Promise<void> | void;
+  onSendDraft: (draft: ComposerDraft, signal?: AbortSignal) => Promise<void> | void;
   onDraftChange: (draft: ComposerDraft) => void;
   attachmentsEnabled: boolean;
   attachmentsDisabledReason: string | null;
@@ -1041,6 +1042,9 @@ export function findPrivacyPreflightInError(value: unknown, depth = 0): Matterho
 }
 
 export function parseSessionError(thrown: unknown): SessionError {
+  if (thrown instanceof ChatSubmissionStoppedError) {
+    return { message: thrown.message, kind: "cancelled", retryable: false };
+  }
   if (thrown instanceof ResponseRetrySupersededError) {
     return { message: thrown.message, kind: "cancelled", retryable: false };
   }
@@ -2371,6 +2375,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       reasoningLevel: props.modelVariant,
       source: "chat",
     });
+    const submission = beginChatSubmission(operation);
     try {
       let resolvedText = addBittensorContextToResolvedText(text, bittensorContext);
       const nextDraft = buildDraft(text, attachments, { resolvedText, privacyConsentToken });
@@ -2407,7 +2412,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
       const prepared = await jevChat.prepare(nextDraft);
       if (!isCurrentAccount()) return;
-      await props.onSendDraft(prepared);
+      requireActiveChatSubmission(submission.signal);
+      await props.onSendDraft(prepared, submission.signal);
       if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
       if (useComposerStateStore.getState().clearSubmittedSession(props.sessionId, submittedComposer)) {
@@ -2428,6 +2434,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
+    } finally {
+      submission.finish();
     }
   }, [captureViewLifetime, activeWorkflowDeskAgent, attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.modelVariant, props.onDraftChange, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft, jevChat.prepare]);
 
@@ -2454,11 +2462,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
     const operation = beginModelOperation({ workspaceId: props.workspaceId, sessionId: props.sessionId,
       providerId: props.selectedModel.providerID, modelId: props.selectedModel.modelID,
       reasoningLevel: props.modelVariant, source: "chat" });
+    const submission = beginChatSubmission(operation);
     try {
       const continuation = { ...buildDraft(MATTERHORN_CONTINUE_ANSWER_TEXT, [], { privacyConsentToken }), continuationOf: messageId };
       const prepared = await jevChat.prepare(continuation);
       if (!isCurrentAccount()) return;
-      await props.onSendDraft(prepared);
+      requireActiveChatSubmission(submission.signal);
+      await props.onSendDraft(prepared, submission.signal);
       if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
       void queryClient.invalidateQueries({ queryKey: snapshotQueryKey, exact: true });
@@ -2475,6 +2485,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       }
       throw nextError;
     } finally {
+      submission.finish();
       if (isCurrentView() && isLatestModelOperation(operation)) {
         continuationSendingRef.current = false;
         setSending(false);
@@ -2489,6 +2500,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     jevChat.cancel();
     if (!chatStreaming) return;
     const operation = latestModelOperation(props.workspaceId, props.sessionId);
+    stopChatSubmission(operation);
     const isCurrentOperation = () => latestModelOperation(props.workspaceId, props.sessionId) === operation;
     suppressNextAbortFailureRef.current = true;
     setError(null);
@@ -2550,18 +2562,20 @@ export function SessionSurface(props: SessionSurfaceProps) {
       promptMessageId: retryTurn.promptMessageId,
     });
 
+    const submission = beginChatSubmission(operation);
     try {
       const retryAttachments = restoreResponseRetryAttachments(retryTurn);
       if (!prompt && retryAttachments.length === 0) throw new Error("This turn has no saved prompt to retry. Send a new message from the composer.");
       let resolvedText = addBittensorContextToResolvedText(prompt, bittensorContext);
       await runAssistantResponseRetry({
         isCurrent: () => isLatestModelOperation(operation),
+        signal: submission.signal,
         prepare: () => jevChat.prepare({ ...buildDraft(prompt, retryAttachments, { resolvedText, privacyConsentToken }),
           ...(prompt === MATTERHORN_CONTINUE_ANSWER_TEXT ? { answerOnly: true } : {}),
         }),
         abort: () => abortSession(opencodeClient, props.sessionId),
         revert: () => revertSession(opencodeClient, props.sessionId, retryTurn.promptMessageId),
-        dispatch: (prepared) => props.onSendDraft(prepared),
+        dispatch: (prepared) => props.onSendDraft(prepared, submission.signal),
         restore: () => unrevertSession(opencodeClient, props.sessionId),
       });
       if (!isCurrentAccount()) return;
@@ -2587,6 +2601,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       }
       throw nextError;
     } finally {
+      submission.finish();
       if (isCurrentView() && isLatestModelOperation(operation)) retrySendingRef.current = false;
     }
   }, [captureViewLifetime, bittensorContext, buildDraft, chatStreaming, jevChat.prepare, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, queryClient, snapshotQueryKey]);
