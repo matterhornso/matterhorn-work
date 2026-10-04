@@ -3268,6 +3268,160 @@ describe("workspace session read APIs", () => {
     expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/prompt_async")).toHaveLength(0);
   });
 
+  for (const mount of ["/opencode", "/w/ws_1/opencode", "/workspace/ws_1/opencode"]) {
+    for (const endpoint of ["message", "prompt_async"]) {
+      for (const kind of ["secret-inline", "secret-file", "remote", "outside", "regular-file", "regular-inline", "secret-label", "oversize-inline", "oversize-file", "invalid-inline", "at-part-limit", "too-many-parts"]) {
+        test(`raw attachment inspection ${mount}/${endpoint}: ${kind}`, async () => {
+          const workspaceRoot = await createWorkspaceRoot();
+          const outside = await createWorkspaceRoot();
+          const content = kind.startsWith("secret-") && kind !== "secret-label"
+            ? "PRIVATE_KEY=disposable-raw-attachment-secret" : "Public validator notes.";
+          const path = join(kind === "outside" ? outside : workspaceRoot, "notes.txt");
+          await writeFile(path, content);
+          if (kind === "oversize-file") await truncate(path, 5_000_001);
+          const inline = kind === "invalid-inline" ? "data:text/plain;base64,!invalid!"
+            : `data:text/plain;base64,${(kind === "oversize-inline" ? Buffer.alloc(5_000_001, 97) : Buffer.from(content)).toString("base64")}`;
+          const mock = startMockOpencode();
+          const app = await startOpenworkServer({ workspaceRoot,
+            opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+          const response = await fetch(`http://127.0.0.1:${app.server.port}${mount}/session/ses_1/${endpoint}`, {
+            method: "POST", headers: { ...auth(app.token), "Content-Type": "application/json" },
+            body: JSON.stringify({ model: { providerID: "local", modelID: "private-local-model" }, parts: [
+              { type: "text", text: "Review these notes" },
+              ...(["at-part-limit", "too-many-parts"].includes(kind)
+                ? Array.from({ length: kind === "at-part-limit" ? 62 : 63 }, () => ({ type: "text", text: "Extra note" })) : []),
+              { type: "file", filename: "notes.txt", mime: "text/plain", label: kind === "secret-label" ? "secret" : "public",
+                contentHash: "caller-controlled-hash", sizeBytes: 1,
+                url: kind.endsWith("inline") ? inline : kind === "remote" ? "https://example.invalid/private.txt" : pathToFileURL(path).href },
+            ] }),
+          });
+          const text = await response.text();
+          const expected = kind.startsWith("secret-") ? 422 : kind.startsWith("oversize-") ? 413
+            : ["remote", "outside", "invalid-inline", "too-many-parts"].includes(kind) ? 400 : 200;
+          expect(response.status, text).toBe(expected);
+          expect(text).not.toContain("disposable-raw-attachment-secret");
+          const dispatches = mock.requests.filter(entry => entry.method === "POST" && entry.pathname === `/session/ses_1/${endpoint}`);
+          expect(dispatches).toHaveLength(expected === 200 ? 1 : 0);
+          if (expected === 200) expect(dispatches[0].body).toMatchObject({ parts: expect.arrayContaining([expect.objectContaining({
+            type: "file", filename: "notes.txt", mime: "text/plain", url: inline,
+          })]) });
+        });
+      }
+      test(`raw attachment remains frozen after inspection ${mount}/${endpoint}`, async () => {
+        const workspaceRoot = await createWorkspaceRoot();
+        const path = join(workspaceRoot, "notes.txt");
+        const original = "Disposable validator notes.";
+        await writeFile(path, original);
+        let agentReads = 0;
+        const mock = startMockOpencode({ beforeRead: async pathname => {
+          if (pathname === "/agent" && ++agentReads === 2) await writeFile(path, "PRIVATE_KEY=disposable-post-inspection-secret");
+        } });
+        const app = await startOpenworkServer({ workspaceRoot,
+          opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+        const response = await fetch(`http://127.0.0.1:${app.server.port}${mount}/session/ses_1/${endpoint}`, {
+          method: "POST", headers: { ...auth(app.token), "Content-Type": "application/json" },
+          body: JSON.stringify({ model: { providerID: "local", modelID: "private-local-model" }, parts: [
+            { type: "text", text: "Summarize the notes" },
+            { type: "file", filename: "notes.txt", mime: "text/plain", url: pathToFileURL(path).href },
+          ] }),
+        });
+        expect(response.status).toBe(200);
+        await response.text();
+        expect(await readFile(path, "utf8")).toBe("PRIVATE_KEY=disposable-post-inspection-secret");
+        const dispatched = mock.requests.filter(entry => entry.method === "POST" && entry.pathname === `/session/ses_1/${endpoint}`);
+        expect(dispatched).toHaveLength(1);
+        expect(dispatched[0].body).toMatchObject({ parts: expect.arrayContaining([expect.objectContaining({
+          type: "file", url: `data:text/plain;base64,${Buffer.from(original).toString("base64")}`,
+        })]) });
+      });
+      test(`raw attachment consent binds inspected contents ${mount}/${endpoint}`, async () => {
+        process.env.MATTERHORN_PROVIDER_PRIVACY_MODE = "verified-only";
+        process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "shadow";
+        process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "disposable-raw-attachment-runtime-secret";
+        const workspaceRoot = await createWorkspaceRoot();
+        const path = join(workspaceRoot, "notes.txt");
+        const original = "Private validator preference A.";
+        await writeFile(path, original);
+        const mock = startMockOpencode();
+        const app = await startOpenworkServer({ workspaceRoot,
+          opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+        const base = `http://127.0.0.1:${app.server.port}`;
+        const headers = { ...auth(app.token), "Content-Type": "application/json" };
+        const send = (privacyConsentToken?: string) => fetch(`${base}${mount}/session/ses_1/${endpoint}`, {
+          method: "POST", headers, body: JSON.stringify({ model: { providerID: "openai", modelID: "gpt-4.1" },
+            ...(privacyConsentToken ? { privacyConsentToken } : {}), parts: [
+              { type: "text", text: "Summarize the private notes" },
+              { type: "file", filename: "notes.txt", mime: "text/plain", url: pathToFileURL(path).href,
+                contentHash: "unchanged-caller-hash", sizeBytes: 1, label: "public" },
+            ] }),
+        });
+        const challenged = await send();
+        expect(challenged.status).toBe(409);
+        const privacy = await challenged.json();
+        const confirmed = await fetch(`${base}/workspace/ws_1/privacy-consents/${privacy.details.challenge.id}/confirm`, {
+          method: "POST", headers, body: JSON.stringify({ sessionId: "ses_1", requestHash: privacy.details.requestHash }),
+        });
+        expect(confirmed.status).toBe(200);
+        const consent = await confirmed.json();
+        await writeFile(path, "Private validator preference B.");
+        const changed = await send(consent.consentToken);
+        expect(changed.status).toBe(409);
+        expect(await changed.json()).toMatchObject({ code: "agent_privacy_consent_required" });
+        expect(mock.requests.filter(entry => entry.method === "POST" && entry.pathname === `/session/ses_1/${endpoint}`)).toHaveLength(0);
+        await writeFile(path, original);
+        const exact = await send(consent.consentToken);
+        expect(exact.status).toBe(200);
+        await exact.text();
+        const dispatched = mock.requests.filter(entry => entry.method === "POST" && entry.pathname === `/session/ses_1/${endpoint}`);
+        expect(dispatched).toHaveLength(1);
+        expect(dispatched[0].body).toMatchObject({ parts: expect.arrayContaining([expect.objectContaining({
+          type: "file", url: `data:text/plain;base64,${Buffer.from(original).toString("base64")}`,
+        })]) });
+        const replay = await send(consent.consentToken);
+        expect(replay.status).toBe(409);
+        await replay.text();
+        expect(mock.requests.filter(entry => entry.method === "POST" && entry.pathname === `/session/ses_1/${endpoint}`)).toHaveLength(1);
+      });
+    }
+  }
+
+  for (const route of ["/workspace/ws_1/sessions/ses_1/messages/preflight", "/workspace/ws_1/opencode/session/ses_1/prompt_async"]) {
+    for (const sample of [
+      { name: "empty", encoded: "", status: 200 },
+      { name: "one byte", encoded: "YQ==", status: 200 },
+      { name: "two bytes", encoded: "YWI=", status: 200 },
+      { name: "three bytes", encoded: "YWJj", status: 200 },
+      { name: "whitespace", encoded: "Y W\nJj", status: 200 },
+      { name: "short group", encoded: "YWJ", status: 400 },
+      { name: "padding inside", encoded: "YW=J", status: 400 },
+      { name: "excess padding", encoded: "Y===", status: 400 },
+      { name: "invalid alphabet", encoded: "!!!!", status: 400 },
+      { name: "at byte limit", size: 5_000_000, status: 200 },
+      { name: "over byte limit", size: 5_000_001, status: 413 },
+    ]) {
+      test(`attachment base64 decoder ${route}: ${sample.name}`, async () => {
+        const workspaceRoot = await createWorkspaceRoot();
+        const mock = startMockOpencode();
+        const app = await startOpenworkServer({ workspaceRoot,
+          opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+        const encoded = sample.encoded ?? Buffer.alloc(sample.size, 97).toString("base64");
+        const response = await fetch(`http://127.0.0.1:${app.server.port}${route}`, {
+          method: "POST", headers: { ...auth(app.token), "Content-Type": "application/json" },
+          body: JSON.stringify({ model: { providerID: "local", modelID: "private-local-model" }, parts: [
+            { type: "text", text: "Read these notes" },
+            { type: "file", filename: "notes.txt", mime: "text/plain", url: `data:text/plain;base64,${encoded}` },
+          ] }),
+        });
+        const payload = await response.json();
+        expect(response.status, JSON.stringify(payload)).toBe(sample.status);
+        if (sample.status === 413) expect(payload.code).toBe("attachment_too_large");
+        if (sample.status === 400) expect(payload.code).toBe("attachment_unverifiable");
+        const dispatched = mock.requests.filter(entry => entry.method === "POST" && entry.pathname === "/session/ses_1/prompt_async");
+        expect(dispatched).toHaveLength(sample.status === 200 && route.endsWith("prompt_async") ? 1 : 0);
+      });
+    }
+  }
+
   for (const change of ["unchanged", "replace-after-inspection"]) {
     test(`workspace attachment dispatch uses inspected bytes: ${change}`, async () => {
       const workspaceRoot = await createWorkspaceRoot();

@@ -111,4 +111,37 @@ pnpm test:matterhorn-platform-safety
 
 Logs: `/tmp/matterhorn-attachment-snapshot-red2-2026-10-05.log`, `/tmp/matterhorn-attachment-snapshot-final-2026-10-05.log`, `/tmp/matterhorn-file-apis-2026-10-05.log`, `/tmp/matterhorn-attachment-http-2026-10-05.log`, `/tmp/matterhorn-attachment-typecheck-final2-2026-10-05.log`, `/tmp/matterhorn-attachment-build-2026-10-05.log`, `/tmp/matterhorn-file-snapshot-node-2026-10-05.log`, and `/tmp/matterhorn-attachment-safety-2026-10-05.log`. The new snapshot unit tests and existing HTTP suite are wired into the platform safety gate. The supplementary Node script is `/tmp/matterhorn-file-snapshot-node-2026-10-05.mjs`; it uses the already-installed tsx loader and is not a durable CI artifact.
 
-This is local, synthetic acceptance, not real-model or hosted attachment acceptance. It does not prove hostile concurrent parent-directory replacement is impossible, guarantee a transactional filesystem snapshot against a writer that restores metadata, or bound aggregate memory across many file attachments/concurrent requests. Review those separately along with the 8 MiB/5 MB composer mismatch and mounted error/draft recovery. The raw proxy still constructs privacy parts through `normalizePrivacyParts` rather than the canonical attachment resolver; test its attachment inspection and consent parity next, without treating this canonical-path fix as proof for that separate route. Windows-specific filesystem behavior and Electron remain unverified. Nothing was pushed, merged or deployed; existing user chats and previews were preserved.
+This is local, synthetic acceptance, not real-model or hosted attachment acceptance. It does not prove hostile concurrent parent-directory replacement is impossible, guarantee a transactional filesystem snapshot against a writer that restores metadata, or bound aggregate memory across many file attachments/concurrent requests. Review those separately along with the 8 MiB/5 MB composer mismatch and mounted error/draft recovery. Raw-proxy attachment inspection is addressed in the subsequent section below. Windows-specific filesystem behavior and Electron remain unverified. Nothing was pushed, merged or deployed; existing user chats and previews were preserved.
+
+## Raw chat attachment inspection
+
+Following `fdca6934ed281c83b6860eefb39aa5c84489b442`, the raw prompt routes were found to construct privacy inputs from caller-supplied metadata without resolving attachment bytes. The initial 42-case HTTP matrix had **30 failures and 12 passing controls**: secret-shaped inline/workspace contents, remote URLs and outside-workspace files reached the fake runtime, and ordinary files were forwarded as mutable URLs. Valid inline attachments and explicit caller secret labels already behaved as expected. These are local synthetic reproductions, not evidence of real-provider disclosure.
+
+Both `message` and `prompt_async` now inspect file/attachment parts through the canonical attachment resolver on all three aliases: `/opencode`, `/w/ws_1/opencode`, and `/workspace/ws_1/opencode`. Runtime payloads use inspected file snapshots. Authoritative content hashes and sizes are added to privacy checks; a forged hash or `label: public` cannot replace inspection. Original caller labels remain in the privacy input so an explicit secret/private restriction is not weakened. Raw prompts now also enforce the canonical 64-part ceiling. Other prompt-part normalization and the existing provider-policy gate remain unchanged.
+
+The expanded tests exposed a separate decoder defect: the original repeated-group base64 validator rejected valid multi-megabyte data. A standalone check on valid 5,000,000-byte input returned false for the original expression and true for the replacement. Validation now checks length, alphabet and trailing padding without nested repetition. Invalid padding/alphabet remain rejected, valid 5 MB input succeeds, and 5 MB plus one byte returns the intended 413 size error. No specific regex-engine failure mechanism is asserted.
+
+### Raw attachment verification
+
+The final focused matrix passes **106 tests, zero failures and 372 assertions**:
+
+- 72 route/input cases cover all six alias/endpoint combinations: secret inline/file contents, ordinary inline/file contents, restrictive caller labels, remote/outside paths, malformed data, per-file limits and 64/65-part boundaries.
+- Six cases replace the file during the later agent check and verify that only the previously inspected snapshot is forwarded.
+- Six cases obtain and confirm a raw-route challenge, change file contents while leaving caller metadata unchanged, verify rejection, restore the exact approved bytes, and verify one successful dispatch followed by replay rejection.
+- 22 canonical-preflight/raw-route decoder cases cover empty data, one/two/three bytes, whitespace, malformed length/padding/alphabet, and the actual per-file byte boundary.
+
+Consent cases explicitly use a disposable shadow-runtime configuration, matching the existing consent fixture pattern. Their first draft was correctly rejected by the independent provider-policy gate when using an unverified provider with runtime mode off; no production policy was changed to make the test pass. All provider/model responses are local fixtures. The `message` runtime fixture acknowledges transport but does not simulate an actual model stream.
+
+Broader affected regressions pass **615 tests, zero failures and 3,527 assertions across nine files**. Server typecheck and build pass. The full platform safety gate passes all 11 stages, with terminal exit zero. Existing safety wiring includes this HTTP suite; no additional test runner or dependency was introduced.
+
+```sh
+bun test apps/server/src/session-read-model.e2e.test.ts --test-name-pattern 'raw attachment|attachment base64 decoder' --timeout 20000
+bun test apps/server/src/workspace-file-snapshot.test.ts apps/server/src/file-sessions.test.ts apps/server/src/artifact-files.e2e.test.ts apps/server/src/workspace-path-boundary.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/token-authority.e2e.test.ts apps/server/src/agent-privacy.test.ts apps/server/src/guarded-agent-runtime.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+```
+
+Evidence logs use `/tmp/matterhorn-raw-attachment-`: `red-2026-10-05.log`, `final3-2026-10-05.log`, `http-2026-10-05.log`, `typecheck-final-2026-10-05.log`, `build-2026-10-05.log`, and `safety-2026-10-05.log`. Earlier intermediate logs are not final acceptance evidence.
+
+Next verify aggregate expanded attachment memory budgets, the composer/backend size contract and mounted error/draft recovery. This pass does not certify historical attachment rehydration, every runtime-specific part type, concurrent hostile filesystem races, real model/provider interpretation, or hosted acceptance. Canonical and raw consent challenges are each bound to their own exact request; this does not make their tokens interchangeable. No push, merge, deployment, real provider request or existing user chat/preview change occurred.

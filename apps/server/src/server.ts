@@ -3039,6 +3039,10 @@ async function proxyOpencodeRequest(input: {
     if (payload.jevReceipt !== undefined) {
       throw new ApiError(400, "jev_gateway_required", "Use the Matterhorn messages endpoint for Jev-assisted chats.");
     }
+    const rawParts = Array.isArray(payload.parts) ? payload.parts : [];
+    if (rawParts.length > AGENT_MESSAGE_MAX_PARTS) {
+      throw new ApiError(400, "invalid_payload", `parts must include no more than ${AGENT_MESSAGE_MAX_PARTS} items`);
+    }
 
     const bodyExecutionMode = payload.executionMode == null
       ? headerExecutionMode
@@ -3136,8 +3140,19 @@ async function proxyOpencodeRequest(input: {
         [agentContext.prompt, typeof payload.system === "string" ? payload.system : ""],
         "message",
       );
+      // Client privacy labels may tighten policy, but cannot replace inspection
+      // of the bytes that the runtime will actually receive.
+      const promptPrivacyParts = normalizePrivacyParts(rawParts);
+      for (let index = 0; index < rawParts.length; index++) {
+        const part = rawParts[index];
+        if (!isRecord(part) || (part.type !== "file" && part.type !== "attachment")) continue;
+        const resolved = await resolveAgentAttachment(workspace, part);
+        rawParts[index] = resolved.upstream;
+        promptPrivacyParts.push(resolved.privacy);
+      }
+      body = JSON.stringify(payload);
       const requestPrivacyParts = [
-        ...normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
+        ...promptPrivacyParts,
         ...rawPromptSystemPrivacyParts(payload.system),
         ...agentContext.privacyParts,
         guardedProviderSystemPrivacyPart(providerSystem),
@@ -22370,7 +22385,9 @@ function decodeInlineAttachmentData(url: string): { bytes: Uint8Array; mimeFromU
   try {
     if (match[2]) {
       const compact = encoded.replace(/\s+/g, "");
-      if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(compact)) {
+      // Repeated-group validation can reject valid multi-megabyte base64.
+      // Check length, alphabet and final padding without nested repetition.
+      if (compact.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(compact)) {
         throw new Error("invalid base64");
       }
       return { bytes: Buffer.from(compact, "base64"), mimeFromUrl };
