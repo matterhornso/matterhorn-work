@@ -979,3 +979,34 @@ The second command is an optional deliberately failing mutation check, not a rel
 Evidence: `/tmp/matterhorn-mounted-lifecycle-negative-2026-10-04.log` (mutation check), `/tmp/matterhorn-mounted-fork-feedback-red-2026-10-04.log` (missing-feedback reproduction), `/tmp/matterhorn-mounted-lifecycle-final-2026-10-04.log` (56 cases), `/tmp/matterhorn-mounted-lifecycle-browser-confirmed-2026-10-04.log` (final 26 browser cases), and `/tmp/matterhorn-mounted-lifecycle-{frontend,typecheck,build,safety}-2026-10-04.log`. Confirmed screenshots: `/tmp/matterhorn-mounted-lifecycle-confirmed-captures-2026-10-04/`; the earlier `captures` directory does not establish dark-theme coverage.
 
 The fixture supplies synthetic completed messages and does not establish a connected model, real inference, live chain reads, backend fork/revert persistence, actual inbox recovery or production account isolation. No push, merge, deployment or existing-chat change occurred. Next: review remaining worker-control/realtime outbound transports and extend mounted intermediate-wait recovery coverage; hosted five-desk acceptance, provider accounting, email, backup restore/encryption and complete browser/accessibility checks remain open. Whole-platform readiness is still unproven.
+
+## Worker control and realtime provider endpoint isolation
+
+Following `ab63b2b00cad01b6991be0c9b1f496b468dccea6`, the remaining direct fetch calls in server.ts were reviewed. A loopback HTTP matrix reproduced 30 redirect escapes across worker version reads, worker upgrade requests and realtime voice setup. It covers 301, 302, 303, 307 and 308 with same-origin and second-server destinations. All reached the synthetic capture endpoint; six nonredirect controls passed. Eight more failing cases showed raw upstream error diagnostics being returned to callers at status 401, 403, 429 and 500. The diagnostic values and credentials were synthetic. These findings do not establish a real provider compromise or that every redirect forwarded an Authorization header.
+
+The shared fixed-endpoint transport now protects OpenCode, worker control and realtime setup with manual redirect handling. It cancels redirect bodies and returns a safe 502 error without exposing Location or contacting the redirect target. Existing OpenCode error codes/messages remain unchanged. Worker control and realtime setup preserve nonredirect error statuses but discard upstream bodies and supply application-owned error messages. Invalid successful worker-control JSON now produces a safe 502 instead of an unhandled parse error. This does not validate every successful provider/control payload or impose response-size/time limits across all integrations.
+
+Voice tests intercept only the fixed provider URL and forward its request to a loopback server using native fetch. This preserves redirect behavior while preventing a real OpenAI request. Control tests configure only disposable local endpoints. The initial read tests incorrectly supplied a host header to a client-authenticated route; correcting the fixture credential produced the definitive **38-failure, six-pass** run. A later denied-access assertion expected 403 where the existing host-auth contract deliberately returns 401; that assertion was corrected without changing authorization behavior.
+
+The final 53 new cases add malformed-response checks, legacy `/w/:id/runtime` aliases and denial before upstream dispatch. Existing voice-owner access, missing credentials, STM host-only requirements and environment-store tests remain passing. The safety gate now includes environment-route and voice-credential tests in its agent-runtime stage, and its wiring contract checks those inclusions.
+
+- Related HTTP/auth/runtime/coworker suites: **490 pass, zero fail, 4,467 assertions across eight files**, including all 53 new cases.
+- Initial corrected endpoint matrix after the fix: **44 pass, zero fail, 258 assertions**.
+- Server typecheck and build: pass.
+- Safety-gate wiring contract and diff whitespace: pass.
+- Full platform safety gate: all 11 stages pass, terminal exit zero, including the newly added environment-route and voice-credential suites.
+
+```sh
+bun test apps/server/src/env-routes.e2e.test.ts apps/server/src/voice-credential.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts apps/server/src/hosted-guarded-mcp.test.ts apps/server/src/crypto-coworker-routes.e2e.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+node scripts/matterhorn-platform-safety-gate.test.mjs
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+Evidence: `/tmp/matterhorn-control-voice-red-final-2026-10-04.log` (definitive failing matrix), `/tmp/matterhorn-control-voice-focused-2026-10-04.log` (44 focused cases), and `/tmp/matterhorn-control-voice-{http,typecheck,build,safety}-2026-10-04.log` (final broader checks). The earlier expanded log contains the corrected 403/401 test expectation and is not the final acceptance result.
+
+Operators must configure the final worker-control endpoint, not a redirecting alias. A rejected response does not undo an upgrade or voice session already accepted at the initial endpoint. Check actual runtime versions/state before retrying an uncertain upgrade; the server does not add an automatic retry. Assess historical exposure from deployed versions and service/log access rather than inferring a production incident from these fixtures. No credential rotation or production configuration change occurred.
+
+Next: inspect authority revalidation around delayed host-authorized request bodies and external waits, then continue mounted intermediate-wait recovery coverage. This transport pass does not certify every outbound integration, DNS/address policy, response schema, timeout or browser error state. Hosted five-desk/provider/accounting acceptance, email, production encryption/restore and full accessibility/browser coverage remain open. No real-provider call, user-preview change, push, merge or deployment occurred.

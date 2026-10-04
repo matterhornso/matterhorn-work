@@ -937,7 +937,7 @@ async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown,
   }
 
   const model = readStringField(input, "model") || OPENWORK_VOICE_REALTIME_MODEL;
-  const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
+  const response = await fetchFixedEndpoint("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -966,7 +966,13 @@ async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown,
         tools: OPENWORK_VOICE_REALTIME_TOOLS,
       },
     }),
-  });
+  }, { code: "openai_realtime_redirect_blocked", message: "The voice provider redirected this request. Ask the workspace owner to check the service." });
+
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new ApiError(response.status, "openai_realtime_failed",
+      "Voice session setup failed. Check the provider configuration or try again later.");
+  }
 
   const text = await response.text();
   let payload: unknown = null;
@@ -974,12 +980,6 @@ async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown,
     payload = text ? JSON.parse(text) : null;
   } catch {
     payload = null;
-  }
-
-  if (!response.ok) {
-    const errorPayload = isRecord(payload) && isRecord(payload.error) ? payload.error : null;
-    const message = typeof errorPayload?.message === "string" ? errorPayload.message : response.statusText;
-    throw new ApiError(response.status, "openai_realtime_failed", message || "Failed to create OpenAI Realtime session");
   }
 
   const { clientSecret, expiresAt } = readOpenAiClientSecret(payload);
@@ -2353,17 +2353,22 @@ function buildOpencodeDirectoryHeader(directory: string) {
   return /[^\x00-\x7F]/.test(directory) ? encodeURIComponent(directory) : directory;
 }
 
-async function fetchOpencodeRuntime(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> {
+async function fetchFixedEndpoint(input: Parameters<typeof fetch>[0], init: Parameters<typeof fetch>[1],
+  redirectError: { code: string; message: string }): Promise<Response> {
   // Authorization, private bodies and directory scope apply to this endpoint,
   // not to another URL selected by an upstream redirect (even on the same host).
   const response = await fetch(input, { ...init, redirect: "manual" });
   if ([301, 302, 303, 307, 308].includes(response.status)) {
     await response.body?.cancel().catch(() => undefined);
-    throw new ApiError(502, "opencode_redirect_blocked",
-      "The agent runtime redirected this request. Ask the workspace owner to check its configured URL.",
+    throw new ApiError(502, redirectError.code, redirectError.message,
       { status: response.status });
   }
   return response;
+}
+
+function fetchOpencodeRuntime(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> {
+  return fetchFixedEndpoint(input, init, { code: "opencode_redirect_blocked",
+    message: "The agent runtime redirected this request. Ask the workspace owner to check its configured URL." });
 }
 
 function createOpencodeDirectoryFetch(directory: string | null): typeof fetch {
@@ -23494,20 +23499,24 @@ async function fetchRuntimeControl(path: string, init?: { method?: string; body?
   if (!control) {
     throw new ApiError(501, "runtime_upgrade_unavailable", "Worker runtime control is not configured on this host");
   }
-  const response = await fetch(`${control.baseUrl}${path}`, {
+  const response = await fetchFixedEndpoint(`${control.baseUrl}${path}`, {
     method: init?.method ?? "GET",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${control.token}`,
     },
     body: init?.body === undefined ? undefined : JSON.stringify(init.body),
-  });
-  const text = await response.text();
-  const json = text ? JSON.parse(text) : null;
+  }, { code: "runtime_control_redirect_blocked", message: "Worker runtime control redirected this request. Ask the workspace owner to check its configured URL." });
   if (!response.ok) {
-    throw new ApiError(response.status, "runtime_upgrade_failed", "Worker runtime control request failed", json);
+    await response.body?.cancel().catch(() => undefined);
+    throw new ApiError(response.status, "runtime_upgrade_failed", "Worker runtime control request failed");
   }
-  return json;
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    throw new ApiError(502, "runtime_control_invalid_response", "Worker runtime control returned an invalid response");
+  }
 }
 
 async function readOpencodeConfig(workspaceRoot: string): Promise<Record<string, unknown>> {

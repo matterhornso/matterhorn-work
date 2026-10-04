@@ -198,6 +198,8 @@ const STAGES = [
       "bun",
       "test",
       "apps/server/src/managed-opencode.test.ts",
+      "apps/server/src/env-routes.e2e.test.ts",
+      "apps/server/src/voice-credential.test.ts",
     ],
     shell: true,
   },

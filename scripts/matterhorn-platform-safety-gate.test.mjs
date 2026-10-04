@@ -87,6 +87,8 @@ for (const required of [
   "alpha-macos-tester-artifact.test.mjs",
   "deep-link-runtime-contract.test.ts",
   "managed-opencode.test.ts",
+  "env-routes.e2e.test.ts",
+  "voice-credential.test.ts",
   "app-error-boundary-contract.test.ts",
   "app-observability-contract.test.ts",
   "shared-primitives-ui-contract.test.ts",

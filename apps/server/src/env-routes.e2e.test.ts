@@ -24,7 +24,7 @@ const priorOpenAiApiKey = process.env.OPENAI_API_KEY;
 const priorOpenAiRealtimeApiKey = process.env.OPENAI_REALTIME_API_KEY;
 const priorOpenWorkOpenAiRealtimeApiKey = process.env.OPENWORK_OPENAI_REALTIME_API_KEY;
 const priorBuildCommit = process.env.MATTERHORN_BUILD_COMMIT;
-const isolatedEnvironment = ["MATTERHORN_WORK_DATA_DIR", "MATTERHORN_AUTH_DB", "MATTERHORN_WORK_RATE_LIMIT_DB", "MATTERHORN_WORK_ENV_STORE", "MATTERHORN_WORK_STM_ENABLED"];
+const isolatedEnvironment = ["MATTERHORN_WORK_DATA_DIR", "MATTERHORN_AUTH_DB", "MATTERHORN_WORK_RATE_LIMIT_DB", "MATTERHORN_WORK_ENV_STORE", "MATTERHORN_WORK_STM_ENABLED", "OPENWORK_CONTROL_BASE_URL", "OPENWORK_CONTROL_TOKEN"];
 const priorIsolatedEnvironment = new Map(isolatedEnvironment.map(key => [key, process.env[key]]));
 const nativeFetch = globalThis.fetch;
 
@@ -116,6 +116,155 @@ afterEach(async () => {
     const value = priorIsolatedEnvironment.get(key);
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
   }
+});
+
+function useLoopbackVoiceProvider(url: string) {
+  process.env.OPENAI_API_KEY = "synthetic-voice-key";
+  delete process.env.OPENAI_REALTIME_API_KEY;
+  delete process.env.OPENWORK_OPENAI_REALTIME_API_KEY;
+  // Preserve native redirect behavior while routing the fixed provider URL to
+  // loopback. A real provider is never contacted by these fixtures.
+  globalThis.fetch = Object.assign(
+    (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const target = input instanceof Request ? input.url : String(input);
+      if (target === "https://api.openai.com/v1/realtime/client_secrets") return nativeFetch(url, init);
+      if (new URL(target).hostname !== "127.0.0.1") throw new Error("Non-fixture network request blocked");
+      return nativeFetch(input, init);
+    }, { preconnect: nativeFetch.preconnect });
+}
+
+describe("configured outbound endpoint isolation", () => {
+  for (const surface of ["control-read", "control-upgrade", "voice"]) {
+    for (const destination of ["same-origin", "cross-origin"]) {
+      for (const redirectStatus of [0, 301, 302, 303, 307, 308]) {
+        test(`${surface} rejects redirects: ${destination}, ${redirectStatus}`, async () => {
+          const observed: Array<{ method: string; authorization: string | null; body: string }> = [];
+          let escaped = 0;
+          const payload = surface === "voice" ? { client_secret: { value: "synthetic-client-secret", expires_at: 123 } }
+            : { ok: true, version: "fixture-runtime" };
+          const capture = () => { escaped++; return Response.json(payload); };
+          const receiver = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: capture });
+          stops.push(() => receiver.stop(true));
+          const upstream = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+            if (new URL(request.url).pathname === "/capture") return capture();
+            observed.push({ method: request.method, authorization: request.headers.get("authorization"), body: await request.text() });
+            if (!redirectStatus) return Response.json(payload);
+            return new Response(null, { status: redirectStatus, headers: {
+              Location: destination === "same-origin" ? "/capture" : `${receiver.url}capture`,
+            } });
+          } });
+          stops.push(() => upstream.stop(true));
+          process.env.OPENWORK_CONTROL_BASE_URL = upstream.url.origin;
+          process.env.OPENWORK_CONTROL_TOKEN = "synthetic-control-token";
+          if (surface === "voice") useLoopbackVoiceProvider(`${upstream.url}client_secrets`);
+          const { base } = await boot();
+          const method = surface === "control-read" ? "GET" : "POST";
+          const path = surface === "voice" ? "/voice/realtime/session" : surface === "control-read" ? "/runtime/versions" : "/runtime/upgrade";
+          const response = await fetch(`${base}${path}`, { method, headers: method === "GET" ? { authorization: "Bearer owt_env_client_token" } : hostAuth(),
+            ...(method === "POST" ? { body: JSON.stringify({ version: "fixture-only" }) } : {}),
+          });
+          expect({ status: response.status, escaped }).toEqual({ status: redirectStatus ? 502 : surface === "control-upgrade" ? 202 : 200, escaped: 0 });
+          expect(observed).toHaveLength(1);
+          expect(observed[0]?.method).toBe(method);
+          expect(observed[0]?.authorization).toBe(`Bearer ${surface === "voice" ? "synthetic-voice-key" : "synthetic-control-token"}`);
+          if (surface === "control-upgrade") expect(JSON.parse(observed[0]?.body ?? "{}")).toEqual({ version: "fixture-only" });
+          if (surface === "voice") expect(JSON.parse(observed[0]?.body ?? "{}").session.output_modalities).toEqual(["audio"]);
+          const result = await response.json();
+          if (redirectStatus) {
+            expect(result.code).toBe(surface === "voice" ? "openai_realtime_redirect_blocked" : "runtime_control_redirect_blocked");
+            expect(JSON.stringify(result)).not.toContain("/capture");
+          } else if (surface === "voice") expect(result.clientSecret).toBe("synthetic-client-secret");
+          else expect(result).toEqual(payload);
+        });
+      }
+    }
+  }
+
+  for (const surface of ["control", "voice"]) {
+    for (const status of [401, 403, 429, 500]) {
+      test(`${surface} does not return upstream diagnostic secrets: ${status}`, async () => {
+        const upstream = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch() {
+          return Response.json({ error: { message: "synthetic-private-diagnostic", credential: "synthetic-private-diagnostic" } }, { status });
+        } });
+        stops.push(() => upstream.stop(true));
+        process.env.OPENWORK_CONTROL_BASE_URL = upstream.url.origin;
+        process.env.OPENWORK_CONTROL_TOKEN = "synthetic-control-token";
+        if (surface === "voice") useLoopbackVoiceProvider(upstream.url.href);
+        const { base } = await boot();
+        const response = await fetch(`${base}${surface === "voice" ? "/voice/realtime/session" : "/runtime/versions"}`, {
+          method: surface === "voice" ? "POST" : "GET", headers: surface === "voice" ? hostAuth() : { authorization: "Bearer owt_env_client_token" }, ...(surface === "voice" ? { body: "{}" } : {}),
+        });
+        expect(response.status).toBe(status);
+        const body = await response.text();
+        expect(body).not.toContain("synthetic-private-diagnostic");
+        expect(JSON.parse(body).code).toBe(surface === "voice" ? "openai_realtime_failed" : "runtime_upgrade_failed");
+      });
+    }
+  }
+
+  for (const surface of ["control", "voice"]) {
+    for (const body of ["<html>synthetic-private-diagnostic</html>", '{"synthetic-private-diagnostic":']) {
+      test(`${surface} rejects malformed successful response: ${body[0]}`, async () => {
+        const upstream = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(body) });
+        stops.push(() => upstream.stop(true));
+        process.env.OPENWORK_CONTROL_BASE_URL = upstream.url.origin;
+        process.env.OPENWORK_CONTROL_TOKEN = "synthetic-control-token";
+        if (surface === "voice") useLoopbackVoiceProvider(upstream.url.href);
+        const { base } = await boot();
+        const response = await fetch(`${base}${surface === "voice" ? "/voice/realtime/session" : "/runtime/versions"}`, {
+          method: surface === "voice" ? "POST" : "GET", headers: surface === "voice" ? hostAuth() : { authorization: "Bearer owt_env_client_token" },
+          ...(surface === "voice" ? { body: "{}" } : {}),
+        });
+        expect(response.status).toBe(502);
+        const result = await response.json();
+        expect(result.code).toBe(surface === "voice" ? "openai_realtime_invalid_response" : "runtime_control_invalid_response");
+        expect(JSON.stringify(result)).not.toContain("synthetic-private-diagnostic");
+      });
+    }
+  }
+
+  for (const method of ["GET", "POST"]) {
+    for (const redirect of [false, true]) {
+      test(`legacy worker-control alias preserves transport policy: ${method}, redirect=${redirect}`, async () => {
+        let calls = 0;
+        const upstream = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
+          calls++;
+          if (redirect && !request.url.endsWith("/capture")) return new Response(null, { status: 307, headers: { Location: "/capture" } });
+          return Response.json({ ok: true });
+        } });
+        stops.push(() => upstream.stop(true));
+        process.env.OPENWORK_CONTROL_BASE_URL = upstream.url.origin;
+        process.env.OPENWORK_CONTROL_TOKEN = "synthetic-control-token";
+        const { base } = await boot();
+        const response = await fetch(`${base}/w/fixture/runtime/${method === "GET" ? "versions" : "upgrade"}`, {
+          method, headers: method === "GET" ? { authorization: "Bearer owt_env_client_token" } : hostAuth(),
+          ...(method === "POST" ? { body: "{}" } : {}),
+        });
+        expect(response.status).toBe(redirect ? 502 : method === "GET" ? 200 : 202);
+        expect(calls).toBe(1);
+      });
+    }
+  }
+
+  test("unauthorized control and voice requests never reach upstream", async () => {
+    let calls = 0;
+    const upstream = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch() { calls++; return Response.json({ ok: true }); } });
+    stops.push(() => upstream.stop(true));
+    process.env.OPENWORK_CONTROL_BASE_URL = upstream.url.origin;
+    process.env.OPENWORK_CONTROL_TOKEN = "synthetic-control-token";
+    useLoopbackVoiceProvider(upstream.url.href);
+    const { base } = await boot();
+    for (const path of ["/runtime/versions", "/runtime/upgrade", "/w/fixture/runtime/versions", "/w/fixture/runtime/upgrade", "/voice/realtime/session"]) {
+      const method = path.endsWith("/versions") ? "GET" : "POST";
+      const response = await fetch(`${base}${path}`, { method, ...(method === "POST" ? { body: "{}" } : {}) });
+      expect(response.status).toBe(401);
+    }
+    for (const path of ["/runtime/upgrade", "/w/fixture/runtime/upgrade", "/voice/realtime/session"]) {
+      const response = await fetch(`${base}${path}`, { method: "POST", headers: { authorization: "Bearer owt_env_client_token" }, body: "{}" });
+      expect(response.status).toBe(401);
+    }
+    expect(calls).toBe(0);
+  });
 });
 
 class FixtureStm extends StmCredentials {
