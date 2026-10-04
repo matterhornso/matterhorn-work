@@ -5,9 +5,10 @@ import { captureAccountGeneration } from "../../../../app/lib/account-client-sta
 import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
 import { responseCompletionSummary } from "../message-completion-metadata";
 import type { CSSProperties } from "react";
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { UIMessage } from "ai";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "react-router";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
 import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-mode";
 import type { MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
@@ -1559,6 +1560,12 @@ function revokeAttachmentPreview(attachment: { previewUrl?: string | undefined }
 
 export function SessionSurface(props: SessionSurfaceProps) {
   const isCurrentAccount = useRef(captureAccountGeneration()).current;
+  const location = useLocation();
+  const viewScope = useMemo(() => ({ current: true }), [location.key, props.workspaceId, props.sessionId]);
+  useLayoutEffect(() => {
+    viewScope.current = true;
+    return () => { viewScope.current = false; };
+  }, [viewScope]);
   const publicBetaWeb = isPublicBetaWebDeployment();
   const local = useLocal();
   const { openQuickJot } = useQuickJot();
@@ -1593,6 +1600,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const clearCoworkerContext = useMatterhornSessionCoworkerContextStore((state) => state.clearContext);
   const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [error, setError] = useState<SessionError | null>(null);
+  const currentErrorRef = useRef(error);
+  useLayoutEffect(() => { currentErrorRef.current = error; }, [error]);
+  const privacyConfirmationRef = useRef<object | null>(null);
   const [sending, setSending] = useState(false);
   const [preparingAttachments, setPreparingAttachments] = useState(false);
   const preparingAttachmentsRef = useRef(false);
@@ -1724,6 +1734,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     setError(null);
     setSending(false);
     setConfirmingPrivacy(false);
+    privacyConfirmationRef.current = null;
     setShowDelayedLoading(false);
     setAwaitingAssistantBaseline(null);
     setNoVisibleAssistantOutputBaseline(null);
@@ -2552,19 +2563,53 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
   }, [bittensorContext, buildDraft, chatStreaming, jevChat.prepare, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery]);
 
+  // Consent belongs to the displayed request, not merely to a session URL.
+  // Invalidate on committed changes, even if the user changes a setting back.
+  const privacyRequestScope = useMemo(() => ({ current: true }), [
+    error, viewScope, buildDraft, bittensorContext, jevChat.enabled,
+    props.selectedModel.providerID, props.selectedModel.modelID, props.modelVariant,
+    props.executionMode, props.selectedAgent, props.responsePerspective, props.client,
+    props.attachmentsEnabled, props.modelUnavailable, activeWorkflowDeskAgent?.agentId, renderedMessages.at(-1)?.id,
+  ]);
+  useLayoutEffect(() => {
+    privacyRequestScope.current = true;
+    return () => { privacyRequestScope.current = false; };
+  }, [privacyRequestScope]);
+
   const handleConfirmPrivacy = useCallback(async () => {
     const preflight = error?.privacyPreflight;
     const challenge = preflight?.challenge;
-    if (!preflight || !challenge || confirmingPrivacy || sending) return;
+    if (!isCurrentAccount() || !preflight || !challenge || privacyConfirmationRef.current || confirmingPrivacy || sending) return;
+    const confirmation = {};
+    privacyConfirmationRef.current = confirmation;
+    const continuation = pendingContinuationRef.current;
+    const retry = pendingRetryRef.current;
+    const composer = useComposerStateStore.getState().sessions[props.sessionId];
+    // Router transitions can retain the old surface after history has moved.
+    const navigationHref = window.location.href;
+    const isCurrentView = () => isCurrentAccount() && viewScope.current && window.location.href === navigationHref;
+    const stillCurrent = () => {
+      if (!isCurrentView() || currentErrorRef.current !== error) return false;
+      if (!privacyRequestScope.current
+        || pendingContinuationRef.current !== continuation || pendingRetryRef.current !== retry
+        || (!continuation && !retry && (preparingAttachmentsRef.current
+          || useComposerStateStore.getState().sessions[props.sessionId] !== composer))) {
+        setError({
+          message: "This request changed while approval was pending. Review it and try again.",
+          retryable: Boolean(continuation || retry),
+        });
+        return false;
+      }
+      return true;
+    };
     setConfirmingPrivacy(true);
     try {
       const consent = await props.client.confirmAgentPrivacyConsent(
         props.workspaceId, challenge.id,
         { sessionId: props.sessionId, requestHash: preflight.requestHash },
       );
+      if (!stillCurrent()) return;
       setError(null);
-      const continuation = pendingContinuationRef.current;
-      const retry = pendingRetryRef.current;
       if (continuation?.sessionId === props.sessionId) {
         await continueAssistantResponse(continuation.messageId, consent.consentToken);
       } else if (retry?.sessionId === props.sessionId) {
@@ -2573,11 +2618,14 @@ export function SessionSurface(props: SessionSurfaceProps) {
         await sendWithConsent(consent.consentToken);
       }
     } catch (nextError) {
-      setError(parseSessionError(nextError));
+      if (stillCurrent()) setError(parseSessionError(nextError));
     } finally {
-      setConfirmingPrivacy(false);
+      if (privacyConfirmationRef.current === confirmation) {
+        privacyConfirmationRef.current = null;
+        if (isCurrentView()) setConfirmingPrivacy(false);
+      }
     }
-  }, [confirmingPrivacy, error?.privacyPreflight, sendWithConsent, continueAssistantResponse, handleRetryAssistantResponse, props.client, props.sessionId, props.workspaceId, sending]);
+  }, [confirmingPrivacy, error, isCurrentAccount, privacyRequestScope, viewScope, sendWithConsent, continueAssistantResponse, handleRetryAssistantResponse, props.client, props.sessionId, props.workspaceId, sending]);
 
   const handleRetryResponse = useCallback(async () => {
     const continuation = pendingContinuationRef.current;

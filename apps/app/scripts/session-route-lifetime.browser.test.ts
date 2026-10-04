@@ -22,6 +22,8 @@ let action: "fork" | "revert" = "fork";
 let rejectAction = false;
 let promptFailure: "preflight" | "dispatch" | null = null;
 let promptFixture = false;
+let consentFixture = false;
+let rejectConsent = false;
 let responseRetryFixture = false;
 let historyText = true;
 let terminalFailure = false;
@@ -29,6 +31,7 @@ let terminalRateLimited = false;
 let terminalProviderUnavailable = false;
 let terminalStopped = false;
 let historyContinuation = false;
+let incompleteResponse = false;
 let historyFiles: Array<{ type: "file"; id: string; messageID: string; sessionID: string; url: string; filename: string; mime: string }> = [];
 const promptRequests: Array<{ stage: string; body: unknown }> = [];
 let realGateway: { origin: string; runtimeOrigin: string } | undefined;
@@ -149,7 +152,8 @@ const fixtureMessages = () => [
     error: terminalStopped ? { name: "MessageAbortedError", data: { message: "Stopped" } }
       : terminalProviderUnavailable ? { name: "APIError", data: { message: "No provider available", statusCode: 401 } }
       : terminalRateLimited ? { name: "APIError", data: { message: "Too many requests", statusCode: 429 } }
-      : { name: "UnknownError", data: { message: "Synthetic accepted request failed." } } }, parts: [] } : messages[1],
+      : { name: "UnknownError", data: { message: "Synthetic accepted request failed." } } }, parts: [] }
+    : incompleteResponse ? { ...messages[1], info: { ...messages[1].info, finish: "length" } } : messages[1],
 ];
 
 beforeAll(async () => {
@@ -277,6 +281,12 @@ beforeAll(async () => {
           },
         );
       requests.push({ path, method: request.method });
+      if (consentFixture && path.endsWith("/privacy-consents/fixture_challenge/confirm")) {
+        await new Promise<void>(resolve => { release = resolve; });
+        return rejectConsent
+          ? Response.json({ message: "Synthetic consent confirmation failed." }, { status: 500 })
+          : Response.json({ consentToken: "synthetic-consent-token" });
+      }
       if (responseRetryFixture && request.method === "POST" && /\/(abort|revert|unrevert)$/.test(path)) {
         return Response.json(path.endsWith("/abort") ? true : session("ses_fixture"));
       }
@@ -297,6 +307,16 @@ beforeAll(async () => {
         if (promptFailure === stage) return Response.json({
           code: "attachments_too_large", message: "Remove a file and try again. Synthetic attachment rejection.",
         }, { status: 413 });
+        if (stage === "preflight" && consentFixture) return Response.json({
+          version: "matterhorn.agent-privacy-preflight.v1", requestHash: "fixture_request_hash",
+          workspaceId: "ws_fixture", sessionId: "ses_fixture", requestedMode: "public_research", effectiveMode: "private_workspace",
+          decision: "consent_required", reason: "Synthetic private-context approval required.",
+          provider: { id: "fixture", name: "Fixture provider", modelId: "fixture", privacyStatus: "unverified",
+            trainingUse: "unknown", retentionDays: null, policyUrl: null, dataLeavesMatterhorn: true },
+          detectedData: { labels: ["workspace_private"], categories: ["workspace_attachment"], redactionCount: 0 },
+          challenge: { id: "fixture_challenge", expiresAt: new Date(Date.now() + 60000).toISOString(), singleUse: true },
+          ...(incompleteResponse ? { continuation: { messageId: "msg_answer", tools: "disabled" } } : {}),
+        });
         if (stage === "preflight") return Response.json({ decision: "allow", reason: "Synthetic fixture only" });
         return Response.json({ accepted: true }, { status: 202 });
       }
@@ -379,6 +399,7 @@ beforeAll(async () => {
               name: "Fixture",
               source: "api",
               models: {
+                ...(consentFixture ? { alternate: { id: "alternate", name: "Alternate test model", limit: { context: 10000, output: 1000 } } } : {}),
                 [realGateway ? "private-local-model" : "fixture"]: {
                   id: realGateway ? "private-local-model" : "fixture",
                   name: "Fixture model",
@@ -449,6 +470,8 @@ beforeEach(() => {
   rejectAction = false;
   promptFailure = null;
   promptFixture = false;
+  consentFixture = false;
+  rejectConsent = false;
   responseRetryFixture = false;
   historyText = true;
   terminalFailure = false;
@@ -456,6 +479,7 @@ beforeEach(() => {
   terminalProviderUnavailable = false;
   terminalStopped = false;
   historyContinuation = false;
+  incompleteResponse = false;
   historyFiles = [];
   promptRequests.length = 0;
   gatewayResults.length = 0;
@@ -463,6 +487,160 @@ beforeEach(() => {
 });
 
 const operations: Array<"fork" | "revert"> = ["fork", "revert"];
+for (const boundary of ["unchanged", "edit", "edit back", "attach", "preparing", "model", "dismiss", "navigate", "return", "cross-tab logout"]) {
+  for (const rejected of [false, true]) {
+    test(`delayed privacy confirmation rejected=${rejected} after ${boundary}`, async () => {
+      promptFixture = true;
+      consentFixture = true;
+      rejectConsent = rejected;
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      context.setDefaultTimeout(8000);
+      await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+      const page = await context.newPage();
+      try {
+        await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+        await page.getByRole("button", { name: "Change model", exact: true }).click();
+        await page.getByRole("option", { name: /Fixture model/ }).click();
+        const editor = page.getByRole("textbox").first();
+        await editor.fill("Original private fixture draft");
+        await page.getByRole("button", { name: "Ask", exact: true }).click();
+        await page.getByRole("button", { name: "Share once and send", exact: true }).click();
+        for (let attempt = 0; attempt < 100 && !release; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+        expect(release).toBeDefined();
+        // Logout aborts pending account-bound HTTP requests. Observe that event
+        // before changing accounts, rather than waiting for an impossible response.
+        const confirmationFinished = Promise.race([
+          page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/fixture_challenge/confirm")),
+          page.waitForEvent("requestfailed", request => new URL(request.url()).pathname.endsWith("/fixture_challenge/confirm")),
+        ]);
+        void confirmationFinished.catch(() => { /* Awaited below; cleanup may close the page after another assertion fails. */ });
+        if (boundary === "edit") await editor.fill("Keep my edited draft");
+        if (boundary === "edit back") {
+          await editor.fill("Temporary edit");
+          await editor.fill("Original private fixture draft");
+        }
+        if (boundary === "attach") {
+          await page.locator('input[type="file"]').setInputFiles({ name: "new.txt", mimeType: "text/plain", buffer: Buffer.from("New context") });
+          await page.getByText("new.txt", { exact: true }).waitFor();
+        }
+        if (boundary === "preparing") {
+          await delayImagePreparation(page);
+          await page.locator('input[type="file"]').setInputFiles(await delayedImage(page));
+          await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+          expect(await page.getByRole("button", { name: "Ask", exact: true }).isDisabled()).toBe(true);
+        }
+        if (boundary === "model") {
+          await page.getByRole("button", { name: "Change model", exact: true }).click();
+          await page.getByRole("option", { name: /Alternate test model/ }).click();
+        }
+        if (boundary === "dismiss") await page.getByRole("button", { name: "Dismiss error", exact: true }).click();
+        if (boundary === "navigate" || boundary === "return") {
+          await page.getByRole("button", { name: "Other fixture chat", exact: true }).click();
+          await page.waitForURL("**/ses_other");
+          if (boundary === "return") {
+            await page.getByRole("button", { name: "Original fixture chat", exact: true }).click();
+            await page.waitForURL("**/ses_fixture");
+          }
+        }
+        if (boundary === "cross-tab logout") {
+          const other = await context.newPage();
+          await other.goto(`${server.url}settings/cloud-account`);
+          await other.getByRole("button", { name: "Sign out", exact: true }).click();
+          await page.getByRole("heading", { name: "Welcome to Matterhorn Desks", exact: true }).waitFor();
+        }
+        release?.();
+        await confirmationFinished;
+        await page.waitForTimeout(250);
+        const dispatched = promptRequests.filter(request => request.stage === "dispatch");
+        expect(dispatched.length).toBe(boundary === "unchanged" && !rejected ? 1 : 0);
+        if (boundary === "unchanged") {
+          if (rejected) await page.getByText(/Synthetic consent confirmation failed/).waitFor();
+          else expect(dispatched[0]?.body).toMatchObject({ privacyConsentToken: "synthetic-consent-token" });
+        } else if (["edit", "edit back", "attach", "preparing", "model"].includes(boundary)) {
+          expect((await editor.innerText()).trim()).toBe(boundary === "edit" ? "Keep my edited draft" : "Original private fixture draft");
+          const error = page.locator('[data-matterhorn-session-error]');
+          await error.getByText(/This request changed while approval was pending/).waitFor();
+          expect(await error.getByRole("button", { name: "Share once and send", exact: true }).count()).toBe(0);
+          if (boundary === "edit" && !rejected && process.env.CONSENT_LIFETIME_CAPTURES) {
+            await mkdir(process.env.CONSENT_LIFETIME_CAPTURES, { recursive: true });
+            await page.emulateMedia({ reducedMotion: "reduce" });
+            for (const [theme, width] of [["light", 390], ["dark", 1440]] satisfies [string, number][]) {
+              await page.evaluate(value => {
+                document.documentElement.dataset.theme = value;
+                document.documentElement.classList.toggle("dark", value === "dark");
+              }, theme);
+              await page.setViewportSize({ width, height: 1000 });
+              await error.scrollIntoViewIfNeeded();
+              await page.screenshot({ path: join(process.env.CONSENT_LIFETIME_CAPTURES, `consent-${theme}-${width}.png`), fullPage: true });
+              expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+            }
+          }
+          if (boundary === "preparing") await releaseImagePreparation(page);
+          // Cancellation must not trap the composer or silently resend. A fresh
+          // explicit action gets a new preflight before the fixture allows it.
+          consentFixture = false;
+          const accepted = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/messages"));
+          await page.getByRole("button", { name: "Ask", exact: true }).click();
+          await accepted;
+          expect(promptRequests.filter(request => request.stage === "dispatch")).toHaveLength(1);
+          expect(JSON.stringify(promptRequests.at(-1)?.body)).not.toContain("synthetic-consent-token");
+        } else {
+          expect(await page.locator('[data-matterhorn-session-error]').count()).toBe(0);
+        }
+      } finally { release?.(); await context.close(); }
+    }, 30000);
+  }
+}
+for (const operation of ["retry", "continue"]) {
+  for (const boundary of ["unchanged", "edit", "navigate", "dismiss"]) {
+    test(`delayed privacy confirmation for ${operation} after ${boundary}`, async () => {
+      promptFixture = consentFixture = responseRetryFixture = true;
+      terminalFailure = operation === "retry";
+      incompleteResponse = operation === "continue";
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      context.setDefaultTimeout(8000);
+      await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+      const page = await context.newPage();
+      try {
+        await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+        await page.getByRole("button", { name: "Change model", exact: true }).click();
+        await page.getByRole("option", { name: /Fixture model/ }).click();
+        const editor = page.getByRole("textbox").first();
+        await editor.fill("Unrelated draft");
+        if (operation === "retry") await page.locator('[data-matterhorn-session-error]').getByRole("button", { name: "Retry response", exact: true }).click();
+        else await page.getByRole("button", { name: "Continue answer", exact: true }).click();
+        await page.getByRole("button", { name: "Share once and send", exact: true }).click();
+        for (let attempt = 0; attempt < 100 && !release; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+        expect(release).toBeDefined();
+        if (boundary === "edit") await editor.fill("Edited unrelated draft");
+        if (boundary === "navigate") {
+          await page.getByRole("button", { name: "Other fixture chat", exact: true }).click();
+          await page.waitForURL("**/ses_other");
+        }
+        if (boundary === "dismiss") await page.getByRole("button", { name: "Dismiss error", exact: true }).click();
+        const before = requests.length;
+        const response = page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/fixture_challenge/confirm"));
+        release?.();
+        await response;
+        const shouldDispatch = boundary === "unchanged" || boundary === "edit";
+        if (shouldDispatch) {
+          for (let attempt = 0; attempt < 100 && !promptRequests.some(request => request.stage === "dispatch"); attempt++) await page.waitForTimeout(20);
+        } else await page.waitForTimeout(250);
+        const dispatches = promptRequests.filter(request => request.stage === "dispatch");
+        expect(dispatches).toHaveLength(shouldDispatch ? 1 : 0);
+        if (shouldDispatch) {
+          expect(JSON.stringify(dispatches)).not.toContain("Unrelated draft");
+          expect(JSON.stringify(dispatches)).not.toContain("Edited unrelated draft");
+          expect(dispatches[0]?.body).toMatchObject({ privacyConsentToken: "synthetic-consent-token",
+            ...(operation === "continue" ? { requestToolProfiles: [{ "*": false }] } : {}) });
+          expect((await editor.innerText()).trim()).toBe(boundary === "edit" ? "Edited unrelated draft" : "Unrelated draft");
+        } else {
+          expect(requests.slice(before).filter(request => request.method === "POST" && /\/(abort|revert|unrevert)$/.test(request.path))).toEqual([]);
+        }
+      } finally { release?.(); await context.close(); }
+    }, 30000);
+  }
+}
 for (const recovery of ["rate limit", "unavailable file", "continuation", "provider unavailable", "stopped"]) {
   test(`accepted failure preserves ${recovery} recovery boundaries`, async () => {
     promptFixture = true;
