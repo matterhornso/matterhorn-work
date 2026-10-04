@@ -791,4 +791,31 @@ git diff --check
 
 Failing evidence: `/tmp/matterhorn-session-read-revocation-red-final-2026-10-04.log` and `/tmp/matterhorn-session-stream-revocation-red-2026-10-04.log`. Focused evidence: `/tmp/matterhorn-session-authority-focused-2026-10-04.log`. Final broader checks: `/tmp/matterhorn-session-authority-http-2026-10-04.log`, `/tmp/matterhorn-session-authority-typecheck-final-2026-10-04.log` and `/tmp/matterhorn-session-authority-{build,safety}-2026-10-04.log`. The session-read suite already runs in the safety gate. All accounts, keys and runtime data are disposable local fixtures; there was no live inference, hosted account change or user-preview restart.
 
-Next review targets are final delivery of buffered MCP event batches, remaining runtime proxy streams and coworker/session-binding reads across in-flight authorization changes. In particular, the MCP adapter collects internal event frames before producing its complete tool response; the current tests revoke access before the initial snapshot is emitted, not after valid frames have entered that internal buffer. This change does not certify that later boundary, all browser recovery behavior, native-driver concurrency or hosted acceptance. No migration, dependency change, feature activation, push, merge or deployment occurred. The wider QA and launch gates remain open.
+The buffered-MCP and runtime-proxy follow-up is recorded below. These initial-snapshot tests alone do not certify buffered delivery, remaining coworker/session-binding reads, all browser recovery behavior, native-driver concurrency or hosted acceptance. No migration, dependency change, feature activation, push, merge or deployment occurred. The wider QA and launch gates remain open.
+
+## Buffered MCP delivery and runtime proxy responses
+
+The preceding session-read correction is committed as `51870c641292472c627f191e1188ea0585fc86b2`. The next HTTP reproduction paused consumption of an actual internal SSE snapshot frame before the MCP adapter returned its collected event batch. Revoking the key or disabling MCP access still returned the buffered snapshot as a successful tool result, even though the inner stream stopped on its next authority check. Both denied cases initially failed; unchanged access passed. The adapter now rechecks the original authority after collecting/parsing its response and before returning the tool result. Revoked access yields the safe account-access error without the synthetic private-message marker.
+
+The fixture instruments `ReadableStreamDefaultReader.read` only within the isolated test process to observe the real frame, then restores the original method in `finally`. It does not use a sleep to infer that buffering happened or add production hooks. The initial typecheck exposed incompatible Bun/DOM done-result declarations; explicitly returning both `done` and `value` resolves that fixture error without a type cast. The final full run uses the corrected fixture.
+
+The browser runtime proxy had a separate delivery gap: delayed HTTP responses and later event chunks were still forwarded after logout or a workspace switch. Four denied cases initially failed, while unchanged read and stream controls passed. Before exposing the runtime response, the proxy now rechecks the request and cancels the upstream response on denial. Streaming responses recheck after each awaited chunk read; denial closes the downstream stream and cancels the upstream reader/controller before that chunk is forwarded. The regression verifies that upstream cancellation is observed, not merely that the browser stops receiving data. Existing downstream-disconnect coverage remains passing.
+
+The final response check is outside the existing dispatch-failure catch, after accepted-work accounting handling. Denying delivery must not cancel the reservation for work that the runtime already accepted. This change does not undo accepted work, retract bytes already sent to the client, or instantly cancel an idle upstream stream with no new chunks. It prevents delivery at the tested final-response and chunk boundaries. Live-provider billing after mid-flight logout is still a separate hosted acceptance gate.
+
+- Focused buffered/proxy/disconnect regressions: **10 pass, zero fail, 66 assertions**.
+- Final local chat, auth, backend-security, rate-limit and guarded-MCP suites: **286 pass, zero fail, 2,520 assertions across five files**.
+- Final server typecheck and build: pass. The full platform safety gate passed all 11 stages with terminal exit zero.
+- Diff whitespace: pass.
+
+```sh
+bun test apps/server/src/session-read-model.e2e.test.ts apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts apps/server/src/hosted-guarded-mcp.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+Failing evidence: `/tmp/matterhorn-mcp-buffered-revocation-red-2026-10-04.log` and `/tmp/matterhorn-proxy-response-revocation-red-2026-10-04.log`. Passing focused evidence: `/tmp/matterhorn-buffer-proxy-focused-2026-10-04.log`. Final checks: `/tmp/matterhorn-buffer-proxy-http-final-2026-10-04.log`, `/tmp/matterhorn-buffer-proxy-typecheck-final-2026-10-04.log` and `/tmp/matterhorn-buffer-proxy-{build,safety}-2026-10-04.log`. The final HTTP/typecheck runs include a bounded fixture watchdog that restores the intercepted reader even if its expected frame never arrives. All accounts, credentials, models and stream contents are disposable local fixtures; no hosted account, provider, secret or user preview was changed.
+
+Next local review targets are runtime request-header minimization and coworker/session-binding reads after asynchronous work. Those are not certified by the response-delivery corrections. Full browser recovery, hosted five-desk responses, inbox delivery, storage encryption/restore and other release gates remain open. No dependency, migration, feature activation, push, merge or deployment occurred.

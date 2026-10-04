@@ -202,6 +202,7 @@ function startMockOpencode(input?: {
   beforeMessages?: () => Promise<void>;
   onAbort?: () => void;
   beforeRead?: (pathname: string) => Promise<void>;
+  holdEvent?: Promise<void>;
   sessionMessages?: unknown[] | (() => unknown[]);
   sessionAgent?: string;
   agentPrompts?: Record<string, string> | (() => Record<string, string>);
@@ -354,7 +355,10 @@ function startMockOpencode(input?: {
 
       if (url.pathname === "/event") {
         let interval: ReturnType<typeof setInterval> | null = null;
+        let closed = false;
         const close = () => {
+          if (closed) return;
+          closed = true;
           if (interval) clearInterval(interval);
           interval = null;
           streamAborts.count += 1;
@@ -363,9 +367,15 @@ function startMockOpencode(input?: {
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
             controller.enqueue(new TextEncoder().encode("data: connected\n\n"));
-            interval = setInterval(() => {
-              controller.enqueue(new TextEncoder().encode("data: heartbeat\n\n"));
-            }, 25);
+            if (input?.holdEvent) {
+              void input.holdEvent.then(() => {
+                if (!closed) controller.enqueue(new TextEncoder().encode("data: private-runtime-fixture\n\n"));
+              });
+            } else {
+              interval = setInterval(() => {
+                controller.enqueue(new TextEncoder().encode("data: heartbeat\n\n"));
+              }, 25);
+            }
           },
           cancel() {
             close();
@@ -535,7 +545,7 @@ async function waitUntil(predicate: () => boolean) {
   return predicate();
 }
 
-async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Promise<void>) {
+async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Promise<void>, holdEvent?: Promise<void>) {
   const workspaceRoot = await createWorkspaceRoot();
   process.env.MATTERHORN_AUTH_DB = join(workspaceRoot, "accounts.db");
   process.env.MATTERHORN_WORK_DATA_DIR = join(workspaceRoot, "data");
@@ -546,7 +556,7 @@ async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Pro
   process.env.MATTERHORN_HOSTED_PUBLIC_BETA = "false";
   process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "invite";
   process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET = "disposable-session-read-integrity-secret";
-  const mock = startMockOpencode({ beforeRead, sessionMessages: defaultSessionMessages() });
+  const mock = startMockOpencode({ beforeRead, holdEvent, sessionMessages: defaultSessionMessages() });
   const openwork = await startOpenworkServer({ workspaceRoot,
     opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
   const base = `http://127.0.0.1:${openwork.server.port}`;
@@ -585,10 +595,117 @@ async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Pro
       })).status).toBe(200);
     }
   };
-  return { base, workspaceId, cookie, accessToken: credential.accessToken, revoke };
+  return { base, workspaceId, cookie, accessToken: credential.accessToken, revoke, streamAborts: mock.streamAborts };
 }
 
 describe("workspace session read APIs", () => {
+  for (const surface of ["delayed-read", "stream"]) {
+    for (const change of ["cookie-revoked", "workspace-changed", "unchanged"]) {
+      test(`runtime proxy rechecks response authority: ${surface}, ${change}`, async () => {
+        const reached = deferred();
+        const release = deferred();
+        const app = await createReadAuthorityFixture(async pathname => {
+          if (surface !== "delayed-read" || !pathname.startsWith("/session")) return;
+          reached.resolve();
+          await release.promise;
+        }, surface === "stream" ? release.promise : undefined);
+        const path = surface === "stream" ? "/event" : "/session/ses_1/message";
+        const controller = new AbortController();
+        const pending = fetch(`${app.base}/workspace/${app.workspaceId}/opencode${path}`, {
+          headers: { Cookie: app.cookie }, signal: controller.signal,
+        });
+        let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+        try {
+          if (surface === "stream") {
+            const response = await pending;
+            expect(response.status).toBe(200);
+            reader = response.body?.getReader();
+            if (!reader) throw new Error("Missing disposable runtime stream");
+            expect(new TextDecoder().decode((await reader.read()).value)).toContain("connected");
+          } else await reached.promise;
+          await app.revoke(change);
+          release.resolve();
+          if (surface === "stream") {
+            if (!reader) throw new Error("Missing disposable runtime reader");
+            const next = await reader.read();
+            if (change === "unchanged") expect(new TextDecoder().decode(next.value)).toContain("private-runtime-fixture");
+            else {
+              expect(next.done).toBe(true);
+              expect(await waitUntil(() => app.streamAborts.count > 0)).toBe(true);
+            }
+          } else {
+            const response = await pending;
+            expect(response.status).toBe(change === "unchanged" ? 200 : change === "workspace-changed" ? 403 : 401);
+            const body = await response.text();
+            if (change === "unchanged") expect(body).toContain("mock-host");
+            else expect(body).not.toContain("mock-host");
+          }
+        } finally {
+          release.resolve();
+          controller.abort();
+          await reader?.cancel().catch(() => undefined);
+          await pending.catch(() => undefined);
+        }
+      }, 15000);
+    }
+  }
+
+  for (const change of ["mcp-revoked", "mode-disabled", "unchanged"]) {
+    test(`buffered MCP event result rechecks authority after ${change}`, async () => {
+      const app = await createReadAuthorityFixture();
+      const reached = deferred();
+      const release = deferred();
+      const originalRead = ReadableStreamDefaultReader.prototype.read;
+      let captured = false;
+      // Observe an actual internal SSE frame, not a guessed timer delay.
+      // This hook exists only in this disposable test process and is restored.
+      ReadableStreamDefaultReader.prototype.read = async function(this: ReadableStreamDefaultReader<unknown>) {
+        const result = await originalRead.call(this);
+        if (!captured && result.value instanceof Uint8Array
+          && new TextDecoder().decode(result.value).includes("event: session.snapshot\n")) {
+          captured = true;
+          reached.resolve();
+          await release.promise;
+        }
+        return result.done ? { done: true, value: result.value } : { done: false, value: result.value };
+      };
+      const controller = new AbortController();
+      const pending = fetch(`${app.base}/mcp/guarded`, {
+        method: "POST", signal: controller.signal,
+        headers: { ...auth(app.accessToken), "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "buffered-read", method: "tools/call",
+          params: { name: "matterhorn_watch_session_events", arguments: {
+            workspaceId: app.workspaceId, sessionId: "ses_1", snapshot: true, maxEvents: 3, heartbeatMs: 1000,
+          } } }),
+      });
+      const watchdog = setTimeout(reached.resolve, 4000);
+      try {
+        await reached.promise;
+        clearTimeout(watchdog);
+        expect(captured).toBe(true);
+        if (change === "mode-disabled") process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "off";
+        else await app.revoke(change);
+        release.resolve();
+        const response = await pending;
+        expect(response.status).toBe(200);
+        const result = await response.json();
+        expect(result.result?.isError === true).toBe(change !== "unchanged");
+        if (change === "unchanged") expect(JSON.stringify(result)).toContain("mock-host");
+        else {
+          expect(JSON.stringify(result)).toContain("Matterhorn denied this account-scoped request.");
+          expect(JSON.stringify(result)).not.toContain("mock-host");
+        }
+      } finally {
+        clearTimeout(watchdog);
+        release.resolve();
+        ReadableStreamDefaultReader.prototype.read = originalRead;
+        controller.abort();
+        await pending.catch(() => undefined);
+      }
+    }, 15000);
+  }
+
   for (const tool of ["matterhorn_get_session_snapshot", "matterhorn_watch_session_events"]) {
     for (const change of ["mcp-revoked", "unchanged"]) {
       test(`guarded MCP delayed read retains authority: ${tool}, ${change}`, async () => {

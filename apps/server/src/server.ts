@@ -3594,7 +3594,17 @@ async function proxyOpencodeRequest(input: {
     }
   }
 
-  const sanitized = sanitizeProxyResponse(response, input.request.signal, upstreamController);
+  // The runtime may respond long after authentication. Do not expose its
+  // response to a revoked principal, or cancel accounting for accepted work.
+  try {
+    assertRequestAccessCurrent(input.request);
+  } catch (error) {
+    upstreamController.abort();
+    await response.body?.cancel().catch(() => undefined);
+    throw error;
+  }
+  const sanitized = sanitizeProxyResponse(response, input.request.signal, upstreamController,
+    requestAccessChecks.get(input.request));
   if (guardedRunId) sanitized.headers.set("X-Matterhorn-Agent-Run-Id", guardedRunId);
   return sanitized;
 }
@@ -3610,6 +3620,7 @@ function sanitizeProxyResponse(
   response: Response,
   downstreamSignal?: AbortSignal,
   upstreamController?: AbortController,
+  checkAccess?: () => void,
 ): Response {
   const headers = new Headers(response.headers);
   headers.delete("content-encoding");
@@ -3654,6 +3665,13 @@ function sanitizeProxyResponse(
       if (closed) return;
       try {
         const { done, value } = await reader.read();
+        try {
+          checkAccess?.();
+        } catch {
+          await closeReader("request access revoked");
+          controller.close();
+          return;
+        }
         if (done) {
           closed = true;
           if (downstreamSignal && abortDownstream) {
@@ -3672,6 +3690,7 @@ function sanitizeProxyResponse(
           }
           return;
         }
+        await closeReader(error);
         controller.error(error);
       }
     },
@@ -11092,7 +11111,9 @@ function createRoutes(
         url: targetUrl,
         params: targetRoute.params,
       });
-      return await hostedGuardedMcpInvocationResult(response);
+      const result = await hostedGuardedMcpInvocationResult(response);
+      checkAccess();
+      return result;
     } catch (error) {
       throw hostedGuardedMcpToolError(error);
     } finally {
