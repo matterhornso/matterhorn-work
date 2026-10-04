@@ -90,4 +90,12 @@ export class ApprovalService {
       }
     }
   }
+
+  cancelWorkspace(workspaceId: string): void {
+    for (const [id, pending] of this.pending) {
+      if (pending.request.workspaceId === workspaceId) {
+        pending.resolve({ id, allowed: false, reason: "cancelled" });
+      }
+    }
+  }
 }

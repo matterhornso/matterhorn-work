@@ -94,16 +94,16 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-async function boot(root?: string) {
+async function boot(root?: string, approvalMode: "auto" | "manual" = "auto") {
   const resolvedRoot =
     root ?? mkdtempSync(join(tmpdir(), "matterhorn-auth-e2e-"));
   if (!root) roots.push(resolvedRoot);
   process.env.MATTERHORN_WORK_DATA_DIR = join(resolvedRoot, "data");
   process.env.MATTERHORN_WORK_MEMORY_ROOT = join(resolvedRoot, "memory");
   delete process.env.MATTERHORN_AUTH_DB;
-  const server = await startServer(
-    config(await getFreePort(), resolvedRoot),
-  ) as Served;
+  const serverConfig = config(await getFreePort(), resolvedRoot);
+  if (approvalMode === "manual") serverConfig.approval = { mode: "manual", timeoutMs: 4000 };
+  const server = await startServer(serverConfig) as Served;
   let stopped = false;
   const stop = async () => {
     if (stopped) return;
@@ -1191,6 +1191,89 @@ describe("public account authentication", () => {
     const otherAfter = await jsonRequest(app.base, "/api/memory/entities", { cookie: otherCookie });
     expect(otherAfter.response.status).toBe(200);
     expect(otherAfter.payload).toEqual(otherBefore.payload);
+  });
+
+  test.each(["delete", "logout", "workspace-change", "unchanged"])("pending workspace approvals recheck access after %s without cancelling another account", async change => {
+    const app = await boot(undefined, "manual");
+    const hostHeaders = { "x-matterhorn-host-token": HOST_TOKEN };
+    const accounts: Array<{ email: string; cookie: string; workspaceId: string; workspacePath: string }> = [];
+    for (const email of ["pending-owner@example.com", "pending-other@example.com"]) {
+      const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email, password: PASSWORD },
+      });
+      expect(signup.response.status).toBe(200);
+      const cookie = sessionCookie(signup.response);
+      const workspaces = await jsonRequest(app.base, "/workspaces", { cookie });
+      expect(workspaces.response.status).toBe(200);
+      const workspace = workspaces.payload.items[0];
+      if (typeof workspace.id !== "string" || typeof workspace.path !== "string") {
+        throw new Error("Disposable account workspace is missing");
+      }
+      accounts.push({ email, cookie, workspaceId: workspace.id, workspacePath: workspace.path });
+    }
+    const uploads = accounts.map(account => {
+      const controller = new AbortController();
+      const form = new FormData();
+      form.set("file", new File(["Disposable approval fixture"], "pending.txt"));
+      const completed = fetch(`${app.base}/workspace/${account.workspaceId}/inbox`, {
+        method: "POST", headers: { Cookie: account.cookie }, body: form, signal: controller.signal,
+      }).then(response => response.status, () => 0);
+      return { controller, completed };
+    });
+    try {
+      let approvals = await jsonRequest(app.base, "/approvals", { headers: hostHeaders });
+      expect(approvals.response.status).toBe(200);
+      for (let attempt = 0; attempt < 100 && approvals.payload.items.length !== 2; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        approvals = await jsonRequest(app.base, "/approvals", { headers: hostHeaders });
+      }
+      expect(approvals.response.status).toBe(200);
+      expect(approvals.payload.items).toHaveLength(2);
+      const pending = approvals.payload.items.find((item: { workspaceId: string }) => item.workspaceId === accounts[0].workspaceId);
+      const other = approvals.payload.items.find((item: { workspaceId: string }) => item.workspaceId === accounts[1].workspaceId);
+      expect(typeof pending?.id).toBe("string");
+      expect(typeof other?.id).toBe("string");
+      if (change === "delete") {
+        const deleted = await jsonRequest(app.base, "/api/auth/account", {
+          method: "DELETE", cookie: accounts[0].cookie,
+          body: { password: PASSWORD, confirmationEmail: accounts[0].email },
+        });
+        expect(deleted.response.status).toBe(200);
+        expect(existsSync(accounts[0].workspacePath)).toBe(false);
+      } else if (change === "logout") {
+        expect((await jsonRequest(app.base, "/api/auth/sign-out", {
+          method: "POST", cookie: accounts[0].cookie,
+        })).response.status).toBe(200);
+      } else if (change === "workspace-change") {
+        const created = await jsonRequest(app.base, "/api/auth/organization/create", {
+          cookie: accounts[0].cookie, body: { name: "Approval workspace", slug: "approval-workspace" },
+        });
+        expect(created.response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/den/v1/me/active-organization", {
+          cookie: accounts[0].cookie, body: { organizationId: created.payload.organization.id },
+        })).response.status).toBe(200);
+      }
+      const lateApproval = await jsonRequest(app.base, `/approvals/${pending.id}`, {
+        headers: hostHeaders, body: { reply: "allow" },
+      });
+      const uploadStatus = await uploads[0].completed;
+      if (change === "delete") expect(existsSync(accounts[0].workspacePath)).toBe(false);
+      expect(existsSync(join(accounts[0].workspacePath, ".opencode", "openwork", "inbox", "pending.txt")))
+        .toBe(change === "unchanged");
+      expect(lateApproval.response.status).toBe(change === "delete" ? 404 : 200);
+      expect(uploadStatus).toBe(change === "unchanged" ? 200 : change === "workspace-change" ? 403 : 401);
+      const remaining = await jsonRequest(app.base, "/approvals", { headers: hostHeaders });
+      expect(remaining.payload.items).toEqual([other]);
+      expect((await jsonRequest(app.base, `/approvals/${other.id}`, {
+        headers: hostHeaders, body: { reply: "allow" },
+      })).response.status).toBe(200);
+      expect(await uploads[1].completed).toBe(200);
+      expect(readFileSync(join(accounts[1].workspacePath, ".opencode", "openwork", "inbox", "pending.txt"), "utf8"))
+        .toBe("Disposable approval fixture");
+    } finally {
+      for (const upload of uploads) upload.controller.abort();
+      await Promise.all(uploads.map(upload => upload.completed));
+    }
   });
 
   test("blocks deletion while the account owns a workspace with other members", async () => {

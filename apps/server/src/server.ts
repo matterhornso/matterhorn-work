@@ -1833,6 +1833,7 @@ export async function startServer(
   let accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
     config,
     authStore,
+    approvals,
     guardedRuntime,
     cryptoAppRuntime,
     coworkerRuntime,
@@ -1846,6 +1847,7 @@ export async function startServer(
     accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
       config,
       authStore,
+      approvals,
       guardedRuntime,
       cryptoAppRuntime,
       coworkerRuntime,
@@ -5490,6 +5492,7 @@ async function purgeMatterhornOrganizationWorkspaces(
 async function processMatterhornAccountDeletionJob(input: {
   config: ServerConfig;
   authStore: MatterhornAuthStore;
+  approvals: ApprovalService;
   job: MatterhornAuthAccountDeletionJob;
   guardedRuntime?: MatterhornGuardedAgentRuntime;
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices;
@@ -5500,6 +5503,11 @@ async function processMatterhornAccountDeletionJob(input: {
 }): Promise<{ complete: boolean; job: MatterhornAuthAccountDeletionJob }> {
   let job = input.job;
   try {
+    // Sessions are already revoked by beginAccountDeletion. Settle approval
+    // waiters before removing files, including when retrying an interrupted job.
+    for (const organizationId of job.deletedOrganizationIds) {
+      input.approvals.cancelWorkspace(matterhornOrganizationWorkspaceId(organizationId));
+    }
     if (!job.steps.memory) {
       const memoryVault = createMatterhornMemoryVault(resolveMatterhornMemoryRoot());
       for (const organizationId of job.deletedOrganizationIds) {
@@ -5556,6 +5564,7 @@ async function processMatterhornAccountDeletionJob(input: {
 async function retryMatterhornAccountDeletionJobs(input: {
   config: ServerConfig;
   authStore: MatterhornAuthStore;
+  approvals: ApprovalService;
   guardedRuntime?: MatterhornGuardedAgentRuntime;
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices;
   coworkerRuntime?: MatterhornCoworkerRuntimeServices;
@@ -10789,6 +10798,7 @@ function createRoutes(
     const processed = await processMatterhornAccountDeletionJob({
       config,
       authStore,
+      approvals,
       guardedRuntime,
       job: deletion,
       cryptoAppRuntime,
@@ -23514,11 +23524,13 @@ async function requireApproval(
   input: Omit<ApprovalRequest, "id" | "createdAt" | "actor">,
   cancellation?: { sessionId: string; subjectId: string },
 ): Promise<void> {
+  assertRequestAccessCurrent(ctx.request);
   const actor = ctx.actor ?? { type: "remote" };
   const result = await ctx.approvals.requestApproval(
     { ...input, actor }, ctx.request.signal,
     cancellation ? { workspaceId: input.workspaceId, ...cancellation } : undefined,
   );
+  assertRequestAccessCurrent(ctx.request);
   if (!result.allowed) {
     throw new ApiError(403, "write_denied", "Write request denied", {
       requestId: result.id,
