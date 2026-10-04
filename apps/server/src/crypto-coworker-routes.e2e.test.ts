@@ -334,6 +334,7 @@ async function boot(
   let walrusCurrentEpoch = 11;
   let walrusValidUntilEpoch = 15;
   let walrusRenewalTransactionStatus: "confirmed" | "failed" = "confirmed";
+  let onRenewalVerification: (() => void) | undefined;
   const dependencies: MatterhornServerDependencies = {};
   if (keyManager) dependencies.evidenceKeyManager = keyManager;
   if (walrusTransport) {
@@ -382,12 +383,15 @@ async function boot(
         simulatedAt: new Date().toISOString(),
       };
     };
-    dependencies.agentFileWalrusTransactionStatusVerifier = async (input) => ({
-      digest: input.digest,
-      signer: input.signer,
-      status: walrusRenewalTransactionStatus,
-      observedAt: new Date().toISOString(),
-    });
+    dependencies.agentFileWalrusTransactionStatusVerifier = async (input) => {
+      onRenewalVerification?.();
+      return {
+        digest: input.digest,
+        signer: input.signer,
+        status: walrusRenewalTransactionStatus,
+        observedAt: new Date().toISOString(),
+      };
+    };
     if (options.anchor) {
       dependencies.cryptoEvidenceSuiAnchorPackageVerifier = async () => {
         if (options.anchorVerificationFailure) {
@@ -449,6 +453,7 @@ async function boot(
     setWalrusRenewalTransactionStatus: (value: "confirmed" | "failed") => {
       walrusRenewalTransactionStatus = value;
     },
+    setRenewalVerificationHook: (hook: () => void) => { onRenewalVerification = hook; },
     stop,
   };
 }
@@ -2185,6 +2190,75 @@ describe("crypto coworker HTTP boundary", () => {
     expect(replay.response.status).toBe(410);
     expect(replay.payload.code).toBe("crypto_evidence_sui_anchor_expired_or_replayed");
   });
+
+  for (const kind of ["crypto-evidence", "agent-files"]) {
+    for (const failure of ["deleted", "unavailable"]) {
+      test(`renewal recovery guidance for ${kind} when ${failure}`, async () => {
+        const server = await boot("internal", { agentFiles: true, walrus: true });
+        const signup = await request(server.base, "/api/auth/sign-up/email", {
+          body: { email: "renewal-recovery@example.com", password: PASSWORD },
+        });
+        const sessionCookie = cookie(signup.response);
+        const workspaceId = String((await request(server.base, "/workspaces", { cookie: sessionCookie })).payload.items[0].id);
+        const coworker = await request(server.base, `/workspace/${workspaceId}/coworkers`, {
+          cookie: sessionCookie, body: privateCoworkerInput(),
+        });
+        if (!server.keyManager) throw new Error("route_test_key_manager_missing");
+        let id: string;
+        if (kind === "crypto-evidence") {
+          id = (await seedCryptoEvidence({
+            guardedDb: server.guardedDb, keyManager: server.keyManager, workspaceId,
+            ownerId: String(signup.payload.user.id), coworkerId: String(coworker.payload.coworker.id),
+            runId: "run_renewal_recovery",
+          })).id;
+        } else {
+          const created = await request(server.base, `/workspace/${workspaceId}/agent-files`, {
+            cookie: sessionCookie, body: {
+              name: "test.txt", mimeType: "text/plain", expiresAt: null,
+              coworkerIds: [String(coworker.payload.coworker.id)], contentBase64: Buffer.from("Test file").toString("base64"),
+            },
+          });
+          expect(created.response.status).toBe(201);
+          id = String(created.payload.item.id);
+        }
+        const path = `/workspace/${workspaceId}/${kind}/${id}`;
+        expect((await request(server.base, `${path}/publish`, {
+          cookie: sessionCookie, body: {
+            expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true,
+            ...(kind === "crypto-evidence" ? { ownerAddress: ROUTE_SIGNER } : {}),
+          },
+        })).response.status).toBe(200);
+        server.setWalrusCurrentEpoch(13);
+        const prepared = await request(server.base, `${path}/renew`, {
+          cookie: sessionCookie, body: {
+            expectedRevision: 2, network: "testnet", signer: ROUTE_SIGNER, acknowledgeWalletPayment: true,
+          },
+        });
+        expect(prepared.response.status).toBe(200);
+        server.setWalrusValidUntilEpoch(20);
+        let verificationCalls = 0;
+        server.setRenewalVerificationHook(() => {
+          verificationCalls += 1;
+          if (failure === "unavailable") throw new Error("synthetic transport failure private-detail");
+          const state = new MatterhornGuardedRuntimeStateStore(server.guardedDb);
+          try { state.markWorkspaceDeleted(workspaceId); } finally { state.close(); }
+        });
+        const result = await request(server.base, `${path}/renew/confirm`, {
+          cookie: sessionCookie, body: {
+            intentId: prepared.payload.preview.intentId, intentHash: prepared.payload.preview.intentHash,
+            transactionDigest: prepared.payload.preview.transactionDigest,
+          },
+        });
+        expect(verificationCalls).toBe(1);
+        expect(result.response.status).toBe(failure === "deleted" ? 410 : 503);
+        if (failure === "deleted") expect(result.payload.code).toBe(kind === "crypto-evidence"
+          ? "crypto_evidence_workspace_deleted" : "agent_file_workspace_deleted");
+        expect(result.payload.message).toContain("wallet");
+        expect(result.payload.message).not.toMatch(/Nothing was (?:changed|sent|recorded)/);
+        expect(JSON.stringify(result.payload)).not.toContain("private-detail");
+      });
+    }
+  }
 
   test("renews published evidence only through one exact connected-wallet transaction", async () => {
     const server = await boot("internal", { agentFiles: true, walrus: true });

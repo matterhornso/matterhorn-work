@@ -303,6 +303,39 @@ Logs: `/tmp/matterhorn-verification-deletion-red-2026-10-04.log`, `/tmp/matterho
 
 These are local service/storage integration tests with synthetic keys and transports. They mark the durable deletion barrier before content cleanup; they do not perform a real account deletion, remote storage request or wallet transaction. The fix does not erase existing remote objects or backup data. HTTP deletion/error recovery guidance, cleanup claims, downstream use of already-returned context and hosted acceptance remain open. The earlier Sui anchor follow-up is commit `5f518a2a8ab991658d5f28359e522012ff24bf9b`.
 
+## Renewal HTTP and UI recovery messages
+
+Four local HTTP tests reproduced missing or misleading renewal recovery guidance: evidence and file confirmation mapped workspace deletion to a generic 503, while verification failures either claimed “Nothing was changed” or gave no wallet recovery action. The tests use normal fixture signup, cookie-authenticated creation/publication/preparation, and confirmation through the HTTP server. A synthetic verification hook either marks the workspace in a second SQLite connection or raises an upstream error. It does not delete the account or contact a chain.
+
+Evidence renewal and file errors now map the deletion marker to 410 with an explicit explanation that the action cannot continue. Generic renewal failures, replay/expiry, review-integrity failures and mismatch messages direct users to check their wallet transaction status before retrying, rather than claiming no external effect. The two UI message functions previously replaced some server messages with “Nothing was recorded” or omitted wallet guidance; their corresponding renewal messages now preserve that uncertainty. Conditional guidance distinguishes users who submitted a transaction from those who only attempted preparation.
+
+| Check | Result |
+| --- | --- |
+| Initial HTTP recovery matrix | Four failures |
+| Full coworker HTTP suite | 20 pass, zero fail, 437 assertions |
+| Focused UI message and existing UI contracts | 20 pass, zero fail, 128 assertions |
+| Full frontend suite with loopback permission | 1,357 pass, zero fail, 8,128 assertions across 188 files |
+| Server and frontend typechecks | Pass |
+| Web production build | Pass with existing large-chunk advisory |
+| Full local platform safety gate | All 11 stages pass |
+| Diff whitespace check | Pass |
+
+```sh
+bun test apps/server/src/crypto-coworker-routes.e2e.test.ts --timeout 15000
+bun test apps/app/tests/storage-wallet-recovery-copy.test.ts apps/app/tests/agent-files-ui-contract.test.ts apps/app/tests/crypto-evidence-verification-ui-contract.test.ts
+pnpm --filter @matterhorn-work/app test
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build
+pnpm --filter matterhorn-work-server typecheck
+pnpm test:matterhorn-platform-safety
+```
+
+Logs use `/tmp/matterhorn-wallet-recovery-` with suffixes `red`, `http`, `app-tests-final`, `app-typecheck`, `app-build`, `server-typecheck` and `safety`, followed by `-2026-10-04.log`. The initial sandboxed frontend run had three loopback listener failures; the permitted rerun above passed without changing those tests. The safety gate exited successfully and its terminal result confirms all 11 stages passed.
+
+Impeccable guided the correction toward plain factual recovery text, and Uncodixfy kept the change copy-only. The automatic design hook found no deterministic issues. There are no new browser captures for these error states: function tests, source review of the existing announced alert containers and build success are not viewport, zoom or screen-reader acceptance. Optional wording feedback was requested; no new legal/provider claim or production setting was introduced.
+
+This pass covers renewal responses only. Separate deletion/anchor error mappings, some expired-claim responses and unknown-error fallbacks still need review. The wallet callbacks also need tests for retaining already-submitted transaction details and safely retrying confirmation without asking for another signature. No live wallet transaction, remote erasure or hosted acceptance was performed. The preceding verification fix is commit `97dcad1cebab6cb87d1c4686e1e36e34258e16f1`.
+
 ## Polymarket policy review deadline
 
 The broader regression run found that the bundled policy's review deadline is `2026-10-04T00:00:00.000Z`, which had passed at execution time. `evaluatePolymarketOpenPositionJurisdiction` now returns `policy_review_required` for otherwise valid jurisdiction evidence, and guarded capability issuance denies new-position preparation. This is intended fail-closed behavior. The production deadline and restrictions were not changed. This result concerns the local candidate; the exact hosted policy version and user-facing recovery text have not been verified. It does not establish that public research reads are broken.

@@ -65,8 +65,10 @@ function statusLabel(item: MatterhornEvidenceVerificationPacket): string {
   return "Encrypted in your workspace";
 }
 
-function userMessage(error: unknown): string {
+export function userMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
+    if (error.code === "crypto_evidence_workspace_deleted") return "This workspace is being deleted. This action cannot continue. If you submitted a transaction, check its status in your wallet.";
+    if (error.code === "crypto_evidence_wallet_review_unavailable") return "Wallet review is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.";
     if (error.code === "crypto_evidence_unavailable") return "Encrypted coworker records are not enabled for this deployment.";
     if (error.code === "crypto_evidence_not_found") return "This secure record no longer exists or belongs to another workspace.";
     if (error.code === "crypto_evidence_verification_unavailable") return "Live verification is temporarily unavailable. No proof state was changed.";
@@ -80,10 +82,10 @@ function userMessage(error: unknown): string {
     if (error.code === "crypto_evidence_key_destruction_unavailable") return "The recovery key could not be deleted. The secure record is unchanged.";
     if (error.code === "crypto_evidence_walrus_renewal_not_due") return "This encrypted copy does not need renewal yet.";
     if (error.code === "crypto_evidence_walrus_renewal_in_progress") return "A renewal is already waiting for wallet review.";
-    if (error.code === "crypto_evidence_walrus_renewal_expired_or_replayed") return "This renewal expired or was already used. Check the proof and try again.";
+    if (error.code === "crypto_evidence_walrus_renewal_expired_or_replayed") return "This renewal expired or was already used. Check its transaction status in your wallet before trying again.";
     if (error.code === "crypto_evidence_walrus_renewal_transaction_failed") return "The Sui wallet transaction failed. The encrypted copy was not renewed.";
-    if (error.code === "crypto_evidence_walrus_renewal_unavailable") return "Encrypted testnet storage renewal is temporarily unavailable.";
-    if (error.code.includes("crypto_evidence_walrus_renewal") && error.code.includes("mismatch")) return "The renewal changed after review. Nothing was recorded; check the proof and try again.";
+    if (error.code === "crypto_evidence_walrus_renewal_unavailable") return "Matterhorn could not confirm the renewal. If you submitted a transaction, check its status in your wallet before trying again.";
+    if (error.code.includes("crypto_evidence_walrus_renewal") && error.code.includes("mismatch")) return "Matterhorn could not verify this renewal. Check its transaction status in your wallet before trying again.";
     if (error.code === "crypto_evidence_walrus_deletion_confirmation_required") return "Confirm that the wallet will delete the Walrus copy and Matterhorn recovery key.";
     if (error.code === "crypto_evidence_walrus_not_deletable") return "This encrypted copy was not created as deletable. You can still delete its recovery key.";
     if (error.code === "crypto_evidence_walrus_deletion_in_progress") return "A deletion is already waiting for wallet review.";

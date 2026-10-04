@@ -4644,7 +4644,7 @@ function cryptoEvidencePublicationApiError(error: unknown): ApiError {
 function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
   if (error instanceof MatterhornCryptoEvidenceWalrusRenewalError) {
     if (error.code === "crypto_evidence_walrus_renewal_intent_integrity_invalid") {
-      return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+      return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.");
     }
     if (error.code === "crypto_evidence_not_found") {
       return new ApiError(404, error.code, "Secure record not found.");
@@ -4657,7 +4657,7 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
     }
     if (error.code === "crypto_evidence_walrus_certification_expired"
       || error.code === "crypto_evidence_walrus_renewal_expired_or_replayed") {
-      return new ApiError(410, error.code, "This renewal expired or was already used. Prepare a new renewal.");
+      return new ApiError(410, error.code, "This renewal expired or was already used. Check its transaction status in your wallet before trying again.");
     }
     if (error.code === "crypto_evidence_walrus_renewal_not_due") {
       return new ApiError(409, error.code, "This encrypted copy does not need renewal yet.");
@@ -4669,10 +4669,13 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
       return new ApiError(409, error.code, "The wallet transaction failed. Prepare a new renewal.");
     }
     if (error.code.includes("mismatch") || error.code.endsWith("_invalid")) {
-      return new ApiError(409, error.code, "The renewal changed or could not be verified. Prepare it again.");
+      return new ApiError(409, error.code, "Matterhorn could not verify this renewal. Check its transaction status in your wallet before trying again.");
     }
   }
   const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
+  if (code === "crypto_evidence_workspace_deleted") {
+    return new ApiError(410, code, "This workspace is being deleted. This action cannot continue. If you submitted a transaction, check its status in your wallet.");
+  }
   if (code === "crypto_evidence_not_found") {
     return new ApiError(404, code, "Secure record not found.");
   }
@@ -4691,7 +4694,7 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
   return new ApiError(
     503,
     "crypto_evidence_walrus_renewal_unavailable",
-    "The encrypted copy could not be renewed safely. Nothing was changed.",
+    "Matterhorn could not confirm the renewal. If you submitted a transaction, check its status in your wallet before trying again.",
   );
 }
 
@@ -4837,6 +4840,9 @@ function agentFileApiError(error: unknown): ApiError {
   if (error.code === "agent_file_not_found") {
     return new ApiError(404, error.code, "Agent file not found.");
   }
+  if (error.code === "agent_file_workspace_deleted") {
+    return new ApiError(410, error.code, "This workspace is being deleted. This action cannot continue. If you submitted a transaction, check its status in your wallet.");
+  }
   if (error.code === "agent_file_access_denied" || error.code === "agent_file_expired") {
     return new ApiError(404, "agent_file_not_found", "Agent file not found.");
   }
@@ -4885,7 +4891,7 @@ function agentFileWalrusApiError(error: unknown): ApiError {
   if (error instanceof MatterhornAgentFileStoreError) return agentFileApiError(error);
   if (error instanceof MatterhornAgentFileWalrusRenewalError) {
     if (error.code === "agent_file_walrus_renewal_intent_integrity_invalid") {
-      return new ApiError(503, "agent_file_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+      return new ApiError(503, "agent_file_wallet_review_unavailable", "Wallet review is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.");
     }
     if (error.code === "agent_file_not_found") {
       return new ApiError(404, error.code, "Agent file not found.");
@@ -4896,7 +4902,7 @@ function agentFileWalrusApiError(error: unknown): ApiError {
     }
     if (error.code === "agent_file_walrus_certification_expired"
       || error.code === "agent_file_walrus_renewal_expired_or_replayed") {
-      return new ApiError(410, error.code, "This renewal expired or was already used. Prepare a new renewal.");
+      return new ApiError(410, error.code, "This renewal expired or was already used. Check its transaction status in your wallet before trying again.");
     }
     if (error.code === "agent_file_walrus_renewal_not_due") {
       return new ApiError(409, error.code, "This backup does not need renewal yet.");
@@ -4908,7 +4914,7 @@ function agentFileWalrusApiError(error: unknown): ApiError {
       return new ApiError(409, error.code, "The wallet transaction failed. Prepare a new renewal.");
     }
     if (error.code.includes("mismatch") || error.code.endsWith("_invalid")) {
-      return new ApiError(409, error.code, "The renewal changed or could not be verified. Prepare it again.");
+      return new ApiError(409, error.code, "Matterhorn could not verify this renewal. Check its transaction status in your wallet before trying again.");
     }
   }
   const code = error instanceof Error ? error.message : "";
@@ -4930,7 +4936,7 @@ function agentFileWalrusApiError(error: unknown): ApiError {
   return new ApiError(
     503,
     "agent_file_walrus_unavailable",
-    "Secure cloud backup is temporarily unavailable.",
+    "Secure cloud backup is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.",
   );
 }
 

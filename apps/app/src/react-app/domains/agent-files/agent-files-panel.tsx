@@ -103,8 +103,10 @@ export function agentFileSelectionSummary(count: number): string {
   return `${count} ${count === 1 ? "file" : "files"} selected · 8 maximum`;
 }
 
-function agentFileErrorMessage(error: unknown): string {
+export function agentFileErrorMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
+    if (error.code === "agent_file_workspace_deleted") return "This workspace is being deleted. This action cannot continue. If you submitted a transaction, check its status in your wallet.";
+    if (error.code === "agent_file_wallet_review_unavailable") return "Wallet review is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.";
     if (error.code === "agent_file_blocked") {
       return "Matterhorn blocked this file because it may contain a secret, executable content, or invalid data.";
     }
@@ -114,17 +116,17 @@ function agentFileErrorMessage(error: unknown): string {
     if (error.code === "agent_file_walrus_publication_in_progress") return "This file is already being backed up.";
     if (error.code === "agent_file_operation_in_progress") return "This file is being updated. Try again shortly.";
     if (error.code === "agent_file_walrus_publication_claim_invalid") return "This backup request expired or changed. Start it again.";
-    if (error.code === "agent_file_walrus_unavailable") return "Encrypted cloud backup is temporarily unavailable.";
+    if (error.code === "agent_file_walrus_unavailable") return "Encrypted cloud backup is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.";
     if (error.code === "agent_file_walrus_certification_expired") {
       return "This backup has expired. Your workspace file is still available, but its public encrypted copy cannot be used.";
     }
     if (error.code === "agent_file_walrus_renewal_not_due") return "This cloud copy does not need renewal yet.";
     if (error.code === "agent_file_walrus_renewal_in_progress") return "A renewal is already waiting for wallet review.";
     if (error.code === "agent_file_walrus_renewal_expired_or_replayed") {
-      return "This renewal expired or was already used. Check the backup and prepare it again.";
+      return "This renewal expired or was already used. Check its transaction status in your wallet before trying again.";
     }
     if (error.code === "agent_file_walrus_renewal_intent_mismatch") {
-      return "The renewal changed after review. Nothing was recorded; prepare it again.";
+      return "Matterhorn could not verify this renewal. Check its transaction status in your wallet before trying again.";
     }
     if (error.code === "agent_file_walrus_renewal_transaction_failed") {
       return "The Sui wallet transaction failed. The cloud copy was not renewed.";
