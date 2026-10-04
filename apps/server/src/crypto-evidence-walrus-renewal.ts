@@ -204,6 +204,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceWalrusRenewalPrepareResponse> {
     if (input.signal.aborted) fail("crypto_evidence_walrus_aborted");
+    this.store.assertWorkspaceWritable(input.workspaceId);
     const signer = canonicalSigner(input.signer);
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) fail("crypto_evidence_time_invalid");
@@ -254,6 +255,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
       } catch (error) {
         return translateDependencyError(error);
       }
+      this.store.assertWorkspaceWritable(input.workspaceId);
       if (certification.network !== "testnet"
         || proof.network !== "testnet"
         || certification.blobId !== proof.blobId
@@ -286,6 +288,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
       } catch (error) {
         return translateDependencyError(error);
       }
+      this.store.assertWorkspaceWritable(input.workspaceId);
       const transactionBytes = canonicalTransactionBytes(built.transactionBytesBase64);
       try {
         if (TransactionDataBuilder.getDigestFromBytes(transactionBytes)
@@ -325,18 +328,26 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
         intentHash: sha256(intentHashPayload(previewWithoutHash)),
       };
       assertPreview(preview);
-      if (!this.intentState.putIfAbsent({
-        key: input.evidenceId,
-        workspaceId: input.workspaceId,
-        value: {
+      const finalizedAt = input.now ?? new Date();
+      this.stateStore.transaction(() => {
+        this.store.assertWorkspaceWritable(input.workspaceId);
+        if (!this.store.hasWalrusRenewalClaim({ ...input, claimId: candidate.claimId, now: finalizedAt })) {
+          fail("crypto_evidence_walrus_renewal_expired_or_replayed");
+        }
+        if (this.store.get(input)?.revision !== input.expectedRevision) fail("crypto_evidence_revision_conflict");
+        if (!this.intentState.putIfAbsent({
+          key: input.evidenceId,
           workspaceId: input.workspaceId,
-          ownerId: input.ownerId,
-          claimId: candidate.claimId,
-          preview,
-        },
-        expiresAtMs: Date.parse(preview.expiresAt),
-        nowMs: now.getTime(),
-      })) fail("crypto_evidence_walrus_renewal_in_progress");
+          value: {
+            workspaceId: input.workspaceId,
+            ownerId: input.ownerId,
+            claimId: candidate.claimId,
+            preview,
+          },
+          expiresAtMs: Date.parse(preview.expiresAt),
+          nowMs: finalizedAt.getTime(),
+        })) fail("crypto_evidence_walrus_renewal_in_progress");
+      });
       retainedClaim = true;
       return this.prepareResponse(preview);
     } finally {
@@ -362,6 +373,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceWalrusRenewalConfirmResponse> {
     if (input.signal.aborted) fail("crypto_evidence_walrus_aborted");
+    this.store.assertWorkspaceWritable(input.workspaceId);
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) fail("crypto_evidence_time_invalid");
     const record = this.intentState.get<RenewalIntentRecord>(input.evidenceId, now.getTime());
@@ -391,6 +403,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
     } catch (error) {
       return translateDependencyError(error);
     }
+    this.store.assertWorkspaceWritable(input.workspaceId);
     if (transaction.digest !== preview.transactionDigest
       || canonicalSigner(transaction.signer) !== preview.signer) {
       fail("crypto_evidence_walrus_renewal_transaction_mismatch");
@@ -407,6 +420,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
     } catch (error) {
       return translateDependencyError(error);
     }
+    this.store.assertWorkspaceWritable(input.workspaceId);
     if (certification.network !== "testnet"
       || certification.blobId !== preview.blobId
       || certification.suiObjectId !== preview.suiObjectId
@@ -443,6 +457,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
       reason: null,
     };
     const item = this.stateStore.transaction(() => {
+      this.store.assertWorkspaceWritable(input.workspaceId);
       const consumed = this.intentState.take<RenewalIntentRecord>(
         input.evidenceId,
         finalizedAt.getTime(),

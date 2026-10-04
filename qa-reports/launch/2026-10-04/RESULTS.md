@@ -1,4 +1,4 @@
-# Authentication and account deletion QA
+# Authentication and storage lifecycle QA
 
 4 October 2026. This review fixed client response-validation, auth recovery and delayed-upload authorization defects. The full-platform QA goal remains incomplete. No hosted release, account, provider, production setting, existing preview runtime or chat was changed. All account-deletion tests use disposable loopback accounts and files. Disposable loopback UI fixtures were created and stopped after testing.
 
@@ -217,7 +217,37 @@ pnpm test:matterhorn-platform-safety
 
 Logs: `/tmp/matterhorn-publication-deletion-red-2026-10-04.log`, `/tmp/matterhorn-publication-deletion-final-2026-10-04.log`, `/tmp/matterhorn-publication-deletion-regressions-2026-10-04.log`, `/tmp/matterhorn-publication-deletion-typecheck-2026-10-04.log` and `/tmp/matterhorn-publication-deletion-safety-2026-10-04.log`.
 
-These fixtures replace every storage/network/key operation; no real upload or signature occurred. The correction rejects continuation after an awaited request returns, not an already-dispatched network upload. It cannot remove ciphertext already accepted by external storage or recall data from existing backups. Local proof attachment and remote object existence are distinct outcomes. A durable remote-orphan cleanup/reconciliation path and deletion during renewal preparation/confirmation still need acceptance. Source review also found that deleted-workspace errors currently fall back to generic unavailable responses; dedicated user-facing recovery copy and HTTP behavior need testing before this is called seamless end-to-end deletion.
+Commit `4273224c7154c4740056cfb322e1a90a31943be1` contains this publication follow-up. These fixtures replace every storage/network/key operation; no real upload or signature occurred. The correction rejects continuation after an awaited request returns, not an already-dispatched network upload. It cannot remove ciphertext already accepted by external storage or recall data from existing backups. Local proof attachment and remote object existence are distinct outcomes. Remote-orphan cleanup/reconciliation remains unverified. The next section covers renewal service deletion checks. Source review also found that deleted-workspace errors currently fall back to generic unavailable responses; dedicated user-facing recovery copy and HTTP behavior need testing before this is called seamless end-to-end deletion.
+
+## Renewal preparation and confirmation during deletion
+
+The renewal matrix reproduced eight failures across Agent Files and evidence: preparation certification, transaction-preview building, confirmation transaction verification and confirmation certification all allowed completion after the workspace deletion marker was committed. Eight unrelated-workspace controls succeeded. The fixture marks the same durable state used by the account-deletion coordinator; it deliberately pauses before content cleanup to test that tombstoning itself denies new work. These tests do not invoke a real account deletion endpoint, upload, wallet signature or network transaction.
+
+Both renewal services now check the workspace before serving even a cached preview and after each awaited dependency. Preparation revalidates the exact claim and current record revision, then saves the intent in the same synchronous SQLite transaction as those checks. Production calls use a fresh completion time; the HTTP routes do not pass a fixed clock. Final renewal writes also check the marker inside their existing transaction boundary. Existing wallet-owner, transaction, certification, single-use and tenant checks remain in place.
+
+The final tests confirm that target deletion produces no new preview, does not advance the file/evidence revision and does not start confirmation certification after deletion was observed during transaction verification. A previously prepared intent stays unchanged when confirmation is rejected; deletion cleanup or claim expiry still owns its removal. Four additional cases verify that delayed preview preparation rejects removed/expired and replaced claims without writing an intent or clearing the replacement. Controls for unrelated workspaces and existing renewal flows pass.
+
+| Check | Result |
+| --- | --- |
+| Original deletion matrix | Eight reproduced failures and eight passing controls |
+| Final file/evidence renewal suites | 33 pass, zero fail, 200 assertions across two files |
+| Auth, guarded runtime and affected evidence/file lifecycle suites | 216 pass, zero fail, 1,729 assertions across 13 files |
+| Server typecheck | Pass |
+| Full local platform safety gate | All 11 stages pass |
+| Diff whitespace check | Pass |
+
+```sh
+bun test apps/server/src/agent-file-walrus-renewal.test.ts apps/server/src/crypto-evidence-walrus-renewal.test.ts
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/guarded-agent-runtime.test.ts apps/server/src/crypto-evidence-store.test.ts apps/server/src/crypto-evidence-finalizer.test.ts apps/server/src/crypto-evidence-walrus-publisher.test.ts apps/server/src/crypto-evidence-walrus-renewal.test.ts apps/server/src/crypto-evidence-walrus-deletion.test.ts apps/server/src/crypto-evidence-verification.test.ts apps/server/src/crypto-evidence-sui-anchor.test.ts apps/server/src/agent-file-store.test.ts apps/server/src/agent-file-walrus-publisher.test.ts apps/server/src/agent-file-walrus-renewal.test.ts apps/server/src/guarded-runtime-state-store.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm test:matterhorn-platform-safety
+```
+
+Logs: `/tmp/matterhorn-renewal-deletion-red-2026-10-04.log`, `/tmp/matterhorn-renewal-deletion-final-2026-10-04.log`, `/tmp/matterhorn-renewal-deletion-regressions-2026-10-04.log`, `/tmp/matterhorn-renewal-deletion-typecheck-2026-10-04.log` and `/tmp/matterhorn-renewal-deletion-safety-2026-10-04.log`.
+
+This is service-level local evidence, not hosted account-to-wallet acceptance. It cannot cancel a transaction a wallet already submitted or certify remote erasure. Follow-up targets are Sui anchor/verification completion writes, claim cleanup during account deletion, HTTP deletion-error guidance and downstream use of already-returned context. The full platform review, hosted real responses and operational launch gates remain incomplete.
+
+Specific copy follow-up: `cryptoEvidenceRenewalApiError` currently ends its generic failure message with “Nothing was changed.” That can be misleading after a wallet transaction has been confirmed but local renewal finalization is rejected. Separate the local record outcome from the external transaction outcome and test the HTTP response; the local rejection tests above do not validate that copy.
 
 ## Polymarket policy review deadline
 
@@ -234,6 +264,6 @@ Release action: review the current official venue restrictions and the applicabl
 - Fresh hosted responses on all five desks, optional Jev acceptance, accounting settlement, two-account isolation, real email/reset delivery, logout cleanup and production backup/restore evidence remain outstanding as recorded in the [previous launch report](../2026-10-03/RESULTS.md). No fresh hosted state is asserted in this pass.
 - The limited responsive and keyboard evidence above does not establish platform-wide accessibility, cross-browser or theme acceptance.
 - The Polymarket policy review and expiry-state UI/hosted checks above are open release actions; passing historical policy tests does not establish current eligibility.
-- All 11 local safety stages pass after the publication-completion corrections. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-publication-deletion-safety-2026-10-04.log`.
+- All 11 local safety stages pass after the renewal-completion corrections. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-renewal-deletion-safety-2026-10-04.log`.
 
 These corrections and regression results do not establish launch readiness. Continue with writes already past request-body validation, auth mutation lifecycle and the remaining acceptance work above.

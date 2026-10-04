@@ -221,6 +221,108 @@ async function fixture(input: {
 }
 
 describe("Walrus encrypted evidence renewal airlock", () => {
+  for (const stage of ["prepare_certification", "prepare_build", "confirm_transaction", "confirm_certification"]) {
+    for (const deletedWorkspace of ["workspace_alpha", "workspace_other"]) {
+      test(`renewal rechecks ${deletedWorkspace} deletion during ${stage}`, async () => {
+        const value = await fixture();
+        let release = () => {};
+        let notifyStarted = () => {};
+        const released = new Promise<void>(resolve => { release = resolve; });
+        const started = new Promise<void>(resolve => { notifyStarted = resolve; });
+        const waitAt = async (at: string) => { if (at === stage) { notifyStarted(); await released; } };
+        let certifications = 0;
+        const service = new MatterhornCryptoEvidenceWalrusRenewalService(
+          value.store, value.state, value.authority,
+          async request => { await waitAt("prepare_build"); return value.buildTransaction(request); },
+          async request => { await waitAt("confirm_transaction"); return value.verifyTransaction(request); },
+          async () => {
+            certifications += 1;
+            await waitAt(certifications === 1 ? "prepare_certification" : "confirm_certification");
+            return value.verifyCertification();
+          },
+        );
+        const request = {
+          workspaceId: "workspace_alpha", ownerId: "owner_alpha", evidenceId: value.published.id,
+          expectedRevision: 2, signer: SIGNER, signal: new AbortController().signal,
+          now: new Date("2026-09-02T00:00:00.000Z"),
+        };
+        let pending: Promise<string> | undefined;
+        try {
+          const confirming = stage.startsWith("confirm");
+          if (confirming) {
+            const prepared = await service.prepare(request);
+            value.setValidUntilEpoch(20);
+            pending = service.confirm({ ...request, ...prepared.preview, now: new Date("2026-09-02T00:02:00.000Z") })
+              .then(() => "completed", error => error instanceof Error ? error.message : "unknown_error");
+          } else {
+            pending = service.prepare(request).then(() => "completed", error => error instanceof Error ? error.message : "unknown_error");
+          }
+          await started;
+          // This is the coordinator's durable first step, before content cleanup.
+          value.state.markWorkspaceDeleted(deletedWorkspace);
+          release();
+          const deletingTarget = deletedWorkspace === request.workspaceId;
+          expect(await pending).toBe(deletingTarget ? "crypto_evidence_workspace_deleted" : "completed");
+          expect(value.store.get(request)?.revision).toBe(!deletingTarget && confirming ? 3 : 2);
+          const intents = value.state.listRecords("crypto_evidence_renewal_intent", { workspaceId: request.workspaceId, nowMs: request.now.getTime() });
+          expect(intents).toHaveLength(confirming ? (deletingTarget ? 1 : 0) : (deletingTarget ? 0 : 1));
+          if (deletingTarget) {
+            expect(certifications).toBe(stage === "confirm_certification" ? 2 : 1);
+            await expect(service.prepare(request)).rejects.toThrow("crypto_evidence_workspace_deleted");
+          }
+        } finally {
+          release();
+          await pending;
+          value.authority.close();
+          value.state.close();
+        }
+      });
+    }
+  }
+
+  for (const replaceClaim of [false, true]) {
+    test(`delayed renewal preview rejects a ${replaceClaim ? "replaced" : "expired"} claim`, async () => {
+      const value = await fixture();
+      const authority = testDurableStateAuthority();
+      let release = () => {};
+      let notifyStarted = () => {};
+      const released = new Promise<void>(resolve => { release = resolve; });
+      const started = new Promise<void>(resolve => { notifyStarted = resolve; });
+      const service = new MatterhornCryptoEvidenceWalrusRenewalService(
+        value.store, value.state, authority,
+        async request => { notifyStarted(); await released; return value.buildTransaction(request); },
+        value.verifyTransaction, value.verifyCertification,
+      );
+      const request = {
+        workspaceId: "workspace_alpha", ownerId: "owner_alpha", evidenceId: value.published.id,
+        expectedRevision: 2, signer: SIGNER, signal: new AbortController().signal,
+        now: new Date("2026-09-02T00:00:00.000Z"),
+      };
+      const pending = service.prepare(request).then(
+        () => "prepared", error => error instanceof Error ? error.message : "unknown_error",
+      );
+      try {
+        await started;
+        const later = new Date("2026-09-02T00:06:00.000Z");
+        value.state.deleteExpired(later.getTime());
+        const replacement = replaceClaim ? value.store.beginWalrusRenewal({ ...request, now: later }) : null;
+        release();
+        expect(await pending).toBe("crypto_evidence_walrus_renewal_expired_or_replayed");
+        expect(value.state.listRecords("crypto_evidence_renewal_intent", { workspaceId: request.workspaceId, nowMs: request.now.getTime() })).toEqual([]);
+        expect(value.store.get(request)?.revision).toBe(2);
+        if (replacement) {
+          expect(value.store.hasWalrusRenewalClaim({ ...request, claimId: replacement.claimId, now: later })).toBe(true);
+          expect(value.store.endWalrusRenewal({ ...request, claimId: replacement.claimId, now: later })).toBe(true);
+        }
+      } finally {
+        release();
+        await pending;
+        authority.close();
+        value.state.close();
+      }
+    });
+  }
+
   test("serializes renewal preparation across SQLite connections and protects replacement claims", async () => {
     let releaseBuild!: () => void;
     let buildStarted!: () => void;

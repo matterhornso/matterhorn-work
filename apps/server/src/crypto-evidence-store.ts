@@ -1456,6 +1456,7 @@ export class MatterhornCryptoEvidenceStore {
     proof: MatterhornWalrusProof;
     now?: Date;
   }): MatterhornCryptoEvidenceRecord {
+    this.assertWorkspaceWritable(input.workspaceId);
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
     if (!this.hasWalrusRenewalClaim({ ...input, now })) {

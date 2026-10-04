@@ -856,6 +856,7 @@ export class MatterhornAgentFileStore {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new MatterhornAgentFileStoreError("agent_file_time_invalid");
     return this.stateStore.transaction(() => {
+      this.assertWorkspaceWritable(input.workspaceId);
       if (!this.hasWalrusRenewalClaim({ ...input, now })) {
         throw new MatterhornAgentFileStoreError("agent_file_walrus_renewal_claim_invalid");
       }
