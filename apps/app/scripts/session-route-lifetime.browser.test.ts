@@ -21,6 +21,9 @@ let action: "fork" | "revert" = "fork";
 let rejectAction = false;
 let promptFailure: "preflight" | "dispatch" | null = null;
 let promptFixture = false;
+let responseRetryFixture = false;
+let historyText = true;
+let historyFiles: Array<{ type: "file"; id: string; messageID: string; sessionID: string; url: string; filename: string; mime: string }> = [];
 const promptRequests: Array<{ stage: string; body: unknown }> = [];
 let realGateway: { origin: string; runtimeOrigin: string } | undefined;
 const gatewayResults: Array<{ status: number; payload: unknown }> = [];
@@ -133,6 +136,9 @@ const messages = [
       },
     ],
   },
+];
+const fixtureMessages = () => [
+  { ...messages[0], parts: [...(historyText ? messages[0].parts : []), ...historyFiles] }, messages[1],
 ];
 
 beforeAll(async () => {
@@ -260,6 +266,9 @@ beforeAll(async () => {
           },
         );
       requests.push({ path, method: request.method });
+      if (responseRetryFixture && request.method === "POST" && /\/(abort|revert|unrevert)$/.test(path)) {
+        return Response.json(path.endsWith("/abort") ? true : session("ses_fixture"));
+      }
       if (realGateway && request.method === "POST" && (path.endsWith("/messages/preflight") || path.endsWith("/messages"))) {
         // Browser bytes reach the production gateway unchanged. Only transport
         // authentication uses this isolated local server's legitimate test token.
@@ -338,13 +347,13 @@ beforeAll(async () => {
         return Response.json({
           item: {
             session: session(id),
-            messages: id === "ses_fixture" ? messages : [],
+            messages: id === "ses_fixture" ? fixtureMessages() : [],
             todos: [],
             status: { type: "idle" },
           },
         });
       }
-      if (path.endsWith("/messages")) return Response.json({ items: messages });
+      if (path.endsWith("/messages")) return Response.json({ items: fixtureMessages() });
       if (path.endsWith("/coworker"))
         return Response.json({ active: false, binding: null, coworker: null });
       if (/\/sessions\/ses_/.test(path))
@@ -429,12 +438,102 @@ beforeEach(() => {
   rejectAction = false;
   promptFailure = null;
   promptFixture = false;
+  responseRetryFixture = false;
+  historyText = true;
+  historyFiles = [];
   promptRequests.length = 0;
   gatewayResults.length = 0;
   requests.length = 0;
 });
 
 const operations: Array<"fork" | "revert"> = ["fork", "revert"];
+for (const withText of [false, true]) {
+  test(`historical response retry preserves original attachments with ${withText ? "text" : "files only"}`, async () => {
+    promptFixture = true;
+    responseRetryFixture = true;
+    historyText = withText;
+    const originalUrl = "data:text/plain;base64,T3JpZ2luYWwgZmlsZSBieXRlcw==";
+    historyFiles = [{ type: "file", id: "part_file", messageID: "msg_user", sessionID: "ses_fixture",
+      filename: "original.txt", mime: "text/plain", url: originalUrl }];
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    context.setDefaultTimeout(8000);
+    await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    const page = await context.newPage();
+    try {
+      await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+      await page.getByRole("button", { name: "Change model", exact: true }).click();
+      await page.getByRole("option", { name: /Fixture model/ }).click();
+      const editor = page.getByRole("textbox").first();
+      await editor.fill("Keep my unrelated draft");
+      await page.locator('input[type="file"]').setInputFiles({ name: "unrelated.txt", mimeType: "text/plain", buffer: Buffer.from("Unrelated draft bytes") });
+      await Promise.all([
+        page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/messages")).catch(async error => {
+          throw new Error(`${error}\nFixture requests: ${JSON.stringify(requests.filter(request => request.method === "POST"))}\nError: ${await page.locator('[data-matterhorn-session-error]').allTextContents()}`);
+        }),
+        page.getByRole("button", { name: "Retry response", exact: true }).click(),
+      ]);
+      expect(promptRequests.at(-1)?.body).toMatchObject({ parts: expect.arrayContaining([
+        expect.objectContaining({ type: "file", filename: "original.txt", mime: "text/plain", url: originalUrl }),
+      ]) });
+      expect(JSON.stringify(promptRequests)).not.toContain("unrelated.txt");
+      expect(await editor.innerText()).toBe("Keep my unrelated draft");
+      expect(await page.getByText("unrelated.txt", { exact: true }).count()).toBe(1);
+      expect(promptRequests.map(request => request.stage)).toEqual(["preflight", "dispatch"]);
+    } finally { await context.close(); }
+  }, 30000);
+}
+for (const failure of ["unavailable", "malformed", "preflight", "dispatch"]) {
+  test(`historical response retry safely recovers from ${failure}`, async () => {
+    promptFixture = true;
+    responseRetryFixture = true;
+    promptFailure = failure === "preflight" || failure === "dispatch" ? failure : null;
+    historyFiles = [{ type: "file", id: "part_file", messageID: "msg_user", sessionID: "ses_fixture",
+      filename: "original.txt", mime: "text/plain", url: failure === "unavailable" ? "file:///fixture/missing.txt"
+        : failure === "malformed" ? "data:text/plain;base64,YQ=" : "data:text/plain;base64,QQ==" }];
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
+    context.setDefaultTimeout(8000);
+    await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    const page = await context.newPage();
+    try {
+      await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+      await page.getByRole("button", { name: "Change model", exact: true }).click();
+      await page.getByRole("option", { name: /Fixture model/ }).click();
+      const editor = page.getByRole("textbox").first();
+      await editor.fill("Unrelated draft stays here");
+      await page.locator('input[type="file"]').setInputFiles({ name: "unrelated.txt", mimeType: "text/plain", buffer: Buffer.from("Unrelated bytes") });
+      await page.getByRole("button", { name: "Retry response", exact: true }).focus();
+      await page.keyboard.press("Enter");
+      const errorCard = page.locator('[data-matterhorn-session-error="error"]');
+      await errorCard.waitFor();
+      expect(await errorCard.getAttribute("role")).toBe("alert");
+      expect(await editor.innerText()).toBe("Unrelated draft stays here");
+      expect(await page.getByText("unrelated.txt", { exact: true }).count()).toBe(1);
+      const mutations = requests.filter(request => request.method === "POST" && /\/(abort|revert|unrevert|messages|preflight)$/.test(request.path));
+      if (failure === "unavailable" || failure === "malformed") {
+        expect(await errorCard.innerText()).toContain("Attach the files again");
+        expect(await errorCard.getByRole("button", { name: "Retry response", exact: true }).count()).toBe(0);
+        expect(mutations).toEqual([]);
+      } else {
+        expect(await errorCard.innerText()).toContain("Synthetic attachment rejection");
+        expect(mutations.map(request => request.path.split("/").at(-1))).toEqual(failure === "preflight"
+          ? ["abort", "revert", "preflight", "unrevert"] : ["abort", "revert", "preflight", "messages", "unrevert"]);
+        expect(promptRequests[0].body).toMatchObject({ parts: expect.arrayContaining([
+          expect.objectContaining({ filename: "original.txt", url: "data:text/plain;base64,QQ==" }),
+        ]) });
+      }
+      if (failure === "unavailable" && process.env.HISTORICAL_ATTACHMENT_CAPTURES) {
+        await mkdir(process.env.HISTORICAL_ATTACHMENT_CAPTURES, { recursive: true });
+        for (const theme of ["light", "dark"]) for (const width of [390, 1440]) {
+          await page.setViewportSize({ width, height: 1000 });
+          await page.evaluate(theme => { document.documentElement.classList.toggle("dark", theme === "dark"); document.documentElement.dataset.theme = theme; }, theme);
+          await errorCard.scrollIntoViewIfNeeded();
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+          await page.screenshot({ path: join(process.env.HISTORICAL_ATTACHMENT_CAPTURES, `historical-${theme}-${width}.png`), fullPage: true });
+        }
+      }
+    } finally { await context.close(); }
+  }, 30000);
+}
 for (const rejection of ["wire size", "private contents"]) {
   for (const withText of [false, true]) {
   test(`real gateway attachment ${rejection} rejection and recovery with ${withText ? "text" : "files only"}`, async () => {

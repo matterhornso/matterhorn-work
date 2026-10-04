@@ -300,3 +300,33 @@ pnpm test:matterhorn-platform-safety
 Final evidence is `/tmp/matterhorn-browser-real-gateway-mounted-final-2026-10-05.log`, `/tmp/matterhorn-browser-real-gateway-aggregate-2026-10-05.log` and `/tmp/matterhorn-browser-real-gateway-safety-2026-10-05.log`. The earlier focused log is `/tmp/matterhorn-browser-real-gateway-focused3-2026-10-05.log`. The complete mounted suite is already in the existing CI workflow. These logs are local evidence, not published CI artifacts. No new visual design or production behavior changed, so no new screenshot, cross-browser or screen-reader certification is implied.
 
 Remaining work includes historical attachment recovery, control actions whose state changes during choreography, native image decoding resource ceilings, real provider interpretation and hosted five-desk acceptance. Hosted accounts/inboxes, deployment identity, encryption and backup-restore evidence remain independent launch gates. Nothing was pushed, merged or deployed; existing chats and previews were untouched.
+
+## Attachments in historical response retries
+
+Following `56cb6f25dde6a98b6f07de8286a1e8c81b5d0f93`, two mounted browser reproductions failed: retrying a text-plus-file turn sent only its text, while an attachment-only turn did not submit. The retry resolver previously discarded files, and the handler explicitly required nonempty prompt text. The corrected resolver retains the original user turn's file parts. A bounded decoder restores saved base64 data URLs into transient Files, and the handler submits those files through the existing serialization, preflight and dispatch path. It does not consume, send or overwrite unrelated composer text/files.
+
+The decoder rejects non-inline URLs, malformed base64, mismatched MIME types, files above 5 MB, decoded totals above 10 MB and more than 64 files. It never fetches remote, workspace-file or expired blob URLs. These cases ask the user to reattach files and send a new message; validation runs before abort/revert. The error is visible and non-retryable rather than offering an action that cannot recover the missing bytes. No preview object URL is created during restoration. The server still independently verifies attachment contents, privacy, byte limits and authority; restoring a File is not approval to send it.
+
+### Historical retry verification
+
+- Focused response-action suite: **38 pass, zero fail, 97 assertions**. New coverage includes stable retry IDs and saved bytes, UTF-8 and binary data, unavailable references, malformed data, MIME mismatch, per-file boundaries, aggregate decoded-byte and part-count bounds.
+- Final full frontend suite: **1,469 pass, zero fail, 8,539 assertions across 193 files**. Final frontend typecheck and web build pass; existing bundle-size warnings remain.
+- Final mounted suite: **46 pass, zero fail, 365 assertions**. It adds six cases: successful attachment-only/text-plus-file retry; missing-file and malformed-data recovery without mutating requests; and preflight/dispatch rejection followed by an unrevert request. Successful retries preserve the old file's exact data URL and exclude the unrelated draft's file. Failure tests use keyboard activation, preserve current drafts/files and check alert semantics.
+- Final platform safety gate: **all 11 stages pass**, with terminal exit zero. The earlier running gate was allowed to finish before a fresh gate checked the final error-handling code.
+
+The initial synthetic abort fixture returned a session object instead of the runtime's required boolean acknowledgement, so the product correctly stopped before retry dispatch. After correcting that fixture, both attachment bugs reproduced in `red2`. This fixture correction is not counted as a product fix. No existing tests were weakened to accept dropped attachments.
+
+One batched light/dark capture round at 390 and 1440 px exposed an unhelpful Retry response button on an unrecoverable attachment error. That action was removed in one follow-up, followed by one confirmation batch. Mobile light and desktop dark captures were visually inspected; all captured sizes check horizontal overflow. Captures use reduced motion. This does not verify Safari/Firefox, native screen-reader announcements, 200% zoom or hosted behavior. Impeccable hardening/polish and Uncodixfy preserved the current layout, tokens and identity. The hook found no deterministic design issues; its pre-existing stale sidecar warning was not migrated. The new error copy remains English and needs the same localization review as other session errors.
+
+```sh
+bun test apps/app/tests/response-actions.test.tsx
+bun test apps/app/tests
+HISTORICAL_ATTACHMENT_CAPTURES=<disposable-output-directory> bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+pnpm test:matterhorn-platform-safety
+```
+
+Evidence logs use `/tmp/matterhorn-historical-attachments-`: `red2-2026-10-05.log`, `unit-2026-10-05.log`, `app-final-2026-10-05.log`, `mounted-final-2026-10-05.log`, `typecheck-final-2026-10-05.log`, `build-final-2026-10-05.log` and `safety-final-2026-10-05.log`. Capture folders are `/tmp/matterhorn-historical-attachments-captures-2026-10-05` and `/tmp/matterhorn-historical-attachments-confirmation-2026-10-05`. These are disposable local artifacts, not published CI evidence.
+
+The new historical-retry cases use synthetic account/runtime responses and assert the restoration request sequence; they are not proof of a real provider completing a replacement response or of hosted runtime rollback. The earlier real-gateway attachment cases remain in the same mounted suite. Remaining work includes accepted-run failure rehydration, delayed action/route changes, native decoding resource ceilings and hosted acceptance. No credentials, existing chats, previews or production settings changed; nothing was pushed, merged or deployed.

@@ -2,6 +2,8 @@ import type { UIMessage } from "ai";
 import type { MatterhornAgentPrivacyPreflightResponse } from "@matterhorn-work/types/guarded-agent-runtime";
 import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
 import { AccountStateChangedError, captureAccountGeneration } from "../../../../app/lib/account-client-state";
+import type { ComposerAttachment } from "../../../../app/types";
+import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
 
 export function failedContinuationResponseId(
   failure: { id: string; retryMessage: string } | null,
@@ -22,7 +24,40 @@ export type AssistantResponseRetryTurn = {
   responseIndex: number;
   promptMessageId: string;
   prompt: string;
+  attachments: Extract<UIMessage["parts"][number], { type: "file" }>[];
 };
+
+export class ResponseRetryAttachmentError extends Error {
+  constructor() {
+    super("The original attachments cannot be restored. Attach the files again in the composer and send a new message. The original conversation is unchanged.");
+  }
+}
+
+/** Replay saved bytes only; never fetch remote, expired blob, or mutable file URLs. */
+export function restoreResponseRetryAttachments(turn: AssistantResponseRetryTurn): ComposerAttachment[] {
+  const unavailable = () => new ResponseRetryAttachmentError();
+  if (turn.attachments.length > 64) throw unavailable();
+  // Bound allocations before decoding. The gateway independently enforces its
+  // decoded aggregate and encoded request limits again on submission.
+  let remaining = CHAT_ATTACHMENT_MAX_BYTES * 2;
+  return turn.attachments.map((part, index): ComposerAttachment => {
+    if (part.url.length > Math.ceil(CHAT_ATTACHMENT_MAX_BYTES / 3) * 4 + 1024) throw unavailable();
+    const match = /^data:([^,]*);base64,([A-Za-z0-9+/]*={0,2})$/.exec(part.url);
+    if (!match || match[2].length % 4 !== 0) throw unavailable();
+    if (match[1].split(";")[0].toLowerCase() !== part.mediaType.split(";")[0].toLowerCase()) throw unavailable();
+    const encoded = match[2];
+    const size = encoded.length / 4 * 3 - (encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0);
+    if (size > CHAT_ATTACHMENT_MAX_BYTES || size > remaining) throw unavailable();
+    remaining -= size;
+    let decoded: string;
+    try { decoded = atob(encoded); } catch { throw unavailable(); }
+    const bytes = Uint8Array.from(decoded, character => character.charCodeAt(0));
+    const name = part.filename || "attachment";
+    const file = new File([bytes], name, { type: part.mediaType });
+    return { id: `retry:${turn.promptMessageId}:${index}`, name, mimeType: part.mediaType,
+      size: file.size, kind: part.mediaType.startsWith("image/") ? "image" : "file", file };
+  });
+}
 
 export type AssistantResponseRetryTransaction<T> = {
   prepare: () => Promise<T>;
@@ -87,6 +122,7 @@ export function resolveAssistantResponseRetryTurn(
       responseIndex,
       promptMessageId: candidate.id,
       prompt: retryPromptText(candidate),
+      attachments: candidate.parts.filter(part => part.type === "file"),
     };
   }
   return null;

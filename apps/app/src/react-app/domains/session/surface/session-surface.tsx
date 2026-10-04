@@ -98,7 +98,7 @@ import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from ".
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
-import { failedContinuationResponseId, resolveAssistantResponseRetryTurn, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
+import { failedContinuationResponseId, resolveAssistantResponseRetryTurn, restoreResponseRetryAttachments, ResponseRetryAttachmentError, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
 import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionActivityStatus } from "../status/session-activity-store";
 import { deriveOpenTargets, selectAutoOpenTarget, type OpenTarget } from "../artifacts/open-target";
 import {
@@ -1037,6 +1037,9 @@ export function findPrivacyPreflightInError(value: unknown, depth = 0): Matterho
 }
 
 export function parseSessionError(thrown: unknown): SessionError {
+  if (thrown instanceof ResponseRetryAttachmentError) {
+    return { message: thrown.message, kind: "generic", retryable: false };
+  }
   if (thrown instanceof JevPreparationCancelledError) {
     return { message: "Request stopped.", detail: "Nothing was sent to your answering model. Your draft is still available.",
       kind: "cancelled", retryable: false };
@@ -2485,7 +2488,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
     const retryTurn = resolveAssistantResponseRetryTurn(renderedMessages, messageId);
     if (!retryTurn) throw new Error("Matterhorn could not find the prompt for this response.");
     const prompt = retryTurn.prompt;
-    if (!prompt) throw new Error("This response came from an attachment-only prompt. Re-send it from the composer to include the attachment.");
 
     retrySendingRef.current = true;
     pendingContinuationRef.current = null;
@@ -2512,9 +2514,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
     });
 
     try {
+      const retryAttachments = restoreResponseRetryAttachments(retryTurn);
+      if (!prompt && retryAttachments.length === 0) throw new Error("This turn has no saved prompt to retry. Send a new message from the composer.");
       let resolvedText = addBittensorContextToResolvedText(prompt, bittensorContext);
       await runAssistantResponseRetry({
-        prepare: () => jevChat.prepare({ ...buildDraft(prompt, [], { resolvedText, privacyConsentToken }),
+        prepare: () => jevChat.prepare({ ...buildDraft(prompt, retryAttachments, { resolvedText, privacyConsentToken }),
           ...(prompt === MATTERHORN_CONTINUE_ANSWER_TEXT ? { answerOnly: true } : {}),
         }),
         abort: () => abortSession(opencodeClient, props.sessionId),
