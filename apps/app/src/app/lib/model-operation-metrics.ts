@@ -51,10 +51,16 @@ type ModelMetricsRoot = typeof globalThis & {
   __matterhornPendingModelOperations?: Record<string, ModelOperationContext[]>;
 };
 
+// Retain the latest identity even after completion: an older HTTP result must
+// not become current again just because the newer request finished first.
+const latestOperations = new Map<string, ModelOperationContext>();
+const operationScope = (workspaceId: string, sessionId: string) => JSON.stringify([workspaceId, sessionId]);
+
 accountClientState.register("model-metrics", () => {
   const root = globalThis as ModelMetricsRoot;
   root.__matterhornModelMetrics = [];
   root.__matterhornPendingModelOperations = {};
+  latestOperations.clear();
 });
 
 const METRIC_LIMIT = 300;
@@ -135,6 +141,7 @@ export function beginModelOperation(input: {
   };
   const pending = pendingOperations(root);
   pending[operation.sessionId] = [...(pending[operation.sessionId] ?? []), operation];
+  latestOperations.set(operationScope(operation.workspaceId, operation.sessionId), operation);
   appendMetric({
     event: "started",
     workspaceId: operation.workspaceId,
@@ -148,9 +155,14 @@ export function beginModelOperation(input: {
   return operation;
 }
 
-export function pendingModelOperation(sessionId: string) {
+export function pendingModelOperation(sessionId: string, operationId?: number) {
   const root = globalThis as ModelMetricsRoot;
-  return pendingOperations(root)[safeIdentifier(sessionId)]?.[0] ?? null;
+  const pending = pendingOperations(root)[safeIdentifier(sessionId)];
+  return (operationId === undefined ? pending?.[0] : pending?.find(operation => operation.id === operationId)) ?? null;
+}
+
+export function isLatestModelOperation(operation: ModelOperationContext) {
+  return latestOperations.get(operationScope(operation.workspaceId, operation.sessionId)) === operation;
 }
 
 export function recordModelOperationAccepted(operation: ModelOperationContext) {
@@ -207,6 +219,7 @@ export function recordModelOperationCompleted(
 }
 
 export function recordModelOperationCancelled(operation: ModelOperationContext) {
+  if (pendingModelOperation(operation.sessionId, operation.id) !== operation) return;
   appendMetric({
     event: "cancelled",
     workspaceId: operation.workspaceId,
@@ -282,4 +295,5 @@ export function clearModelOperationMetrics() {
   root.__matterhornModelMetricSeq = 0;
   root.__matterhornModelMetrics = [];
   root.__matterhornPendingModelOperations = {};
+  latestOperations.clear();
 }

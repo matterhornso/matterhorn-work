@@ -497,6 +497,76 @@ beforeEach(() => {
 });
 
 const operations: Array<"fork" | "revert"> = ["fork", "revert"];
+for (const earlier of ["retry", "continue"]) {
+  for (const newerPending of [false, true]) {
+    test(`same chat late ${earlier} failure preserves newer send pending=${newerPending}`, async () => {
+      promptFixture = delayedPromptDispatch = responseRetryFixture = true;
+      terminalFailure = earlier === "retry";
+      incompleteResponse = earlier === "continue";
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      context.setDefaultTimeout(6000);
+      await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+      const page = await context.newPage();
+      let releaseEarlier: (() => void) | undefined;
+      try {
+        await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+        await page.getByRole("button", { name: "Change model", exact: true }).click();
+        await page.getByRole("option", { name: /Fixture model/ }).click();
+        await page.getByRole("button", { name: earlier === "retry" ? "Retry response" : "Continue answer", exact: true }).click();
+        for (let attempt = 0; attempt < 100 && !release; attempt++) await page.waitForTimeout(20);
+        expect(release).toBeDefined();
+        releaseEarlier = release;
+        terminalFailure = incompleteResponse = false;
+        await page.getByRole("button", { name: "Other fixture chat", exact: true }).click();
+        await page.waitForURL("**/ses_other");
+        await page.getByRole("button", { name: "Original fixture chat", exact: true }).click();
+        await page.waitForURL("**/ses_fixture");
+        await page.waitForFunction(() => {
+          const composer = window.__openwork?.slice("composer");
+          return composer && typeof composer === "object" && "sessionId" in composer && composer.sessionId === "ses_fixture";
+        });
+        const editor = page.getByRole("textbox").first();
+        await editor.fill("Newer request in the same chat");
+        delayedPromptDispatch = newerPending;
+        await page.getByRole("button", { name: "Ask", exact: true }).click();
+        for (let attempt = 0; attempt < 100 && promptRequests.filter(request => request.stage === "dispatch").length < 2; attempt++) await page.waitForTimeout(20);
+        expect(promptRequests.filter(request => request.stage === "dispatch")).toHaveLength(2);
+        const releaseNewer = release;
+        await editor.fill("Keep the newest draft");
+        const activityCount = await page.evaluate(() => {
+          const history = window.__openwork?.slice("qa-session-activity");
+          return Array.isArray(history) ? history.length : -1;
+        });
+        expect(activityCount).toBeGreaterThanOrEqual(0);
+        rejectDelayedPrompt = true;
+        const oldResponse = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/messages"));
+        releaseEarlier?.();
+        await oldResponse;
+        await page.waitForTimeout(250);
+        expect((await editor.innerText()).trim()).toBe("Keep the newest draft");
+        expect(await page.locator('[data-matterhorn-session-error]').filter({ hasText: "Synthetic delayed dispatch failed" }).count()).toBe(0);
+        expect(await page.locator('[aria-label="Error"][title="Error"]').count()).toBe(0);
+        expect(await page.evaluate(start => {
+          const history = window.__openwork?.slice("qa-session-activity");
+          return Array.isArray(history) ? history.slice(start).filter((item: unknown) => item && typeof item === "object"
+            && "sessionId" in item && item.sessionId === "ses_fixture" && "status" in item && item.status === "error") : null;
+        }, activityCount)).toEqual([]);
+        if (newerPending) {
+          expect(await page.evaluate(() => {
+            const composer = window.__openwork?.slice("composer");
+            return composer && typeof composer === "object" && "sending" in composer && composer.sending === true;
+          })).toBe(true);
+          rejectDelayedPrompt = false;
+          releaseNewer?.();
+          await page.waitForFunction(() => {
+            const composer = window.__openwork?.slice("composer");
+            return composer && typeof composer === "object" && "sending" in composer && composer.sending === false;
+          });
+        }
+      } finally { releaseEarlier?.(); release?.(); await context.close(); }
+    }, 30000);
+  }
+}
 for (const rejected of [false, true]) {
   for (const otherPending of [false, true]) {
   test(`pending send does not block another chat with old rejection=${rejected} other pending=${otherPending}`, async () => {

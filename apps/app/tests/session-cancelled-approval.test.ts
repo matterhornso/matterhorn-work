@@ -5,7 +5,7 @@ import { useComposerStateStore } from "../src/react-app/domains/session/surface/
 import { JevPreparationCancelledError } from "../src/react-app/domains/session/surface/use-jev-chat";
 import {
   beginModelOperation, clearModelOperationMetrics, pendingModelOperation,
-  readModelOperationMetrics, recordModelOperationCancelled,
+  readModelOperationMetrics, recordModelOperationCancelled, recordModelOperationCompleted,
 } from "../src/app/lib/model-operation-metrics";
 
 const workspaceId = "ws_cancelled_approval";
@@ -51,4 +51,34 @@ test("a real failure remains an error with its draft intact", () => {
   expect(readModelOperationMetrics().filter((metric) => metric.event === "provider_error")).toHaveLength(1);
   expect(pendingModelOperation(sessionId)).toBeNull();
   expect(useComposerStateStore.getState().sessions[sessionId]?.draft).toBe("Retry this later");
+});
+
+for (const newerState of ["busy", "completed", "error"]) {
+  for (const error of [cancelled, new Error("Older request failed")]) {
+    test(`older submission result preserves newer ${newerState} state (${error === cancelled ? "cancelled" : "failed"})`, () => {
+      const older = beginModelOperation({ workspaceId, sessionId, source: "chat" });
+      const newer = beginModelOperation({ workspaceId, sessionId, source: "chat" });
+      const activity = useSessionActivityStore.getState();
+      activity.setRunStatus(workspaceId, sessionId, { type: "busy" });
+      if (newerState === "completed") {
+        recordModelOperationCompleted(newer, { tokens: {} });
+        activity.setRunStatus(workspaceId, sessionId, { type: "idle" });
+      }
+      if (newerState === "error") recordSessionSubmissionFailure(newer, new Error("Newer request failed"));
+      const before = useSessionActivityStore.getState().recordsByWorkspaceId[workspaceId][sessionId];
+      recordSessionSubmissionFailure(older, error);
+      expect(useSessionActivityStore.getState().recordsByWorkspaceId[workspaceId][sessionId]).toEqual(before);
+      expect(readModelOperationMetrics().filter(metric => metric.operationId === older.id && metric.event === (error === cancelled ? "cancelled" : "provider_error"))).toHaveLength(1);
+      expect(pendingModelOperation(sessionId)).toEqual(newerState === "busy" ? newer : null);
+    });
+  }
+}
+
+test("cancellation of a newer request removes that request rather than the oldest pending one", () => {
+  const older = beginModelOperation({ workspaceId, sessionId, source: "chat" });
+  const newer = beginModelOperation({ workspaceId, sessionId, source: "chat" });
+  recordSessionSubmissionFailure(newer, cancelled);
+  recordSessionSubmissionFailure(older, cancelled);
+  expect(pendingModelOperation(sessionId)).toBeNull();
+  expect(readModelOperationMetrics().filter(metric => metric.event === "cancelled").map(metric => metric.operationId)).toEqual([newer.id, older.id]);
 });

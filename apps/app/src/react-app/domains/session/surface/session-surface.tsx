@@ -42,6 +42,7 @@ import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deploy
 import {
   beginModelOperation,
   pendingModelOperation,
+  isLatestModelOperation,
   recordModelOperationAccepted,
   recordModelOperationCancelled,
   recordModelOperationCompleted,
@@ -1237,14 +1238,14 @@ export function recordSessionSubmissionFailure(operation: ModelOperationContext,
   const activity = useSessionActivityStore.getState();
   if (parsed.kind === "cancelled") {
     // Stop's response and the cancelled send can arrive in either order.
-    if (pendingModelOperation(operation.sessionId)?.id === operation.id) {
-      recordModelOperationCancelled(operation);
+    recordModelOperationCancelled(operation);
+    if (isLatestModelOperation(operation)) {
+      activity.setRunStatus(operation.workspaceId, operation.sessionId, { type: "idle" });
+      activity.clearError(operation.workspaceId, operation.sessionId);
     }
-    activity.setRunStatus(operation.workspaceId, operation.sessionId, { type: "idle" });
-    activity.clearError(operation.workspaceId, operation.sessionId);
   } else {
     recordModelOperationProviderError(operation, error);
-    activity.setError(operation.workspaceId, operation.sessionId);
+    if (isLatestModelOperation(operation)) activity.setError(operation.workspaceId, operation.sessionId);
   }
   return parsed;
 }
@@ -2410,7 +2411,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       }
       const currentComposer = useComposerStateStore.getState();
       props.onDraftChange(buildDraft(getComposerDraft(currentComposer, props.sessionId), getComposerAttachments(currentComposer, props.sessionId)));
-      if (isCurrentView()) setSending(false);
+      if (isCurrentView() && isLatestModelOperation(operation)) setSending(false);
     } catch (nextError) {
       if (!isCurrentAccount()) return;
       const parsed = recordSessionSubmissionFailure(operation, nextError);
@@ -2418,7 +2419,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       // than overwriting newer edits with the older, rejected submission.
       const currentComposer = useComposerStateStore.getState();
       props.onDraftChange(buildDraft(getComposerDraft(currentComposer, props.sessionId), getComposerAttachments(currentComposer, props.sessionId)));
-      if (!isCurrentView()) return;
+      if (!isCurrentView() || !isLatestModelOperation(operation)) return;
       setError(parsed);
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
@@ -2457,21 +2458,20 @@ export function SessionSurface(props: SessionSurfaceProps) {
       if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
       void queryClient.invalidateQueries({ queryKey: snapshotQueryKey, exact: true });
-      if (!isCurrentView()) return;
+      if (!isCurrentView() || !isLatestModelOperation(operation)) return;
       pendingContinuationRef.current = null;
       // No composer writes: an unrelated draft and attachments stay untouched.
     } catch (nextError) {
       if (!isCurrentAccount()) return;
       const parsed = recordSessionSubmissionFailure(operation, nextError);
-      activity.setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
-      if (isCurrentView()) {
+      if (isCurrentView() && isLatestModelOperation(operation)) {
         setError(parsed);
         setAwaitingAssistantBaseline(null);
         setNoVisibleAssistantOutputBaseline(null);
       }
       throw nextError;
     } finally {
-      if (isCurrentView()) {
+      if (isCurrentView() && isLatestModelOperation(operation)) {
         continuationSendingRef.current = false;
         setSending(false);
       }
@@ -2558,7 +2558,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
       void queryClient.invalidateQueries({ queryKey: snapshotQueryKey, exact: true });
-      if (!isCurrentView()) return;
+      if (!isCurrentView() || !isLatestModelOperation(operation)) return;
       pendingRetryRef.current = null;
       setSending(false);
       setNotice({
@@ -2569,9 +2569,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
     } catch (nextError) {
       if (!isCurrentAccount()) return;
       const parsed = recordSessionSubmissionFailure(operation, nextError);
-      useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
       void queryClient.invalidateQueries({ queryKey: snapshotQueryKey, exact: true });
-      if (isCurrentView()) {
+      if (isCurrentView() && isLatestModelOperation(operation)) {
         setError(parsed);
         setAwaitingAssistantBaseline(null);
         setNoVisibleAssistantOutputBaseline(null);
@@ -2579,7 +2578,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       }
       throw nextError;
     } finally {
-      if (isCurrentView()) retrySendingRef.current = false;
+      if (isCurrentView() && isLatestModelOperation(operation)) retrySendingRef.current = false;
     }
   }, [captureViewLifetime, bittensorContext, buildDraft, chatStreaming, jevChat.prepare, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, queryClient, snapshotQueryKey]);
 

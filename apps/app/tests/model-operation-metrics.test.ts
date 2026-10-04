@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import { clearDevLogs, readDevLogs } from "../src/app/lib/dev-log";
+import { accountClientState } from "../src/app/lib/account-client-state";
 import {
   beginModelOperation,
+  isLatestModelOperation,
   clearModelOperationMetrics,
   pendingModelOperation,
   readModelOperationMetrics,
@@ -102,5 +104,38 @@ describe("privacy-safe model operation metrics", () => {
       reasoningLevel: "provider_default",
       source: "workspace",
     }));
+  });
+
+  test("latest identity is scoped to workspace/session and survives newer completion", () => {
+    const old = beginModelOperation({ workspaceId: "ws_one", sessionId: "shared_id", source: "chat" });
+    const otherWorkspace = beginModelOperation({ workspaceId: "ws_two", sessionId: "shared_id", source: "chat" });
+    const otherSession = beginModelOperation({ workspaceId: "ws_one", sessionId: "other_id", source: "chat" });
+    expect(isLatestModelOperation(old)).toBe(true);
+    const newer = beginModelOperation({ workspaceId: "ws_one", sessionId: "shared_id", source: "chat" });
+    recordModelOperationCompleted(newer, { tokens: {} });
+    expect(isLatestModelOperation(old)).toBe(false);
+    expect(isLatestModelOperation(newer)).toBe(true);
+    expect(isLatestModelOperation(otherWorkspace)).toBe(true);
+    expect(isLatestModelOperation(otherSession)).toBe(true);
+    recordModelOperationCancelled(newer);
+    expect(readModelOperationMetrics().filter(metric => metric.operationId === newer.id && metric.event === "cancelled")).toEqual([]);
+    recordModelOperationCancelled(old);
+    recordModelOperationCancelled(old);
+    expect(readModelOperationMetrics().filter(metric => metric.operationId === old.id && metric.event === "cancelled")).toHaveLength(1);
+    expect(pendingModelOperation("shared_id")).toBe(otherWorkspace);
+  });
+
+  test("clearing or changing accounts invalidates retained operation identities", () => {
+    const old = beginModelOperation({ workspaceId: "ws_one", sessionId: "ses_one", source: "chat" });
+    clearModelOperationMetrics();
+    const newer = beginModelOperation({ workspaceId: "ws_one", sessionId: "ses_one", source: "chat" });
+    expect(newer.id).toBe(old.id);
+    expect(isLatestModelOperation(old)).toBe(false);
+    expect(isLatestModelOperation(newer)).toBe(true);
+    recordModelOperationCancelled(old);
+    expect(pendingModelOperation("ses_one")).toBe(newer);
+    accountClientState.clear();
+    expect(isLatestModelOperation(newer)).toBe(false);
+    expect(pendingModelOperation("ses_one")).toBeNull();
   });
 });

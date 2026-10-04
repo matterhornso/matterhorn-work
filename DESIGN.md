@@ -256,6 +256,8 @@ Privacy confirmation belongs to the displayed request. A delayed confirmation ca
 
 An in-progress send, retry or continuation keeps its bookkeeping attached to the original session. After navigation, late errors, success notices and pending-state cleanup must not overwrite the newly viewed chat. Duplicate-send suppression is scoped to workspace and chat: one pending submission must not silently block another chat's enabled Ask action or release another chat's pending state. This does not cancel accepted backend work on navigation.
 
+Within a chat, submission feedback belongs to its request identity. An older rejected or cancelled submission must not overwrite a newer request's activity, error or pending state, even when the newer request has already finished. Cancellation records the exact pending request once; this browser bookkeeping does not prove server cancellation, usage settlement or reversal of dispatched work.
+
 Selected sidebar entries use ice/ink, 700 weight and a 2px inset line; selected tabs use ice/ink and a 2px action-colored underline. Picker options add a 2px inset outline and keep title, capability, identifier and checkmark on the same selection ink. Unavailable picker options stay disabled with 0.6 opacity and a not-allowed cursor. The full model list retains its separately scoped subtle selected treatment.
 
 Dialogs, alert dialogs, popovers and menus use framed panels with panel depth. Sheets and command dialogs use the same geometry without that shadow. The mobile drawer keeps an explicit 44px close control. Shared badges remain compact inherited components, not invented readiness certifications.

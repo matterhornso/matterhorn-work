@@ -452,3 +452,31 @@ pnpm test:matterhorn-platform-safety
 Logs use `/tmp/matterhorn-pending-chat-feedback-`: `red2-2026-10-05.log` and `concurrent-red2-2026-10-05.log` are the stabilized reproductions; `expanded-2026-10-05.log` is the focused passing run before adding overlapping completion cases. Final evidence is `mounted-verified-2026-10-05.log`, `composer-2026-10-05.log`, `app-2026-10-05.log`, `typecheck-final-2026-10-05.log`, `build-2026-10-05.log` and `safety-2026-10-05.log`. Earlier mounted logs include the documented test-assertion failures and stopped run, and are superseded by `mounted-verified`.
 
 Impeccable hardening and Uncodixfy preserved existing copy, error components and layout. This correction changes when feedback is applied, not its visual design; no additional screenshot certification is claimed. All new services, accounts and delayed responses are synthetic. Existing real-gateway attachment cases remain in the mounted suite, but neither set proves hosted inference, actual provider accounting or server rollback. Same-session overlapping-request correlation, cancellation/compensation during retry transactions, native image-decoding limits and hosted operational acceptance remain open. No production data/configuration, existing chats/previews or credentials changed; nothing was pushed, merged or deployed.
+
+## Same chat submission result ownership
+
+The preceding cross-view correction is committed locally as `c95ef8f136133b329c05f5819c8d564801cc15e4`. Follow-up unit tests reproduced older failures/cancellations overwriting a newer request's activity state and cancellation leaving a newer request pending because only the oldest queued operation was considered. Five of the seven new regression cases failed before correction; the other two are preservation controls.
+
+Four browser cases also reproduce older retry/continuation failures writing an error into the same chat after navigation and a newer send, with the newer send either accepted or still awaiting its HTTP response. A final-DOM assertion initially missed the intermediate store transition. The fixture now observes production activity-store transitions without changing them, and all four cases fail on the old code. The first observer attempt registered before the account initialization reset, so it was cleared; those missing-observer failures are fixture errors, not product findings. Registration now follows the actual store updates.
+
+The latest operation identity is retained per workspace/session, including after it completes, and cleared at account/cache reset. Submission feedback updates global activity and local error/pending state only for that identity. Historical metrics still record the earlier result. Cancellation looks up the exact operation and is idempotent instead of depending on FIFO position. The retry/continuation catch paths no longer unconditionally set activity idle after recording a failure. These changes neither cancel accepted backend work nor change permission, consent, signing or accounting authority.
+
+### Same chat verification
+
+- Nine added unit cases cover older cancelled/failed results against newer busy/completed/error states, out-of-order cancellation, independent workspace/session identities, duplicate cancellation, completed requests, account clearing and reused numeric IDs. The focused operation/cancellation suites pass **16 tests and 70 assertions**.
+- Four added mounted browser cases preserve the newer draft and pending flag and check intermediate activity transitions, not just the final DOM. The focused run passes **four cases and 30 assertions**.
+- Final aggregate checks pass: **122 mounted browser cases, zero failures, 756 assertions**; **1,478 frontend tests, zero failures, 8,573 assertions across 193 files**; typecheck; web build; and **all 11 platform-safety stages**, each command with terminal exit zero. Existing bundle-size warnings remain.
+
+```sh
+bun test apps/app/tests/session-cancelled-approval.test.ts apps/app/tests/model-operation-metrics.test.ts
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --test-name-pattern 'same chat late' --timeout 120000
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+bun test apps/app/tests
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+pnpm test:matterhorn-platform-safety
+```
+
+Evidence uses `/tmp/matterhorn-same-chat-`: `results-red-2026-10-05.log` for unit reproduction; `mounted-red3-2026-10-05.log` for the four observed browser failures; `mounted-focused-2026-10-05.log` for focused verification; and `mounted-final-2026-10-05.log`, `app-verified-2026-10-05.log`, `typecheck-2026-10-05.log`, `build-final-2026-10-05.log` and `safety-final-2026-10-05.log` for aggregate checks. The initial sandboxed frontend run passed 1,475 cases but failed three HTTP-fixture tests at loopback server startup; it is not counted as an aggregate pass. The permitted-loopback rerun is the final frontend evidence.
+
+Impeccable hardening and Uncodixfy preserve the existing visuals and feedback components. No new visual certification is claimed. Browser accounts, providers and delayed responses are synthetic; the existing isolated real-gateway attachment checks remain in the larger suite. This correction does not establish exact runtime-message-to-metric correlation, late Stop response isolation, retry transaction compensation or native image-decoding ceilings. Those reviews and hosted five-desk responses, operational accounts/inboxes, encryption and backup restore remain open. No push, merge, deployment, production configuration or existing preview/chat mutation occurred.
