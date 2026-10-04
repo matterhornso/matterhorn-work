@@ -254,6 +254,8 @@ Control Mode rechecks a queued action after its spotlight animation, before exec
 
 Privacy confirmation belongs to the displayed request. A delayed confirmation cannot resume after dismissal, navigation, account changes or changes to that request. Edited drafts and pending attachments require a fresh explicit send; stale failures must not replace a newer error. Retrying or continuing a saved answer remains separate from an unrelated composer draft. Dropping an unused confirmation token is not server-side revocation or rollback of an already dispatched request.
 
+An in-progress send, retry or continuation keeps its bookkeeping attached to the original session. After navigation, late errors, success notices and pending-state cleanup must not overwrite the newly viewed chat. Duplicate-send suppression is scoped to workspace and chat: one pending submission must not silently block another chat's enabled Ask action or release another chat's pending state. This does not cancel accepted backend work on navigation.
+
 Selected sidebar entries use ice/ink, 700 weight and a 2px inset line; selected tabs use ice/ink and a 2px action-colored underline. Picker options add a 2px inset outline and keep title, capability, identifier and checkmark on the same selection ink. Unavailable picker options stay disabled with 0.6 opacity and a not-allowed cursor. The full model list retains its separately scoped subtle selected treatment.
 
 Dialogs, alert dialogs, popovers and menus use framed panels with panel depth. Sheets and command dialogs use the same geometry without that shadow. The mobile drawer keeps an explicit 44px close control. Shared badges remain compact inherited components, not invented readiness certifications.

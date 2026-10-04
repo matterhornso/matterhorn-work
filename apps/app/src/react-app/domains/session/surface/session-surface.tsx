@@ -7,7 +7,7 @@ import { responseCompletionSummary } from "../message-completion-metadata";
 import type { CSSProperties } from "react";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { UIMessage } from "ai";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "react-router";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
 import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-mode";
@@ -1566,6 +1566,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
     viewScope.current = true;
     return () => { viewScope.current = false; };
   }, [viewScope]);
+  const captureViewLifetime = useCallback(() => {
+    const href = window.location.href;
+    return () => isCurrentAccount() && viewScope.current && window.location.href === href;
+  }, [isCurrentAccount, viewScope]);
+  const queryClient = useQueryClient();
   const publicBetaWeb = isPublicBetaWebDeployment();
   const local = useLocal();
   const { openQuickJot } = useQuickJot();
@@ -1748,8 +1753,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
     suppressNextAbortFailureRef.current = false;
     pendingContinuationRef.current = null;
     pendingRetryRef.current = null;
+    continuationSendingRef.current = false;
+    retrySendingRef.current = false;
     setVerifiedOpenTargets([]);
-  }, [props.sessionId]);
+  }, [props.workspaceId, props.sessionId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -2287,6 +2294,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   const sendDraft = useCallback(async (privacyConsentToken?: string) => {
     if (!isCurrentAccount()) return;
+    const isCurrentView = captureViewLifetime();
     if (preparingAttachmentsRef.current) return;
     pendingContinuationRef.current = null;
     pendingRetryRef.current = null;
@@ -2402,26 +2410,28 @@ export function SessionSurface(props: SessionSurfaceProps) {
       }
       const currentComposer = useComposerStateStore.getState();
       props.onDraftChange(buildDraft(getComposerDraft(currentComposer, props.sessionId), getComposerAttachments(currentComposer, props.sessionId)));
-      setSending(false);
+      if (isCurrentView()) setSending(false);
     } catch (nextError) {
       if (!isCurrentAccount()) return;
       const parsed = recordSessionSubmissionFailure(operation, nextError);
-      setError(parsed);
       // Sending never removed the draft. Preserve its current contents rather
       // than overwriting newer edits with the older, rejected submission.
       const currentComposer = useComposerStateStore.getState();
       props.onDraftChange(buildDraft(getComposerDraft(currentComposer, props.sessionId), getComposerAttachments(currentComposer, props.sessionId)));
+      if (!isCurrentView()) return;
+      setError(parsed);
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
     }
-  }, [activeWorkflowDeskAgent, attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.modelVariant, props.onDraftChange, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft, jevChat.prepare]);
+  }, [captureViewLifetime, activeWorkflowDeskAgent, attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.modelVariant, props.onDraftChange, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft, jevChat.prepare]);
 
   // UI callbacks accept no arguments. Consent enters only through confirmation.
-  const { send: handleSend, sendWithConsent } = useComposerSubmission(sendDraft);
+  const { send: handleSend, sendWithConsent } = useComposerSubmission(sendDraft, JSON.stringify([props.workspaceId, props.sessionId]));
 
   const continueAssistantResponse = useCallback(async (messageId: string, privacyConsentToken?: string) => {
     if (!isCurrentAccount()) return;
+    const isCurrentView = captureViewLifetime();
     if (sending || chatStreaming || continuationSendingRef.current) return;
     const latest = renderedMessages.at(-1);
     if (!latest || latest.id !== messageId || latest.role !== "assistant" || !responseCompletionSummary(latest).canContinue) {
@@ -2446,22 +2456,28 @@ export function SessionSurface(props: SessionSurfaceProps) {
       await props.onSendDraft(prepared);
       if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
+      void queryClient.invalidateQueries({ queryKey: snapshotQueryKey, exact: true });
+      if (!isCurrentView()) return;
       pendingContinuationRef.current = null;
-      void snapshotQuery.refetch();
       // No composer writes: an unrelated draft and attachments stay untouched.
     } catch (nextError) {
       if (!isCurrentAccount()) return;
-      setError(recordSessionSubmissionFailure(operation, nextError));
-      setAwaitingAssistantBaseline(null);
-      setNoVisibleAssistantOutputBaseline(null);
+      const parsed = recordSessionSubmissionFailure(operation, nextError);
       activity.setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
+      if (isCurrentView()) {
+        setError(parsed);
+        setAwaitingAssistantBaseline(null);
+        setNoVisibleAssistantOutputBaseline(null);
+      }
       throw nextError;
     } finally {
-      continuationSendingRef.current = false;
-      setSending(false);
+      if (isCurrentView()) {
+        continuationSendingRef.current = false;
+        setSending(false);
+      }
     }
-  }, [buildDraft, chatStreaming, jevChat.prepare, props.modelVariant, props.onSendDraft, props.selectedModel.modelID,
-    props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery]);
+  }, [captureViewLifetime, buildDraft, chatStreaming, jevChat.prepare, props.modelVariant, props.onSendDraft, props.selectedModel.modelID,
+    props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, queryClient, snapshotQueryKey]);
 
   const handleAbort = useCallback(async () => {
     if (!isCurrentAccount()) return;
@@ -2490,6 +2506,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   const handleRetryAssistantResponse = useCallback(async (messageId: string, privacyConsentToken?: string) => {
     if (!isCurrentAccount()) return;
+    const isCurrentView = captureViewLifetime();
     if (sending || chatStreaming || retrySendingRef.current) {
       throw new Error("Wait for the active response to finish before retrying another response.");
     }
@@ -2540,8 +2557,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
       });
       if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
+      void queryClient.invalidateQueries({ queryKey: snapshotQueryKey, exact: true });
+      if (!isCurrentView()) return;
       pendingRetryRef.current = null;
-      void snapshotQuery.refetch();
       setSending(false);
       setNotice({
         title: "Response retry started",
@@ -2551,17 +2569,19 @@ export function SessionSurface(props: SessionSurfaceProps) {
     } catch (nextError) {
       if (!isCurrentAccount()) return;
       const parsed = recordSessionSubmissionFailure(operation, nextError);
-      setError(parsed);
-      setAwaitingAssistantBaseline(null);
-      setNoVisibleAssistantOutputBaseline(null);
-      setSending(false);
       useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
-      void snapshotQuery.refetch();
+      void queryClient.invalidateQueries({ queryKey: snapshotQueryKey, exact: true });
+      if (isCurrentView()) {
+        setError(parsed);
+        setAwaitingAssistantBaseline(null);
+        setNoVisibleAssistantOutputBaseline(null);
+        setSending(false);
+      }
       throw nextError;
     } finally {
-      retrySendingRef.current = false;
+      if (isCurrentView()) retrySendingRef.current = false;
     }
-  }, [bittensorContext, buildDraft, chatStreaming, jevChat.prepare, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery]);
+  }, [captureViewLifetime, bittensorContext, buildDraft, chatStreaming, jevChat.prepare, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, queryClient, snapshotQueryKey]);
 
   // Consent belongs to the displayed request, not merely to a session URL.
   // Invalidate on committed changes, even if the user changes a setting back.

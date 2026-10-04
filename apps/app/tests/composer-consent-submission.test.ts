@@ -61,7 +61,7 @@ describe("composer consent request boundary", () => {
 
   test("surface wires ordinary/retry and confirmed consent to distinct entry points", () => {
     const source = readFileSync(new URL("../src/react-app/domains/session/surface/session-surface.tsx", import.meta.url), "utf8");
-    expect(source).toContain("const { send: handleSend, sendWithConsent } = useComposerSubmission(sendDraft);");
+    expect(source).toContain("const { send: handleSend, sendWithConsent } = useComposerSubmission(sendDraft, JSON.stringify([props.workspaceId, props.sessionId]));");
     expect(source).toContain("await sendWithConsent(consent.consentToken);");
     expect(source).toContain("onSend={handleSend}");
     expect(source).toContain("await handleSend();");

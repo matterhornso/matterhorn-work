@@ -421,3 +421,34 @@ pnpm test:matterhorn-platform-safety
 Evidence uses `/tmp/matterhorn-consent-lifetime-`: `red-2026-10-05.log` records the initial reproduction; intermediate `focused`, `expanded` and `boundaries` logs include the identified fixture errors and incomplete navigation guard. The final logs are `mounted-verified-2026-10-05.log`, `app-verified-2026-10-05.log`, `typecheck-verified-2026-10-05.log`, `build-verified-2026-10-05.log` and `safety-verified-2026-10-05.log`. Captures are in `/tmp/matterhorn-consent-lifetime-captures-2026-10-05` and can be reproduced with `CONSENT_LIFETIME_CAPTURES` on the focused run. These are local disposable artifacts, not remote CI results.
 
 The new cases use synthetic accounts, grants and runtime responses; earlier isolated real-gateway attachment cases remain in the full suite. This establishes browser request-lifetime behavior, not hosted exposure, real-provider completion or revocation of server grants. Native image-decoding resource ceilings and post-start asynchronous send/retry transaction behavior remain for review. Hosted five-desk responses, operational accounts/inboxes, release identity, encryption and backup restore remain independent launch gates. Nothing was pushed, merged or deployed; existing previews/chats and credentials were untouched.
+
+## Late chat results and concurrent sessions
+
+Following `01599171d42a127b92613d91ef2e4d4b0f3b6182`, eight mounted reproductions showed late request feedback crossing view lifetimes. Failed sends, retries and continuations displayed their error after navigation or navigation away and back; successful retries also displayed their completion notice in the new view. Drafts/files survived the stabilized reproductions. The tests wait for the intended composer, not just the changed URL, so they isolate post-request feedback from typing during the router's transitional render.
+
+The surface now checks the captured account/view lifetime before writing local error, notice, baseline and pending state. Accepted work still updates its original operation metrics and session-scoped draft bookkeeping. Retry and continuation invalidate the original snapshot's exact query key instead of invoking a query observer that may now be attached to another chat. Their busy refs reset when changing workspace/session; an old completion cannot release a newer view's action ref. Navigation does not cancel or undo work already dispatched.
+
+A second pair of reproductions found that an enabled Ask button in another chat silently did nothing while the first chat's submission was pending. The composer hook's duplicate gate was shared by all sessions using the surface. It now tracks pending workspace/session keys independently and releases only the completed key. The source-level consent wiring assertion was updated to require that scope without weakening ordinary-send versus explicit-consent separation.
+
+### Late result verification
+
+- Eighteen new cases cover successful/failed send, retry and continuation after unchanged view, navigation and return. They retain a newer text/file draft and verify that late errors and retry-success notices do not appear in a different view.
+- Four concurrent-chat cases cover accepted/rejected first requests with the second request already completed or still pending. Completing the first leaves the second draft intact; a still-pending second request retains its pending state and Stop generating control. The second request can then complete independently.
+- Final frontend regressions pass **1,469 tests, zero failures, 8,539 assertions across 193 files**. Typecheck and web build pass, with existing bundle-size warnings.
+- The dedicated composer browser suite passes **31 tests, zero failures, 135 assertions**, with two existing optional sidebar/capture cases skipped. The final mounted browser run passes **118 tests, zero failures, 726 assertions**. The full platform safety gate passes **all 11 stages**, with terminal exit zero.
+
+The initial concurrent fixture had not selected a model in the second chat, so its disabled Ask button was correct. After selecting the model, `concurrent-red2` reproduced the silent no-op at the HTTP request boundary. Overlapping-request checks initially expected a disabled Ask button; the real pending UI instead exposes Stop generating and hides Ask. Those assertions were corrected against the existing component and English label. One obsolete verification run was explicitly stopped after detecting the wrong label; it is not counted as a passing run. No production behavior was changed to satisfy those fixture errors.
+
+```sh
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --test-name-pattern 'pending (send|retry|continue)' --timeout 120000
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+bun test apps/app/scripts/composer-submit.browser.test.ts --timeout 120000
+bun test apps/app/tests
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+pnpm test:matterhorn-platform-safety
+```
+
+Logs use `/tmp/matterhorn-pending-chat-feedback-`: `red2-2026-10-05.log` and `concurrent-red2-2026-10-05.log` are the stabilized reproductions; `expanded-2026-10-05.log` is the focused passing run before adding overlapping completion cases. Final evidence is `mounted-verified-2026-10-05.log`, `composer-2026-10-05.log`, `app-2026-10-05.log`, `typecheck-final-2026-10-05.log`, `build-2026-10-05.log` and `safety-2026-10-05.log`. Earlier mounted logs include the documented test-assertion failures and stopped run, and are superseded by `mounted-verified`.
+
+Impeccable hardening and Uncodixfy preserved existing copy, error components and layout. This correction changes when feedback is applied, not its visual design; no additional screenshot certification is claimed. All new services, accounts and delayed responses are synthetic. Existing real-gateway attachment cases remain in the mounted suite, but neither set proves hosted inference, actual provider accounting or server rollback. Same-session overlapping-request correlation, cancellation/compensation during retry transactions, native image-decoding limits and hosted operational acceptance remain open. No production data/configuration, existing chats/previews or credentials changed; nothing was pushed, merged or deployed.

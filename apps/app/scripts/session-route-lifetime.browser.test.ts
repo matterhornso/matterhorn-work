@@ -24,6 +24,8 @@ let promptFailure: "preflight" | "dispatch" | null = null;
 let promptFixture = false;
 let consentFixture = false;
 let rejectConsent = false;
+let delayedPromptDispatch = false;
+let rejectDelayedPrompt = false;
 let responseRetryFixture = false;
 let historyText = true;
 let terminalFailure = false;
@@ -304,6 +306,10 @@ beforeAll(async () => {
       if (promptFixture && request.method === "POST" && (path.endsWith("/messages/preflight") || path.endsWith("/messages"))) {
         const stage = path.endsWith("/preflight") ? "preflight" : "dispatch";
         promptRequests.push({ stage, body: await request.json() });
+        if (stage === "dispatch" && delayedPromptDispatch) {
+          await new Promise<void>(resolve => { release = resolve; });
+          if (rejectDelayedPrompt) return Response.json({ message: "Synthetic delayed dispatch failed." }, { status: 500 });
+        }
         if (promptFailure === stage) return Response.json({
           code: "attachments_too_large", message: "Remove a file and try again. Synthetic attachment rejection.",
         }, { status: 413 });
@@ -317,7 +323,9 @@ beforeAll(async () => {
           challenge: { id: "fixture_challenge", expiresAt: new Date(Date.now() + 60000).toISOString(), singleUse: true },
           ...(incompleteResponse ? { continuation: { messageId: "msg_answer", tools: "disabled" } } : {}),
         });
-        if (stage === "preflight") return Response.json({ decision: "allow", reason: "Synthetic fixture only" });
+        if (stage === "preflight") return Response.json({ decision: "allow", reason: "Synthetic fixture only",
+          ...(incompleteResponse ? { continuation: { messageId: "msg_answer", tools: "disabled" } } : {}),
+        });
         return Response.json({ accepted: true }, { status: 202 });
       }
       if (path === "/v1/me")
@@ -472,6 +480,8 @@ beforeEach(() => {
   promptFixture = false;
   consentFixture = false;
   rejectConsent = false;
+  delayedPromptDispatch = false;
+  rejectDelayedPrompt = false;
   responseRetryFixture = false;
   historyText = true;
   terminalFailure = false;
@@ -487,6 +497,130 @@ beforeEach(() => {
 });
 
 const operations: Array<"fork" | "revert"> = ["fork", "revert"];
+for (const rejected of [false, true]) {
+  for (const otherPending of [false, true]) {
+  test(`pending send does not block another chat with old rejection=${rejected} other pending=${otherPending}`, async () => {
+    promptFixture = delayedPromptDispatch = true;
+    rejectDelayedPrompt = rejected;
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    context.setDefaultTimeout(5000);
+    await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    const page = await context.newPage();
+    let releaseOriginal: (() => void) | undefined;
+    try {
+      await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+      await page.getByRole("button", { name: "Change model", exact: true }).click();
+      await page.getByRole("option", { name: /Fixture model/ }).click();
+      const editor = page.getByRole("textbox").first();
+      await editor.fill("First chat request");
+      await page.getByRole("button", { name: "Ask", exact: true }).click();
+      for (let attempt = 0; attempt < 100 && !release; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+      expect(release).toBeDefined();
+      releaseOriginal = release;
+      delayedPromptDispatch = otherPending;
+      await page.getByRole("button", { name: "Other fixture chat", exact: true }).click();
+      await page.waitForFunction(() => {
+        const composer = window.__openwork?.slice("composer");
+        return composer && typeof composer === "object" && "sessionId" in composer && composer.sessionId === "ses_other";
+      });
+      await page.getByRole("button", { name: "Change model", exact: true }).click();
+      await page.getByRole("option", { name: /Fixture model/ }).click();
+      await editor.fill("Second chat request");
+      const ask = page.getByRole("button", { name: "Ask", exact: true });
+      expect(await ask.isEnabled()).toBe(true);
+      await ask.click();
+      for (let attempt = 0; attempt < 100 && promptRequests.filter(request => request.stage === "dispatch").length < 2; attempt++) await page.waitForTimeout(20);
+      expect(promptRequests.filter(request => request.stage === "dispatch")).toHaveLength(2);
+      const releaseOther = release;
+      await editor.fill("Preserve second chat after send");
+      const oldResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/ses_fixture/messages"));
+      releaseOriginal?.();
+      await oldResponse;
+      await page.waitForTimeout(250);
+      expect((await editor.innerText()).trim()).toBe("Preserve second chat after send");
+      expect(await page.locator('[data-matterhorn-session-error]').count()).toBe(0);
+      if (otherPending) {
+        expect(await page.evaluate(() => {
+          const composer = window.__openwork?.slice("composer");
+          return composer && typeof composer === "object" && "sending" in composer && composer.sending === true;
+        })).toBe(true);
+        expect(await ask.count()).toBe(0);
+        expect(await page.getByRole("button", { name: "Stop generating", exact: true }).count()).toBe(1);
+        rejectDelayedPrompt = false;
+        const otherResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/ses_other/messages"));
+        releaseOther?.();
+        await otherResponse;
+        await page.waitForFunction(() => {
+          const composer = window.__openwork?.slice("composer");
+          return composer && typeof composer === "object" && "sending" in composer && composer.sending === false;
+        });
+        expect((await editor.innerText()).trim()).toBe("Preserve second chat after send");
+      }
+    } finally { releaseOriginal?.(); release?.(); await context.close(); }
+  }, 30000);
+  }
+}
+for (const operation of ["send", "retry", "continue"]) {
+  for (const boundary of ["unchanged", "navigate", "return"]) {
+    for (const rejected of [false, true]) {
+      test(`pending ${operation} completion rejected=${rejected} after ${boundary}`, async () => {
+        promptFixture = delayedPromptDispatch = responseRetryFixture = true;
+        rejectDelayedPrompt = rejected;
+        terminalFailure = operation === "retry";
+        incompleteResponse = operation === "continue";
+        const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+        context.setDefaultTimeout(8000);
+        await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+        const page = await context.newPage();
+        try {
+          await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+          await page.getByRole("button", { name: "Change model", exact: true }).click();
+          await page.getByRole("option", { name: /Fixture model/ }).click();
+          const editor = page.getByRole("textbox").first();
+          await editor.fill("Original in-progress draft");
+          if (operation === "send") await page.getByRole("button", { name: "Ask", exact: true }).click();
+          if (operation === "retry") await page.locator('[data-matterhorn-session-error]').getByRole("button", { name: "Retry response", exact: true }).click();
+          if (operation === "continue") await page.getByRole("button", { name: "Continue answer", exact: true }).click();
+          for (let attempt = 0; attempt < 100 && !release; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+          expect(release).toBeDefined();
+          // The request has started. Navigation must not undo accepted work,
+          // but its late feedback must not replace the newly viewed chat state.
+          if (boundary !== "unchanged") {
+            await page.getByRole("button", { name: "Other fixture chat", exact: true }).click();
+            await page.waitForURL("**/ses_other");
+            await page.waitForFunction(() => {
+              const composer = window.__openwork?.slice("composer");
+              return composer && typeof composer === "object" && "sessionId" in composer && composer.sessionId === "ses_other";
+            });
+            await editor.fill("Other chat draft");
+            if (boundary === "return") {
+              await page.getByRole("button", { name: "Original fixture chat", exact: true }).click();
+              await page.waitForURL("**/ses_fixture");
+              await page.waitForFunction(() => {
+                const composer = window.__openwork?.slice("composer");
+                return composer && typeof composer === "object" && "sessionId" in composer && composer.sessionId === "ses_fixture";
+              });
+            }
+          }
+          await editor.fill("Keep current draft");
+          await page.locator('input[type="file"]').setInputFiles({ name: "current.txt", mimeType: "text/plain", buffer: Buffer.from("Keep current file") });
+          await page.getByText("current.txt", { exact: true }).waitFor();
+          const response = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/messages"));
+          release?.();
+          await response;
+          await page.waitForTimeout(350);
+          expect(promptRequests.filter(request => request.stage === "dispatch")).toHaveLength(1);
+          expect((await editor.innerText()).trim()).toBe("Keep current draft");
+          expect(await page.getByText("current.txt", { exact: true }).count()).toBe(1);
+          const error = page.locator('[data-matterhorn-session-error]');
+          if (boundary === "unchanged" && rejected) await error.getByText(/Synthetic delayed dispatch failed/).waitFor();
+          else expect(await error.filter({ hasText: "Synthetic delayed dispatch failed" }).count()).toBe(0);
+          if (boundary !== "unchanged") expect(await page.getByText("Response retry started", { exact: true }).count()).toBe(0);
+        } finally { release?.(); await context.close(); }
+      }, 30000);
+    }
+  }
+}
 for (const boundary of ["unchanged", "edit", "edit back", "attach", "preparing", "model", "dismiss", "navigate", "return", "cross-tab logout"]) {
   for (const rejected of [false, true]) {
     test(`delayed privacy confirmation rejected=${rejected} after ${boundary}`, async () => {
