@@ -665,6 +665,104 @@ test("mounted preparation blocks the control action as well as the composer", as
     ]) });
   } finally { await context.close(); }
 }, 30000);
+for (const boundary of ["unchanged", "edit", "edit back", "clear", "append", "remove", "preparing", "navigate", "return", "off", "cross-tab logout"]) {
+  test(`delayed control send after ${boundary}`, async () => {
+    promptFixture = true;
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    context.setDefaultTimeout(8000);
+    await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    const page = await context.newPage();
+    try {
+      await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+      await page.getByRole("button", { name: "Change model", exact: true }).click();
+      await page.getByRole("option", { name: /Fixture model/ }).click();
+      const editor = page.getByRole("textbox").first();
+      await editor.fill("Original control draft");
+      const input = page.locator('input[type="file"]');
+      if (boundary === "remove") {
+        await input.setInputFiles({ name: "removed.txt", mimeType: "text/plain", buffer: Buffer.from("Removed file") });
+        await page.getByText("removed.txt", { exact: true }).waitFor();
+      }
+      await page.evaluate(() => {
+        const original = window.setTimeout;
+        window.setTimeout = (callback, delay, ...args) => {
+          if (delay === 180 && typeof callback === "function") {
+            window.setTimeout = original;
+            window.addEventListener("qa-release-control", () => callback(...args), { once: true });
+            document.documentElement.dataset.controlWaiting = "true";
+            return original(() => {}, 0);
+          }
+          return original(callback, delay, ...args);
+        };
+        void window.__openworkControl?.execute("composer.send").then(result => {
+          document.documentElement.dataset.controlResult = JSON.stringify(result);
+        });
+      });
+      await page.waitForFunction(() => document.documentElement.dataset.controlWaiting === "true");
+      const duplicate = await page.evaluate(() => window.__openworkControl?.execute("composer.send"));
+      expect(duplicate?.ok).toBe(false);
+      expect(promptRequests).toEqual([]);
+      if (boundary === "edit" || boundary === "edit back" || boundary === "clear") {
+        await editor.fill(boundary === "clear" ? "" : "Replacement draft");
+        if (boundary === "edit back") {
+          await page.waitForFunction(() => document.querySelector('[role="textbox"]')?.textContent === "Replacement draft");
+          await editor.fill("Original control draft");
+        }
+      }
+      if (boundary === "append") {
+        await input.setInputFiles({ name: "new.txt", mimeType: "text/plain", buffer: Buffer.from("New file") });
+        await page.getByText("new.txt", { exact: true }).waitFor();
+      }
+      if (boundary === "remove") await page.getByRole("button", { name: "Remove", exact: true }).click();
+      if (boundary === "preparing") {
+        await delayImagePreparation(page);
+        await input.setInputFiles(await delayedImage(page));
+        await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+      }
+      if (boundary === "navigate" || boundary === "return") {
+        await page.getByRole("button", { name: "Other fixture chat", exact: true }).click();
+        await page.waitForURL("**/ses_other");
+        if (boundary === "return") {
+          await page.getByRole("button", { name: "Original fixture chat", exact: true }).click();
+          await page.waitForURL("**/ses_fixture");
+        }
+      }
+      if (boundary === "off") await page.evaluate(() => window.__openworkControl?.setEnabled(false));
+      if (boundary === "cross-tab logout") {
+        const other = await context.newPage();
+        await other.goto(`${server.url}settings/cloud-account`);
+        await other.getByRole("button", { name: "Sign out", exact: true }).click();
+        await page.getByRole("heading", { name: "Welcome to Matterhorn Desks", exact: true }).waitFor();
+      }
+      await page.evaluate(() => window.dispatchEvent(new Event("qa-release-control")));
+      await page.waitForFunction(() => Boolean(document.documentElement.dataset.controlResult));
+      const result = await page.evaluate(() => JSON.parse(document.documentElement.dataset.controlResult || "null"));
+      if (boundary === "unchanged") {
+        expect(promptRequests.map(request => request.stage)).toEqual(["preflight", "dispatch"]);
+        expect((await editor.innerText()).trim()).toBe("");
+      } else {
+        expect(promptRequests).toEqual([]);
+        if (boundary === "edit") expect((await editor.innerText()).trim()).toBe("Replacement draft");
+      }
+      expect(result?.ok).toBe(boundary === "unchanged");
+      if (boundary === "preparing") {
+        await releaseImagePreparation(page);
+        await page.getByText("pending.jpg", { exact: true }).waitFor();
+        expect(promptRequests).toEqual([]);
+      }
+      if (boundary === "edit" || boundary === "off" || boundary === "preparing") {
+        const fresh = await page.evaluate(() => window.__openworkControl?.execute("composer.send"));
+        expect(fresh?.ok).toBe(true);
+        expect(promptRequests.map(request => request.stage)).toEqual(["preflight", "dispatch"]);
+        expect(promptRequests.at(-1)?.body).toMatchObject({ parts: expect.arrayContaining([
+          expect.objectContaining({ type: "text", text: boundary === "edit" ? "Replacement draft" : "Original control draft" }),
+          ...(boundary === "preparing" ? [expect.objectContaining({ type: "file", filename: "pending.jpg", mime: "image/jpeg" })] : []),
+        ]) });
+      }
+    } finally { await context.close(); }
+  }, 30000);
+}
+
 for (const boundary of ["append", "remove", "navigate", "return", "cross-tab logout"]) {
   test(`mounted attachment preparation after ${boundary}`, async () => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });

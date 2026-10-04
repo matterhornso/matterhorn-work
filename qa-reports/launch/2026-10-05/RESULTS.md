@@ -330,3 +330,33 @@ pnpm test:matterhorn-platform-safety
 Evidence logs use `/tmp/matterhorn-historical-attachments-`: `red2-2026-10-05.log`, `unit-2026-10-05.log`, `app-final-2026-10-05.log`, `mounted-final-2026-10-05.log`, `typecheck-final-2026-10-05.log`, `build-final-2026-10-05.log` and `safety-final-2026-10-05.log`. Capture folders are `/tmp/matterhorn-historical-attachments-captures-2026-10-05` and `/tmp/matterhorn-historical-attachments-confirmation-2026-10-05`. These are disposable local artifacts, not published CI evidence.
 
 The new historical-retry cases use synthetic account/runtime responses and assert the restoration request sequence; they are not proof of a real provider completing a replacement response or of hosted runtime rollback. The earlier real-gateway attachment cases remain in the same mounted suite. Remaining work includes accepted-run failure rehydration, delayed action/route changes, native decoding resource ceilings and hosted acceptance. No credentials, existing chats, previews or production settings changed; nothing was pushed, merged or deployed.
+
+## Delayed control actions before execution
+
+Following `ceb08387167f2ff2aa8d44663768e9bc60f0a544`, mounted browser tests paused the real Control Mode spotlight at its existing scroll delay, changed user state, and then released that delay. Five cases dispatched the old draft after editing, clearing, navigating away, navigating away and back, or switching Control Mode off. A sixth case returned success after cross-tab logout, although the existing account guard prevented dispatch. The unchanged control sent normally. The second red run asserts actual preflight/dispatch requests before checking the result, distinguishing unwanted sends from false-success reporting.
+
+The provider now captures the account generation and target before choreography, then rechecks the registration token, action definition, disabled state, connected target and run generation immediately before invoking the action. Route changes/unmounting and explicit disable invalidate that generation; returning to the same URL does not restore the old action. A changed definition is cancelled instead of silently invoking a newer draft. The existing action result reports review-and-retry guidance. No server authorization, consent or model-selection gate was relaxed.
+
+### Delayed action verification
+
+- Eleven new mounted cases cover unchanged Send, editing, editing back to the original text, clearing, adding/removing attachments, pending image preparation, navigation, return navigation, disabling and cross-tab logout. Every case also checks that a concurrent duplicate is rejected before dispatch. Fresh explicit sends after editing, disabling and completed image preparation succeed; the image recovery request contains both current text and the prepared JPEG.
+- Final mounted production-shell suite: **57 pass, zero fail, 417 assertions**. Earlier real-gateway attachment tests remain included. Account services and the runtime used for the new control cases are synthetic; no real provider is called.
+- Final full frontend suite: **1,469 pass, zero fail, 8,539 assertions across 193 files**. Frontend typecheck and web build pass, with existing bundle-size warnings.
+- The full platform safety gate passes **all 11 stages**, with terminal exit zero.
+
+The first full frontend run could not bind loopback for three HTTP-client tests in the sandbox. The permitted local-network rerun passed the entire suite. One expanded test initially checked the same recorded body using two nested asymmetric matchers. A separate minimal reproduction showed Bun 1.3.11's first `toMatchObject` replaced `parts` with the matcher, so the second assertion no longer inspected the original array. Combining the text and file requirements into one assertion fixed the test without changing product serialization. Temporary debug output was removed.
+
+```sh
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --test-name-pattern 'delayed control send' --timeout 120000
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+bun test apps/app/tests
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+pnpm test:matterhorn-platform-safety
+```
+
+Evidence logs use `/tmp/matterhorn-delayed-control-`: `red2-2026-10-05.log`, `focused-2026-10-05.log`, `expanded-2026-10-05.log`, `mounted-final-2026-10-05.log`, `app-final-2026-10-05.log`, `typecheck-2026-10-05.log`, `build-2026-10-05.log` and `safety-2026-10-05.log`. The final full mounted run supersedes the expanded run's matcher failure. These are local artifacts, not published CI evidence; the mounted suite is already wired into CI.
+
+Impeccable hardening/polish and Uncodixfy kept the existing layout and tokens. This correction adds cancellation feedback through the existing narration/result channel, not a new visual surface. No new screenshot round, cross-browser, native screen-reader or zoom certification is claimed. The automatic design hook found no deterministic issues and reported the existing stale design sidecar; no metadata migration was made.
+
+This gate stops execution before an action starts. It does not reverse accepted mutations or certify every registered action's own post-execution awaits and success reporting. Accepted-run attachment recovery, native decoding resource ceilings and hosted five-desk/operational acceptance remain open. Source inspection still shows the terminal-failure effect restoring only `retryMessage` text with an empty attachment list; a mounted reproduction is the next useful check, not yet a confirmed new finding here. No credentials, existing previews/chats or production configuration were changed. Nothing was pushed, merged or deployed.

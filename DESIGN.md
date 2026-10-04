@@ -248,6 +248,8 @@ Pending attachment preparation is announced inline and blocks Send/Enter until e
 
 Retrying an earlier response restores that user turn's saved inline attachments, including attachment-only prompts, without consuming an unrelated composer draft. It uses the ordinary send/privacy path. Missing, malformed, oversized or non-inline attachment references stop before abort/revert and explain how to reattach files and send a new message; that error card does not offer a retry that cannot recover the original file.
 
+Control Mode rechecks a queued action after its spotlight animation, before execution. A changed action, disabled control, replaced target, navigation, account change or switching Control Mode off cancels the pending action. It returns review-and-retry guidance rather than sending an obsolete draft or claiming success. A fresh explicit action can run against the current screen. This does not cancel or roll back requests already dispatched.
+
 Selected sidebar entries use ice/ink, 700 weight and a 2px inset line; selected tabs use ice/ink and a 2px action-colored underline. Picker options add a 2px inset outline and keep title, capability, identifier and checkmark on the same selection ink. Unavailable picker options stay disabled with 0.6 opacity and a not-allowed cursor. The full model list retains its separately scoped subtle selected treatment.
 
 Dialogs, alert dialogs, popovers and menus use framed panels with panel depth. Sheets and command dialogs use the same geometry without that shadow. The mobile drawer keeps an explicit 44px close control. Shared badges remain compact inherited components, not invented readiness certifications.
