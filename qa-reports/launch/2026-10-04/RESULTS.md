@@ -275,6 +275,34 @@ Logs: `/tmp/matterhorn-anchor-deletion-red-2026-10-04.log`, `/tmp/matterhorn-anc
 
 These service fixtures directly mark the durable workspace state before content cleanup and use synthetic certification, transaction building and verification. They do not perform a wallet signature, contact a chain, or establish hosted account-deletion acceptance. Rejecting local attachment cannot reverse a transaction already submitted by a wallet or delete an immutable on-chain anchor. Existing confirmation intent cleanup remains owned by deletion cleanup/expiry. Evidence verification status writes, HTTP recovery guidance and broader hosted acceptance remain open.
 
+## Evidence verification during workspace deletion
+
+The first integrated verification matrix reproduced five failures. Four success/error paths saved a verification result after workspace deletion during certification or readback. Another path continued to read remote ciphertext after key destruction had changed the record revision during certification. The existing revision check already prevented saving that stale result, but did not stop the unnecessary subsequent read. Controls deleting another workspace remained valid.
+
+The publisher verifier now rechecks the workspace and current revision after certification and readback. The verification service rejects marked workspaces at entry, and the scheduled candidate scan skips them. Status persistence checks the deletion marker, current record revision and status validity in the same immediate SQLite transaction as the write. Renewal confirmation uses the corresponding caller-owned-transaction method so the renewal proof and verification status remain atomic. An initial wrapper-only implementation caused three renewal tests to fail with a nested transaction; the explicit transaction method corrected that regression before final testing.
+
+The final matrix covers certification, readback and the gap immediately before status saving, each with successful/failed transport outcomes and deletion, unrelated-workspace deletion or key destruction. Assertions check both returned results and durable status rows, including failures: neither verified nor failed status is recreated for a deleted workspace. Tests also verify that stale publisher verification does not return success, that no read starts after certification discovers deletion/revision change, and that deleted workspaces cannot initiate direct or scheduled verification.
+
+| Check | Result |
+| --- | --- |
+| Initial integrated publisher verification suite | Five reproduced failures, 30 passing tests |
+| Final publisher, verification, store, renewal and deletion suites | 79 pass, zero fail, 465 assertions across five files |
+| Auth, guarded runtime and evidence/file lifecycle regressions | 243 pass, zero fail, 1,819 assertions across 13 files |
+| Server typecheck | Pass |
+| Full local platform safety gate | All 11 stages pass |
+| Diff whitespace check | Pass |
+
+```sh
+bun test apps/server/src/crypto-evidence-walrus-renewal.test.ts apps/server/src/crypto-evidence-walrus-deletion.test.ts apps/server/src/crypto-evidence-verification.test.ts apps/server/src/crypto-evidence-walrus-publisher.test.ts apps/server/src/crypto-evidence-store.test.ts
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/guarded-agent-runtime.test.ts apps/server/src/crypto-evidence-store.test.ts apps/server/src/crypto-evidence-finalizer.test.ts apps/server/src/crypto-evidence-walrus-publisher.test.ts apps/server/src/crypto-evidence-walrus-renewal.test.ts apps/server/src/crypto-evidence-walrus-deletion.test.ts apps/server/src/crypto-evidence-verification.test.ts apps/server/src/crypto-evidence-sui-anchor.test.ts apps/server/src/agent-file-store.test.ts apps/server/src/agent-file-walrus-publisher.test.ts apps/server/src/agent-file-walrus-renewal.test.ts apps/server/src/guarded-runtime-state-store.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm test:matterhorn-platform-safety
+```
+
+Logs: `/tmp/matterhorn-verification-deletion-red-2026-10-04.log`, `/tmp/matterhorn-verification-deletion-focused-2026-10-04.log`, `/tmp/matterhorn-verification-deletion-regressions-2026-10-04.log`, `/tmp/matterhorn-verification-deletion-typecheck-2026-10-04.log` and `/tmp/matterhorn-verification-deletion-safety-2026-10-04.log`. The full gate exited successfully with all 11 stages passed. These stages include offline/source-contract checks and do not replace hosted acceptance.
+
+These are local service/storage integration tests with synthetic keys and transports. They mark the durable deletion barrier before content cleanup; they do not perform a real account deletion, remote storage request or wallet transaction. The fix does not erase existing remote objects or backup data. HTTP deletion/error recovery guidance, cleanup claims, downstream use of already-returned context and hosted acceptance remain open. The earlier Sui anchor follow-up is commit `5f518a2a8ab991658d5f28359e522012ff24bf9b`.
+
 ## Polymarket policy review deadline
 
 The broader regression run found that the bundled policy's review deadline is `2026-10-04T00:00:00.000Z`, which had passed at execution time. `evaluatePolymarketOpenPositionJurisdiction` now returns `policy_review_required` for otherwise valid jurisdiction evidence, and guarded capability issuance denies new-position preparation. This is intended fail-closed behavior. The production deadline and restrictions were not changed. This result concerns the local candidate; the exact hosted policy version and user-facing recovery text have not been verified. It does not establish that public research reads are broken.

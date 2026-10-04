@@ -655,6 +655,7 @@ export class MatterhornTestnetWalrusEvidencePublisher {
     signal: AbortSignal;
   }): Promise<{ certification: MatterhornWalrusCertification }> {
     if (input.signal.aborted) throw new Error("crypto_evidence_walrus_aborted");
+    this.store.assertWorkspaceWritable(input.workspaceId);
     const record = this.store.get(input);
     if (!record) throw new Error("crypto_evidence_not_found");
     if (record.state !== "published" || !record.envelope || !record.walrusProof) {
@@ -664,6 +665,12 @@ export class MatterhornTestnetWalrusEvidencePublisher {
       || record.walrusProof.network !== "testnet") {
       throw new Error("crypto_evidence_walrus_proof_invalid");
     }
+    const assertCurrent = () => {
+      this.store.assertWorkspaceWritable(input.workspaceId);
+      const current = this.store.get(input);
+      if (!current) throw new Error("crypto_evidence_not_found");
+      if (current.revision !== record.revision) throw new Error("crypto_evidence_revision_conflict");
+    };
     const publicBytes = serializeMatterhornWalrusCiphertext(record.envelope);
     if (sha256(publicBytes) !== record.index.ciphertextHash) {
       throw new Error("crypto_evidence_walrus_ciphertext_mismatch");
@@ -682,6 +689,7 @@ export class MatterhornTestnetWalrusEvidencePublisher {
       suiObjectId: record.walrusProof.suiObjectId,
       signal: input.signal,
     });
+    assertCurrent();
     if (certification.network !== "testnet"
       || certification.blobId !== record.walrusProof.blobId
       || certification.suiObjectId !== record.walrusProof.suiObjectId
@@ -710,6 +718,7 @@ export class MatterhornTestnetWalrusEvidencePublisher {
         signal: input.signal,
       });
     }
+    assertCurrent();
     if (readback.length !== publicBytes.length || !timingSafeEqual(readback, publicBytes)) {
       throw new Error("crypto_evidence_walrus_readback_mismatch");
     }

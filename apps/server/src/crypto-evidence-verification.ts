@@ -123,6 +123,7 @@ export class MatterhornCryptoEvidenceVerificationService {
     evidenceId: string;
     signal: AbortSignal;
   }): Promise<MatterhornEvidenceVerificationResult> {
+    this.store.assertWorkspaceWritable(input.workspaceId);
     const record = this.store.get(input);
     if (!record) throw new Error("crypto_evidence_not_found");
     const verifiedAt = this.now();

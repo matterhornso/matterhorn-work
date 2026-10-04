@@ -1032,6 +1032,14 @@ export class MatterhornCryptoEvidenceStore {
     expectedRevision: number;
     verification: MatterhornEvidenceVerificationStatus;
   }): void {
+    this.stateStore.transaction(() => this.recordVerificationStatusInTransaction(input));
+  }
+
+  /** Caller must hold the state-store transaction, as renewal confirmation does. */
+  recordVerificationStatusInTransaction(
+    input: Parameters<MatterhornCryptoEvidenceStore["recordVerificationStatus"]>[0],
+  ): void {
+    this.assertWorkspaceWritable(input.workspaceId);
     const record = this.get(input);
     if (!record) throw new Error("crypto_evidence_not_found");
     if (record.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
@@ -1069,7 +1077,7 @@ export class MatterhornCryptoEvidenceStore {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
     return this.storedRecords()
-      .filter((record) => record.state === "published")
+      .filter((record) => record.state === "published" && !this.stateStore.isWorkspaceDeleted(record.workspaceId))
       .map((record) => ({
         record,
         verification: this.getVerificationStatus({

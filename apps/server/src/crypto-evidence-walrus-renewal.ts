@@ -480,7 +480,7 @@ export class MatterhornCryptoEvidenceWalrusRenewalService {
         proof: renewedProof,
         now: finalizedAt,
       });
-      this.store.recordVerificationStatus({
+      this.store.recordVerificationStatusInTransaction({
         workspaceId: input.workspaceId,
         ownerId: input.ownerId,
         evidenceId: input.evidenceId,
