@@ -144,4 +144,33 @@ pnpm test:matterhorn-platform-safety
 
 Evidence logs use `/tmp/matterhorn-raw-attachment-`: `red-2026-10-05.log`, `final3-2026-10-05.log`, `http-2026-10-05.log`, `typecheck-final-2026-10-05.log`, `build-2026-10-05.log`, and `safety-2026-10-05.log`. Earlier intermediate logs are not final acceptance evidence.
 
-Next verify aggregate expanded attachment memory budgets, the composer/backend size contract and mounted error/draft recovery. This pass does not certify historical attachment rehydration, every runtime-specific part type, concurrent hostile filesystem races, real model/provider interpretation, or hosted acceptance. Canonical and raw consent challenges are each bound to their own exact request; this does not make their tokens interchangeable. No push, merge, deployment, real provider request or existing user chat/preview change occurred.
+The aggregate attachment budget is addressed in the following section. The composer/backend size contract and mounted error/draft recovery still need verification. This pass does not certify historical attachment rehydration, every runtime-specific part type, concurrent hostile filesystem races, real model/provider interpretation, or hosted acceptance. Canonical and raw consent challenges are each bound to their own exact request; this does not make their tokens interchangeable. No push, merge, deployment, real provider request or existing user chat/preview change occurred.
+
+## Aggregate attachment byte budget
+
+Following `f50c37d85637b2507dc15d4e4baceeac8c61ed0e`, the resolver still allowed each of up to 64 attachment references to expand independently to 5 MB. A short JSON request could therefore accumulate substantially more inspected content than the HTTP body limit suggests. The corrected boundary reproduction had **eight failures and 16 passing controls** across canonical preflight/send and the six raw proxy alias/endpoint combinations: each route accepted 10,000,001 decoded bytes. This demonstrates the missing aggregate limit, not an observed production out-of-memory event.
+
+All eight entry paths now share a per-request **10,000,000-byte decoded attachment budget**, retaining the existing 5,000,000-byte per-file maximum and 64-part ceiling. The total is derived from the existing request body's two-file-size allowance; the HTTP JSON cap remains unchanged at 10,065,536 bytes. Inline/base64 encoding overhead can still reach the HTTP limit before the decoded attachment limit. These are separate limits, not a promise that any pair of 5 MB inline attachments fits one request.
+
+Workspace snapshot reads use the smaller of the per-file maximum and the remaining budget, rejecting statically oversized files before allocating their contents. Existing snapshot growth checks remain in place. Inline data is checked by decoded byte count. Each occurrence of a repeated reference counts, and untrusted `sizeBytes` metadata does not affect enforcement. Crossing the total returns HTTP 413 with `attachments_too_large` and a remove-file recovery message before dispatch; hashes, inspection text and base64 file snapshots are not created for that rejected attachment. Budgets are local to each request, so a failed request does not consume capacity for a retry.
+
+### Aggregate attachment verification
+
+- The 56 new cases cover all eight entry paths at one byte below, exactly at and one byte above 10 MB; 64 repeated references at/over the limit; mixed inline/workspace data in both orders; three-byte UTF-8 text with forged one-byte metadata; and successful retry after reducing a rejected request.
+- Focused attachment regressions: **185 pass, zero fail, 651 assertions**. This includes the prior privacy, consent, snapshot and decoder cases.
+- Broader affected backend regressions: **671 pass, zero fail, 3,719 assertions across nine files**.
+- Server typecheck, build and whitespace checks pass. The full platform safety gate passes all 11 stages, with terminal exit zero.
+
+The initial sandbox attempt could not bind loopback listeners and is not a product failure. The first executable draft also expected canonical send success to return 200 instead of its documented 202; the corrected pre-fix run isolates the eight actual aggregate-limit failures. Fixtures use disposable files and a fake loopback runtime, not existing chats, hosted accounts or paid model requests.
+
+```sh
+bun test apps/server/src/session-read-model.e2e.test.ts --test-name-pattern 'aggregate attachment byte budget|raw attachment|attachment base64 decoder|workspace attachment' --timeout 20000
+bun test apps/server/src/workspace-file-snapshot.test.ts apps/server/src/file-sessions.test.ts apps/server/src/artifact-files.e2e.test.ts apps/server/src/workspace-path-boundary.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/token-authority.e2e.test.ts apps/server/src/agent-privacy.test.ts apps/server/src/guarded-agent-runtime.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+```
+
+Logs use `/tmp/matterhorn-aggregate-attachment-`: `red3-2026-10-05.log`, `focused-2026-10-05.log`, `http-2026-10-05.log`, `typecheck-2026-10-05.log`, `build-2026-10-05.log`, and `safety-2026-10-05.log`. The existing safety gate already runs the updated HTTP suite.
+
+This bounds attachment expansion per request, not total process RSS, concurrent-request load, selected agent-file context, memory records or historical attachments. Base64, inspection strings and JSON serialization add overhead. Verify composer limit alignment and rendered rejection/draft recovery next; real-provider and hosted acceptance remain separate release gates. No push, merge, deployment, production configuration or existing preview was changed.

@@ -3143,10 +3143,11 @@ async function proxyOpencodeRequest(input: {
       // Client privacy labels may tighten policy, but cannot replace inspection
       // of the bytes that the runtime will actually receive.
       const promptPrivacyParts = normalizePrivacyParts(rawParts);
+      const attachmentBudget = { remainingBytes: AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES };
       for (let index = 0; index < rawParts.length; index++) {
         const part = rawParts[index];
         if (!isRecord(part) || (part.type !== "file" && part.type !== "attachment")) continue;
-        const resolved = await resolveAgentAttachment(workspace, part);
+        const resolved = await resolveAgentAttachment(workspace, part, attachmentBudget);
         rawParts[index] = resolved.upstream;
         promptPrivacyParts.push(resolved.privacy);
       }
@@ -22146,7 +22147,9 @@ function promptPrivateContextIds(body: Record<string, unknown>, ...keys: string[
 
 const AGENT_MESSAGE_MAX_PARTS = 64;
 const AGENT_MESSAGE_MAX_ATTACHMENT_BYTES = FILE_SESSION_MAX_FILE_BYTES;
-const AGENT_MESSAGE_JSON_BODY_MAX_BYTES = AGENT_MESSAGE_MAX_ATTACHMENT_BYTES * 2 + 65_536;
+// Workspace URLs are small on the wire but expand into inspected file snapshots.
+const AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES = AGENT_MESSAGE_MAX_ATTACHMENT_BYTES * 2;
+const AGENT_MESSAGE_JSON_BODY_MAX_BYTES = AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES + 65_536;
 const AGENT_MESSAGE_MAX_SYSTEM_CHARS = 32_000;
 const AGENT_MESSAGE_MAX_MEMORY_IDS = 32;
 const AGENT_MESSAGE_MAX_AGENT_FILE_IDS = 8;
@@ -22401,6 +22404,7 @@ function decodeInlineAttachmentData(url: string): { bytes: Uint8Array; mimeFromU
 async function resolveAgentAttachment(
   workspace: WorkspaceInfo,
   part: Record<string, unknown>,
+  budget: { remainingBytes: number },
 ): Promise<{
   upstream: Record<string, unknown>;
   privacy: MatterhornAgentPrivacyPart;
@@ -22423,10 +22427,12 @@ async function resolveAgentAttachment(
       throw new ApiError(400, "attachment_unverifiable", "The workspace attachment path is invalid.");
     }
     const safePath = resolveSafeChildPath(workspace.path, relative(workspace.path, requestedPath));
+    const readLimit = Math.min(AGENT_MESSAGE_MAX_ATTACHMENT_BYTES, budget.remainingBytes);
     try {
-      bytes = (await readWorkspaceFileSnapshot(safePath, AGENT_MESSAGE_MAX_ATTACHMENT_BYTES)).content;
+      bytes = (await readWorkspaceFileSnapshot(safePath, readLimit)).content;
     } catch (error) {
       if (error instanceof ApiError && error.code === "file_too_large") {
+        if (readLimit < AGENT_MESSAGE_MAX_ATTACHMENT_BYTES) throw aggregateAttachmentSizeError();
         throw new ApiError(413, "attachment_too_large", "Attachments must be 5 MB or smaller.", {
           maxBytes: AGENT_MESSAGE_MAX_ATTACHMENT_BYTES,
         });
@@ -22438,13 +22444,6 @@ async function resolveAgentAttachment(
     }
     fallbackName = basename(safePath);
     mime ||= contentTypeForPath(safePath).split(";")[0] ?? "application/octet-stream";
-    const mediaType = mime.split(";")[0].trim();
-    if (!/^[\w.+-]+\/[\w.+-]+$/.test(mediaType)) {
-      throw new ApiError(400, "attachment_unverifiable", "The attachment media type is invalid.");
-    }
-    // Forward exactly the inspected snapshot, not a mutable path the runtime
-    // could reopen after privacy checks and consent have already completed.
-    url = `data:${mediaType};base64,${Buffer.from(bytes).toString("base64")}`;
   } else {
     throw new ApiError(
       400,
@@ -22457,6 +22456,18 @@ async function resolveAgentAttachment(
     throw new ApiError(413, "attachment_too_large", "Attachments must be 5 MB or smaller.", {
       maxBytes: AGENT_MESSAGE_MAX_ATTACHMENT_BYTES,
     });
+  }
+  if (bytes.byteLength > budget.remainingBytes) throw aggregateAttachmentSizeError();
+  budget.remainingBytes -= bytes.byteLength;
+
+  if (url.startsWith("file://")) {
+    const mediaType = mime.split(";")[0].trim();
+    if (!/^[\w.+-]+\/[\w.+-]+$/.test(mediaType)) {
+      throw new ApiError(400, "attachment_unverifiable", "The attachment media type is invalid.");
+    }
+    // Forward exactly the inspected snapshot, not a mutable path the runtime
+    // could reopen after privacy checks and consent have already completed.
+    url = `data:${mediaType};base64,${Buffer.from(bytes).toString("base64")}`;
   }
 
   const name = (
@@ -22486,6 +22497,12 @@ async function resolveAgentAttachment(
   };
 }
 
+function aggregateAttachmentSizeError(): ApiError {
+  return new ApiError(413, "attachments_too_large", "Attachments must total 10 MB or less. Remove a file and try again.", {
+    maxBytes: AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES,
+  });
+}
+
 async function resolveAgentPromptParts(
   workspace: WorkspaceInfo,
   value: unknown[],
@@ -22495,6 +22512,7 @@ async function resolveAgentPromptParts(
   }
   const upstreamParts: unknown[] = [];
   const privacyParts: MatterhornAgentPrivacyPart[] = [];
+  const attachmentBudget = { remainingBytes: AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES };
   for (const part of value) {
     if (!isRecord(part) || typeof part.type !== "string") {
       throw new ApiError(400, "invalid_payload", "Every message part must be a typed object.");
@@ -22515,7 +22533,7 @@ async function resolveAgentPromptParts(
       continue;
     }
     if (part.type === "file" || part.type === "attachment") {
-      const resolved = await resolveAgentAttachment(workspace, part);
+      const resolved = await resolveAgentAttachment(workspace, part, attachmentBudget);
       upstreamParts.push(resolved.upstream);
       privacyParts.push(resolved.privacy);
       continue;

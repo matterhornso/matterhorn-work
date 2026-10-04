@@ -3422,6 +3422,81 @@ describe("workspace session read APIs", () => {
     }
   }
 
+  for (const route of [
+    "/workspace/ws_1/sessions/ses_1/messages/preflight", "/workspace/ws_1/sessions/ses_1/messages",
+    ...["/opencode", "/w/ws_1/opencode", "/workspace/ws_1/opencode"].flatMap(mount =>
+      ["message", "prompt_async"].map(endpoint => `${mount}/session/ses_1/${endpoint}`)),
+  ]) {
+    for (const delta of [-1, 0, 1]) {
+      test(`aggregate attachment byte budget ${route}: ${delta}`, async () => {
+        const workspaceRoot = await createWorkspaceRoot();
+        const first = join(workspaceRoot, "first.txt");
+        const second = join(workspaceRoot, "second.txt");
+        const third = join(workspaceRoot, "third.txt");
+        await writeFile(first, Buffer.alloc(5_000_000, 97));
+        await writeFile(second, Buffer.alloc(4_999_999, 98));
+        await writeFile(third, Buffer.alloc(delta + 1, 99));
+        const mock = startMockOpencode();
+        const app = await startOpenworkServer({ workspaceRoot,
+          opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+        const response = await fetch(`http://127.0.0.1:${app.server.port}${route}`, {
+          method: "POST", headers: { ...auth(app.token), "Content-Type": "application/json" },
+          body: JSON.stringify({ model: { providerID: "local", modelID: "private-local-model" }, parts:
+            [first, second, third].map(path => ({ type: "file", mime: "text/plain", url: pathToFileURL(path).href,
+              sizeBytes: 0, contentHash: "untrusted-size-metadata" })),
+          }),
+        });
+        const payload = await response.json();
+        expect(response.status, JSON.stringify(payload)).toBe(delta > 0 ? 413 : route.endsWith("messages") ? 202 : 200);
+        if (delta > 0) expect(payload).toMatchObject({ code: "attachments_too_large", details: { maxBytes: 10_000_000 } });
+        const dispatched = mock.requests.filter(entry => entry.method === "POST" && /\/session\/ses_1\/(message|prompt_async)$/.test(entry.pathname));
+        expect(dispatched).toHaveLength(delta <= 0 && !route.endsWith("preflight") ? 1 : 0);
+      });
+    }
+  }
+
+  for (const route of [
+    "/workspace/ws_1/sessions/ses_1/messages/preflight", "/workspace/ws_1/sessions/ses_1/messages",
+    ...["/opencode", "/w/ws_1/opencode", "/workspace/ws_1/opencode"].flatMap(mount =>
+      ["message", "prompt_async"].map(endpoint => `${mount}/session/ses_1/${endpoint}`)),
+  ]) {
+    for (const kind of ["repeated-exact", "repeated-over", "inline-first", "inline-last"]) {
+      test(`aggregate attachment byte budget and retry ${route}: ${kind}`, async () => {
+        const workspaceRoot = await createWorkspaceRoot();
+        const first = join(workspaceRoot, "first.txt");
+        const second = join(workspaceRoot, "second.txt");
+        const repeated = kind.startsWith("repeated");
+        await writeFile(first, Buffer.alloc(repeated ? kind === "repeated-exact" ? 156_250 : 156_251 : 5_000_000, 97));
+        await writeFile(second, Buffer.alloc(4_999_998, 98));
+        const file = { type: "file", mime: "text/plain", url: pathToFileURL(first).href, sizeBytes: 0 };
+        const inline = { type: "attachment", mime: "text/plain", url: "data:text/plain,%E2%82%AC", sizeBytes: 1 };
+        const files = [file, { ...file, url: pathToFileURL(second).href }];
+        const parts = repeated ? Array.from({ length: 64 }, () => ({ ...file }))
+          : kind === "inline-first" ? [inline, ...files] : [...files, inline];
+        const mock = startMockOpencode();
+        const app = await startOpenworkServer({ workspaceRoot,
+          opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+        const send = (requestedParts: typeof parts) => fetch(`http://127.0.0.1:${app.server.port}${route}`, {
+          method: "POST", headers: { ...auth(app.token), "Content-Type": "application/json" },
+          body: JSON.stringify({ model: { providerID: "local", modelID: "private-local-model" }, parts: requestedParts }),
+        });
+        const response = await send(parts);
+        const payload = await response.json();
+        const accepted = route.endsWith("messages") ? 202 : 200;
+        expect(response.status, JSON.stringify(payload)).toBe(kind === "repeated-exact" ? accepted : 413);
+        const dispatches = () => mock.requests.filter(entry => entry.method === "POST" && /\/session\/ses_1\/(message|prompt_async)$/.test(entry.pathname));
+        if (kind !== "repeated-exact") {
+          expect(payload).toMatchObject({ code: "attachments_too_large", details: { maxBytes: 10_000_000 } });
+          expect(dispatches()).toHaveLength(0);
+          // A rejected request must not consume a shared budget or disable retry.
+          const retry = await send(parts.slice(0, -1));
+          expect(retry.status, await retry.text()).toBe(accepted);
+        }
+        expect(dispatches()).toHaveLength(route.endsWith("preflight") ? 0 : 1);
+      });
+    }
+  }
+
   for (const change of ["unchanged", "replace-after-inspection"]) {
     test(`workspace attachment dispatch uses inspected bytes: ${change}`, async () => {
       const workspaceRoot = await createWorkspaceRoot();
