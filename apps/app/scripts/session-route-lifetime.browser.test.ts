@@ -2,12 +2,14 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { chromium, type Browser } from "playwright";
 import { build } from "vite";
 import tailwindcss from "@tailwindcss/vite";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { delayImagePreparation, delayedImage, releaseImagePreparation } from "./fixtures/attachment-preparation";
 
-// Only synthetic same-origin services are used. This mounts the production shell,
-// but does not certify server authentication, real inference, or hosted access.
+// Production shell with synthetic account/runtime services. Attachment integration
+// cases additionally use an isolated real gateway with legitimate local bearer auth;
+// they do not certify hosted login, tenant isolation or real inference.
 
 let browser: Browser;
 let server: ReturnType<typeof Bun.serve>;
@@ -20,6 +22,52 @@ let rejectAction = false;
 let promptFailure: "preflight" | "dispatch" | null = null;
 let promptFixture = false;
 const promptRequests: Array<{ stage: string; body: unknown }> = [];
+let realGateway: { origin: string; runtimeOrigin: string } | undefined;
+const gatewayResults: Array<{ status: number; payload: unknown }> = [];
+
+async function startAttachmentBackend() {
+  const root = await mkdtemp(join(tmpdir(), "matterhorn-browser-gateway-"));
+  const child = Bun.spawn([process.execPath, new URL("./fixtures/attachment-backend.ts", import.meta.url).pathname, root], {
+    // Do not inherit provider keys, production configuration or durable databases.
+    env: {
+      PATH: process.env.PATH,
+      OPENWORK_DATA_DIR: join(root, "state"),
+      MATTERHORN_WORK_DATA_DIR: join(root, "data"),
+      MATTERHORN_WORK_MEMORY_ROOT: join(root, "memory"),
+      MATTERHORN_AUTH_DB: join(root, "auth.db"),
+      MATTERHORN_MODEL_USAGE_DB: join(root, "usage.db"),
+      MATTERHORN_GUARDED_RUNTIME_MODE: "off",
+      MATTERHORN_PROVIDER_PRIVACY_MODE: "off",
+      MATTERHORN_CAPABILITY_SIGNING_SECRET: "disposable-browser-attachment-signing-secret",
+    }, stdout: "pipe", stderr: "pipe",
+  });
+  const errors = new Response(child.stderr).text();
+  const stop = async () => {
+    realGateway = undefined;
+    child.kill();
+    await child.exited;
+    await rm(root, { recursive: true, force: true });
+  };
+  const timer = setTimeout(() => child.kill(), 30_000);
+  try {
+    const reader = child.stdout.getReader();
+    let output = "";
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) throw new Error(`Attachment backend failed: ${await errors}`);
+      output += new TextDecoder().decode(chunk.value);
+      const ready = output.match(/ATTACHMENT_BACKEND_READY (.+)\n/);
+      if (!ready) continue;
+      const ports: unknown = JSON.parse(ready[1]);
+      if (!ports || typeof ports !== "object" || !("port" in ports) || !("runtimePort" in ports)
+        || typeof ports.port !== "number" || typeof ports.runtimePort !== "number") throw new Error("Invalid fixture ports");
+      realGateway = { origin: `http://127.0.0.1:${ports.port}`, runtimeOrigin: `http://127.0.0.1:${ports.runtimePort}` };
+      reader.releaseLock();
+      return stop;
+    }
+  } catch (error) { await stop(); throw error; }
+  finally { clearTimeout(timer); }
+}
 const session = (id: string) => ({
   id,
   slug: id,
@@ -212,6 +260,17 @@ beforeAll(async () => {
           },
         );
       requests.push({ path, method: request.method });
+      if (realGateway && request.method === "POST" && (path.endsWith("/messages/preflight") || path.endsWith("/messages"))) {
+        // Browser bytes reach the production gateway unchanged. Only transport
+        // authentication uses this isolated local server's legitimate test token.
+        const response = await fetch(`${realGateway.origin}${path}`, {
+          method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer disposable-browser-attachment-token" },
+          body: await request.arrayBuffer(), redirect: "error",
+        });
+        const payload: unknown = await response.json();
+        gatewayResults.push({ status: response.status, payload });
+        return Response.json(payload, { status: response.status });
+      }
       if (promptFixture && request.method === "POST" && (path.endsWith("/messages/preflight") || path.endsWith("/messages"))) {
         const stage = path.endsWith("/preflight") ? "preflight" : "dispatch";
         promptRequests.push({ stage, body: await request.json() });
@@ -296,20 +355,20 @@ beforeAll(async () => {
         return Response.json({
           all: [
             {
-              id: "fixture",
+              id: realGateway ? "local" : "fixture",
               name: "Fixture",
               source: "api",
               models: {
-                fixture: {
-                  id: "fixture",
+                [realGateway ? "private-local-model" : "fixture"]: {
+                  id: realGateway ? "private-local-model" : "fixture",
                   name: "Fixture model",
                   limit: { context: 10000, output: 1000 },
                 },
               },
             },
           ],
-          connected: ["fixture"],
-          default: { fixture: "fixture" },
+          connected: [realGateway ? "local" : "fixture"],
+          default: realGateway ? { local: "private-local-model" } : { fixture: "fixture" },
         });
       if (path.endsWith("/agent"))
         return Response.json([
@@ -371,10 +430,75 @@ beforeEach(() => {
   promptFailure = null;
   promptFixture = false;
   promptRequests.length = 0;
+  gatewayResults.length = 0;
   requests.length = 0;
 });
 
 const operations: Array<"fork" | "revert"> = ["fork", "revert"];
+for (const rejection of ["wire size", "private contents"]) {
+  for (const withText of [false, true]) {
+  test(`real gateway attachment ${rejection} rejection and recovery with ${withText ? "text" : "files only"}`, async () => {
+    const stop = await startAttachmentBackend();
+    const runtimeOrigin = realGateway?.runtimeOrigin;
+    if (!runtimeOrigin) throw new Error("Missing isolated runtime");
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    context.setDefaultTimeout(10000);
+    await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    const page = await context.newPage();
+    const dispatches = async (): Promise<unknown> => (await fetch(`${runtimeOrigin}/__qa/dispatches`)).json();
+    try {
+      await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+      await page.getByRole("button", { name: "Change model", exact: true }).click();
+      await page.getByRole("option", { name: /Fixture model/ }).click();
+      const editor = page.getByRole("textbox").first();
+      if (withText) await editor.fill("Summarize these notes");
+      const retainedBytes = Buffer.alloc(rejection === "wire size" ? 4_000_000 : 24, 97);
+      await page.locator('input[type="file"]').setInputFiles([
+        { name: "keep.txt", mimeType: "text/plain", buffer: retainedBytes },
+        { name: "remove.txt", mimeType: "text/plain", buffer: rejection === "wire size"
+          ? Buffer.alloc(4_000_000, 98) : Buffer.from("PRIVATE_KEY=disposable-browser-fixture-secret") },
+      ]);
+      await page.getByText("remove.txt", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "Ask", exact: true }).click();
+      const errorCard = page.locator('[data-matterhorn-session-error="error"]');
+      await errorCard.waitFor();
+      expect((await editor.innerText()).trim()).toBe(withText ? "Summarize these notes" : "");
+      expect(await page.getByText("keep.txt", { exact: true }).count()).toBe(1);
+      expect(await page.getByText("remove.txt", { exact: true }).count()).toBe(1);
+      expect(gatewayResults).toHaveLength(1);
+      expect(gatewayResults[0]).toMatchObject(rejection === "wire size"
+        ? { status: 413, payload: { code: "payload_too_large" } }
+        : { status: 200, payload: { decision: "blocked" } });
+      expect(await dispatches()).toEqual([]);
+      expect(JSON.stringify(gatewayResults)).not.toContain("disposable-browser-fixture-secret");
+      const removals = page.getByRole("button", { name: "Remove", exact: true });
+      expect(await removals.count()).toBe(2);
+      await removals.nth(1).click();
+      if (rejection === "wire size") {
+        await errorCard.getByRole("button", { name: "Retry response", exact: true }).click();
+      } else {
+        // Privacy blocks intentionally offer review, not a bypass/retry button.
+        // Explicitly send the edited draft, not the old transcript's Retry action.
+        expect(await errorCard.getByRole("button", { name: "Retry response", exact: true }).count()).toBe(0);
+        await page.getByRole("button", { name: "Ask", exact: true }).click();
+      }
+      await page.getByText("keep.txt", { exact: true }).waitFor({ state: "hidden" }).catch(error => {
+        throw new Error(`${error}\nIsolated gateway results: ${JSON.stringify(gatewayResults)}`);
+      });
+      expect((await editor.innerText()).trim()).toBe("");
+      expect(gatewayResults.map(result => result.status)).toEqual(rejection === "wire size" ? [413, 200, 202] : [200, 200, 202]);
+      const dispatched = await dispatches();
+      expect(dispatched).toEqual([expect.objectContaining({ parts: expect.arrayContaining([
+        expect.objectContaining({ type: "file", filename: "keep.txt" }),
+      ]) })]);
+      const serialized = JSON.stringify(dispatched);
+      // Boolean assertion avoids dumping a multi-megabyte payload on failure.
+      expect(serialized.includes(`"url":"data:text/plain;base64,${retainedBytes.toString("base64")}"`)).toBe(true);
+      expect(serialized).not.toContain('"filename":"remove.txt"');
+    } finally { await context.close(); await stop(); }
+  }, 60000);
+  }
+}
 for (const failure of ["preflight", "dispatch"] satisfies Array<"preflight" | "dispatch">) {
   for (const withText of [false, true]) {
     test(`mounted attachment ${failure} rejection preserves ${withText ? "text and files" : "files only"} for retry`, async () => {

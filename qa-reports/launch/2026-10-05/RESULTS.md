@@ -273,3 +273,30 @@ pnpm test:matterhorn-platform-safety
 Logs use `/tmp/matterhorn-preparing-send-`: `red-2026-10-05.log`, `retry-red-2026-10-05.log`, `browser-final-2026-10-05.log`, `legacy-2026-10-05.log`, `mounted-final-2026-10-05.log`, `app-final-2026-10-05.log`, `typecheck-final-2026-10-05.log`, `build-2026-10-05.log` and `safety-2026-10-05.log`. Add `PREPARATION_QA_CAPTURES=<disposable-directory>` to reproduce captures. Both browser suites are already invoked by CI. Logs and captures remain local evidence, not published artifacts.
 
 The mounted HTTP responses deliberately simulate rejection followed by acceptance of small files. They do not execute the backend's byte-budget implementation or establish that an actually oversized request can succeed unchanged. Backend size-limit tests are separate evidence. Next join the mounted browser with the real isolated server for wire/aggregate limits and privacy rejection, then inspect historical attachment recovery and control actions whose state changes during choreography. Native decoding resource ceilings/cancellation, real provider interpretation and hosted acceptance remain open. Nothing was pushed, merged or deployed, and existing previews/chats were untouched.
+
+## Browser attachment recovery through the real gateway
+
+Following `f2f0329146354302a247a45ca5ac64423885bd72`, the mounted production shell now has four integration cases that forward its serialized request bytes unchanged to a real isolated Matterhorn backend. They cover encoded-body rejection and secret-content rejection, each with both text-plus-files and attachment-only drafts. Each test starts a separate backend process with an explicit environment, disposable database/storage paths, a legitimate local bearer token and a synthetic loopback agent runtime. Provider keys and production configuration are not inherited. The browser's account/session services remain synthetic; these checks do not establish hosted login or tenant isolation.
+
+Two 4 MB text files pass the individual picker limit but exceed the gateway's 10,065,536-byte JSON limit after base64 encoding. The actual backend returns HTTP 413 before agent dispatch. The privacy cases attach a harmless file alongside a synthetic `PRIVATE_KEY=` marker in an otherwise ordinary `.txt` file. The real inspector returns a blocked preflight without echoing the synthetic value or dispatching to the runtime. In both cases the browser retains the draft and both files.
+
+Removing the offending file and explicitly resending succeeds through real preflight and dispatch, consumes the accepted draft, and delivers only the retained file to the synthetic runtime. The final test also compares its complete encoded contents with the original bytes. The size-error case uses the error card's Retry response action. The privacy-error card intentionally has no Retry response action; its edited draft is explicitly sent with Ask and receives a fresh privacy check. This does not bypass consent or weaken the block. The isolated local provider uses the existing local-processing path; external provider consent and guarded-runtime enforcement are not certified by these tests.
+
+### Gateway integration verification
+
+- Final mounted regression suite: **40 pass, zero fail, 327 assertions**, including all four real-gateway integration cases and exact retained-byte checks. The earlier focused run passed all four cases with 50 assertions before the four exact-byte assertions were added.
+- Actual server aggregate matrix: **56 pass, zero fail, 192 assertions**. It covers 10 MB decoded boundaries, repeated references, mixed inline/workspace inputs and retry after reducing attachments across canonical and raw mounts. These are separate backend HTTP tests, not a claim that the browser picker can create workspace-file references or reach a 10 MB decoded total within its smaller base64 wire allowance.
+- Full platform safety gate: **all 11 stages pass**, with terminal exit zero. This change adds tests and documentation only; frontend typecheck and web build were not rerun separately, and their prior results are not presented as fresh evidence for this pass.
+
+Initial test development found an incorrect Remove button selector, an omitted abort endpoint in the synthetic runtime, and a selector that picked an old transcript's Retry response action instead of the privacy recovery flow. Correcting those fixture assumptions produced the passing cases above; no new production defect or fix is claimed in this pass. The gateway correctly rejected dispatch when the synthetic runtime could not acknowledge abort. Test controls and production source were not weakened to turn that rejection into success.
+
+```sh
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --test-name-pattern 'real gateway attachment' --timeout 120000
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+bun test apps/server/src/session-read-model.e2e.test.ts --test-name-pattern 'aggregate attachment byte budget' --timeout 30000
+pnpm test:matterhorn-platform-safety
+```
+
+Final evidence is `/tmp/matterhorn-browser-real-gateway-mounted-final-2026-10-05.log`, `/tmp/matterhorn-browser-real-gateway-aggregate-2026-10-05.log` and `/tmp/matterhorn-browser-real-gateway-safety-2026-10-05.log`. The earlier focused log is `/tmp/matterhorn-browser-real-gateway-focused3-2026-10-05.log`. The complete mounted suite is already in the existing CI workflow. These logs are local evidence, not published CI artifacts. No new visual design or production behavior changed, so no new screenshot, cross-browser or screen-reader certification is implied.
+
+Remaining work includes historical attachment recovery, control actions whose state changes during choreography, native image decoding resource ceilings, real provider interpretation and hosted five-desk acceptance. Hosted accounts/inboxes, deployment identity, encryption and backup-restore evidence remain independent launch gates. Nothing was pushed, merged or deployed; existing chats and previews were untouched.
