@@ -610,6 +610,140 @@ async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Pro
 }
 
 describe("workspace session read APIs", () => {
+  for (const destination of ["same-origin", "cross-origin"]) {
+    for (const redirectStatus of [0, 301, 302, 303, 307, 308]) {
+      test(`runtime reload rejects redirected control: ${destination}, ${redirectStatus}`, async () => {
+        let captured = 0;
+        const capture = () => { captured += 1; return Response.json(true); };
+        const receiver = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: capture });
+        stops.push(() => receiver.stop(true));
+        const mock = startMockOpencode({ responseForRequest: pathname => {
+          if (pathname === "/redirect-capture") return capture();
+          if (pathname !== "/instance/dispose") return undefined;
+          if (!redirectStatus) return Response.json(true);
+          return new Response(null, { status: redirectStatus, headers: {
+            Location: destination === "same-origin" ? "/redirect-capture"
+              : `http://127.0.0.1:${receiver.port}/redirect-capture`,
+          } });
+        } });
+        const workspaceRoot = await createWorkspaceRoot();
+        const app = await startOpenworkServer({ workspaceRoot, readOnly: false,
+          opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+          opencodeUsername: "fixture-runtime", opencodePassword: "disposable-runtime-password",
+        });
+        const response = await fetch(`http://127.0.0.1:${app.server.port}/workspace/ws_1/engine/reload`, {
+          method: "POST", headers: auth(app.token),
+        });
+        expect({ status: response.status, captured }).toEqual({ status: redirectStatus ? 502 : 200, captured: 0 });
+        const requests = mock.requests.filter(request => request.pathname === "/instance/dispose");
+        // The fresh workspace triggers a bootstrap reload before the explicit reload.
+        expect(requests).toHaveLength(2);
+        for (const request of requests) {
+          expect(request.method).toBe("POST");
+          expect(request.headers.get("authorization"))
+            .toBe(`Basic ${Buffer.from("fixture-runtime:disposable-runtime-password").toString("base64")}`);
+        }
+        const result = await response.json();
+        if (redirectStatus) expect(result.code).toBe("opencode_redirect_blocked");
+        else expect(result.ok).toBe(true);
+      });
+    }
+  }
+
+  for (const dispatchPath of ["default", "reasoning"]) {
+    for (const redirectStatus of [0, 307, 308]) {
+      test(`prompt redirect preserves dispatch uncertainty: ${dispatchPath}, ${redirectStatus}`, async () => {
+        let captured = 0;
+        const receiver = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch() {
+          captured += 1;
+          return Response.json({ ok: true });
+        } });
+        stops.push(() => receiver.stop(true));
+        const workspaceRoot = await createWorkspaceRoot();
+        const mock = startMockOpencode({ responseForRequest: pathname => {
+          if (!redirectStatus || pathname !== "/session/ses_1/prompt_async") return undefined;
+          return new Response(null, { status: redirectStatus,
+            headers: { Location: `http://127.0.0.1:${receiver.port}/redirect-capture` } });
+        } });
+        const app = await startOpenworkServer({ workspaceRoot,
+          opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false, hardModelUsageLimit: 32_000,
+          opencodeUsername: "fixture-runtime", opencodePassword: "disposable-runtime-password",
+        });
+        const base = `http://127.0.0.1:${app.server.port}`;
+        const body = JSON.stringify({ messageID: "req_redirect_test", message: "Private synthetic prompt",
+          model: { providerID: "openai", modelID: "gpt-4.1" },
+          ...(dispatchPath === "reasoning" ? { reasoningEffort: "high" } : {}),
+        });
+        const send = () => fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+          method: "POST", headers: { ...auth(app.token), "Content-Type": "application/json" }, body,
+        });
+        const response = await send();
+        expect({ status: response.status, redirectedRequests: captured })
+          .toEqual({ status: redirectStatus ? 409 : 202, redirectedRequests: 0 });
+        const prompts = () => mock.requests.filter(request => request.pathname === "/session/ses_1/prompt_async");
+        expect(prompts()).toHaveLength(1);
+        if (redirectStatus) {
+          expect((await response.json()).code).toBe("message_outcome_unknown");
+          const retry = await send();
+          expect(retry.status).toBe(409);
+          expect((await retry.json()).code).toBe("message_outcome_unknown");
+          expect(prompts()).toHaveLength(1);
+          expect(captured).toBe(0);
+        }
+        const usageResponse = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(app.token) });
+        expect(usageResponse.status).toBe(200);
+        expect((await usageResponse.json()).status).toMatchObject({
+          pendingRequests: 1, monthly: { chargedTokens: 32_000 },
+        });
+      });
+    }
+  }
+
+  for (const surface of ["proxy-read", "proxy-update", "managed-read", "managed-delete"]) {
+    for (const destination of ["same-origin", "cross-origin"]) {
+      for (const redirectStatus of [0, 301, 302, 303, 307, 308]) {
+        test(`runtime redirect stays at authorized endpoint: ${surface}, ${destination}, ${redirectStatus}`, async () => {
+          let captured = 0;
+          const captureResponse = () => {
+            captured += 1;
+            return Response.json(surface === "managed-delete" ? true : []);
+          };
+          const receiver = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: captureResponse });
+          stops.push(() => receiver.stop(true));
+          const runtimePath = surface === "proxy-update" || surface === "managed-delete"
+            ? "/session/ses_1" : "/session/ses_1/message";
+          const app = await createReadAuthorityFixture(undefined, undefined, pathname => {
+            if (pathname === "/redirect-capture") return captureResponse();
+            if (pathname !== runtimePath) return undefined;
+            if (!redirectStatus) return Response.json(surface === "managed-delete" ? true : []);
+            return new Response(null, { status: redirectStatus, headers: {
+              Location: destination === "same-origin" ? "/redirect-capture"
+                : `http://127.0.0.1:${receiver.port}/redirect-capture`,
+            } });
+          });
+          const path = surface === "managed-read" ? "/sessions/ses_1/messages"
+            : surface === "managed-delete" ? "/sessions/ses_1" : `/opencode${runtimePath}`;
+          const response = await fetch(`${app.base}/workspace/${app.workspaceId}${path}`, {
+            method: surface === "proxy-update" ? "PATCH" : surface === "managed-delete" ? "DELETE" : "GET",
+            headers: { Cookie: app.cookie, "Content-Type": "application/json" },
+            ...(surface === "proxy-update" ? { body: JSON.stringify({ title: "private-fixture-title" }) } : {}),
+          });
+          expect({ status: response.status, redirectedRequests: captured }).toEqual({
+            status: redirectStatus ? 502 : 200, redirectedRequests: 0,
+          });
+          expect(response.headers.has("location")).toBe(false);
+          expect(app.runtimeRequests.filter(request => request.pathname === runtimePath)).toHaveLength(1);
+          if (surface === "proxy-update") {
+            expect(app.runtimeRequests.find(request => request.pathname === runtimePath)?.body)
+              .toEqual({ title: "private-fixture-title" });
+          }
+          const result = await response.json();
+          if (redirectStatus) expect(result.code).toMatch(/^opencode_/);
+        });
+      }
+    }
+  }
+
   for (const surface of ["json", "empty", "throttled", "stream", "compressed"]) {
     test(`runtime response cannot control browser authority: ${surface}`, async () => {
       const path = surface === "stream" ? "/event" : "/session/ses_1/message";

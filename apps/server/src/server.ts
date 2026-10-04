@@ -2353,13 +2353,26 @@ function buildOpencodeDirectoryHeader(directory: string) {
   return /[^\x00-\x7F]/.test(directory) ? encodeURIComponent(directory) : directory;
 }
 
-function createOpencodeDirectoryFetch(directory: string): typeof fetch {
+async function fetchOpencodeRuntime(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> {
+  // Authorization, private bodies and directory scope apply to this endpoint,
+  // not to another URL selected by an upstream redirect (even on the same host).
+  const response = await fetch(input, { ...init, redirect: "manual" });
+  if ([301, 302, 303, 307, 308].includes(response.status)) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new ApiError(502, "opencode_redirect_blocked",
+      "The agent runtime redirected this request. Ask the workspace owner to check its configured URL.",
+      { status: response.status });
+  }
+  return response;
+}
+
+function createOpencodeDirectoryFetch(directory: string | null): typeof fetch {
   return Object.assign(
     (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const headers = new Headers(init?.headers ?? request.headers);
-      headers.set("x-opencode-directory", buildOpencodeDirectoryHeader(directory));
-      return fetch(new Request(request, { headers }));
+      if (directory) headers.set("x-opencode-directory", buildOpencodeDirectoryHeader(directory));
+      return fetchOpencodeRuntime(new Request(request, { headers }));
     },
     { preconnect: fetch.preconnect },
   );
@@ -2376,12 +2389,12 @@ function createWorkspaceOpencodeClient(config: ServerConfig, workspace: Workspac
     throw new ApiError(400, "opencode_unconfigured", "Agent runtime is not connected for this workspace");
   }
   const directory = resolveOpencodeDirectory(workspace);
-  const directoryFetch = directory ? createOpencodeDirectoryFetch(directory) : undefined;
+  const directoryFetch = createOpencodeDirectoryFetch(directory);
 
   return createOpencodeClient({
     baseUrl,
     ...(directory ? { directory } : {}),
-    ...(directoryFetch ? { fetch: directoryFetch } : {}),
+    fetch: directoryFetch,
     ...(connection.authHeader ? { headers: { Authorization: connection.authHeader } } : {}),
   });
 }
@@ -2606,7 +2619,7 @@ async function postWorkspaceOpencodePromptWithReasoning(input: {
   if (directory) headers.set("x-opencode-directory", buildOpencodeDirectoryHeader(directory));
 
   const target = `${baseUrl.replace(/\/+$/, "")}/session/${encodeURIComponent(input.sessionId)}/prompt_async`;
-  const response = await fetch(target, {
+  const response = await fetchOpencodeRuntime(target, {
     method: "POST",
     headers,
     body: JSON.stringify(input.body),
@@ -2625,6 +2638,7 @@ function unwrapOpencodeResult<T, E>(result: OpencodeClientResult<T, E>, path: st
   if (result.data != null) {
     return result.data;
   }
+  if (result.error instanceof ApiError) throw result.error;
   if (result.error === undefined) {
     throw new ApiError(502, "opencode_empty_response", "OpenCode returned an empty response", { path });
   }
@@ -3285,7 +3299,7 @@ async function proxyOpencodeRequest(input: {
       body = JSON.stringify(payload);
       headers.delete("content-length");
     }
-    void fetch(targetUrl, {
+    void fetchOpencodeRuntime(targetUrl, {
       method,
       headers,
       body,
@@ -3471,7 +3485,7 @@ async function proxyOpencodeRequest(input: {
   input.request.signal.addEventListener("abort", abortUpstreamConnect, { once: true });
   let response: Response;
   try {
-    response = await fetch(targetUrl, {
+    response = await fetchOpencodeRuntime(targetUrl, {
       method,
       headers,
       body,
@@ -8662,7 +8676,7 @@ async function probeWorkspaceOpencodeReadiness(
   try {
     const headers = new Headers();
     if (connection.authHeader) headers.set("Authorization", connection.authHeader);
-    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/global/health`, {
+    const response = await fetchOpencodeRuntime(`${baseUrl.replace(/\/+$/, "")}/global/health`, {
       method: "GET",
       headers,
       signal: controller.signal,
@@ -23575,7 +23589,7 @@ async function reloadOpencodeEngine(config: ServerConfig, workspace: WorkspaceIn
   const auth = connection.authHeader ?? null;
   if (auth) headers.Authorization = auth;
 
-  const response = await fetch(targetUrl, { method: "POST", headers });
+  const response = await fetchOpencodeRuntime(targetUrl, { method: "POST", headers });
   if (response.ok) return;
   const body = parseOpencodeErrorBody(await response.text());
   throw new ApiError(502, "opencode_reload_failed", "Agent runtime reload failed", {
