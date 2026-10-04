@@ -95,6 +95,46 @@ describe("TokenService", () => {
     expect(revoked).toBe(false);
   });
 
+  test("synchronous checks fail closed before load and reflect committed revocation", async () => {
+    const owner = await service.create("owner");
+    const other = new TokenService(config);
+    expect(other.currentScopeForToken(owner.token)).toBeNull();
+    expect(await other.scopeForToken(owner.token)).toBe("owner");
+    expect(other.currentScopeForToken(owner.token)).toBe("owner");
+    expect(other.currentScopeForToken("test-client-token")).toBe("collaborator");
+    expect(other.currentScopeForToken(" ")).toBeNull();
+    await other.revoke(owner.id);
+    expect(other.currentScopeForToken(owner.token)).toBeNull();
+  });
+
+  for (const change of ["unchanged", "owner-revoked", "other-revoked"]) {
+    for (const action of ["create", "revoke"]) {
+      test(`queued authorization: ${action}, ${change}`, async () => {
+        const owner = await service.create("owner");
+        const other = await service.create("owner");
+        const target = await service.create("viewer");
+        const assertAccess = () => {
+          if (service.currentScopeForToken(owner.token) !== "owner") throw new Error("Revoked fixture owner");
+        };
+        // Admission passes, but an earlier queued revocation must win before
+        // this operation creates or removes another credential.
+        assertAccess();
+        const prior = change === "unchanged" ? Promise.resolve(false)
+          : service.revoke(change === "owner-revoked" ? owner.id : other.id);
+        const pending = action === "create" ? service.create("owner", { label: "queued fixture", assertAccess })
+          : service.revoke(target.id, assertAccess);
+        if (change === "owner-revoked") await expect(pending).rejects.toThrow("Revoked fixture owner");
+        else await pending;
+        await prior;
+        const listed = await service.list();
+        expect(listed.some(item => item.label === "queued fixture")).toBe(action === "create" && change !== "owner-revoked");
+        expect(service.currentScopeForToken(target.token)).toBe(action === "revoke" && change !== "owner-revoked" ? null : "viewer");
+        const restarted = new TokenService(config);
+        expect(await restarted.list()).toEqual(listed);
+      });
+    }
+  }
+
   test("multiple tokens with different scopes", async () => {
     const owner = await service.create("owner");
     const collab = await service.create("collaborator");

@@ -1,10 +1,13 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { request as httpRequest } from "node:http";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { startServer } from "./server.js";
+import { TokenService } from "./tokens.js";
+import { EnvService } from "./env-file.js";
 import type { ServerConfig } from "./types.js";
 import { StmCredentials, StmError, type Binding } from "@matterhorn-work/stm-credentials";
 import { opencodeConfigPath } from "./workspace-files.js";
@@ -24,7 +27,7 @@ const priorOpenAiApiKey = process.env.OPENAI_API_KEY;
 const priorOpenAiRealtimeApiKey = process.env.OPENAI_REALTIME_API_KEY;
 const priorOpenWorkOpenAiRealtimeApiKey = process.env.OPENWORK_OPENAI_REALTIME_API_KEY;
 const priorBuildCommit = process.env.MATTERHORN_BUILD_COMMIT;
-const isolatedEnvironment = ["MATTERHORN_WORK_DATA_DIR", "MATTERHORN_AUTH_DB", "MATTERHORN_WORK_RATE_LIMIT_DB", "MATTERHORN_WORK_ENV_STORE", "MATTERHORN_WORK_STM_ENABLED", "OPENWORK_CONTROL_BASE_URL", "OPENWORK_CONTROL_TOKEN"];
+const isolatedEnvironment = ["MATTERHORN_WORK_DATA_DIR", "MATTERHORN_AUTH_DB", "MATTERHORN_WORK_RATE_LIMIT_DB", "MATTERHORN_WORK_ENV_STORE", "MATTERHORN_WORK_TOKEN_STORE", "MATTERHORN_WORK_STM_ENABLED", "OPENWORK_CONTROL_BASE_URL", "OPENWORK_CONTROL_TOKEN"];
 const priorIsolatedEnvironment = new Map(isolatedEnvironment.map(key => [key, process.env[key]]));
 const nativeFetch = globalThis.fetch;
 
@@ -69,6 +72,7 @@ beforeEach(() => {
   process.env.MATTERHORN_WORK_ENV_STORE = join(dir, "env.json");
   delete process.env.MATTERHORN_WORK_STM_ENABLED;
   process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
+  process.env.MATTERHORN_WORK_TOKEN_STORE = join(dir, "tokens.json");
   process.env.MATTERHORN_WORK_DATA_DIR = dir;
   process.env.MATTERHORN_AUTH_DB = join(dir, "auth.db");
   process.env.MATTERHORN_WORK_RATE_LIMIT_DB = join(dir, "rate-limit.db");
@@ -132,6 +136,143 @@ function useLoopbackVoiceProvider(url: string) {
       return nativeFetch(input, init);
     }, { preconnect: nativeFetch.preconnect });
 }
+
+describe("owner request revocation", () => {
+  for (const changed of [false, true]) {
+    test(`voice credential wait, revoked=${changed}`, async () => {
+      let dispatched = 0;
+      const upstream = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch() {
+        dispatched++;
+        return Response.json({ client_secret: { value: "synthetic-lifetime-secret" } });
+      } });
+      stops.push(() => upstream.stop(true));
+      useLoopbackVoiceProvider(`${upstream.url}voice`);
+      const { base } = await boot();
+      const owner = await (await fetch(`${base}/tokens`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ scope: "owner" }) })).json();
+      const arrived = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const original = EnvService.prototype.get;
+      const lookup = spyOn(EnvService.prototype, "get").mockImplementation(async function (this: EnvService, key: string) {
+        if (key === "OPENAI_REALTIME_API_KEY") {
+          arrived.resolve();
+          await release.promise;
+        }
+        return original.call(this, key);
+      });
+      const pending = fetch(`${base}/voice/realtime/session`, { method: "POST", headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" }, body: "{}" });
+      try {
+        await arrived.promise;
+        if (changed) expect((await fetch(`${base}/tokens/${owner.id}`, { method: "DELETE", headers: hostAuth() })).status).toBe(200);
+        release.resolve();
+        const response = await pending;
+        expect(response.status).toBe(changed ? 401 : 200);
+        expect(dispatched).toBe(changed ? 0 : 1);
+        if (changed) expect((await response.json()).code).toBe("unauthorized");
+        else expect((await response.json()).clientSecret).toBe("synthetic-lifetime-secret");
+      } finally {
+        release.resolve();
+        await pending.catch(() => undefined);
+        lookup.mockRestore();
+      }
+    });
+    for (const path of ["/tokens", "/runtime/upgrade", "/w/fixture/runtime/upgrade", "/voice/realtime/session"]) {
+      test(`delayed body ${path}, revoked=${changed}`, async () => {
+        let dispatched = 0;
+        const upstream = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch() {
+          dispatched++;
+          return Response.json({ ok: true, client_secret: { value: "synthetic-lifetime-secret" } });
+        } });
+        stops.push(() => upstream.stop(true));
+        process.env.OPENWORK_CONTROL_BASE_URL = upstream.url.origin;
+        process.env.OPENWORK_CONTROL_TOKEN = "synthetic-control-token";
+        useLoopbackVoiceProvider(`${upstream.url}voice`);
+        const { base } = await boot();
+        const issued = await fetch(`${base}/tokens`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ scope: "owner" }) });
+        expect(issued.status).toBe(201);
+        const owner = await issued.json();
+        const admitted = Promise.withResolvers<void>();
+        const original = TokenService.prototype.scopeForToken;
+        const admission = spyOn(TokenService.prototype, "scopeForToken").mockImplementation(async function (this: TokenService, token: string) {
+          const scope = await original.call(this, token);
+          if (token === owner.token && scope === "owner") admitted.resolve();
+          return scope;
+        });
+        const body = JSON.stringify({ scope: "owner", label: "delayed-owner-create", version: "fixture" });
+        let finish = () => {};
+        const completed = new Promise<{ status: number; body: string }>((resolve, reject) => {
+          const request = httpRequest(`${base}${path}`, { method: "POST", headers: {
+            authorization: `Bearer ${owner.token}`, "content-type": "application/json", "content-length": Buffer.byteLength(body),
+          } }, response => {
+            let result = "";
+            response.setEncoding("utf8");
+            response.on("data", chunk => { result += chunk; });
+            response.on("end", () => resolve({ status: response.statusCode ?? 0, body: result }));
+            response.on("error", reject);
+          });
+          request.on("error", reject);
+          request.setTimeout(5000, () => request.destroy(new Error("Disposable owner upload timed out")));
+          finish = () => { finish = () => {}; request.end(body.slice(1)); };
+          request.write(body.slice(0, 1));
+          request.flushHeaders();
+        });
+        try {
+          // Observe genuine token admission while JSON remains incomplete.
+          // This spy neither changes authorization nor substitutes an actor.
+          await admitted.promise;
+          if (changed) expect((await fetch(`${base}/tokens/${owner.id}`, { method: "DELETE", headers: hostAuth() })).status).toBe(200);
+          finish();
+          const result = await completed;
+          const listed = await (await fetch(`${base}/tokens`, { headers: hostAuth() })).json();
+          expect(listed.items.some((item: { label?: string }) => item.label === "delayed-owner-create")).toBe(path === "/tokens" && !changed);
+          expect(dispatched).toBe(path === "/tokens" || changed ? 0 : 1);
+          expect(result.status).toBe(changed ? 401 : path === "/tokens" ? 201 : path.includes("upgrade") ? 202 : 200);
+          if (changed) expect(JSON.parse(result.body).code).toBe("unauthorized");
+        } finally {
+          finish();
+          await completed.catch(() => undefined);
+          admission.mockRestore();
+        }
+      });
+    }
+    for (const path of ["/runtime/upgrade", "/w/fixture/runtime/upgrade", "/voice/realtime/session"]) {
+      test(`delayed result ${path}, revoked=${changed}`, async () => {
+        const arrived = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        let dispatched = 0;
+        const upstream = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch() {
+          dispatched++;
+          arrived.resolve();
+          await release.promise;
+          return Response.json({ privateResult: "synthetic-control-result", client_secret: { value: "synthetic-lifetime-secret" } });
+        } });
+        stops.push(() => upstream.stop(true));
+        process.env.OPENWORK_CONTROL_BASE_URL = upstream.url.origin;
+        process.env.OPENWORK_CONTROL_TOKEN = "synthetic-control-token";
+        useLoopbackVoiceProvider(`${upstream.url}voice`);
+        const { base } = await boot();
+        const owner = await (await fetch(`${base}/tokens`, { method: "POST", headers: hostAuth(), body: JSON.stringify({ scope: "owner" }) })).json();
+        const pending = fetch(`${base}${path}`, { method: "POST", headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" }, body: "{}" });
+        try {
+          await arrived.promise;
+          if (changed) expect((await fetch(`${base}/tokens/${owner.id}`, { method: "DELETE", headers: hostAuth() })).status).toBe(200);
+          release.resolve();
+          const response = await pending;
+          const text = await response.text();
+          expect(dispatched).toBe(1); // Accepted work is not cancelled or resent.
+          expect(response.status).toBe(changed ? 401 : path.includes("upgrade") ? 202 : 200);
+          if (changed) {
+            expect(JSON.parse(text).code).toBe("unauthorized");
+            expect(text).not.toContain("synthetic-lifetime-secret");
+            expect(text).not.toContain("synthetic-control-result");
+          } else expect(text).toContain(path.includes("upgrade") ? "synthetic-control-result" : "synthetic-lifetime-secret");
+        } finally {
+          release.resolve();
+          await pending.catch(() => undefined);
+        }
+      });
+    }
+  }
+});
 
 describe("configured outbound endpoint isolation", () => {
   for (const surface of ["control-read", "control-upgrade", "voice"]) {

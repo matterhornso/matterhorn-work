@@ -923,11 +923,12 @@ function readOpenAiClientSecret(payload: unknown): { clientSecret: string; expir
   return { clientSecret: value, expiresAt: null };
 }
 
-async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown, stm?: StmCredentials) {
+async function createOpenAiRealtimeVoiceSession(request: Request, env: EnvService, input: unknown, stm?: StmCredentials) {
   const apiKey = await resolveVoiceCredential(env, stm).catch(error => {
     if (error instanceof StmError) throw new ApiError(409, error.code, "Voice secret storage needs attention. Reconnect or check the selected binding.");
     throw error;
   });
+  assertRequestAccessCurrent(request);
   if (!apiKey) {
     throw new ApiError(
       400,
@@ -975,6 +976,7 @@ async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown,
   }
 
   const text = await response.text();
+  assertRequestAccessCurrent(request);
   let payload: unknown = null;
   try {
     payload = text ? JSON.parse(text) : null;
@@ -6802,6 +6804,11 @@ function assertMatterhornWorkspaceAccess(
 function requireHostToken(request: Request, config: ServerConfig): Actor {
   const hostToken = request.headers.get("x-matterhorn-host-token") ?? request.headers.get("x-openwork-host-token");
   if (hostToken && timingSafeTokenEqual(hostToken, config.hostToken)) {
+    requestAccessChecks.set(request, () => {
+      if (!timingSafeTokenEqual(hostToken, config.hostToken)) {
+        throw new ApiError(401, "unauthorized", "Invalid host token");
+      }
+    });
     return { type: "host", tokenHash: hashToken(hostToken), scope: "owner" };
   }
   throw new ApiError(401, "unauthorized", "Invalid host token");
@@ -6810,7 +6817,7 @@ function requireHostToken(request: Request, config: ServerConfig): Actor {
 async function requireHost(request: Request, config: ServerConfig, tokens: TokenService): Promise<Actor> {
   const hostToken = request.headers.get("x-matterhorn-host-token") ?? request.headers.get("x-openwork-host-token");
   if (hostToken && timingSafeTokenEqual(hostToken, config.hostToken)) {
-    return { type: "host", tokenHash: hashToken(hostToken), scope: "owner" };
+    return requireHostToken(request, config);
   }
 
   const header = request.headers.get("authorization") ?? "";
@@ -6823,6 +6830,12 @@ async function requireHost(request: Request, config: ServerConfig, tokens: Token
   if (scope !== "owner") {
     throw new ApiError(401, "unauthorized", "Invalid host token");
   }
+  requestAccessChecks.set(request, () => {
+    if (tokens.currentScopeForToken(bearer) !== "owner") {
+      throw new ApiError(401, "unauthorized", "Owner access is no longer active. Check the current state before retrying any operation.");
+    }
+  });
+  assertRequestAccessCurrent(request);
   const clientId = request.headers.get("x-openwork-client-id") ?? undefined;
   return { type: "remote", clientId, tokenHash: hashToken(bearer), scope };
 }
@@ -11514,7 +11527,9 @@ function createRoutes(
 
   addRoute(routes, "POST", "/runtime/upgrade", "host", async (ctx) => {
     const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Runtime upgrade");
+    assertRequestAccessCurrent(ctx.request);
     const result = await fetchRuntimeControl("/runtime/upgrade", { method: "POST", body });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse(result, 202);
   });
 
@@ -11525,7 +11540,9 @@ function createRoutes(
 
   addRoute(routes, "POST", "/w/:id/runtime/upgrade", "host", async (ctx) => {
     const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Runtime upgrade");
+    assertRequestAccessCurrent(ctx.request);
     const result = await fetchRuntimeControl("/runtime/upgrade", { method: "POST", body });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse(result, 202);
   });
 
@@ -14120,8 +14137,9 @@ function createRoutes(
     return jsonResponse({ items, workspaces: items, activeId: active?.id ?? null });
   });
 
-  addRoute(routes, "GET", "/tokens", "host", async () => {
+  addRoute(routes, "GET", "/tokens", "host", async (ctx) => {
     const items = await tokens.list();
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({ items });
   });
 
@@ -14134,13 +14152,14 @@ function createRoutes(
       throw new ApiError(400, "invalid_scope", "Token scope must be owner, collaborator, or viewer");
     }
     const label = typeof body.label === "string" ? body.label.trim() : undefined;
-    const issued = await tokens.create(scope, { label });
+    const issued = await tokens.create(scope, { label, assertAccess: () => assertRequestAccessCurrent(ctx.request) });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse(issued, 201);
   });
 
   addRoute(routes, "DELETE", "/tokens/:id", "host", async (ctx) => {
     ensureWritable(config);
-    const ok = await tokens.revoke(ctx.params.id);
+    const ok = await tokens.revoke(ctx.params.id, () => assertRequestAccessCurrent(ctx.request));
     if (!ok) {
       throw new ApiError(404, "token_not_found", "Token not found");
     }
@@ -14346,7 +14365,7 @@ function createRoutes(
       requireHostToken(ctx.request, config);
     }
     const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Realtime voice session");
-    return jsonResponse(await createOpenAiRealtimeVoiceSession(env, body, stm));
+    return jsonResponse(await createOpenAiRealtimeVoiceSession(ctx.request, env, body, stm));
   });
 
   addRoute(routes, "POST", "/workspaces/local", "host", async (ctx) => {

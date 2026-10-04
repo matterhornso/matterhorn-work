@@ -147,9 +147,10 @@ export class TokenService {
     return this.tokens.map(({ hash: _hash, ...rest }) => rest);
   }
 
-  async create(scope: TokenScope, options?: { label?: string }): Promise<{ id: string; token: string; scope: TokenScope; createdAt: number; label?: string }> {
+  async create(scope: TokenScope, options?: { label?: string; assertAccess?: () => void }): Promise<{ id: string; token: string; scope: TokenScope; createdAt: number; label?: string }> {
     return this.runMutation(async () => {
       await this.ensureLoaded();
+      options?.assertAccess?.();
 
       const id = shortId();
       const token = `owt_${shortId().replace(/-/g, "")}`;
@@ -170,9 +171,10 @@ export class TokenService {
     });
   }
 
-  async revoke(id: string): Promise<boolean> {
+  async revoke(id: string, assertAccess?: () => void): Promise<boolean> {
     return this.runMutation(async () => {
       await this.ensureLoaded();
+      assertAccess?.();
       const index = this.tokens.findIndex((token) => token.id === id);
       if (index === -1) return false;
       const nextTokens = this.tokens.filter((token) => token.id !== id);
@@ -189,6 +191,15 @@ export class TokenService {
     if (timingSafeTokenEqual(trimmed, this.config.token)) return "collaborator";
     await this.mutationQueue;
     await this.ensureLoaded();
+    return this.currentScopeForToken(trimmed);
+  }
+
+  // Revalidate an admitted request without introducing another async gap.
+  // Unloaded durable tokens fail closed; admission must call scopeForToken.
+  currentScopeForToken(token: string): TokenScope | null {
+    const trimmed = token.trim();
+    if (!trimmed) return null;
+    if (timingSafeTokenEqual(trimmed, this.config.token)) return "collaborator";
     const found = this.byHash.get(hashToken(trimmed));
     return found?.scope ?? null;
   }

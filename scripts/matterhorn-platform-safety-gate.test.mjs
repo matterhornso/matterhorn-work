@@ -88,6 +88,7 @@ for (const required of [
   "deep-link-runtime-contract.test.ts",
   "managed-opencode.test.ts",
   "env-routes.e2e.test.ts",
+  "tokens.test.ts",
   "voice-credential.test.ts",
   "app-error-boundary-contract.test.ts",
   "app-observability-contract.test.ts",

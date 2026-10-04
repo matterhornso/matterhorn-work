@@ -1010,3 +1010,35 @@ Evidence: `/tmp/matterhorn-control-voice-red-final-2026-10-04.log` (definitive f
 Operators must configure the final worker-control endpoint, not a redirecting alias. A rejected response does not undo an upgrade or voice session already accepted at the initial endpoint. Check actual runtime versions/state before retrying an uncertain upgrade; the server does not add an automatic retry. Assess historical exposure from deployed versions and service/log access rather than inferring a production incident from these fixtures. No credential rotation or production configuration change occurred.
 
 Next: inspect authority revalidation around delayed host-authorized request bodies and external waits, then continue mounted intermediate-wait recovery coverage. This transport pass does not certify every outbound integration, DNS/address policy, response schema, timeout or browser error state. Hosted five-desk/provider/accounting acceptance, email, production encryption/restore and full accessibility/browser coverage remain open. No real-provider call, user-preview change, push, merge or deployment occurred.
+
+## Owner token revocation during privileged requests
+
+Following `10b6133b04633d8ba69c9726d0d670ed38b4278f`, seven failing loopback HTTP cases reproduced requests continuing after an owner token was revoked. An incomplete JSON upload could finish and create another owner token or dispatch a worker upgrade or voice request. A response delayed at the upstream service could also return upgrade data or a usable synthetic voice-session secret after revocation. Seven unchanged-access controls passed before correction. Both upgrade URLs were tested. This is local evidence, not a claim of production exploitation.
+
+Owner-bearer admission now registers a request-scoped check of that exact token's committed scope. The existing bounded body reader invokes it before and after upload. Worker upgrades check again before dispatch and before returning their result; voice checks after credential resolution and after reading the provider response. Host-token admission retains its separate privileged path and checks the original configured token, without falling back to another credential. STM voice bindings remain host-token-only.
+
+Token creation and revocation accept an access check that runs inside the existing serialized mutation queue, after loading and before writing. A revocation ahead of a mutation therefore prevents that mutation from using stale admission. The ordinary token routes supply the check; token listing and issuance also recheck before returning their data. The synchronous lookup is an in-process committed-state check, not a cross-process store watcher. Requests or mutations already accepted before revocation are not rolled back, and no automatic retry is added. An authenticated operator must inspect current state before retrying an uncertain operation.
+
+The final focused group passes **37 tests, zero failures, 170 assertions**: 16 owner HTTP cases and 21 token-service tests. The HTTP additions cover a delayed credential lookup as well as uploads/results; the token tests cover unloaded state, committed revocation, queued creation/deletion, unrelated-token revocation and durable state after reopening. Initial admission is observed through the real token lookup while the HTTP body remains incomplete; tests do not rely on a sleep-only race or replace authorization results. All accounts, keys and upstream responses are disposable fixtures. Voice uses loopback interception of its fixed provider URL, with non-fixture network calls blocked.
+
+- Affected nine-file backend group: **527 pass, zero fail, 4,637 assertions**.
+- Server typecheck and build: pass. The final extra check before returning a newly issued token is covered by the focused rerun and subsequent build.
+- Safety-gate wiring contract: pass; token-service tests are added beside the existing environment/voice suites.
+- Full safety gate: all 11 stages pass, terminal exit zero. The gate command list was already loaded before token-service tests were added, so the updated `daemon.electron.perimeter` stage was then rerun separately and passed, including 123 tests and 681 assertions in its final four-file backend group. Wiring and diff checks pass.
+- No frontend code changed. Earlier frontend/browser evidence remains historical; no new hosted, UI or real-provider acceptance is claimed.
+
+```sh
+bun test apps/server/src/env-routes.e2e.test.ts apps/server/src/tokens.test.ts --test-name-pattern 'owner request revocation|TokenService' --timeout 15000
+bun test apps/server/src/env-routes.e2e.test.ts apps/server/src/tokens.test.ts apps/server/src/voice-credential.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts apps/server/src/hosted-guarded-mcp.test.ts apps/server/src/crypto-coworker-routes.e2e.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+node scripts/matterhorn-platform-safety-gate.test.mjs
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+Evidence logs: `/tmp/matterhorn-owner-revocation-red-2026-10-04.log` (seven failing cases and seven controls), `/tmp/matterhorn-owner-revocation-final-focused-2026-10-04.log` (37 cases), and `/tmp/matterhorn-owner-revocation-{http,typecheck,build,safety}-2026-10-04.log`. The initial sandbox attempt could not bind loopback ports; the definitive red run used permitted isolated local listeners.
+
+Updated-stage command: `pnpm test:matterhorn-platform-safety --only daemon.electron.perimeter`; log: `/tmp/matterhorn-owner-revocation-safety-stage-final-2026-10-04.log`.
+
+Next inspect the remaining team-access token wrappers, local-workspace mutations and legacy bearer client reads/streams at their asynchronous boundaries. Those paths are not certified by the bounded owner-route tests above; source inspection alone is not a confirmed defect. Continue mounted intermediate-wait UI coverage and hosted launch gates. No real secret, production configuration, existing preview/chat, push, merge or deployment was changed. Whole-platform readiness remains unproven.
