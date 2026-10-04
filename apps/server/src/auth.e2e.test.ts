@@ -419,6 +419,64 @@ describe("public account authentication", () => {
     expect(newPassword.response.status).toBe(200);
   });
 
+  test("a reset link cannot overwrite a subsequent authenticated password change", async () => {
+    const app = await boot();
+    process.env.EMAIL_FROM = "accounts@example.com";
+    process.env.EMAIL_FROM_NAME = "Matterhorn Desks";
+    process.env.MATTERHORN_EMAIL_DEV_MODE = "true";
+    process.env.MATTERHORN_APP_URL = app.base;
+    const email = "password-lifecycle@example.com";
+    const newPassword = "disposable-new-account-password";
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email, password: PASSWORD },
+    });
+    expect(signup.response.status).toBe(200);
+    const cookie = sessionCookie(signup.response);
+    const delivery = await captureDevEmail(() => jsonRequest(app.base, "/api/auth/password-reset/request", {
+      body: { email },
+    }));
+    expect(delivery.result.response.status).toBe(202);
+    const link = delivery.payload.props.resetLink;
+    if (typeof link !== "string") throw new Error("Missing disposable reset link");
+    const token = new URLSearchParams(new URL(link).hash.slice(1)).get("token");
+    if (!token) throw new Error("Missing disposable reset token");
+    const changed = await jsonRequest(app.base, "/api/auth/account/change-password", {
+      cookie, body: { currentPassword: PASSWORD, newPassword },
+    });
+    expect(changed.response.status).toBe(200);
+    expect(changed.payload).toEqual({ ok: true, signedOutEverywhere: true });
+    const obsolete = await jsonRequest(app.base, "/api/auth/password-reset/confirm", {
+      body: { token, newPassword: "disposable-unwanted-reset-password" },
+    });
+    expect(obsolete.response.status).toBe(400);
+    expect(obsolete.payload.code).toBe("invalid_reset_token");
+    expect(obsolete.response.headers.get("set-cookie")).toBeNull();
+    expect((await jsonRequest(app.base, "/api/den/v1/session", { cookie })).payload).toEqual({ authenticated: false });
+    const signin = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: newPassword },
+    });
+    expect(signin.response.status).toBe(200);
+    expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: PASSWORD },
+    })).response.status).toBe(401);
+
+    const fresh = await captureDevEmail(() => jsonRequest(app.base, "/api/auth/password-reset/request", {
+      body: { email },
+    }));
+    expect(fresh.result.response.status).toBe(202);
+    const freshLink = fresh.payload.props.resetLink;
+    if (typeof freshLink !== "string") throw new Error("Missing fresh disposable reset link");
+    const freshToken = new URLSearchParams(new URL(freshLink).hash.slice(1)).get("token");
+    if (!freshToken) throw new Error("Missing fresh disposable reset token");
+    expect((await jsonRequest(app.base, "/api/auth/password-reset/confirm", {
+      body: { token: freshToken, newPassword: "disposable-fresh-reset-password" },
+    })).response.status).toBe(200);
+    expect((await jsonRequest(app.base, "/api/den/v1/session", { cookie: sessionCookie(signin.response) })).payload).toEqual({ authenticated: false });
+    expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: "disposable-fresh-reset-password" },
+    })).response.status).toBe(200);
+  });
+
   test("fails closed before creating an account when verification email is not configured", async () => {
     const app = await boot();
     process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "true";

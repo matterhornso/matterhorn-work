@@ -554,3 +554,34 @@ Inspection of the publicly served `app-Hue0tu8o.js` and its referenced `index.re
 Next verification: inspect the in-page config request in a supported regular browser and the Codex preview without disabling security protections; distinguish browser/client blocking, network failure and a real setup-required response. After an approved deployment, verify that failed configuration loading offers accurate retry guidance, successful loading enables eligible actions, and the real signup/verification/reset flows complete using controlled inboxes. Do not activate signup or change email configuration merely to remove this message.
 
 This was a narrow functional audit guided by Impeccable, not a scored full accessibility/performance/theme audit. It creates no new platform-wide UI certification. The documentation skill preserved observed facts separately from hypotheses and historical test evidence. No product code, production settings, accounts or user-owned previews were changed; no push, merge or deployment occurred. Hosted five-desk responses, accounting, two-account isolation, email delivery, encryption/restore evidence and the policy-review gate remain open.
+
+## Password changes and obsolete reset links
+
+**P1 security finding, corrected locally:** an authenticated password change revoked sessions but did not delete previously issued password-reset challenges. A valid old reset link could therefore overwrite the newly chosen password until its original one-hour expiry. A store-level regression reproduced this successful obsolete reset. This requires possession of a valid reset link; it is not evidence of a credential-free account takeover or an observed production incident.
+
+Both successful password-change paths now share transaction-scoped recovery invalidation. The authenticated change deletes the account's outstanding reset challenges, and reset confirmation retains that invalidation. Both retire only that account's pending, retrying or sending password-reset emails, clear their stored link payloads and label them `password_changed`. Password update, session revocation, challenge deletion and queue retirement commit together. Another account's challenges/sessions and unrelated verification emails are untouched; already accepted delivery history is retained. No schema migration, production cleanup or credential change was performed.
+
+The first nine new store tests produced eight failures and one pass before correction. The final expanded suite includes failed-current-password preservation, two-account isolation, new recovery after rotation, pending/retry/sending outbox states, late acceptance/failure callbacks and transaction failures during both challenge deletion and email retirement. SQL-trigger failures prove that password, sessions, challenge and pending email remain recoverable when cleanup cannot commit. These are disposable local databases, not production corruption tests.
+
+A new local HTTP test signs up normally, captures a console-transport reset email, changes the password with its authenticated cookie, rejects the earlier link with HTTP 400 `invalid_reset_token`, confirms the original session is invalid and signs in with the new password. It then requests a fresh link, completes recovery successfully, verifies session invalidation and signs in with the recovered password. All account data and email are disposable; no real inbox or provider is contacted.
+
+| Check | Result |
+| --- | --- |
+| Recovery, verification, outbox and maintenance suites | 26 pass, zero fail, 149 assertions across four files |
+| Full local auth HTTP suite | 47 pass, zero fail, 800 assertions |
+| Server typecheck and build | Pass |
+| Platform safety gate | All 11 stages pass |
+| Diff whitespace | Pass |
+
+```sh
+bun test apps/server/src/auth-password-lifecycle.test.ts apps/server/src/auth-store-verification.test.ts apps/server/src/auth-email-outbox.test.ts apps/server/src/auth-store-maintenance.test.ts
+bun test apps/server/src/auth.e2e.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+Logs: `/tmp/matterhorn-password-lifecycle-red-2026-10-04.log`, `/tmp/matterhorn-password-lifecycle-focused-final-2026-10-04.log`, `/tmp/matterhorn-password-lifecycle-auth-http-final-2026-10-04.log`, and `/tmp/matterhorn-password-lifecycle-{typecheck,build,safety}-2026-10-04.log`. The first HTTP attempt could not bind a loopback listener in the sandbox; the permitted full-suite run passed without weakening tests. No frontend code changed, and the previous full frontend result is historical, not a rerun in this pass.
+
+Limitations and release actions: a worker may already hold an email payload or have handed it to a provider, so queue retirement cannot recall an in-flight email. Its reset link is invalid after a successful password change. The `terminal/password_changed` state is expected invalidation, not an email-provider failure. This fix acts on future password changes; it does not retroactively erase old production challenges or provider-held messages. Previously issued links retain their existing one-hour expiry unless an operator separately approves cleanup or a subsequent password change invalidates them. Multi-process races and multi-tab browser cookie ordering are not certified by these synchronous-store/local-HTTP tests. Hosted password recovery requires controlled accounts and inbox access after an approved deployment. The broader launch gates remain open. The documentation skill keeps those limits separate from the passing regression evidence.

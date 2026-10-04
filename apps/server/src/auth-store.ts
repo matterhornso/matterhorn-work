@@ -1660,10 +1660,7 @@ export class MatterhornAuthStore {
       statement(this.db, "DELETE FROM sessions WHERE user_id = ?").run(
         challenge.user_id,
       );
-      statement(
-        this.db,
-        "DELETE FROM password_reset_challenges WHERE user_id = ?",
-      ).run(challenge.user_id);
+      this.invalidatePasswordRecovery(challenge.user_id);
     });
   }
 
@@ -1858,7 +1855,22 @@ export class MatterhornAuthStore {
       statement(this.db, "DELETE FROM sessions WHERE user_id = ?").run(
         session.user.id,
       );
+      this.invalidatePasswordRecovery(session.user.id);
     });
+  }
+
+  // Called within the password update transaction. A previously issued link
+  // must not undo a later authenticated password change. A claimed email may
+  // already be in transit, but its link becomes invalid and cannot be retried.
+  private invalidatePasswordRecovery(userId: string): void {
+    statement(this.db, "DELETE FROM password_reset_challenges WHERE user_id = ?").run(userId);
+    statement(this.db, `
+      UPDATE email_outbox
+      SET state = 'terminal', last_error_code = 'password_changed',
+        props_json = '{}', updated_at = ?
+      WHERE user_id = ? AND template = 'passwordReset'
+        AND state IN ('pending', 'retry', 'sending')
+    `).run(Date.now(), userId);
   }
 
   deleteAccount(
