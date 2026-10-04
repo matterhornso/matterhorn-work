@@ -480,3 +480,47 @@ pnpm test:matterhorn-platform-safety
 Evidence uses `/tmp/matterhorn-same-chat-`: `results-red-2026-10-05.log` for unit reproduction; `mounted-red3-2026-10-05.log` for the four observed browser failures; `mounted-focused-2026-10-05.log` for focused verification; and `mounted-final-2026-10-05.log`, `app-verified-2026-10-05.log`, `typecheck-2026-10-05.log`, `build-final-2026-10-05.log` and `safety-final-2026-10-05.log` for aggregate checks. The initial sandboxed frontend run passed 1,475 cases but failed three HTTP-fixture tests at loopback server startup; it is not counted as an aggregate pass. The permitted-loopback rerun is the final frontend evidence.
 
 Impeccable hardening and Uncodixfy preserve the existing visuals and feedback components. No new visual certification is claimed. Browser accounts, providers and delayed responses are synthetic; the existing isolated real-gateway attachment checks remain in the larger suite. This correction does not establish exact runtime-message-to-metric correlation, late Stop response isolation, retry transaction compensation or native image-decoding ceilings. Those reviews and hosted five-desk responses, operational accounts/inboxes, encryption and backup restore remain open. No push, merge, deployment, production configuration or existing preview/chat mutation occurred.
+
+## Delayed Stop responses
+
+Following local commit `61a3262c9635f9c8e5c40987d4578e5e5563f2c9`, five of eight initial browser cases reproduced stale Stop feedback. A successful delayed acknowledgement cleared a newer request's pending state in the same chat, another chat, and after returning to the original chat. Rejected acknowledgements displayed an error on newer requests in the same chat and after return. Three controls already passed; no claim is made that every tested boundary was broken.
+
+Stop now captures the latest workspace/session request before awaiting the server, instead of looking up the oldest pending request afterward. Its acknowledgement records cancellation only for the captured request, invalidates the original snapshot's exact query key, and updates activity only if no newer local request superseded it. Local error/pending feedback also rechecks account and view lifetime. Rejected acknowledgements retain the ordinary error for the unchanged request; stale errors do not replace the newly viewed chat's feedback. Cancellation metrics remain idempotent, and no draft is rewritten.
+
+### Stop verification
+
+Fourteen mounted cases cover successful/rejected acknowledgements with unchanged request, a newer request in the same chat, navigation/return with a replacement request, navigation/return without a replacement, and cross-tab logout. The expanded focused run passes **14 cases, zero failures, 65 assertions**. One added unit case checks exact Stop target capture, workspace separation, older/newer pending entries and account clearing; the focused operation/cancellation suites pass **17 cases and 78 assertions**. Final aggregate checks pass: **136 mounted browser cases, zero failures, 821 assertions**; **1,479 frontend tests, zero failures, 8,581 assertions across 193 files**; typecheck; web build; and **all 11 platform-safety stages**, with terminal exit zero. Existing bundle-size warnings remain.
+
+```sh
+bun test apps/app/tests/session-cancelled-approval.test.ts apps/app/tests/model-operation-metrics.test.ts
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --test-name-pattern 'delayed Stop' --timeout 120000
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+bun test apps/app/tests
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+pnpm test:matterhorn-platform-safety
+```
+
+Logs use `/tmp/matterhorn-stop-lifetime-`: `red-2026-10-05.log` records the five browser failures; `focused-2026-10-05.log` and `expanded-2026-10-05.log` record the corrected focused cases. Final evidence uses `mounted-final-2026-10-05.log`, `app-final-2026-10-05.log`, `typecheck-2026-10-05.log`, `build-final-2026-10-05.log` and `safety-final-2026-10-05.log`.
+
+The new checks run production UI against synthetic account/runtime HTTP responses. They prove feedback isolation, not actual server abort ordering, provider cancellation or token settlement. Impeccable hardening and Uncodixfy preserve the current layout/copy; no new visual certification is claimed. Exact runtime-message-to-metric correlation, overlapping retry compensation, repeated Stop ordering and native image-decoding limits remain for review, alongside hosted five-desk and operational acceptance. Source inspection confirms the retry helper restores a failed dispatch without a session revision check, and image compression calls `createImageBitmap` before bounding output dimensions; neither risk has yet been established by a new end-to-end reproduction. No push, merge, deployment, production configuration or existing chat/preview mutation occurred.
+
+## Hosted release recheck
+
+The credential-free GET/OPTIONS probe completed at **4 October 2026 22:41:19 UTC**, or **5 October 06:41:19 Asia/Singapore**. GitHub's `dev` branch still reports `e4342d6bef8d833d12e36bd8093a87c8dbe84856`. Both public web HTML and API headers report `9b74d923b8c999733fe698c29a6555dd2980460b`, 27 commits behind that baseline. Before this Stop fix/documentation commit, local HEAD `61a3262c9635f9c8e5c40987d4578e5e5563f2c9` is another 60 commits beyond `dev`. Deploying current `dev` alone would omit the local fixes; select and review the final candidate explicitly.
+
+The strict probe exits 1 with three failures: web commit mismatch, API commit mismatch and guarded runtime mode `off` rather than the required `enforce`. Its 27 other checks pass, including the sampled security headers, HTTPS, exact-origin CORS, unauthenticated JSON 401 responses on `/workspaces` and `/opencode/global/health`, and public signup configuration. Signup reports open with verification/reset/legal/Turnstile dependencies present; `/health/launch` reports ready. These configuration claims do not establish inbox delivery, authenticated inference, backups, isolation or full launch readiness. Guarded mode off does not by itself prove an authorization bypass.
+
+The durable, sanitized report is [hosted-release-readonly.json](./hosted-release-readonly.json). Reproduce without credentials or production changes:
+
+```sh
+gh api repos/matterhornso/matterhorn-work/branches/dev --jq .commit.sha
+node scripts/product-hunt-deployment-probe.mjs \
+  --app-url https://desks.matterhorn.so --server-url https://desks.matterhorn.so \
+  --allowed-origin https://desks.matterhorn.so \
+  --expected-commit e4342d6bef8d833d12e36bd8093a87c8dbe84856 \
+  --expected-web-commit e4342d6bef8d833d12e36bd8093a87c8dbe84856 \
+  --expected-guarded-mode enforce --expected-signup-status open --strict
+```
+
+Update the expected commits to the approved candidate for deployment acceptance. No account, email, model request, wallet action or production configuration was created or changed by this probe. The public beta remains **not certified for launch**.

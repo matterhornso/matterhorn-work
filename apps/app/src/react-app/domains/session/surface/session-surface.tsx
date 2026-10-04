@@ -43,6 +43,7 @@ import {
   beginModelOperation,
   pendingModelOperation,
   isLatestModelOperation,
+  latestModelOperation,
   recordModelOperationAccepted,
   recordModelOperationCancelled,
   recordModelOperationCompleted,
@@ -2481,28 +2482,32 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   const handleAbort = useCallback(async () => {
     if (!isCurrentAccount()) return;
+    const isCurrentView = captureViewLifetime();
     jevChat.cancel();
     if (!chatStreaming) return;
+    const operation = latestModelOperation(props.workspaceId, props.sessionId);
+    const isCurrentOperation = () => latestModelOperation(props.workspaceId, props.sessionId) === operation;
     suppressNextAbortFailureRef.current = true;
     setError(null);
     try {
       await abortSession(opencodeClient, props.sessionId);
       if (!isCurrentAccount()) return;
-      const operation = pendingModelOperation(props.sessionId);
       if (operation) recordModelOperationCancelled(operation);
-      await snapshotQuery.refetch();
-      if (!isCurrentAccount()) return;
-      setSending(false);
-      setAwaitingAssistantBaseline(null);
-      setNoVisibleAssistantOutputBaseline(null);
+      void queryClient.invalidateQueries({ queryKey: snapshotQueryKey, exact: true });
+      if (!isCurrentOperation()) return;
       const activity = useSessionActivityStore.getState();
       activity.setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
       activity.clearError(props.workspaceId, props.sessionId);
+      if (!isCurrentView()) return;
+      setSending(false);
+      setAwaitingAssistantBaseline(null);
+      setNoVisibleAssistantOutputBaseline(null);
     } catch (nextError) {
+      if (!isCurrentView() || !isCurrentOperation()) return;
       suppressNextAbortFailureRef.current = false;
       setError({ message: nextError instanceof Error ? nextError.message : "Failed to stop run." });
     }
-  }, [chatStreaming, opencodeClient, props.sessionId, props.workspaceId, snapshotQuery.refetch, jevChat.cancel]);
+  }, [captureViewLifetime, chatStreaming, opencodeClient, props.sessionId, props.workspaceId, queryClient, snapshotQueryKey, jevChat.cancel]);
 
   const handleRetryAssistantResponse = useCallback(async (messageId: string, privacyConsentToken?: string) => {
     if (!isCurrentAccount()) return;

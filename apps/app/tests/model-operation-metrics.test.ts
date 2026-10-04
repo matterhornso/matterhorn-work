@@ -5,6 +5,7 @@ import { accountClientState } from "../src/app/lib/account-client-state";
 import {
   beginModelOperation,
   isLatestModelOperation,
+  latestModelOperation,
   clearModelOperationMetrics,
   pendingModelOperation,
   readModelOperationMetrics,
@@ -137,5 +138,22 @@ describe("privacy-safe model operation metrics", () => {
     accountClientState.clear();
     expect(isLatestModelOperation(newer)).toBe(false);
     expect(pendingModelOperation("ses_one")).toBeNull();
+  });
+
+  test("Stop captures the latest request rather than looking up an older pending request after awaiting", () => {
+    expect(latestModelOperation("ws_stop", "ses_stop")).toBeNull();
+    const old = beginModelOperation({ workspaceId: "ws_stop", sessionId: "ses_stop", source: "chat" });
+    const stopped = beginModelOperation({ workspaceId: "ws_stop", sessionId: "ses_stop", source: "chat" });
+    const captured = latestModelOperation("ws_stop", "ses_stop");
+    expect(captured).toBe(stopped);
+    expect(latestModelOperation("ws_other", "ses_stop")).toBeNull();
+    const newer = beginModelOperation({ workspaceId: "ws_stop", sessionId: "ses_stop", source: "chat" });
+    if (captured) recordModelOperationCancelled(captured);
+    expect(latestModelOperation("ws_stop", "ses_stop")).toBe(newer);
+    expect(pendingModelOperation("ses_stop", newer.id)).toBe(newer);
+    expect(pendingModelOperation("ses_stop", stopped.id)).toBeNull();
+    expect(pendingModelOperation("ses_stop", old.id)).toBe(old);
+    accountClientState.clear();
+    expect(latestModelOperation("ws_stop", "ses_stop")).toBeNull();
   });
 });

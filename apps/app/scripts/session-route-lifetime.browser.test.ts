@@ -26,6 +26,9 @@ let consentFixture = false;
 let rejectConsent = false;
 let delayedPromptDispatch = false;
 let rejectDelayedPrompt = false;
+let delayedStop = false;
+let rejectStop = false;
+let releaseStop: (() => void) | undefined;
 let responseRetryFixture = false;
 let historyText = true;
 let terminalFailure = false;
@@ -440,7 +443,10 @@ beforeAll(async () => {
           session(action === "fork" ? "ses_fork" : "ses_fixture"),
         );
       }
-      if (path.endsWith("/abort")) return Response.json(true);
+      if (path.endsWith("/abort")) {
+        if (delayedStop) await new Promise<void>(resolve => { releaseStop = resolve; });
+        return rejectStop ? Response.json({ message: "Synthetic Stop failed." }, { status: 500 }) : Response.json(true);
+      }
       if (path.endsWith("/config"))
         return Response.json({ model: "fixture/fixture" });
       if (
@@ -468,6 +474,7 @@ beforeAll(async () => {
 }, 120_000);
 afterAll(async () => {
   release?.();
+  releaseStop?.();
   await browser?.close();
   server?.stop(true);
 });
@@ -482,6 +489,8 @@ beforeEach(() => {
   rejectConsent = false;
   delayedPromptDispatch = false;
   rejectDelayedPrompt = false;
+  delayedStop = rejectStop = false;
+  releaseStop = undefined;
   responseRetryFixture = false;
   historyText = true;
   terminalFailure = false;
@@ -497,6 +506,83 @@ beforeEach(() => {
 });
 
 const operations: Array<"fork" | "revert"> = ["fork", "revert"];
+for (const boundary of ["unchanged", "newer", "navigate", "return", "navigate empty", "return empty", "cross-tab logout"]) {
+  for (const rejected of [false, true]) {
+    test(`delayed Stop rejected=${rejected} after ${boundary}`, async () => {
+      promptFixture = delayedPromptDispatch = delayedStop = true;
+      rejectStop = rejected;
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      context.setDefaultTimeout(6000);
+      await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+      const page = await context.newPage();
+      try {
+        await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+        await page.getByRole("button", { name: "Change model", exact: true }).click();
+        await page.getByRole("option", { name: /Fixture model/ }).click();
+        const editor = page.getByRole("textbox").first();
+        await editor.fill("Original request to stop");
+        await page.getByRole("button", { name: "Ask", exact: true }).click();
+        for (let attempt = 0; attempt < 100 && !release; attempt++) await page.waitForTimeout(20);
+        expect(release).toBeDefined();
+        await page.getByRole("button", { name: "Stop generating", exact: true }).click();
+        for (let attempt = 0; attempt < 100 && !releaseStop; attempt++) await page.waitForTimeout(20);
+        expect(releaseStop).toBeDefined();
+        const stopFinished = Promise.race([
+          page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/abort")),
+          page.waitForEvent("requestfailed", { predicate: request => new URL(request.url()).pathname.endsWith("/abort") }),
+        ]);
+        void stopFinished.catch(() => { /* Awaited below; closing a failed fixture can abort the request. */ });
+        release?.();
+        await page.waitForFunction(() => {
+          const composer = window.__openwork?.slice("composer");
+          return composer && typeof composer === "object" && "sending" in composer && composer.sending === false;
+        });
+        if (boundary.startsWith("navigate") || boundary.startsWith("return")) {
+          await page.getByRole("button", { name: "Other fixture chat", exact: true }).click();
+          await page.waitForFunction(() => {
+            const composer = window.__openwork?.slice("composer");
+            return composer && typeof composer === "object" && "sessionId" in composer && composer.sessionId === "ses_other";
+          });
+          if (boundary.startsWith("return")) {
+            await page.getByRole("button", { name: "Original fixture chat", exact: true }).click();
+            await page.waitForFunction(() => {
+              const composer = window.__openwork?.slice("composer");
+              return composer && typeof composer === "object" && "sessionId" in composer && composer.sessionId === "ses_fixture";
+            });
+          }
+          await page.getByRole("button", { name: "Change model", exact: true }).click();
+          await page.getByRole("option", { name: /Fixture model/ }).click();
+        }
+        const newerRequest = ["newer", "navigate", "return"].includes(boundary);
+        if (newerRequest) {
+          await editor.fill("New request after Stop was sent");
+          await page.getByRole("button", { name: "Ask", exact: true }).click();
+          for (let attempt = 0; attempt < 100 && promptRequests.filter(request => request.stage === "dispatch").length < 2; attempt++) await page.waitForTimeout(20);
+          expect(promptRequests.filter(request => request.stage === "dispatch")).toHaveLength(2);
+        }
+        await editor.fill("Keep draft during Stop");
+        if (boundary === "cross-tab logout") {
+          const other = await context.newPage();
+          await other.goto(`${server.url}settings/cloud-account`);
+          await other.getByRole("button", { name: "Sign out", exact: true }).click();
+          await page.getByRole("heading", { name: "Welcome to Matterhorn Desks", exact: true }).waitFor();
+        }
+        releaseStop?.();
+        await stopFinished;
+        await page.waitForTimeout(250);
+        if (boundary !== "cross-tab logout") expect((await editor.innerText()).trim()).toBe("Keep draft during Stop");
+        if (newerRequest) {
+          expect(await page.evaluate(() => {
+            const composer = window.__openwork?.slice("composer");
+            return composer && typeof composer === "object" && "sending" in composer && composer.sending === true;
+          })).toBe(true);
+          expect(await page.locator('[data-matterhorn-session-error]').count()).toBe(0);
+        } else if (boundary === "unchanged" && rejected) await page.locator('[data-matterhorn-session-error]').getByText(/Synthetic Stop failed/).waitFor();
+        else expect(await page.locator('[data-matterhorn-session-error]').count()).toBe(0);
+      } finally { release?.(); releaseStop?.(); await context.close(); }
+    }, 30000);
+  }
+}
 for (const earlier of ["retry", "continue"]) {
   for (const newerPending of [false, true]) {
     test(`same chat late ${earlier} failure preserves newer send pending=${newerPending}`, async () => {

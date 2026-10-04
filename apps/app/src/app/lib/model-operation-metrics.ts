@@ -165,6 +165,10 @@ export function isLatestModelOperation(operation: ModelOperationContext) {
   return latestOperations.get(operationScope(operation.workspaceId, operation.sessionId)) === operation;
 }
 
+export function latestModelOperation(workspaceId: string, sessionId: string) {
+  return latestOperations.get(operationScope(safeIdentifier(workspaceId), safeIdentifier(sessionId))) ?? null;
+}
+
 export function recordModelOperationAccepted(operation: ModelOperationContext) {
   appendMetric({
     event: "accepted",
