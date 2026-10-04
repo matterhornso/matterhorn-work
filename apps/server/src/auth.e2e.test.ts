@@ -1240,6 +1240,13 @@ describe("public account authentication", () => {
         });
         expect(deleted.response.status).toBe(200);
         expect(existsSync(accounts[0].workspacePath)).toBe(false);
+        const guardedDb = new Database(join(app.root, "data", "guarded-runtime", "state.db"), { readonly: true });
+        try {
+          const marker = guardedDb.query("SELECT state_key FROM guarded_state WHERE kind = 'workspace_deletion_barrier'").all();
+          expect(marker).toEqual([{ state_key: accounts[0].workspaceId }]);
+        } finally {
+          guardedDb.close();
+        }
       } else if (change === "logout") {
         expect((await jsonRequest(app.base, "/api/auth/sign-out", {
           method: "POST", cookie: accounts[0].cookie,

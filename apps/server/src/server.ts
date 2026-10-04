@@ -5506,7 +5506,9 @@ async function processMatterhornAccountDeletionJob(input: {
     // Sessions are already revoked by beginAccountDeletion. Settle approval
     // waiters before removing files, including when retrying an interrupted job.
     for (const organizationId of job.deletedOrganizationIds) {
-      input.approvals.cancelWorkspace(matterhornOrganizationWorkspaceId(organizationId));
+      const workspaceId = matterhornOrganizationWorkspaceId(organizationId);
+      input.guardedRuntime?.beginWorkspaceDeletion(workspaceId);
+      input.approvals.cancelWorkspace(workspaceId);
     }
     if (!job.steps.memory) {
       const memoryVault = createMatterhornMemoryVault(resolveMatterhornMemoryRoot());

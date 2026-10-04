@@ -127,7 +127,38 @@ pnpm test:matterhorn-platform-safety
 
 Final logs: `/tmp/matterhorn-approval-revocation-matrix-2026-10-04.log`, `/tmp/matterhorn-approval-revocation-regressions-final-2026-10-04.log`, `/tmp/matterhorn-approval-revocation-typecheck-final-2026-10-04.log` and `/tmp/matterhorn-approval-safety-gate-2026-10-04.log`. The first typecheck caught an implicit array type in the new fixture; it was explicitly typed, and the final check passed.
 
-These fixes do not establish a global deletion lock. Writes already past approval, provider responses, evidence sealing, external runtime operations and multiple server processes still require review. Source inspection identified `sealFinalizedCoworkerRunEvidence` waiting for key creation before persisting a record, while workspace deletion enumerates existing records. A delayed-finalization test is the next step; this source observation alone is not a confirmed vulnerability. Existing guarded-runtime tests prove queued finalization entries are removed by a purge, not that an already-running finalizer cannot write afterward.
+These fixes do not establish a global deletion lock. The follow-up below reproduced and corrected the delayed evidence-sealing path identified during this review. Provider responses, other background mutations and external runtime operations still require separate acceptance.
+
+## Delayed encryption and file reads during deletion
+
+Two local regressions confirmed that operations waiting for a new data key could persist private records after workspace cleanup had finished: coworker evidence finalization and encrypted Agent File creation. Both original tests failed because the deleted workspace's list contained the newly persisted record. The fixtures use disposable SQLite stores and synthetic key managers; no hosted account, real key service or blockchain publication was involved.
+
+The deletion coordinator now installs a durable workspace-deletion marker before asynchronous content cleanup. Evidence and Agent File creation check it before requesting a key and again in a synchronous SQLite transaction before persistence. Rejected creations clean up their scoped key reference and zero the plaintext key. The marker remains across normal workspace purge, expiry cleanup, another database connection and reopening the database. Its presence grants denial only: modifying its payload or expiry cannot grant access. Tests also verify that an unrelated workspace can still create data and that the normal account-deletion endpoint writes only the deleted account's marker.
+
+A second matrix reproduced stale decrypted reads. Both Agent File model-context projection and recovery download returned their captured content after file deletion or workspace deletion completed while the key service was delayed. The corrected paths recheck the current record, revision, erasure state and workspace marker before requesting a key and after the wait. The final check and decryption run synchronously in one SQLite transaction. Returned key buffers are cleared on rejection and success. Unchanged-record controls still return the expected content. This protects these store methods; it does not recall bytes already returned to a caller or prove that every downstream runtime cancels work after account deletion.
+
+| Check | Result |
+| --- | --- |
+| Delayed evidence sealing and Agent File creation before correction | Two failing reproductions persisted records after cleanup |
+| Delayed context and recovery reads before correction | Four failing deletion cases returned content; two unchanged controls passed |
+| Final Agent File suite | 13 pass, zero fail, 78 assertions |
+| Auth, guarded runtime, evidence finalizer/store, file store/publisher/renewal and durable state suites | 138 pass, zero fail, 1,253 assertions across eight files |
+| Server typecheck | Pass |
+| Full local platform safety gate after the file-read correction | All 11 stages pass |
+| Diff whitespace check | Pass |
+
+```sh
+bun test apps/server/src/agent-file-store.test.ts
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/guarded-agent-runtime.test.ts apps/server/src/crypto-evidence-finalizer.test.ts apps/server/src/crypto-evidence-store.test.ts apps/server/src/agent-file-store.test.ts apps/server/src/guarded-runtime-state-store.test.ts apps/server/src/agent-file-walrus-publisher.test.ts apps/server/src/agent-file-walrus-renewal.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm test:matterhorn-platform-safety
+```
+
+Logs: `/tmp/matterhorn-finalizer-deletion-red-2026-10-04.log`, `/tmp/matterhorn-agent-file-deletion-red-2026-10-04.log`, `/tmp/matterhorn-file-read-deletion-red-2026-10-04.log`, `/tmp/matterhorn-file-read-deletion-green-2026-10-04.log`, `/tmp/matterhorn-deletion-followup-regressions-2026-10-04.log`, `/tmp/matterhorn-deletion-followup-typecheck-2026-10-04.log` and `/tmp/matterhorn-deletion-followup-safety-2026-10-04.log`.
+
+The deletion marker retains a workspace identifier indefinitely, not chat/file content or keys. It uses the existing generic state table; no new database table is required. It does not survive replacement of the database with a pre-deletion backup, deliberate deletion of the marker, or bypassing these guarded paths. Operators must preserve deletion/erasure evidence during restore. KMS envelope-key destruction is not proof of deleting an individual KMS resource or every backup copy; hosted key-service and restore evidence remain required.
+
+Next review targets are evidence decryption and key rotation across key-service waits, publication/renewal completions, and downstream use of already-returned context. Source inspection shows these are separate paths; the passing file matrix is not their acceptance evidence. The changes are local, with no push, merge, deployment, production configuration change or user-preview restart.
 
 ## Polymarket policy review deadline
 
@@ -144,6 +175,6 @@ Release action: review the current official venue restrictions and the applicabl
 - Fresh hosted responses on all five desks, optional Jev acceptance, accounting settlement, two-account isolation, real email/reset delivery, logout cleanup and production backup/restore evidence remain outstanding as recorded in the [previous launch report](../2026-10-03/RESULTS.md). No fresh hosted state is asserted in this pass.
 - The limited responsive and keyboard evidence above does not establish platform-wide accessibility, cross-browser or theme acceptance.
 - The Polymarket policy review and expiry-state UI/hosted checks above are open release actions; passing historical policy tests does not establish current eligibility.
-- All 11 local safety stages pass on the approval correction. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-approval-safety-gate-2026-10-04.log`.
+- All 11 local safety stages pass after the delayed encryption/file-read corrections. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-deletion-followup-safety-2026-10-04.log`.
 
 These corrections and regression results do not establish launch readiness. Continue with writes already past request-body validation, auth mutation lifecycle and the remaining acceptance work above.

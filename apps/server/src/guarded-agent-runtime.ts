@@ -2174,6 +2174,10 @@ export class MatterhornGuardedAgentRuntime {
     return [...this.observations.values()].map((observation) => ({ ...observation }));
   }
 
+  beginWorkspaceDeletion(workspaceId: string): void {
+    this.stateStore.markWorkspaceDeleted(workspaceId);
+  }
+
   purgeWorkspace(workspaceId: string) {
     const privacy = this.privacy.purgeWorkspace(workspaceId);
     const capabilities = this.capabilities.purgeWorkspace(workspaceId);

@@ -1,10 +1,42 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 describe("durable guarded runtime state", () => {
+  test("workspace deletion barriers survive other connections, cleanup, mutation and restart", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-deletion-barrier-"));
+    const path = join(root, "state.db");
+    const first = new MatterhornGuardedRuntimeStateStore(path);
+    const second = new MatterhornGuardedRuntimeStateStore(path);
+    try {
+      expect(second.isWorkspaceDeleted("ws_deleted")).toBe(false);
+      first.markWorkspaceDeleted("ws_deleted");
+      expect(second.isWorkspaceDeleted("ws_deleted")).toBe(true);
+      expect(second.isWorkspaceDeleted("ws_other")).toBe(false);
+      first.markWorkspaceDeleted("ws_deleted");
+      first.purgeWorkspace("ws_deleted");
+      second.purgeWorkspace("ws_deleted", ["workspace_deletion_barrier"]);
+      expect(second.isWorkspaceDeleted("ws_deleted")).toBe(true);
+      // Denial depends on the canonical marker key, not editable metadata.
+      first.put({ kind: "workspace_deletion_barrier", key: "ws_deleted", workspaceId: "ws_other", value: { deleted: false }, expiresAtMs: 1 });
+      second.deleteExpired();
+      expect(second.isWorkspaceDeleted("ws_deleted")).toBe(true);
+      expect(second.isWorkspaceDeleted("ws_other")).toBe(false);
+    } finally {
+      first.close();
+      second.close();
+    }
+    const reopened = new MatterhornGuardedRuntimeStateStore(path);
+    try {
+      expect(reopened.isWorkspaceDeleted("ws_deleted")).toBe(true);
+    } finally {
+      reopened.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("commits or rolls back multi-record security mutations atomically", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-guarded-transaction-"));
     const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));

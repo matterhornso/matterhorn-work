@@ -807,6 +807,10 @@ export class MatterhornCryptoEvidenceStore {
     return events.map((event) => structuredClone(event));
   }
 
+  assertWorkspaceWritable(workspaceId: string): void {
+    if (this.stateStore.isWorkspaceDeleted(workspaceId)) throw new Error("crypto_evidence_workspace_deleted");
+  }
+
   create(input: {
     workspaceId: string;
     ownerId: string;
@@ -815,6 +819,18 @@ export class MatterhornCryptoEvidenceStore {
     sealed: MatterhornSealedEvidence;
     now?: Date;
   }): MatterhornCryptoEvidenceRecord {
+    return this.stateStore.transaction(() => this.createActiveRecord(input));
+  }
+
+  private createActiveRecord(input: {
+    workspaceId: string;
+    ownerId: string;
+    runId: string;
+    coworkerId: string;
+    sealed: MatterhornSealedEvidence;
+    now?: Date;
+  }): MatterhornCryptoEvidenceRecord {
+    this.assertWorkspaceWritable(input.workspaceId);
     for (const value of [input.workspaceId, input.ownerId, input.runId, input.coworkerId]) {
       if (!value.trim()) throw new Error("crypto_evidence_identity_invalid");
     }
@@ -1941,6 +1957,7 @@ export class MatterhornCryptoEvidenceStore {
     destroyed: number;
     failures: Array<{ evidenceId: string; error: string }>;
   }> {
+    this.stateStore.markWorkspaceDeleted(input.workspaceId);
     const records = this.storedRecords({
       workspaceId: input.workspaceId,
     });

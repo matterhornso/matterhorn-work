@@ -105,6 +105,109 @@ async function withStore(
 }
 
 describe("encrypted Agent Files store", () => {
+  for (const operation of ["context", "recover"]) {
+    for (const deletion of ["workspace", "file", "none"]) {
+      test(`${operation} rechecks ${deletion} deletion after waiting for decryption`, async () => {
+        await withStore(async ({ store, keys }) => {
+          const now = new Date("2026-09-02T00:00:00.000Z");
+          const identity = { workspaceId: "ws_read", ownerId: "owner_read" };
+          const created = await store.create({
+            ...identity, request: uploadRequest(), bytes: encoder.encode("Disposable read fixture"), now,
+          });
+          let release = () => {};
+          let notifyStarted = () => {};
+          const released = new Promise<void>(resolve => { release = resolve; });
+          const started = new Promise<void>(resolve => { notifyStarted = resolve; });
+          const decryptKey = keys.decryptDataKey.bind(keys);
+          let returnedKey: Buffer | undefined;
+          keys.decryptDataKey = async input => {
+            returnedKey = await decryptKey(input);
+            notifyStarted();
+            await released;
+            return returnedKey;
+          };
+          const read = async () => {
+            if (operation === "context") {
+              const result = await store.readContext({ ...identity, fileId: created.id, coworkerId: "risk_monitor", now });
+              return result.part.text;
+            }
+            const result = await store.recover({ ...identity, fileId: created.id, expectedRevision: 1, now });
+            try { return result.bytes.toString("utf8"); } finally { result.bytes.fill(0); }
+          };
+          const pending = read().then(value => ({ value, error: "" }), error => ({
+            value: "", error: error instanceof Error ? error.message : "unknown_error",
+          }));
+          try {
+            await started;
+            if (deletion === "workspace") {
+              expect(await store.destroyWorkspace(identity)).toEqual({ checked: 1, destroyed: 1, failures: [] });
+            } else if (deletion === "file") {
+              await store.delete({ ...identity, fileId: created.id, expectedRevision: 1, now });
+            }
+            release();
+            const outcome = await pending;
+            if (deletion === "none") {
+              expect(outcome.error).toBe("");
+              expect(outcome.value).toContain("Disposable read fixture");
+            } else {
+              expect(outcome.value).toBe("");
+              expect(outcome.error).toBe(deletion === "workspace" ? "agent_file_workspace_deleted" : "agent_file_not_found");
+            }
+            expect(returnedKey?.every(byte => byte === 0)).toBe(true);
+          } finally {
+            release();
+            await pending;
+          }
+        });
+      });
+    }
+  }
+
+  test("rejects a file whose data key arrives after workspace deletion", async () => {
+    await withStore(async ({ store, keys }) => {
+      let release = () => {};
+      let notifyStarted = () => {};
+      const released = new Promise<void>(resolve => { release = resolve; });
+      const started = new Promise<void>(resolve => { notifyStarted = resolve; });
+      const createKey = keys.createDataKey.bind(keys);
+      keys.createDataKey = async input => {
+        notifyStarted();
+        await released;
+        return createKey(input);
+      };
+      const now = new Date("2026-09-02T00:00:00.000Z");
+      const pending = store.create({
+        workspaceId: "ws_deleted", ownerId: "owner_deleted",
+        request: uploadRequest(), bytes: encoder.encode("Disposable delayed file"), now,
+      }).then(() => "persisted", error => error instanceof Error ? error.message : "unknown_error");
+      try {
+        await started;
+        expect(await store.destroyWorkspace({ workspaceId: "ws_deleted" }))
+          .toEqual({ checked: 0, destroyed: 0, failures: [] });
+        release();
+        const outcome = await pending;
+        expect(store.list({ workspaceId: "ws_deleted", ownerId: "owner_deleted", now })).toEqual([]);
+        expect(outcome).toBe("agent_file_workspace_deleted");
+        expect(keys.keys.size).toBe(0);
+        expect(keys.destroyed).toHaveLength(1);
+        await expect(store.create({
+          workspaceId: "ws_deleted", ownerId: "owner_deleted",
+          request: uploadRequest(), bytes: encoder.encode("Rejected retry"), now,
+        })).rejects.toThrow("agent_file_workspace_deleted");
+        expect(keys.destroyed).toHaveLength(1);
+        expect(keys.keys.size).toBe(0);
+        const retained = await store.create({
+          workspaceId: "ws_retained", ownerId: "owner_retained",
+          request: uploadRequest(), bytes: encoder.encode("Retained fixture"), now,
+        });
+        expect(store.list({ workspaceId: "ws_retained", ownerId: "owner_retained", now })).toEqual([retained]);
+      } finally {
+        release();
+        await pending;
+      }
+    });
+  });
+
   test("encrypts bytes, lists metadata only, and compiles context for the exact coworker", async () => {
     await withStore(async ({ store, state }) => {
       const secretText = "Target allocation: 20% TAO. Review each Friday.";

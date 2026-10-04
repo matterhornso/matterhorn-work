@@ -468,6 +468,19 @@ export class MatterhornAgentFileStore {
     }
   }
 
+  private assertReadableRecordActive(record: MatterhornAgentFileRecord): void {
+    if (this.stateStore.isWorkspaceDeleted(record.workspaceId)) {
+      throw new MatterhornAgentFileStoreError("agent_file_workspace_deleted");
+    }
+    const current = this.storedRecord(record.id);
+    if (!current) throw new MatterhornAgentFileStoreError("agent_file_not_found");
+    assertTenant(current, record);
+    this.assertRecoveryMaterialActive(current);
+    if (current.revision !== record.revision) {
+      throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
+    }
+  }
+
   async create(input: {
     workspaceId: string;
     ownerId: string;
@@ -477,6 +490,9 @@ export class MatterhornAgentFileStore {
   }): Promise<MatterhornStoredAgentFile> {
     if (!input.workspaceId.trim() || !input.ownerId.trim()) {
       throw new MatterhornAgentFileStoreError("agent_file_identity_invalid");
+    }
+    if (this.stateStore.isWorkspaceDeleted(input.workspaceId)) {
+      throw new MatterhornAgentFileStoreError("agent_file_workspace_deleted");
     }
     const scan = scanMatterhornAgentFile({ request: input.request, bytes: input.bytes, now: input.now });
     if (!scan.descriptor) throw new MatterhornAgentFileStoreError("agent_file_blocked", scan.issues);
@@ -518,8 +534,19 @@ export class MatterhornAgentFileStore {
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       };
-      this.persistRecord(record, now.getTime());
-      return accountView(record);
+      return this.stateStore.transaction(() => {
+        if (this.stateStore.isWorkspaceDeleted(input.workspaceId)) {
+          throw new MatterhornAgentFileStoreError("agent_file_workspace_deleted");
+        }
+        this.persistRecord(record, now.getTime());
+        return accountView(record);
+      });
+    } catch (error) {
+      if (error instanceof MatterhornAgentFileStoreError && error.code === "agent_file_workspace_deleted") {
+        lease.plaintextKey.fill(0);
+        await this.keyManager.destroyKey({ workspaceId: input.workspaceId, keyReference: lease.keyReference });
+      }
+      throw error;
     } finally {
       lease.plaintextKey.fill(0);
     }
@@ -560,7 +587,7 @@ export class MatterhornAgentFileStore {
     const record = this.storedRecord(input.fileId);
     if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
     assertTenant(record, input);
-    this.assertRecoveryMaterialActive(record);
+    this.assertReadableRecordActive(record);
     const key = await this.keyManager.decryptDataKey({
       workspaceId: record.workspaceId,
       runId: record.id,
@@ -569,20 +596,23 @@ export class MatterhornAgentFileStore {
       keyContext: record.key.keyContext,
     });
     try {
-      const bytes = decryptFile(record, key);
-      try {
-        return compileMatterhornAgentFileContext({
-          descriptor: record.file,
-          bytes,
-          coworkerId: input.coworkerId,
-          now: input.now,
-        });
-      } catch (error) {
-        const code = error instanceof Error ? error.message : "agent_file_context_failed";
-        throw new MatterhornAgentFileStoreError(code);
-      } finally {
-        bytes.fill(0);
-      }
+      return this.stateStore.transaction(() => {
+        this.assertReadableRecordActive(record);
+        const bytes = decryptFile(record, key);
+        try {
+          return compileMatterhornAgentFileContext({
+            descriptor: record.file,
+            bytes,
+            coworkerId: input.coworkerId,
+            now: input.now,
+          });
+        } catch (error) {
+          const code = error instanceof Error ? error.message : "agent_file_context_failed";
+          throw new MatterhornAgentFileStoreError(code);
+        } finally {
+          bytes.fill(0);
+        }
+      });
     } finally {
       key.fill(0);
     }
@@ -605,7 +635,7 @@ export class MatterhornAgentFileStore {
     const record = this.storedRecord(input.fileId);
     if (!record) throw new MatterhornAgentFileStoreError("agent_file_not_found");
     assertTenant(record, input);
-    this.assertRecoveryMaterialActive(record);
+    this.assertReadableRecordActive(record);
     if (record.revision !== input.expectedRevision) {
       throw new MatterhornAgentFileStoreError("agent_file_revision_conflict");
     }
@@ -623,13 +653,16 @@ export class MatterhornAgentFileStore {
       keyContext: record.key.keyContext,
     });
     try {
-      const bytes = decryptFile(record, key);
-      if (bytes.byteLength !== record.file.sizeBytes
-        || digest(bytes) !== record.file.contentSha256) {
-        bytes.fill(0);
-        throw new MatterhornAgentFileStoreError("agent_file_content_mismatch");
-      }
-      return { item: accountView(record), bytes };
+      return this.stateStore.transaction(() => {
+        this.assertReadableRecordActive(record);
+        const bytes = decryptFile(record, key);
+        if (bytes.byteLength !== record.file.sizeBytes
+          || digest(bytes) !== record.file.contentSha256) {
+          bytes.fill(0);
+          throw new MatterhornAgentFileStoreError("agent_file_content_mismatch");
+        }
+        return { item: accountView(record), bytes };
+      });
     } finally {
       key.fill(0);
     }
@@ -919,6 +952,7 @@ export class MatterhornAgentFileStore {
   }
 
   async destroyWorkspace(input: { workspaceId: string }): Promise<{ checked: number; destroyed: number; failures: string[] }> {
+    this.stateStore.markWorkspaceDeleted(input.workspaceId);
     const records = this.storedRecords({ workspaceId: input.workspaceId });
     let destroyed = 0;
     const failures: string[] = [];

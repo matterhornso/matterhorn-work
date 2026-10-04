@@ -48,6 +48,7 @@ export async function sealFinalizedCoworkerRunEvidence(input: {
     coworkerId: coworker.id,
     runId: receipt.runId,
   };
+  input.store.assertWorkspaceWritable(receipt.workspaceId);
   const existing = input.store.findByRun(identity);
   if (existing) return { record: existing, created: false };
 
@@ -66,6 +67,9 @@ export async function sealFinalizedCoworkerRunEvidence(input: {
         created: true,
       };
     } catch (error) {
+      if (error instanceof Error && error.message === "crypto_evidence_workspace_deleted") {
+        await input.keyManager.destroyKey({ workspaceId: receipt.workspaceId, keyReference: sealed.localIndex.keyReference });
+      }
       if (!(error instanceof Error) || error.message !== "crypto_evidence_already_exists") throw error;
       const raced = input.store.findByRun(identity);
       if (!raced) throw error;
