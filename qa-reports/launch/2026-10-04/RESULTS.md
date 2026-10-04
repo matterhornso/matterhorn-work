@@ -371,7 +371,50 @@ pnpm --filter matterhorn-work-server typecheck
 
 Logs: `/tmp/matterhorn-confirmation-retry-baseline-2026-10-04.log`, `/tmp/matterhorn-confirmation-retry-http-2026-10-04.log` and `/tmp/matterhorn-confirmation-retry-typecheck-2026-10-04.log`. No production code changed in this test-only follow-up. The immediately preceding cleanup fix and its full safety pass are recorded above; its commit is `0aec4aa1d0932b0bcd3d52a70520b47cd84beb8f`.
 
-Still required: wire this contract into all four UI callbacks; retain only necessary confirmation metadata scoped to the authenticated account, backend, workspace, resource and wallet/network; prevent repeated clicks from resubmitting; reconcile after reload/navigation; clear account data on logout; provide truthful unresolved/expired recovery guidance. Test changed wallets, account/backend changes, expiry before confirmation, cancellation, unavailable reads, concurrent confirmations and transaction success with lost responses. A temporary failure before expiry is not proof that an expired intent can be recovered. These tests perform no wallet signing, real chain calls, hosted traffic or browser execution.
+The API-only pass left UI wiring and recovery acceptance open. The following section records the subsequent implementation and its narrower verified coverage. A temporary failure before expiry is not proof that an expired intent can be recovered. These HTTP tests perform no wallet signing, real chain calls or hosted traffic.
+
+## Pending wallet confirmation recovery
+
+All four UI callbacks now share a recovery controller: evidence renewal, file renewal, evidence deletion and Sui anchoring. It validates and saves minimal transaction metadata before opening the existing wallet flow. Pending entries are partitioned by backend, credential, authenticated cache owner, workspace and resource. Only an opaque scope hash is persisted, not the bearer token. The entry contains the action, resource/revision, signer/network, intent identity, digest and expiry; it contains no transaction bytes, file contents or key material. This browser metadata is not encrypted. Logout/account-boundary cleanup removes it, and generation checks prevent delayed operations from recreating it after cleanup.
+
+The notice offers **Check confirmation**, which never opens another wallet request. It first reads the server record, retries only the saved confirmation while valid, then verifies an exact committed digest and newer revision before clearing the pending entry. Deletion additionally requires the key-destroyed state. Web Locks prevent concurrent operations for the same resource across tabs; absent browser support fails closed. Expired, uncertain, malformed or unwritable recovery state gives guidance instead of automatically preparing another transaction. The existing consent and wallet-signing controls remain in place.
+
+This review reproduced and fixed three additional recovery defects:
+
+- Removing pending metadata could make a retry resolve without proof of completion. Missing metadata now requires a matching server record or returns an unresolved error.
+- A stale retry could attempt to confirm a replacement intent saved by another tab. It now rejects a changed action, intent ID/hash or digest before confirmation.
+- The evidence list defaults to 50 records, so older pending records could not reconcile. The authenticated list now accepts a bounded optional `evidenceId` filter, applied after owner scoping and before the list limit. Recovery requests one exact record. A 51-record HTTP fixture proves lookup beyond the first page, same-workspace foreign-owner and unknown IDs return no items, and invalid filter lengths return 400. The new frontend and backend should ship together; an old backend ignores this filter and cannot guarantee recovery for older records.
+
+Final local checks:
+
+| Check | Result |
+| --- | --- |
+| Frontend regression suite | 1,381 pass, zero fail, 8,291 assertions across 189 files |
+| Coworker HTTP regression suite | 26 pass, zero fail, 573 assertions |
+| App and server typechecks | Pass |
+| Web production build | Pass; existing large-chunk advisory remains |
+| Platform safety gate | Pass, all 11 configured stages |
+| Diff whitespace | Pass |
+
+The recovery tests cover four-action retry/reload and uncertain acknowledgments, wrong digests, expiry, uncertain wallet errors, account changes during submission, storage failure, malformed/transplanted metadata, overlapping clicks, missing metadata and stale replacement intents. They use synthetic fetch responses with the actual API client and an injected lock; they do not prove real wallet behavior or browser locking under contention. HTTP fixtures use disposable normal-signup accounts and synthetic keys/transports.
+
+```sh
+pnpm --filter @matterhorn-work/app test
+bun test apps/server/src/crypto-coworker-routes.e2e.test.ts --timeout 15000
+pnpm test:matterhorn-platform-safety
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter @matterhorn-work/app build
+git diff --check
+```
+
+Final logs are `/tmp/matterhorn-wallet-pending-app-tests-final-reviewed-2026-10-04.log`, `/tmp/matterhorn-wallet-pending-http-verified-2026-10-04.log`, `/tmp/matterhorn-wallet-pending-safety-permitted-2026-10-04.log`, `/tmp/matterhorn-wallet-pending-app-typecheck-final-2026-10-04.log`, `/tmp/matterhorn-wallet-pending-server-typecheck-final-2026-10-04.log` and `/tmp/matterhorn-wallet-pending-build-final-2026-10-04.log`. Failing reproductions use `/tmp/matterhorn-wallet-missing-metadata-red-2026-10-04.log`, `/tmp/matterhorn-wallet-stale-retry-red-2026-10-04.log` and `/tmp/matterhorn-wallet-exact-record-red-2026-10-04.log`.
+
+An initial sandboxed frontend run failed three loopback listener tests, and an initial safety run failed local listener setup. Permitted reruns passed without weakening tests. Running bare app TypeScript checking while another command rebuilt the shared SDK also produced missing-declaration errors; the successful final run used the normal pretypecheck and sequential safety/typecheck/build steps.
+
+The disposable `bun apps/app/scripts/wallet-confirmation-fixture.ts` browser harness renders the actual recovery hook, notice and shared controls against synthetic loopback responses, with no wallet/provider connection. A bounded capture round covered light desktop and dark mobile; the final confirmation round used the rebuilt harness in dark desktop (1280×720) and mobile (390×844). Pending metadata survived reload, the mount's synthetic submission count stayed at zero during confirmation-only retry, and restoring the fixture verifier removed the pending notice with “Matching transaction recorded.” The mobile DOM reported width and scroll width of 390. Keyboard Tab from the transaction disclosure reached Check confirmation with a visible 3px focus outline. Native screenshots were inspected in the tool output but are not saved as repository artifacts. The fixture server/tab were closed and viewport reset; user previews/chats were untouched. The final subsequent stale-intent controller guard is covered by automated tests, not a new browser capture.
+
+Impeccable guided truthful recovery/error handling and bounded visual verification; Uncodixfy kept the incumbent layout. This is not full wallet acceptance: actual wallet rejection versus submission, safe release of a genuinely unsigned/expired request, recovery after logout or loss of browser metadata, changed-wallet browser interactions, multi-tab contention, unavailable reads, 200% zoom, screen-reader announcements and cross-browser behavior remain unverified or incomplete. An uncertain wallet exception intentionally retains the entry and may require support; there is no dismiss-and-resubmit bypass. Do not claim server-resumable recovery, real-chain acceptance or launch readiness from this pass. Hosted desk/auth/accounting/email/restore gates remain unchanged.
 
 ## Polymarket policy review deadline
 

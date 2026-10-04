@@ -2319,6 +2319,48 @@ describe("crypto coworker HTTP boundary", () => {
     }
   }
 
+  test("reads an exact owned evidence record beyond the default list window", async () => {
+    const server = await boot("internal", { agentFiles: true });
+    const signup = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "evidence-query-owner@example.com", password: PASSWORD },
+    });
+    const sessionCookie = cookie(signup.response);
+    const workspaceId = String((await request(server.base, "/workspaces", { cookie: sessionCookie })).payload.items[0].id);
+    const coworker = await request(server.base, `/workspace/${workspaceId}/coworkers`, {
+      cookie: sessionCookie, body: privateCoworkerInput(),
+    });
+    if (!server.keyManager) throw new Error("route_test_key_manager_missing");
+    const records: string[] = [];
+    for (let index = 0; index < 51; index++) {
+      records.push((await seedCryptoEvidence({
+        guardedDb: server.guardedDb, keyManager: server.keyManager, workspaceId,
+        ownerId: String(signup.payload.user.id), coworkerId: String(coworker.payload.coworker.id),
+        runId: `run_exact_evidence_${index}`,
+      })).id);
+    }
+    const path = `/workspace/${workspaceId}/crypto-evidence`;
+    const firstPage = await request(server.base, path, { cookie: sessionCookie });
+    expect(firstPage.payload.items).toHaveLength(50);
+    const target = records.find((id) => !firstPage.payload.items.some((item: { evidenceId: string }) => item.evidenceId === id));
+    if (!target) throw new Error("fixture_record_not_outside_window");
+    const exact = await request(server.base, `${path}?limit=1&evidenceId=${encodeURIComponent(target)}`, { cookie: sessionCookie });
+    expect(exact.response.status).toBe(200);
+    expect(exact.payload.items).toHaveLength(1);
+    expect(exact.payload.items[0].evidenceId).toBe(target);
+    const foreign = await seedCryptoEvidence({
+      guardedDb: server.guardedDb, keyManager: server.keyManager, workspaceId,
+      ownerId: "synthetic-other-owner", coworkerId: String(coworker.payload.coworker.id), runId: "run_exact_foreign",
+    });
+    for (const id of [foreign.id, "missing-record"]) {
+      const hidden = await request(server.base, `${path}?evidenceId=${encodeURIComponent(id)}`, { cookie: sessionCookie });
+      expect(hidden.response.status).toBe(200);
+      expect(hidden.payload.items).toEqual([]);
+    }
+    for (const id of ["", "x".repeat(257)]) {
+      expect((await request(server.base, `${path}?evidenceId=${id}`, { cookie: sessionCookie })).response.status).toBe(400);
+    }
+  });
+
   for (const scenario of [
     { kind: "crypto-evidence", action: "renew" },
     { kind: "agent-files", action: "renew" },

@@ -11912,6 +11912,10 @@ function createRoutes(
 
   addRoute(routes, "GET", "/workspace/:id/crypto-evidence", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
+    const evidenceId = ctx.url.searchParams.get("evidenceId");
+    if (evidenceId !== null && (evidenceId.length < 1 || evidenceId.length > 256)) {
+      throw new ApiError(400, "crypto_evidence_query_invalid", "Record identifier must be between 1 and 256 characters.");
+    }
     const rawLimit = ctx.url.searchParams.get("limit");
     const limit = rawLimit === null ? 50 : Number(rawLimit);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
@@ -11921,7 +11925,7 @@ function createRoutes(
       ? cryptoEvidenceRuntime.verification.list({
           workspaceId: workspace.id,
           ownerId: cryptoAppCreatedBy(ctx),
-        }).slice(0, limit)
+        }).filter((item) => evidenceId === null || item.evidenceId === evidenceId).slice(0, limit)
       : [];
     return noStoreJsonResponse({
       mode: cryptoEvidenceRuntime.mode,

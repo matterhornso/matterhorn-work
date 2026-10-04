@@ -9,6 +9,9 @@ describe("storage wallet recovery copy", () => {
       "crypto_evidence_workspace_deleted", "crypto_evidence_wallet_review_unavailable",
       "crypto_evidence_walrus_renewal_expired_or_replayed", "crypto_evidence_walrus_renewal_unavailable",
       "crypto_evidence_walrus_renewal_intent_mismatch",
+      "crypto_evidence_walrus_deletion_expired_or_replayed", "crypto_evidence_walrus_deletion_unavailable",
+      "crypto_evidence_walrus_deletion_intent_mismatch", "crypto_evidence_sui_anchor_expired_or_replayed",
+      "crypto_evidence_sui_anchor_intent_mismatch",
     ]],
     [agentFileErrorMessage, [
       "agent_file_workspace_deleted", "agent_file_wallet_review_unavailable",

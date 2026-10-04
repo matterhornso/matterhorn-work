@@ -63,7 +63,7 @@ describe("coworker files UI", () => {
     expect(panel).toContain("Only your connected wallet can approve, sign, and send it.");
     expect(panel).toContain("Review renewal in wallet");
     expect(panel).toContain("The encrypted backup matches the file in your workspace.");
-    expect(panel).toContain("Sui confirmed the renewed encrypted backup.");
+    expect(panel).toContain("The matching transaction is recorded.");
     expect(panel).toContain("This backup has expired.");
     expect(panel).toContain("This file is being updated. Try again shortly.");
     expect(panel).toContain("This backup request expired or changed. Start it again.");
@@ -77,7 +77,9 @@ describe("coworker files UI", () => {
     expect(serverClient).toContain("confirmAgentFileRenewal:");
     expect(serverClient).toContain("recoverAgentFile:");
     expect(panel).toContain("Transaction.from(prepared.preview.transactionBytesBase64)");
-    expect(panel).toContain("localDigest !== prepared.preview.transactionDigest");
+    expect(panel).toContain("await transaction.getDigest() !== prepared.preview.transactionDigest");
+    expect(panel).toContain('recovery.execute("file-renewal"');
+    expect(panel).toContain("WalletConfirmationNotice");
     expect(panel).toContain('network: "testnet"');
     expect(panel).not.toContain('type="password"');
     expect(panel).not.toContain("privateKey");

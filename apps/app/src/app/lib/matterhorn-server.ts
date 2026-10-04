@@ -2530,9 +2530,9 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       `/workspace/${encodeURIComponent(workspaceId)}/agent-run-receipts/${encodeURIComponent(runId)}`,
       { token, hostToken, timeoutMs: timeouts.sessionRead },
     ),
-    listCryptoEvidence: (workspaceId: string, limit = 50) => requestJson<MatterhornEvidenceVerificationListResponse>(
+    listCryptoEvidence: (workspaceId: string, limit = 50, evidenceId?: string) => requestJson<MatterhornEvidenceVerificationListResponse>(
       baseUrl,
-      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence?limit=${encodeURIComponent(String(limit))}`,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence?limit=${encodeURIComponent(String(limit))}${evidenceId === undefined ? "" : `&evidenceId=${encodeURIComponent(evidenceId)}`}`,
       { token, hostToken, timeoutMs: timeouts.sessionRead },
     ),
     publishCryptoEvidence: (

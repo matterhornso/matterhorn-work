@@ -20,6 +20,7 @@ const accountPrefixes = [
   "matterhorn.pending-desk-task.v1:", "matterhorn.pending-message.",
   "openwork.den.desktopConfig:", "matterhorn.jev.",
   "openwork.sessionModels.", "openwork.modelVariant.",
+  "matterhorn.wallet-confirmation.v1:",
 ];
 
 export class AccountStateChangedError extends Error {
@@ -108,6 +109,7 @@ export function createAccountClientState(local: StorageSource, session: StorageS
   }
 
   return {
+    owner: () => owner,
     generation: () => generation,
     isResetting: () => resetting,
     register(name: string, resetter: () => void, phase: ResetPhase = "clear") {
