@@ -2977,12 +2977,13 @@ async function proxyOpencodeRequest(input: {
       `${headerExecutionMode === "plan" ? "Plan" : "Discuss"} mode does not allow commands or session changes. Switch to Work mode first.`,
     );
   }
-  // Buffer the request body so it can be forwarded reliably across Node.js
+  // Bound and buffer the request body so it can be forwarded reliably across Node.js
   // stream boundaries (Readable.toWeb streams from the HTTP adapter aren't
   // always accepted directly by Node's global fetch as a body).
   const rawBody = method === "GET" || method === "HEAD"
     ? undefined
-    : await input.request.arrayBuffer().then((buf) => (buf.byteLength > 0 ? buf : undefined));
+    : await readBodyBytesLimited(input.request, AGENT_MESSAGE_JSON_BODY_MAX_BYTES, "Agent runtime")
+      .then((buf) => (buf.byteLength > 0 ? buf : undefined));
   assertRequestAccessCurrent(input.request);
   const stopSessionMatch = method === "POST"
     ? normalizeOpencodeProxyPath(proxyPath).match(/^\/session\/([^/]+)\/abort$/)
@@ -15531,7 +15532,7 @@ function createRoutes(
     if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
     const body = await readJsonBody(
       ctx.request,
-      AGENT_MESSAGE_MAX_ATTACHMENT_BYTES * 2 + 65_536,
+      AGENT_MESSAGE_JSON_BODY_MAX_BYTES,
       "Agent privacy preflight",
     );
     const headerExecutionMode = requestExecutionMode(ctx.request);
@@ -15890,7 +15891,7 @@ function createRoutes(
     }
     const body = await readJsonBody(
       ctx.request,
-      AGENT_MESSAGE_MAX_ATTACHMENT_BYTES * 2 + 65_536,
+      AGENT_MESSAGE_JSON_BODY_MAX_BYTES,
       "Agent message",
     );
     const rawParts = parseSessionPromptParts(body);
@@ -22121,6 +22122,7 @@ function promptPrivateContextIds(body: Record<string, unknown>, ...keys: string[
 
 const AGENT_MESSAGE_MAX_PARTS = 64;
 const AGENT_MESSAGE_MAX_ATTACHMENT_BYTES = FILE_SESSION_MAX_FILE_BYTES;
+const AGENT_MESSAGE_JSON_BODY_MAX_BYTES = AGENT_MESSAGE_MAX_ATTACHMENT_BYTES * 2 + 65_536;
 const AGENT_MESSAGE_MAX_SYSTEM_CHARS = 32_000;
 const AGENT_MESSAGE_MAX_MEMORY_IDS = 32;
 const AGENT_MESSAGE_MAX_AGENT_FILE_IDS = 8;
@@ -23343,18 +23345,18 @@ const CONTROL_PLANE_JSON_BODY_MAX_BYTES = 65_536;
 const FEEDBACK_JSON_BODY_MAX_BYTES = 131_072;
 const CHAT_RESPONSE_JSON_BODY_MAX_BYTES = FILE_SESSION_MAX_FILE_BYTES + 65_536;
 
-async function readBodyTextLimited(
+async function readBodyBytesLimited(
   request: Request,
   maxBytes: number,
   label = "Request",
-): Promise<string> {
+): Promise<ArrayBuffer> {
   const contentLength = Number(request.headers.get("content-length") ?? "");
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
     throw new ApiError(413, "payload_too_large", `${label} payload is too large`);
   }
 
   assertRequestAccessCurrent(request);
-  if (!request.body) return "";
+  if (!request.body) return new ArrayBuffer(0);
 
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -23382,7 +23384,15 @@ async function readBodyTextLimited(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder().decode(bytes);
+  return bytes.buffer;
+}
+
+async function readBodyTextLimited(
+  request: Request,
+  maxBytes: number,
+  label = "Request",
+): Promise<string> {
+  return new TextDecoder().decode(await readBodyBytesLimited(request, maxBytes, label));
 }
 
 async function readJsonBody(

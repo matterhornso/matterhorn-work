@@ -5,12 +5,13 @@ import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpServer, request as httpRequest } from "node:http";
+import { connect } from "node:net";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
 import { configureVenicePrivateModelRegistry } from "./venice-provider.js";
-import { resolveMatterhornManagedAgentPrompt } from "./workspace-init.js";
+import { ensureWorkspaceFiles, resolveMatterhornManagedAgentPrompt } from "./workspace-init.js";
 import type { JevTransport } from "./jev.js";
 import { JEV_CONSENT_VERSION, JEV_MODEL } from "@matterhorn-work/types/jev";
 import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
@@ -608,6 +609,150 @@ async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Pro
   return { base, workspaceId, cookie, accessToken: credential.accessToken, revoke,
     streamAborts: mock.streamAborts, runtimeRequests: mock.requests };
 }
+
+describe("runtime upload bounds", () => {
+  // Match the message gateway's existing aggregate JSON allowance, including
+  // room for base64 attachments. This is a byte limit, not a character count.
+  const limit = 5_000_000 * 2 + 65_536;
+  const mounts = ["/opencode", "/w/ws_1/opencode", "/workspace/ws_1/opencode"];
+  async function fixture() {
+    const received: Array<{ bytes: number; digest: string }> = [];
+    const runtime = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+      const bytes = new Uint8Array(await request.arrayBuffer());
+      received.push({ bytes: bytes.byteLength, digest: createHash("sha256").update(bytes).digest("hex") });
+      return Response.json(true);
+    } });
+    stops.push(() => runtime.stop(true));
+    const workspaceRoot = await createWorkspaceRoot();
+    await ensureWorkspaceFiles(workspaceRoot, "starter");
+    process.env.MATTERHORN_WORK_DATA_DIR = join(workspaceRoot, "data");
+    process.env.MATTERHORN_AUTH_DB = join(workspaceRoot, "auth.db");
+    process.env.MATTERHORN_WORK_MEMORY_ROOT = join(workspaceRoot, "memory");
+    const app = await startOpenworkServer({ workspaceRoot, readOnly: false, opencodeBaseUrl: runtime.url.origin });
+    return { base: `http://127.0.0.1:${app.server.port}`, token: app.token, received };
+  }
+  function upload(url: string, token: string, bytes: Uint8Array, chunked: boolean) {
+    return new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const request = httpRequest(url, { method: "POST", headers: {
+        Authorization: `Bearer ${token}`, "content-type": "application/json",
+        ...(chunked ? { "transfer-encoding": "chunked" } : { "content-length": bytes.byteLength }),
+      } }, response => {
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", chunk => { body += chunk; });
+        response.on("end", () => {
+          resolve({ status: response.statusCode ?? 0, body });
+          request.destroy();
+        });
+        response.on("error", reject);
+      });
+      request.on("error", reject);
+      request.setTimeout(10_000, () => request.destroy(new Error("Disposable upload timed out")));
+      // Flush before writing so even empty/small uploads use the requested framing.
+      request.flushHeaders();
+      for (let offset = 0; offset < bytes.byteLength; offset += 65_536) request.write(bytes.subarray(offset, offset + 65_536));
+      request.end();
+    });
+  }
+  function incompleteUpload(url: string, token: string, chunked: boolean) {
+    const target = new URL(url);
+    return new Promise<string>((resolve, reject) => {
+      let response = "";
+      const socket = connect({ host: target.hostname, port: Number(target.port) }, () => {
+        socket.write(`POST ${target.pathname} HTTP/1.1\r\nHost: ${target.host}\r\nAuthorization: Bearer ${token}\r\nContent-Type: application/json\r\nConnection: close\r\n${chunked ? "Transfer-Encoding: chunked" : `Content-Length: ${limit + 1}`}\r\n\r\n`);
+        if (chunked) {
+          socket.write(`${(limit + 1).toString(16)}\r\n`);
+          socket.write(new Uint8Array(limit + 1));
+          socket.write("\r\n"); // Deliberately omit the final zero-size chunk.
+        }
+      });
+      const timeout = setTimeout(() => socket.destroy(new Error("Incomplete upload was not rejected promptly")), 5000);
+      socket.setEncoding("utf8");
+      socket.on("data", chunk => {
+        response += chunk;
+        const end = response.indexOf("\r\n\r\n");
+        if (end < 0) return;
+        const headers = response.slice(0, end);
+        const body = response.slice(end + 4);
+        const length = headers.match(/\r\ncontent-length:\s*(\d+)/i)?.[1];
+        if ((length !== undefined && Buffer.byteLength(body) >= Number(length))
+          || (/\r\ntransfer-encoding:\s*chunked/i.test(headers) && body.endsWith("\r\n0\r\n\r\n"))) {
+          resolve(response);
+          socket.destroy();
+        }
+      });
+      socket.on("end", () => resolve(response));
+      socket.on("error", reject);
+      socket.on("close", () => clearTimeout(timeout));
+    });
+  }
+  for (const mount of mounts) {
+    for (const chunked of [false, true]) {
+      test(`rejects incomplete oversized upload ${mount}, chunked=${chunked}`, async () => {
+        const app = await fixture();
+        // Declared-length requests send headers only. Chunked requests cross the
+        // limit without sending the final chunk: neither may await completion.
+        const response = await incompleteUpload(`${app.base}${mount}/session/ses_1/abort`, app.token, chunked);
+        expect(response).toMatch(/^HTTP\/1\.1 413 /);
+        expect(response).toContain('"code":"payload_too_large"');
+        expect(app.received).toHaveLength(0);
+      });
+      test(`counts UTF-8 bytes ${mount}, chunked=${chunked}`, async () => {
+        const app = await fixture();
+        const text = JSON.stringify({ parts: [{ type: "text", text: "\u{1f30b}".repeat(Math.ceil(limit / 4)) }] });
+        const bytes = new TextEncoder().encode(text);
+        expect(text.length).toBeLessThan(limit);
+        expect(bytes.byteLength).toBeGreaterThan(limit);
+        const response = await upload(`${app.base}${mount}/session/ses_1/message`, app.token, bytes, chunked);
+        expect(response.status, response.body).toBe(413);
+        expect(JSON.parse(response.body).code).toBe("payload_too_large");
+        expect(app.received).toHaveLength(0);
+      });
+      for (const extra of [-1, 0, 1]) {
+        test(`byte boundary ${mount}, chunked=${chunked}, offset=${extra}`, async () => {
+          const app = await fixture();
+          const bytes = new Uint8Array(limit + extra).fill(97);
+          const response = await upload(`${app.base}${mount}/session/ses_1/abort`, app.token, bytes, chunked);
+          expect(response.status, response.body).toBe(extra > 0 ? 413 : 200);
+          if (extra > 0) {
+            expect(JSON.parse(response.body).code).toBe("payload_too_large");
+            expect(app.received).toHaveLength(0);
+          } else expect(app.received).toEqual([{ bytes: bytes.byteLength, digest: createHash("sha256").update(bytes).digest("hex") }]);
+        });
+      }
+      for (const endpoint of ["message", "prompt_async"]) {
+        test(`oversized prompt ${mount}/${endpoint}, chunked=${chunked}`, async () => {
+          const app = await fixture();
+          const bytes = new TextEncoder().encode(JSON.stringify({ parts: [{ type: "text", text: "x".repeat(limit) }] }));
+          const response = await upload(`${app.base}${mount}/session/ses_1/${endpoint}`, app.token, bytes, chunked);
+          expect(response.status).toBe(413);
+          expect(JSON.parse(response.body).code).toBe("payload_too_large");
+          expect(app.received).toHaveLength(0); // No runtime/model discovery or inference.
+        });
+      }
+    }
+  }
+  for (const chunked of [false, true]) {
+    for (const endpoint of ["messages", "messages/preflight"]) {
+      test(`canonical ${endpoint} retains upload bound, chunked=${chunked}`, async () => {
+        const app = await fixture();
+        const bytes = new TextEncoder().encode(JSON.stringify({ parts: [{ type: "text", text: "x".repeat(limit) }] }));
+        const response = await upload(`${app.base}/workspace/ws_1/sessions/ses_1/${endpoint}`, app.token, bytes, chunked);
+        expect(response.status).toBe(413);
+        expect(JSON.parse(response.body).code).toBe("payload_too_large");
+        expect(app.received).toHaveLength(0);
+      });
+    }
+    for (const bytes of [new Uint8Array(), new Uint8Array([0, 255, 128, 240, 159, 146, 169])]) {
+      test(`transport preserves ${bytes.byteLength} bytes, chunked=${chunked}`, async () => {
+        const app = await fixture();
+        const response = await upload(`${app.base}/w/ws_1/opencode/session/ses_1/abort`, app.token, bytes, chunked);
+        expect(response.status, response.body).toBe(200);
+        expect(app.received).toEqual([{ bytes: bytes.byteLength, digest: createHash("sha256").update(bytes).digest("hex") }]);
+      });
+    }
+  }
+});
 
 describe("workspace session read APIs", () => {
   for (const destination of ["same-origin", "cross-origin"]) {
