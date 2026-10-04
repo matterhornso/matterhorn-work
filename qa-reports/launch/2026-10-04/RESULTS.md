@@ -353,6 +353,26 @@ pnpm test:matterhorn-platform-safety
 
 Source review also confirms that evidence renewal/deletion/anchoring and Agent File renewal callbacks prepare and request wallet submission on each attempt; no separate pending-confirmation state is retained. This is a recovery gap, not proof that a duplicate transaction was executed: cached intents may retain the same transaction digest, while committed confirmations change the record state. Test transient verification failure, lost acknowledgments, expiry, navigation/reload and account/wallet changes before claiming safe retry. No real wallet, provider or hosted request was used for this pass. The preceding recovery-copy correction is commit `c3aabb7f84a3c587522dc903ad15bcdda4674b53`.
 
+## Confirmation retry API acceptance
+
+Four new local HTTP cases exercise evidence renewal, Agent File renewal, Walrus evidence deletion and Sui anchoring. Each creates a disposable owner and outsider through normal signup, publishes synthetic encrypted content, prepares one transaction and injects a temporary verifier error. The HTTP response is 503 without the injected private error detail; the account record remains at revision 2 and the fixture key remains available.
+
+With the verifier restored, cross-account confirmation is denied with 404 and a changed intent hash with 409, neither reaching verification. Retrying only the exact confirmation succeeds. No second preparation occurs, the synthetic transaction builder is called once, and both verification attempts receive the same digest. A subsequent repeat is rejected with 410 `expired_or_replayed` without another verification call. An authenticated list read returns revision 3 with the exact recorded renewal/deletion/anchor digest; deletion also removes the fixture key. The outsider cannot read that result.
+
+This establishes two different recovery paths for the UI: retry confirmation while the original intent remains valid after a temporary failure; reconcile an already-committed operation against its exact digest through an authenticated read when the acknowledgment is uncertain. A 410 alone cannot distinguish successful prior completion from expiry and must never be displayed as success without matching durable evidence. Do not prepare or submit another transaction automatically. The test ignores the successful response body to model an uncertain acknowledgment; it does not physically sever a network connection.
+
+The four new cases pass with 113 assertions. The full coworker HTTP suite passes 25 cases with 563 assertions, and server typecheck passes. Commands:
+
+```sh
+bun test apps/server/src/crypto-coworker-routes.e2e.test.ts --test-name-pattern 'confirmation recovery without a new preview' --timeout 15000
+bun test apps/server/src/crypto-coworker-routes.e2e.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+```
+
+Logs: `/tmp/matterhorn-confirmation-retry-baseline-2026-10-04.log`, `/tmp/matterhorn-confirmation-retry-http-2026-10-04.log` and `/tmp/matterhorn-confirmation-retry-typecheck-2026-10-04.log`. No production code changed in this test-only follow-up. The immediately preceding cleanup fix and its full safety pass are recorded above; its commit is `0aec4aa1d0932b0bcd3d52a70520b47cd84beb8f`.
+
+Still required: wire this contract into all four UI callbacks; retain only necessary confirmation metadata scoped to the authenticated account, backend, workspace, resource and wallet/network; prevent repeated clicks from resubmitting; reconcile after reload/navigation; clear account data on logout; provide truthful unresolved/expired recovery guidance. Test changed wallets, account/backend changes, expiry before confirmation, cancellation, unavailable reads, concurrent confirmations and transaction success with lost responses. A temporary failure before expiry is not proof that an expired intent can be recovered. These tests perform no wallet signing, real chain calls, hosted traffic or browser execution.
+
 ## Polymarket policy review deadline
 
 The broader regression run found that the bundled policy's review deadline is `2026-10-04T00:00:00.000Z`, which had passed at execution time. `evaluatePolymarketOpenPositionJurisdiction` now returns `policy_review_required` for otherwise valid jurisdiction evidence, and guarded capability issuance denies new-position preparation. This is intended fail-closed behavior. The production deadline and restrictions were not changed. This result concerns the local candidate; the exact hosted policy version and user-facing recovery text have not been verified. It does not establish that public research reads are broken.
