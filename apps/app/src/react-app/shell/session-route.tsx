@@ -742,6 +742,13 @@ export function SessionRoute() {
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [legacySelectedWorkspaceId, setLegacySelectedWorkspaceId] = useState<string>(() => readActiveWorkspaceId() ?? "");
   const selectedWorkspaceId = routeWorkspaceId || legacySelectedWorkspaceId;
+  // A late action must not restore old chat state after navigation or unmount.
+  // Returning to the same IDs creates a new scope; it does not revive the old one.
+  const sessionActionScope = useMemo(() => ({ current: true }), [selectedWorkspaceId, selectedSessionId]);
+  useEffect(() => {
+    sessionActionScope.current = true;
+    return () => { sessionActionScope.current = false; };
+  }, [sessionActionScope]);
   const handlePendingDeskTaskRestored = useCallback(() => {
     const workspaceId = selectedWorkspaceId || routeWorkspaceId;
     clearPendingDeskTask(workspaceId);
@@ -3084,6 +3091,8 @@ export function SessionRoute() {
       isRemoteWorkspace: selectedWorkspace?.workspaceType === "remote",
       isSandboxWorkspace: selectedWorkspace ? isSandboxWorkspace(selectedWorkspace) : false,
       onRevertToMessage: async (messageId: string) => {
+        const isCurrent = () => isCurrentAccount() && sessionActionScope.current;
+        if (!isCurrent()) return;
         if (executionMode !== "work") {
           showToast({
             title: "Switch to Work mode to revert",
@@ -3099,13 +3108,16 @@ export function SessionRoute() {
           } catch {
             // The session may already be idle.
           }
+          if (!isCurrent()) return;
           await revertSession(opencodeClient, selectedSessionId, messageId);
+          if (!isCurrent()) return;
           if (selectedWorkspaceEndpoint) {
             const snapshot = await selectedWorkspaceEndpoint.client.getSessionSnapshot(
               selectedWorkspaceEndpoint.workspaceId,
               selectedSessionId,
               { limit: 140 },
             );
+            if (!isCurrent()) return;
             getReactQueryClient().setQueryData(
               ["react-session-snapshot", selectedWorkspaceId, selectedSessionId],
               snapshot.item,
@@ -3118,6 +3130,7 @@ export function SessionRoute() {
             durationMs: 2400,
           });
         } catch (error) {
+          if (!isCurrent()) return;
           showToast({
             title: "Could not revert conversation",
             description: describeRouteError(error),
@@ -3127,6 +3140,8 @@ export function SessionRoute() {
         }
       },
       onForkAtMessage: (messageId: string) => {
+        const isCurrent = () => isCurrentAccount() && sessionActionScope.current;
+        if (!isCurrent()) return;
         if (executionMode !== "work") {
           console.warn(`[fork] blocked in ${executionMode} mode; switch to Work mode first`);
           return;
@@ -3134,6 +3149,7 @@ export function SessionRoute() {
         void (async () => {
           try {
             const forked = await forkSession(opencodeClient, selectedSessionId, messageId);
+            if (!isCurrent()) return;
             let coworkerForkWarning = false;
             if (selectedWorkspaceEndpoint) {
               try {
@@ -3141,6 +3157,7 @@ export function SessionRoute() {
                   selectedWorkspaceEndpoint.workspaceId,
                   selectedSessionId,
                 );
+                if (!isCurrent()) return;
                 if (sourceBinding.binding) {
                   if (!sourceBinding.active) {
                     coworkerForkWarning = true;
@@ -3153,9 +3170,11 @@ export function SessionRoute() {
                   }
                 }
               } catch {
+                if (!isCurrent()) return;
                 coworkerForkWarning = true;
               }
             }
+            if (!isCurrent()) return;
             inheritStoredSessionModelChoice(selectedWorkspaceId, selectedSessionId, forked.id);
             writeLastSessionFor(selectedWorkspaceId, forked.id);
             rememberPendingCreatedSession(selectedWorkspaceId, forked.id);
@@ -3174,6 +3193,7 @@ export function SessionRoute() {
               });
             }
           } catch (error) {
+            if (!isCurrent()) return;
             console.warn("[fork] failed", error);
           }
         })();
@@ -3219,6 +3239,7 @@ export function SessionRoute() {
     selectedSessionId,
     selectedSessionKnown,
     selectedSessionPending,
+    sessionActionScope,
     selectedModelUnavailable,
     selectedProviderPrivacyPolicy,
     selectedPrivateModeVerified,

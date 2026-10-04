@@ -914,3 +914,32 @@ Commands are the six-file HTTP group and typecheck/build/safety commands in the 
 Frontend command: `pnpm --filter @matterhorn-work/app test`; initial sandbox log `/tmp/matterhorn-runtime-redirect-frontend-2026-10-04.log`, passing run `/tmp/matterhorn-runtime-redirect-frontend-final-2026-10-04.log`. Documentation follows the existing QA/handoff format and explicitly separates test fixtures from hosted acceptance. UI hardening guidance informed the next-case inventory; it did not produce UI edits or a visual audit score.
 
 This correction covers OpenCode runtime transports, not every outbound request in the platform. Worker-control and realtime-provider requests remain separate review targets. The UI hardening review identified the session-route fork/revert callbacks as the next delayed-result cases to reproduce: inspect cache writes, coworker fallback and navigation after logout or workspace changes. Existing account-generation checks protect retry and server-client requests, so a source-level missing check alone is not being reported as a confirmed browser defect. No UI changes or visual acceptance occurred in this pass. Hosted five-desk responses, provider accounting, inboxes, encryption/restore and full browser/accessibility acceptance remain open. No production configuration, real provider request, user-preview change, push, merge or deployment occurred.
+
+## Delayed fork and revert callback lifetime
+
+Following runtime-redirect commit `5a3ae8516b2ac1ad2fb1e8d251b502c8052b3297`, tests execute the exact production fork/revert callbacks with synthetic dependencies and controlled async boundaries. Twelve failing cases showed work continuing after an account generation or route lifetime change. Fork could request/inherit a coworker, write model/last-session/pending hints, update session state and navigate after its originating context was gone. Revert could continue after abort, read a snapshot after revert, or repopulate the cache and show success after a delayed snapshot. Six unchanged controls passed before the fix.
+
+The route now gives these actions a lifetime tied to workspace/session selection and component cleanup. Each callback checks that lifetime and the existing account generation before starting and after awaited operations, including error recovery. Returning to the same route IDs creates a new lifetime rather than reviving an old action. Stale results do not trigger subsequent requests, cache writes, navigation or old-context notices. This does not cancel or roll back a mutation the server has already accepted; an already-created fork remains accessible through its owner's normal session history. Ordinary account-preserving coworker errors retain the existing warning/fallback behavior.
+
+The final 36-case matrix includes resolved and rejected delayed results after account/route changes, plus unchanged success and failure controls. It extracts callback initializers with the TypeScript AST and compiles them with explicit synthetic dependencies, rather than maintaining a copied algorithm. This verifies actual callback control flow, not a mounted SessionRoute, actual logout event propagation, or full browser authorization. End-to-end route unmount, navigation away and back, and cross-tab account changes remain to be verified in the mounted authenticated app.
+
+- Focused lifetime/retry/account/coworker tests: **91 pass, zero fail, 480 assertions across four files**, including all 36 lifetime cases.
+- Full frontend suite: **1,456 pass, zero fail, 8,513 assertions across 193 files**.
+- Frontend typecheck and web build: pass. The build retains its existing large-chunk warning; performance optimization is not certified.
+- Existing Chromium composer/model-picker/navigation fixture: **9 pass, one capture-only skip, zero fail, 42 assertions**. Tests cover ordinary/consented sending, single-flight requests, retry, keyboard desk access and mobile drawer focus return. No real provider is called.
+- Separate capture-only run: **one pass, 48 assertions**, covering 390/768/1280/1440 widths and both themes. Captures are in `/tmp/matterhorn-session-lifetime-visuals-OUmxa5`. One batched inspection of light mobile, dark desktop, dark mobile sidebar and light tablet busy composer found no new clipping or overlap in those fixture controls. Unstyled fixture-only control buttons are not production UI findings. These images do not exercise fork/revert or the full authenticated shell.
+- Impeccable detector: no findings for the changed route. The hardening skill guided async/error checks while preserving the existing UI, and the documentation skill kept the evidence scope explicit. No layout, copy, privacy claim or theme was redesigned.
+- Full platform safety gate: all 11 stages pass, terminal exit zero. Final diff whitespace: pass.
+
+Failing callback log: `/tmp/matterhorn-session-action-lifetime-red-2026-10-04.log`. Final logs: `/tmp/matterhorn-session-action-lifetime-{focused-final,frontend-final,typecheck,build,browser,visual,safety}-2026-10-04.log`; mechanical scan: `/tmp/matterhorn-session-action-lifetime-design-2026-10-04.json`.
+
+```sh
+bun test apps/app/tests/session-action-lifetime.test.ts apps/app/tests/response-actions.test.tsx apps/app/tests/account-client-state.test.ts apps/app/tests/coworkers-ui-contract.test.ts
+pnpm --filter @matterhorn-work/app test
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+RETRO_QA_FLAG=1 bun test apps/app/scripts/composer-submit.browser.test.ts --timeout 60000
+pnpm test:matterhorn-platform-safety
+```
+
+No user preview, chat or account was changed, and nothing was pushed, merged or deployed. Next: mounted fork/revert lifecycle and recovery tests, followed by the remaining outbound transport review and hosted launch gates. Whole-platform readiness remains unproven.
