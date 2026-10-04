@@ -569,6 +569,7 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceSuiAnchorPrepareResponse> {
     if (input.signal.aborted) fail("crypto_evidence_sui_anchor_aborted");
+    this.store.assertWorkspaceWritable(input.workspaceId);
     const signer = canonicalSigner(input.signer);
     const now = input.now ?? this.now();
     if (!Number.isFinite(now.getTime())) fail("crypto_evidence_time_invalid");
@@ -611,6 +612,7 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
         suiObjectId: proof.suiObjectId,
         signal: input.signal,
       });
+      this.store.assertWorkspaceWritable(input.workspaceId);
       if (certification.network !== "testnet"
         || proof.network !== "testnet"
         || certification.blobId !== proof.blobId
@@ -639,6 +641,7 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
         validUntilEpoch: proof.validUntilEpoch,
         signal: input.signal,
       });
+      this.store.assertWorkspaceWritable(input.workspaceId);
       const transactionBytes = canonicalTransactionBytes(built.transactionBytesBase64);
       try {
         if (TransactionDataBuilder.getDigestFromBytes(transactionBytes) !== canonicalDigest(built.transactionDigest)) {
@@ -683,13 +686,26 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
         claimId: claimed.claimId,
         preview,
       };
-      if (!this.intentState.putIfAbsent({
-        key: input.evidenceId,
-        workspaceId: input.workspaceId,
-        value: intent,
-        expiresAtMs: Date.parse(preview.expiresAt),
-        nowMs: now.getTime(),
-      })) fail("crypto_evidence_sui_anchor_in_progress");
+      const finalizedAt = input.now ?? this.now();
+      if (!Number.isFinite(finalizedAt.getTime())) fail("crypto_evidence_time_invalid");
+      this.stateStore.transaction(() => {
+        this.store.assertWorkspaceWritable(input.workspaceId);
+        if (!this.store.hasSuiAnchorClaim({
+          ...input,
+          claimId: claimed.claimId,
+          now: finalizedAt,
+        })) fail("crypto_evidence_sui_anchor_expired_or_replayed");
+        const current = this.store.get(input);
+        if (!current) fail("crypto_evidence_not_found");
+        if (current.revision !== input.expectedRevision) fail("crypto_evidence_revision_conflict");
+        if (!this.intentState.putIfAbsent({
+          key: input.evidenceId,
+          workspaceId: input.workspaceId,
+          value: intent,
+          expiresAtMs: Date.parse(preview.expiresAt),
+          nowMs: finalizedAt.getTime(),
+        })) fail("crypto_evidence_sui_anchor_in_progress");
+      });
       return this.prepareResponse(preview);
     } catch (error) {
       this.store.endSuiAnchor({
@@ -713,6 +729,7 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceSuiAnchorConfirmResponse> {
     if (input.signal.aborted) fail("crypto_evidence_sui_anchor_aborted");
+    this.store.assertWorkspaceWritable(input.workspaceId);
     const now = input.now ?? this.now();
     if (!Number.isFinite(now.getTime())) fail("crypto_evidence_time_invalid");
     const record = this.intentState.get<AnchorIntentRecord>(input.evidenceId, now.getTime());
@@ -762,6 +779,7 @@ export class MatterhornCryptoEvidenceSuiAnchorService {
       anchoredAt: verified.observedAt,
     };
     const item = this.stateStore.transaction(() => {
+      this.store.assertWorkspaceWritable(input.workspaceId);
       const consumed = this.intentState.take<AnchorIntentRecord>(
         input.evidenceId,
         finalizedAt.getTime(),

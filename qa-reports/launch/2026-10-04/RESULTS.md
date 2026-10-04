@@ -249,6 +249,32 @@ This is service-level local evidence, not hosted account-to-wallet acceptance. I
 
 Specific copy follow-up: `cryptoEvidenceRenewalApiError` currently ends its generic failure message with “Nothing was changed.” That can be misleading after a wallet transaction has been confirmed but local renewal finalization is rejected. Separate the local record outcome from the external transaction outcome and test the HTTP response; the local rejection tests above do not validate that copy.
 
+## Sui anchor completion during workspace deletion
+
+The isolated anchor matrix reproduced three deletion failures: preparation continued after certification or transaction-preview building, and confirmation attached an anchor after transaction verification, despite the workspace deletion marker. Three controls deleting an unrelated workspace passed. A fourth reproduction showed that preparation could return a preview after its five-minute claim expired during the builder wait.
+
+The anchor service now rejects deleted workspaces before returning cached previews or starting confirmation. It rechecks deletion after preparation dependencies and within the final confirmation transaction. Preparation saves its intent in the same SQLite transaction as the workspace, exact claim and current revision checks, using the completion clock without extending the original expiry. The final anchor attachment store method also rejects marked workspaces. Tests confirm that a stale worker cannot clear a replacement claim, that deleted-workspace confirmation leaves the previous intent and evidence revision unchanged, and that certification interrupted by deletion does not start transaction building.
+
+| Check | Result |
+| --- | --- |
+| Initial anchor reproductions | Four failures and 11 passing existing/control tests |
+| Anchor service, package, contract and evidence store suites | 40 pass, zero fail, 219 assertions across four files |
+| Auth, guarded runtime and evidence/file lifecycle regressions | 225 pass, zero fail, 1,755 assertions across 13 files |
+| Server typecheck | Pass |
+| Full local platform safety gate | All 11 stages pass |
+| Diff whitespace check | Pass |
+
+```sh
+bun test apps/server/src/crypto-evidence-sui-anchor.test.ts apps/server/src/crypto-evidence-store.test.ts apps/server/src/crypto-evidence-sui-anchor-package.test.ts apps/server/src/crypto-evidence-sui-anchor-contract.test.ts
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/guarded-agent-runtime.test.ts apps/server/src/crypto-evidence-store.test.ts apps/server/src/crypto-evidence-finalizer.test.ts apps/server/src/crypto-evidence-walrus-publisher.test.ts apps/server/src/crypto-evidence-walrus-renewal.test.ts apps/server/src/crypto-evidence-walrus-deletion.test.ts apps/server/src/crypto-evidence-verification.test.ts apps/server/src/crypto-evidence-sui-anchor.test.ts apps/server/src/agent-file-store.test.ts apps/server/src/agent-file-walrus-publisher.test.ts apps/server/src/agent-file-walrus-renewal.test.ts apps/server/src/guarded-runtime-state-store.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm test:matterhorn-platform-safety
+```
+
+Logs: `/tmp/matterhorn-anchor-deletion-red-2026-10-04.log`, `/tmp/matterhorn-anchor-deletion-final-2026-10-04.log`, `/tmp/matterhorn-anchor-deletion-regressions-2026-10-04.log`, `/tmp/matterhorn-anchor-deletion-typecheck-2026-10-04.log` and `/tmp/matterhorn-anchor-deletion-safety-2026-10-04.log`. The full safety process exited successfully and its terminal result confirms all 11 stages passed.
+
+These service fixtures directly mark the durable workspace state before content cleanup and use synthetic certification, transaction building and verification. They do not perform a wallet signature, contact a chain, or establish hosted account-deletion acceptance. Rejecting local attachment cannot reverse a transaction already submitted by a wallet or delete an immutable on-chain anchor. Existing confirmation intent cleanup remains owned by deletion cleanup/expiry. Evidence verification status writes, HTTP recovery guidance and broader hosted acceptance remain open.
+
 ## Polymarket policy review deadline
 
 The broader regression run found that the bundled policy's review deadline is `2026-10-04T00:00:00.000Z`, which had passed at execution time. `evaluatePolymarketOpenPositionJurisdiction` now returns `policy_review_required` for otherwise valid jurisdiction evidence, and guarded capability issuance denies new-position preparation. This is intended fail-closed behavior. The production deadline and restrictions were not changed. This result concerns the local candidate; the exact hosted policy version and user-facing recovery text have not been verified. It does not establish that public research reads are broken.

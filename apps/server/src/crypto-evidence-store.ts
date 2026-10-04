@@ -1321,6 +1321,7 @@ export class MatterhornCryptoEvidenceStore {
     anchor: MatterhornSuiEvidenceAnchor;
     now?: Date;
   }): MatterhornCryptoEvidenceRecord {
+    this.assertWorkspaceWritable(input.workspaceId);
     const current = this.get(input);
     if (!current) throw new Error("crypto_evidence_not_found");
     if (current.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
