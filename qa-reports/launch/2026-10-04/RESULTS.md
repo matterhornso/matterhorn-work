@@ -521,3 +521,36 @@ The first capture found a fixture-only constrained parent and missing logo route
 Final checks: 42 focused tests pass with 175 assertions across four files; 1,420 frontend tests pass with 8,441 assertions across 192 files; all 11 safety stages, frontend typecheck, production build and diff whitespace pass. The existing bundle-size advisory remains. Focused command: `bun test apps/app/tests/account-outcome.test.ts apps/app/tests/account-lifecycle-contract.test.ts apps/app/tests/account-security-render.test.tsx apps/app/tests/account-security-client-lifetime.test.ts`. Full commands are the same frontend/safety/typecheck/build commands listed above. Logs: `/tmp/matterhorn-account-outcome-final-{focused,frontend,safety,typecheck,build}-2026-10-04.log`.
 
 The notice tests cover all known outcomes, one-time consumption, exact expiry, future/invalid clocks, malformed and oversized values, arbitrary stored text, unavailable/throwing storage, failed removal and failed replacement. The previous server auth HTTP evidence is not a fresh browser or hosted result. Remaining work includes real Cloud/desktop sign-in notice delivery, mounted account-switch clearing, Strict Mode effect replay, storage-disabled browser behavior, actual download persistence and all broader hosted/accounting/email/restore gates. Impeccable guided the non-sensitive recovery notice and bounded inspection; the documentation skill preserves the evidence and limits in this report. No push, merge or deployment occurred.
+
+## Hosted release and public sign in recheck
+
+The read-only deployment probe completed at **2026-10-04 14:53:51 UTC**. GitHub's `dev` branch still reports `e4342d6bef8d833d12e36bd8093a87c8dbe84856`; both hosted web HTML and API headers report `9b74d923b8c999733fe698c29a6555dd2980460b`. The deployed revision is 27 commits behind that remote baseline. The local candidate before this documentation update is `e8ee860e5d44ff4f7c3a1d0f1c72b6239984d751`, itself 27 commits beyond the remote baseline. These are distinct comparisons: deploying current `dev` alone would still omit the local corrections.
+
+The strict probe exits 1 with three failed checks: web commit mismatch, API commit mismatch and guarded runtime mode `off` instead of the expected `enforce`. Runtime readiness is reported as true while the mode is off. This does not prove an authorization bypass or that every other guard is absent. It means the required guarded-runtime release setting is not established. The `/health/launch` endpoint reports ready; that narrower configuration signal must not be treated as platform-wide acceptance.
+
+The other 27 probe checks pass: HTTPS, successful app/health responses, same-origin routing, the sampled security headers, JSON 401 denial on `/workspaces` and `/opencode/global/health`, and the trusted/untrusted CORS challenges. Public auth configuration reports signup open, email verification required, password reset available, legal acceptance required and a configured Turnstile site key. No account was created and no email delivery, restore, authenticated session or inference was tested.
+
+Reproduction command (GET and OPTIONS only, no credentials):
+
+```sh
+node scripts/product-hunt-deployment-probe.mjs \
+  --app-url https://desks.matterhorn.so \
+  --server-url https://desks.matterhorn.so \
+  --allowed-origin https://desks.matterhorn.so \
+  --expected-commit e4342d6bef8d833d12e36bd8093a87c8dbe84856 \
+  --expected-web-commit e4342d6bef8d833d12e36bd8093a87c8dbe84856 \
+  --expected-guarded-mode enforce --expected-signup-status open --strict \
+  --json-output /tmp/matterhorn-hosted-release-recheck-2026-10-04.json
+```
+
+### Browser specific signup failure
+
+A new background Codex browser tab at `/session` reached the signed-out screen with enabled email/password/sign-in controls, but Create account and Forgot password remained disabled. The page claimed that secure email delivery was being configured. A separate command-line GET to `/api/auth/config` returned HTTP 200, `Cache-Control: no-store`, signup open and password reset available. Thus the contradictory visible state is freshly reproduced, not merely carried forward from the earlier report.
+
+Opening that exact public config URL directly in another Codex browser tab failed with `net::ERR_BLOCKED_BY_CLIENT`. No security protection was bypassed. This is evidence of a client-side loading block in this browser environment, not proof that the hosted endpoint is down. The available browser console log API returned no errors. The tool's read-only DOM evaluator cannot inspect resource timing, so the actual in-page failed fetch response was not captured.
+
+Inspection of the publicly served `app-Hue0tu8o.js` and its referenced `index.react-CgjtqoYz.js` confirms same-origin auth configuration. The deployed sign-in code catches a configuration-load error and substitutes `setup_required`, then displays the email-setup explanation. This supports the misleading-fallback diagnosis, but the direct-navigation block does not establish why the in-page fetch failed or that it failed for the same reason. Do not report an email-provider outage from this observation. The local candidate already distinguishes unavailable configuration from authoritative setup-required status and supplies retry guidance; see the earlier public-auth recovery evidence. It is not yet deployed.
+
+Next verification: inspect the in-page config request in a supported regular browser and the Codex preview without disabling security protections; distinguish browser/client blocking, network failure and a real setup-required response. After an approved deployment, verify that failed configuration loading offers accurate retry guidance, successful loading enables eligible actions, and the real signup/verification/reset flows complete using controlled inboxes. Do not activate signup or change email configuration merely to remove this message.
+
+This was a narrow functional audit guided by Impeccable, not a scored full accessibility/performance/theme audit. It creates no new platform-wide UI certification. The documentation skill preserved observed facts separately from hypotheses and historical test evidence. No product code, production settings, accounts or user-owned previews were changed; no push, merge or deployment occurred. Hosted five-desk responses, accounting, two-account isolation, email delivery, encryption/restore evidence and the policy-review gate remain open.
