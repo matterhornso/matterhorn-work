@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   createPublicAuthClient,
   DenApiError,
@@ -26,6 +26,34 @@ afterEach(() => {
 });
 
 describe("public auth client", () => {
+  const mutations = [
+    { name: "sign-in", run: (client: ReturnType<typeof createPublicAuthClient>, signal: AbortSignal) => client.signInEmail("fixture@example.invalid", "synthetic-only", signal) },
+    { name: "sign-up", run: (client: ReturnType<typeof createPublicAuthClient>, signal: AbortSignal) => client.signUpEmail("fixture@example.invalid", "synthetic-only", true, "synthetic-turnstile", signal) },
+    { name: "verification", run: (client: ReturnType<typeof createPublicAuthClient>, signal: AbortSignal) => client.verifyEmail("fixture@example.invalid", "123456", signal) },
+    { name: "resend", run: (client: ReturnType<typeof createPublicAuthClient>, signal: AbortSignal) => client.resendVerification("fixture@example.invalid", signal) },
+    { name: "request-reset", run: (client: ReturnType<typeof createPublicAuthClient>, signal: AbortSignal) => client.requestPasswordReset("fixture@example.invalid", signal) },
+    { name: "confirm-reset", run: (client: ReturnType<typeof createPublicAuthClient>, signal: AbortSignal) => client.confirmPasswordReset("synthetic-token", "synthetic-only", signal) },
+  ];
+  for (const mutation of mutations) {
+    test(`cancels ${mutation.name} transport without treating cancellation as a timeout`, async () => {
+      let transportSignal: AbortSignal | null | undefined;
+      const fetchMock = spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+        transportSignal = init?.signal;
+        return new Promise<Response>((_resolve, reject) => {
+          transportSignal?.addEventListener("abort", () => reject(transportSignal?.reason), { once: true });
+        });
+      });
+      try {
+        const cancellation = new AbortController();
+        const request = mutation.run(createPublicAuthClient(config), cancellation.signal);
+        cancellation.abort();
+        await expect(request).rejects.toBeInstanceOf(DOMException);
+        expect(transportSignal?.aborted).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      } finally { fetchMock.mockRestore(); }
+    });
+  }
+
   test("cancels a pending configuration lookup without reporting a timeout", async () => {
     const controller = new AbortController();
     let requestSignal: AbortSignal | null | undefined;

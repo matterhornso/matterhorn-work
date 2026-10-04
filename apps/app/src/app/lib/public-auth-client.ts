@@ -122,8 +122,8 @@ async function requestPublicAuth(
 export function createPublicAuthClient(config: PublicCloudConfig) {
   return {
     getPublicAuthConfig: async (signal?: AbortSignal) => parsePublicAuthConfig(await requestPublicAuth(config, "/api/auth/config", { signal })),
-    signInEmail: (email: string, password: string) => requestPublicAuth(config, "/api/auth/sign-in/email", {
-      method: "POST",
+    signInEmail: (email: string, password: string, signal?: AbortSignal) => requestPublicAuth(config, "/api/auth/sign-in/email", {
+      method: "POST", signal,
       body: { email: email.trim(), password },
     }),
     async signUpEmail(
@@ -131,9 +131,10 @@ export function createPublicAuthClient(config: PublicCloudConfig) {
       password: string,
       legalAccepted = false,
       turnstileToken?: string,
+      signal?: AbortSignal,
     ): Promise<PublicAuthSignUpResult> {
       const payload = await requestPublicAuth(config, "/api/auth/sign-up/email", {
-        method: "POST",
+        method: "POST", signal,
         body: {
           name: "Matterhorn Desks User",
           email: email.trim(),
@@ -147,20 +148,20 @@ export function createPublicAuthClient(config: PublicCloudConfig) {
         email: isRecord(payload) && typeof payload.email === "string" ? payload.email : null,
       };
     },
-    verifyEmail: (email: string, code: string) => requestPublicAuth(config, "/api/auth/verify-email", {
-      method: "POST",
+    verifyEmail: (email: string, code: string, signal?: AbortSignal) => requestPublicAuth(config, "/api/auth/verify-email", {
+      method: "POST", signal,
       body: { email: email.trim(), code: code.trim() },
     }),
-    resendVerification: (email: string) => requestPublicAuth(config, "/api/auth/resend-verification", {
-      method: "POST",
+    resendVerification: (email: string, signal?: AbortSignal) => requestPublicAuth(config, "/api/auth/resend-verification", {
+      method: "POST", signal,
       body: { email: email.trim() },
     }).then(requireAuthAcknowledgement),
-    requestPasswordReset: (email: string) => requestPublicAuth(config, "/api/auth/password-reset/request", {
-      method: "POST",
+    requestPasswordReset: (email: string, signal?: AbortSignal) => requestPublicAuth(config, "/api/auth/password-reset/request", {
+      method: "POST", signal,
       body: { email: email.trim() },
     }).then(requireAuthAcknowledgement),
-    confirmPasswordReset: (token: string, newPassword: string) => requestPublicAuth(config, "/api/auth/password-reset/confirm", {
-      method: "POST",
+    confirmPasswordReset: (token: string, newPassword: string, signal?: AbortSignal) => requestPublicAuth(config, "/api/auth/password-reset/confirm", {
+      method: "POST", signal,
       body: { token: token.trim(), newPassword },
     }).then(requireAuthAcknowledgement),
   };

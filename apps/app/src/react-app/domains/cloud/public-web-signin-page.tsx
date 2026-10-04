@@ -2,6 +2,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -20,6 +21,8 @@ import {
 import { publicWebAuthErrorMessage } from "./public-web-auth-errors";
 import { PublicTurnstile } from "./public-turnstile";
 import { RETRO_UI } from "../../../app/lib/retro-ui";
+import { accountClientState, captureAccountGeneration } from "../../../app/lib/account-client-state";
+import { createPublicAuthMutationScope } from "../../../app/lib/public-auth-mutation";
 
 type PublicWebSigninPageProps = {
   config: PublicCloudConfig;
@@ -86,7 +89,7 @@ export function PublicWebSigninPage({
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileResetSignal, setTurnstileResetSignal] = useState(0);
-  const [resetToken] = useState(initialResetToken);
+  const [resetToken, setResetToken] = useState(initialResetToken);
   const [resetRequested, setResetRequested] = useState(false);
   const [sessionBusy, setSessionBusy] = useState(true);
   const [submitBusy, setSubmitBusy] = useState(false);
@@ -99,6 +102,43 @@ export function PublicWebSigninPage({
   const accessCheck = useRef<AbortController | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const scopeId = useId();
+  const mutations = useRef(createPublicAuthMutationScope());
+  const liveConfig = useRef(config);
+  liveConfig.current = config;
+  const priorConnection = useRef(JSON.stringify([config.baseUrl, config.apiBaseUrl]));
+
+  useEffect(() => {
+    const clearForm = () => {
+      mutations.current.cancel();
+      accessCheck.current?.abort();
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
+      setVerificationCode("");
+      setLegalAccepted(false);
+      setTurnstileToken(null);
+      setTurnstileResetSignal((value) => value + 1);
+      setResetToken("");
+      setResetRequested(false);
+      setMode("sign-in");
+      setSubmitBusy(false);
+      setSessionBusy(false);
+      setAuthError(null);
+      setStatusMessage(null);
+    };
+    const key = JSON.stringify([config.baseUrl, config.apiBaseUrl]);
+    if (priorConnection.current !== key) clearForm();
+    priorConnection.current = key;
+    const unregister = accountClientState.register(`public-auth:${scopeId}`, clearForm, "stop");
+    return () => { mutations.current.cancel(); unregister(); };
+  }, [config.baseUrl, config.apiBaseUrl, scopeId]);
+
+  const beginMutation = () => {
+    const accountCurrent = captureAccountGeneration();
+    return mutations.current.begin(() => accountCurrent()
+      && liveConfig.current.baseUrl === config.baseUrl && liveConfig.current.apiBaseUrl === config.apiBaseUrl);
+  };
 
   const client = useMemo(
     () =>
@@ -235,8 +275,11 @@ export function PublicWebSigninPage({
     setResetRequested(false);
   };
 
-  const finishSignIn = async () => {
-    if (!(await checkPublicCloudSession(config))) {
+  const finishSignIn = async (operation: NonNullable<ReturnType<typeof beginMutation>>) => {
+    if (!operation.current()) return;
+    const signedIn = await checkPublicCloudSession(config, operation.signal);
+    if (!operation.current()) return;
+    if (!signedIn) {
       throw new Error("Session cookie was not accepted.");
     }
     onSignedIn();
@@ -252,6 +295,8 @@ export function PublicWebSigninPage({
       return;
     }
     const submittingSignup = mode === "sign-up";
+    const operation = beginMutation();
+    if (!operation) return;
     setSubmitBusy(true);
     setAuthError(null);
     setStatusMessage(null);
@@ -262,7 +307,9 @@ export function PublicWebSigninPage({
           password,
           legalAccepted,
           turnstileToken ?? undefined,
+          operation.signal,
         );
+        if (!operation.current()) return;
         if (result.verificationRequired) {
           setEmail(result.email ?? email.trim());
           setPassword("");
@@ -270,21 +317,22 @@ export function PublicWebSigninPage({
           setStatusMessage("Your account is ready for verification. Check your email, or request a new code if delivery is delayed.");
           return;
         }
-        await finishSignIn();
+        await finishSignIn(operation);
         return;
       }
       if (mode === "sign-in") {
-        await client.signInEmail(email, password);
-        await finishSignIn();
+        await client.signInEmail(email, password, operation.signal);
+        await finishSignIn(operation);
         return;
       }
       if (mode === "verify-email") {
-        await client.verifyEmail(email, verificationCode);
-        await finishSignIn();
+        await client.verifyEmail(email, verificationCode, operation.signal);
+        await finishSignIn(operation);
         return;
       }
       if (mode === "request-reset") {
-        await client.requestPasswordReset(email);
+        await client.requestPasswordReset(email, operation.signal);
+        if (!operation.current()) return;
         setResetRequested(true);
         setStatusMessage(
           "If an account exists for that email, a secure reset link is on its way.",
@@ -299,13 +347,15 @@ export function PublicWebSigninPage({
         setAuthError("Passwords do not match.");
         return;
       }
-      await client.confirmPasswordReset(resetToken, password);
+      await client.confirmPasswordReset(resetToken, password, operation.signal);
+      if (!operation.current()) return;
       window.history.replaceState({}, "", `${window.location.pathname}?mode=sign-in`);
       setPassword("");
       setConfirmPassword("");
       setMode("sign-in");
       setStatusMessage("Password updated. Sign in with your new password.");
     } catch (error) {
+      if (!operation.current()) return;
       if (
         mode === "sign-in" &&
         error instanceof DenApiError &&
@@ -318,27 +368,34 @@ export function PublicWebSigninPage({
         setAuthError(publicWebAuthErrorMessage(error));
       }
     } finally {
-      if (submittingSignup) {
-        setTurnstileToken(null);
-        setTurnstileResetSignal((value) => value + 1);
+      if (operation.current()) {
+        if (submittingSignup) {
+          setTurnstileToken(null);
+          setTurnstileResetSignal((value) => value + 1);
+        }
+        setSubmitBusy(false);
       }
-      setSubmitBusy(false);
+      operation.finish();
     }
   };
 
   const resendVerification = async () => {
     if (sessionBusy || submitBusy || accountServiceAvailable === false || !email.trim()) return;
+    const operation = beginMutation();
+    if (!operation) return;
     setSubmitBusy(true);
     setAuthError(null);
     setStatusMessage(null);
     try {
-      await client.resendVerification(email);
+      await client.resendVerification(email, operation.signal);
+      if (!operation.current()) return;
       setVerificationCode("");
       setStatusMessage("A verification email is queued. You can safely try again later if it does not arrive.");
     } catch (error) {
-      setAuthError(publicWebAuthErrorMessage(error));
+      if (operation.current()) setAuthError(publicWebAuthErrorMessage(error));
     } finally {
-      setSubmitBusy(false);
+      if (operation.current()) setSubmitBusy(false);
+      operation.finish();
     }
   };
 

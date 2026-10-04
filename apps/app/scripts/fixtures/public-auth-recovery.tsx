@@ -26,6 +26,7 @@ function Fixture() {
       <button onClick={() => void configure("ready")}>Fixture ready</button>{" "}
       <button onClick={() => void configure("error")}>Fixture config failure</button>{" "}
       <button onClick={() => void configure("pending")}>Fixture delayed config</button>{" "}
+      <button onClick={() => void configure("pending-signin")}>Fixture delayed sign-in</button>{" "}
       <button onClick={() => void configure("release")}>Release old response</button>{" "}
       <button onClick={() => setConnection(value => value === "a" ? "b" : "a")}>Switch connection</button>{" "}
       <button onClick={() => setMounted(value => !value)}>{mounted ? "Unmount auth" : "Mount auth"}</button>

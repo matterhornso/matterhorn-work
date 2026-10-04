@@ -427,10 +427,33 @@ Release action: review the current official venue restrictions and the applicabl
 ## Remaining work
 
 - The hosted signup-screen/API discrepancy is not root-caused by this local reproduction. Inspect the deployed response and network failure in a working browser session before attributing it to this bug.
-- The local auth config loading/failure/recovery defects above are corrected. In-flight auth mutation completion across connection/account changes still needs a separate lifecycle review; the present cancellation tests cover access checks, not server-side rollback of mutations.
+- The public auth mutation lifetime correction below now covers obsolete form callbacks. It does not roll back server mutations or establish browser-cookie ordering across simultaneous logins. Authenticated account-security exports, password-change and deletion completion callbacks need a separate lifecycle review.
 - Fresh hosted responses on all five desks, optional Jev acceptance, accounting settlement, two-account isolation, real email/reset delivery, logout cleanup and production backup/restore evidence remain outstanding as recorded in the [previous launch report](../2026-10-03/RESULTS.md). No fresh hosted state is asserted in this pass.
 - The limited responsive and keyboard evidence above does not establish platform-wide accessibility, cross-browser or theme acceptance.
 - The Polymarket policy review and expiry-state UI/hosted checks above are open release actions; passing historical policy tests does not establish current eligibility.
 - All 11 local safety stages pass after the renewal-completion corrections. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-renewal-deletion-safety-2026-10-04.log`.
 
 These corrections and regression results do not establish launch readiness. Continue with writes already past request-body validation, auth mutation lifecycle and the remaining acceptance work above.
+
+## Public auth mutation lifetime
+
+The earlier access-check cancellation did not cover form submissions. A synthetic browser reproduction held a sign-in response for connection A, switched the mounted form to connection B, then released A's response. The fixture's accepted-sign-in counter advanced from zero to one while B was selected. This demonstrates an obsolete UI callback, not an authentication bypass or a real account switch.
+
+The public auth client now accepts an optional abort signal for sign-in, signup, email verification/resend and password-reset request/confirmation. The form keeps one synchronous mutation slot, aborts it on unmount or connection/account reset, and checks its identity, connection and account generation before displaying results or invoking the signed-in callback. The independent session check uses the same cancellation signal. A late operation cannot clear the busy state of its replacement. Connection/account changes clear email, passwords, verification codes, consent checkbox, Turnstile token and password-reset token so the new connection cannot reuse those form values. No auth policy, registration gate, layout or backend mutation was changed.
+
+The fixture now has a **Fixture delayed sign-in** control. Its sign-in/session responses are synthetic only, use no cookies, and create no accounts. Reproduce using `bun apps/app/scripts/public-auth-recovery-fixture.ts`, select the delayed sign-in scenario, enter disposable fictional values, submit through the actual form, switch connection, and release the old response. Before the correction the accepted-sign-in count became one; after the correction it stayed zero. Both email and password fields were confirmed empty through read-only DOM checks. A subsequent current-connection sign-in advanced the counter to one, while another delayed response released after unmount left it at one. This is an actual component/browser check against a fixture, not hosted sign-in acceptance. The temporary server and tab were stopped; user previews/chats were untouched. A native screenshot of the final fixture counter was inspected but not saved as a repository artifact.
+
+New unit tests cover duplicate submission exclusion before React rerenders, invalidation on cancellation, old completion not clearing a replacement, and late success/error suppression after an account-generation change. Six transport tests verify that each mutation receives cancellation without misreporting it as a timeout. The focused auth/accessibility group passes 70 tests with 211 assertions. The full frontend suite passes 1,390 tests with 8,321 assertions across 190 files, and frontend typecheck passes.
+
+```sh
+bun test apps/app/tests/public-auth-mutation.test.ts apps/app/tests/public-auth-client.test.ts apps/app/tests/public-web-auth-errors.test.ts apps/app/tests/responsive-a11y-regressions.test.ts
+pnpm --filter @matterhorn-work/app test
+pnpm --filter @matterhorn-work/app typecheck
+pnpm test:matterhorn-platform-safety
+pnpm --filter @matterhorn-work/app build
+git diff --check
+```
+
+Logs: `/tmp/matterhorn-auth-lifetime-focused-2026-10-04.log`, `/tmp/matterhorn-auth-lifetime-frontend-2026-10-04.log`, `/tmp/matterhorn-auth-lifetime-typecheck-2026-10-04.log`, `/tmp/matterhorn-auth-lifetime-safety-2026-10-04.log` and `/tmp/matterhorn-auth-lifetime-build-2026-10-04.log`. The full safety gate completed successfully with all 11 stages passed; the subsequent production build passed with the existing large-chunk advisory. Diff whitespace checking passed. These stages include offline/source contracts, not fresh hosted or real inbox evidence.
+
+Impeccable's hardening guidance kept progress/error ownership tied to the active form; Uncodixfy preserved the existing interface. The documentation skill kept this evidence and its limitations in the established repository report. The browser reproduction covers delayed sign-in, not every form branch, real credential changes, email delivery, cookie side effects or multi-tab login ordering. Aborting a request cannot undo an account, email, password or session already changed on the server. Do not claim full auth mutation safety or hosted release readiness. The authenticated account-security component's asynchronous export/session-ending callbacks remain a separate next review item.
