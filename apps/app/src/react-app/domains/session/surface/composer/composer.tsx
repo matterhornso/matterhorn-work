@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
 import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
 import { ArrowUp, Check, ChevronDown, FileText, LockKeyhole, Paperclip, Play, Plug, Puzzle, Settings, Square, Terminal, X, Zap } from "lucide-react";
@@ -31,6 +31,7 @@ import {
 } from "./extension-readiness";
 import { ChatOptionsControl } from "./chat-options-control";
 import { MINIMAL_UI } from "@/app/lib/minimal-ui";
+import { captureAccountGeneration } from "@/app/lib/account-client-state";
 
 type MentionItem = {
   id: string;
@@ -477,6 +478,14 @@ export function ReactSessionComposer(props: ComposerProps) {
   // compositionstart/compositionend events below.
   const imeComposingRef = useRef(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const isCurrentAccount = useRef(captureAccountGeneration()).current;
+  const attachmentLifetimeRef = useRef<{ active: boolean } | null>(null);
+  useLayoutEffect(() => {
+    const lifetime = { active: true };
+    attachmentLifetimeRef.current = lifetime;
+    // A return to the same chat or permission state must not revive old work.
+    return () => { lifetime.active = false; };
+  }, [props.draftScopeKey, props.attachmentsEnabled]);
   const draftRef = useRef(props.draft);
   useEffect(() => {
     draftRef.current = props.draft;
@@ -1017,7 +1026,9 @@ export function ReactSessionComposer(props: ComposerProps) {
   };
 
   const addAttachments = async (inputFiles: File[]) => {
-    if (!inputFiles.length) return;
+    const lifetime = attachmentLifetimeRef.current;
+    const isCurrent = () => Boolean(lifetime?.active) && isCurrentAccount();
+    if (!inputFiles.length || !isCurrent()) return;
     if (!props.attachmentsEnabled) {
       props.onNotice({
         title: props.attachmentsDisabledReason ?? t("composer.attachments_unavailable"),
@@ -1030,8 +1041,10 @@ export function ReactSessionComposer(props: ComposerProps) {
     const warnings: string[] = [];
 
     for (const original of inputFiles) {
+      if (!isCurrent()) return;
       try {
         const processed = original.type.startsWith("image/") ? await compressImageFile(original) : original;
+        if (!isCurrent()) return;
         if (processed.size > CHAT_ATTACHMENT_MAX_BYTES) {
           warnings.push(t("composer.file_exceeds_limit", {
             name: processed.name || original.name, limit: CHAT_ATTACHMENT_MAX_BYTES / 1_000_000,
@@ -1040,10 +1053,12 @@ export function ReactSessionComposer(props: ComposerProps) {
         }
         accepted.push(processed);
       } catch {
+        if (!isCurrent()) return;
         warnings.push(t("composer.file_prepare_failed", { name: original.name }));
       }
     }
 
+    if (!isCurrent()) return;
     if (accepted.length) {
       props.onAttachFiles(accepted);
       props.onNotice({

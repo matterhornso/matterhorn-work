@@ -4,6 +4,7 @@ import { build } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { delayImagePreparation, delayedImage, releaseImagePreparation } from "./fixtures/attachment-preparation";
 
 // Only synthetic same-origin services are used. This mounts the production shell,
 // but does not certify server authentication, real inference, or hosted access.
@@ -98,6 +99,11 @@ beforeAll(async () => {
       {
         name: "fixture-only-negative-control",
         transform(code, id) {
+          if (process.env.QA_ATTACHMENT_STALE_STATE === "1" && id.endsWith("/surface/session-surface.tsx")) {
+            const read = "const current = getComposerAttachments(useComposerStateStore.getState(), props.sessionId);";
+            if (code.split(read).length !== 3) throw new Error("Attachment state guards changed; review negative control");
+            return code.replaceAll(read, "const current = attachments;");
+          }
           if (
             process.env.QA_SESSION_LIFETIME_UNGUARDED === "1" &&
             id.endsWith("/shell/session-route.tsx")
@@ -354,6 +360,61 @@ beforeEach(() => {
 });
 
 const operations: Array<"fork" | "revert"> = ["fork", "revert"];
+for (const boundary of ["append", "remove", "navigate", "return", "cross-tab logout"]) {
+  test(`mounted attachment preparation after ${boundary}`, async () => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    context.setDefaultTimeout(8000);
+    await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    try {
+      await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+      const input = page.locator('input[type="file"]');
+      await input.setInputFiles({ name: "earlier.txt", mimeType: "text/plain", buffer: Buffer.from("Earlier") });
+      await page.getByText("earlier.txt", { exact: true }).waitFor();
+      await delayImagePreparation(page);
+      await input.setInputFiles(await delayedImage(page));
+      await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+      if (boundary === "append") {
+        await input.setInputFiles({ name: "newer.txt", mimeType: "text/plain", buffer: Buffer.from("Newer") });
+        await page.getByText("newer.txt", { exact: true }).waitFor();
+      }
+      if (boundary === "remove") await page.getByRole("button", { name: "Remove", exact: true }).click();
+      if (boundary === "navigate" || boundary === "return") {
+        await page.getByRole("button", { name: "Other fixture chat", exact: true }).click();
+        await page.waitForURL("**/ses_other");
+        if (boundary === "return") {
+          await page.getByRole("button", { name: "Original fixture chat", exact: true }).click();
+          await page.waitForURL("**/ses_fixture");
+        }
+      }
+      if (boundary === "cross-tab logout") {
+        const other = await context.newPage();
+        await other.goto(`${server.url}settings/cloud-account`);
+        await other.getByRole("button", { name: "Sign out", exact: true }).click();
+        await page.getByRole("heading", { name: "Welcome to Matterhorn Desks", exact: true }).waitFor();
+      }
+      await releaseImagePreparation(page);
+      if (boundary === "append" || boundary === "remove") {
+        await page.getByText("pending.jpg", { exact: true }).waitFor();
+        expect(await page.getByText("earlier.txt", { exact: true }).count()).toBe(boundary === "append" ? 1 : 0);
+        if (boundary === "append") expect(await page.getByText("newer.txt", { exact: true }).count()).toBe(1);
+      } else {
+        expect(await page.getByText("pending.jpg", { exact: true }).count()).toBe(0);
+        if (boundary === "navigate") {
+          await page.getByRole("button", { name: "Original fixture chat", exact: true }).click();
+          await page.waitForURL("**/ses_fixture");
+        }
+        if (boundary !== "cross-tab logout") {
+          await page.getByText("earlier.txt", { exact: true }).waitFor();
+          expect(await page.getByText("pending.jpg", { exact: true }).count()).toBe(0);
+        }
+      }
+      expect(errors).toEqual([]);
+    } finally { await context.close(); }
+  }, 30000);
+}
 const boundaries = [
   "unchanged",
   "navigate",

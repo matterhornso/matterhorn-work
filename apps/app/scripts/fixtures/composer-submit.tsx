@@ -6,6 +6,7 @@ import { ReactSessionComposer } from "../../src/react-app/domains/session/surfac
 import { useComposerSubmission } from "../../src/react-app/domains/session/surface/composer/use-composer-submission";
 import { SigninBoundary } from "../../src/react-app/shell/signin-boundary";
 import { useComposerStateStore } from "../../src/react-app/domains/session/surface/composer-state-store";
+import { accountClientState } from "../../src/app/lib/account-client-state";
 import type { DenAuthStatus } from "../../src/react-app/domains/cloud/den-auth-provider";
 import { applyRetroUi, RETRO_UI } from "../../src/app/lib/retro-ui";
 import { PrimaryDeskLauncher } from "../../src/react-app/domains/session/workflows/primary-desk-launcher";
@@ -84,6 +85,11 @@ function AuthFixture() {
 }
 
 function Fixture() {
+  const [attachmentScope, setAttachmentScope] = useState("first");
+  const [attachmentAllowed, setAttachmentAllowed] = useState(true);
+  const [composerVisible, setComposerVisible] = useState(true);
+  const [attachmentCallbacks, setAttachmentCallbacks] = useState(0);
+  const [noticeCallbacks, setNoticeCallbacks] = useState(0);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [desk, setDesk] = useState("");
@@ -117,7 +123,8 @@ function Fixture() {
   return <main className="mx-auto max-w-3xl space-y-6 p-6">
     <p>Isolated desk/composer fixture. No account, provider or chain requests.</p>
     {params.has("launcher") ? <><PrimaryDeskLauncher onOpenDesk={setDesk} /><output data-testid="selected-desk">{desk}</output></> : null}
-    <ReactSessionComposer
+    {composerVisible ? <ReactSessionComposer
+      draftScopeKey={attachmentScope}
       draft={params.has("empty") ? "" : draft}
       placeholder="Test prompt"
       mentions={{}}
@@ -136,12 +143,15 @@ function Fixture() {
       onModelPickerOpenChange={noop}
       onModelChange={noop}
       attachments={attachments}
-      onAttachFiles={files => setAttachments(current => [...current, ...files.map((file): ComposerAttachment => ({
-        id: `${current.length}-${file.name}`, name: file.name, size: file.size,
-        mimeType: file.type, kind: "file", file,
-      }))])}
+      onAttachFiles={files => {
+        setAttachmentCallbacks(count => count + 1);
+        setAttachments(current => [...current, ...files.map((file): ComposerAttachment => ({
+          id: `${current.length}-${file.name}`, name: file.name, size: file.size,
+          mimeType: file.type, kind: "file", file,
+        }))]);
+      }}
       onRemoveAttachment={id => setAttachments(current => current.filter(file => file.id !== id))}
-      attachmentsEnabled={params.has("attachments")}
+      attachmentsEnabled={params.has("attachments") && attachmentAllowed}
       attachmentsDisabledReason={null}
       modelBehaviorTitle="Default"
       modelVariantLabel="Default"
@@ -163,7 +173,7 @@ function Fixture() {
       searchFiles={async () => []}
       onInsertMention={noop}
       notice={notice}
-      onNotice={setNotice}
+      onNotice={value => { setNoticeCallbacks(count => count + 1); setNotice(value); }}
       onPasteText={noop}
       onUnsupportedFileLinks={noop}
       pastedText={[]}
@@ -172,7 +182,17 @@ function Fixture() {
       onRemovePastedText={noop}
       isRemoteWorkspace={false}
       isSandboxWorkspace={false}
-    />
+    /> : null}
+    {params.has("attachmentLifetime") ? <section aria-label="Attachment fixture controls">
+      <button onClick={() => setAttachmentScope("second")}>Change fixture chat</button>
+      <button onClick={() => setAttachmentScope("first")}>Return to fixture chat</button>
+      <button onClick={() => setAttachmentAllowed(false)}>Disable fixture attachments</button>
+      <button onClick={() => setAttachmentAllowed(true)}>Enable fixture attachments</button>
+      <button onClick={() => setComposerVisible(false)}>Unmount fixture composer</button>
+      <button onClick={() => accountClientState.clear()}>Clear fixture account</button>
+      <output data-testid="attachment-callbacks">{attachmentCallbacks}</output>
+      <output data-testid="notice-callbacks">{noticeCallbacks}</output>
+    </section> : null}
     <output data-testid="result">{result}</output>
     <output data-testid="calls">{JSON.stringify(calls)}</output>
     <output data-testid="attachments">{JSON.stringify(attachments.map(file => ({ name: file.name, size: file.size })))}</output>

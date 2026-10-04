@@ -207,4 +207,37 @@ pnpm test:matterhorn-platform-safety
 
 Logs use `/tmp/matterhorn-composer-attachments-`: `red2-2026-10-05.log`, `browser-final2-2026-10-05.log`, `legacy-2026-10-05.log`, `app-tests-final-2026-10-05.log`, `typecheck-final-2026-10-05.log`, `web-build-final-2026-10-05.log`, `server-typecheck-2026-10-05.log`, `server-build-2026-10-05.log`, and `safety-2026-10-05.log`. Reproduce captures by adding `ATTACHMENT_QA_CAPTURES=<disposable-output-directory>` to the retro browser command. Screenshot files and logs in `/tmp` are local evidence, not durable CI artifacts.
 
-Next review async preparation during overlapping selections, navigation and account changes; exact encoded-request/aggregate rejection through the mounted session send path; and actual server-error draft recovery. The 10 MB aggregate limit and the smaller effective base64 wire allowance remain enforced by the gateway, not pre-approved by the picker. Safari/Firefox, real screen readers, 200% zoom, image decompression resource ceilings, actual provider interpretation and hosted acceptance are not certified by this pass. No user chat/preview was restarted, and nothing was pushed, merged or deployed.
+Async preparation is addressed in the following section. Exact encoded-request/aggregate rejection through the mounted session send path and actual server-error draft recovery still need verification. The 10 MB aggregate limit and the smaller effective base64 wire allowance remain enforced by the gateway, not pre-approved by the picker. Safari/Firefox, real screen readers, 200% zoom, image decompression resource ceilings, actual provider interpretation and hosted acceptance are not certified by this pass. No user chat/preview was restarted, and nothing was pushed, merged or deployed.
+
+## Attachment preparation lifetime and concurrent selections
+
+Following `5dd7fe7f176ab3b1e075ec0cd58631b1f60ca987`, 12 local browser cases reproduced stale attachment callbacks after chat changes, returning to the original chat, permission changes, restoring permission, unmounting and account invalidation. Both successful and failed image preparation could still commit a batch's remaining files and notices. The unchanged-chat control passed. These are production-composer callbacks in a disposable fixture, not evidence of a hosted disclosure.
+
+The composer now binds each selection to its mounted account generation and the committed workspace/chat/attachment-permission lifetime. Cleanup invalidates pending work even if the user later returns to the same chat or re-enables attachments. Preparation rechecks that lifetime after awaiting image processing and before committing files or notices. Already-running native decoding is not forcibly cancelled; the bitmap still closes in the existing `finally` block and stale results are discarded. Independent selections within an unchanged chat remain valid, and fresh selections work after navigation or permission restoration.
+
+A separate mounted production-shell reproduction restored the old render-captured attachment list in an in-memory test bundle. Both cases failed: completion replaced a newer attachment, or restored one the user had removed. The session handler now reads the current store immediately before appending/removing and rejects old-account callbacks. No second data store, routing change or visual redesign was introduced.
+
+### Attachment lifetime verification
+
+- The expanded real-composer suite tests all six lifetime boundaries with valid and corrupt native-decoded images, sibling files, suppressed stale notices, fresh selections after restoration and independent overlapping selections.
+- The mounted shell/session suite passes **31 tests, zero failures and 241 assertions**, including five new cases for append, removal, navigation, return and cross-tab logout. The existing fork/revert and responsive error-feedback cases still pass. These tests run production routing and state stores with synthetic account/runtime HTTP responses.
+- Frontend regressions pass **1,456 tests, zero failures and 8,513 assertions across 193 files**. Frontend typecheck and web build pass; existing bundle-size warnings remain.
+- Final retro browser suite: **26 pass, zero fail, one optional capture skip, 108 assertions**. Legacy layout: **25 pass, zero fail, two skips, 104 assertions**; its skips are retro-only mobile navigation and optional captures. The full platform safety gate passes all 11 stages with terminal exit zero.
+
+The initial hand-written PNG control did not decode successfully. It was replaced with a browser-generated PNG before the corrected pre-fix run: **12 failures and one passing control**. Trailing padding crosses the image compressor's threshold; decoding, compression and bitmap cleanup remain native browser operations. The test gate delays decoding deterministically and observes settlement rather than relying on a guessed sleep. The stale-state negative control modifies only the test bundle, never production source.
+
+```sh
+RETRO_QA_FLAG=1 bun test apps/app/scripts/composer-submit.browser.test.ts --timeout 30000
+RETRO_QA_FLAG=0 bun test apps/app/scripts/composer-submit.browser.test.ts --timeout 30000
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+bun test apps/app/tests
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+pnpm test:matterhorn-platform-safety
+```
+
+Evidence logs use `/tmp/matterhorn-attachment-lifetime-`: `red2-2026-10-05.log`, `mounted-red-2026-10-05.log`, `browser-final-2026-10-05.log`, `legacy-final-2026-10-05.log`, `mounted-2026-10-05.log`, `app-2026-10-05.log`, `typecheck-2026-10-05.log`, `build-2026-10-05.log` and `safety-2026-10-05.log`. Browser coverage is wired into the existing suites, including the session-route CI job. Logs remain local `/tmp` evidence.
+
+Impeccable hardening and Uncodixfy kept the correction behavioral: no layout, copy, token or motion changes. No new screenshot round was needed for this correction; the preceding visual evidence is not extended into a new cross-browser or screen-reader claim. The automatic design hook reported no deterministic issues and continued reporting the pre-existing stale design sidecar; no unrequested metadata migration occurred.
+
+Next verify mounted send rejection/retry with attachments, including encoded-body and aggregate limits, and sending while image preparation is still pending. Resource ceilings for decoding, historical attachment rehydration and real-provider interpretation remain outside this correction. Hosted acceptance, actual two-account authorization, Safari/Firefox and assistive-technology checks remain open. No existing runtime/chat was restarted, and nothing was pushed, merged or deployed.

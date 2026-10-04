@@ -2700,6 +2700,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   }, [attachments, buildDraft, draft, props.onDraftChange]);
 
   const handleAttachFiles = (files: File[]) => {
+    if (!isCurrentAccount()) return;
     if (!props.attachmentsEnabled) {
       setNotice({ title: props.attachmentsDisabledReason ?? "Attachments are unavailable.", tone: "warning" });
       return;
@@ -2723,7 +2724,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
       file,
       previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
     }));
-    setComposerAttachments(props.sessionId, [...attachments, ...next]);
+    const current = getComposerAttachments(useComposerStateStore.getState(), props.sessionId);
+    setComposerAttachments(props.sessionId, [...current, ...next]);
     setNotice({
       title: next.length === 1 ? `Attached ${next[0]?.name ?? "file"}` : `Attached ${next.length} files`,
       tone: "success",
@@ -2731,11 +2733,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
   };
 
   const handleRemoveAttachment = (id: string) => {
-    const target = attachments.find((item) => item.id === id);
+    if (!isCurrentAccount()) return;
+    const current = getComposerAttachments(useComposerStateStore.getState(), props.sessionId);
+    const target = current.find((item) => item.id === id);
     if (target?.previewUrl) {
       URL.revokeObjectURL(target.previewUrl);
     }
-    setComposerAttachments(props.sessionId, attachments.filter((item) => item.id !== id));
+    setComposerAttachments(props.sessionId, current.filter((item) => item.id !== id));
   };
 
   const handleInsertMention = (kind: "agent" | "file", value: string) => {
@@ -3680,6 +3684,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         />
         <DevProfiler id="SessionComposer">
         <ReactSessionComposer
+          draftScopeKey={JSON.stringify([props.workspaceId, props.sessionId])}
           draft={draft}
           placeholder={privateAiActive ? "Message Private AI…" : undefined}
           mentions={mentions}

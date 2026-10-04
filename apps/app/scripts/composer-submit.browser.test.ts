@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chromium, type Browser } from "playwright";
+import { delayImagePreparation, delayedImage, releaseImagePreparation } from "./fixtures/attachment-preparation";
 import { build } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { mkdir, readFile } from "node:fs/promises";
@@ -75,6 +76,55 @@ async function fixturePage() {
   page.setDefaultTimeout(3_000);
   return page;
 }
+
+for (const boundary of ["chat", "chat-return", "permission", "permission-return", "unmount", "account"]) {
+  for (const corrupt of [false, true]) {
+    test(`attachment lifetime ignores ${corrupt ? "failed" : "successful"} preparation after ${boundary}`, async () => {
+      const page = await fixturePage();
+      try {
+        await page.goto(`${server.url}?attachments&attachmentLifetime`);
+        await delayImagePreparation(page);
+        await page.locator('input[type="file"]').setInputFiles([
+          await delayedImage(page, corrupt), { name: "sibling.txt", mimeType: "text/plain", buffer: Buffer.from("Unsent sibling") },
+        ]);
+        await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+        if (boundary.startsWith("chat")) await page.getByRole("button", { name: "Change fixture chat", exact: true }).click();
+        if (boundary === "chat-return") await page.getByRole("button", { name: "Return to fixture chat", exact: true }).click();
+        if (boundary.startsWith("permission")) await page.getByRole("button", { name: "Disable fixture attachments", exact: true }).click();
+        if (boundary === "permission-return") await page.getByRole("button", { name: "Enable fixture attachments", exact: true }).click();
+        if (boundary === "unmount") await page.getByRole("button", { name: "Unmount fixture composer", exact: true }).click();
+        if (boundary === "account") await page.getByRole("button", { name: "Clear fixture account", exact: true }).click();
+        await releaseImagePreparation(page);
+        expect(await page.getByTestId("attachment-callbacks").textContent()).toBe("0");
+        expect(await page.getByTestId("notice-callbacks").textContent()).toBe("0");
+        expect(await page.getByTestId("attachments").textContent()).toBe("[]");
+        if (boundary === "chat" || boundary === "chat-return" || boundary === "permission-return") {
+          await page.locator('input[type="file"]').setInputFiles({ name: "fresh.txt", mimeType: "text/plain", buffer: Buffer.from("Fresh") });
+          await page.getByText("Attached fresh.txt to your draft.", { exact: true }).waitFor();
+          expect(await page.getByTestId("attachment-callbacks").textContent()).toBe("1");
+          expect(await page.getByTestId("attachments").textContent()).toBe('[{"name":"fresh.txt","size":5}]');
+        }
+      } finally { await page.close(); }
+    });
+  }
+}
+
+test("attachment lifetime accepts independent selections in the unchanged chat", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments&attachmentLifetime`);
+    await delayImagePreparation(page);
+    const input = page.locator('input[type="file"]');
+    await input.setInputFiles(await delayedImage(page));
+    await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+    await input.setInputFiles({ name: "new.txt", mimeType: "text/plain", buffer: Buffer.from("New") });
+    await releaseImagePreparation(page);
+    expect(await page.getByTestId("attachment-callbacks").textContent()).toBe("2");
+    expect(await page.getByTestId("attachments").textContent()).toContain("new.txt");
+    expect(await page.getByTestId("attachments").textContent()).toContain("pending.jpg");
+    expect(await page.getByRole("alert").count()).toBe(0);
+  } finally { await page.close(); }
+});
 
 test("attachment selection respects the server limit without changing the draft", async () => {
   const page = await fixturePage();
