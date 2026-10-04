@@ -582,3 +582,32 @@ Impeccable hardening and Uncodixfy preserved the existing interface and made can
 Existing accepted requests still require actual runtime cancellation and usage reconciliation. Requests already forwarded to the server, concurrent clients, repeated Stop acknowledgements, and workflow-status bookkeeping need separate review. Source inspection found that desk workflow staging/start runs independently of prompt preflight; the start endpoint changes persisted workflow status rather than invoking inference, but its cancellation/status behavior has not yet been exercised. No existing previews/chats, real credentials, hosted configuration, providers or wallets were changed; nothing was pushed, merged or deployed.
 
 Next task: verify cancellation once the gateway has received a message, including Stop racing with gateway preparation, then session mutation ordering across clients. A client-side signal cannot withdraw an HTTP request already accepted by the gateway. Keep hosted release drift, guarded mode, five-desk real responses, inbox/recovery, isolation, encryption and backup restore as separate launch gates.
+
+## Stop during gateway preparation
+
+Following local commit `b94fb8e30c8ea93ffa7051216056fc72e75e8f07`, two isolated HTTP regressions reproduced a successful Stop followed by a 202 message acceptance. One request was waiting for agent lookup; the other was waiting for the runtime permission update. Both unchanged controls passed. The earlier browser-only cancellation correction cannot prevent this once an HTTP request reaches the gateway.
+
+The server now tracks authenticated preparations by workspace, session and usage subject. Stop invalidates matching preparations before forwarding the runtime abort, even if that abort later fails. Messages, raw prompts, commands and compaction check this state before dispatch, with checks before replacement/authorization where applicable. Existing failure paths release undispatched reservations and discard unsent message claims; the scope registration is removed in `finally`. Manual compaction approvals now have the same cancellation scope as manual message approvals. This does not replace authentication, privacy consent or runtime permission checks.
+
+Checks deliberately stop at the dispatch boundary. A request already sent to the runtime may have been accepted, so a later Stop must not label it unsent, free its usage hold prematurely, or remove its idempotency record. The new accepted-response cases retain acceptance and the pending usage record until ordinary reconciliation. No actual provider usage was generated in these fixtures.
+
+### Gateway verification
+
+- The final focused preparation matrix passes **52 cases, zero failures, 335 assertions**. It includes 40 message cases across guarded mode `off` and `enforce`, early/late preparation and accepted transport, unchanged/successful/rejected Stop, another session and unauthenticated Stop; eight alternate-route cases; and four registry lifecycle tests. Ten message cases cover encoded surrounding spaces: the cancellation scope uses the same trimmed session ID as dispatch.
+- The full affected server group passes **567 tests, zero failures, 3,309 assertions across four files**. This includes the expanded manual message/compaction approval cases, legacy/session/MCP authority regressions, dispatch idempotency and usage accounting. The existing public-model message approval controls remain; compaction uses a synthetic local model.
+- The focused client cancellation/retry suites pass **70 tests, zero failures, 193 assertions**. No frontend code was changed in this pass.
+- The full platform safety gate passes **all 11 stages**, terminal exit zero, including the new registry unit file and normalized-session cases. Its wiring contract, final server typecheck and final server build also pass.
+
+```sh
+bun test apps/server/src/session-preparation.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/approvals.test.ts apps/server/src/model-usage-store.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+node scripts/matterhorn-platform-safety-gate.test.mjs
+pnpm test:matterhorn-platform-safety
+```
+
+Evidence uses `/tmp/matterhorn-gateway-stop-`: `red2-2026-10-05.log` is the stabilized two-failure reproduction; `focused-final-2026-10-05.log` is the final 52-case pass; `server-complete-2026-10-05.log` is the 567-case pass; `client-2026-10-05.log` is the focused client pass; `safety-final-2026-10-05.log` is the final full-gate pass; and `build-verified-2026-10-05.log` records the final serial typecheck/build. The first `red` run incorrectly delayed `/provider` even though the request supplied an explicit model; the corrected fixture delays `/agent`. The first expanded run made every abort fail, including the gateway's replacement abort before the intended boundary. That fixture now fails only the explicit Stop acknowledgement. Those fixture errors are not additional product defects. Earlier `enforce`, `server-final` and `server-verified` logs cover the preceding matrix without the normalized-session cases.
+
+The registry is per server instance and covers preparations already admitted there. It is **not** a distributed cancellation epoch, cross-process lock or atomic session revision. An old Stop arriving after a newer preparation is admitted can still target that session, and this does not retract an already-forwarded abort/revert/unrevert. Cross-instance ordering, precise Stop targeting, mutations already in flight and provider-side cancellation remain open. Raw command transport failure/accounting and authority revocation during alternate-route preparation need separate review. All new HTTP traffic, accounts, models and runtime responses are disposable/local or synthetic. No frontend redesign, fresh rendered acceptance, hosted inference, email delivery, backup restore, production configuration, push, merge or deployment is claimed.
+
+Next review: exercise the alternate submission routes under authority revocation during preparation, then authoritative mutation/Stop ordering across clients and gateway instances. Keep the broader launch gates above open.

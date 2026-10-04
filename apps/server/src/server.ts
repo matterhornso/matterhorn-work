@@ -497,6 +497,7 @@ import {
   createInMemoryRequestRateLimitStore,
 } from "./request-rate-limit-store.js";
 import { ApprovalService } from "./approvals.js";
+import { SessionPreparationRegistry } from "./session-preparation.js";
 import { addPlugin, listPlugins, normalizePluginSpec, removePlugin } from "./plugins.js";
 import { sanitizePortableOpencodeConfig } from "./portable-opencode.js";
 import { addMcp, listMcp, removeMcp, setMcpEnabled } from "./mcp.js";
@@ -1459,6 +1460,7 @@ export async function startServer(
   dependencies: MatterhornServerDependencies = {},
 ): Promise<ServeResult> {
   const approvals = new ApprovalService(config.approval);
+  const sessionPreparations = new SessionPreparationRegistry();
   const reloadEvents = new ReloadEventStore();
   const tokens = new TokenService(config);
   const authStore = new MatterhornAuthStore();
@@ -1867,6 +1869,7 @@ export async function startServer(
   const routes = createRoutes(
     config,
     approvals,
+    sessionPreparations,
     tokens,
     authStore,
     env,
@@ -1949,6 +1952,7 @@ export async function startServer(
             config,
             logger,
             approvals,
+            sessionPreparations,
             request,
             url,
             workspace,
@@ -2039,6 +2043,7 @@ export async function startServer(
             config,
             logger,
             approvals,
+            sessionPreparations,
             request,
             url,
             workspace,
@@ -2924,10 +2929,11 @@ async function reserveModelUsage(input: {
   return { reservation, subject };
 }
 
-async function proxyOpencodeRequest(input: {
+type OpencodeProxyRequestInput = {
   config: ServerConfig;
   logger: ServerLogger;
   approvals: ApprovalService;
+  sessionPreparations: SessionPreparationRegistry;
   request: Request;
   url: URL;
   workspace?: WorkspaceInfo;
@@ -2935,7 +2941,21 @@ async function proxyOpencodeRequest(input: {
   access?: ClientAccess;
   modelUsageStore?: MatterhornModelUsageStore;
   guardedRuntime: MatterhornGuardedAgentRuntime;
-}) {
+};
+
+async function proxyOpencodeRequest(input: OpencodeProxyRequestInput) {
+  const path = normalizeOpencodeProxyPath(input.proxyPath ?? input.url.pathname);
+  const match = input.request.method === "POST"
+    ? path.match(/^\/session\/([^/]+)\/(?:message|prompt_async|command|summarize)$/) : null;
+  const sessionId = match ? decodePathSegment(match[1]) : null;
+  if (sessionId && input.workspace && input.access) {
+    return input.sessionPreparations.run({ workspaceId: input.workspace.id, sessionId,
+      subjectId: modelUsageSubject(input.access).id }, input.request, () => forwardOpencodeRequest(input));
+  }
+  return forwardOpencodeRequest(input);
+}
+
+async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
   const workspace = input.workspace;
   const baseUrl = workspace ? resolveWorkspaceOpencodeConnection(input.config, workspace).baseUrl?.trim() ?? "" : "";
   if (!baseUrl) {
@@ -2991,11 +3011,13 @@ async function proxyOpencodeRequest(input: {
     : null;
   const stopSessionId = stopSessionMatch ? decodePathSegment(stopSessionMatch[1]) : null;
   if (stopSessionId && workspace && input.access) {
-    input.approvals.cancelSession({
+    const scope = {
       workspaceId: workspace.id,
       sessionId: stopSessionId,
       subjectId: modelUsageSubject(input.access).id,
-    });
+    };
+    input.sessionPreparations.stop(scope);
+    input.approvals.cancelSession(scope);
   }
   let body: BodyInit | undefined = rawBody;
   let promptAudit: { executionMode: MatterhornExecutionMode; agent?: string; sessionId: string } | null = null;
@@ -3273,6 +3295,7 @@ async function proxyOpencodeRequest(input: {
           executionMode: "work",
         };
         const authorization = input.guardedRuntime.authorizePrompt(guardedInput);
+        input.sessionPreparations.assertActive(input.request);
         await ensureMatterhornSessionPermissionProfile({
           config: input.config,
           workspace,
@@ -3294,6 +3317,7 @@ async function proxyOpencodeRequest(input: {
           usageReservationId = usage.reservation.reservationId;
           usageSubject = usage.subject;
         }
+        input.sessionPreparations.assertActive(input.request);
         await abortWorkspaceSessionBeforeReplacement(input.config, workspace, sessionId);
         const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
           config: input.config,
@@ -3301,6 +3325,7 @@ async function proxyOpencodeRequest(input: {
           sessionId,
           guardedRuntime: input.guardedRuntime,
         });
+        input.sessionPreparations.assertActive(input.request);
         const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
           {
             ...guardedInput,
@@ -3315,6 +3340,7 @@ async function proxyOpencodeRequest(input: {
           sessionId,
           messageId: userMessageId,
         });
+        input.sessionPreparations.assertActive(input.request);
       } catch (error) {
         input.modelUsageStore?.cancel(usageReservationId);
         if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
@@ -3426,6 +3452,7 @@ async function proxyOpencodeRequest(input: {
   }
   if (promptPermissionRequest) {
     try {
+      input.sessionPreparations.assertActive(input.request);
       await ensureMatterhornSessionPermissionProfile({
         config: input.config,
         ...promptPermissionRequest,
@@ -3438,6 +3465,7 @@ async function proxyOpencodeRequest(input: {
   }
   if (guardedPromptStart && workspace && promptAudit) {
     try {
+      input.sessionPreparations.assertActive(input.request);
       await abortWorkspaceSessionBeforeReplacement(input.config, workspace, promptAudit.sessionId);
       const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
         config: input.config,
@@ -3445,6 +3473,7 @@ async function proxyOpencodeRequest(input: {
         sessionId: promptAudit.sessionId,
         guardedRuntime: input.guardedRuntime,
       });
+      input.sessionPreparations.assertActive(input.request);
       const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
         {
           ...guardedPromptStart.input,
@@ -3484,7 +3513,9 @@ async function proxyOpencodeRequest(input: {
         agentId: guardedSummaryStart.agentId,
         expectedAgentPromptHash: guardedSummaryStart.agentPromptHash,
       });
+      input.sessionPreparations.assertActive(input.request);
       await abortWorkspaceSessionBeforeReplacement(input.config, workspace, guardedSummaryStart.sessionId);
+      input.sessionPreparations.assertActive(input.request);
       const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
         {
           ...guardedSummaryStart.input,
@@ -3510,6 +3541,7 @@ async function proxyOpencodeRequest(input: {
   input.request.signal.addEventListener("abort", abortUpstreamConnect, { once: true });
   let response: Response;
   try {
+    if (promptAudit || guardedSummaryStart) input.sessionPreparations.assertActive(input.request);
     response = await fetchOpencodeRuntime(targetUrl, {
       method,
       headers,
@@ -10292,6 +10324,7 @@ function coerceWalletSimulationInput(body: Record<string, unknown>): {
 function createRoutes(
   config: ServerConfig,
   approvals: ApprovalService,
+  sessionPreparations: SessionPreparationRegistry,
   tokens: TokenService,
   authStore: MatterhornAuthStore,
   env: EnvService,
@@ -10323,6 +10356,14 @@ function createRoutes(
   // launch boundary. Do not accept arbitrary consumer names from a browser.
   const stmConsumers = dependencies.stmConsumers ?? [STM_VOICE_CONSUMER];
   const routes: Route[] = [];
+  const withSessionPreparation = (handler: Route["handler"]): Route["handler"] => async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!ctx.actor) throw new ApiError(401, "unauthorized", "An authenticated account is required.");
+    return sessionPreparations.run({ workspaceId: ctx.params.id, sessionId: (ctx.params.sessionId ?? "").trim(),
+      subjectId: modelUsageSubject({ actor: ctx.actor, session: ctx.matterhornSession }).id },
+    ctx.request, () => handler(ctx));
+  };
   const billingRouteContext = createBillingRouteContext(config);
   const fileSessions = new FileSessionStore();
   const googleWorkspaceConnectFlows = createGoogleWorkspaceConnectFlowManager(config);
@@ -15740,9 +15781,7 @@ function createRoutes(
     return jsonResponse({ item: receipt });
   });
 
-  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/compact", "client", async (ctx) => {
-    ensureWritable(config);
-    requireClientScope(ctx, "collaborator");
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/compact", "client", withSessionPreparation(async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const sessionId = (ctx.params.sessionId ?? "").trim();
     if (!sessionId) {
@@ -15790,12 +15829,14 @@ function createRoutes(
     } catch (error) {
       throw guardedRuntimeApiError(error);
     }
+    sessionPreparations.assertActive(ctx.request);
     await requireApproval(ctx, {
       workspaceId: workspace.id,
       action: "session.compact",
       summary: `Compact session ${sessionId}`,
       paths: [workspace.path],
-    });
+    }, { sessionId, subjectId: modelUsageSubject(clientAccessFromRequestContext(ctx, workspace)).id });
+    sessionPreparations.assertActive(ctx.request);
 
     const usage = await reserveModelUsage({
       config,
@@ -15830,7 +15871,9 @@ function createRoutes(
         agentId: compactionAgentContext.agentId,
         expectedAgentPromptHash: compactionAgentContext.promptHash,
       });
+      sessionPreparations.assertActive(ctx.request);
       await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
+      sessionPreparations.assertActive(ctx.request);
       guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
         {
           ...guardedInput,
@@ -15842,6 +15885,7 @@ function createRoutes(
         guardedAuthorization,
         providerSystem,
       );
+      sessionPreparations.assertActive(ctx.request);
       unwrapOpencodeResult(
         await sessionApi.summarize({
           sessionID: sessionId,
@@ -15905,11 +15949,9 @@ function createRoutes(
         consentUsed: guardedAcceptance.consentUsed,
       },
     }, 202);
-  });
+  }));
 
-  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages", "client", async (ctx) => {
-    ensureWritable(config);
-    requireClientScope(ctx, "collaborator");
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages", "client", withSessionPreparation(async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const sessionId = (ctx.params.sessionId ?? "").trim();
     if (!sessionId) {
@@ -16096,12 +16138,14 @@ function createRoutes(
       throw guardedRuntimeApiError(error);
     }
 
+    sessionPreparations.assertActive(ctx.request);
     await requireApproval(ctx, {
       workspaceId: workspace.id,
       action: "session.prompt",
       summary: `Submit prompt to session ${sessionId}`,
       paths: [workspace.path],
     }, { sessionId, subjectId });
+    sessionPreparations.assertActive(ctx.request);
     const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
     if (!modelUsageStore.claimMessageDispatch({ subjectId, workspaceId: workspace.id, sessionId, requestId, requestHash, messageId: userMessageId })) {
       throw unknownDispatch();
@@ -16126,6 +16170,7 @@ function createRoutes(
         // consuming consent or starting the newly authorized guarded run; abort
         // is idempotent when the session is already idle.
         assertRequestAccessCurrent(ctx.request);
+        sessionPreparations.assertActive(ctx.request);
         await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
       } catch (error) {
         modelUsageStore.cancel(usage.reservation.reservationId);
@@ -16142,6 +16187,7 @@ function createRoutes(
         });
         if (continuationOf) await validateAnswerContinuation(config, workspace, sessionId, body);
         assertRequestAccessCurrent(ctx.request);
+        sessionPreparations.assertActive(ctx.request);
         guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
           {
             ...guardedInput,
@@ -16197,6 +16243,7 @@ function createRoutes(
           ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
         });
         assertRequestAccessCurrent(ctx.request);
+        sessionPreparations.assertActive(ctx.request);
         dispatchStarted = true;
         if (reasoningEffort) {
           const { sessionID: _sessionID, directory: _directory, ...upstreamBody } = promptBody;
@@ -16263,7 +16310,7 @@ function createRoutes(
       if (!dispatchStarted) modelUsageStore.discardUnsentMessageDispatch(subjectId, workspace.id, sessionId, requestId);
       throw error;
     }
-  });
+  }));
 
   addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/execution-mode", "client", async (ctx) => {
     ensureWritable(config);

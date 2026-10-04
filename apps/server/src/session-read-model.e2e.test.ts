@@ -197,9 +197,10 @@ function defaultSessionMessages() {
 
 function startMockOpencode(input?: {
   sessionStatus?: "idle" | "busy";
-  abortStatus?: number;
+  abortStatus?: number | (() => number);
   invalidList?: boolean;
   holdCommand?: Promise<void>;
+  holdPrompt?: Promise<void>;
   holdPermission?: Promise<void>;
   beforeMessages?: () => Promise<void>;
   onAbort?: () => void;
@@ -442,13 +443,15 @@ function startMockOpencode(input?: {
       }
 
       if (url.pathname === "/session/ses_1/prompt_async" && request.method === "POST") {
+        await input?.holdPrompt;
         return Response.json({ ok: true });
       }
 
       if (url.pathname === "/session/ses_1/abort" && request.method === "POST") {
         input?.onAbort?.();
-        if (input?.abortStatus && input.abortStatus !== 200) {
-          return Response.json({ error: "upstream abort unavailable" }, { status: input.abortStatus });
+        const abortStatus = typeof input?.abortStatus === "function" ? input.abortStatus() : input?.abortStatus;
+        if (abortStatus && abortStatus !== 200) {
+          return Response.json({ error: "upstream abort unavailable" }, { status: abortStatus });
         }
         return Response.json(true);
       }
@@ -2042,8 +2045,132 @@ describe("workspace session read APIs", () => {
     expect(JSON.stringify(ledgerBody)).not.toContain("Summarize this workspace");
   });
 
-  for (const reply of ["allow", "deny", "timeout", "stop", "disconnect"] as const) {
-    test(`manual chat approval requires the host and handles ${reply} without early dispatch`, async () => {
+  for (const { runtimeMode, boundary } of ["off", "enforce"].flatMap(runtimeMode =>
+    ["agent", "permission", "accepted", "padded-session"].map(boundary => ({ runtimeMode, boundary })))) {
+    for (const outcome of ["unchanged", "stopped", "stop-rejected", "other-session", "unauthenticated"]) {
+      test(`gateway preparation ${runtimeMode} ${boundary} ${outcome} does not dispatch cancelled work`, async () => {
+        process.env.MATTERHORN_GUARDED_RUNTIME_MODE = runtimeMode;
+        process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "isolated-gateway-stop-runtime-fixture";
+        const workspaceRoot = await createWorkspaceRoot();
+        const gate = deferred();
+        const reached = deferred();
+        const cancelled = boundary !== "accepted" && (outcome === "stopped" || outcome === "stop-rejected");
+        const waitingForAgent = boundary === "agent" || boundary === "padded-session";
+        let rejectAbort = false;
+        const mock = startMockOpencode({
+          sessionStatus: "idle",
+          abortStatus: () => rejectAbort ? 503 : 200,
+          holdPrompt: boundary === "accepted" ? gate.promise : undefined,
+          holdPermission: boundary === "permission" ? gate.promise : undefined,
+          beforeRead: async (pathname) => {
+            if (waitingForAgent && pathname === "/agent") {
+              reached.resolve();
+              await gate.promise;
+            }
+          },
+        });
+        const openwork = await startOpenworkServer({ workspaceRoot,
+          opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false,
+          hardModelUsageLimit: 1000,
+        });
+        const base = `http://127.0.0.1:${openwork.server.port}`;
+        const sessionPath = boundary === "padded-session" ? "%20ses_1%20" : "ses_1";
+        const send = () => fetch(`${base}/workspace/ws_1/sessions/${sessionPath}/messages`, {
+          method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+          body: JSON.stringify({ messageID: "msg_stop_preparation", message: "Synthetic cancellation test",
+            model: { providerID: "openai", modelID: "gpt-4.1" } }),
+        });
+        const pending = send();
+        try {
+          if (waitingForAgent) {
+            expect(await waitUntil(() => mock.requests.some(request => request.pathname === "/agent"))).toBe(true);
+            await reached.promise;
+          } else if (boundary === "permission") {
+            expect(await waitUntil(() => mock.requests.some(request => request.pathname === "/session/ses_1" && request.method === "PATCH"))).toBe(true);
+          } else {
+            expect(await waitUntil(() => mock.requests.some(request => request.pathname.endsWith("/prompt_async")))).toBe(true);
+          }
+          if (outcome !== "unchanged") {
+            rejectAbort = outcome === "stop-rejected";
+            const session = outcome === "other-session" ? "ses_other" : "ses_1";
+            const response = await fetch(`${base}/w/ws_1/opencode/session/${session}/abort`, {
+              method: "POST", headers: outcome === "unauthenticated" ? {} : auth(openwork.token),
+            });
+            expect(response.status).toBe(outcome === "unauthenticated" ? 401 : outcome === "stop-rejected" ? 503 : outcome === "other-session" ? 404 : 200);
+            rejectAbort = false;
+          }
+          gate.resolve();
+          const response = await pending;
+          expect(response.status).toBe(cancelled ? 403 : 202);
+          expect(mock.requests.filter(request => request.pathname.endsWith("/prompt_async"))).toHaveLength(cancelled ? 0 : 1);
+          const db = new Database(join(workspaceRoot, ".model-usage.db"), { readonly: true });
+          try {
+            expect(db.query("SELECT COUNT(*) AS count FROM model_usage_operations WHERE status = 'pending'").get()).toEqual({ count: cancelled ? 0 : 1 });
+            expect(db.query("SELECT COUNT(*) AS count FROM model_message_dispatches").get()).toEqual({ count: cancelled ? 0 : 1 });
+          } finally { db.close(); }
+          if (cancelled) {
+            expect(await response.json()).toMatchObject({ code: "write_denied", details: { reason: "cancelled" } });
+            expect((await send()).status).toBe(202);
+            expect(mock.requests.filter(request => request.pathname.endsWith("/prompt_async"))).toHaveLength(1);
+          }
+        } finally {
+          gate.resolve();
+          await pending;
+        }
+      }, 15000);
+    }
+  }
+
+  for (const action of ["proxy-prompt", "command", "compact", "proxy-summary"]) {
+    for (const stopped of [false, true]) {
+      test(`gateway preparation ${action} ${stopped ? "stopped" : "unchanged"} covers alternate submission routes`, async () => {
+        const workspaceRoot = await createWorkspaceRoot();
+        const gate = deferred();
+        const mock = startMockOpencode({ beforeRead: async (pathname) => {
+          if (pathname === "/agent") await gate.promise;
+        } });
+        const openwork = await startOpenworkServer({ workspaceRoot,
+          opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false, hardModelUsageLimit: 1000,
+        });
+        const base = `http://127.0.0.1:${openwork.server.port}`;
+        const target = action === "command" ? "command" : action === "proxy-prompt" ? "prompt_async" : "summarize";
+        const path = action === "compact" ? "/workspace/ws_1/sessions/ses_1/compact"
+          : `/w/ws_1/opencode/session/ses_1/${target}`;
+        const body = action === "command" ? { command: "explain", arguments: "Synthetic cancellation check", model: "ollama/local-private" }
+          : action === "proxy-summary" ? { providerID: "ollama", modelID: "local-private" }
+          : { model: { providerID: "ollama", modelID: "local-private" }, parts: [{ type: "text", text: "Synthetic cancellation check" }] };
+        const send = () => fetch(`${base}${path}`, { method: "POST",
+          headers: { ...auth(openwork.token), "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+        const pending = send();
+        try {
+          expect(await waitUntil(() => mock.requests.some(request => request.pathname === "/agent"))).toBe(true);
+          if (stopped) expect((await fetch(`${base}/w/ws_1/opencode/session/ses_1/abort`, {
+            method: "POST", headers: auth(openwork.token),
+          })).status).toBe(200);
+          gate.resolve();
+          const response = await pending;
+          expect(response.status).toBe(stopped ? 403 : action === "compact" ? 202 : 200);
+          const count = () => mock.requests.filter(request => request.method === "POST" && request.pathname === `/session/ses_1/${target}`).length;
+          if (!stopped) expect(await waitUntil(() => count() === 1)).toBe(true);
+          expect(count()).toBe(stopped ? 0 : 1);
+          const db = new Database(join(workspaceRoot, ".model-usage.db"), { readonly: true });
+          try {
+            expect(db.query("SELECT COUNT(*) AS count FROM model_usage_operations WHERE status = 'pending'").get()).toEqual({ count: stopped ? 0 : 1 });
+          } finally { db.close(); }
+          if (stopped) {
+            expect(await response.json()).toMatchObject({ code: "write_denied", details: { reason: "cancelled" } });
+            expect((await send()).status).toBe(action === "compact" ? 202 : 200);
+            expect(await waitUntil(() => count() === 1)).toBe(true);
+          }
+        } finally { gate.resolve(); await pending; }
+      }, 15000);
+    }
+  }
+
+  for (const { operation, reply } of ["messages", "compact"].flatMap(operation =>
+    ["allow", "deny", "timeout", "stop", "disconnect"].map(reply => ({ operation, reply })))) {
+    test(`manual chat ${operation} approval requires the host and handles ${reply} without early dispatch`, async () => {
       const workspaceRoot = await createWorkspaceRoot();
       const mock = startMockOpencode();
       const openwork = await startOpenworkServer({
@@ -2054,8 +2181,11 @@ describe("workspace session read APIs", () => {
       });
       const base = `http://127.0.0.1:${openwork.server.port}`;
       const controller = new AbortController();
-      const messageBody = JSON.stringify({ messageID: "msg_approval_retry", message: "Synthetic approval acceptance", model: { providerID: "openai", modelID: "gpt-4.1" } });
-      const pendingResponse = fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      const messageBody = JSON.stringify({ messageID: "msg_approval_retry", message: "Synthetic approval acceptance",
+        model: operation === "messages" ? { providerID: "openai", modelID: "gpt-4.1" } : { providerID: "ollama", modelID: "local-private" } });
+      const dispatchPath = operation === "messages" ? "/prompt_async" : "/summarize";
+      const approvalAction = operation === "messages" ? "session.prompt" : "session.compact";
+      const pendingResponse = fetch(`${base}/workspace/ws_1/sessions/ses_1/${operation}`, {
         method: "POST",
         signal: controller.signal,
         headers: { ...auth(openwork.token), "Content-Type": "application/json" },
@@ -2069,12 +2199,12 @@ describe("workspace session read APIs", () => {
         const response = await fetch(`${base}/approvals`, { headers: { "x-matterhorn-host-token": openwork.hostToken } });
         expect(response.status).toBe(200);
         const body = await response.json();
-        approvalId = body.items.find((item: { action: string }) => item.action === "session.prompt")?.id;
+        approvalId = body.items.find((item: { action: string }) => item.action === approvalAction)?.id;
         if (approvalId) break;
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       expect(approvalId).toBeDefined();
-      expect(mock.requests.filter((request) => request.pathname.endsWith("/prompt_async"))).toHaveLength(0);
+      expect(mock.requests.filter((request) => request.pathname.endsWith(dispatchPath))).toHaveLength(0);
       const clientList = await fetch(`${base}/approvals`, { headers: auth(openwork.token) });
       expect(clientList.status).toBe(401);
       const clientApproval = await fetch(`${base}/approvals/${approvalId}`, {
@@ -2117,11 +2247,11 @@ describe("workspace session read APIs", () => {
       if (result && reply !== "allow") {
         expect(await result.json()).toMatchObject({ code: "write_denied" });
       }
-      expect(mock.requests.filter((request) => request.pathname.endsWith("/prompt_async"))).toHaveLength(reply === "allow" ? 1 : 0);
+      expect(mock.requests.filter((request) => request.pathname.endsWith(dispatchPath))).toHaveLength(reply === "allow" ? 1 : 0);
       const after = await fetch(`${base}/approvals`, { headers: { "x-matterhorn-host-token": openwork.hostToken } });
       expect((await after.json()).items).toEqual([]);
       if (reply === "stop" || reply === "disconnect") {
-        const retried = fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+        const retried = fetch(`${base}/workspace/ws_1/sessions/ses_1/${operation}`, {
           method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" }, body: messageBody,
         });
         let retryApprovalId: string | undefined;
@@ -2140,7 +2270,7 @@ describe("workspace session read APIs", () => {
         });
         expect(approved.status).toBe(200);
         expect((await retried).status).toBe(202);
-        expect(mock.requests.filter((request) => request.pathname.endsWith("/prompt_async"))).toHaveLength(1);
+        expect(mock.requests.filter((request) => request.pathname.endsWith(dispatchPath))).toHaveLength(1);
       }
     });
   }
