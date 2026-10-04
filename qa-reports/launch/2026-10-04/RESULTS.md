@@ -585,3 +585,38 @@ git diff --check
 Logs: `/tmp/matterhorn-password-lifecycle-red-2026-10-04.log`, `/tmp/matterhorn-password-lifecycle-focused-final-2026-10-04.log`, `/tmp/matterhorn-password-lifecycle-auth-http-final-2026-10-04.log`, and `/tmp/matterhorn-password-lifecycle-{typecheck,build,safety}-2026-10-04.log`. The first HTTP attempt could not bind a loopback listener in the sandbox; the permitted full-suite run passed without weakening tests. No frontend code changed, and the previous full frontend result is historical, not a rerun in this pass.
 
 Limitations and release actions: a worker may already hold an email payload or have handed it to a provider, so queue retirement cannot recall an in-flight email. Its reset link is invalid after a successful password change. The `terminal/password_changed` state is expected invalidation, not an email-provider failure. This fix acts on future password changes; it does not retroactively erase old production challenges or provider-held messages. Previously issued links retain their existing one-hour expiry unless an operator separately approves cleanup or a subsequent password change invalidates them. Multi-process races and multi-tab browser cookie ordering are not certified by these synchronous-store/local-HTTP tests. Hosted password recovery requires controlled accounts and inbox access after an approved deployment. The broader launch gates remain open. The documentation skill keeps those limits separate from the passing regression evidence.
+
+## Concurrent reset token consumption
+
+The preceding sequential correction is committed as `3409f34589a6249022f1d2184552531b5e63dc79`. A subsequent concurrent review reproduced another **P1 security defect**: `resetPassword` read a challenge before computing the password hash, then updated the password without confirming that the challenge still existed. A request already past that read could overwrite a newer password even after the token had been consumed, replaced or invalidated by another database connection.
+
+The new regression fixture uses a worker thread and the main thread with independent SQLite connections to the same disposable database. A barrier pauses the worker immediately after its challenge read. The main connection then performs an authenticated password change, consumes the same reset token, or issues a replacement link. After release, the stale worker reset succeeded in all three pre-fix cases. This is controlled concurrent database execution, not a timing-only test or an HTTP mock; it is not a certification of a multi-host deployment.
+
+Reset confirmation now conditionally deletes the exact, unexpired token inside the write transaction and requires exactly one affected row before updating the password. Losing requests receive `invalid_reset_token`; they cannot overwrite the winner, revoke its sessions or consume its replacement challenge. Hash computation remains outside the write transaction. Failure later in the transaction rolls token consumption back with the existing password/session/email operations. No migration or production data operation is added.
+
+All three interleavings pass after correction. A fourth case advances only the disposable worker's clock after its initial check, proving that expiry is rechecked at commit time and rejection leaves the original account/session usable. Fresh recovery and valid sign-in still work. The worker fixture closes its database, restores its clock and terminates; the main test removes only its generated temporary directory. It does not alter machine time, user accounts, existing previews or provider state.
+
+Results:
+
+- Focused concurrency, password lifecycle, verification, outbox and maintenance suites: **30 pass, zero fail, 168 assertions across five files**.
+- Full local auth HTTP suite: **47 pass, zero fail, 800 assertions**.
+- Server typecheck and build: pass.
+- Expanded platform safety gate: all **11 stages pass**, including all four new worker scenarios.
+- Security workflow and safety-gate contract tests, plus diff whitespace: pass.
+
+The password-lifecycle and concurrency tests are now included in `.github/workflows/security.yml` and the local platform safety gate; their contract tests require both entries. These workflow edits have been checked locally, not run on GitHub. No branch was pushed or merged.
+
+```sh
+bun test apps/server/src/auth-reset-concurrency.test.ts apps/server/src/auth-password-lifecycle.test.ts apps/server/src/auth-store-verification.test.ts apps/server/src/auth-email-outbox.test.ts apps/server/src/auth-store-maintenance.test.ts
+bun test apps/server/src/auth.e2e.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+node scripts/security-workflow-contract.test.mjs
+node scripts/matterhorn-platform-safety-gate.test.mjs
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+Logs: `/tmp/matterhorn-reset-concurrency-red-2026-10-04.log`, `/tmp/matterhorn-reset-concurrency-focused-final-2026-10-04.log`, `/tmp/matterhorn-reset-concurrency-http-2026-10-04.log`, `/tmp/matterhorn-reset-concurrency-typecheck-final-2026-10-04.log`, `/tmp/matterhorn-reset-concurrency-build-2026-10-04.log` and `/tmp/matterhorn-reset-concurrency-safety-2026-10-04.log`.
+
+Next security coverage is concurrent sign-in, authenticated password change and email-verification completion against credential/session changes. This reset-specific correction does not certify those separate paths, browser cookie ordering, actual inbox delivery or hosted rollout. The broader UI, five-desk, accounting, privacy and operational acceptance requirements remain unchanged. The documentation skill keeps the new evidence scoped to the tested reset path.

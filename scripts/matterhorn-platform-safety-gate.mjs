@@ -320,6 +320,8 @@ const STAGES = [
       "bun",
       "test",
       "apps/server/src/auth-email-outbox.test.ts",
+      "apps/server/src/auth-password-lifecycle.test.ts",
+      "apps/server/src/auth-reset-concurrency.test.ts",
       "apps/server/src/email-outbox.test.ts",
       "apps/server/src/host-backup-readiness.test.ts",
       "apps/server/src/public-launch-readiness.test.ts",

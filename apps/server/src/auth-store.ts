@@ -1649,6 +1649,19 @@ export class MatterhornAuthStore {
     const salt = randomBytes(16);
     const passwordHash = encodePasswordHash(newPassword, salt);
     this.withTransaction(() => {
+      // Hashing occurs outside the write transaction. Another process may
+      // consume, replace or invalidate the token meanwhile; its earlier read
+      // is not authority to change the password after that happens.
+      const consumed = statement(this.db, `
+        DELETE FROM password_reset_challenges
+        WHERE token_hash = ? AND user_id = ? AND expires_at > ?
+      `).run(tokenHash, challenge.user_id, Date.now());
+      if (consumed.changes !== 1) {
+        throw new MatterhornAuthError(
+          "invalid_reset_token",
+          "That password reset link is invalid or has already been used.",
+        );
+      }
       statement(
         this.db,
         "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
